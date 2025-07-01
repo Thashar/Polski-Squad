@@ -7,7 +7,7 @@ const http = require('http');
 const sharp = require('sharp');
 
 // Załadowanie zmiennych środowiskowych z folderu Rekruter
-require('dotenv').config({ path: path.join(__dirname, 'Rekruter', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 
 // Walidacja wymaganych zmiennych środowiskowych
