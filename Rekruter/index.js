@@ -6,23 +6,51 @@ const https = require('https');
 const http = require('http');
 const sharp = require('sharp');
 
+// Załadowanie zmiennych środowiskowych
+require('dotenv').config();
+
+// Walidacja wymaganych zmiennych środowiskowych
+const requiredEnvVars = [
+    'DISCORD_TOKEN',
+    'RECRUITMENT_CHANNEL',
+    'CLAN0_CHANNEL',
+    'CLAN1_CHANNEL',
+    'CLAN2_CHANNEL',
+    'MAIN_CLAN_CHANNEL',
+    'WELCOME_CHANNEL',
+    'NOT_POLISH_ROLE',
+    'VERIFIED_ROLE',
+    'CLAN0_ROLE',
+    'CLAN1_ROLE',
+    'CLAN2_ROLE',
+    'MAIN_CLAN_ROLE'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+    console.error('❌ Brakujące zmienne środowiskowe:', missingVars.join(', '));
+    console.error('Sprawdź plik .env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
+    process.exit(1);
+}
+
 const config = {
-    token: "MTM4MzgzODM3NDc5NTkzNTkxNA.GXZTub.ZalsQfcFQD1-MgrBZ84WdZFe_GzbRMP7Xl2VlY",
+    token: process.env.DISCORD_TOKEN,
     channels: {
-        recruitment: "1170323972173340743",
-        clan0: "1262793022983114792",
-        clan1: "1210265872921526303", 
-        clan2: "1196808118697463870",
-        mainClan: "1195086151283912745",
-        welcome: "1170323972173340744"
+        recruitment: process.env.RECRUITMENT_CHANNEL,
+        clan0: process.env.CLAN0_CHANNEL,
+        clan1: process.env.CLAN1_CHANNEL,
+        clan2: process.env.CLAN2_CHANNEL,
+        mainClan: process.env.MAIN_CLAN_CHANNEL,
+        welcome: process.env.WELCOME_CHANNEL
     },
     roles: {
-        notPolish: "1183332089492418631",
-        verified: "1173760134527324270",
-        clan0: "1262793135860355254",
-        clan1: "1210265548584132648",
-        clan2: "1196805078162616480",
-        mainClan: "1194249987677229186"
+        notPolish: process.env.NOT_POLISH_ROLE,
+        verified: process.env.VERIFIED_ROLE,
+        clan0: process.env.CLAN0_ROLE,
+        clan1: process.env.CLAN1_ROLE,
+        clan2: process.env.CLAN2_ROLE,
+        mainClan: process.env.MAIN_CLAN_ROLE
     },
     messages: {
         initialQuestion: "Czy jesteś Polakiem?",
@@ -63,7 +91,7 @@ const userEphemeralReplies = new Map();
 const pendingQualifications = new Map();
 const userImages = new Map();
 
-const MONITORED_CHANNEL_ID = '1170323972173340743';
+const MONITORED_CHANNEL_ID = config.channels.recruitment;
 
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
