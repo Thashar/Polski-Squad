@@ -1271,3 +1271,5 @@ async function sendUserSummary(user, channelId) {
 }
 
 client.login(config.token);
+
+// Test
