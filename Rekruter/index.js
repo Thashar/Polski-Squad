@@ -661,17 +661,7 @@ async function extractOptimizedStatsFromImage(imagePath, userId) {
         
         console.log(`[ANALYSIS] Wymiary obrazu: ${dimensions.width}x${dimensions.height}`);
         
-        const aspectRatio = dimensions.width / dimensions.height;
-        if (aspectRatio < 0.5 || aspectRatio > 3.0) {
-            console.log(`[ANALYSIS] ❌ Nieprawidłowe proporcje obrazu: ${aspectRatio}`);
-            return {
-                isValidEquipment: false,
-                playerNick: null,
-                characterAttack: null,
-                confidence: 0,
-                error: 'INVALID_ASPECT_RATIO'
-            };
-        }
+        // USUNIĘTO SPRAWDZANIE PROPORCJI - zdjęcia mogą mieć różne rozmiary
         
         await updateUserEphemeralReply(userId, '✂️ Wycinam regiony obrazu...');
         
