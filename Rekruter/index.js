@@ -645,7 +645,7 @@ function extractAttackFromText(text) {
     
     console.log(`[ATK_EXTRACT] ❌ BRAK WYNIKU: Nie znaleziono ataku żadną metodą`);
     return { attack: null, confidence: 0, method: 'none' };
-}
+
 
 function checkEquipmentKeyword(text) {
     console.log(`[EQUIPMENT] ===== SPRAWDZANIE SŁOWA EQUIPMENT =====`);
