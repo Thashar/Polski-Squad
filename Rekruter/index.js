@@ -9,6 +9,7 @@ const sharp = require('sharp');
 // Załadowanie zmiennych środowiskowych z folderu Rekruter
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+
 // Walidacja wymaganych zmiennych środowiskowych
 const requiredEnvVars = [
     'DISCORD_TOKEN',
@@ -64,9 +65,7 @@ const config = {
         invalidRC: "Podaj poprawną ilość RC!",
         invalidLunarLevel: "Podaj poprawny poziom Lunar Mine Expedition (1-12)!",
         invalidLunarPoints: "Podaj poprawną ilość punktów z I fazy Lunar Mine Expedition (0-1500)!",
-        invalidEquipmentImage: "❌ To nie jest zdjęcie postaci! Proszę wklej zdjęcie postaci bez obróbki. Musi być widoczny Twój nick w prawym górnym rogu, postać oraz EQ!",
-        nickNotFound: "❌ Nie mogę odczytać Twojego nicku! Upewnij się, że nick w prawym górnym rogu jest wyraźnie widoczny i nie jest obcięty ani zamazany!",
-        attackNotFound: "❌ Nie mogę odczytać wartości ATK! Upewnij się, że statystyki postaci są wyraźnie widoczne!",
+        invalidEquipmentImage: "❌ To nie jest zdjęcie postaci! Proszę wklej zdjęcie postaci bez obróbki. Musi być widoczny Twój nick, postać oraz EQ!",
         notQualified: "\nWitaj na serwerze!\nNiestety nie kwalifikujesz się do żadnego z naszych klanów :PepeSad:\n\nZostań z nami na serwerze, już niedługo z naszą pomocą osiągniesz odpowiedni poziom. <:PepePOG:1185136709487300669> <#1183308580867285152> <a:PepeDziedoberek:1246475492190720241> z nami lub od razu zacznij <#1170323972173340744> <:PepeHahaNoob:1246476180408762548> .\nNa kanale <#1207041051831832586>, możesz wrzucić zdjęcie swojego EQ, sprawdzimy czy można coś poprawić <a:PepeConfused:1246476605614985316> , wytyczymy Ci odpowiednią ścieżkę rozwoju <a:PandaSSJ:1265690596727848963>\nNa kanałach <#1190255710005633174> oraz <#1326501601409761350> możesz ustawić sobie odpowiednie role na serwerze, dzięki którym dostaniesz dostęp do tematycznych kanałów na serwerze. <a:PepePopcorn2:1259556091474481244> \n\nZmień NICK na serwerze na taki jaki masz w grze, jest to bardzo ważne byśmy pozostali w kontakcie! <:PepeOK:1185134659286347886>",
         clan0Welcome: "\n**Aplikujesz do klanu :video_game:PolskiSquad⁰:video_game:**\n\nNa początek potrzebujemy **zdjęcia Twojego EQ,** prześlij nam je tutaj.\nOsoba zajmująca się rekrutacją, jak tylko będzie na pewno się do Ciebie odezwie.\n\n**W międzyczasie zapoznaj się z zasadami klanu:**\n1.〘:trophy:〙Cel minimum 100 pkt. Optymalnie 130 pkt. dla ambitnych.\n2.〘:crossed_swords:〙Aktywny udział w eventach oraz ekspedycjach.\n3.〘:video_game:〙Codzienna aktywność w grze.\n4.〘:calling:〙Codzienna aktywność na discordzie.\n5.〘:loudspeaker:〙Uruchomienie powiadomień o wzmiankach z serwera jest obowiązkowe.\n6.〘:chart_with_upwards_trend:〙Wyraźny progres w grze.\n\nWymagania rekrutacyjne znajdziesz w naszym regulaminie: https://discord.com/channels/1170323970692743240/1170349018900074637 \n\n**W oczekiwaniu na kontakt z naszej strony:**\n<#1183308580867285152> <a:PepeDziedoberek:1246475492190720241> z nami lub od razu zacznij <#1170323972173340744> <:PepeHahaNoob:1246476180408762548> .\nNa kanale <#1207041051831832586>, możesz wrzucić zdjęcie swojego EQ, sprawdzimy czy można coś poprawić <a:PepeConfused:1246476605614985316> , wytyczymy Ci odpowiednią ścieżkę rozwoju <a:PandaSSJ:1265690596727848963>\nNa kanałach <#1190255710005633174> oraz <#1326501601409761350> możesz ustawić sobie odpowiednie role na serwerze, dzięki którym dostaniesz dostęp do tematycznych kanałów na serwerze. <a:PepePopcorn2:1259556091474481244>\n\nZmień NICK na serwerze na taki jaki masz w grze, jest to bardzo ważne byśmy pozostali w kontakcie! <:PepeOK:1185134659286347886>\n\nJeśli nadal czekasz na odpowiedź z naszej strony, nie martw się, zazwyczaj nie trwa to długo. Dziękujemy! <:PepeOK:1185134659286347886>",
         clan1Welcome: "\n**Aplikujesz do klanu ⚡Polski Squad¹⚡**\n\nNa początek potrzebujemy **zdjęcia Twojego EQ,** prześlij nam je tutaj.\nOsoba zajmująca się rekrutacją, jak tylko będzie na pewno się do Ciebie odezwie.\n\n**W międzyczasie zapoznaj się z zasadami klanu:**\n1.〘:trophy:〙Cel minimum 100 pkt. Optymalnie 130 pkt. dla ambitnych.\n2.〘:crossed_swords:〙Aktywny udział w eventach oraz ekspedycjach.\n3.〘:video_game:〙Codzienna aktywność w grze.\n4.〘:calling:〙Codzienna aktywność na discordzie.\n5.〘:loudspeaker:〙Uruchomienie powiadomień o wzmiankach z serwera jest obowiązkowe.\n6.〘:chart_with_upwards_trend:〙Wyraźny progres w grze.\n\nWymagania rekrutacyjne znajdziesz w naszym regulaminie: https://discord.com/channels/1170323970692743240/1170349018900074637 \n\n**W oczekiwaniu na kontakt z naszej strony:**\n<#1183308580867285152> <a:PepeDziedoberek:1246475492190720241> z nami lub od razu zacznij <#1170323972173340744> <:PepeHahaNoob:1246476180408762548> .\nNa kanale <#1207041051831832586>, możesz wrzucić zdjęcie swojego EQ, sprawdzimy czy można coś poprawić <a:PepeConfused:1246476605614985316> , wytyczymy Ci odpowiednią ścieżkę rozwoju <a:PandaSSJ:1265690596727848963>\nNa kanałach <#1190255710005633174> oraz <#1326501601409761350> możesz ustawić sobie odpowiednie role na serwerze, dzięki którym dostaniesz dostęp do tematycznych kanałów na serwerze. <a:PepePopcorn2:1259556091474481244>\n\nZmień NICK na serwerze na taki jaki masz w grze, jest to bardzo ważne byśmy pozostali w kontakcie! <:PepeOK:1185134659286347886>\n\nJeśli nadal czekasz na odpowiedź z naszej strony, nie martw się, zazwyczaj nie trwa to długo. Dziękujemy! <:PepeOK:1185134659286347886>",
@@ -86,57 +85,17 @@ const client = new Client({
     ]
 });
 
-// Mapy przechowujące dane użytkowników
 const userStates = new Map();
 const userInfo = new Map();
 const nicknameRequests = new Map();
 const userEphemeralReplies = new Map();
 const pendingQualifications = new Map();
 const userImages = new Map();
-const fileTimeouts = new Map();
 
 const MONITORED_CHANNEL_ID = config.channels.recruitment;
 
-// Funkcje pomocnicze
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function safeDeleteTempFile(userId, logPrefix = 'TEMP') {
-    const userImagePath = userImages.get(userId);
-    if (userImagePath) {
-        try {
-            await fs.unlink(userImagePath);
-            userImages.delete(userId);
-            console.log(`[${logPrefix}] ✅ Usunięto tymczasowy obraz dla użytkownika ${userId}`);
-            return true;
-        } catch (error) {
-            console.log(`[${logPrefix}] ❌ Nie udało się usunąć tymczasowego obrazu: ${error.message}`);
-            return false;
-        }
-    }
-    return true;
-}
-
-async function cleanupTempFolder() {
-    try {
-        const tempDir = path.join(__dirname, 'temp');
-        const files = await fs.readdir(tempDir);
-        
-        for (const file of files) {
-            if (file.startsWith('temp_') || file.startsWith('region_')) {
-                const filePath = path.join(tempDir, file);
-                try {
-                    await fs.unlink(filePath);
-                    console.log(`[CLEANUP] ✅ Usunięto stary plik tymczasowy: ${file}`);
-                } catch (error) {
-                    console.log(`[CLEANUP] ❌ Nie udało się usunąć pliku: ${file}`);
-                }
-            }
-        }
-    } catch (error) {
-        console.log(`[CLEANUP] ❌ Błąd podczas czyszczenia folderu temp:`, error);
-    }
 }
 
 async function safeAddRole(member, roleId) {
@@ -265,6 +224,41 @@ async function sendPendingQualification(userId, qualificationData) {
     }
 }
 
+function findNicknameInText(text) {
+    console.log(`[OCR] Szukanie nicku w pierwszych 3 linijkach tekstu`);
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    const maxLines = Math.min(3, lines.length);
+    console.log(`[OCR] Sprawdzanie ${maxLines} linii (maksymalnie 3)`);
+    
+    for (let i = 0; i < maxLines; i++) {
+        const line = lines[i];
+        console.log(`[OCR] Sprawdzanie linii ${i + 1}: "${line}"`);
+        
+        const words = line.split(/\s+/);
+        const filteredWords = words.filter(word => /[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(word));
+        
+        if (filteredWords.length > 0) {
+            let longestWord = filteredWords[0];
+            for (const word of filteredWords) {
+                if (word.length > longestWord.length) {
+                    longestWord = word;
+                }
+            }
+            
+            longestWord = longestWord.replace(/^[^\w\u00C0-\u017F]+|[^\w\u00C0-\u017F]+$/g, '');
+            
+            if (longestWord && longestWord.length >= 3) {
+                console.log(`[OCR] Znaleziono potencjalny nick "${longestWord}" w linii ${i + 1}`);
+                return { nickname: longestWord, lineIndex: i };
+            }
+        }
+    }
+    
+    console.log(`[OCR] ❌ Nie znaleziono nicku w pierwszych 3 linijkach`);
+    return { nickname: null, lineIndex: -1 };
+}
+
 async function updateUserEphemeralReply(userId, content, components = []) {
     const userReply = userEphemeralReplies.get(userId);
     if (!userReply) {
@@ -284,526 +278,6 @@ async function updateUserEphemeralReply(userId, content, components = []) {
     }
 }
 
-// ========== FUNKCJE ANALIZY OBRAZU ==========
-
-async function getImageDimensions(imagePath) {
-    try {
-        const metadata = await sharp(imagePath).metadata();
-        return { width: metadata.width, height: metadata.height };
-    } catch (error) {
-        console.error(`[IMAGE] ❌ Błąd pobierania wymiarów obrazu:`, error);
-        return null;
-    }
-}
-
-async function extractRegionFromImage(imagePath, region, outputPath) {
-    try {
-        console.log(`[REGION] Wycinanie regionu ${region.name} z ${imagePath}`);
-        
-        await sharp(imagePath)
-            .extract({
-                left: region.left,
-                top: region.top,
-                width: region.width,
-                height: region.height
-            })
-            .png()
-            .toFile(outputPath);
-            
-        console.log(`[REGION] ✅ Wycięto region ${region.name} do ${outputPath}`);
-        return true;
-    } catch (error) {
-        console.error(`[REGION] ❌ Błąd wycinania regionu ${region.name}:`, error);
-        return false;
-    }
-}
-
-async function preprocessRegionForOCR(inputPath, outputPath, type = 'default') {
-    try {
-        console.log(`[PREPROCESS] Przetwarzanie regionu ${type}: ${inputPath}`);
-        
-        let pipeline = sharp(inputPath);
-        
-        switch (type) {
-            case 'nickname':
-                pipeline = pipeline
-                    .grayscale()
-                    .normalize()
-                    .sharpen({ sigma: 1.0 })
-                    .linear(1.2, -(128 * 0.2))
-                    .threshold(160);
-                break;
-                
-            case 'attack':
-                pipeline = pipeline
-                    .grayscale()
-                    .normalize()
-                    .sharpen({ sigma: 1.2 })
-                    .linear(2.0, -(128 * 1.0))
-                    .threshold(160);
-                break;
-                
-            case 'equipment':
-                pipeline = pipeline
-                    .grayscale()
-                    .normalize()
-                    .threshold(200);
-                break;
-                
-            default:
-                pipeline = pipeline
-                    .grayscale()
-                    .normalize()
-                    .threshold(180);
-        }
-        
-        await pipeline.png().toFile(outputPath);
-        console.log(`[PREPROCESS] ✅ Przetworzono region ${type}`);
-        return true;
-    } catch (error) {
-        console.error(`[PREPROCESS] ❌ Błąd przetwarzania regionu ${type}:`, error);
-        return false;
-    }
-}
-
-function calculateImageRegions(width, height) {
-    console.log(`[REGIONS] Kalkulacja regionów dla obrazu ${width}x${height}`);
-    
-    const regions = {
-        nickname: {
-            name: 'nickname',
-            left: Math.floor(width * 0.5),
-            top: 0,
-            width: Math.floor(width * 0.5),
-            height: Math.floor(height * 0.2)
-        },
-        stats: {
-            name: 'stats',
-            left: Math.floor(width * 0.1),
-            top: Math.floor(height * 0.2),
-            width: Math.floor(width * 0.8),
-            height: Math.floor(height * 0.4)
-        },
-        equipment: {
-            name: 'equipment',
-            left: 0,
-            top: Math.floor(height * 0.8),
-            width: width,
-            height: Math.floor(height * 0.2)
-        }
-    };
-    
-    console.log(`[REGIONS] Regiony:`, regions);
-    return regions;
-}
-
-async function performOCROnRegion(imagePath, region, ocrOptions = {}) {
-    try {
-        console.log(`[OCR] Rozpoznawanie tekstu w regionie ${region}: ${imagePath}`);
-        
-        const defaultOptions = {
-            lang: 'pol+eng',
-            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄĆĘŁŃÓŚŹŻąćęłńóśźż|: +-%.,()/'
-        };
-        
-        const finalOptions = { ...defaultOptions, ...ocrOptions };
-        
-        const { data: { text, confidence } } = await Tesseract.recognize(imagePath, finalOptions.lang, finalOptions);
-        
-        console.log(`[OCR] Region ${region} - Pewność: ${confidence}%`);
-        console.log(`[OCR] Region ${region} - Tekst: "${text.substring(0, 100)}..."`);
-        
-        return { text: text.trim(), confidence };
-    } catch (error) {
-        console.error(`[OCR] ❌ Błąd OCR dla regionu ${region}:`, error);
-        return { text: '', confidence: 0 };
-    }
-}
-
-function extractNicknameFromText(text) {
-    console.log(`[NICK_EXTRACT] ===== ZAAWANSOWANA ANALIZA NICKU =====`);
-    console.log(`[NICK_EXTRACT] Pełny tekst do analizy:`);
-    console.log(text);
-    console.log(`[NICK_EXTRACT] ===============================`);
-    
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    // METODA 1: Szukaj wzorca "PL | nick" (najwyższa pewność)
-    console.log(`[NICK_EXTRACT] METODA 1: Szukanie wzorca "PL | nick"`);
-    for (const line of lines) {
-        console.log(`[NICK_EXTRACT] Analizuję linię: "${line}"`);
-        
-        const plPatterns = [
-            /PL\s*\|\s*([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ][a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ_-]*)/i,
-            /PL\s*\|\s*([a-zA-Z][a-zA-Z0-9_-]*)/i,
-            /PL\|\s*([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ][a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ_-]*)/i
-        ];
-        
-        for (const pattern of plPatterns) {
-            const match = line.match(pattern);
-            if (match && match[1]) {
-                const nickname = match[1].trim();
-                if (nickname.length >= 3 && nickname.length <= 20) {
-                    console.log(`[NICK_EXTRACT] ✅ SUKCES METODA 1: Znaleziono nick "${nickname}" (wzorzec PL)`);
-                    return { nickname, confidence: 95, method: 'PL_pattern' };
-                }
-            }
-        }
-    }
-    
-    // METODA 2: Szukaj po znaku "|" (bez PL)
-    console.log(`[NICK_EXTRACT] METODA 2: Szukanie po znaku "|"`);
-    for (const line of lines) {
-        if (line.includes('|')) {
-            console.log(`[NICK_EXTRACT] Znaleziono linię z "|": "${line}"`);
-            const parts = line.split('|');
-            if (parts.length >= 2) {
-                const potentialNick = parts[1].trim();
-                const cleanNick = potentialNick.split(/\s+/)[0];
-                
-                if (cleanNick.length >= 3 && cleanNick.length <= 20 && /^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(cleanNick)) {
-                    console.log(`[NICK_EXTRACT] ✅ SUKCES METODA 2: Znaleziono nick "${cleanNick}" (po |)`);
-                    return { nickname: cleanNick, confidence: 85, method: 'pipe_split' };
-                }
-            }
-        }
-    }
-    
-    // METODA 3: Szukaj samodzielnego nicku (bez prefiksów)
-    console.log(`[NICK_EXTRACT] METODA 3: Szukanie samodzielnego nicku`);
-    
-    const excludeWords = [
-        'level', 'lvl', 'lv', 'attack', 'atk', 'equipment', 'equip', 'clan', 'guild', 
-        'player', 'hp', 'defense', 'def', 'power', 'score', 'points', 'exp', 'gold',
-        'silver', 'bronze', 'diamond', 'platinum', 'master', 'legendary',
-        'my', 'equipment', 'stats', 'character', 'profile', 'info'
-    ];
-    
-    const maxLines = Math.min(3, lines.length);
-    for (let i = 0; i < maxLines; i++) {
-        const line = lines[i];
-        console.log(`[NICK_EXTRACT] METODA 3 - Analizuję linię ${i + 1}: "${line}"`);
-        
-        const words = line.split(/\s+/);
-        for (const word of words) {
-            const cleanWord = word.replace(/[^a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]/g, '');
-            
-            if (cleanWord.length >= 3 && cleanWord.length <= 20) {
-                if (/^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(cleanWord)) {
-                    const isExcluded = excludeWords.some(excluded => 
-                        cleanWord.toLowerCase().includes(excluded.toLowerCase())
-                    );
-                    
-                    if (!isExcluded) {
-                        if (!/^\d+$/.test(cleanWord)) {
-                            console.log(`[NICK_EXTRACT] ✅ SUKCES METODA 3: Znaleziono potencjalny nick "${cleanWord}"`);
-                            return { nickname: cleanWord, confidence: 75, method: 'standalone_word' };
-                        }
-                    } else {
-                        console.log(`[NICK_EXTRACT] Wykluczono słowo "${cleanWord}" (słowo kluczowe gry)`);
-                    }
-                }
-            }
-        }
-    }
-    
-    // METODA 4: Ostatnia szansa - najdłuższe alfanumeryczne słowo
-    console.log(`[NICK_EXTRACT] METODA 4: Ostatnia szansa - najdłuższe słowo`);
-    
-    let bestCandidate = null;
-    let bestLength = 0;
-    
-    for (const line of lines.slice(0, 5)) {
-        const words = line.split(/\s+/);
-        for (const word of words) {
-            const cleanWord = word.replace(/[^a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]/g, '');
-            
-            if (cleanWord.length >= 4 && cleanWord.length <= 20 && cleanWord.length > bestLength) {
-                if (/^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(cleanWord) && !/^\d+$/.test(cleanWord)) {
-                    const isExcluded = excludeWords.some(excluded => 
-                        cleanWord.toLowerCase().includes(excluded.toLowerCase())
-                    );
-                    
-                    if (!isExcluded) {
-                        bestCandidate = cleanWord;
-                        bestLength = cleanWord.length;
-                    }
-                }
-            }
-        }
-    }
-    
-    if (bestCandidate) {
-        console.log(`[NICK_EXTRACT] ⚠️ SUKCES METODA 4: Najlepszy kandydat "${bestCandidate}" (niska pewność)`);
-        return { nickname: bestCandidate, confidence: 60, method: 'best_candidate' };
-    }
-    
-    console.log(`[NICK_EXTRACT] ❌ BRAK WYNIKU: Nie znaleziono nicku żadną metodą`);
-    return { nickname: null, confidence: 0, method: 'none' };
-}
-
-function extractAttackFromText(text) {
-    console.log(`[ATK_EXTRACT] ===== ZAAWANSOWANA ANALIZA ATK =====`);
-    console.log(`[ATK_EXTRACT] Tekst do analizy:`);
-    console.log(text);
-    console.log(`[ATK_EXTRACT] ==============================`);
-    
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    // METODA 1: Szukaj linii z "ATK" i liczbą (najwyższa pewność)
-    console.log(`[ATK_EXTRACT] METODA 1: Szukanie linii z "ATK"`);
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        console.log(`[ATK_EXTRACT] Sprawdzam linię ${i + 1}: "${line}"`);
-        
-        if (line.toLowerCase().includes('atk')) {
-            console.log(`[ATK_EXTRACT] ✅ Znaleziono linię z ATK: "${line}"`);
-            
-            const numbers = line.match(/\b\d+\b/g);
-            if (numbers) {
-                console.log(`[ATK_EXTRACT] Znalezione liczby w linii ATK:`, numbers);
-                
-                for (const numStr of numbers) {
-                    const num = parseInt(numStr);
-                    if (num >= 1000 && num <= 50000000) {
-                        console.log(`[ATK_EXTRACT] ✅ SUKCES METODA 1: Znaleziono ATK ${num} w linii ATK`);
-                        return { attack: num, confidence: 95, method: 'ATK_line' };
-                    }
-                }
-            }
-        }
-    }
-    
-    // METODA 2: Szukaj we wszystkich liniach liczb w odpowiednim zakresie
-    console.log(`[ATK_EXTRACT] METODA 2: Szukanie we wszystkich liniach`);
-    const allNumbers = [];
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        console.log(`[ATK_EXTRACT] Sprawdzam linię ${i + 1}: "${line}"`);
-        
-        const numbers = line.match(/\b\d+\b/g);
-        if (numbers) {
-            for (const numStr of numbers) {
-                const num = parseInt(numStr);
-                if (num >= 1000 && num <= 50000000) {
-                    let confidence = 70;
-                    
-                    if (line.toLowerCase().includes('atk')) {
-                        confidence = 90;
-                    }
-                    
-                    if (line.toLowerCase().includes('hp')) {
-                        confidence -= 20;
-                    }
-                    
-                    allNumbers.push({ 
-                        num, 
-                        line: line, 
-                        lineIndex: i,
-                        confidence 
-                    });
-                }
-            }
-        }
-    }
-    
-    console.log(`[ATK_EXTRACT] Wszystkie potencjalne ATK:`, allNumbers);
-    
-    if (allNumbers.length > 0) {
-        allNumbers.sort((a, b) => {
-            if (b.confidence !== a.confidence) {
-                return b.confidence - a.confidence;
-            }
-            return b.num - a.num;
-        });
-        
-        const best = allNumbers[0];
-        console.log(`[ATK_EXTRACT] ✅ SUKCES METODA 2: Wybrano najbardziej prawdopodobny ATK: ${best.num} (pewność: ${best.confidence}%)`);
-        return { attack: best.num, confidence: best.confidence, method: 'best_guess' };
-    }
-    
-    console.log(`[ATK_EXTRACT] ❌ BRAK WYNIKU: Nie znaleziono ataku żadną metodą`);
-    return { attack: null, confidence: 0, method: 'none' };
-}
-
-function checkEquipmentKeyword(text) {
-    console.log(`[EQUIPMENT] ===== SPRAWDZANIE SŁOWA EQUIPMENT =====`);
-    console.log(`[EQUIPMENT] Tekst do sprawdzenia:`);
-    console.log(text.substring(0, 200) + "...");
-    console.log(`[EQUIPMENT] ===============================`);
-    
-    const lowerText = text.toLowerCase();
-    const keywords = ['equipment', 'equipement', 'equipmnt', 'equip'];
-    
-    for (const keyword of keywords) {
-        if (lowerText.includes(keyword)) {
-            console.log(`[EQUIPMENT] ✅ SUKCES: Znaleziono słowo kluczowe "${keyword}"`);
-            return { found: true, keyword, confidence: 90 };
-        }
-    }
-    
-    console.log(`[EQUIPMENT] ❌ BRAK WYNIKU: Nie znaleziono słów kluczowych Equipment`);
-    return { found: false, keyword: null, confidence: 0 };
-}
-
-async function extractOptimizedStatsFromImage(imagePath, userId) {
-    try {
-        console.log(`[ANALYSIS] ===== ROZPOCZĘCIE ZAAWANSOWANEJ ANALIZY =====`);
-        console.log(`[ANALYSIS] Użytkownik: ${userId}`);
-        console.log(`[ANALYSIS] Ścieżka obrazu: ${imagePath}`);
-        
-        await updateUserEphemeralReply(userId, '📐 Analizuję wymiary obrazu...');
-        
-        const dimensions = await getImageDimensions(imagePath);
-        if (!dimensions) {
-            throw new Error('Nie można pobrać wymiarów obrazu');
-        }
-        
-        console.log(`[ANALYSIS] Wymiary obrazu: ${dimensions.width}x${dimensions.height}`);
-        
-        // USUNIĘTO SPRAWDZANIE PROPORCJI - zdjęcia mogą mieć różne rozmiary
-        
-        await updateUserEphemeralReply(userId, '✂️ Wycinam regiony obrazu...');
-        
-        const regions = calculateImageRegions(dimensions.width, dimensions.height);
-        
-        const tempDir = path.dirname(imagePath);
-        const baseFilename = path.basename(imagePath, path.extname(imagePath));
-        
-        const regionPaths = {
-            nickname: {
-                original: path.join(tempDir, `${baseFilename}_nickname_orig.png`),
-                processed: path.join(tempDir, `${baseFilename}_nickname_proc.png`)
-            },
-            stats: {
-                original: path.join(tempDir, `${baseFilename}_stats_orig.png`),
-                processed: path.join(tempDir, `${baseFilename}_stats_proc.png`)
-            },
-            equipment: {
-                original: path.join(tempDir, `${baseFilename}_equipment_orig.png`),
-                processed: path.join(tempDir, `${baseFilename}_equipment_proc.png`)
-            }
-        };
-        
-        const regionExtractions = await Promise.all([
-            extractRegionFromImage(imagePath, regions.nickname, regionPaths.nickname.original),
-            extractRegionFromImage(imagePath, regions.stats, regionPaths.stats.original),
-            extractRegionFromImage(imagePath, regions.equipment, regionPaths.equipment.original)
-        ]);
-        
-        if (!regionExtractions.every(Boolean)) {
-            throw new Error('Nie udało się wyciąć wszystkich regionów');
-        }
-        
-        await updateUserEphemeralReply(userId, '🔧 Przetwarzam regiony...');
-        
-        await Promise.all([
-            preprocessRegionForOCR(regionPaths.nickname.original, regionPaths.nickname.processed, 'nickname'),
-            preprocessRegionForOCR(regionPaths.stats.original, regionPaths.stats.processed, 'attack'),
-            preprocessRegionForOCR(regionPaths.equipment.original, regionPaths.equipment.processed, 'equipment')
-        ]);
-        
-        await updateUserEphemeralReply(userId, '🔍 Rozpoznaję tekst...');
-        
-        const [nicknameOCR, statsOCR, equipmentOCR] = await Promise.all([
-            performOCROnRegion(regionPaths.nickname.processed, 'nickname'),
-            performOCROnRegion(regionPaths.stats.processed, 'stats', {
-                tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz: '
-            }),
-            performOCROnRegion(regionPaths.equipment.processed, 'equipment')
-        ]);
-        
-        console.log(`[ANALYSIS] OCR Results:`);
-        console.log(`[ANALYSIS] Nickname region confidence: ${nicknameOCR.confidence}%`);
-        console.log(`[ANALYSIS] Stats region confidence: ${statsOCR.confidence}%`);
-        console.log(`[ANALYSIS] Equipment region confidence: ${equipmentOCR.confidence}%`);
-        
-        await updateUserEphemeralReply(userId, '📊 Analizuję wyniki...');
-        
-        const equipmentCheck = checkEquipmentKeyword(equipmentOCR.text);
-        const nicknameResult = extractNicknameFromText(nicknameOCR.text);
-        const attackResult = extractAttackFromText(statsOCR.text);
-        
-        const cleanupPaths = [
-            ...Object.values(regionPaths.nickname),
-            ...Object.values(regionPaths.stats),
-            ...Object.values(regionPaths.equipment)
-        ];
-        
-        for (const filePath of cleanupPaths) {
-            try {
-                await fs.unlink(filePath);
-            } catch (error) {
-                // Ignoruj błędy usuwania
-            }
-        }
-        
-        if (!equipmentCheck.found) {
-            console.log(`[ANALYSIS] ❌ Nie znaleziono słowa Equipment - to nie jest zdjęcie Equipment`);
-            return {
-                isValidEquipment: false,
-                playerNick: null,
-                characterAttack: null,
-                confidence: 0,
-                error: 'EQUIPMENT_KEYWORD_NOT_FOUND'
-            };
-        }
-        
-        if (!nicknameResult.nickname) {
-            console.log(`[ANALYSIS] ❌ Nie znaleziono nicku w prawym górnym rogu`);
-            return {
-                isValidEquipment: true,
-                playerNick: null,
-                characterAttack: attackResult.attack,
-                confidence: 0,
-                error: 'NICKNAME_NOT_FOUND'
-            };
-        }
-        
-        if (!attackResult.attack) {
-            console.log(`[ANALYSIS] ❌ Nie znaleziono wartości ATK`);
-            return {
-                isValidEquipment: true,
-                playerNick: nicknameResult.nickname,
-                characterAttack: null,
-                confidence: 0,
-                error: 'ATTACK_NOT_FOUND'
-            };
-        }
-        
-        const overallConfidence = Math.round(
-            (nicknameResult.confidence + attackResult.confidence + equipmentCheck.confidence) / 3
-        );
-        
-        const result = {
-            isValidEquipment: true,
-            playerNick: nicknameResult.nickname,
-            characterAttack: attackResult.attack,
-            confidence: overallConfidence,
-            details: {
-                nickname: nicknameResult,
-                attack: attackResult,
-                equipment: equipmentCheck
-            }
-        };
-        
-        console.log(`[ANALYSIS] ===== WYNIKI ANALIZY =====`);
-        console.log(`[ANALYSIS] Nick gracza: ${result.playerNick} (pewność: ${nicknameResult.confidence}%)`);
-        console.log(`[ANALYSIS] Atak postaci: ${result.characterAttack} (pewność: ${attackResult.confidence}%)`);
-        console.log(`[ANALYSIS] Equipment: ${equipmentCheck.found} (pewność: ${equipmentCheck.confidence}%)`);
-        console.log(`[ANALYSIS] Ogólna pewność: ${overallConfidence}%`);
-        console.log(`[ANALYSIS] ============================`);
-        
-        return result;
-        
-    } catch (error) {
-        console.error(`[ANALYSIS] ❌ Błąd podczas zaawansowanej analizy:`, error);
-        throw error;
-    }
-}
-
-// ========== EVENT HANDLERS ==========
-
 client.once('ready', async () => {
     console.log(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
     console.log(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
@@ -811,9 +285,6 @@ client.once('ready', async () => {
     try {
         await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
         console.log(`[BOT] ✅ Utworzono folder temp`);
-        
-        await cleanupTempFolder();
-        
     } catch (error) {
         console.log(`[BOT] Folder temp już istnieje`);
     }
@@ -970,8 +441,6 @@ client.on('messageCreate', async message => {
     }
 });
 
-// ========== FUNKCJE OBSŁUGI ==========
-
 async function downloadImage(url, filepath) {
     console.log(`[DOWNLOAD] Rozpoczynam pobieranie obrazu: ${url}`);
     return new Promise((resolve, reject) => {
@@ -990,6 +459,249 @@ async function downloadImage(url, filepath) {
             reject(err);
         });
     });
+}
+
+async function preprocessImageForWhiteText(inputPath, outputPath) {
+    try {
+        console.log(`[IMAGE] Przetwarzanie obrazu: ${inputPath} -> ${outputPath}`);
+        await sharp(inputPath)
+            .grayscale()
+            .threshold(200)
+            .negate()
+            .png()
+            .toFile(outputPath);
+        console.log(`[IMAGE] ✅ Przetworzono obraz`);
+    } catch (error) {
+        console.error(`[IMAGE] ❌ Błąd przetwarzania obrazu:`, error);
+        throw error;
+    }
+}
+
+function checkForEquipmentKeyword(text) {
+    const lowerText = text.toLowerCase();
+    console.log(`[OCR] Sprawdzanie słów kluczowych Equipment w tekście`);
+    
+    const equipmentKeywords = [
+        'equipment',
+        'equipement',
+        'equipmnt',
+        'equip',
+        'eq'
+    ];
+    
+    for (const keyword of equipmentKeywords) {
+        if (lowerText.includes(keyword)) {
+            console.log(`[OCR] ✅ Znaleziono słowo kluczowe: ${keyword}`);
+            return true;
+        }
+    }
+    
+    console.log(`[OCR] ❌ Nie znaleziono słów kluczowych Equipment`);
+    return false;
+}
+
+async function extractOptimizedStatsFromImage(imagePath, userId) {
+    try {
+        console.log(`[OCR] ===== ROZPOCZĘCIE ANALIZY OCR =====`);
+        console.log(`[OCR] Użytkownik: ${userId}`);
+        console.log(`[OCR] Ścieżka obrazu: ${imagePath}`);
+        
+        const processedPath = imagePath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '_processed.png');
+        
+        await updateUserEphemeralReply(userId, '🔄 Przetwarzam obraz...');
+        console.log(`[OCR] Rozpoczynam preprocessowanie obrazu`);
+        await preprocessImageForWhiteText(imagePath, processedPath);
+        
+        await updateUserEphemeralReply(userId, '🔍 Analizuję obraz...');
+        console.log(`[OCR] Rozpoczynam rozpoznawanie tekstu Tesseract`);
+        
+        const { data: { text } } = await Tesseract.recognize(processedPath, 'pol+eng', {
+            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄĆĘŁŃÓŚŹŻąćęłńóśźż: +-%.,()/'
+        });
+        
+        console.log(`[OCR] ===== WYNIK TESSERACT =====`);
+        console.log(`[OCR] Rozpoznany tekst:`);
+        console.log(text);
+        console.log(`[OCR] ===============================`);
+        
+        await fs.unlink(processedPath).catch(() => {});
+        
+        await updateUserEphemeralReply(userId, '📊 Sprawdzam czy to Equipment...');
+        
+        const hasEquipment = checkForEquipmentKeyword(text);
+        
+        if (!hasEquipment) {
+            console.log(`[OCR] ❌ Nie znaleziono słów kluczowych Equipment - odrzucam obraz`);
+            return { 
+                isValidEquipment: false,
+                playerNick: null,
+                characterAttack: null,
+                confidence: 0
+            };
+        }
+        
+        await updateUserEphemeralReply(userId, '📊 Analizuję statystyki...');
+        console.log(`[OCR] Rozpoczynam analizę statystyk`);
+        
+        const stats = extractStatsFromLines(text);
+        
+        if (!stats.playerNick) {
+            console.log(`[OCR] ❌ Nie znaleziono nicku w pierwszych 3 linijkach - odrzucam obraz`);
+            return { 
+                isValidEquipment: false,
+                playerNick: null,
+                characterAttack: null,
+                confidence: 0,
+                error: 'NICK_NOT_FOUND_IN_FIRST_3_LINES'
+            };
+        }
+        
+        stats.isValidEquipment = true;
+        
+        console.log(`[OCR] ===== WYNIKI ANALIZY =====`);
+        console.log(`[OCR] Nick gracza: ${stats.playerNick}`);
+        console.log(`[OCR] Atak postaci: ${stats.characterAttack}`);
+        console.log(`[OCR] Pewność: ${stats.confidence}%`);
+        console.log(`[OCR] ===========================`);
+        
+        return stats;
+        
+    } catch (error) {
+        console.error(`[OCR] ❌ Błąd podczas analizy OCR:`, error);
+        throw error;
+    }
+}
+
+function extractStatsFromLines(text) {
+    console.log(`[OCR] Rozpoczynam ekstraktację statystyk z tekstu`);
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    console.log(`[OCR] Liczba linii po filtracji: ${lines.length}`);
+    
+    let playerNick = null;
+    let characterAttack = null;
+    let nickLineIndex = -1;
+    
+    const nicknameResult = findNicknameInText(text);
+    if (nicknameResult.nickname) {
+        playerNick = nicknameResult.nickname;
+        nickLineIndex = nicknameResult.lineIndex;
+        console.log(`[OCR] Znaleziono nick "${playerNick}" w linii ${nickLineIndex + 1}`);
+    } else {
+        console.log(`[OCR] ❌ Nie znaleziono nicku w pierwszych 3 linijkach - zwracam błąd`);
+        return { 
+            playerNick: null, 
+            characterAttack: null,
+            confidence: 0,
+            isValidEquipment: false
+        };
+    }
+    
+    if (nickLineIndex >= 0) {
+        console.log(`[OCR] Szukanie ataku zaczynając od linii ${nickLineIndex + 2}`);
+        
+        for (let i = nickLineIndex + 1; i < lines.length; i++) {
+            const line = lines[i];
+            console.log(`[OCR] Analiza linii ${i + 1} w poszukiwaniu ataku: "${line}"`);
+            
+            const attackFromLine = extractAttackFromLine(line);
+            if (attackFromLine) {
+                characterAttack = attackFromLine;
+                console.log(`[OCR] Znaleziono atak ${characterAttack} w linii ${i + 1}`);
+                break;
+            }
+        }
+    }
+    
+    if (!characterAttack) {
+        console.log(`[OCR] Nie znaleziono ataku w standardowych liniach, przeszukuję cały tekst`);
+        const allNumberMatches = text.match(/\b\d+\b/g);
+        if (allNumberMatches) {
+            console.log(`[OCR] Wszystkie znalezione liczby:`, allNumberMatches);
+            const numbers = allNumberMatches
+                .map(n => parseInt(n))
+                .filter(n => n >= 1000 && n <= 10000000)
+                .sort((a, b) => b - a);
+            
+            console.log(`[OCR] Liczby po filtracji i sortowaniu (1000-10M):`, numbers);
+            
+            if (numbers.length > 0) {
+                if (numbers[0] <= 10000000) {
+                    characterAttack = numbers[0];
+                    console.log(`[OCR] Wybrano największą liczbę jako atak: ${characterAttack}`);
+                } else if (numbers.length > 1 && numbers[1] <= 10000000) {
+                    characterAttack = numbers[1];
+                    console.log(`[OCR] Pierwsza liczba przekracza limit, wybrano drugą najwyższą: ${characterAttack}`);
+                } else {
+                    console.log(`[OCR] Wszystkie liczby przekraczają limit lub są nieodpowiednie`);
+                }
+            }
+        }
+    }
+    
+    const result = { 
+        playerNick, 
+        characterAttack,
+        confidence: calculateSimpleConfidence(playerNick, characterAttack),
+        isValidEquipment: true
+    };
+    
+    console.log(`[OCR] Finalne wyniki ekstraktacji:`, result);
+    return result;
+}
+
+function extractAttackFromLine(line) {
+    console.log(`[OCR] Ekstraktacja ataku z linii: "${line}"`);
+    
+    const numberMatches = line.match(/\b\d+\b/g);
+    
+    if (numberMatches) {
+        console.log(`[OCR] Znalezione liczby w linii:`, numberMatches);
+        
+        for (const numStr of numberMatches) {
+            const num = parseInt(numStr);
+            console.log(`[OCR] Sprawdzam liczbę: ${num}`);
+            
+            if (num >= 1000 && num <= 10000000) {
+                console.log(`[OCR] ✅ Liczba ${num} mieści się w zakresie ataku`);
+                return num;
+            } else {
+                console.log(`[OCR] ❌ Liczba ${num} poza zakresem ataku (1000-10M)`);
+            }
+        }
+    } else {
+        console.log(`[OCR] Nie znaleziono liczb w linii`);
+    }
+    
+    return null;
+}
+
+function calculateSimpleConfidence(playerNick, characterAttack) {
+    let confidence = 0;
+    
+    console.log(`[OCR] Kalkulacja pewności:`);
+    
+    if (playerNick) {
+        confidence += 40;
+        console.log(`[OCR] + 40 punktów za nick`);
+        if (playerNick.length >= 4) {
+            confidence += 10;
+            console.log(`[OCR] + 10 punktów za długość nicku`);
+        }
+    }
+    
+    if (characterAttack) {
+        confidence += 50;
+        console.log(`[OCR] + 50 punktów za atak`);
+        if (characterAttack >= 10000) {
+            confidence += 10;
+            console.log(`[OCR] + 10 punktów za wysoki atak`);
+        }
+    }
+    
+    const finalConfidence = Math.min(confidence, 100);
+    console.log(`[OCR] Końcowa pewność: ${finalConfidence}%`);
+    
+    return finalConfidence;
 }
 
 async function analyzeMessage(message, userState) {
@@ -1222,7 +934,7 @@ async function handleImageInput(message, userState) {
     }
 
     try {
-        await updateUserEphemeralReply(message.author.id, '🚀 Rozpoczynam zaawansowaną analizę zdjęcia...');
+        await updateUserEphemeralReply(message.author.id, '🚀 Rozpoczynam szybką analizę zdjęcia...');
         
         const tempImagePath = path.join(__dirname, 'temp', `temp_${Date.now()}_${message.author.id}.png`);
         console.log(`[IMAGE_INPUT] Ścieżka tymczasowa: ${tempImagePath}`);
@@ -1232,31 +944,20 @@ async function handleImageInput(message, userState) {
 
         userImages.set(message.author.id, tempImagePath);
 
-        const timeoutId = setTimeout(async () => {
-            console.log(`[TIMEOUT] Automatyczne usuwanie pliku dla użytkownika ${message.author.id}`);
-            await safeDeleteTempFile(message.author.id, 'TIMEOUT');
-            fileTimeouts.delete(message.author.id);
-        }, 30 * 60 * 1000);
-
-        fileTimeouts.set(message.author.id, timeoutId);
-
         const stats = await extractOptimizedStatsFromImage(tempImagePath, message.author.id);
 
         if (!stats || !stats.isValidEquipment) {
             console.log(`[IMAGE_INPUT] ❌ Obraz nie zawiera prawidłowych danych`);
             await safeDeleteMessage(message);
             
-            await safeDeleteTempFile(message.author.id, 'ERROR');
-            const timeoutId = fileTimeouts.get(message.author.id);
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-                fileTimeouts.delete(message.author.id);
-            }
+            try {
+                await fs.unlink(tempImagePath);
+                userImages.delete(message.author.id);
+            } catch (error) {}
             
-            if (stats && stats.error === 'NICKNAME_NOT_FOUND') {
-                await updateUserEphemeralReply(message.author.id, config.messages.nickNotFound);
-            } else if (stats && stats.error === 'ATTACK_NOT_FOUND') {
-                await updateUserEphemeralReply(message.author.id, config.messages.attackNotFound);
+            if (stats && stats.error === 'NICK_NOT_FOUND_IN_FIRST_3_LINES') {
+                console.log(`[IMAGE_INPUT] ❌ Nick nie został znaleziony w pierwszych 3 linijkach`);
+                await updateUserEphemeralReply(message.author.id, config.messages.invalidEquipmentImage);
             } else {
                 await updateUserEphemeralReply(message.author.id, config.messages.invalidEquipmentImage);
             }
@@ -1400,13 +1101,6 @@ async function sendWelcomeMessageWithSummary(user) {
 }
 
 async function sendUserSummaryToWelcome(user, channelId) {
-    const timeoutId = fileTimeouts.get(user.id);
-    if (timeoutId) {
-        clearTimeout(timeoutId);
-        fileTimeouts.delete(user.id);
-        console.log(`[SUMMARY] ✅ Anulowano timeout dla użytkownika ${user.id}`);
-    }
-
     console.log(`[SUMMARY] Wysyłanie podsumowania dla ${user.username} na kanał ${channelId}`);
     
     const info = userInfo.get(user.id);
@@ -1480,17 +1174,18 @@ async function sendUserSummaryToWelcome(user, channelId) {
     
     userInfo.delete(user.id);
     
-    await safeDeleteTempFile(user.id, 'SUMMARY');
+    if (userImagePath) {
+        try {
+            await fs.unlink(userImagePath);
+            userImages.delete(user.id);
+            console.log(`[SUMMARY] ✅ Usunięto tymczasowy obraz`);
+        } catch (error) {
+            console.log(`[SUMMARY] ❌ Nie udało się usunąć tymczasowego obrazu`);
+        }
+    }
 }
 
 async function sendUserSummary(user, channelId) {
-    const timeoutId = fileTimeouts.get(user.id);
-    if (timeoutId) {
-        clearTimeout(timeoutId);
-        fileTimeouts.delete(user.id);
-        console.log(`[SUMMARY] ✅ Anulowano timeout dla użytkownika ${user.id}`);
-    }
-
     console.log(`[SUMMARY] Wysyłanie podsumowania dla ${user.username} na kanał klanu ${channelId}`);
     
     const info = userInfo.get(user.id);
@@ -1564,8 +1259,15 @@ async function sendUserSummary(user, channelId) {
     
     userInfo.delete(user.id);
     
-    await safeDeleteTempFile(user.id, 'SUMMARY');
+    if (userImagePath) {
+        try {
+            await fs.unlink(userImagePath);
+            userImages.delete(user.id);
+            console.log(`[SUMMARY] ✅ Usunięto tymczasowy obraz po podsumowaniu klanu`);
+        } catch (error) {
+            console.log(`[SUMMARY] ❌ Nie udało się usunąć tymczasowego obrazu po podsumowaniu klanu`);
+        }
+    }
 }
 
-// Logowanie bota
 client.login(config.token);
