@@ -7,7 +7,7 @@ const http = require('http');
 const sharp = require('sharp');
 
 const config = {
-    token: "MTM4MzgzODM3NDc5NTkzNTkxNA.G-8GW7.iwtRVRCBCIdwPgh7C-l5yjpB7RrpXUEJF4nqf0",
+    token: "MTM4MzgzODM3NDc5NTkzNTkxNA.GXZTub.ZalsQfcFQD1-MgrBZ84WdZFe_GzbRMP7Xl2VlY",
     channels: {
         recruitment: "1170323972173340743",
         clan0: "1262793022983114792",
