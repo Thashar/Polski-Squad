@@ -9,7 +9,6 @@ const sharp = require('sharp');
 // Załadowanie zmiennych środowiskowych z folderu Rekruter
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-
 // Walidacja wymaganych zmiennych środowiskowych
 const requiredEnvVars = [
     'DISCORD_TOKEN',
@@ -85,17 +84,57 @@ const client = new Client({
     ]
 });
 
+// Mapy przechowujące dane użytkowników
 const userStates = new Map();
 const userInfo = new Map();
 const nicknameRequests = new Map();
 const userEphemeralReplies = new Map();
 const pendingQualifications = new Map();
 const userImages = new Map();
+const fileTimeouts = new Map();
 
 const MONITORED_CHANNEL_ID = config.channels.recruitment;
 
+// Funkcje pomocnicze
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function safeDeleteTempFile(userId, logPrefix = 'TEMP') {
+    const userImagePath = userImages.get(userId);
+    if (userImagePath) {
+        try {
+            await fs.unlink(userImagePath);
+            userImages.delete(userId);
+            console.log(`[${logPrefix}] ✅ Usunięto tymczasowy obraz dla użytkownika ${userId}`);
+            return true;
+        } catch (error) {
+            console.log(`[${logPrefix}] ❌ Nie udało się usunąć tymczasowego obrazu: ${error.message}`);
+            return false;
+        }
+    }
+    return true;
+}
+
+async function cleanupTempFolder() {
+    try {
+        const tempDir = path.join(__dirname, 'temp');
+        const files = await fs.readdir(tempDir);
+        
+        for (const file of files) {
+            if (file.startsWith('temp_')) {
+                const filePath = path.join(tempDir, file);
+                try {
+                    await fs.unlink(filePath);
+                    console.log(`[CLEANUP] ✅ Usunięto stary plik tymczasowy: ${file}`);
+                } catch (error) {
+                    console.log(`[CLEANUP] ❌ Nie udało się usunąć pliku: ${file}`);
+                }
+            }
+        }
+    } catch (error) {
+        console.log(`[CLEANUP] ❌ Błąd podczas czyszczenia folderu temp:`, error);
+    }
 }
 
 async function safeAddRole(member, roleId) {
@@ -278,6 +317,7 @@ async function updateUserEphemeralReply(userId, content, components = []) {
     }
 }
 
+// Event: Bot gotowy
 client.once('ready', async () => {
     console.log(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
     console.log(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
@@ -285,6 +325,10 @@ client.once('ready', async () => {
     try {
         await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
         console.log(`[BOT] ✅ Utworzono folder temp`);
+        
+        // Czyszczenie starych plików przy starcie
+        await cleanupTempFolder();
+        
     } catch (error) {
         console.log(`[BOT] Folder temp już istnieje`);
     }
@@ -341,6 +385,7 @@ client.once('ready', async () => {
     }
 });
 
+// Event: Interakcje z przyciskami
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
@@ -419,6 +464,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// Event: Wiadomości
 client.on('messageCreate', async message => {
     if (message.channel.id !== MONITORED_CHANNEL_ID) {
         return;
@@ -441,6 +487,7 @@ client.on('messageCreate', async message => {
     }
 });
 
+// Funkcje obsługi obrazów
 async function downloadImage(url, filepath) {
     console.log(`[DOWNLOAD] Rozpoczynam pobieranie obrazu: ${url}`);
     return new Promise((resolve, reject) => {
@@ -704,6 +751,7 @@ function calculateSimpleConfidence(playerNick, characterAttack) {
     return finalConfidence;
 }
 
+// Funkcje obsługi wiadomości
 async function analyzeMessage(message, userState) {
     console.log(`[ANALYZE] Analizuję wiadomość w stanie: ${userState?.step || 'brak stanu'}`);
     
@@ -740,6 +788,7 @@ async function safeDeleteMessage(message) {
     }
 }
 
+// Handlers dla różnych interakcji
 async function handleNotPolish(interaction) {
     const member = interaction.member;
     console.log(`[NOT_POLISH] Obsługuję użytkownika ${interaction.user.username} jako nie-Polaka`);
@@ -944,16 +993,27 @@ async function handleImageInput(message, userState) {
 
         userImages.set(message.author.id, tempImagePath);
 
+        // Dodaj timeout do automatycznego usunięcia po 30 minutach
+        const timeoutId = setTimeout(async () => {
+            console.log(`[TIMEOUT] Automatyczne usuwanie pliku dla użytkownika ${message.author.id}`);
+            await safeDeleteTempFile(message.author.id, 'TIMEOUT');
+            fileTimeouts.delete(message.author.id);
+        }, 30 * 60 * 1000); // 30 minut
+
+        fileTimeouts.set(message.author.id, timeoutId);
+
         const stats = await extractOptimizedStatsFromImage(tempImagePath, message.author.id);
 
         if (!stats || !stats.isValidEquipment) {
             console.log(`[IMAGE_INPUT] ❌ Obraz nie zawiera prawidłowych danych`);
             await safeDeleteMessage(message);
             
-            try {
-                await fs.unlink(tempImagePath);
-                userImages.delete(message.author.id);
-            } catch (error) {}
+            await safeDeleteTempFile(message.author.id, 'ERROR');
+            const timeoutId = fileTimeouts.get(message.author.id);
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                fileTimeouts.delete(message.author.id);
+            }
             
             if (stats && stats.error === 'NICK_NOT_FOUND_IN_FIRST_3_LINES') {
                 console.log(`[IMAGE_INPUT] ❌ Nick nie został znaleziony w pierwszych 3 linijkach`);
@@ -1101,6 +1161,14 @@ async function sendWelcomeMessageWithSummary(user) {
 }
 
 async function sendUserSummaryToWelcome(user, channelId) {
+    // Czyszczenie timeoutów
+    const timeoutId = fileTimeouts.get(user.id);
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+        fileTimeouts.delete(user.id);
+        console.log(`[SUMMARY] ✅ Anulowano timeout dla użytkownika ${user.id}`);
+    }
+
     console.log(`[SUMMARY] Wysyłanie podsumowania dla ${user.username} na kanał ${channelId}`);
     
     const info = userInfo.get(user.id);
@@ -1174,18 +1242,19 @@ async function sendUserSummaryToWelcome(user, channelId) {
     
     userInfo.delete(user.id);
     
-    if (userImagePath) {
-        try {
-            await fs.unlink(userImagePath);
-            userImages.delete(user.id);
-            console.log(`[SUMMARY] ✅ Usunięto tymczasowy obraz`);
-        } catch (error) {
-            console.log(`[SUMMARY] ❌ Nie udało się usunąć tymczasowego obrazu`);
-        }
-    }
+    // Bezpieczne usuwanie pliku tymczasowego
+    await safeDeleteTempFile(user.id, 'SUMMARY');
 }
 
 async function sendUserSummary(user, channelId) {
+    // Czyszczenie timeoutów
+    const timeoutId = fileTimeouts.get(user.id);
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+        fileTimeouts.delete(user.id);
+        console.log(`[SUMMARY] ✅ Anulowano timeout dla użytkownika ${user.id}`);
+    }
+
     console.log(`[SUMMARY] Wysyłanie podsumowania dla ${user.username} na kanał klanu ${channelId}`);
     
     const info = userInfo.get(user.id);
@@ -1259,15 +1328,9 @@ async function sendUserSummary(user, channelId) {
     
     userInfo.delete(user.id);
     
-    if (userImagePath) {
-        try {
-            await fs.unlink(userImagePath);
-            userImages.delete(user.id);
-            console.log(`[SUMMARY] ✅ Usunięto tymczasowy obraz po podsumowaniu klanu`);
-        } catch (error) {
-            console.log(`[SUMMARY] ❌ Nie udało się usunąć tymczasowego obrazu po podsumowaniu klanu`);
-        }
-    }
+    // Bezpieczne usuwanie pliku tymczasowego
+    await safeDeleteTempFile(user.id, 'SUMMARY');
 }
 
+// Logowanie bota
 client.login(config.token);
