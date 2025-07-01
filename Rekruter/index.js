@@ -6,8 +6,9 @@ const https = require('https');
 const http = require('http');
 const sharp = require('sharp');
 
-// Załadowanie zmiennych środowiskowych
-require('dotenv').config();
+// Załadowanie zmiennych środowiskowych z folderu Rekruter
+require('dotenv').config({ path: path.join(__dirname, 'Rekruter', '.env') });
+
 
 // Walidacja wymaganych zmiennych środowiskowych
 const requiredEnvVars = [
