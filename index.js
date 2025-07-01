@@ -19,3 +19,4 @@ try {
 } catch (error) {
     console.error('❌ Błąd uruchomienia bota:', error);
 }
+
