@@ -1,0 +1,58 @@
+{
+  "token": "MTM4MzgzODM3NDc5NTkzNTkxNA.G-8GW7.iwtRVRCBCIdwPgh7C-l5yjpB7RrpXUEJF4nqf0",
+  "channels": {
+    "recruitment": "1194396792981311489",
+    "clan0": "1262793022983114792",
+    "clan1": "1210265872921526303", 
+    "clan2": "1196808118697463870",
+    "mainClan": "1195086151283912745"
+  },
+  "roles": {
+    "notPolish": "1183332089492418631",
+    "verified": "1173760134527324270",
+    "masterYang": "1326510262668234816",
+    "metallia": "1326511028967571517",
+    "joey": "1326511801877135432",
+    "android": "1339552767806537770",
+    "ios": "1339552918730178591",
+    "clan0": "1262793135860355254",
+    "clan1": "1210265548584132648",
+    "clan2": "1196805078162616480",
+    "mainClan": "1194249987677229186",
+    "attack": {
+      "100k": "1173987591834583052",
+      "200k": "1190252992482508800",
+      "300k": "1212372650463203348",
+      "400k": "1254550028169773086",
+      "500k": "1268879784000225290",
+      "600k": "1304872630494433330",
+      "700k": "1304872767358894150",
+      "800k": "1326505392548741160",
+      "900k": "1326505466829869108",
+      "1000k": "1326505521964126312",
+      "1200k": "1386995713409552507",
+      "1400k": "1386995792795140139",
+      "1600k": "1386995859375259678",
+      "1800k": "1386995918741573712",
+      "2000k": "1386995960651059332"
+    }
+  },
+  "messages": {
+    "initialQuestion": "Czy jesteś Polakiem?",
+    "notPolishDM": "Ten serwer jest tylko dla Polaków, jeśli pomyliłeś się w trakcie ankiety możesz wyjść z serwera i dołączyć jeszcze raz! Polski Squad",
+    "purposeQuestion": "Co Cię do nas sprowadza?",
+    "rcQuestion": "Ile posiadasz <:I_RC:1385139885924421653>?\nNapisz na czacie dokładną ilość!",
+    "survivorQuestion": "Rozumiem, że szukasz Polskiej społeczności, ale masz już swój klan. Bardzo dobrze trafiłeś!\nZanim dostaniesz dostęp do serwera, możesz powiedzieć nam coś więcej o sobie.\nWybierz swojego głównego Survivora!",
+    "statsQuestion": "Wklej na czacie zdjęcie swojej postaci!",
+    "attackLevelQuestion": "Wybierz poziom ataku, który reprezentujesz!",
+    "osQuestion": "Jakiego używasz systemu operacyjnego do gry?",
+    "welcome": "Witamy na serwerze!",
+    "notQualified": "Wiadomość, gdy ktoś nie kwalifikuje się do żadnego klanu",
+    "clan0Welcome": "Wiadomość dla użytkownika, który kwalifikuje się do klanu 0",
+    "clan1Welcome": "Wiadomość dla użytkownika, który kwalifikuje się do klanu 1", 
+    "clan2Welcome": "Wiadomość dla użytkownika, który kwalifikuje się do klanu 2",
+    "mainClanWelcome": "Wiadomość dla użytkownika, który kwalifikuje się do Głównego Klanu",
+    "invalidRC": "Musisz podać liczbę między 0 a 500. Spróbuj ponownie!",
+    "invalidImage": "Nie udało się odczytać statystyk z obrazu. Spróbuj ponownie z lepszym zdjęciem."
+  }
+}
