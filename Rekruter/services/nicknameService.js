@@ -69,7 +69,7 @@ async function proposeNicknameChange(
 
   await updateUserEphemeralReply(
     user.id,
-    `Zauważyliśmy różnicę między Twoim nickiem na Discordzie a nickiem w grze.\n` +
+    `Zauważyliśmy różnicę między Twoim nickiem na Discordzie, a nickiem w grze.\n` +
     `Wykryty nick w grze: **${gameNick}**\nCzy chcesz, aby bot zmienił Twój nick?`,
     [row],
     userEphemeralReplies

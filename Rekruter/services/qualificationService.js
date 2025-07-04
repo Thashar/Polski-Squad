@@ -87,7 +87,7 @@ async function sendUserSummary(user, channelId, state, config) {
   const channel = state.client.channels.cache.get(channelId);
   if (!channel) return;
 
-  let txt = ` **Użytkownik Discord:** ${info.username}\n`;
+  let txt = `<:discord_logo:1389177319968473140> **Użytkownik Discord:** ${info.username}\n`;
   if (info.playerNick)      txt += `<:J_SurvivorJoey:1326511743555600451> **Nick w grze:** ${info.playerNick}\n`;
   if (info.characterAttack) txt += `<:L_ATK:1209754263228522516> **Atak postaci:** ${info.characterAttack.toLocaleString()}\n`;
   if (info.rcAmount != null)txt += `<:I_RC:1385139885924421653> **Ilość RC:** ${info.rcAmount}\n`;
