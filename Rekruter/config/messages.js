@@ -5,7 +5,7 @@ module.exports = {
     rcQuestion: "Ile posiadasz <:I_RC:1385139885924421653>?\nNapisz na czacie dokładną ilość!",
     lunarLevelQuestion: "Na jakim poziomie trudności ostatnio robiłeś/robiłaś **Lunar Mine Expedition**?",
     lunarPointsQuestion: "Ile punktów uzyskałeś/uzyskałaś ostatnio w **I fazie Lunar Mine Expedition**?",
-    otherPurposeMessage: "Rozumiem, że szukasz Polskiej społeczności, ale masz już swój klan.\n\n## Bardzo dobrze trafiłeś!\n\nZanim dostaniesz dostęp do serwera, musimy sprawdzić o Tobie kilka rzeczy.\n**W tym celu wklej na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
+    otherPurposeMessage: "Rozumiem, że szukasz Polskiej społeczności, ale masz już swój klan.\n## Bardzo dobrze trafiłeś!\n\nZanim dostaniesz dostęp do serwera, musimy sprawdzić o Tobie kilka rzeczy.\n**W tym celu wklej na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
     statsQuestion: "Wklej tu na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
     invalidRC: "Podaj poprawną ilość RC!",
     invalidLunarLevel: "Podaj poprawny poziom Lunar Mine Expedition (1-12)!",
