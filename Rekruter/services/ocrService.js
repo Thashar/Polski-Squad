@@ -63,9 +63,14 @@ function checkForEquipmentKeyword(text) {
     return false;
 }
 
-// POPRAWIONA FUNKCJA - priorytet od lewej strony
+// NOWA FUNKCJA POMOCNICZA - sprawdza czy słowo zawiera znaki interpunkcyjne
+function hasPunctuation(word) {
+    return /[.,\/#!$%\^&\*;:{}=\-_`~()[\]"'<>?\\|+=]/.test(word);
+}
+
+// POPRAWIONA FUNKCJA - ignoruje słowa ze znakami interpunkcyjnymi
 function findNicknameInText(text) {
-    console.log(`[OCR] Szukanie nicku w pierwszych 3 linijkach tekstu - priorytet od lewej strony`);
+    console.log(`[OCR] Szukanie najdłuższego nicku BEZ znaków interpunkcyjnych w pierwszych 3 linijkach tekstu`);
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     const maxLines = Math.min(3, lines.length);
     console.log(`[OCR] Sprawdzanie ${maxLines} linii (maksymalnie 3)`);
@@ -77,18 +82,36 @@ function findNicknameInText(text) {
         const filteredWords = words.filter(word => /[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(word));
         console.log(`[OCR] Znalezione słowa w linii ${i + 1}:`, filteredWords);
         
-        // ZMIANA: Sprawdzamy słowa od lewej strony, nie szukamy najdłuższego
+        // ZMIANA: Szukamy najdłuższego słowa BEZ interpunkcji (ignorujemy słowa z interpunkcją)
+        let longestWord = '';
+        
         for (let j = 0; j < filteredWords.length; j++) {
-            let word = filteredWords[j];
-            word = word.replace(/^[^\w\u00C0-\u017F]+|[^\w\u00C0-\u017F]+$/g, '');
-            console.log(`[OCR] Sprawdzanie słowa ${j + 1} od lewej: "${word}"`);
+            const word = filteredWords[j];
+            console.log(`[OCR] Sprawdzanie słowa ${j + 1}: "${word}"`);
             
-            if (word && word.length >= 3) {
-                console.log(`[OCR] ✅ Znaleziono potencjalny nick "${word}" w linii ${i + 1}, pozycja ${j + 1} od lewej`);
-                return { nickname: word, lineIndex: i };
-            } else {
-                console.log(`[OCR] ❌ Słowo "${word}" za krótkie (minimum 3 znaki)`);
+            // Sprawdź czy słowo zawiera znaki interpunkcyjne
+            if (hasPunctuation(word)) {
+                console.log(`[OCR] ❌ Słowo "${word}" zawiera znaki interpunkcyjne - IGNORUJĘ`);
+                continue; // Pomiń to słowo całkowicie
             }
+            
+            // Sprawdź długość słowa
+            if (word.length >= 3 && word.length > longestWord.length) {
+                longestWord = word;
+                console.log(`[OCR] ✅ Nowe najdłuższe słowo bez interpunkcji: "${word}" (${word.length} znaków)`);
+            } else if (word.length < 3) {
+                console.log(`[OCR] ❌ Słowo "${word}" za krótkie (minimum 3 znaki)`);
+            } else {
+                console.log(`[OCR] ❌ Słowo "${word}" krótsze niż obecne najdłuższe`);
+            }
+        }
+        
+        // Jeśli znaleziono najdłuższe słowo w tej linii
+        if (longestWord.length >= 3) {
+            console.log(`[OCR] ✅ Znaleziono najdłuższy nick bez interpunkcji "${longestWord}" w linii ${i + 1}`);
+            return { nickname: longestWord, lineIndex: i };
+        } else {
+            console.log(`[OCR] ❌ Nie znaleziono odpowiednio długiego słowa bez interpunkcji w linii ${i + 1}`);
         }
     }
     
