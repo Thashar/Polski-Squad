@@ -105,6 +105,7 @@ const nicknameRequests = new Map();
 const userEphemeralReplies = new Map();
 const pendingQualifications = new Map();
 const userImages = new Map();
+const pendingOtherPurposeFinish = new Map(); // NOWA MAPA dla ścieżki "inne cele"
 const MONITORED_CHANNEL_ID = config.channels.recruitment;
 
 // ============================================================================
@@ -191,13 +192,17 @@ function areNicknamesSimilar(discordNick, gameNick) {
     return false;
 }
 
-async function proposeNicknameChange(user, gameNick, member, pendingQualificationData) {
+// ZMODYFIKOWANA FUNKCJA - dodano obsługę ścieżki "inne cele"
+async function proposeNicknameChange(user, gameNick, member, pendingQualificationData = null, isOtherPurpose = false) {
     const discordNick = member.displayName;
     console.log(`[NICK] Propozycja zmiany nicku dla ${user.username}: "${discordNick}" -> "${gameNick}"`);
     
     if (areNicknamesSimilar(discordNick, gameNick)) {
         console.log(`[NICK] Nicki są podobne, pomijam zmianę`);
-        if (pendingQualificationData) {
+        
+        if (isOtherPurpose) {
+            await finishOtherPurposeRecruitment(user);
+        } else if (pendingQualificationData) {
             await sendPendingQualification(user.id, pendingQualificationData);
         }
         return;
@@ -205,7 +210,10 @@ async function proposeNicknameChange(user, gameNick, member, pendingQualificatio
     
     if (!userEphemeralReplies.has(user.id)) {
         console.log(`[NICK] Brak ephemeral reply dla użytkownika, pomijam propozycję`);
-        if (pendingQualificationData) {
+        
+        if (isOtherPurpose) {
+            await finishOtherPurposeRecruitment(user);
+        } else if (pendingQualificationData) {
             await sendPendingQualification(user.id, pendingQualificationData);
         }
         return;
@@ -214,6 +222,11 @@ async function proposeNicknameChange(user, gameNick, member, pendingQualificatio
     if (pendingQualificationData) {
         pendingQualifications.set(user.id, pendingQualificationData);
         console.log(`[NICK] Zapisano odroczoną kwalifikację dla ${user.username}`);
+    }
+    
+    if (isOtherPurpose) {
+        pendingOtherPurposeFinish.set(user.id, true);
+        console.log(`[NICK] Zapisano oczekujące zakończenie rekrutacji "inne cele" dla ${user.username}`);
     }
     
     await delay(1000);
@@ -247,12 +260,46 @@ async function proposeNicknameChange(user, gameNick, member, pendingQualificatio
         if (nicknameRequests.has(user.id)) {
             console.log(`[NICK] Timeout propozycji nicku dla ${user.username}`);
             nicknameRequests.delete(user.id);
+            
             const pendingData = pendingQualifications.get(user.id);
             if (pendingData) {
                 sendPendingQualification(user.id, pendingData);
             }
+            
+            const isOtherPending = pendingOtherPurposeFinish.get(user.id);
+            if (isOtherPending) {
+                const targetUser = client.users.cache.get(user.id);
+                if (targetUser) {
+                    finishOtherPurposeRecruitment(targetUser);
+                }
+            }
         }
     }, 300000);
+}
+
+// NOWA FUNKCJA dla finalizacji rekrutacji ścieżki "inne cele"
+async function finishOtherPurposeRecruitment(user) {
+    try {
+        console.log(`[OTHER_PURPOSE] Finalizacja rekrutacji "inne cele" dla ${user.username}`);
+        
+        const guild = client.guilds.cache.first();
+        const member = await guild.members.fetch(user.id);
+        
+        await safeAddRole(member, config.roles.verified);
+        await updateUserEphemeralReply(user.id, '✅ Proces rekrutacji zakończony pomyślnie! Witamy na serwerze!');
+        await sendWelcomeMessageWithSummary(user);
+        
+        setTimeout(() => {
+            userEphemeralReplies.delete(user.id);
+        }, 5000);
+        
+        userStates.delete(user.id);
+        pendingOtherPurposeFinish.delete(user.id);
+        
+        console.log(`[OTHER_PURPOSE] ✅ Zakończono rekrutację "inne cele" dla ${user.username}`);
+    } catch (error) {
+        console.error(`[OTHER_PURPOSE] ❌ Błąd podczas finalizacji rekrutacji "inne cele":`, error);
+    }
 }
 
 // ============================================================================
@@ -390,6 +437,7 @@ function checkForEquipmentKeyword(text) {
     return false;
 }
 
+// POPRAWIONA FUNKCJA - priorytet od lewej strony
 function findNicknameInText(text) {
     console.log(`[OCR] Szukanie nicku w pierwszych 3 linijkach tekstu - priorytet od lewej strony`);
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
@@ -403,6 +451,7 @@ function findNicknameInText(text) {
         const filteredWords = words.filter(word => /[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(word));
         console.log(`[OCR] Znalezione słowa w linii ${i + 1}:`, filteredWords);
         
+        // ZMIANA: Sprawdzamy słowa od lewej strony, nie szukamy najdłuższego
         for (let j = 0; j < filteredWords.length; j++) {
             let word = filteredWords[j];
             word = word.replace(/^[^\w\u00C0-\u017F]+|[^\w\u00C0-\u017F]+$/g, '');
@@ -824,6 +873,7 @@ async function handleLunarPointsInput(message, userState) {
     await updateUserEphemeralReply(message.author.id, config.messages.statsQuestion);
 }
 
+// ZMODYFIKOWANA FUNKCJA - dodano obsługę propozycji nicku dla ścieżki "inne cele"
 async function handleImageInput(message, userState) {
     console.log(`[IMAGE_INPUT] Użytkownik ${message.author.username} przesłał ${message.attachments.size} załączników`);
     
@@ -892,20 +942,24 @@ async function handleImageInput(message, userState) {
         await safeDeleteMessage(message);
         await updateUserEphemeralReply(message.author.id, '✅ Analiza zakończona pomyślnie!');
         
+        // GŁÓWNA ZMIANA: Obsługa propozycji nicku dla ścieżki "inne cele"
         if (info && info.purpose === 'Przyszedłem w innym celu') {
-            console.log(`[IMAGE_INPUT] Użytkownik ${message.author.username} przyszedł w innym celu - kończymy rekrutację`);
-            await safeAddRole(message.member, config.roles.verified);
-            await updateUserEphemeralReply(message.author.id, '✅ Proces rekrutacji zakończony pomyślnie! Witamy na serwerze!');
-            await sendWelcomeMessageWithSummary(message.author);
+            console.log(`[IMAGE_INPUT] Użytkownik ${message.author.username} przyszedł w innym celu - sprawdzamy nick`);
             
-            setTimeout(() => {
-                userEphemeralReplies.delete(message.author.id);
-            }, 5000);
+            // Sprawdzamy czy wykryto nick i czy różni się od Discord nicku
+            if (stats.playerNick && stats.playerNick !== 'Nieznany') {
+                console.log(`[IMAGE_INPUT] Wykryto nick w grze: ${stats.playerNick}, sprawdzamy podobieństwo`);
+                await proposeNicknameChange(message.author, stats.playerNick, message.member, null, true);
+            } else {
+                console.log(`[IMAGE_INPUT] Nie wykryto nicku lub nick nieznany - kończenie rekrutacji bez propozycji zmiany`);
+                await finishOtherPurposeRecruitment(message.author);
+            }
             
             userStates.delete(message.author.id);
             return;
         }
         
+        // Standardowa obsługa dla ścieżki "Szukam klanu"
         if (stats.characterAttack) {
             console.log(`[IMAGE_INPUT] Przystępuję do kwalifikacji klanu dla ${message.author.username} (atak: ${stats.characterAttack})`);
             
@@ -917,7 +971,7 @@ async function handleImageInput(message, userState) {
             };
             
             if (stats.playerNick && stats.playerNick !== 'Nieznany') {
-                await proposeNicknameChange(message.author, stats.playerNick, message.member, qualificationData);
+                await proposeNicknameChange(message.author, stats.playerNick, message.member, qualificationData, false);
             } else {
                 await sendPendingQualification(message.author.id, qualificationData);
             }
@@ -1218,6 +1272,15 @@ client.on('interactionCreate', async interaction => {
             } else if (action === 'no') {
                 console.log(`[NICK] Użytkownik ${targetUserId} odrzucił zmianę nicku`);
                 await updateUserEphemeralReply(targetUserId, '✅ Rozumiem. Nick pozostaje bez zmian.');
+            }
+            
+            // ZMODYFIKOWANA OBSŁUGA - sprawdzamy czy to ścieżka "inne cele"
+            const isOtherPending = pendingOtherPurposeFinish.get(targetUserId);
+            if (isOtherPending) {
+                const targetUser = client.users.cache.get(targetUserId);
+                if (targetUser) {
+                    await finishOtherPurposeRecruitment(targetUser);
+                }
             }
             
             const pendingData = pendingQualifications.get(targetUserId);
