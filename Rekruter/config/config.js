@@ -1,0 +1,49 @@
+const path = require('path');
+const messages = require('./messages');
+
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+const requiredEnvVars = [
+    'DISCORD_TOKEN',
+    'RECRUITMENT_CHANNEL',
+    'CLAN0_CHANNEL',
+    'CLAN1_CHANNEL',
+    'CLAN2_CHANNEL',
+    'MAIN_CLAN_CHANNEL',
+    'WELCOME_CHANNEL',
+    'NOT_POLISH_ROLE',
+    'VERIFIED_ROLE',
+    'CLAN0_ROLE',
+    'CLAN1_ROLE',
+    'CLAN2_ROLE',
+    'MAIN_CLAN_ROLE'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+    console.error('❌ Brakujące zmienne środowiskowe:', missingVars.join(', '));
+    console.error('Sprawdź plik .env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
+    process.exit(1);
+}
+
+module.exports = {
+    token: process.env.DISCORD_TOKEN,
+    channels: {
+        recruitment: process.env.RECRUITMENT_CHANNEL,
+        clan0: process.env.CLAN0_CHANNEL,
+        clan1: process.env.CLAN1_CHANNEL,
+        clan2: process.env.CLAN2_CHANNEL,
+        mainClan: process.env.MAIN_CLAN_CHANNEL,
+        welcome: process.env.WELCOME_CHANNEL
+    },
+    roles: {
+        notPolish: process.env.NOT_POLISH_ROLE,
+        verified: process.env.VERIFIED_ROLE,
+        clan0: process.env.CLAN0_ROLE,
+        clan1: process.env.CLAN1_ROLE,
+        clan2: process.env.CLAN2_ROLE,
+        mainClan: process.env.MAIN_CLAN_ROLE
+    },
+    messages
+};
