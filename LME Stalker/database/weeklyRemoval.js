@@ -9,13 +9,20 @@ const { manageUserRole } = require('../utils/roleManager');
  * Funkcja do zapewnienia istnienia katalogu data/
  */
 async function ensureDataDirectory() {
-    const dataDir = path.dirname(config.WEEKLY_REMOVAL_FILE);
+    const dataDir = config.DATA_DIR; // Używaj zdefiniowanego katalogu data/
+    console.log(`📁 Sprawdzanie istnienia katalogu: ${dataDir}`);
+    
     try {
         await fs.access(dataDir);
+        console.log(`✅ Katalog data/ istnieje: ${dataDir}`);
     } catch (error) {
         if (error.code === 'ENOENT') {
-            console.log(`📁 Tworzenie katalogu: ${dataDir}`);
+            console.log(`📁 Tworzenie katalogu data/: ${dataDir}`);
             await fs.mkdir(dataDir, { recursive: true });
+            console.log(`✅ Katalog data/ utworzony pomyślnie: ${dataDir}`);
+        } else {
+            console.error(`❌ Błąd podczas sprawdzania katalogu data/:`, error);
+            throw error;
         }
     }
 }
@@ -292,7 +299,7 @@ async function setupWeeklyRemoval() {
         if (result.success) {
             console.log(`✅ Zaplanowane usuwanie zakończone: ${result.usersModified} użytkowników, ${result.pointsRemoved} punktów, ${result.rolesModified} ról`);
         } else {
-            console.log(`❌ Błąd podczas zaplanowanego usuwania: ${result.error}`);
+            console.log(`❌ Błąd podczas zaplanowanego usywania: ${result.error}`);
         }
     }, {
         timezone: "Europe/Warsaw"
