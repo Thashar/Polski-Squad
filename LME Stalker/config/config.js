@@ -1,16 +1,26 @@
 const path = require('path');
 
-// Znajdź katalog główny bota używając __dirname (katalog config/) + level wyżej
-const BOT_ROOT_DIR = path.dirname(__dirname);
+// POPRAWKA: Użyj __dirname (katalog config/) + poziom wyżej
+// __dirname w config/config.js wskazuje na katalog config/
+// Więc jeden poziom wyżej to katalog "LME Stalker"
+const BOT_ROOT_DIR = path.resolve(__dirname, '..');
 
-// Ładuj .env z katalogu bota
+// DODATKOWA ZABEZPIECZENIE: Sprawdź czy jesteśmy w odpowiednim katalogu
+const expectedBotName = 'LME Stalker';
+if (!BOT_ROOT_DIR.endsWith(expectedBotName)) {
+    console.warn(`⚠️ Uwaga: Katalog bota nie kończy się na "${expectedBotName}"`);
+    console.warn(`📁 Aktualny katalog: ${BOT_ROOT_DIR}`);
+}
+
+// Ładuj .env z katalogu bota (absolutna ścieżka)
+const envPath = path.join(BOT_ROOT_DIR, '.env');
 require('dotenv').config({ 
-    path: path.join(BOT_ROOT_DIR, '.env'),
+    path: envPath,
     debug: true
 });
 
 /**
- * Funkcja do konwersji względnych ścieżek na absolutne
+ * Funkcja do konwersji względnych ścieżek na absolutne względem katalogu bota
  */
 function resolveFilePath(filePath, fallbackPath) {
     if (!filePath) return fallbackPath;
@@ -20,20 +30,15 @@ function resolveFilePath(filePath, fallbackPath) {
         return filePath;
     }
     
-    // Jeśli ścieżka zaczyna się od ./ lub ../
-    if (filePath.startsWith('./') || filePath.startsWith('../')) {
-        return path.resolve(BOT_ROOT_DIR, filePath);
-    }
-    
-    // W pozostałych przypadkach traktuj jako względną do katalogu bota
-    return path.join(BOT_ROOT_DIR, filePath);
+    // Konwertuj względną ścieżkę na absolutną względem katalogu bota
+    return path.resolve(BOT_ROOT_DIR, filePath);
 }
 
 const config = {
     // Discord Bot Token
     DISCORD_TOKEN: process.env.DISCORD_TOKEN,
     
-    // Ścieżki do plików bazy danych - ZAWSZE absolutne
+    // Ścieżki do plików bazy danych - ZAWSZE absolutne względem katalogu bota
     DATABASE_FILE: resolveFilePath(
         process.env.DATABASE_FILE, 
         path.join(BOT_ROOT_DIR, 'data', 'punishments.json')
@@ -77,64 +82,86 @@ const config = {
     // Polski alfabet dla OCR
     POLISH_ALPHABET: 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźżAĄBCĆDEĘFGHIJKLŁMNŃOÓPQRSŚTUVWXYZŹŻ0123456789.,;:!?-()[]{}/" ',
     
-    // Katalog główny bota
+    // Katalog główny bota (absolutna ścieżka)
     BOT_ROOT_DIR: BOT_ROOT_DIR,
     
     // Katalog data/ (absolutna ścieżka)
     DATA_DIR: path.join(BOT_ROOT_DIR, 'data')
 };
 
-// Walidacja konfiguracji z lepszymi komunikatami błędów
-console.log(`📁 Katalog bota LME Stalker: ${BOT_ROOT_DIR}`);
-console.log(`📄 Ładuję plik .env z: ${path.join(BOT_ROOT_DIR, '.env')}`);
-console.log(`📊 Katalog data/ (absolutny): ${config.DATA_DIR}`);
-console.log(`💾 Plik punishments.json (absolutny): ${config.DATABASE_FILE}`);
-console.log(`🗓️ Plik weekly_removal.json (absolutny): ${config.WEEKLY_REMOVAL_FILE}`);
+// DIAGNOSTYKA ŚCIEŻEK
+console.log('\n🔍 ==================== DIAGNOSTYKA ŚCIEŻEK ====================');
+console.log(`📁 Working Directory: ${process.cwd()}`);
+console.log(`📁 Config __dirname: ${__dirname}`);
+console.log(`📁 Katalog bota (BOT_ROOT_DIR): ${config.BOT_ROOT_DIR}`);
+console.log(`📄 Plik .env: ${envPath}`);
+console.log(`📊 Katalog data/: ${config.DATA_DIR}`);
+console.log(`💾 Plik punishments.json: ${config.DATABASE_FILE}`);
+console.log(`🗓️ Plik weekly_removal.json: ${config.WEEKLY_REMOVAL_FILE}`);
 
 // Sprawdź czy ścieżki są absolutne
-if (!path.isAbsolute(config.DATABASE_FILE)) {
-    console.error(`❌ DATABASE_FILE nie jest absolutną ścieżką: ${config.DATABASE_FILE}`);
-}
-if (!path.isAbsolute(config.WEEKLY_REMOVAL_FILE)) {
-    console.error(`❌ WEEKLY_REMOVAL_FILE nie jest absolutną ścieżką: ${config.WEEKLY_REMOVAL_FILE}`);
+const pathsToCheck = [
+    { name: 'BOT_ROOT_DIR', path: config.BOT_ROOT_DIR },
+    { name: 'DATA_DIR', path: config.DATA_DIR },
+    { name: 'DATABASE_FILE', path: config.DATABASE_FILE },
+    { name: 'WEEKLY_REMOVAL_FILE', path: config.WEEKLY_REMOVAL_FILE }
+];
+
+for (const { name, path: checkPath } of pathsToCheck) {
+    if (!path.isAbsolute(checkPath)) {
+        console.error(`❌ ${name} nie jest absolutną ścieżką: ${checkPath}`);
+    } else {
+        console.log(`✅ ${name}: ${checkPath}`);
+    }
 }
 
+// Walidacja zmiennych środowiskowych
 if (!config.DISCORD_TOKEN) {
     console.error(`❌ DISCORD_TOKEN nie jest ustawiony w pliku .env`);
-    console.error(`📍 Sprawdź plik: ${path.join(BOT_ROOT_DIR, '.env')}`);
+    console.error(`📍 Sprawdź plik: ${envPath}`);
     process.exit(1);
 }
 
 if (!config.PUNISHMENT_ROLE_ID) {
     console.error(`❌ PUNISHMENT_ROLE_ID nie jest ustawiony w pliku .env`);
-    console.error(`📍 Sprawdź plik: ${path.join(BOT_ROOT_DIR, '.env')}`);
+    console.error(`📍 Sprawdź plik: ${envPath}`);
     console.error(`🔧 Przykład: PUNISHMENT_ROLE_ID=1230903957241467012`);
     process.exit(1);
 }
 
 if (config.ALLOWED_PUNISH_ROLES.length === 0) {
     console.error(`❌ ALLOWED_PUNISH_ROLES nie są ustawione w pliku .env`);
-    console.error(`📍 Sprawdź plik: ${path.join(BOT_ROOT_DIR, '.env')}`);
+    console.error(`📍 Sprawdź plik: ${envPath}`);
     console.error(`🔧 Przykład: ALLOWED_PUNISH_ROLES=role1,role2,role3`);
     process.exit(1);
 }
 
 // Sprawdź czy wszystkie wymagane role są ustawione
 const requiredRoles = ['TARGET_ROLE_0', 'TARGET_ROLE_1', 'TARGET_ROLE_2', 'TARGET_ROLE_MAIN'];
+let missingRoles = [];
 for (const roleKey of requiredRoles) {
     if (!process.env[roleKey]) {
-        console.error(`❌ ${roleKey} nie jest ustawiony w pliku .env`);
-        console.error(`📍 Sprawdź plik: ${path.join(BOT_ROOT_DIR, '.env')}`);
+        missingRoles.push(roleKey);
     }
+}
+
+if (missingRoles.length > 0) {
+    console.error(`❌ Brakujące role w pliku .env: ${missingRoles.join(', ')}`);
+    console.error(`📍 Sprawdź plik: ${envPath}`);
 }
 
 // Sprawdź czy wszystkie kanały ostrzeżeń są ustawione
 const requiredChannels = ['WARNING_CHANNEL_0', 'WARNING_CHANNEL_1', 'WARNING_CHANNEL_2', 'WARNING_CHANNEL_MAIN'];
+let missingChannels = [];
 for (const channelKey of requiredChannels) {
     if (!process.env[channelKey]) {
-        console.error(`❌ ${channelKey} nie jest ustawiony w pliku .env`);
-        console.error(`📍 Sprawdź plik: ${path.join(BOT_ROOT_DIR, '.env')}`);
+        missingChannels.push(channelKey);
     }
+}
+
+if (missingChannels.length > 0) {
+    console.error(`❌ Brakujące kanały w pliku .env: ${missingChannels.join(', ')}`);
+    console.error(`📍 Sprawdź plik: ${envPath}`);
 }
 
 console.log('✅ Konfiguracja załadowana pomyślnie');
