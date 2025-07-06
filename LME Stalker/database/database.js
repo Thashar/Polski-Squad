@@ -1,14 +1,33 @@
 const fs = require('fs').promises;
+const path = require('path');
 const config = require('../config/config');
 const { manageUserRole } = require('../utils/roleManager');
 const { sendWarningMessage } = require('../messages/messages');
+
+/**
+ * Funkcja do zapewnienia istnienia katalogu data/
+ */
+async function ensureDataDirectory() {
+    const dataDir = path.dirname(config.DATABASE_FILE);
+    try {
+        await fs.access(dataDir);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            console.log(`📁 Tworzenie katalogu: ${dataDir}`);
+            await fs.mkdir(dataDir, { recursive: true });
+        }
+    }
+}
 
 /**
  * Funkcja do odczytu bazy danych JSON
  */
 async function readDatabase() {
     console.log('📖 Odczytywanie bazy danych JSON...');
+    console.log(`📍 Ścieżka: ${config.DATABASE_FILE}`);
+    
     try {
+        await ensureDataDirectory();
         const data = await fs.readFile(config.DATABASE_FILE, 'utf8');
         const parsed = JSON.parse(data);
         console.log('✅ Baza danych JSON wczytana pomyślnie');
@@ -30,7 +49,10 @@ async function readDatabase() {
  */
 async function writeDatabase(data) {
     console.log('💾 Zapisywanie bazy danych JSON...');
+    console.log(`📍 Ścieżka: ${config.DATABASE_FILE}`);
+    
     try {
+        await ensureDataDirectory();
         const jsonString = JSON.stringify(data, null, 2);
         await fs.writeFile(config.DATABASE_FILE, jsonString, 'utf8');
         console.log('✅ Baza danych JSON zapisana pomyślnie');
