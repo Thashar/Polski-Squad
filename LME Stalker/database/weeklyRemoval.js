@@ -1,15 +1,34 @@
 const fs = require('fs').promises;
+const path = require('path');
 const cron = require('node-cron');
 const config = require('../config/config');
 const { readDatabase, writeDatabase } = require('./database');
 const { manageUserRole } = require('../utils/roleManager');
 
 /**
+ * Funkcja do zapewnienia istnienia katalogu data/
+ */
+async function ensureDataDirectory() {
+    const dataDir = path.dirname(config.WEEKLY_REMOVAL_FILE);
+    try {
+        await fs.access(dataDir);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            console.log(`📁 Tworzenie katalogu: ${dataDir}`);
+            await fs.mkdir(dataDir, { recursive: true });
+        }
+    }
+}
+
+/**
  * Funkcja do odczytu pliku weekly_removal.json
  */
 async function readWeeklyRemovalData() {
     console.log('📖 Odczytywanie danych o tygodniowym usuwaniu...');
+    console.log(`📍 Ścieżka: ${config.WEEKLY_REMOVAL_FILE}`);
+    
     try {
+        await ensureDataDirectory();
         const data = await fs.readFile(config.WEEKLY_REMOVAL_FILE, 'utf8');
         const parsed = JSON.parse(data);
         console.log('✅ Dane o tygodniowym usuwaniu wczytane pomyślnie');
@@ -31,7 +50,10 @@ async function readWeeklyRemovalData() {
  */
 async function writeWeeklyRemovalData(data) {
     console.log('💾 Zapisywanie danych o tygodniowym usuwaniu...');
+    console.log(`📍 Ścieżka: ${config.WEEKLY_REMOVAL_FILE}`);
+    
     try {
+        await ensureDataDirectory();
         const jsonString = JSON.stringify(data, null, 2);
         await fs.writeFile(config.WEEKLY_REMOVAL_FILE, jsonString, 'utf8');
         console.log('✅ Dane o tygodniowym usuwaniu zapisane pomyślnie');
