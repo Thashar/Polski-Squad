@@ -8,7 +8,7 @@ const { sendWarningMessage } = require('../messages/messages');
  * Funkcja do zapewnienia istnienia katalogu data/
  */
 async function ensureDataDirectory() {
-    const dataDir = config.DATA_DIR; // Używaj zdefiniowanego katalogu data/
+    const dataDir = config.DATA_DIR;
     console.log(`📁 Sprawdzanie istnienia katalogu: ${dataDir}`);
     
     try {
@@ -31,22 +31,32 @@ async function ensureDataDirectory() {
  */
 async function readDatabase() {
     console.log('📖 Odczytywanie bazy danych JSON...');
-    console.log(`📍 Ścieżka: ${config.DATABASE_FILE}`);
+    console.log(`📍 Ścieżka (absolutna): ${config.DATABASE_FILE}`);
     
     try {
         await ensureDataDirectory();
+        
+        // Sprawdź czy plik istnieje przed próbą odczytu
+        try {
+            await fs.access(config.DATABASE_FILE);
+        } catch (accessError) {
+            if (accessError.code === 'ENOENT') {
+                console.log('📝 Plik bazy danych nie istnieje, tworzenie nowej bazy...');
+                const newDatabase = { guilds: {} };
+                await writeDatabase(newDatabase);
+                return newDatabase;
+            }
+            throw accessError;
+        }
+        
         const data = await fs.readFile(config.DATABASE_FILE, 'utf8');
         const parsed = JSON.parse(data);
         console.log('✅ Baza danych JSON wczytana pomyślnie');
         return parsed;
+        
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            console.log('📝 Plik bazy danych nie istnieje, tworzenie nowej bazy...');
-            const newDatabase = { guilds: {} };
-            await writeDatabase(newDatabase);
-            return newDatabase;
-        }
         console.error('❌ Błąd podczas odczytu bazy danych JSON:', error);
+        console.error(`📍 Próbowano odczytać z: ${config.DATABASE_FILE}`);
         throw error;
     }
 }
@@ -56,16 +66,29 @@ async function readDatabase() {
  */
 async function writeDatabase(data) {
     console.log('💾 Zapisywanie bazy danych JSON...');
-    console.log(`📍 Ścieżka: ${config.DATABASE_FILE}`);
+    console.log(`📍 Ścieżka (absolutna): ${config.DATABASE_FILE}`);
     
     try {
         await ensureDataDirectory();
+        
         const jsonString = JSON.stringify(data, null, 2);
         await fs.writeFile(config.DATABASE_FILE, jsonString, 'utf8');
         console.log('✅ Baza danych JSON zapisana pomyślnie');
         console.log(`📊 Rozmiar pliku: ${jsonString.length} znaków`);
+        
     } catch (error) {
         console.error('❌ Błąd podczas zapisu bazy danych JSON:', error);
+        console.error(`📍 Próbowano zapisać do: ${config.DATABASE_FILE}`);
+        console.error(`📁 Katalog docelowy: ${path.dirname(config.DATABASE_FILE)}`);
+        
+        // Sprawdź czy katalog istnieje
+        try {
+            const stats = await fs.stat(path.dirname(config.DATABASE_FILE));
+            console.log(`📂 Katalog istnieje i jest ${stats.isDirectory() ? 'katalogiem' : 'plikiem'}`);
+        } catch (dirError) {
+            console.error(`❌ Katalog nie istnieje: ${dirError.message}`);
+        }
+        
         throw error;
     }
 }
