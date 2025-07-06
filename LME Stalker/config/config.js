@@ -9,13 +9,39 @@ require('dotenv').config({
     debug: true
 });
 
+/**
+ * Funkcja do konwersji względnych ścieżek na absolutne
+ */
+function resolveFilePath(filePath, fallbackPath) {
+    if (!filePath) return fallbackPath;
+    
+    // Jeśli ścieżka jest już absolutna, zwróć ją
+    if (path.isAbsolute(filePath)) {
+        return filePath;
+    }
+    
+    // Jeśli ścieżka zaczyna się od ./ lub ../
+    if (filePath.startsWith('./') || filePath.startsWith('../')) {
+        return path.resolve(BOT_ROOT_DIR, filePath);
+    }
+    
+    // W pozostałych przypadkach traktuj jako względną do katalogu bota
+    return path.join(BOT_ROOT_DIR, filePath);
+}
+
 const config = {
     // Discord Bot Token
     DISCORD_TOKEN: process.env.DISCORD_TOKEN,
     
-    // Ścieżki do plików bazy danych - ZAWSZE w folderze data/
-    DATABASE_FILE: process.env.DATABASE_FILE || path.join(BOT_ROOT_DIR, 'data', 'punishments.json'),
-    WEEKLY_REMOVAL_FILE: process.env.WEEKLY_REMOVAL_FILE || path.join(BOT_ROOT_DIR, 'data', 'weekly_removal.json'),
+    // Ścieżki do plików bazy danych - ZAWSZE absolutne
+    DATABASE_FILE: resolveFilePath(
+        process.env.DATABASE_FILE, 
+        path.join(BOT_ROOT_DIR, 'data', 'punishments.json')
+    ),
+    WEEKLY_REMOVAL_FILE: resolveFilePath(
+        process.env.WEEKLY_REMOVAL_FILE, 
+        path.join(BOT_ROOT_DIR, 'data', 'weekly_removal.json')
+    ),
     
     // Role uprawnione do korzystania z komend
     ALLOWED_PUNISH_ROLES: process.env.ALLOWED_PUNISH_ROLES ? 
@@ -54,16 +80,24 @@ const config = {
     // Katalog główny bota
     BOT_ROOT_DIR: BOT_ROOT_DIR,
     
-    // Katalog data/ (dla wygody)
+    // Katalog data/ (absolutna ścieżka)
     DATA_DIR: path.join(BOT_ROOT_DIR, 'data')
 };
 
 // Walidacja konfiguracji z lepszymi komunikatami błędów
 console.log(`📁 Katalog bota LME Stalker: ${BOT_ROOT_DIR}`);
 console.log(`📄 Ładuję plik .env z: ${path.join(BOT_ROOT_DIR, '.env')}`);
-console.log(`📊 Katalog data/: ${config.DATA_DIR}`);
-console.log(`💾 Plik punishments.json: ${config.DATABASE_FILE}`);
-console.log(`🗓️ Plik weekly_removal.json: ${config.WEEKLY_REMOVAL_FILE}`);
+console.log(`📊 Katalog data/ (absolutny): ${config.DATA_DIR}`);
+console.log(`💾 Plik punishments.json (absolutny): ${config.DATABASE_FILE}`);
+console.log(`🗓️ Plik weekly_removal.json (absolutny): ${config.WEEKLY_REMOVAL_FILE}`);
+
+// Sprawdź czy ścieżki są absolutne
+if (!path.isAbsolute(config.DATABASE_FILE)) {
+    console.error(`❌ DATABASE_FILE nie jest absolutną ścieżką: ${config.DATABASE_FILE}`);
+}
+if (!path.isAbsolute(config.WEEKLY_REMOVAL_FILE)) {
+    console.error(`❌ WEEKLY_REMOVAL_FILE nie jest absolutną ścieżką: ${config.WEEKLY_REMOVAL_FILE}`);
+}
 
 if (!config.DISCORD_TOKEN) {
     console.error(`❌ DISCORD_TOKEN nie jest ustawiony w pliku .env`);
