@@ -6,24 +6,62 @@ const { readDatabase, writeDatabase } = require('./database');
 const { manageUserRole } = require('../utils/roleManager');
 
 /**
- * Funkcja do zapewnienia istnienia katalogu data/
+ * Funkcja do bezpiecznego odczytu pliku JSON
  */
-async function ensureDataDirectory() {
-    const dataDir = config.DATA_DIR;
-    console.log(`📁 Sprawdzanie istnienia katalogu: ${dataDir}`);
+async function safeReadJsonFile(filePath, defaultData) {
+    console.log(`📖 Odczyt pliku: ${filePath}`);
     
     try {
-        await fs.access(dataDir);
-        console.log(`✅ Katalog data/ istnieje: ${dataDir}`);
+        // Sprawdź czy katalog istnieje
+        const dataDir = path.dirname(filePath);
+        try {
+            await fs.access(dataDir);
+        } catch (dirError) {
+            if (dirError.code === 'ENOENT') {
+                console.log(`📁 Tworzenie katalogu: ${dataDir}`);
+                await fs.mkdir(dataDir, { recursive: true });
+            }
+        }
+        
+        // Sprawdź czy plik istnieje
+        await fs.access(filePath);
+        
+        // Odczytaj i sparsuj
+        const data = await fs.readFile(filePath, 'utf8');
+        const parsed = JSON.parse(data);
+        console.log(`✅ Plik odczytany: ${filePath}`);
+        return parsed;
+        
     } catch (error) {
         if (error.code === 'ENOENT') {
-            console.log(`📁 Tworzenie katalogu data/: ${dataDir}`);
-            await fs.mkdir(dataDir, { recursive: true });
-            console.log(`✅ Katalog data/ utworzony pomyślnie: ${dataDir}`);
+            console.log(`📝 Plik nie istnieje, tworzenie: ${filePath}`);
+            await safeWriteJsonFile(filePath, defaultData);
+            return defaultData;
         } else {
-            console.error(`❌ Błąd podczas sprawdzania katalogu data/:`, error);
+            console.error(`❌ Błąd odczytu ${filePath}:`, error.message);
             throw error;
         }
+    }
+}
+
+/**
+ * Funkcja do bezpiecznego zapisu pliku JSON
+ */
+async function safeWriteJsonFile(filePath, data) {
+    console.log(`💾 Zapis pliku: ${filePath}`);
+    
+    try {
+        // Upewnij się, że katalog istnieje
+        const dataDir = path.dirname(filePath);
+        await fs.mkdir(dataDir, { recursive: true });
+        
+        const jsonString = JSON.stringify(data, null, 2);
+        await fs.writeFile(filePath, jsonString, 'utf8');
+        console.log(`✅ Plik zapisany: ${filePath} (${jsonString.length} znaków)`);
+        
+    } catch (error) {
+        console.error(`❌ Błąd zapisu ${filePath}:`, error.message);
+        throw error;
     }
 }
 
@@ -31,66 +69,19 @@ async function ensureDataDirectory() {
  * Funkcja do odczytu pliku weekly_removal.json
  */
 async function readWeeklyRemovalData() {
-    console.log('📖 Odczytywanie danych o tygodniowym usuwaniu...');
-    console.log(`📍 Ścieżka (absolutna): ${config.WEEKLY_REMOVAL_FILE}`);
-    
-    try {
-        await ensureDataDirectory();
-        
-        // Sprawdź czy plik istnieje przed próbą odczytu
-        try {
-            await fs.access(config.WEEKLY_REMOVAL_FILE);
-        } catch (accessError) {
-            if (accessError.code === 'ENOENT') {
-                console.log('📝 Plik weekly_removal.json nie istnieje, tworzenie nowego...');
-                const newData = { lastRemovalDate: null, lastRemovalTimestamp: null };
-                await writeWeeklyRemovalData(newData);
-                return newData;
-            }
-            throw accessError;
-        }
-        
-        const data = await fs.readFile(config.WEEKLY_REMOVAL_FILE, 'utf8');
-        const parsed = JSON.parse(data);
-        console.log('✅ Dane o tygodniowym usuwaniu wczytane pomyślnie');
-        return parsed;
-        
-    } catch (error) {
-        console.error('❌ Błąd podczas odczytu danych o tygodniowym usuwaniu:', error);
-        console.error(`📍 Próbowano odczytać z: ${config.WEEKLY_REMOVAL_FILE}`);
-        throw error;
-    }
+    console.log('\n📖 ==================== ODCZYT WEEKLY REMOVAL ====================');
+    return await safeReadJsonFile(
+        config.WEEKLY_REMOVAL_FILE, 
+        { lastRemovalDate: null, lastRemovalTimestamp: null }
+    );
 }
 
 /**
  * Funkcja do zapisu pliku weekly_removal.json
  */
 async function writeWeeklyRemovalData(data) {
-    console.log('💾 Zapisywanie danych o tygodniowym usuwaniu...');
-    console.log(`📍 Ścieżka (absolutna): ${config.WEEKLY_REMOVAL_FILE}`);
-    
-    try {
-        await ensureDataDirectory();
-        
-        const jsonString = JSON.stringify(data, null, 2);
-        await fs.writeFile(config.WEEKLY_REMOVAL_FILE, jsonString, 'utf8');
-        console.log('✅ Dane o tygodniowym usuwaniu zapisane pomyślnie');
-        
-    } catch (error) {
-        console.error('❌ Błąd podczas zapisu danych o tygodniowym usuwaniu:', error);
-        console.error(`📍 Próbowano zapisać do: ${config.WEEKLY_REMOVAL_FILE}`);
-        console.error(`📁 Katalog docelowy: ${path.dirname(config.WEEKLY_REMOVAL_FILE)}`);
-        
-        // Sprawdź czy katalog istnieje
-        try {
-            const stats = await fs.stat(path.dirname(config.WEEKLY_REMOVAL_FILE));
-            console.log(`📂 Katalog istnieje i jest ${stats.isDirectory() ? 'katalogiem' : 'plikiem'}`);
-        } catch (dirError) {
-            console.error(`❌ Katalog nie istnieje: ${dirError.message}`);
-        }
-        
-        throw error;
-    }
+    console.log('\n💾 ==================== ZAPIS WEEKLY REMOVAL ====================');
+    await safeWriteJsonFile(config.WEEKLY_REMOVAL_FILE, data);
 }
 
 /**
@@ -261,7 +252,7 @@ async function weeklyPointsRemoval() {
 }
 
 /**
- * Funkcja do sprawdzania czy należy uruchomić tygodniowe usywanie punktów
+ * Funkcja do sprawdzania czy należy uruchomić tygodniowe usuwanie punktów
  */
 async function shouldRunWeeklyRemoval() {
     console.log('\n🔍 ==================== SPRAWDZANIE POTRZEBY USUWANIA ====================');
@@ -273,7 +264,7 @@ async function shouldRunWeeklyRemoval() {
         console.log(`📅 Ostatni poniedziałek o północy: ${lastMondayMidnight.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
         
         if (!removalData.lastRemovalTimestamp) {
-            console.log('📅 Brak danych o ostatnim usuwaniu - uruchamianie usywania');
+            console.log('📅 Brak danych o ostatnim usuwaniu - uruchamianie usuwania');
             return true;
         }
         
@@ -281,7 +272,7 @@ async function shouldRunWeeklyRemoval() {
         console.log(`📅 Ostatnie usuwanie: ${lastRemovalDate.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
         
         if (lastRemovalDate < lastMondayMidnight) {
-            console.log('✅ Ostatnie usuwanie było przed ostatnim poniedziałkiem o północy - uruchamianie usywania');
+            console.log('✅ Ostatnie usuwanie było przed ostatnim poniedziałkiem o północy - uruchamianie usuwania');
             return true;
         } else {
             console.log('❌ Ostatnie usuwanie było po ostatnim poniedziałku o północy - nie uruchamiamy');
@@ -289,46 +280,52 @@ async function shouldRunWeeklyRemoval() {
         }
         
     } catch (error) {
-        console.error('❌ Błąd podczas sprawdzania potrzeby usywania:', error);
+        console.error('❌ Błąd podczas sprawdzania potrzeby usuwania:', error);
         return false;
     }
 }
 
 /**
- * Funkcja do ustawienia tygodniowego usywania punktów
+ * Funkcja do ustawienia tygodniowego usuwania punktów
  */
 async function setupWeeklyRemoval() {
-    console.log('\n🗓️ Sprawdzanie tygodniowego usywania punktów przy starcie...');
-    const shouldRun = await shouldRunWeeklyRemoval();
-    if (shouldRun) {
-        console.log('🚀 Uruchamianie tygodniowego usywania punktów...');
-        const result = await weeklyPointsRemoval();
-        if (result.success) {
-            console.log(`✅ Tygodniowe usywanie zakończone: ${result.usersModified} użytkowników, ${result.pointsRemoved} punktów, ${result.rolesModified} ról`);
+    console.log('\n🗓️ ==================== SETUP WEEKLY REMOVAL ====================');
+    
+    try {
+        const shouldRun = await shouldRunWeeklyRemoval();
+        if (shouldRun) {
+            console.log('🚀 Uruchamianie tygodniowego usuwania punktów...');
+            const result = await weeklyPointsRemoval();
+            if (result.success) {
+                console.log(`✅ Tygodniowe usuwanie zakończone: ${result.usersModified} użytkowników, ${result.pointsRemoved} punktów, ${result.rolesModified} ról`);
+            } else {
+                console.log(`❌ Błąd podczas tygodniowego usuwania: ${result.error}`);
+            }
         } else {
-            console.log(`❌ Błąd podczas tygodniowego usywania: ${result.error}`);
+            console.log('⏭️ Tygodniowe usuwanie nie jest potrzebne');
         }
-    } else {
-        console.log('⏭️ Tygodniowe usywanie nie jest potrzebne');
-    }
-    
-    console.log('\n⏰ Ustawianie harmonogramu tygodniowego usywania punktów...');
-    
-    cron.schedule('0 0 * * 1', async () => {
-        console.log('\n🗓️ ==================== ZAPLANOWANE TYGODNIOWE USUWANIE ====================');
-        console.log(`📅 Rozpoczęcie o: ${new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
         
-        const result = await weeklyPointsRemoval();
-        if (result.success) {
-            console.log(`✅ Zaplanowane usywanie zakończone: ${result.usersModified} użytkowników, ${result.pointsRemoved} punktów, ${result.rolesModified} ról`);
-        } else {
-            console.log(`❌ Błąd podczas zaplanowanego usywania: ${result.error}`);
-        }
-    }, {
-        timezone: "Europe/Warsaw"
-    });
-    
-    console.log('✅ Harmonogram tygodniowego usywania ustawiony (poniedziałki o północy - czas polski)');
+        console.log('\n⏰ Ustawianie harmonogramu tygodniowego usuwania punktów...');
+        
+        cron.schedule('0 0 * * 1', async () => {
+            console.log('\n🗓️ ==================== ZAPLANOWANE TYGODNIOWE USUWANIE ====================');
+            console.log(`📅 Rozpoczęcie o: ${new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`);
+            
+            const result = await weeklyPointsRemoval();
+            if (result.success) {
+                console.log(`✅ Zaplanowane usuwanie zakończone: ${result.usersModified} użytkowników, ${result.pointsRemoved} punktów, ${result.rolesModified} ról`);
+            } else {
+                console.log(`❌ Błąd podczas zaplanowanego usuwania: ${result.error}`);
+            }
+        }, {
+            timezone: "Europe/Warsaw"
+        });
+        
+        console.log('✅ Harmonogram tygodniowego usuwania ustawiony (poniedziałki o północy - czas polski)');
+        
+    } catch (error) {
+        console.error('❌ Błąd podczas setup weekly removal:', error);
+    }
 }
 
 module.exports = {
