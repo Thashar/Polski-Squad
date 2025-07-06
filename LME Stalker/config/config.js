@@ -1,19 +1,19 @@
 const path = require('path');
 
-// Znajdź katalog główny bota (gdzie znajduje się index.js)
+// Znajdź katalog główny bota używając __dirname (katalog config/) + level wyżej
 const BOT_ROOT_DIR = path.dirname(__dirname);
 
-// Ładuj .env z katalogu bota, nie z working directory
+// Ładuj .env z katalogu bota
 require('dotenv').config({ 
     path: path.join(BOT_ROOT_DIR, '.env'),
-    debug: true // Dodaj debug żeby zobaczyć czy .env jest ładowany
+    debug: true
 });
 
 const config = {
     // Discord Bot Token
     DISCORD_TOKEN: process.env.DISCORD_TOKEN,
     
-    // Ścieżki do plików bazy danych - relatywne do katalogu bota
+    // Ścieżki do plików bazy danych - ZAWSZE w folderze data/
     DATABASE_FILE: process.env.DATABASE_FILE || path.join(BOT_ROOT_DIR, 'data', 'punishments.json'),
     WEEKLY_REMOVAL_FILE: process.env.WEEKLY_REMOVAL_FILE || path.join(BOT_ROOT_DIR, 'data', 'weekly_removal.json'),
     
@@ -51,13 +51,19 @@ const config = {
     // Polski alfabet dla OCR
     POLISH_ALPHABET: 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźżAĄBCĆDEĘFGHIJKLŁMNŃOÓPQRSŚTUVWXYZŹŻ0123456789.,;:!?-()[]{}/" ',
     
-    // Katalog główny bota (dla innych plików które mogą tego potrzebować)
-    BOT_ROOT_DIR: BOT_ROOT_DIR
+    // Katalog główny bota
+    BOT_ROOT_DIR: BOT_ROOT_DIR,
+    
+    // Katalog data/ (dla wygody)
+    DATA_DIR: path.join(BOT_ROOT_DIR, 'data')
 };
 
 // Walidacja konfiguracji z lepszymi komunikatami błędów
-console.log(`📁 Katalog bota: ${BOT_ROOT_DIR}`);
-console.log(`📄 Szukam pliku .env w: ${path.join(BOT_ROOT_DIR, '.env')}`);
+console.log(`📁 Katalog bota LME Stalker: ${BOT_ROOT_DIR}`);
+console.log(`📄 Ładuję plik .env z: ${path.join(BOT_ROOT_DIR, '.env')}`);
+console.log(`📊 Katalog data/: ${config.DATA_DIR}`);
+console.log(`💾 Plik punishments.json: ${config.DATABASE_FILE}`);
+console.log(`🗓️ Plik weekly_removal.json: ${config.WEEKLY_REMOVAL_FILE}`);
 
 if (!config.DISCORD_TOKEN) {
     console.error(`❌ DISCORD_TOKEN nie jest ustawiony w pliku .env`);
