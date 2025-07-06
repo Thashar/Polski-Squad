@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const config = {
     // Discord Bot Token
