@@ -1,7 +1,7 @@
 const path = require('path');
 
 // Znajdź katalog główny bota (gdzie znajduje się index.js)
-const BOT_ROOT_DIR = path.dirname(require.main.filename);
+const BOT_ROOT_DIR = path.dirname(__dirname);
 
 // Ładuj .env z katalogu bota, nie z working directory
 require('dotenv').config({ 
