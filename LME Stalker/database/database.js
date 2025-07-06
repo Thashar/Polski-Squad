@@ -8,13 +8,20 @@ const { sendWarningMessage } = require('../messages/messages');
  * Funkcja do zapewnienia istnienia katalogu data/
  */
 async function ensureDataDirectory() {
-    const dataDir = path.dirname(config.DATABASE_FILE);
+    const dataDir = config.DATA_DIR; // Używaj zdefiniowanego katalogu data/
+    console.log(`📁 Sprawdzanie istnienia katalogu: ${dataDir}`);
+    
     try {
         await fs.access(dataDir);
+        console.log(`✅ Katalog data/ istnieje: ${dataDir}`);
     } catch (error) {
         if (error.code === 'ENOENT') {
-            console.log(`📁 Tworzenie katalogu: ${dataDir}`);
+            console.log(`📁 Tworzenie katalogu data/: ${dataDir}`);
             await fs.mkdir(dataDir, { recursive: true });
+            console.log(`✅ Katalog data/ utworzony pomyślnie: ${dataDir}`);
+        } else {
+            console.error(`❌ Błąd podczas sprawdzania katalogu data/:`, error);
+            throw error;
         }
     }
 }
