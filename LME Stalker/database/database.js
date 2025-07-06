@@ -9,20 +9,72 @@ const { sendWarningMessage } = require('../messages/messages');
  */
 async function ensureDataDirectory() {
     const dataDir = config.DATA_DIR;
-    console.log(`📁 Sprawdzanie istnienia katalogu: ${dataDir}`);
+    console.log(`📁 Sprawdzanie katalogu data/: ${dataDir}`);
     
     try {
-        await fs.access(dataDir);
-        console.log(`✅ Katalog data/ istnieje: ${dataDir}`);
+        const stats = await fs.stat(dataDir);
+        if (stats.isDirectory()) {
+            console.log(`✅ Katalog data/ istnieje: ${dataDir}`);
+        } else {
+            throw new Error(`${dataDir} istnieje ale nie jest katalogiem`);
+        }
     } catch (error) {
         if (error.code === 'ENOENT') {
             console.log(`📁 Tworzenie katalogu data/: ${dataDir}`);
             await fs.mkdir(dataDir, { recursive: true });
-            console.log(`✅ Katalog data/ utworzony pomyślnie: ${dataDir}`);
+            console.log(`✅ Katalog data/ utworzony: ${dataDir}`);
         } else {
-            console.error(`❌ Błąd podczas sprawdzania katalogu data/:`, error);
+            console.error(`❌ Błąd katalogu data/:`, error.message);
             throw error;
         }
+    }
+}
+
+/**
+ * Funkcja do bezpiecznego odczytu pliku JSON
+ */
+async function safeReadJsonFile(filePath, defaultData) {
+    console.log(`📖 Odczyt pliku: ${filePath}`);
+    
+    try {
+        // Sprawdź czy plik istnieje
+        await fs.access(filePath);
+        
+        // Odczytaj i sparsuj
+        const data = await fs.readFile(filePath, 'utf8');
+        const parsed = JSON.parse(data);
+        console.log(`✅ Plik odczytany: ${filePath}`);
+        return parsed;
+        
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            console.log(`📝 Plik nie istnieje, tworzenie: ${filePath}`);
+            await safeWriteJsonFile(filePath, defaultData);
+            return defaultData;
+        } else {
+            console.error(`❌ Błąd odczytu ${filePath}:`, error.message);
+            throw error;
+        }
+    }
+}
+
+/**
+ * Funkcja do bezpiecznego zapisu pliku JSON
+ */
+async function safeWriteJsonFile(filePath, data) {
+    console.log(`💾 Zapis pliku: ${filePath}`);
+    
+    try {
+        await ensureDataDirectory();
+        
+        const jsonString = JSON.stringify(data, null, 2);
+        await fs.writeFile(filePath, jsonString, 'utf8');
+        console.log(`✅ Plik zapisany: ${filePath} (${jsonString.length} znaków)`);
+        
+    } catch (error) {
+        console.error(`❌ Błąd zapisu ${filePath}:`, error.message);
+        console.error(`📁 Katalog docelowy: ${path.dirname(filePath)}`);
+        throw error;
     }
 }
 
@@ -30,67 +82,16 @@ async function ensureDataDirectory() {
  * Funkcja do odczytu bazy danych JSON
  */
 async function readDatabase() {
-    console.log('📖 Odczytywanie bazy danych JSON...');
-    console.log(`📍 Ścieżka (absolutna): ${config.DATABASE_FILE}`);
-    
-    try {
-        await ensureDataDirectory();
-        
-        // Sprawdź czy plik istnieje przed próbą odczytu
-        try {
-            await fs.access(config.DATABASE_FILE);
-        } catch (accessError) {
-            if (accessError.code === 'ENOENT') {
-                console.log('📝 Plik bazy danych nie istnieje, tworzenie nowej bazy...');
-                const newDatabase = { guilds: {} };
-                await writeDatabase(newDatabase);
-                return newDatabase;
-            }
-            throw accessError;
-        }
-        
-        const data = await fs.readFile(config.DATABASE_FILE, 'utf8');
-        const parsed = JSON.parse(data);
-        console.log('✅ Baza danych JSON wczytana pomyślnie');
-        return parsed;
-        
-    } catch (error) {
-        console.error('❌ Błąd podczas odczytu bazy danych JSON:', error);
-        console.error(`📍 Próbowano odczytać z: ${config.DATABASE_FILE}`);
-        throw error;
-    }
+    console.log('\n📖 ==================== ODCZYT BAZY DANYCH ====================');
+    return await safeReadJsonFile(config.DATABASE_FILE, { guilds: {} });
 }
 
 /**
  * Funkcja do zapisu bazy danych JSON
  */
 async function writeDatabase(data) {
-    console.log('💾 Zapisywanie bazy danych JSON...');
-    console.log(`📍 Ścieżka (absolutna): ${config.DATABASE_FILE}`);
-    
-    try {
-        await ensureDataDirectory();
-        
-        const jsonString = JSON.stringify(data, null, 2);
-        await fs.writeFile(config.DATABASE_FILE, jsonString, 'utf8');
-        console.log('✅ Baza danych JSON zapisana pomyślnie');
-        console.log(`📊 Rozmiar pliku: ${jsonString.length} znaków`);
-        
-    } catch (error) {
-        console.error('❌ Błąd podczas zapisu bazy danych JSON:', error);
-        console.error(`📍 Próbowano zapisać do: ${config.DATABASE_FILE}`);
-        console.error(`📁 Katalog docelowy: ${path.dirname(config.DATABASE_FILE)}`);
-        
-        // Sprawdź czy katalog istnieje
-        try {
-            const stats = await fs.stat(path.dirname(config.DATABASE_FILE));
-            console.log(`📂 Katalog istnieje i jest ${stats.isDirectory() ? 'katalogiem' : 'plikiem'}`);
-        } catch (dirError) {
-            console.error(`❌ Katalog nie istnieje: ${dirError.message}`);
-        }
-        
-        throw error;
-    }
+    console.log('\n💾 ==================== ZAPIS BAZY DANYCH ====================');
+    await safeWriteJsonFile(config.DATABASE_FILE, data);
 }
 
 /**
@@ -111,7 +112,7 @@ function initializeGuildInDatabase(database, guildId) {
  * Funkcja do dodawania punktów w bazie JSON z timestampem
  */
 async function addPoints(userId, username, roleId, guildId) {
-    console.log(`\n💾 Dodawanie punktów w bazie JSON...`);
+    console.log(`\n💾 ==================== DODAWANIE PUNKTÓW ====================`);
     console.log(`👤 Użytkownik: ${username} (${userId})`);
     console.log(`🎭 Rola: ${roleId}`);
     console.log(`🏰 Serwer: ${guildId}`);
@@ -323,7 +324,7 @@ async function modifyPoints(userId, pointsChange, guildId) {
  * Funkcja do pobierania rankingu z bazy JSON
  */
 async function getRanking(roleId, guildId) {
-    console.log(`\n📊 Pobieranie rankingu z bazy JSON...`);
+    console.log(`\n📊 ==================== POBIERANIE RANKINGU ====================`);
     console.log(`🎭 Rola: ${roleId}`);
     console.log(`🏰 Serwer: ${guildId}`);
     
@@ -368,7 +369,7 @@ async function getRanking(roleId, guildId) {
  * Funkcja do usuwania użytkownika z bazy JSON
  */
 async function removeUser(userId, guildId) {
-    console.log(`\n🗑️ Usuwanie użytkownika z bazy JSON...`);
+    console.log(`\n🗑️ ==================== USUWANIE UŻYTKOWNIKA ====================`);
     console.log(`👤 Użytkownik: ${userId}`);
     console.log(`🏰 Serwer: ${guildId}`);
     
