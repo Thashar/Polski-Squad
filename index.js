@@ -5,6 +5,7 @@ const stalkerLMEBot = require('./StalkerLME/index');
 const muteuszBot = require('./Muteusz/index');
 const endersEchoBot = require('./EndersEcho/index');
 const KontrolerBot = require('./Kontroler/index');
+const konklaweBot = require('./Konklawe/index');
 
 /**
  * Konfiguracja botów z ich właściwościami
@@ -40,6 +41,11 @@ const botConfigs = [
         name: 'Kontroler Bot',
         emoji: '🎯',
         instance: KontrolerBot
+    },
+    {
+        name: 'Konklawe Bot',
+        emoji: '⛪',
+        instance: konklaweBot
     }
 ];
 
