@@ -6,7 +6,7 @@ class RoleService {
     }
 
     /**
-     * Aktualizuje role TOP 1-3 na podstawie aktualnego rankingu
+     * Aktualizuje role TOP 1-3, TOP 4-10 oraz TOP 11-30 na podstawie aktualnego rankingu
      * @param {Guild} guild - Serwer Discord
      * @param {Array} sortedPlayers - Posortowani gracze
      */
@@ -18,16 +18,18 @@ class RoleService {
             const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
             const top2Role = guild.roles.cache.get(this.config.topRoles.top2);
             const top3Role = guild.roles.cache.get(this.config.topRoles.top3);
+            const top4to10Role = guild.roles.cache.get(this.config.topRoles.top4to10);
+            const top11to30Role = guild.roles.cache.get(this.config.topRoles.top11to30);
             
-            if (!top1Role || !top2Role || !top3Role) {
+            if (!top1Role || !top2Role || !top3Role || !top4to10Role || !top11to30Role) {
                 console.error('❌ Nie znaleziono wszystkich ról TOP na serwerze');
                 return false;
             }
             
-            const topRoles = [top1Role, top2Role, top3Role];
+            const allTopRoles = [top1Role, top2Role, top3Role, top4to10Role, top11to30Role];
             
-            // Usuń wszystkie role TOP od wszystkich użytkowników (bez fetch)
-            for (const role of topRoles) {
+            // Usuń wszystkie role TOP od wszystkich użytkowników
+            for (const role of allTopRoles) {
                 const membersWithRole = role.members;
                 for (const [memberId, member] of membersWithRole) {
                     try {
@@ -39,20 +41,35 @@ class RoleService {
                 }
             }
             
-            // Przyznaj nowe role TOP 1-3
-            for (let i = 0; i < Math.min(3, sortedPlayers.length); i++) {
+            // Przyznaj nowe role na podstawie pozycji w rankingu
+            for (let i = 0; i < sortedPlayers.length; i++) {
                 const player = sortedPlayers[i];
-                const role = topRoles[i];
+                const position = i + 1;
+                let targetRole = null;
                 
-                try {
-                    // Pobierz tylko konkretnego użytkownika
-                    const member = await guild.members.fetch(player.userId);
-                    if (member) {
-                        await member.roles.add(role);
-                        console.log(`✅ Przyznano rolę ${role.name} użytkownikowi ${member.user.tag}`);
+                // Określ odpowiednią rolę na podstawie pozycji
+                if (position === 1) {
+                    targetRole = top1Role;
+                } else if (position === 2) {
+                    targetRole = top2Role;
+                } else if (position === 3) {
+                    targetRole = top3Role;
+                } else if (position >= 4 && position <= 10) {
+                    targetRole = top4to10Role;
+                } else if (position >= 11 && position <= 30) {
+                    targetRole = top11to30Role;
+                }
+                
+                if (targetRole) {
+                    try {
+                        const member = await guild.members.fetch(player.userId);
+                        if (member) {
+                            await member.roles.add(targetRole);
+                            console.log(`✅ Przyznano rolę ${targetRole.name} użytkownikowi ${member.user.tag} (pozycja ${position})`);
+                        }
+                    } catch (error) {
+                        console.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userId}:`, error.message);
                     }
-                } catch (error) {
-                    console.error(`Błąd przyznawania roli ${role.name} użytkownikowi ${player.userId}:`, error.message);
                 }
             }
             
@@ -75,15 +92,19 @@ class RoleService {
             const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
             const top2Role = guild.roles.cache.get(this.config.topRoles.top2);
             const top3Role = guild.roles.cache.get(this.config.topRoles.top3);
+            const top4to10Role = guild.roles.cache.get(this.config.topRoles.top4to10);
+            const top11to30Role = guild.roles.cache.get(this.config.topRoles.top11to30);
             
             return {
                 top1: top1Role ? Array.from(top1Role.members.values()) : [],
                 top2: top2Role ? Array.from(top2Role.members.values()) : [],
-                top3: top3Role ? Array.from(top3Role.members.values()) : []
+                top3: top3Role ? Array.from(top3Role.members.values()) : [],
+                top4to10: top4to10Role ? Array.from(top4to10Role.members.values()) : [],
+                top11to30: top11to30Role ? Array.from(top11to30Role.members.values()) : []
             };
         } catch (error) {
             console.error('Błąd pobierania posiadaczy ról TOP:', error);
-            return { top1: [], top2: [], top3: [] };
+            return { top1: [], top2: [], top3: [], top4to10: [], top11to30: [] };
         }
     }
 
