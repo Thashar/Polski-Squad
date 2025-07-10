@@ -164,9 +164,9 @@ class PunishmentService {
             
             let message = '';
             if (points === 3) {
-                message = `⚠️ **OSTRZEŻENIE** ⚠️\n\n${member} otrzymał rolę karną za zbieranie punktów!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Niepokonanie bossa\n\n*Punkty automatycznie znikają co poniedziałek o północy.*`;
+                message = `⚠️ **OSTRZEŻENIE** ⚠️\n\n${member} otrzymał rolę karną za zebrane punkty karne!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Niewystarczająca ilość walk z bossem\n\n*Punkty automatycznie znikają co poniedziałek o północy (1 na tydzień).*`;
             } else if (points === 5) {
-                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Przekroczenie limitu 5 punktów\n\n*Punkty automatycznie znikają co poniedziałek o północy.*`;
+                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii Glory!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Przekroczenie limitu 5 punktów kary\n\n*Punkty automatycznie znikają co poniedziałek o północy (1 na tydzień).*`;
             }
             
             if (message) {
