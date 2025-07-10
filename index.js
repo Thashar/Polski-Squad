@@ -1,5 +1,6 @@
 const rekruterBot = require('./Rekruter/index');
 const szkoleniaBot = require('./Szkolenia/index');
+const stalkerLMEBot = require('./StalkerLME/index');
 
 console.log('🚀 Uruchamianie botów...');
 
@@ -32,5 +33,17 @@ try {
     }
 } catch (error) {
     console.error('❌ Błąd uruchomienia Szkolenia Bot:', error);
+}
+
+// Uruchomienie bota Stalker LME
+console.log('🎯 Uruchamianie Stalker LME Bot...');
+try {
+    if (typeof stalkerLMEBot.start === 'function') {
+        stalkerLMEBot.start();
+    } else {
+        console.log('✅ Stalker LME Bot został uruchomiony automatycznie');
+    }
+} catch (error) {
+    console.error('❌ Błąd uruchomienia Stalker LME Bot:', error);
 }
 
