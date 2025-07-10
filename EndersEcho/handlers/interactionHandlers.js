@@ -104,7 +104,7 @@ class InteractionHandler {
             const totalPages = Math.ceil(players.length / this.config.ranking.playersPerPage);
             const currentPage = 0;
             
-            const embed = this.rankingService.createRankingEmbed(players, currentPage, totalPages, interaction.user.id);
+            const embed = await this.rankingService.createRankingEmbed(players, currentPage, totalPages, interaction.user.id, interaction.guild);
             const buttons = this.rankingService.createRankingButtons(currentPage, totalPages);
             
             await interaction.reply({
@@ -302,8 +302,8 @@ class InteractionHandler {
         rankingData.currentPage = newPage;
         this.rankingService.updateActiveRanking(interaction.message.id, rankingData);
         
-        const embed = this.rankingService.createRankingEmbed(
-            rankingData.players, newPage, rankingData.totalPages, rankingData.userId
+        const embed = await this.rankingService.createRankingEmbed(
+            rankingData.players, newPage, rankingData.totalPages, rankingData.userId, interaction.guild
         );
         const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages);
         

@@ -88,9 +88,10 @@ class RankingService {
      * @param {number} page - Aktualna strona
      * @param {number} totalPages - Całkowita liczba stron
      * @param {string} userId - ID użytkownika
+     * @param {Guild} guild - Serwer Discord
      * @returns {EmbedBuilder} - Embed rankingu
      */
-    createRankingEmbed(players, page, totalPages, userId) {
+    async createRankingEmbed(players, page, totalPages, userId, guild) {
         const startIndex = page * this.config.ranking.playersPerPage;
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
@@ -98,18 +99,28 @@ class RankingService {
         let rankingText = '';
         const medals = this.config.scoring.medals;
         
-        currentPagePlayers.forEach((player, index) => {
+        for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
             const medal = actualPosition <= 3 ? medals[actualPosition - 1] : `${actualPosition}.`;
             const date = new Date(player.timestamp).toLocaleDateString('pl-PL');
+            
+            // Pobierz nick na serwerze
+            let displayName = player.username;
+            try {
+                const member = await guild.members.fetch(player.userId);
+                displayName = member.displayName;
+            } catch (error) {
+                // Jeśli nie można pobrać membera, używamy zapisanego username
+                console.log(`Nie można pobrać membera ${player.userId}, używam zapisanego username`);
+            }
             
             // Wyróżnienie własnego wyniku
             const isCurrentUser = player.userId === userId;
             const highlight = isCurrentUser ? '' : '';
             const highlightEnd = isCurrentUser ? '' : '';
             
-            rankingText += `${highlight}${medal} **${player.username}** - ${this.formatScore(player.scoreValue)} *(${date})*${highlightEnd}\n`;
-        });
+            rankingText += `${highlight}${medal} **${displayName}** - ${this.formatScore(player.scoreValue)} *(${date})*${highlightEnd}\n`;
+        }
         
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
