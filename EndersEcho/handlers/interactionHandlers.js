@@ -125,10 +125,14 @@ class InteractionHandler {
             
         } catch (error) {
             await this.logService.logRankingError(error, 'handleRankingCommand');
-            await interaction.reply({ 
-                content: this.config.messages.rankingError, 
-                ephemeral: true 
-            });
+            
+            // Sprawdź czy interakcja już została odpowiedziana
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: this.config.messages.rankingError, 
+                    ephemeral: true 
+                });
+            }
         }
     }
 
