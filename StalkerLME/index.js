@@ -97,6 +97,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // Obsługa błędów
 client.on('error', error => {
+    // Ignoruj błędy WebSocket 520 - są tymczasowe
+    if (error.message && error.message.includes('520')) {
+        logWithTimestamp('Tymczasowy błąd WebSocket 520 - automatyczne ponowne połączenie', 'warn');
+        return;
+    }
+    
     logWithTimestamp(`Błąd klienta Discord: ${error.message}`, 'error');
 });
 
@@ -106,6 +112,12 @@ client.on('warn', warning => {
 
 // Obsługa błędów procesów
 process.on('unhandledRejection', error => {
+    // Ignoruj błędy WebSocket 520 - są tymczasowe
+    if (error.message && error.message.includes('520')) {
+        logWithTimestamp('Tymczasowy błąd WebSocket 520 - ignoruję', 'warn');
+        return;
+    }
+    
     logWithTimestamp(`Nieobsłużone odrzucenie Promise: ${error.message}`, 'error');
     console.error(error);
 });
