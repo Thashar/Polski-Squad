@@ -91,12 +91,14 @@ class InteractionHandler {
         await this.logService.logCommandUsage('ranking', interaction);
 
         try {
+            // Defer reply aby uniknąć timeoutu przy długich operacjach
+            await interaction.deferReply({ ephemeral: true });
+            
             const players = await this.rankingService.getSortedPlayers();
             
             if (players.length === 0) {
-                await interaction.reply({ 
-                    content: this.config.messages.rankingEmpty, 
-                    ephemeral: true 
+                await interaction.editReply({ 
+                    content: this.config.messages.rankingEmpty
                 });
                 return;
             }
@@ -107,20 +109,18 @@ class InteractionHandler {
             const embed = await this.rankingService.createRankingEmbed(players, currentPage, totalPages, interaction.user.id, interaction.guild);
             const buttons = this.rankingService.createRankingButtons(currentPage, totalPages);
             
-            await interaction.reply({
+            const reply = await interaction.editReply({
                 embeds: [embed],
-                components: [buttons],
-                ephemeral: true
+                components: [buttons]
             });
             
             // Przechowywanie informacji o aktywnej paginacji
-            const followUp = await interaction.fetchReply();
-            this.rankingService.addActiveRanking(followUp.id, {
+            this.rankingService.addActiveRanking(reply.id, {
                 players: players,
                 currentPage: currentPage,
                 totalPages: totalPages,
                 userId: interaction.user.id,
-                messageId: followUp.id
+                messageId: reply.id
             });
             
         } catch (error) {
@@ -131,6 +131,10 @@ class InteractionHandler {
                 await interaction.reply({ 
                     content: this.config.messages.rankingError, 
                     ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: this.config.messages.rankingError 
                 });
             }
         }
