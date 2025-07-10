@@ -1,5 +1,6 @@
 # Environment variables
 .env
+*/.env
 
 # Node modules
 node_modules/
@@ -11,6 +12,25 @@ node_modules/
 temp/
 *.tmp
 
+# Database files
+*/data/*.json
+punishments.json
+weekly_removal.json
+
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Files
+.claude
+Claude.md
+
+#TrainedData
+pol.TrainedData
+eng.TrainedData
