@@ -9,6 +9,7 @@ const requiredEnvVars = [
     'STALKER_LME_MODERATOR_ROLE_3',
     'STALKER_LME_MODERATOR_ROLE_4',
     'STALKER_LME_PUNISHMENT_ROLE_ID',
+    'STALKER_LME_LOTTERY_BAN_ROLE_ID',
     'STALKER_LME_TARGET_ROLE_0',
     'STALKER_LME_TARGET_ROLE_1',
     'STALKER_LME_TARGET_ROLE_2',
@@ -54,6 +55,9 @@ module.exports = {
     // Rola dla użytkowników z 3+ punktami
     punishmentRoleId: process.env.STALKER_LME_PUNISHMENT_ROLE_ID,
     
+    // Rola dla użytkowników z 5+ punktami (zakaz loterii)
+    lotteryBanRoleId: process.env.STALKER_LME_LOTTERY_BAN_ROLE_ID,
+    
     // Role docelowe dla różnych squadów
     targetRoles: {
         '0': process.env.STALKER_LME_TARGET_ROLE_0,
@@ -95,5 +99,12 @@ module.exports = {
     pointLimits: {
         punishmentRole: 3,
         lotteryBan: 5
+    },
+    
+    // Mapowanie ról do zamiany
+    roleSwapping: {
+        // Przy 5 punktach: zabierz punishmentRoleId, nadaj lotteryBanRoleId
+        removeRoleId: '1230903957241467012',
+        addRoleId: '1392812250263195718'
     }
 };
