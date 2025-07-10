@@ -1,6 +1,7 @@
 const rekruterBot = require('./Rekruter/index');
 const szkoleniaBot = require('./Szkolenia/index');
 const stalkerLMEBot = require('./StalkerLME/index');
+const muteuszBot = require('./Muteusz/index');
 
 console.log('🚀 Uruchamianie botów...');
 
@@ -45,5 +46,17 @@ try {
     }
 } catch (error) {
     console.error('❌ Błąd uruchomienia Stalker LME Bot:', error);
+}
+
+// Uruchomienie bota Muteusz
+console.log('🤖 Uruchamianie Muteusz Bot...');
+try {
+    if (typeof muteuszBot.start === 'function') {
+        muteuszBot.start();
+    } else {
+        console.log('✅ Muteusz Bot został uruchomiony automatycznie');
+    }
+} catch (error) {
+    console.error('❌ Błąd uruchomienia Muteusz Bot:', error);
 }
 
