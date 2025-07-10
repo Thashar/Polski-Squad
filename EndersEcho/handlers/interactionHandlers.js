@@ -270,55 +270,78 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      */
     async handleButtonInteraction(interaction) {
-        const rankingData = this.rankingService.getActiveRanking(interaction.message.id);
-        
-        if (!rankingData) {
-            await interaction.reply({ 
-                content: this.config.messages.rankingExpired, 
-                ephemeral: true 
+        try {
+            // Defer update aby uniknąć timeoutu
+            await interaction.deferUpdate();
+            
+            const rankingData = this.rankingService.getActiveRanking(interaction.message.id);
+            
+            if (!rankingData) {
+                await interaction.editReply({ 
+                    content: this.config.messages.rankingExpired,
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+            
+            // Sprawdzenie właściciela
+            if (interaction.user.id !== rankingData.userId) {
+                await interaction.followUp({ 
+                    content: this.config.messages.rankingWrongUser, 
+                    ephemeral: true 
+                });
+                return;
+            }
+            
+            let newPage = rankingData.currentPage;
+            
+            switch (interaction.customId) {
+                case 'ranking_first':
+                    newPage = 0;
+                    break;
+                case 'ranking_prev':
+                    newPage = Math.max(0, rankingData.currentPage - 1);
+                    break;
+                case 'ranking_next':
+                    newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1);
+                    break;
+                case 'ranking_last':
+                    newPage = rankingData.totalPages - 1;
+                    break;
+            }
+            
+            // Aktualizacja danych
+            rankingData.currentPage = newPage;
+            this.rankingService.updateActiveRanking(interaction.message.id, rankingData);
+            
+            const embed = await this.rankingService.createRankingEmbed(
+                rankingData.players, newPage, rankingData.totalPages, rankingData.userId, interaction.guild
+            );
+            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages);
+            
+            await interaction.editReply({
+                embeds: [embed],
+                components: [buttons]
             });
-            return;
+            
+        } catch (error) {
+            console.error('Błąd w handleButtonInteraction:', error);
+            
+            // Sprawdź czy można jeszcze odpowiedzieć
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: this.config.messages.rankingError, 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: this.config.messages.rankingError,
+                    embeds: [],
+                    components: []
+                });
+            }
         }
-        
-        // Sprawdzenie właściciela
-        if (interaction.user.id !== rankingData.userId) {
-            await interaction.reply({ 
-                content: this.config.messages.rankingWrongUser, 
-                ephemeral: true 
-            });
-            return;
-        }
-        
-        let newPage = rankingData.currentPage;
-        
-        switch (interaction.customId) {
-            case 'ranking_first':
-                newPage = 0;
-                break;
-            case 'ranking_prev':
-                newPage = Math.max(0, rankingData.currentPage - 1);
-                break;
-            case 'ranking_next':
-                newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1);
-                break;
-            case 'ranking_last':
-                newPage = rankingData.totalPages - 1;
-                break;
-        }
-        
-        // Aktualizacja danych
-        rankingData.currentPage = newPage;
-        this.rankingService.updateActiveRanking(interaction.message.id, rankingData);
-        
-        const embed = await this.rankingService.createRankingEmbed(
-            rankingData.players, newPage, rankingData.totalPages, rankingData.userId, interaction.guild
-        );
-        const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages);
-        
-        await interaction.update({
-            embeds: [embed],
-            components: [buttons]
-        });
     }
 }
 
