@@ -10,6 +10,7 @@
     "szkolenia": "cd Szkolenia && node index.js",
     "stalker": "cd StalkerLME && node index.js",
     "muteusz": "cd Muteusz && node index.js",
+    "endersecho": "cd EndersEcho && node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

@@ -2,6 +2,7 @@ const rekruterBot = require('./Rekruter/index');
 const szkoleniaBot = require('./Szkolenia/index');
 const stalkerLMEBot = require('./StalkerLME/index');
 const muteuszBot = require('./Muteusz/index');
+const endersEchoBot = require('./EndersEcho/index');
 
 console.log('🚀 Uruchamianie botów...');
 
@@ -58,5 +59,17 @@ try {
     }
 } catch (error) {
     console.error('❌ Błąd uruchomienia Muteusz Bot:', error);
+}
+
+// Uruchomienie bota EndersEcho
+console.log('🏆 Uruchamianie EndersEcho Bot...');
+try {
+    if (typeof endersEchoBot.start === 'function') {
+        endersEchoBot.start();
+    } else {
+        console.log('✅ EndersEcho Bot został uruchomiony automatycznie');
+    }
+} catch (error) {
+    console.error('❌ Błąd uruchomienia EndersEcho Bot:', error);
 }
 

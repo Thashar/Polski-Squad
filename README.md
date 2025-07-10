@@ -1,6 +1,6 @@
 # Polski Squad Discord Bot Collection
 
-Kolekcja botów Discord dla serwera Polish Squad, zawierająca cztery specjalistyczne boty:
+Kolekcja botów Discord dla serwera Polish Squad, zawierająca pięć specjalistycznych botów:
 
 ## Boty
 
@@ -16,6 +16,9 @@ System kar dla graczy z analizą OCR obrazów do śledzenia pokonanych bossów.
 ### 🤖 Muteusz Bot
 Bot do zarządzania mediami i automatycznego zarządzania rolami z funkcjami przywracania.
 
+### 🏆 EndersEcho Bot
+Bot rankingowy z analizą OCR obrazów wyników gier. Automatycznie przyznaje role TOP 1-3 najlepszym graczom.
+
 ## Uruchamianie
 
 ```bash
@@ -27,6 +30,7 @@ npm run rekruter
 npm run szkolenia  
 npm run stalker
 npm run muteusz
+npm run endersecho
 ```
 
 ## Konfiguracja
