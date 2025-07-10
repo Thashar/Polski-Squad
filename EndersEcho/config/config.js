@@ -29,7 +29,7 @@ module.exports = {
     ranking: {
         file: path.join(__dirname, '../data/ranking.json'),
         playersPerPage: 10,
-        paginationTimeout: 600000 // 10 minut
+        paginationTimeout: 3600000 // 1 godzina
     },
     
     // Konfiguracja OCR
