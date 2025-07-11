@@ -6,6 +6,9 @@ const config = require('./config/config');
 const { delay } = require('./utils/helpers');
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleMessage } = require('./handlers/messageHandlers');
+const { createBotLogger } = require('../utils/consoleLogger');
+
+const logger = createBotLogger('Rekruter');
 
 const client = new Client({
     intents: [
@@ -42,21 +45,21 @@ const sharedState = {
 };
 
 client.once('ready', async () => {
-    console.log(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
-    console.log(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
+    logger.info(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
+    logger.info(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
     
     // Inicjalizacja folderu temp
     try {
         await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
-        console.log(`[BOT] ✅ Utworzono folder temp`);
+        logger.info(`[BOT] ✅ Utworzono folder temp`);
     } catch (error) {
-        console.log(`[BOT] Folder temp już istnieje`);
+        logger.info(`[BOT] Folder temp już istnieje`);
     }
     
     // Czyszczenie starych wiadomości i wysyłanie nowej
     const channel = client.channels.cache.get(MONITORED_CHANNEL_ID);
     if (channel) {
-        console.log(`[BOT] Znaleziono kanał rekrutacji: ${channel.name}`);
+        logger.info(`[BOT] Znaleziono kanał rekrutacji: ${channel.name}`);
         
         try {
             const messages = await channel.messages.fetch({ limit: 50 });
@@ -66,18 +69,18 @@ client.once('ready', async () => {
                 msg.components.length > 0
             );
             
-            console.log(`[BOT] Znaleziono ${botMessages.size} starych wiadomości bota do usunięcia`);
+            logger.info(`[BOT] Znaleziono ${botMessages.size} starych wiadomości bota do usunięcia`);
             
             for (const [messageId, message] of botMessages) {
                 try {
                     await message.delete();
-                    console.log(`[BOT] Usunięto starą wiadomość ${messageId}`);
+                    logger.info(`[BOT] Usunięto starą wiadomość ${messageId}`);
                 } catch (deleteError) {
-                    console.log(`[BOT] Nie udało się usunąć wiadomości ${messageId}`);
+                    logger.info(`[BOT] Nie udało się usunąć wiadomości ${messageId}`);
                 }
             }
         } catch (error) {
-            console.error(`[BOT] ❌ Błąd podczas czyszczenia kanału:`, error);
+            logger.error(`[BOT] ❌ Błąd podczas czyszczenia kanału:`, error);
         }
         
         const row = new ActionRowBuilder()
@@ -99,9 +102,9 @@ client.once('ready', async () => {
             components: [row]
         });
         
-        console.log(`[BOT] ✅ Wysłano wiadomość rekrutacyjną`);
+        logger.info(`[BOT] ✅ Wysłano wiadomość rekrutacyjną`);
     } else {
-        console.error(`[BOT] ❌ Nie znaleziono kanału rekrutacji`);
+        logger.error(`[BOT] ❌ Nie znaleziono kanału rekrutacji`);
     }
 });
 

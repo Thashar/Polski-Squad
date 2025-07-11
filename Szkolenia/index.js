@@ -5,8 +5,10 @@ const { logWithTimestamp } = require('./utils/helpers');
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads } = require('./services/threadService');
+const { createBotLogger } = require('../utils/consoleLogger');
 
-console.log('🎓 Inicjalizacja bota Szkolenia...');
+const logger = createBotLogger('Szkolenia');
+logger.info('Inicjalizacja bota Szkolenia...');
 
 const client = new Client({
     intents: [

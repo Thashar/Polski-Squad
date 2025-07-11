@@ -9,8 +9,10 @@ const DatabaseService = require('./services/databaseService');
 const OCRService = require('./services/ocrService');
 const PunishmentService = require('./services/punishmentService');
 const ReminderService = require('./services/reminderService');
+const { createBotLogger } = require('../utils/consoleLogger');
 
-console.log('🎯 Inicjalizacja bota Stalker LME...');
+const logger = createBotLogger('StalkerLME');
+logger.info('Inicjalizacja bota Stalker LME...');
 
 const client = new Client({
     intents: [
@@ -119,12 +121,12 @@ process.on('unhandledRejection', error => {
     }
     
     logWithTimestamp(`Nieobsłużone odrzucenie Promise: ${error.message}`, 'error');
-    console.error(error);
+    logger.error(error);
 });
 
 process.on('uncaughtException', error => {
     logWithTimestamp(`Nieobsłużony wyjątek: ${error.message}`, 'error');
-    console.error(error);
+    logger.error(error);
     process.exit(1);
 });
 
@@ -158,19 +160,19 @@ process.on('SIGTERM', async () => {
 // Funkcja do odświeżania cache'u członków
 async function refreshMemberCache() {
     try {
-        console.log('\n👥 ==================== ODŚWIEŻANIE CACHE\'U CZŁONKÓW ====================');
+        logger.info('\n👥 ==================== ODŚWIEŻANIE CACHE\'U CZŁONKÓW ====================');
         
         let totalMembers = 0;
         let guildsProcessed = 0;
         
         for (const guild of client.guilds.cache.values()) {
             try {
-                console.log(`🏰 Przetwarzanie serwera: ${guild.name} (${guild.id})`);
+                logger.info(`🏰 Przetwarzanie serwera: ${guild.name} (${guild.id})`);
                 
                 // Odśwież cache dla wszystkich członków serwera
                 const members = await guild.members.fetch();
                 
-                console.log(`👥 Załadowano ${members.size} członków dla serwera ${guild.name}`);
+                logger.info(`👥 Załadowano ${members.size} członków dla serwera ${guild.name}`);
                 totalMembers += members.size;
                 guildsProcessed++;
                 
@@ -180,25 +182,25 @@ async function refreshMemberCache() {
                     const role = guild.roles.cache.get(roleId);
                     if (role) {
                         targetRoleMembers += role.members.size;
-                        console.log(`🎭 Rola ${role.name}: ${role.members.size} członków`);
+                        logger.info(`🎭 Rola ${role.name}: ${role.members.size} członków`);
                     }
                 }
                 
-                console.log(`✅ Serwer ${guild.name}: ${members.size} członków, ${targetRoleMembers} z rolami target`);
+                logger.info(`✅ Serwer ${guild.name}: ${members.size} członków, ${targetRoleMembers} z rolami target`);
                 
             } catch (error) {
-                console.error(`❌ Błąd odświeżania cache'u dla serwera ${guild.name}: ${error.message}`);
+                logger.error(`❌ Błąd odświeżania cache'u dla serwera ${guild.name}: ${error.message}`);
             }
         }
         
-        console.log('\n📊 PODSUMOWANIE ODŚWIEŻANIA CACHE\'U:');
-        console.log(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
-        console.log(`👥 Łączna liczba członków: ${totalMembers}`);
-        console.log('✅ Odświeżanie cache\'u zakończone pomyślnie');
+        logger.info('\n📊 PODSUMOWANIE ODŚWIEŻANIA CACHE\'U:');
+        logger.info(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
+        logger.info(`👥 Łączna liczba członków: ${totalMembers}`);
+        logger.info('✅ Odświeżanie cache\'u zakończone pomyślnie');
         
     } catch (error) {
-        console.error('\n💥 ==================== BŁĄD ODŚWIEŻANIA CACHE\'U ====================');
-        console.error('❌ Błąd odświeżania cache\'u członków:', error);
+        logger.error('\n💥 ==================== BŁĄD ODŚWIEŻANIA CACHE\'U ====================');
+        logger.error('❌ Błąd odświeżania cache\'u członków:', error);
     }
 }
 

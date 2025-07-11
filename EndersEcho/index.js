@@ -5,6 +5,9 @@ const RankingService = require('./services/rankingService');
 const LogService = require('./services/logService');
 const RoleService = require('./services/roleService');
 const InteractionHandler = require('./handlers/interactionHandlers');
+const { createBotLogger } = require('../utils/consoleLogger');
+
+const logger = createBotLogger('EndersEcho');
 
 // Inicjalizacja klienta Discord
 const client = new Client({
@@ -27,18 +30,18 @@ const interactionHandler = new InteractionHandler(config, ocrService, rankingSer
  */
 async function initializeBot() {
     try {
-        console.log(`Bot zalogowany jako ${client.user.tag}!`);
+        logger.info(`Bot zalogowany jako ${client.user.tag}!`);
         
         // Rejestracja slash commands
         await interactionHandler.registerSlashCommands(client);
         
-        console.log('Dostępne komendy:');
-        console.log('- /update - aktualizuje wynik na podstawie załączonego obrazu');
-        console.log('- /ranking - pokazuje prywatny ranking graczy z paginacją');
-        console.log(`Dozwolony kanał: ${config.allowedChannelId}`);
+        logger.info('Dostępne komendy:');
+        logger.info('- /update - aktualizuje wynik na podstawie załączonego obrazu');
+        logger.info('- /ranking - pokazuje prywatny ranking graczy z paginacją');
+        logger.info(`Dozwolony kanał: ${config.allowedChannelId}`);
         
     } catch (error) {
-        console.error('Błąd podczas inicjalizacji bota EndersEcho:', error);
+        logger.error('Błąd podczas inicjalizacji bota EndersEcho:', error);
     }
 }
 
@@ -49,7 +52,7 @@ client.on('interactionCreate', async (interaction) => {
     try {
         await interactionHandler.handleInteraction(interaction);
     } catch (error) {
-        console.error('Błąd podczas obsługi interakcji:', error);
+        logger.error('Błąd podczas obsługi interakcji:', error);
         
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ 
@@ -70,7 +73,7 @@ async function startBot() {
         await client.login(config.token);
         return client;
     } catch (error) {
-        console.error('Błąd podczas logowania bota EndersEcho:', error);
+        logger.error('Błąd podczas logowania bota EndersEcho:', error);
         throw error;
     }
 }
@@ -82,10 +85,10 @@ async function stopBot() {
     try {
         if (client.readyAt) {
             await client.destroy();
-            console.log('Bot EndersEcho został zatrzymany');
+            logger.info('Bot EndersEcho został zatrzymany');
         }
     } catch (error) {
-        console.error('Błąd podczas zatrzymywania bota EndersEcho:', error);
+        logger.error('Błąd podczas zatrzymywania bota EndersEcho:', error);
     }
 }
 
@@ -103,13 +106,13 @@ if (require.main === module) {
     
     // Graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('Otrzymano sygnał SIGINT, zamykam bota EndersEcho...');
+        logger.info('Otrzymano sygnał SIGINT, zamykam bota EndersEcho...');
         await stopBot();
         process.exit(0);
     });
     
     process.on('SIGTERM', async () => {
-        console.log('Otrzymano sygnał SIGTERM, zamykam bota EndersEcho...');
+        logger.info('Otrzymano sygnał SIGTERM, zamykam bota EndersEcho...');
         await stopBot();
         process.exit(0);
     });

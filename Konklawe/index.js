@@ -13,6 +13,9 @@ const CommandService = require('./services/commandService');
 // Import handlerów
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
+const { createBotLogger } = require('../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 
 // Klient Discord
 const client = new Client({
@@ -54,7 +57,7 @@ function initializeServices() {
  * Obsługuje zdarzenie ready
  */
 async function onReady() {
-    console.log(`🚀 Zalogowano jako ${client.user.tag}`);
+    logger.info(`🚀 Zalogowano jako ${client.user.tag}`);
     await commandService.registerSlashCommands();
 
     try {
@@ -62,10 +65,10 @@ async function onReady() {
         if (triggerChannel && triggerChannel.isTextBased()) {
             const messages = await triggerChannel.messages.fetch({ limit: 100 });
             await triggerChannel.bulkDelete(messages, true);
-            console.log('🧹 Wyczyszczono kanał przed startem bota.');
+            logger.info('🧹 Wyczyszczono kanał przed startem bota.');
         }
     } catch (error) {
-        console.error(`❌ Błąd podczas czyszczenia kanału ${config.channels.trigger}:`, error);
+        logger.error(`❌ Błąd podczas czyszczenia kanału ${config.channels.trigger}:`, error);
     }
 
     try {
@@ -84,10 +87,10 @@ async function onReady() {
                         await timerService.removeRoleFromAllMembers(guild, config.roles.papal);
                     }
                 } catch (error) {
-                    console.error('❌ Błąd podczas usuwania ról papieskich:', error);
+                    logger.error('❌ Błąd podczas usuwania ról papieskich:', error);
                 }
 
-                console.log(`✅ Automatycznie przywrócono hasło "${config.messages.defaultPassword}" przy starcie bota`);
+                logger.info(`✅ Automatycznie przywrócono hasło "${config.messages.defaultPassword}" przy starcie bota`);
             }
         }
 
@@ -101,7 +104,7 @@ async function onReady() {
                     await timerService.removeRoleFromAllMembers(guild, config.roles.papal);
                 }
             } catch (error) {
-                console.error('❌ Błąd podczas usuwania ról papieskich:', error);
+                logger.error('❌ Błąd podczas usuwania ról papieskich:', error);
             }
         }
 
@@ -118,7 +121,7 @@ async function onReady() {
 
         if (triggerChannel && triggerChannel.isTextBased()) {
             await triggerChannel.send(`🔑 Aktualne hasło: ${gameService.trigger}`);
-            console.log(`🔑 Automatycznie ustawiono hasło: ${gameService.trigger}`);
+            logger.info(`🔑 Automatycznie ustawiono hasło: ${gameService.trigger}`);
         }
 
         // Ustawienie odpowiednich timerów
@@ -132,7 +135,7 @@ async function onReady() {
         }
 
     } catch (error) {
-        console.error('❌ Błąd podczas uruchamiania bota:', error);
+        logger.error('❌ Błąd podczas uruchamiania bota:', error);
     }
 }
 
@@ -174,7 +177,7 @@ async function start() {
         setupEventHandlers();
         await client.login(config.token);
     } catch (error) {
-        console.error('❌ Błąd podczas uruchamiania bota:', error);
+        logger.error('❌ Błąd podczas uruchamiania bota:', error);
         process.exit(1);
     }
 }

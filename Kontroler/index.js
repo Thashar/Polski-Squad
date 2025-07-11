@@ -12,6 +12,9 @@ const MessageService = require('./services/messageService');
 
 // Import handlerów
 const MessageHandler = require('./handlers/messageHandlers');
+const { createBotLogger } = require('../utils/consoleLogger');
+
+const logger = createBotLogger('Kontroler');
 
 // Klient Discord
 const client = new Client({
@@ -48,43 +51,43 @@ function initializeServices() {
  * Handler dla zdarzenia ready
  */
 function onReady() {
-    console.log('\n' + '🤖'.repeat(20));
-    console.log('🤖 BOT KONTROLER JEST GOTOWY! 🤖');
-    console.log('🤖'.repeat(20));
-    console.log(`📋 Zalogowany jako: ${client.user.tag}`);
-    console.log(`🌐 Serwery: ${client.guilds.cache.size}`);
-    console.log(`👥 Użytkownicy: ${client.users.cache.size}`);
-    console.log('─'.repeat(50));
-    console.log('📡 MONITOROWANE KANAŁY:');
+    logger.info('\n' + '🤖'.repeat(20));
+    logger.info('🤖 BOT KONTROLER JEST GOTOWY! 🤖');
+    logger.info('🤖'.repeat(20));
+    logger.info(`📋 Zalogowany jako: ${client.user.tag}`);
+    logger.info(`🌐 Serwery: ${client.guilds.cache.size}`);
+    logger.info(`👥 Użytkownicy: ${client.users.cache.size}`);
+    logger.info('─'.repeat(50));
+    logger.info('📡 MONITOROWANE KANAŁY:');
 
     Object.entries(config.channels).forEach(([key, channelConfig], index) => {
-        console.log(`${index + 1}. Kanał ${channelConfig.name}: ${channelConfig.targetChannelId}`);
-        console.log(`   🏆 Rola: ${channelConfig.requiredRoleId}`);
-        console.log(`   📊 Min wynik: ${channelConfig.minimumScore}`);
-        console.log(`   📈 Zakres: ${channelConfig.scoreRange[0]}-${channelConfig.scoreRange[1]} (krok: ${channelConfig.scoreStep})`);
-        console.log(`   🔍 Drugie wystąpienie: ${channelConfig.requireSecondOccurrence ? 'TAK' : 'NIE'}`);
-        console.log(`   🖼️ Preprocessing: ${channelConfig.name === 'Daily' ? 'BIAŁY TEKST NA SZARYM TLE' : 'BIAŁO-CZARNY'}`);
-        console.log(`   ⚠️ Pomija pierwsze ${channelConfig.skipLines} linii`);
+        logger.info(`${index + 1}. Kanał ${channelConfig.name}: ${channelConfig.targetChannelId}`);
+        logger.info(`   🏆 Rola: ${channelConfig.requiredRoleId}`);
+        logger.info(`   📊 Min wynik: ${channelConfig.minimumScore}`);
+        logger.info(`   📈 Zakres: ${channelConfig.scoreRange[0]}-${channelConfig.scoreRange[1]} (krok: ${channelConfig.scoreStep})`);
+        logger.info(`   🔍 Drugie wystąpienie: ${channelConfig.requireSecondOccurrence ? 'TAK' : 'NIE'}`);
+        logger.info(`   🖼️ Preprocessing: ${channelConfig.name === 'Daily' ? 'BIAŁY TEKST NA SZARYM TLE' : 'BIAŁO-CZARNY'}`);
+        logger.info(`   ⚠️ Pomija pierwsze ${channelConfig.skipLines} linii`);
         if (channelConfig.name === 'Daily') {
-            console.log(`   🎯 DAILY: Wyjątek "sg" -> "9"`);
+            logger.info(`   🎯 DAILY: Wyjątek "sg" -> "9"`);
         }
     });
 
-    console.log('─'.repeat(50));
-    console.log('🚫 BLOKOWANIE UŻYTKOWNIKÓW:');
-    console.log(`   ID roli blokującej: ${config.blockedRole}`);
-    console.log(`   Blokowane kanały: Daily (${config.channels.daily.targetChannelId}) i CX (${config.channels.cx.targetChannelId})`);
-    console.log('─'.repeat(50));
-    console.log('✅ Bot jest gotowy do analizy obrazów!');
-    console.log('📷 Wrzuć obraz na monitorowany kanał aby rozpocząć analizę');
-    console.log('🔄 Różne metody preprocessingu dla różnych kanałów');
-    console.log('🎯 Optymalizacja: podobieństwo nicku z wielopoziomowym progiem');
-    console.log('🔤 Normalizacja s/S: testowane warianty 5 i 8');
-    console.log('🎯 NOWY: Wyjątek "sg" -> "9" dla kanału Daily');
-    console.log('⚠️ INTELIGENTNE WYKLUCZENIE: CX pomija 1 linię, Daily pomija 3 linie');
-    console.log('🔢 POPRAWKA: Wyciąganie tylko cyfr z rozpoznanego tekstu');
-    console.log('🚫 NOWA FUNKCJA: Blokowanie użytkowników z rolą karną');
-    console.log('─'.repeat(50) + '\n');
+    logger.info('─'.repeat(50));
+    logger.info('🚫 BLOKOWANIE UŻYTKOWNIKÓW:');
+    logger.info(`   ID roli blokującej: ${config.blockedRole}`);
+    logger.info(`   Blokowane kanały: Daily (${config.channels.daily.targetChannelId}) i CX (${config.channels.cx.targetChannelId})`);
+    logger.info('─'.repeat(50));
+    logger.info('✅ Bot jest gotowy do analizy obrazów!');
+    logger.info('📷 Wrzuć obraz na monitorowany kanał aby rozpocząć analizę');
+    logger.info('🔄 Różne metody preprocessingu dla różnych kanałów');
+    logger.info('🎯 Optymalizacja: podobieństwo nicku z wielopoziomowym progiem');
+    logger.info('🔤 Normalizacja s/S: testowane warianty 5 i 8');
+    logger.info('🎯 NOWY: Wyjątek "sg" -> "9" dla kanału Daily');
+    logger.info('⚠️ INTELIGENTNE WYKLUCZENIE: CX pomija 1 linię, Daily pomija 3 linie');
+    logger.info('🔢 POPRAWKA: Wyciąganie tylko cyfr z rozpoznanego tekstu');
+    logger.info('🚫 NOWA FUNKCJA: Blokowanie użytkowników z rolą karną');
+    logger.info('─'.repeat(50) + '\n');
 }
 
 /**

@@ -13,8 +13,11 @@ const SpecialRolesService = require('./services/specialRolesService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
 const MemberHandler = require('./handlers/memberHandlers');
+const { createBotLogger } = require('../utils/consoleLogger');
 
-console.log('🎯 Inicjalizacja bota Muteusz...');
+const logger = createBotLogger('Muteusz');
+
+logger.info('🎯 Inicjalizacja bota Muteusz...');
 
 // Tworzenie klienta Discord
 const client = new Client({
@@ -144,7 +147,7 @@ async function startBot() {
         }
         
         logWithTimestamp('Uruchamianie bota Muteusz...', 'info');
-        console.log('🚀 Uruchamianie bota Discord z obsługą plików do 100 MB i automatycznym zarządzaniem rolami z przywracaniem...');
+        logger.info('🚀 Uruchamianie bota Discord z obsługą plików do 100 MB i automatycznym zarządzaniem rolami z przywracaniem...');
         
         await client.login(config.token);
         return client;
@@ -188,7 +191,7 @@ module.exports = {
 // Jeśli plik jest uruchamiany bezpośrednio, wystartuj bota
 if (require.main === module) {
     startBot().catch(error => {
-        console.error('❌ Błąd uruchamiania bota:', error.message);
+        logger.error('❌ Błąd uruchamiania bota:', error.message);
         process.exit(1);
     });
 }

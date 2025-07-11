@@ -1,3 +1,6 @@
+// Import system logowania
+const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
+
 // Import botów
 const rekruterBot = require('./Rekruter/index');
 const szkoleniaBot = require('./Szkolenia/index');
@@ -13,37 +16,44 @@ const konklaweBot = require('./Konklawe/index');
 const botConfigs = [
     {
         name: 'Rekruter Bot',
+        loggerName: 'Rekruter',
         emoji: '🎯',
         instance: rekruterBot,
         hasSpecialHandling: true // Bot Rekruter ma dodatkową logikę dla login()
     },
     {
         name: 'Szkolenia Bot',
+        loggerName: 'Szkolenia',
         emoji: '🎓',
         instance: szkoleniaBot
     },
     {
         name: 'Stalker LME Bot',
+        loggerName: 'StalkerLME',
         emoji: '⚔️',
         instance: stalkerLMEBot
     },
     {
         name: 'Muteusz Bot',
+        loggerName: 'Muteusz',
         emoji: '🤖',
         instance: muteuszBot
     },
     {
         name: 'EndersEcho Bot',
+        loggerName: 'EndersEcho',
         emoji: '🏆',
         instance: endersEchoBot
     },
     {
         name: 'Kontroler Bot',
+        loggerName: 'Kontroler',
         emoji: '🎯',
         instance: KontrolerBot
     },
     {
         name: 'Konklawe Bot',
+        loggerName: 'Konklawe',
         emoji: '⛪',
         instance: konklaweBot
     }
@@ -54,25 +64,26 @@ const botConfigs = [
  * @param {Object} config - Konfiguracja bota
  */
 async function startBot(config) {
-    const { name, emoji, instance, hasSpecialHandling } = config;
+    const { name, loggerName, emoji, instance, hasSpecialHandling } = config;
+    const logger = createBotLogger(loggerName);
     
-    console.log(`${emoji} Uruchamianie ${name}...`);
+    logger.info(`Uruchamianie ${name}...`);
     
     try {
         if (typeof instance.start === 'function') {
             // Bot ma metodę start()
             await instance.start();
-            console.log(`✅ ${name} został uruchomiony`);
+            logger.success(`${name} został uruchomiony`);
         } else if (hasSpecialHandling && typeof instance.login === 'function') {
             // Specjalne traktowanie dla bota z metodą login()
             await instance.login();
-            console.log(`✅ ${name} został uruchomiony`);
+            logger.success(`${name} został uruchomiony`);
         } else {
             // Bot uruchamia się automatycznie po zaimportowaniu
-            console.log(`✅ ${name} został uruchomiony automatycznie`);
+            logger.success(`${name} został uruchomiony automatycznie`);
         }
     } catch (error) {
-        console.error(`❌ Błąd uruchomienia ${name}:`, error);
+        logger.error(`Błąd uruchomienia ${name}: ${error.message}`);
     }
 }
 
@@ -80,14 +91,17 @@ async function startBot(config) {
  * Uruchamia wszystkie boty sekwencyjnie
  */
 async function startAllBots() {
-    console.log('🚀 Uruchamianie botów...\n');
+    setupGlobalLogging();
+    const mainLogger = createBotLogger('MAIN');
+    
+    mainLogger.info('Uruchamianie botów...');
     
     for (const botConfig of botConfigs) {
         await startBot(botConfig);
     }
     
-    console.log('\n🎉 Proces uruchamiania botów zakończony!');
-    console.log('📊 Uruchomiono botów:', botConfigs.length);
+    mainLogger.success('Proces uruchamiania botów zakończony!');
+    mainLogger.info(`Uruchomiono botów: ${botConfigs.length}`);
 }
 
 /**
