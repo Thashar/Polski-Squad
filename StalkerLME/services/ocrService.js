@@ -119,6 +119,7 @@ class OCRService {
         processedLine = processedLine.replace(/\(9\)/g, '0');  // Pattern (9) - treated as 0
         processedLine = processedLine.replace(/\[9\]/g, '0');  // Pattern [9] - treated as 0
         processedLine = processedLine.replace(/1\)/g, '0');   // Pattern 1) - treated as 0
+        processedLine = processedLine.replace(/\(0\)/g, '0');  // Pattern (0) - treated as 0
         
         const zeroPatterns = [
             /\s+0\s+/, /\s+0$/, /^0\s+/, /\s+0\.0\s+/, /\s+0\.0$/, /\s+0,0\s+/, /\s+0,0$/
