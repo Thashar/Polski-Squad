@@ -8,7 +8,7 @@ const KontrolerBot = require('./Kontroler/index');
 const konklaweBot = require('./Konklawe/index');
 
 /**
- * Konfiguracja botów z ich właściwościami
+ * Konfiguracja botów z ich właściwościami TEST
  */
 const botConfigs = [
     {
