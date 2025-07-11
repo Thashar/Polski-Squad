@@ -26,6 +26,8 @@ async function assignClanRole(member, attack, user, config, client) {
         if (welcomeChannel) {
             await welcomeChannel.send(`${user}${config.messages.notQualified}`);
         }
+        // Ustawiam targetChannelId na kanał welcome dla niekwalifikujących się
+        targetChannelId = config.channels.welcome;
     } else {
         await delay(1000);
         
