@@ -2,6 +2,7 @@ const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
+const { calculateNameSimilarity } = require('../utils/helpers');
 
 class OCRService {
     constructor(config) {
@@ -218,8 +219,7 @@ class OCRService {
             }
             
             for (const playerName of playerNames) {
-                const normalizedName = playerName.toLowerCase();
-                let foundMatch = false;
+                const candidates = [];
                 
                 for (const [userId, member] of members) {
                     // Jeśli jest ograniczenie do roli, sprawdź czy członek ma tę rolę
@@ -227,29 +227,51 @@ class OCRService {
                         continue;
                     }
                     
-                    const displayName = member.displayName.toLowerCase();
-                    const username = member.user.username.toLowerCase();
+                    // Sprawdź podobieństwo z displayName i username, wybierz wyższą wartość
+                    const displaySimilarity = calculateNameSimilarity(playerName, member.displayName);
+                    const usernameSimilarity = calculateNameSimilarity(playerName, member.user.username);
                     
-                    if (displayName.includes(normalizedName) || 
-                        username.includes(normalizedName) ||
-                        normalizedName.includes(displayName) ||
-                        normalizedName.includes(username)) {
-                        
-                        foundUsers.push({
+                    const maxSimilarity = Math.max(displaySimilarity, usernameSimilarity);
+                    const matchedField = displaySimilarity >= usernameSimilarity ? 'displayName' : 'username';
+                    
+                    if (maxSimilarity >= 0.7) {
+                        candidates.push({
                             userId: userId,
                             member: member,
                             matchedName: playerName,
-                            displayName: member.displayName
+                            displayName: member.displayName,
+                            similarity: maxSimilarity,
+                            matchedField: matchedField
                         });
-                        
-                        console.log(`✅ Dopasowano: ${playerName} -> ${member.displayName} (${member.user.username})`);
-                        foundMatch = true;
-                        break;
                     }
                 }
                 
-                if (!foundMatch) {
-                    console.log(`❌ Nie znaleziono: ${playerName}`);
+                if (candidates.length > 0) {
+                    // Sortuj kandydatów według podobieństwa (najwyższe pierwsze)
+                    candidates.sort((a, b) => b.similarity - a.similarity);
+                    
+                    // Wybierz najlepszego kandydata
+                    const bestMatch = candidates[0];
+                    foundUsers.push({
+                        userId: bestMatch.userId,
+                        member: bestMatch.member,
+                        matchedName: playerName,
+                        displayName: bestMatch.displayName,
+                        similarity: bestMatch.similarity
+                    });
+                    
+                    console.log(`✅ Dopasowano: ${playerName} -> ${bestMatch.member.displayName} (${bestMatch.member.user.username}) - ${(bestMatch.similarity * 100).toFixed(1)}% podobieństwa`);
+                    
+                    // Pokaż alternatywnych kandydatów jeśli jest ich więcej
+                    if (candidates.length > 1) {
+                        console.log(`   Alternatywni kandydaci:`);
+                        for (let i = 1; i < Math.min(candidates.length, 3); i++) {
+                            const alt = candidates[i];
+                            console.log(`   - ${alt.member.displayName} (${alt.member.user.username}) - ${(alt.similarity * 100).toFixed(1)}%`);
+                        }
+                    }
+                } else {
+                    console.log(`❌ Nie znaleziono kandydata z minimum 70% podobieństwa dla: ${playerName}`);
                 }
             }
             

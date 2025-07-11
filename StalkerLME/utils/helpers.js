@@ -183,6 +183,31 @@ function isNameSimilar(playerName, userName, threshold = 0.7) {
 }
 
 /**
+ * Oblicza podobieństwo między dwoma nazwami graczy
+ */
+function calculateNameSimilarity(playerName, userName) {
+    const normalizedPlayer = normalizePlayerName(playerName);
+    const normalizedUser = normalizePlayerName(userName);
+    
+    // Dokładne dopasowanie
+    if (normalizedPlayer === normalizedUser) {
+        return 1.0;
+    }
+    
+    // Sprawdzenie czy jedna nazwa zawiera drugą
+    if (normalizedPlayer.includes(normalizedUser) || normalizedUser.includes(normalizedPlayer)) {
+        return 0.95; // Bardzo wysokie podobieństwo dla zawierania
+    }
+    
+    // Algorytm Levenshtein dla podobieństwa
+    const distance = levenshteinDistance(normalizedPlayer, normalizedUser);
+    const maxLength = Math.max(normalizedPlayer.length, normalizedUser.length);
+    const similarity = 1 - (distance / maxLength);
+    
+    return similarity;
+}
+
+/**
  * Oblicza odległość Levenshtein między dwoma stringami
  */
 function levenshteinDistance(str1, str2) {
@@ -320,6 +345,7 @@ module.exports = {
     cleanTextForOCR,
     normalizePlayerName,
     isNameSimilar,
+    calculateNameSimilarity,
     levenshteinDistance,
     createErrorEmbed,
     createSuccessEmbed,
