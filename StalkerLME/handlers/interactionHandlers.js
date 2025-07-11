@@ -83,7 +83,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             return;
         }
         
-        const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers);
+        const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers, interaction.member);
         
         if (foundUsers.length === 0) {
             await interaction.editReply(`📷 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0: \`${zeroScorePlayers.join(', ')}\`\n❌ Ale nie udało się dopasować żadnego z nich do członków.`);
@@ -173,7 +173,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             return;
         }
         
-        const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers);
+        const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers, interaction.member);
         
         if (foundUsers.length === 0) {
             await interaction.editReply(`📷 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0: \`${zeroScorePlayers.join(', ')}\`\n❌ Ale nie udało się dopasować żadnego z nich do członków.`);

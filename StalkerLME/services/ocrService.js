@@ -84,14 +84,17 @@ class OCRService {
             
             for (const line of lines) {
                 if (this.hasZeroScore(line)) {
-                    // Wyciągamy prawdopodobną nazwę gracza z linii
+                    // Wyciągamy prawdopodobną nazwę gracza z linii - wybieramy najdłuższe słowo
                     const words = line.split(/\s+/);
-                    for (const word of words) {
-                        if (this.isLikelyPlayerName(word)) {
-                            zeroScorePlayers.push(word);
-                            console.log(`👤 Znaleziono gracza z wynikiem 0: ${word}`);
-                            break; // Jeden gracz na linię
-                        }
+                    const playerCandidates = words.filter(word => this.isLikelyPlayerName(word));
+                    
+                    if (playerCandidates.length > 0) {
+                        // Znajdź najdłuższe słowo jako nick
+                        const longestWord = playerCandidates.reduce((longest, current) => 
+                            current.length > longest.length ? current : longest
+                        );
+                        zeroScorePlayers.push(longestWord);
+                        console.log(`👤 Znaleziono gracza z wynikiem 0: ${longestWord} (najdłuższe z: ${playerCandidates.join(', ')})`);
                     }
                 }
             }
@@ -112,6 +115,9 @@ class OCRService {
         processedLine = processedLine.replace(/\[1\]/g, '0');  // Pattern [1]
         processedLine = processedLine.replace(/\[1(?!\])/g, '0'); // Pattern [1 (no closing bracket)
         processedLine = processedLine.replace(/\(1(?!\))/g, '0'); // Pattern (1 (no closing bracket)
+        processedLine = processedLine.replace(/\(9\)/g, '0');  // Pattern (9) - treated as 0
+        processedLine = processedLine.replace(/\[9\]/g, '0');  // Pattern [9] - treated as 0
+        processedLine = processedLine.replace(/1\)/g, '0');   // Pattern 1) - treated as 0
         
         const zeroPatterns = [
             /\s+0\s+/, /\s+0$/, /^0\s+/, /\s+0\.0\s+/, /\s+0\.0$/, /\s+0,0\s+/, /\s+0,0$/
@@ -188,7 +194,7 @@ class OCRService {
         return patterns.some(pattern => pattern.test(line));
     }
 
-    async findUsersInGuild(guild, playerNames) {
+    async findUsersInGuild(guild, playerNames, requestingMember = null) {
         try {
             console.log('\n👥 ==================== WYSZUKIWANIE UŻYTKOWNIKÓW ====================');
             console.log(`🏰 Serwer: ${guild.name}`);
@@ -198,11 +204,29 @@ class OCRService {
             const members = await guild.members.fetch();
             console.log(`👥 Znaleziono ${members.size} członków serwera`);
             
+            // Sprawdź czy użytkownik ma którejś z ról TARGET i ogranicz wyszukiwanie
+            let restrictToRole = null;
+            if (requestingMember) {
+                const targetRoleIds = Object.values(this.config.targetRoles);
+                for (const roleId of targetRoleIds) {
+                    if (requestingMember.roles.cache.has(roleId)) {
+                        restrictToRole = roleId;
+                        console.log(`🎯 Ograniczam wyszukiwanie do roli: ${roleId}`);
+                        break;
+                    }
+                }
+            }
+            
             for (const playerName of playerNames) {
                 const normalizedName = playerName.toLowerCase();
                 let foundMatch = false;
                 
                 for (const [userId, member] of members) {
+                    // Jeśli jest ograniczenie do roli, sprawdź czy członek ma tę rolę
+                    if (restrictToRole && !member.roles.cache.has(restrictToRole)) {
+                        continue;
+                    }
+                    
                     const displayName = member.displayName.toLowerCase();
                     const username = member.user.username.toLowerCase();
                     
@@ -230,6 +254,9 @@ class OCRService {
             }
             
             console.log(`\n✅ Dopasowano ${foundUsers.length}/${playerNames.length} użytkowników`);
+            if (restrictToRole) {
+                console.log(`🎯 Wyszukiwanie ograniczone do roli: ${restrictToRole}`);
+            }
             return foundUsers;
         } catch (error) {
             console.error('\n💥 ==================== BŁĄD WYSZUKIWANIA ====================');
