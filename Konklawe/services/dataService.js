@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class DataService {
     constructor() {
         this.dataPath = path.join(__dirname, '..', 'data');
@@ -115,7 +118,7 @@ class DataService {
      */
     saveTriggerState(triggerState) {
         fs.writeFileSync(path.join(this.dataPath, 'trigger.json'), JSON.stringify(triggerState, null, 2));
-        console.log('💾 Zapisano stan triggera:', triggerState);
+        logger.info('💾 Zapisano stan triggera:', triggerState);
     }
 
     /**
@@ -126,7 +129,7 @@ class DataService {
         const triggerPath = path.join(this.dataPath, 'trigger.json');
         if (fs.existsSync(triggerPath)) {
             const data = JSON.parse(fs.readFileSync(triggerPath));
-            console.log('📂 Wczytano stan triggera:', {
+            logger.info('📂 Wczytano stan triggera:', {
                 trigger: data.trigger,
                 triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
                 clearedTimestamp: data.clearedTimestamp ? new Date(data.clearedTimestamp) : null,

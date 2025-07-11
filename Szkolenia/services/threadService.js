@@ -1,3 +1,6 @@
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Szkolenia');
 /**
  * Serwis zarządzania wątkami szkoleniowymi.
  * -------------------------------------------------
@@ -36,11 +39,11 @@ async function checkThreads(client, state, config) {
                     reminderThreshold
                 });
             } catch (error) {
-                console.error(`❌ Błąd podczas przetwarzania wątku ${thread.name}:`, error);
+                logger.error(`❌ Błąd podczas przetwarzania wątku ${thread.name}:`, error);
             }
         }
     } catch (error) {
-        console.error('❌ Błąd podczas sprawdzania wątków:', error);
+        logger.error('❌ Błąd podczas sprawdzania wątków:', error);
     }
 }
 
@@ -113,7 +116,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
 
     // Zaktualizuj czas ostatniego przypomnienia
     state.lastReminderMap.set(thread.id, now);
-    console.log(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
+    logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
 }
 
 /**
@@ -125,7 +128,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
 async function deleteThread(thread, state, config) {
     state.lastReminderMap.delete(thread.id);
     await thread.delete(`Wątek nieaktywny przez ${config.timing.threadDeleteDays} dni`);
-    console.log(`🗑️ Usunięto wątek: ${thread.name}`);
+    logger.info(`🗑️ Usunięto wątek: ${thread.name}`);
 }
 
 /**
@@ -135,7 +138,7 @@ async function deleteThread(thread, state, config) {
  */
 async function archiveThread(thread, config) {
     await thread.setArchived(true, `Wątek nieaktywny przez ${config.timing.threadArchiveDays} dni`);
-    console.log(`📦 Zarchiwizowano wątek: ${thread.name}`);
+    logger.info(`📦 Zarchiwizowano wątek: ${thread.name}`);
 }
 
 module.exports = {

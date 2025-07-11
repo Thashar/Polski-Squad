@@ -1,5 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('StalkerLME');
 class PunishmentService {
     constructor(config, databaseService) {
         this.config = config;
@@ -8,26 +11,26 @@ class PunishmentService {
 
     async processPunishments(guild, foundUsers) {
         try {
-            console.log('\n💾 ==================== DODAWANIE PUNKTÓW ====================');
-            console.log(`🏰 Serwer: ${guild.name} (${guild.id})`);
-            console.log(`👥 Liczba użytkowników: ${foundUsers.length}`);
+            logger.info('\n💾 ==================== DODAWANIE PUNKTÓW ====================');
+            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info(`👥 Liczba użytkowników: ${foundUsers.length}`);
             
             const results = [];
             
             for (const userData of foundUsers) {
                 const { userId, member, matchedName } = userData;
                 
-                console.log(`\n👤 Przetwarzanie: ${member.displayName} (${userId})`);
+                logger.info(`\n👤 Przetwarzanie: ${member.displayName} (${userId})`);
                 const userPunishment = await this.db.addPunishmentPoints(guild.id, userId, 1, 'Niepokonanie bossa');
                 
-                console.log(`📊 Nowa liczba punktów: ${userPunishment.points}`);
+                logger.info(`📊 Nowa liczba punktów: ${userPunishment.points}`);
                 
                 const roleResult = await this.updateUserRoles(member, userPunishment.points);
-                console.log(`🎭 ${roleResult}`);
+                logger.info(`🎭 ${roleResult}`);
                 
                 const warningResult = await this.sendWarningIfNeeded(guild, member, userPunishment.points);
                 if (warningResult) {
-                    console.log(`📢 ${warningResult}`);
+                    logger.info(`📢 ${warningResult}`);
                 }
                 
                 results.push({
@@ -36,23 +39,23 @@ class PunishmentService {
                     matchedName: matchedName
                 });
                 
-                console.log(`✅ Pomyślnie zaktualizowano punkty dla ${member.displayName}`);
+                logger.info(`✅ Pomyślnie zaktualizowano punkty dla ${member.displayName}`);
             }
             
-            console.log(`\n✅ Zakończono dodawanie punktów dla ${results.length} użytkowników`);
+            logger.info(`\n✅ Zakończono dodawanie punktów dla ${results.length} użytkowników`);
             return results;
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD DODAWANIA PUNKTÓW ====================');
-            console.error('❌ Błąd przetwarzania kar:', error);
+            logger.error('\n💥 ==================== BŁĄD DODAWANIA PUNKTÓW ====================');
+            logger.error('❌ Błąd przetwarzania kar:', error);
             throw error;
         }
     }
 
     async updateUserRoles(member, points) {
         try {
-            console.log(`\n🎭 ==================== AKTUALIZACJA RÓL ====================`);
-            console.log(`👤 Użytkownik: ${member.displayName} (${member.id})`);
-            console.log(`📊 Punkty: ${points}`);
+            logger.info(`\n🎭 ==================== AKTUALIZACJA RÓL ====================`);
+            logger.info(`👤 Użytkownik: ${member.displayName} (${member.id})`);
+            logger.info(`📊 Punkty: ${points}`);
             
             const punishmentRole = member.guild.roles.cache.get(this.config.punishmentRoleId);
             const lotteryBanRole = member.guild.roles.cache.get(this.config.lotteryBanRoleId);
@@ -72,71 +75,71 @@ class PunishmentService {
             
             // Logika dla 5+ punktów (zakaz loterii)
             if (points >= this.config.pointLimits.lotteryBan) {
-                console.log('🚫 Użytkownik ma 5+ punktów - stosowanie zakazu loterii');
+                logger.info('🚫 Użytkownik ma 5+ punktów - stosowanie zakazu loterii');
                 
                 // Usuń rolę karania (3+ punktów) jeśli ma
                 if (hasPunishmentRole) {
                     await member.roles.remove(punishmentRole);
                     messages.push(`➖ Usunięto rolę karania`);
-                    console.log('➖ Usunięto rolę karania (3+ punktów)');
+                    logger.info('➖ Usunięto rolę karania (3+ punktów)');
                 }
                 
                 // Dodaj rolę zakazu loterii (5+ punktów) jeśli nie ma
                 if (!hasLotteryBanRole) {
                     await member.roles.add(lotteryBanRole);
                     messages.push(`🚨 Nadano rolę zakazu loterii`);
-                    console.log('🚨 Nadano rolę zakazu loterii (5+ punktów)');
+                    logger.info('🚨 Nadano rolę zakazu loterii (5+ punktów)');
                 } else {
-                    console.log('ℹ️ Użytkownik już ma rolę zakazu loterii');
+                    logger.info('ℹ️ Użytkownik już ma rolę zakazu loterii');
                 }
                 
             // Logika dla 3-4 punktów (tylko rola karania)
             } else if (points >= this.config.pointLimits.punishmentRole) {
-                console.log('⚠️ Użytkownik ma 3-4 punkty - stosowanie roli karania');
+                logger.info('⚠️ Użytkownik ma 3-4 punkty - stosowanie roli karania');
                 
                 // Usuń rolę zakazu loterii jeśli ma
                 if (hasLotteryBanRole) {
                     await member.roles.remove(lotteryBanRole);
                     messages.push(`➖ Usunięto rolę zakazu loterii`);
-                    console.log('➖ Usunięto rolę zakazu loterii');
+                    logger.info('➖ Usunięto rolę zakazu loterii');
                 }
                 
                 // Dodaj rolę karania jeśli nie ma
                 if (!hasPunishmentRole) {
                     await member.roles.add(punishmentRole);
                     messages.push(`🎭 Nadano rolę karania`);
-                    console.log('🎭 Nadano rolę karania (3+ punktów)');
+                    logger.info('🎭 Nadano rolę karania (3+ punktów)');
                 } else {
-                    console.log('ℹ️ Użytkownik już ma rolę karania');
+                    logger.info('ℹ️ Użytkownik już ma rolę karania');
                 }
                 
             // Logika dla 0-2 punktów (brak ról karnych)
             } else {
-                console.log('✅ Użytkownik ma mniej niż 3 punkty - usuwanie wszystkich ról karnych');
+                logger.info('✅ Użytkownik ma mniej niż 3 punkty - usuwanie wszystkich ról karnych');
                 
                 if (hasLotteryBanRole) {
                     await member.roles.remove(lotteryBanRole);
                     messages.push(`➖ Usunięto rolę zakazu loterii`);
-                    console.log('➖ Usunięto rolę zakazu loterii');
+                    logger.info('➖ Usunięto rolę zakazu loterii');
                 }
                 
                 if (hasPunishmentRole) {
                     await member.roles.remove(punishmentRole);
                     messages.push(`➖ Usunięto rolę karania`);
-                    console.log('➖ Usunięto rolę karania');
+                    logger.info('➖ Usunięto rolę karania');
                 }
                 
                 if (!hasLotteryBanRole && !hasPunishmentRole) {
-                    console.log('ℹ️ Użytkownik nie ma ról karnych');
+                    logger.info('ℹ️ Użytkownik nie ma ról karnych');
                 }
             }
             
             const result = messages.length > 0 ? messages.join(', ') : `ℹ️ Brak zmian w rolach`;
-            console.log(`✅ Zakończono aktualizację ról: ${result}`);
+            logger.info(`✅ Zakończono aktualizację ról: ${result}`);
             
             return `${member.displayName}: ${result}`;
         } catch (error) {
-            console.error(`❌ Błąd aktualizacji ról: ${error.message}`);
+            logger.error(`❌ Błąd aktualizacji ról: ${error.message}`);
             return `❌ Błąd aktualizacji ról: ${error.message}`;
         }
     }
@@ -213,7 +216,7 @@ class PunishmentService {
             
             return userPunishment;
         } catch (error) {
-            console.error('[PUNISHMENT] ❌ Błąd ręcznego dodawania punktów:', error);
+            logger.error('[PUNISHMENT] ❌ Błąd ręcznego dodawania punktów:', error);
             throw error;
         }
     }
@@ -236,7 +239,7 @@ class PunishmentService {
             
             return userPunishment;
         } catch (error) {
-            console.error('[PUNISHMENT] ❌ Błąd ręcznego usuwania punktów:', error);
+            logger.error('[PUNISHMENT] ❌ Błąd ręcznego usuwania punktów:', error);
             throw error;
         }
     }
@@ -259,7 +262,7 @@ class PunishmentService {
                             });
                         }
                     } catch (error) {
-                        console.log(`[PUNISHMENT] ⚠️ Nie można znaleźć użytkownika ${userId}`);
+                        logger.info(`[PUNISHMENT] ⚠️ Nie można znaleźć użytkownika ${userId}`);
                     }
                 }
             }
@@ -268,15 +271,15 @@ class PunishmentService {
             
             return ranking;
         } catch (error) {
-            console.error('[PUNISHMENT] ❌ Błąd pobierania rankingu:', error);
+            logger.error('[PUNISHMENT] ❌ Błąd pobierania rankingu:', error);
             throw error;
         }
     }
 
     async cleanupAllUsers(guild) {
         try {
-            console.log('\n🧹 ==================== TYGODNIOWE CZYSZCZENIE ====================');
-            console.log(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info('\n🧹 ==================== TYGODNIOWE CZYSZCZENIE ====================');
+            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             
             const guildPunishments = await this.db.getGuildPunishments(guild.id);
             
@@ -288,7 +291,7 @@ class PunishmentService {
                     const member = await guild.members.fetch(userId);
                     
                     if (member) {
-                        console.log(`👤 Czyszczenie ról dla: ${member.displayName}`);
+                        logger.info(`👤 Czyszczenie ról dla: ${member.displayName}`);
                         const result = await this.updateUserRoles(member, 0);
                         
                         if (!result.includes('Brak zmian')) {
@@ -298,19 +301,19 @@ class PunishmentService {
                         usersProcessed++;
                     }
                 } catch (error) {
-                    console.log(`⚠️ Nie można zaktualizować ról dla użytkownika ${userId}: ${error.message}`);
+                    logger.info(`⚠️ Nie można zaktualizować ról dla użytkownika ${userId}: ${error.message}`);
                 }
             }
             
             await this.db.cleanupWeeklyPoints();
             
-            console.log('\n📊 PODSUMOWANIE TYGODNIOWEGO CZYSZCZENIA:');
-            console.log(`👥 Użytkowników przetworzonych: ${usersProcessed}`);
-            console.log(`🎭 Role zaktualizowane: ${rolesUpdated}`);
-            console.log('✅ Zakończono tygodniowe czyszczenie kar');
+            logger.info('\n📊 PODSUMOWANIE TYGODNIOWEGO CZYSZCZENIA:');
+            logger.info(`👥 Użytkowników przetworzonych: ${usersProcessed}`);
+            logger.info(`🎭 Role zaktualizowane: ${rolesUpdated}`);
+            logger.info('✅ Zakończono tygodniowe czyszczenie kar');
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD CZYSZCZENIA ====================');
-            console.error('❌ Błąd czyszczenia kar:', error);
+            logger.error('\n💥 ==================== BŁĄD CZYSZCZENIA ====================');
+            logger.error('❌ Błąd czyszczenia kar:', error);
         }
     }
 }

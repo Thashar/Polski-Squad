@@ -1,4 +1,7 @@
-const fs = require('fs').promises;
+const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('StalkerLME');
+.promises;
 const path = require('path');
 
 class DatabaseService {
@@ -10,30 +13,30 @@ class DatabaseService {
 
     async initializeDatabase() {
         try {
-            console.log('\n💾 ==================== INICJALIZACJA BAZY DANYCH ====================');
-            console.log('📁 Tworzenie katalogów...');
+            logger.info('\n💾 ==================== INICJALIZACJA BAZY DANYCH ====================');
+            logger.info('📁 Tworzenie katalogów...');
             
             await fs.mkdir(path.dirname(this.punishmentsFile), { recursive: true });
             await fs.mkdir(path.dirname(this.weeklyRemovalFile), { recursive: true });
             
             if (!(await this.fileExists(this.punishmentsFile))) {
-                console.log('📄 Tworzenie pliku punishments.json...');
+                logger.info('📄 Tworzenie pliku punishments.json...');
                 await this.savePunishments({});
             } else {
-                console.log('📄 Plik punishments.json już istnieje');
+                logger.info('📄 Plik punishments.json już istnieje');
             }
             
             if (!(await this.fileExists(this.weeklyRemovalFile))) {
-                console.log('📄 Tworzenie pliku weekly_removal.json...');
+                logger.info('📄 Tworzenie pliku weekly_removal.json...');
                 await this.saveWeeklyRemoval({});
             } else {
-                console.log('📄 Plik weekly_removal.json już istnieje');
+                logger.info('📄 Plik weekly_removal.json już istnieje');
             }
             
-            console.log('✅ Baza danych została pomyślnie zainicjalizowana');
+            logger.info('✅ Baza danych została pomyślnie zainicjalizowana');
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD INICJALIZACJI BAZY ====================');
-            console.error('❌ Błąd inicjalizacji bazy danych:', error);
+            logger.error('\n💥 ==================== BŁĄD INICJALIZACJI BAZY ====================');
+            logger.error('❌ Błąd inicjalizacji bazy danych:', error);
         }
     }
 
@@ -51,7 +54,7 @@ class DatabaseService {
             const data = await fs.readFile(this.punishmentsFile, 'utf8');
             return JSON.parse(data);
         } catch (error) {
-            console.error('💥 Błąd wczytywania bazy kar:', error);
+            logger.error('💥 Błąd wczytywania bazy kar:', error);
             return {};
         }
     }
@@ -60,7 +63,7 @@ class DatabaseService {
         try {
             await fs.writeFile(this.punishmentsFile, JSON.stringify(data, null, 2), 'utf8');
         } catch (error) {
-            console.error('💥 Błąd zapisywania bazy kar:', error);
+            logger.error('💥 Błąd zapisywania bazy kar:', error);
         }
     }
 
@@ -69,7 +72,7 @@ class DatabaseService {
             const data = await fs.readFile(this.weeklyRemovalFile, 'utf8');
             return JSON.parse(data);
         } catch (error) {
-            console.error('💥 Błąd wczytywania danych tygodniowych:', error);
+            logger.error('💥 Błąd wczytywania danych tygodniowych:', error);
             return {};
         }
     }
@@ -78,7 +81,7 @@ class DatabaseService {
         try {
             await fs.writeFile(this.weeklyRemovalFile, JSON.stringify(data, null, 2), 'utf8');
         } catch (error) {
-            console.error('💥 Błąd zapisywania danych tygodniowych:', error);
+            logger.error('💥 Błąd zapisywania danych tygodniowych:', error);
         }
     }
 
@@ -100,21 +103,21 @@ class DatabaseService {
     }
 
     async addPunishmentPoints(guildId, userId, points, reason = 'Niepokonanie bossa') {
-        console.log(`\n💾 Dodawanie punktów w bazie JSON...`);
-        console.log(`👤 Użytkownik: ${userId}`);
-        console.log(`🎭 Dodawane punkty: ${points}`);
-        console.log(`🏰 Serwer: ${guildId}`);
-        console.log(`📝 Powód: ${reason}`);
+        logger.info(`\n💾 Dodawanie punktów w bazie JSON...`);
+        logger.info(`👤 Użytkownik: ${userId}`);
+        logger.info(`🎭 Dodawane punkty: ${points}`);
+        logger.info(`🏰 Serwer: ${guildId}`);
+        logger.info(`📝 Powód: ${reason}`);
         
         const punishments = await this.loadPunishments();
         
         if (!punishments[guildId]) {
-            console.log('🏗️ Tworzenie nowego serwera w bazie...');
+            logger.info('🏗️ Tworzenie nowego serwera w bazie...');
             punishments[guildId] = {};
         }
         
         if (!punishments[guildId][userId]) {
-            console.log('👤 Tworzenie nowego użytkownika w bazie...');
+            logger.info('👤 Tworzenie nowego użytkownika w bazie...');
             punishments[guildId][userId] = {
                 points: 0,
                 history: []
@@ -131,10 +134,10 @@ class DatabaseService {
             date: new Date().toISOString()
         });
         
-        console.log(`📊 Punkty: ${oldPoints} -> ${newPoints}`);
+        logger.info(`📊 Punkty: ${oldPoints} -> ${newPoints}`);
         
         await this.savePunishments(punishments);
-        console.log('✅ Pomyślnie zapisano zmiany w bazie');
+        logger.info('✅ Pomyślnie zapisano zmiany w bazie');
         return punishments[guildId][userId];
     }
 
@@ -178,7 +181,7 @@ class DatabaseService {
     }
 
     async cleanupWeeklyPoints() {
-        console.log('\n🗓️ ==================== TYGODNIOWE USUWANIE PUNKTÓW ====================');
+        logger.info('\n🗓️ ==================== TYGODNIOWE USUWANIE PUNKTÓW ====================');
         
         const punishments = await this.loadPunishments();
         const weeklyRemoval = await this.loadWeeklyRemoval();
@@ -186,20 +189,20 @@ class DatabaseService {
         const now = new Date();
         const weekKey = `${now.getFullYear()}-W${this.getWeekNumber(now)}`;
         
-        console.log(`📅 Sprawdzanie tygodnia: ${weekKey}`);
+        logger.info(`📅 Sprawdzanie tygodnia: ${weekKey}`);
         
         if (weeklyRemoval[weekKey]) {
-            console.log('⏭️ Punkty już zostały usunięte w tym tygodniu');
+            logger.info('⏭️ Punkty już zostały usunięte w tym tygodniu');
             return;
         }
         
         let totalCleaned = 0;
         let guildsProcessed = 0;
         
-        console.log('🔄 Rozpoczynam czyszczenie punktów...');
+        logger.info('🔄 Rozpoczynam czyszczenie punktów...');
         
         for (const guildId in punishments) {
-            console.log(`\n🏰 Przetwarzanie serwera: ${guildId}`);
+            logger.info(`\n🏰 Przetwarzanie serwera: ${guildId}`);
             let usersInGuild = 0;
             
             for (const userId in punishments[guildId]) {
@@ -210,12 +213,12 @@ class DatabaseService {
                     reason: 'Automatyczne tygodniowe czyszczenie',
                     date: now.toISOString()
                 });
-                console.log(`➖ Użytkownik ${userId}: usunięto ${oldPoints} punktów`);
+                logger.info(`➖ Użytkownik ${userId}: usunięto ${oldPoints} punktów`);
                 totalCleaned++;
                 usersInGuild++;
             }
             
-            console.log(`✅ Serwer ${guildId}: ${usersInGuild} użytkowników wyczyszczonych`);
+            logger.info(`✅ Serwer ${guildId}: ${usersInGuild} użytkowników wyczyszczonych`);
             guildsProcessed++;
         }
         
@@ -227,11 +230,11 @@ class DatabaseService {
         await this.savePunishments(punishments);
         await this.saveWeeklyRemoval(weeklyRemoval);
         
-        console.log('\n📊 PODSUMOWANIE TYGODNIOWEGO USUWANIA:');
-        console.log(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
-        console.log(`👥 Użytkowników wyczyszczonych: ${totalCleaned}`);
-        console.log(`📅 Tydzień: ${weekKey}`);
-        console.log('✅ Tygodniowe czyszczenie zakończone pomyślnie');
+        logger.info('\n📊 PODSUMOWANIE TYGODNIOWEGO USUWANIA:');
+        logger.info(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
+        logger.info(`👥 Użytkowników wyczyszczonych: ${totalCleaned}`);
+        logger.info(`📅 Tydzień: ${weekKey}`);
+        logger.info('✅ Tygodniowe czyszczenie zakończone pomyślnie');
     }
 
     getWeekNumber(date) {

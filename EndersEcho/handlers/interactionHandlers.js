@@ -1,6 +1,9 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder } = require('discord.js');
 const { downloadFile, formatMessage } = require('../utils/helpers');
-const fs = require('fs').promises;
+const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('EndersEcho');
+.promises;
 const path = require('path');
 
 class InteractionHandler {
@@ -43,16 +46,16 @@ class InteractionHandler {
         const rest = new REST().setToken(this.config.token);
         
         try {
-            console.log('Rozpoczynam rejestrację slash commands...');
+            logger.info('Rozpoczynam rejestrację slash commands...');
             
             await rest.put(
                 Routes.applicationGuildCommands(this.config.clientId, this.config.guildId),
                 { body: commands }
             );
             
-            console.log('Slash commands zostały pomyślnie zarejestrowane!');
+            logger.info('Slash commands zostały pomyślnie zarejestrowane!');
         } catch (error) {
-            console.error('Błąd podczas rejestracji slash commands:', error);
+            logger.error('Błąd podczas rejestracji slash commands:', error);
         }
     }
 
@@ -186,7 +189,7 @@ class InteractionHandler {
             
             // Ekstrakcja tekstu i wyniku
             const extractedText = await this.ocrService.extractTextFromImage(tempImagePath);
-            console.log('Pełny tekst z OCR:', extractedText);
+            logger.info('Pełny tekst z OCR:', extractedText);
             
             let bestScore = this.ocrService.extractScoreAfterBest(extractedText);
             
@@ -326,7 +329,7 @@ class InteractionHandler {
             });
             
         } catch (error) {
-            console.error('Błąd w handleButtonInteraction:', error);
+            logger.error('Błąd w handleButtonInteraction:', error);
             
             // Sprawdź czy można jeszcze odpowiedzieć
             if (!interaction.replied && !interaction.deferred) {

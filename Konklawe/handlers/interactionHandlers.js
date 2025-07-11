@@ -1,3 +1,6 @@
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class InteractionHandler {
     constructor(config, gameService, rankingService, timerService) {
         this.config = config;
@@ -45,7 +48,7 @@ class InteractionHandler {
                 }
                 await interaction.editReply(resultsData);
             } catch (error) {
-                console.error('❌ Błąd podczas aktualizacji strony wyników:', error);
+                logger.error('❌ Błąd podczas aktualizacji strony wyników:', error);
                 if (!interaction.replied) {
                     await interaction.reply({
                         content: 'Wystąpił błąd podczas ładowania strony.',
@@ -85,7 +88,7 @@ class InteractionHandler {
             }
 
         } catch (error) {
-            console.error('❌ Błąd w obsłudze slash command:', error);
+            logger.error('❌ Błąd w obsłudze slash command:', error);
             try {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({
@@ -96,7 +99,7 @@ class InteractionHandler {
                     await interaction.editReply('Wystąpił błąd podczas wykonywania komendy.');
                 }
             } catch (replyError) {
-                console.error('❌ Nie udało się odpowiedzieć na interakcję:', replyError);
+                logger.error('❌ Nie udało się odpowiedzieć na interakcję:', replyError);
             }
         }
     }
@@ -136,7 +139,7 @@ class InteractionHandler {
                 try {
                     await interaction.editReply(`${message}\nDodana podpowiedź: ${hintText}`);
                 } catch (err) {
-                    console.error('❌ Błąd podczas edycji odpowiedzi:', err);
+                    logger.error('❌ Błąd podczas edycji odpowiedzi:', err);
                 }
             }, 100);
         }
@@ -170,11 +173,11 @@ class InteractionHandler {
             const resultsData = await this.rankingService.createResultsPage(interaction, 0);
             await interaction.editReply(resultsData);
         } catch (error) {
-            console.error('❌ Błąd w komendzie wyniki:', error);
+            logger.error('❌ Błąd w komendzie wyniki:', error);
             try {
                 await interaction.editReply('Wystąpił błąd podczas pobierania wyników.');
             } catch (editError) {
-                console.error('❌ Błąd podczas edycji odpowiedzi:', editError);
+                logger.error('❌ Błąd podczas edycji odpowiedzi:', editError);
             }
         }
     }
@@ -192,11 +195,11 @@ class InteractionHandler {
             const medalsData = await this.rankingService.createMedalsPage(interaction, 0);
             await interaction.editReply(medalsData);
         } catch (error) {
-            console.error('❌ Błąd w komendzie medale:', error);
+            logger.error('❌ Błąd w komendzie medale:', error);
             try {
                 await interaction.editReply('Wystąpił błąd podczas pobierania medali.');
             } catch (editError) {
-                console.error('❌ Błąd podczas edycji odpowiedzi:', editError);
+                logger.error('❌ Błąd podczas edycji odpowiedzi:', editError);
             }
         }
     }

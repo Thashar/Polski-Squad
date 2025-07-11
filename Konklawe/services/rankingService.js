@@ -1,5 +1,8 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class RankingService {
     constructor(config, gameService) {
         this.config = config;
@@ -42,7 +45,7 @@ class RankingService {
                 const medalDisplay = medalIcons ? `${medalIcons} ` : '';
                 wynikLines.push(`${globalRank}. ${name} - ${medalDisplay}${count}${this.config.emojis.medal}`);
             } catch (memberError) {
-                console.error(`Błąd pobierania danych użytkownika ${userId}:`, memberError);
+                logger.error(`Błąd pobierania danych użytkownika ${userId}:`, memberError);
                 const medalCount = this.gameService.virtuttiMedals[userId] || 0;
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 const medalDisplay = medalIcons ? `${medalIcons} ` : '';
@@ -125,7 +128,7 @@ class RankingService {
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 medalLines.push(`${globalRank}. ${name} - ${medalIcons} (${medalCount})`);
             } catch (memberError) {
-                console.error(`Błąd pobierania danych użytkownika ${userId}:`, memberError);
+                logger.error(`Błąd pobierania danych użytkownika ${userId}:`, memberError);
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 medalLines.push(`${globalRank}. Nieznany użytkownik - ${medalIcons} (${medalCount})`);
             }
@@ -185,9 +188,9 @@ class RankingService {
             try {
                 const member = await guild.members.fetch(userId);
                 await member.roles.add(this.config.roles.virtuttiPapajlari);
-                console.log(`👑 Nadano rolę Virtutti Papajlari użytkownikowi ${member.user.tag}`);
+                logger.info(`👑 Nadano rolę Virtutti Papajlari użytkownikowi ${member.user.tag}`);
             } catch (err) {
-                console.error(`❌ Błąd nadawania roli Virtutti Papajlari dla ${userId}:`, err);
+                logger.error(`❌ Błąd nadawania roli Virtutti Papajlari dla ${userId}:`, err);
             }
 
             this.gameService.addVirtuttiMedal(userId);
@@ -199,7 +202,7 @@ class RankingService {
 
             this.gameService.resetScoreboard();
             await channel.send(this.config.messages.rankingReset);
-            console.log(`🏆 ${member.user.tag} osiągnął medal Virtutti Papajlari! Ranking został zresetowany.`);
+            logger.info(`🏆 ${member.user.tag} osiągnął medal Virtutti Papajlari! Ranking został zresetowany.`);
             return true;
         }
         return false;
@@ -224,7 +227,7 @@ class RankingService {
                 const medalDisplay = medalIcons ? `${medalIcons} ` : '';
                 top3Lines.push(`${i + 1}. ${name} - ${medalDisplay}${count}${this.config.emojis.medal}`);
             } catch (error) {
-                console.error(`❌ Błąd pobierania użytkownika ${userId}:`, error);
+                logger.error(`❌ Błąd pobierania użytkownika ${userId}:`, error);
                 const medalCount = this.gameService.virtuttiMedals[userId] || 0;
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 const medalDisplay = medalIcons ? `${medalIcons} ` : '';
@@ -242,28 +245,28 @@ class RankingService {
      */
     async removeRoleFromAllMembers(guild, roleId) {
         try {
-            console.log(`Rozpoczynam usuwanie roli ${roleId} wszystkim użytkownikom...`);
+            logger.info(`Rozpoczynam usuwanie roli ${roleId} wszystkim użytkownikom...`);
             const allMembers = await guild.members.fetch();
             const membersWithRole = allMembers.filter(member => member.roles.cache.has(roleId));
-            console.log(`Znaleziono ${membersWithRole.size} użytkowników z rolą ${roleId}`);
+            logger.info(`Znaleziono ${membersWithRole.size} użytkowników z rolą ${roleId}`);
 
             if (membersWithRole.size === 0) {
-                console.log(`Brak użytkowników z rolą ${roleId} do usunięcia`);
+                logger.info(`Brak użytkowników z rolą ${roleId} do usunięcia`);
                 return;
             }
 
             for (const [memberId, member] of membersWithRole) {
                 try {
                     await member.roles.remove(roleId);
-                    console.log(`✅ Usunięto rolę ${roleId} od ${member.user.tag}`);
+                    logger.info(`✅ Usunięto rolę ${roleId} od ${member.user.tag}`);
                     await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (err) {
-                    console.error(`❌ Błąd usuwania roli ${roleId} od ${member.user.tag}:`, err);
+                    logger.error(`❌ Błąd usuwania roli ${roleId} od ${member.user.tag}:`, err);
                 }
             }
-            console.log(`✅ Zakończono usuwanie roli ${roleId} wszystkim użytkownikom`);
+            logger.info(`✅ Zakończono usuwanie roli ${roleId} wszystkim użytkownikom`);
         } catch (error) {
-            console.error(`❌ Błąd podczas usuwania ról ${roleId}:`, error);
+            logger.error(`❌ Błąd podczas usuwania ról ${roleId}:`, error);
         }
     }
 }

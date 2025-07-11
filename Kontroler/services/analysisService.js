@@ -1,5 +1,8 @@
 const { logWithTimestamp, isSimilarNick } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Kontroler');
 class AnalysisService {
     constructor(config, ocrService) {
         this.config = config;
@@ -226,7 +229,7 @@ class AnalysisService {
 
             logWithTimestamp('Posortowane wystąpienia nicku:', 'info');
             linesWithNick.forEach((item, index) => {
-                console.log(`  ${index + 1}. Linia ${item.index}: ${item.matchType} - "${item.line}"`);
+                logger.info(`  ${index + 1}. Linia ${item.index}: ${item.matchType} - "${item.line}"`);
             });
 
             for (let i = 0; i < linesWithNick.length; i++) {

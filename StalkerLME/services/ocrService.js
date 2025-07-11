@@ -3,6 +3,9 @@ const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
 const { calculateNameSimilarity } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('StalkerLME');
 
 class OCRService {
     constructor(config) {
@@ -13,46 +16,46 @@ class OCRService {
     async initializeOCR() {
         try {
             await fs.mkdir(this.tempDir, { recursive: true });
-            console.log('[OCR] ✅ Serwis OCR zainicjalizowany');
+            logger.info('[OCR] ✅ Serwis OCR zainicjalizowany');
         } catch (error) {
-            console.error('[OCR] ❌ Błąd inicjalizacji OCR:', error);
+            logger.error('[OCR] ❌ Błąd inicjalizacji OCR:', error);
         }
     }
 
     async processImage(attachment) {
         try {
-            console.log('\n🔍 ==================== ROZPOCZĘCIE ANALIZY OCR ====================');
-            console.log(`📷 Przetwarzanie obrazu: ${attachment.url}`);
+            logger.info('\n🔍 ==================== ROZPOCZĘCIE ANALIZY OCR ====================');
+            logger.info(`📷 Przetwarzanie obrazu: ${attachment.url}`);
             
             const response = await fetch(attachment.url);
             const arrayBuffer = await response.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             
-            console.log('⚫⚪ ==================== KONWERSJA NA CZARNO-BIAŁY ====================');
-            console.log('🎨 Rozpoczynam przetwarzanie obrazu...');
+            logger.info('⚫⚪ ==================== KONWERSJA NA CZARNO-BIAŁY ====================');
+            logger.info('🎨 Rozpoczynam przetwarzanie obrazu...');
             const processedBuffer = await this.processImageWithSharp(buffer);
-            console.log('✅ Przetwarzanie obrazu zakończone');
+            logger.info('✅ Przetwarzanie obrazu zakończone');
             
-            console.log('\n📖 ==================== URUCHAMIANIE OCR ====================');
+            logger.info('\n📖 ==================== URUCHAMIANIE OCR ====================');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
                 logger: m => {
                     if (m.status === 'recognizing text') {
-                        console.log(`📊 OCR Progress: ${Math.round(m.progress * 100)}%`);
+                        logger.info(`📊 OCR Progress: ${Math.round(m.progress * 100)}%`);
                     }
                 },
                 tessedit_char_whitelist: this.config.ocr.polishAlphabet
             });
             
-            console.log('\n📄 ==================== PEŁNY TEKST Z OCR ====================');
-            console.log('🔤 Odczytany tekst:');
-            console.log('--- POCZĄTEK TEKSTU ---');
-            console.log(text);
-            console.log('--- KONIEC TEKSTU ---');
+            logger.info('\n📄 ==================== PEŁNY TEKST Z OCR ====================');
+            logger.info('🔤 Odczytany tekst:');
+            logger.info('--- POCZĄTEK TEKSTU ---');
+            logger.info(text);
+            logger.info('--- KONIEC TEKSTU ---');
             
             return text;
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD OCR ====================');
-            console.error('❌ Błąd podczas przetwarzania obrazu:', error);
+            logger.error('\n💥 ==================== BŁĄD OCR ====================');
+            logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
             throw error;
         }
     }
@@ -70,15 +73,15 @@ class OCRService {
             
             return processedBuffer;
         } catch (error) {
-            console.error('❌ Błąd podczas przetwarzania obrazu:', error);
+            logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
             throw error;
         }
     }
 
     extractPlayersFromText(text) {
         try {
-            console.log('\n🔍 ==================== ANALIZA TEKSTU ====================');
-            console.log('🎯 Szukanie graczy z wynikiem 0...');
+            logger.info('\n🔍 ==================== ANALIZA TEKSTU ====================');
+            logger.info('🎯 Szukanie graczy z wynikiem 0...');
             
             const lines = text.split('\n').filter(line => line.trim().length > 0);
             const zeroScorePlayers = [];
@@ -95,17 +98,17 @@ class OCRService {
                             current.length > longest.length ? current : longest
                         );
                         zeroScorePlayers.push(longestWord);
-                        console.log(`👤 Znaleziono gracza z wynikiem 0: ${longestWord} (najdłuższe z: ${playerCandidates.join(', ')})`);
+                        logger.info(`👤 Znaleziono gracza z wynikiem 0: ${longestWord} (najdłuższe z: ${playerCandidates.join(', ')})`);
                     }
                 }
             }
             
-            console.log(`\n🎯 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0`);
-            console.log(`👥 Lista: ${zeroScorePlayers.join(', ')}`);
+            logger.info(`\n🎯 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0`);
+            logger.info(`👥 Lista: ${zeroScorePlayers.join(', ')}`);
             return zeroScorePlayers;
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD ANALIZY TEKSTU ====================');
-            console.error('❌ Błąd analizy tekstu:', error);
+            logger.error('\n💥 ==================== BŁĄD ANALIZY TEKSTU ====================');
+            logger.error('❌ Błąd analizy tekstu:', error);
             return [];
         }
     }
@@ -198,13 +201,13 @@ class OCRService {
 
     async findUsersInGuild(guild, playerNames, requestingMember = null) {
         try {
-            console.log('\n👥 ==================== WYSZUKIWANIE UŻYTKOWNIKÓW ====================');
-            console.log(`🏰 Serwer: ${guild.name}`);
-            console.log(`🔍 Szukane nazwy: ${playerNames.join(', ')}`);
+            logger.info('\n👥 ==================== WYSZUKIWANIE UŻYTKOWNIKÓW ====================');
+            logger.info(`🏰 Serwer: ${guild.name}`);
+            logger.info(`🔍 Szukane nazwy: ${playerNames.join(', ')}`);
             
             const foundUsers = [];
             const members = await guild.members.fetch();
-            console.log(`👥 Znaleziono ${members.size} członków serwera`);
+            logger.info(`👥 Znaleziono ${members.size} członków serwera`);
             
             // Sprawdź czy użytkownik ma którejś z ról TARGET i ogranicz wyszukiwanie
             let restrictToRole = null;
@@ -213,7 +216,7 @@ class OCRService {
                 for (const roleId of targetRoleIds) {
                     if (requestingMember.roles.cache.has(roleId)) {
                         restrictToRole = roleId;
-                        console.log(`🎯 Ograniczam wyszukiwanie do roli: ${roleId}`);
+                        logger.info(`🎯 Ograniczam wyszukiwanie do roli: ${roleId}`);
                         break;
                     }
                 }
@@ -261,29 +264,29 @@ class OCRService {
                         similarity: bestMatch.similarity
                     });
                     
-                    console.log(`✅ Dopasowano: ${playerName} -> ${bestMatch.member.displayName} (${bestMatch.member.user.username}) - ${(bestMatch.similarity * 100).toFixed(1)}% podobieństwa`);
+                    logger.info(`✅ Dopasowano: ${playerName} -> ${bestMatch.member.displayName} (${bestMatch.member.user.username}) - ${(bestMatch.similarity * 100).toFixed(1)}% podobieństwa`);
                     
                     // Pokaż alternatywnych kandydatów jeśli jest ich więcej
                     if (candidates.length > 1) {
-                        console.log(`   Alternatywni kandydaci:`);
+                        logger.info(`   Alternatywni kandydaci:`);
                         for (let i = 1; i < Math.min(candidates.length, 3); i++) {
                             const alt = candidates[i];
-                            console.log(`   - ${alt.member.displayName} (${alt.member.user.username}) - ${(alt.similarity * 100).toFixed(1)}%`);
+                            logger.info(`   - ${alt.member.displayName} (${alt.member.user.username}) - ${(alt.similarity * 100).toFixed(1)}%`);
                         }
                     }
                 } else {
-                    console.log(`❌ Nie znaleziono kandydata z minimum 70% podobieństwa dla: ${playerName}`);
+                    logger.info(`❌ Nie znaleziono kandydata z minimum 70% podobieństwa dla: ${playerName}`);
                 }
             }
             
-            console.log(`\n✅ Dopasowano ${foundUsers.length}/${playerNames.length} użytkowników`);
+            logger.info(`\n✅ Dopasowano ${foundUsers.length}/${playerNames.length} użytkowników`);
             if (restrictToRole) {
-                console.log(`🎯 Wyszukiwanie ograniczone do roli: ${restrictToRole}`);
+                logger.info(`🎯 Wyszukiwanie ograniczone do roli: ${restrictToRole}`);
             }
             return foundUsers;
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD WYSZUKIWANIA ====================');
-            console.error('❌ Błąd wyszukiwania użytkowników:', error);
+            logger.error('\n💥 ==================== BŁĄD WYSZUKIWANIA ====================');
+            logger.error('❌ Błąd wyszukiwania użytkowników:', error);
             return [];
         }
     }
@@ -300,11 +303,11 @@ class OCRService {
                 
                 if (ageInHours > 1) {
                     await fs.unlink(filePath);
-                    console.log(`[OCR] 🗑️ Usunięto stary plik tymczasowy: ${file}`);
+                    logger.info(`[OCR] 🗑️ Usunięto stary plik tymczasowy: ${file}`);
                 }
             }
         } catch (error) {
-            console.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych:', error);
+            logger.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych:', error);
         }
     }
 }

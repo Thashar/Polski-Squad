@@ -1,4 +1,7 @@
 const path = require('path');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('StalkerLME');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Walidacja wymaganych zmiennych środowiskowych
@@ -23,8 +26,8 @@ const requiredEnvVars = [
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
-    console.error('❌ Brakujące zmienne środowiskowe:', missingVars.join(', '));
-    console.error('Sprawdź plik StalkerLME/.env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
+    logger.error('❌ Brakujące zmienne środowiskowe:', missingVars.join(', '));
+    logger.error('Sprawdź plik StalkerLME/.env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
     process.exit(1);
 }
 

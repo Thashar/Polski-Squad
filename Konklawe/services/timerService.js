@@ -1,5 +1,8 @@
 const { formatTimeDifference } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class TimerService {
     constructor(config, gameService) {
         this.config = config;
@@ -26,7 +29,7 @@ class TimerService {
         this.clearFirstHintReminderTimer();
         this.clearSecondHintReminderTimer();
         this.clearRecurringReminderTimer();
-        console.log('🔴 Wyczyszczono wszystkie timery');
+        logger.info('🔴 Wyczyszczono wszystkie timery');
     }
 
     /**
@@ -36,7 +39,7 @@ class TimerService {
         if (this.gameService.autoResetTimer) {
             clearTimeout(this.gameService.autoResetTimer);
             this.gameService.autoResetTimer = null;
-            console.log('🔴 Wyczyszczono autoResetTimer');
+            logger.info('🔴 Wyczyszczono autoResetTimer');
         }
     }
 
@@ -47,7 +50,7 @@ class TimerService {
         if (this.gameService.reminderTimer) {
             clearTimeout(this.gameService.reminderTimer);
             this.gameService.reminderTimer = null;
-            console.log('🔴 Wyczyszczono reminderTimer');
+            logger.info('🔴 Wyczyszczono reminderTimer');
         }
     }
 
@@ -58,7 +61,7 @@ class TimerService {
         if (this.gameService.hintReminderTimer) {
             clearTimeout(this.gameService.hintReminderTimer);
             this.gameService.hintReminderTimer = null;
-            console.log('🔴 Wyczyszczono hintReminderTimer');
+            logger.info('🔴 Wyczyszczono hintReminderTimer');
         }
     }
 
@@ -69,7 +72,7 @@ class TimerService {
         if (this.gameService.papalRoleRemovalTimer) {
             clearTimeout(this.gameService.papalRoleRemovalTimer);
             this.gameService.papalRoleRemovalTimer = null;
-            console.log('🔴 Wyczyszczono papalRoleRemovalTimer');
+            logger.info('🔴 Wyczyszczono papalRoleRemovalTimer');
         }
     }
 
@@ -80,7 +83,7 @@ class TimerService {
         if (this.gameService.firstHintReminderTimer) {
             clearTimeout(this.gameService.firstHintReminderTimer);
             this.gameService.firstHintReminderTimer = null;
-            console.log('🔴 Wyczyszczono firstHintReminderTimer');
+            logger.info('🔴 Wyczyszczono firstHintReminderTimer');
         }
     }
 
@@ -91,7 +94,7 @@ class TimerService {
         if (this.gameService.secondHintReminderTimer) {
             clearTimeout(this.gameService.secondHintReminderTimer);
             this.gameService.secondHintReminderTimer = null;
-            console.log('🔴 Wyczyszczono secondHintReminderTimer');
+            logger.info('🔴 Wyczyszczono secondHintReminderTimer');
         }
     }
 
@@ -102,7 +105,7 @@ class TimerService {
         if (this.gameService.recurringReminderTimer) {
             clearTimeout(this.gameService.recurringReminderTimer);
             this.gameService.recurringReminderTimer = null;
-            console.log('🔴 Wyczyszczono recurringReminderTimer');
+            logger.info('🔴 Wyczyszczono recurringReminderTimer');
         }
     }
 
@@ -112,10 +115,10 @@ class TimerService {
     async setAutoResetTimer() {
         this.clearAutoResetTimer();
         if (this.gameService.trigger === null) {
-            console.log(`🕐 Ustawiono timer na automatyczne ustawienie hasła "${this.config.messages.defaultPassword}" za ${this.config.timers.autoResetMinutes} minut`);
+            logger.info(`🕐 Ustawiono timer na automatyczne ustawienie hasła "${this.config.messages.defaultPassword}" za ${this.config.timers.autoResetMinutes} minut`);
             this.gameService.autoResetTimer = setTimeout(async () => {
                 if (this.gameService.trigger === null) {
-                    console.log(`⏰ Automatycznie ustawiam hasło "${this.config.messages.defaultPassword}" po ${this.config.timers.autoResetMinutes} minutach bezczynności`);
+                    logger.info(`⏰ Automatycznie ustawiam hasło "${this.config.messages.defaultPassword}" po ${this.config.timers.autoResetMinutes} minutach bezczynności`);
                     this.gameService.resetToDefaultPassword();
 
                     try {
@@ -124,7 +127,7 @@ class TimerService {
                             await this.removeRoleFromAllMembers(guild, this.config.roles.papal);
                         }
                     } catch (error) {
-                        console.error('❌ Błąd podczas usuwania ról papieskich:', error);
+                        logger.error('❌ Błąd podczas usuwania ról papieskich:', error);
                     }
 
                     try {
@@ -143,7 +146,7 @@ class TimerService {
                             await startChannel.send(`Napisz **"${this.config.messages.defaultPassword}"** by rozpocząć grę.`);
                         }
                     } catch (error) {
-                        console.error('❌ Błąd podczas automatycznego ustawiania hasła:', error);
+                        logger.error('❌ Błąd podczas automatycznego ustawiania hasła:', error);
                     }
                 }
             }, this.gameService.AUTO_RESET_TIME);
@@ -157,7 +160,7 @@ class TimerService {
      */
     async setReminderTimer(userId) {
         this.clearReminderTimer();
-        console.log(`🔔 Ustawiono przypomnienie dla użytkownika ${userId} za ${this.config.timers.reminderMinutes} minut`);
+        logger.info(`🔔 Ustawiono przypomnienie dla użytkownika ${userId} za ${this.config.timers.reminderMinutes} minut`);
         this.gameService.reminderTimer = setTimeout(async () => {
             if (this.gameService.trigger === null) {
                 try {
@@ -166,7 +169,7 @@ class TimerService {
                         await reminderChannel.send(`<@${userId}> Przypomnienie: Minęło już ${this.config.timers.reminderMinutes} minut, a nowe hasło konklawe nie zostało jeszcze ustawione! ⏰\nZa ${this.config.timers.autoResetMinutes - this.config.timers.reminderMinutes} minut hasło zostanie automatycznie ustawione na "${this.config.messages.defaultPassword}".`);
                     }
                 } catch (error) {
-                    console.error('❌ Błąd podczas wysyłania przypomnienia:', error);
+                    logger.error('❌ Błąd podczas wysyłania przypomnienia:', error);
                 }
             }
         }, this.gameService.REMINDER_TIME);
@@ -179,7 +182,7 @@ class TimerService {
     async setFirstHintReminder() {
         this.clearFirstHintReminderTimer();
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
-            console.log(`🟡 Ustawiono pierwszy timer przypomnienia o podpowiedzi na 15 minut`);
+            logger.info(`🟡 Ustawiono pierwszy timer przypomnienia o podpowiedzi na 15 minut`);
             this.gameService.firstHintReminderTimer = setTimeout(async () => {
                 if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                     try {
@@ -196,7 +199,7 @@ class TimerService {
                             }
                         }
                     } catch (error) {
-                        console.error('Błąd podczas wysyłania pierwszego przypomnienia o podpowiedzi:', error);
+                        logger.error('Błąd podczas wysyłania pierwszego przypomnienia o podpowiedzi:', error);
                     }
                 }
             }, this.gameService.FIRST_HINT_REMINDER_TIME);
@@ -209,7 +212,7 @@ class TimerService {
      */
     async setSecondHintReminder() {
         this.clearSecondHintReminderTimer();
-        console.log(`🟠 Ustawiono drugi timer przypomnienia o podpowiedzi na kolejne 15 minut`);
+        logger.info(`🟠 Ustawiono drugi timer przypomnienia o podpowiedzi na kolejne 15 minut`);
         this.gameService.secondHintReminderTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -227,7 +230,7 @@ class TimerService {
                         }
                     }
                 } catch (error) {
-                    console.error('Błąd podczas wysyłania drugiego przypomnienia o podpowiedzi:', error);
+                    logger.error('Błąd podczas wysyłania drugiego przypomnienia o podpowiedzi:', error);
                 }
             }
         }, this.gameService.FIRST_HINT_REMINDER_TIME);
@@ -240,7 +243,7 @@ class TimerService {
      */
     async setRecurringReminders(userId) {
         this.clearRecurringReminderTimer();
-        console.log(`🔄 Ustawiono powtarzające się przypomnienia co 15 minut dla użytkownika ${userId}`);
+        logger.info(`🔄 Ustawiono powtarzające się przypomnienia co 15 minut dla użytkownika ${userId}`);
         this.gameService.recurringReminderTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -256,7 +259,7 @@ class TimerService {
                         }
                     }
                 } catch (error) {
-                    console.error('Błąd podczas wysyłania powtarzającego się przypomnienia:', error);
+                    logger.error('Błąd podczas wysyłania powtarzającego się przypomnienia:', error);
                 }
             }
         }, this.gameService.RECURRING_REMINDER_TIME);
@@ -269,7 +272,7 @@ class TimerService {
      */
     async setPapalRoleRemovalForNoHints(userId) {
         this.clearPapalRoleRemovalTimer();
-        console.log(`🔴 Ustawiono timer na usunięcie roli papieskiej za brak podpowiedzi użytkownikowi ${userId} za 30 minut`);
+        logger.info(`🔴 Ustawiono timer na usunięcie roli papieskiej za brak podpowiedzi użytkownikowi ${userId} za 30 minut`);
         this.gameService.papalRoleRemovalTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -278,12 +281,12 @@ class TimerService {
                         const member = guild.members.cache.get(userId);
                         if (member && member.roles.cache.has(this.config.roles.papal)) {
                             await member.roles.remove(this.config.roles.papal);
-                            console.log(`Usunięto rolę papieską użytkownikowi ${member.user.tag} za brak podpowiedzi przez godzinę`);
+                            logger.info(`Usunięto rolę papieską użytkownikowi ${member.user.tag} za brak podpowiedzi przez godzinę`);
                             await this.resetToDefaultPassword();
                         }
                     }
                 } catch (error) {
-                    console.error('Błąd podczas usuwania roli papieskiej za brak podpowiedzi:', error);
+                    logger.error('Błąd podczas usuwania roli papieskiej za brak podpowiedzi:', error);
                 }
             }
         }, this.gameService.SECOND_HINT_REMINDER_TIME);
@@ -296,7 +299,7 @@ class TimerService {
     async setHintReminderTimer() {
         this.clearHintReminderTimer();
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
-            console.log(`🟢 Ustawiono timer przypomnienia o kolejnej podpowiedzi na 6 godzin`);
+            logger.info(`🟢 Ustawiono timer przypomnienia o kolejnej podpowiedzi na 6 godzin`);
             this.gameService.hintReminderTimer = setTimeout(async () => {
                 if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
                     try {
@@ -313,7 +316,7 @@ class TimerService {
                             }
                         }
                     } catch (error) {
-                        console.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi:', error);
+                        logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi:', error);
                     }
                 }
             }, this.gameService.EXISTING_HINT_REMINDER_TIME);
@@ -341,9 +344,9 @@ class TimerService {
                 await startChannel.send(`Hasło zostało automatycznie ustawione na "${this.config.messages.defaultPassword}". Napisz **"${this.config.messages.defaultPassword}"** by rozpocząć grę.`);
             }
 
-            console.log('Zresetowano hasło na domyślne po usunięciu roli papieskiej');
+            logger.info('Zresetowano hasło na domyślne po usunięciu roli papieskiej');
         } catch (error) {
-            console.error('Błąd podczas resetowania hasła:', error);
+            logger.error('Błąd podczas resetowania hasła:', error);
         }
     }
 
@@ -354,28 +357,28 @@ class TimerService {
      */
     async removeRoleFromAllMembers(guild, roleId) {
         try {
-            console.log(`Rozpoczynam usuwanie roli ${roleId} wszystkim użytkownikom...`);
+            logger.info(`Rozpoczynam usuwanie roli ${roleId} wszystkim użytkownikom...`);
             const allMembers = await guild.members.fetch();
             const membersWithRole = allMembers.filter(member => member.roles.cache.has(roleId));
-            console.log(`Znaleziono ${membersWithRole.size} użytkowników z rolą ${roleId}`);
+            logger.info(`Znaleziono ${membersWithRole.size} użytkowników z rolą ${roleId}`);
 
             if (membersWithRole.size === 0) {
-                console.log(`Brak użytkowników z rolą ${roleId} do usunięcia`);
+                logger.info(`Brak użytkowników z rolą ${roleId} do usunięcia`);
                 return;
             }
 
             for (const [memberId, member] of membersWithRole) {
                 try {
                     await member.roles.remove(roleId);
-                    console.log(`✅ Usunięto rolę ${roleId} od ${member.user.tag}`);
+                    logger.info(`✅ Usunięto rolę ${roleId} od ${member.user.tag}`);
                     await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (err) {
-                    console.error(`❌ Błąd usuwania roli ${roleId} od ${member.user.tag}:`, err);
+                    logger.error(`❌ Błąd usuwania roli ${roleId} od ${member.user.tag}:`, err);
                 }
             }
-            console.log(`✅ Zakończono usuwanie roli ${roleId} wszystkim użytkownikom`);
+            logger.info(`✅ Zakończono usuwanie roli ${roleId} wszystkim użytkownikom`);
         } catch (error) {
-            console.error(`❌ Błąd podczas usuwania ról ${roleId}:`, error);
+            logger.error(`❌ Błąd podczas usuwania ról ${roleId}:`, error);
         }
     }
 
@@ -383,24 +386,24 @@ class TimerService {
      * Przywraca timery po restarcie bota
      */
     async restoreRemindersAfterRestart() {
-        console.log('🔄 Rozpoczynam przywracanie timerów po restarcie...');
+        logger.info('🔄 Rozpoczynam przywracanie timerów po restarcie...');
         
         if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
-            console.log('❌ Hasło jest domyślne lub brak triggera - nie przywracam timerów');
+            logger.info('❌ Hasło jest domyślne lub brak triggera - nie przywracam timerów');
             return;
         }
 
         const now = new Date();
         const timeSincePassword = now - this.gameService.triggerSetTimestamp;
         
-        console.log(`⏱️ Czas od ustawienia hasła: ${formatTimeDifference(timeSincePassword)}`);
-        console.log(`📝 Liczba podpowiedzi: ${this.gameService.hints.length}`);
+        logger.info(`⏱️ Czas od ustawienia hasła: ${formatTimeDifference(timeSincePassword)}`);
+        logger.info(`📝 Liczba podpowiedzi: ${this.gameService.hints.length}`);
 
         // Jeśli brak podpowiedzi
         if (this.gameService.hints.length === 0) {
             if (timeSincePassword >= this.gameService.ROLE_REMOVAL_TIME) {
                 // Godzina minęła - usuń rolę natychmiast
-                console.log('⚠️ Minęła godzina bez podpowiedzi - usuwanie roli papieskiej');
+                logger.info('⚠️ Minęła godzina bez podpowiedzi - usuwanie roli papieskiej');
                 const guild = this.client.guilds.cache.first();
                 const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
                 if (membersWithRole.size > 0) {
@@ -435,11 +438,11 @@ class TimerService {
                                         }
                                     }
                                 } catch (error) {
-                                    console.error('Błąd podczas wysyłania pierwszego przypomnienia o podpowiedzi:', error);
+                                    logger.error('Błąd podczas wysyłania pierwszego przypomnienia o podpowiedzi:', error);
                                 }
                             }
                         }, remainingTime);
-                        console.log(`⏱️ Ustawiono pierwszy timer na ${Math.round(remainingTime / 1000)} sekund`);
+                        logger.info(`⏱️ Ustawiono pierwszy timer na ${Math.round(remainingTime / 1000)} sekund`);
                     } else if (timeSincePassword < this.gameService.SECOND_HINT_REMINDER_TIME) {
                         // Ustaw bezpośrednio timer na wysłanie drugiego przypomnienia
                         const remainingTime = this.gameService.SECOND_HINT_REMINDER_TIME - timeSincePassword;
@@ -461,11 +464,11 @@ class TimerService {
                                         }
                                     }
                                 } catch (error) {
-                                    console.error('Błąd podczas wysyłania drugiego przypomnienia o podpowiedzi:', error);
+                                    logger.error('Błąd podczas wysyłania drugiego przypomnienia o podpowiedzi:', error);
                                 }
                             }
                         }, remainingTime);
-                        console.log(`⏱️ Ustawiono drugi timer na ${Math.round(remainingTime / 1000)} sekund`);
+                        logger.info(`⏱️ Ustawiono drugi timer na ${Math.round(remainingTime / 1000)} sekund`);
                     } else {
                         // Już po drugim przypomnieniu - ustaw usuwanie roli na pozostały czas
                         const remainingTime = this.gameService.ROLE_REMOVAL_TIME - timeSincePassword;
@@ -474,12 +477,12 @@ class TimerService {
                                 await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
                                 await this.setRecurringReminders(papalMember.user.id);
                             }, remainingTime);
-                            console.log(`⏱️ Ustawiono timer usuwania roli na ${Math.round(remainingTime / 1000)} sekund`);
+                            logger.info(`⏱️ Ustawiono timer usuwania roli na ${Math.round(remainingTime / 1000)} sekund`);
                         } else {
                             // Czas już minął - ustaw natychmiast
                             await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
                             await this.setRecurringReminders(papalMember.user.id);
-                            console.log(`⏱️ Czas minął - ustawianie timerów natychmiast`);
+                            logger.info(`⏱️ Czas minął - ustawianie timerów natychmiast`);
                         }
                     }
                 }
@@ -489,15 +492,15 @@ class TimerService {
             const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
             if (timeSinceLastHint >= this.gameService.EXISTING_HINT_REMINDER_TIME) {
                 await this.setHintReminderTimer();
-                console.log(`⏱️ Czas od ostatniej podpowiedzi minął - ustawianie timer natychmiast`);
+                logger.info(`⏱️ Czas od ostatniej podpowiedzi minął - ustawianie timer natychmiast`);
             } else {
                 const remainingTime = this.gameService.EXISTING_HINT_REMINDER_TIME - timeSinceLastHint;
                 setTimeout(async () => await this.setHintReminderTimer(), remainingTime);
-                console.log(`⏱️ Ustawiono timer dla kolejnej podpowiedzi na ${Math.round(remainingTime / 1000)} sekund`);
+                logger.info(`⏱️ Ustawiono timer dla kolejnej podpowiedzi na ${Math.round(remainingTime / 1000)} sekund`);
             }
         }
         
-        console.log('✅ Zakończono przywracanie timerów po restarcie');
+        logger.info('✅ Zakończono przywracanie timerów po restarcie');
     }
 }
 

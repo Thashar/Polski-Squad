@@ -1,3 +1,6 @@
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Szkolenia');
 /**
  * Obsługa wszystkich interakcji przycisków w systemie szkoleń.
  * -------------------------------------------------
@@ -43,7 +46,7 @@ async function handleInteraction(interaction, state, config) {
         }
 
     } catch (error) {
-        console.error('❌ Błąd podczas obsługi interakcji:', error);
+        logger.error('❌ Błąd podczas obsługi interakcji:', error);
     }
 }
 
@@ -70,7 +73,7 @@ async function handleLockThread(interaction, state, config) {
             await channel.setLocked(true, 'Wątek zablokowany na żądanie właściciela');
             await channel.setArchived(true, 'Wątek zablokowany na żądanie właściciela');
         } catch (error) {
-            console.error('Błąd podczas blokowania wątku:', error);
+            logger.error('Błąd podczas blokowania wątku:', error);
         }
     }, 2000);
 }

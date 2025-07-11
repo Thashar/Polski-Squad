@@ -1,5 +1,8 @@
 const { isSingleWord } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class MessageHandler {
     constructor(config, gameService, rankingService, timerService) {
         this.config = config;
@@ -40,9 +43,9 @@ class MessageHandler {
                 message.channel.id !== this.config.channels.trigger) {
                 
                 await message.delete().catch(err => {
-                    console.log(`❌ Nie udało się usunąć wiadomości od ${message.author.tag}:`, err);
+                    logger.info(`❌ Nie udało się usunąć wiadomości od ${message.author.tag}:`, err);
                 });
-                console.log(`🗑️ Usunięto wiadomość zawierającą hasło od papieża (${message.author.tag}) poza triggerChannelId.`);
+                logger.info(`🗑️ Usunięto wiadomość zawierającą hasło od papieża (${message.author.tag}) poza triggerChannelId.`);
                 return;
             }
 
@@ -56,7 +59,7 @@ class MessageHandler {
             }
 
         } catch (error) {
-            console.error('❌ Błąd w obsłudze wiadomości:', error);
+            logger.error('❌ Błąd w obsłudze wiadomości:', error);
         }
     }
 
@@ -104,7 +107,7 @@ class MessageHandler {
      * @param {Message} message - Wiadomość Discord
      */
     async handlePasswordGuess(message) {
-        console.log(`🎉 Hasło odgadnięte przez ${message.author.tag}`);
+        logger.info(`🎉 Hasło odgadnięte przez ${message.author.tag}`);
         
         const guild = message.guild;
         const currentTrigger = this.gameService.trigger;
@@ -115,15 +118,15 @@ class MessageHandler {
         this.timerService.clearAllTimers();
         this.gameService.clearPassword();
 
-        console.log('🔄 Usuwanie roli papieskiej wszystkim użytkownikom...');
+        logger.info('🔄 Usuwanie roli papieskiej wszystkim użytkownikom...');
         await this.timerService.removeRoleFromAllMembers(guild, this.config.roles.papal);
         await message.reply(`${this.config.messages.habemusPapam} ${this.config.emojis.jp2roll}`);
 
         try {
             await message.member.roles.add(this.config.roles.papal);
-            console.log(`👑 Nadano rolę papieską użytkownikowi ${message.author.tag}`);
+            logger.info(`👑 Nadano rolę papieską użytkownikowi ${message.author.tag}`);
         } catch (err) {
-            console.error(`❌ Błąd nadawania roli papieskiej ${this.config.roles.papal} dla ${message.author.tag}:`, err);
+            logger.error(`❌ Błąd nadawania roli papieskiej ${this.config.roles.papal} dla ${message.author.tag}:`, err);
         }
 
         // Statystyki odpowiedzi
@@ -147,7 +150,7 @@ class MessageHandler {
                 const fetchedMessages = await triggerChannel.messages.fetch({ limit: 100 });
                 await triggerChannel.bulkDelete(fetchedMessages, true);
             } catch (error) {
-                console.error(`❌ Błąd czyszczenia kanału ${this.config.channels.trigger}:`, error);
+                logger.error(`❌ Błąd czyszczenia kanału ${this.config.channels.trigger}:`, error);
             }
 
             await triggerChannel.send(`<@${message.author.id}> nadaj tu nowe hasło konklawe.`);

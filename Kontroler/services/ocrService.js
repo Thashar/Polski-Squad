@@ -2,6 +2,9 @@ const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
 const { logWithTimestamp } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Kontroler');
 class OCRService {
     constructor(config) {
         this.config = config;
@@ -167,7 +170,7 @@ class OCRService {
         const { data: { text } } = await Tesseract.recognize(imagePath, this.config.ocr.languages, {
             logger: m => {
                 if (m.status === 'recognizing text') {
-                    console.log(`📖 OCR Progress: ${Math.round(m.progress * 100)}%`);
+                    logger.info(`📖 OCR Progress: ${Math.round(m.progress * 100)}%`);
                 }
             },
             tessedit_char_whitelist: this.config.ocr.charWhitelist,
@@ -179,9 +182,9 @@ class OCRService {
         });
 
         logWithTimestamp('Rozpoznany tekst:', 'info');
-        console.log('─'.repeat(50));
-        console.log(text);
-        console.log('─'.repeat(50));
+        logger.info('─'.repeat(50));
+        logger.info(text);
+        logger.info('─'.repeat(50));
 
         return text;
     }

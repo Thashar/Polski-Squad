@@ -2,6 +2,9 @@ const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const { updateUserEphemeralReply } = require('../utils/helpers');
 const { safeAddRole } = require('./roleService');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Rekruter');
 
 /* -------------------------------------------------------------------------- */
 /* 1.  ODKŁADANA KWALIFIKACJA DO KLANU                                        */
@@ -24,7 +27,7 @@ async function sendPendingQualification(userId, data, state) {
     }
     state.pendingQualifications.delete(userId);
   } catch (err) {
-    console.error('[QUALIFICATION] ❌ Błąd kwalifikacji:', err);
+    logger.error('[QUALIFICATION] ❌ Błąd kwalifikacji:', err);
   }
 }
 
@@ -52,9 +55,9 @@ async function finishOtherPurposeRecruitment(member, state) {
 
     state.userStates.delete(user.id);
     state.pendingOtherPurposeFinish.delete(user.id);
-    console.log(`[OTHER_PURPOSE] ✅ Zakończono rekrutację dla ${user.username}`);
+    logger.info(`[OTHER_PURPOSE] ✅ Zakończono rekrutację dla ${user.username}`);
   } catch (err) {
-    console.error('[OTHER_PURPOSE] ❌ Błąd finalizacji:', err);
+    logger.error('[OTHER_PURPOSE] ❌ Błąd finalizacji:', err);
   }
 }
 

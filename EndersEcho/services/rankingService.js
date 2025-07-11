@@ -1,4 +1,7 @@
-const fs = require('fs').promises;
+const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('EndersEcho');
+.promises;
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { logWithTimestamp, formatMessage } = require('../utils/helpers');
 
@@ -34,7 +37,7 @@ class RankingService {
             
             await fs.writeFile(this.config.ranking.file, JSON.stringify(ranking, null, 2), 'utf8');
         } catch (error) {
-            console.error('Błąd zapisu rankingu:', error);
+            logger.error('Błąd zapisu rankingu:', error);
             throw error;
         }
     }
@@ -111,7 +114,7 @@ class RankingService {
                 displayName = member.displayName;
             } catch (error) {
                 // Jeśli nie można pobrać membera, używamy zapisanego username
-                console.log(`Nie można pobrać membera ${player.userId}, używam zapisanego username`);
+                logger.info(`Nie można pobrać membera ${player.userId}, używam zapisanego username`);
             }
             
             // Wyróżnienie własnego wyniku

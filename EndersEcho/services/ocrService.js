@@ -1,6 +1,9 @@
 const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
-const fs = require('fs').promises;
+const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('EndersEcho');
+.promises;
 const { logWithTimestamp } = require('../utils/helpers');
 
 class OCRService {
@@ -27,9 +30,9 @@ class OCRService {
                 .png()
                 .toFile(processedPath);
             
-            console.log('Sprawdzam obecność wymaganych słów w obrazie...');
+            logger.info('Sprawdzam obecność wymaganych słów w obrazie...');
             const { data: { text } } = await Tesseract.recognize(processedPath, this.config.ocr.languages, {
-                logger: m => console.log(`Word Check Progress: ${m.status}`),
+                logger: m => logger.info(`Word Check Progress: ${m.status}`),
                 tessedit_char_whitelist: this.config.ocr.charWhitelistWords
             });
             
@@ -38,13 +41,13 @@ class OCRService {
             const hasBest = /best\s*:/i.test(text.trim());
             const hasTotal = /total\s*:/i.test(text.trim());
             
-            console.log('Tekst z obrazu:', text.trim());
-            console.log('Znaleziono "Best:":', hasBest);
-            console.log('Znaleziono "Total:":', hasTotal);
+            logger.info('Tekst z obrazu:', text.trim());
+            logger.info('Znaleziono "Best:":', hasBest);
+            logger.info('Znaleziono "Total:":', hasTotal);
             
             return hasBest && hasTotal;
         } catch (error) {
-            console.error('Błąd podczas sprawdzania wymaganych słów:', error);
+            logger.error('Błąd podczas sprawdzania wymaganych słów:', error);
             return false;
         }
     }
@@ -63,9 +66,9 @@ class OCRService {
                 .png()
                 .toFile(outputPath);
             
-            console.log('Obraz został przetworzony dla białego tekstu');
+            logger.info('Obraz został przetworzony dla białego tekstu');
         } catch (error) {
-            console.error('Błąd przetwarzania obrazu:', error);
+            logger.error('Błąd przetwarzania obrazu:', error);
             throw error;
         }
     }
@@ -84,9 +87,9 @@ class OCRService {
             
             await this.preprocessImageForWhiteText(imagePath, processedPath);
             
-            console.log('Rozpoczynam OCR...');
+            logger.info('Rozpoczynam OCR...');
             const { data: { text } } = await Tesseract.recognize(processedPath, this.config.ocr.languages, {
-                logger: m => console.log(`OCR Progress: ${m.status} - ${m.progress}`),
+                logger: m => logger.info(`OCR Progress: ${m.status} - ${m.progress}`),
                 tessedit_char_whitelist: this.config.ocr.charWhitelist
             });
             
@@ -94,7 +97,7 @@ class OCRService {
             
             return text.trim();
         } catch (error) {
-            console.error('Błąd OCR:', error);
+            logger.error('Błąd OCR:', error);
             throw error;
         }
     }
@@ -114,11 +117,11 @@ class OCRService {
         // Sprawdź czy wynik kończy się cyfrą 7 i nie ma jednostki K/M/B/T/Q/S
         if (/7$/.test(fixedScore) && !/[KMBTQS]$/i.test(fixedScore)) {
             fixedScore = fixedScore.replace(/7$/, 'T');
-            console.log('Zastąpiono końcową cyfrę 7 na literę T');
+            logger.info('Zastąpiono końcową cyfrę 7 na literę T');
         }
         
-        console.log('Oryginalny wynik:', scoreText);
-        console.log('Poprawiony wynik:', fixedScore);
+        logger.info('Oryginalny wynik:', scoreText);
+        logger.info('Poprawiony wynik:', fixedScore);
         
         return fixedScore;
     }
@@ -129,13 +132,13 @@ class OCRService {
      * @returns {string|null} - Wyodrębniony wynik lub null
      */
     extractScoreAfterBest(text) {
-        console.log('Analizowany tekst OCR:', text);
+        logger.info('Analizowany tekst OCR:', text);
         
         // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
         const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQS7]*)/gi;
         let matches = text.match(bestScorePattern);
         
-        console.log('Znalezione dopasowania Best (wzorzec 1):', matches);
+        logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
         
         if (!matches || matches.length === 0) {
             // Elastyczny wzorzec też uwzględnia cyfry końcowe
@@ -155,10 +158,10 @@ class OCRService {
                 }
             }
             
-            console.log('Znalezione dopasowania Best (wzorzec elastyczny):', matches);
+            logger.info('Znalezione dopasowania Best (wzorzec elastyczny):', matches);
             
             if (matches.length === 0) {
-                console.log('Nie znaleziono słowa "Best" z wynikiem');
+                logger.info('Nie znaleziono słowa "Best" z wynikiem');
                 return null;
             }
         } else {
@@ -169,12 +172,12 @@ class OCRService {
         
         if (matches.length > 0) {
             let result = matches[0];
-            console.log('Wyodrębniony wynik po "Best" (przed poprawką):', result);
+            logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', result);
             
             // Zastosuj poprawki: TT -> 1T oraz 7 -> T
             result = this.fixScoreFormat(result);
             
-            console.log('Wyodrębniony wynik po "Best" (po poprawce):', result);
+            logger.info('Wyodrębniony wynik po "Best" (po poprawce):', result);
             return result;
         }
         

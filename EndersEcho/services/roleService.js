@@ -1,5 +1,8 @@
 const { logWithTimestamp } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('EndersEcho');
 class RoleService {
     constructor(config) {
         this.config = config;
@@ -12,7 +15,7 @@ class RoleService {
      */
     async updateTopRoles(guild, sortedPlayers) {
         try {
-            console.log('Rozpoczynam aktualizację ról TOP...');
+            logger.info('Rozpoczynam aktualizację ról TOP...');
             
             // Pobierz role z serwera
             const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
@@ -22,7 +25,7 @@ class RoleService {
             const top11to30Role = guild.roles.cache.get(this.config.topRoles.top11to30);
             
             if (!top1Role || !top2Role || !top3Role || !top4to10Role || !top11to30Role) {
-                console.error('❌ Nie znaleziono wszystkich ról TOP na serwerze');
+                logger.error('❌ Nie znaleziono wszystkich ról TOP na serwerze');
                 return false;
             }
             
@@ -34,9 +37,9 @@ class RoleService {
                 for (const [memberId, member] of membersWithRole) {
                     try {
                         await member.roles.remove(role);
-                        console.log(`Usunięto rolę ${role.name} od ${member.user.tag}`);
+                        logger.info(`Usunięto rolę ${role.name} od ${member.user.tag}`);
                     } catch (error) {
-                        console.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, error.message);
+                        logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, error.message);
                     }
                 }
             }
@@ -65,19 +68,19 @@ class RoleService {
                         const member = await guild.members.fetch(player.userId);
                         if (member) {
                             await member.roles.add(targetRole);
-                            console.log(`✅ Przyznano rolę ${targetRole.name} użytkownikowi ${member.user.tag} (pozycja ${position})`);
+                            logger.info(`✅ Przyznano rolę ${targetRole.name} użytkownikowi ${member.user.tag} (pozycja ${position})`);
                         }
                     } catch (error) {
-                        console.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userId}:`, error.message);
+                        logger.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userId}:`, error.message);
                     }
                 }
             }
             
-            console.log('✅ Aktualizacja ról TOP zakończona pomyślnie');
+            logger.info('✅ Aktualizacja ról TOP zakończona pomyślnie');
             return true;
             
         } catch (error) {
-            console.error('❌ Błąd podczas aktualizacji ról TOP:', error);
+            logger.error('❌ Błąd podczas aktualizacji ról TOP:', error);
             return false;
         }
     }
@@ -103,7 +106,7 @@ class RoleService {
                 top11to30: top11to30Role ? Array.from(top11to30Role.members.values()) : []
             };
         } catch (error) {
-            console.error('Błąd pobierania posiadaczy ról TOP:', error);
+            logger.error('Błąd pobierania posiadaczy ról TOP:', error);
             return { top1: [], top2: [], top3: [], top4to10: [], top11to30: [] };
         }
     }

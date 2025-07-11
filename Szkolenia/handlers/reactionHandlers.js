@@ -1,3 +1,6 @@
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Szkolenia');
 /**
  * Obsługa reakcji do zakładania wątków szkoleniowych.
  * -------------------------------------------------
@@ -63,7 +66,7 @@ async function handleReactionAdd(reaction, user, state, config) {
         }
 
     } catch (error) {
-        console.error('❌ Błąd podczas obsługi reakcji:', error);
+        logger.error('❌ Błąd podczas obsługi reakcji:', error);
     }
 }
 

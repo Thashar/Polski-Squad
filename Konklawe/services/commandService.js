@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, REST, Routes } = require('discord.js');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class CommandService {
     constructor(config) {
         this.config = config;
@@ -37,15 +40,15 @@ class CommandService {
      */
     async registerSlashCommands() {
         try {
-            console.log('Rozpoczęto odświeżanie slash commands...');
+            logger.info('Rozpoczęto odświeżanie slash commands...');
             if (this.config.guildId) {
                 await this.rest.put(Routes.applicationGuildCommands(this.config.clientId, this.config.guildId), { body: this.commands });
             } else {
                 await this.rest.put(Routes.applicationCommands(this.config.clientId), { body: this.commands });
             }
-            console.log('Pomyślnie odświeżono slash commands!');
+            logger.info('Pomyślnie odświeżono slash commands!');
         } catch (error) {
-            console.error('Błąd podczas rejestracji slash commands:', error);
+            logger.error('Błąd podczas rejestracji slash commands:', error);
         }
     }
 }

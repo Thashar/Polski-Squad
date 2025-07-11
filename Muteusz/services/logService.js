@@ -1,5 +1,8 @@
 const { logWithTimestamp, createLogEmbed } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 class LogService {
     constructor(config) {
         this.config = config;
@@ -36,7 +39,7 @@ class LogService {
                     await logChannel.send({ embeds: [embed] });
                 }
             } catch (error) {
-                console.error('Błąd podczas logowania do kanału:', error);
+                logger.error('Błąd podczas logowania do kanału:', error);
             }
         }
     }

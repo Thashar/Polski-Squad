@@ -1,6 +1,9 @@
 const { EmbedBuilder } = require('discord.js');
 const messages = require('../config/messages');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('StalkerLME');
 class ReminderService {
     constructor(config) {
         this.config = config;
@@ -8,9 +11,9 @@ class ReminderService {
 
     async sendReminders(guild, foundUsers) {
         try {
-            console.log('\n📢 ==================== WYSYŁANIE PRZYPOMNIEŃ ====================');
-            console.log(`🏰 Serwer: ${guild.name} (${guild.id})`);
-            console.log(`👥 Znalezieni użytkownicy: ${foundUsers.length}`);
+            logger.info('\n📢 ==================== WYSYŁANIE PRZYPOMNIEŃ ====================');
+            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info(`👥 Znalezieni użytkownicy: ${foundUsers.length}`);
             
             const timeUntilDeadline = this.calculateTimeUntilDeadline();
             const roleGroups = new Map();
@@ -47,17 +50,17 @@ class ReminderService {
                         await warningChannel.send(reminderMessage);
                         sentMessages++;
                         
-                        console.log(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} (${warningChannel.id}) dla ${members.length} użytkowników`);
-                        console.log(`💬 Treść przypomnienia: ${reminderMessage.substring(0, 100)}...`);
+                        logger.info(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} (${warningChannel.id}) dla ${members.length} użytkowników`);
+                        logger.info(`💬 Treść przypomnienia: ${reminderMessage.substring(0, 100)}...`);
                     }
                 }
             }
             
-            console.log('\n📊 PODSUMOWANIE PRZYPOMNIEŃ:');
-            console.log(`📤 Wysłanych wiadomości: ${sentMessages}`);
-            console.log(`🎭 Grup ról: ${roleGroups.size}`);
-            console.log(`👥 Łączna liczba użytkowników: ${foundUsers.length}`);
-            console.log('✅ Przypomnienia zostały pomyślnie wysłane');
+            logger.info('\n📊 PODSUMOWANIE PRZYPOMNIEŃ:');
+            logger.info(`📤 Wysłanych wiadomości: ${sentMessages}`);
+            logger.info(`🎭 Grup ról: ${roleGroups.size}`);
+            logger.info(`👥 Łączna liczba użytkowników: ${foundUsers.length}`);
+            logger.info('✅ Przypomnienia zostały pomyślnie wysłane');
             
             return {
                 sentMessages: sentMessages,
@@ -65,8 +68,8 @@ class ReminderService {
                 totalUsers: foundUsers.length
             };
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD PRZYPOMNIEŃ ====================');
-            console.error('❌ Błąd wysyłania przypomnień:', error);
+            logger.error('\n💥 ==================== BŁĄD PRZYPOMNIEŃ ====================');
+            logger.error('❌ Błąd wysyłania przypomnień:', error);
             throw error;
         }
     }
@@ -96,9 +99,9 @@ class ReminderService {
 
     async sendRoleReminders(guild, roleId) {
         try {
-            console.log('\n📢 ==================== PRZYPOMNIENIA DLA ROLI ====================');
-            console.log(`🏰 Serwer: ${guild.name} (${guild.id})`);
-            console.log(`🎭 Rola: ${roleId}`);
+            logger.info('\n📢 ==================== PRZYPOMNIENIA DLA ROLI ====================');
+            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info(`🎭 Rola: ${roleId}`);
             
             const role = guild.roles.cache.get(roleId);
             
@@ -123,30 +126,30 @@ class ReminderService {
                     await member.send({ embeds: [embed] });
                     remindersSent.push(member);
                     
-                    console.log(`✅ Wysłano przypomnienie do ${member.displayName} (${member.id})`);
+                    logger.info(`✅ Wysłano przypomnienie do ${member.displayName} (${member.id})`);
                 } catch (error) {
-                    console.log(`⚠️ Nie udało się wysłać przypomnienia do ${member.displayName}: ${error.message}`);
+                    logger.info(`⚠️ Nie udało się wysłać przypomnienia do ${member.displayName}: ${error.message}`);
                 }
             }
             
-            console.log('\n📊 PODSUMOWANIE PRZYPOMNIEŃ ROLI:');
-            console.log(`📤 Wysłanych przypomnień: ${remindersSent.length}`);
-            console.log(`👥 Członków roli: ${members.size}`);
-            console.log('✅ Przypomnienia dla roli zostały zakończone');
+            logger.info('\n📊 PODSUMOWANIE PRZYPOMNIEŃ ROLI:');
+            logger.info(`📤 Wysłanych przypomnień: ${remindersSent.length}`);
+            logger.info(`👥 Członków roli: ${members.size}`);
+            logger.info('✅ Przypomnienia dla roli zostały zakończone');
             
             return remindersSent;
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD PRZYPOMNIEŃ ROLI ====================');
-            console.error('❌ Błąd wysyłania przypomnień do roli:', error);
+            logger.error('\n💥 ==================== BŁĄD PRZYPOMNIEŃ ROLI ====================');
+            logger.error('❌ Błąd wysyłania przypomnień do roli:', error);
             throw error;
         }
     }
 
     async sendBulkReminder(guild, roleId, customMessage = null) {
         try {
-            console.log('\n📢 ==================== MASOWE PRZYPOMNIENIE ====================');
-            console.log(`🏰 Serwer: ${guild.name} (${guild.id})`);
-            console.log(`🎭 Rola: ${roleId}`);
+            logger.info('\n📢 ==================== MASOWE PRZYPOMNIENIE ====================');
+            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info(`🎭 Rola: ${roleId}`);
             
             const role = guild.roles.cache.get(roleId);
             
@@ -174,16 +177,16 @@ class ReminderService {
                         embeds: [embed] 
                     });
                     
-                    console.log(`✅ Wysłano masowe przypomnienie do kanału ${warningChannel.name} (${warningChannel.id})`);
-                    console.log(`💬 Treść: ${customMessage ? 'Niestandardowa wiadomość' : 'Standardowe przypomnienie'}`);
+                    logger.info(`✅ Wysłano masowe przypomnienie do kanału ${warningChannel.name} (${warningChannel.id})`);
+                    logger.info(`💬 Treść: ${customMessage ? 'Niestandardowa wiadomość' : 'Standardowe przypomnienie'}`);
                     return true;
                 }
             }
             
             throw new Error('Nie znaleziono kanału ostrzeżeń dla tej roli');
         } catch (error) {
-            console.error('\n💥 ==================== BŁĄD MASOWEGO PRZYPOMNIENIA ====================');
-            console.error('❌ Błąd wysyłania masowego przypomnienia:', error);
+            logger.error('\n💥 ==================== BŁĄD MASOWEGO PRZYPOMNIENIA ====================');
+            logger.error('❌ Błąd wysyłania masowego przypomnienia:', error);
             throw error;
         }
     }

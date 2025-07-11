@@ -1,4 +1,7 @@
 const { logWithTimestamp, downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Kontroler');
 
 class MessageHandler {
     constructor(config, ocrService, analysisService, roleService, messageService) {
@@ -86,23 +89,23 @@ class MessageHandler {
      * @param {Object} channelConfig - Konfiguracja kanału
      */
     logAnalysisStart(displayName, username, imageAttachment, channelConfig) {
-        console.log('\n' + '='.repeat(70));
-        console.log('🚀 NOWA ANALIZA ROZPOCZĘTA');
-        console.log(`👤 Nick serwera: "${displayName}"`);
-        console.log(`👤 Nazwa użytkownika: "${username}"`);
-        console.log(`📷 Obraz: ${imageAttachment.name} (${Math.round(imageAttachment.size / 1024)}KB)`);
-        console.log(`📅 Czas: ${new Date().toLocaleString('pl-PL')}`);
-        console.log(`🔗 URL: ${imageAttachment.url}`);
-        console.log(`⚙️ Kanał ${channelConfig.name}: min=${channelConfig.minimumScore}, zakres=${channelConfig.scoreRange}, krok=${channelConfig.scoreStep}`);
-        console.log(`🎯 Wymagane ${channelConfig.requireSecondOccurrence ? 'DRUGIE' : 'PIERWSZE'} wystąpienie nicku`);
-        console.log(`🔍 Próg podobieństwa nicku: ${this.config.similarity.threshold * 100}%`);
-        console.log(`🖼️ Preprocessing: ${channelConfig.name === 'Daily' ? 'BIAŁY TEKST NA SZARYM TLE' : 'BIAŁO-CZARNY'}`);
-        console.log(`🔤 Normalizacja s/S: 5 lub 8 (testowane oba warianty)`);
+        logger.info('\n' + '='.repeat(70));
+        logger.info('🚀 NOWA ANALIZA ROZPOCZĘTA');
+        logger.info(`👤 Nick serwera: "${displayName}"`);
+        logger.info(`👤 Nazwa użytkownika: "${username}"`);
+        logger.info(`📷 Obraz: ${imageAttachment.name} (${Math.round(imageAttachment.size / 1024)}KB)`);
+        logger.info(`📅 Czas: ${new Date().toLocaleString('pl-PL')}`);
+        logger.info(`🔗 URL: ${imageAttachment.url}`);
+        logger.info(`⚙️ Kanał ${channelConfig.name}: min=${channelConfig.minimumScore}, zakres=${channelConfig.scoreRange}, krok=${channelConfig.scoreStep}`);
+        logger.info(`🎯 Wymagane ${channelConfig.requireSecondOccurrence ? 'DRUGIE' : 'PIERWSZE'} wystąpienie nicku`);
+        logger.info(`🔍 Próg podobieństwa nicku: ${this.config.similarity.threshold * 100}%`);
+        logger.info(`🖼️ Preprocessing: ${channelConfig.name === 'Daily' ? 'BIAŁY TEKST NA SZARYM TLE' : 'BIAŁO-CZARNY'}`);
+        logger.info(`🔤 Normalizacja s/S: 5 lub 8 (testowane oba warianty)`);
         if (channelConfig.name === 'Daily') {
-            console.log('🎯 DAILY: Specjalny wyjątek "sg" -> "9"');
+            logger.info('🎯 DAILY: Specjalny wyjątek "sg" -> "9"');
         }
-        console.log(`⚠️ WYKLUCZENIE: Pierwsze ${channelConfig.skipLines} linie tekstu są pomijane`);
-        console.log('='.repeat(70));
+        logger.info(`⚠️ WYKLUCZENIE: Pierwsze ${channelConfig.skipLines} linie tekstu są pomijane`);
+        logger.info('='.repeat(70));
     }
 
     /**
@@ -146,7 +149,7 @@ class MessageHandler {
         } finally {
             cleanupFiles(originalImagePath, processedImagePath);
             logWithTimestamp('Zakończono czyszczenie pamięci', 'info');
-            console.log('='.repeat(70) + '\n');
+            logger.info('='.repeat(70) + '\n');
         }
     }
 

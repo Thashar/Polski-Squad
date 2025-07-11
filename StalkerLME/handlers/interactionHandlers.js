@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const messages = require('../config/messages');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('StalkerLME');
 
 const confirmationData = new Map();
 
@@ -15,7 +18,7 @@ async function handleInteraction(interaction, sharedState, config) {
             await handleButton(interaction, config, databaseService, punishmentService);
         }
     } catch (error) {
-        console.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
+        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
         
         const errorEmbed = new EmbedBuilder()
             .setTitle('❌ Wystąpił błąd')
@@ -143,7 +146,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         });
         
     } catch (error) {
-        console.error('[PUNISH] ❌ Błąd komendy /punish:', error);
+        logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
@@ -233,7 +236,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         });
         
     } catch (error) {
-        console.error('[REMIND] ❌ Błąd komendy /remind:', error);
+        logger.error('[REMIND] ❌ Błąd komendy /remind:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
@@ -251,11 +254,11 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
     
     // Odśwież cache członków przed sprawdzeniem rankingu
     try {
-        console.log('🔄 Odświeżanie cache\'u członków dla punishment...');
+        logger.info('🔄 Odświeżanie cache\'u członków dla punishment...');
         await interaction.guild.members.fetch();
-        console.log('✅ Cache członków odświeżony');
+        logger.info('✅ Cache członków odświeżony');
     } catch (error) {
-        console.error('❌ Błąd odświeżania cache\'u:', error);
+        logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
     
     try {
@@ -314,7 +317,7 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
         
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-        console.error('[PUNISHMENT] ❌ Błąd komendy /punishment:', error);
+        logger.error('[PUNISHMENT] ❌ Błąd komendy /punishment:', error);
         await interaction.editReply({ content: messages.errors.databaseError });
     }
 }
@@ -344,7 +347,7 @@ async function handlePointsCommand(interaction, config, databaseService, punishm
             await interaction.editReply({ content: `ℹ️ ${user} ma obecnie ${userData.points} punktów karnych.` });
         }
     } catch (error) {
-        console.error('[POINTS] ❌ Błąd komendy /points:', error);
+        logger.error('[POINTS] ❌ Błąd komendy /points:', error);
         await interaction.editReply({ content: messages.errors.databaseError });
     }
 }
@@ -362,11 +365,11 @@ async function handleDebugRolesCommand(interaction, config) {
     
     // Odśwież cache członków przed sprawdzeniem ról
     try {
-        console.log('🔄 Odświeżanie cache\'u członków dla debug-roles...');
+        logger.info('🔄 Odświeżanie cache\'u członków dla debug-roles...');
         await interaction.guild.members.fetch();
-        console.log('✅ Cache członków odświeżony');
+        logger.info('✅ Cache członków odświeżony');
     } catch (error) {
-        console.error('❌ Błąd odświeżania cache\'u:', error);
+        logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
     
     try {
@@ -421,7 +424,7 @@ async function handleDebugRolesCommand(interaction, config) {
         
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-        console.error('[DEBUG] ❌ Błąd komendy /debug-roles:', error);
+        logger.error('[DEBUG] ❌ Błąd komendy /debug-roles:', error);
         await interaction.editReply({ content: 'Wystąpił błąd podczas debugowania ról.' });
     }
 }
@@ -442,7 +445,7 @@ async function handleSelectMenu(interaction, config, reminderService) {
             await reminderService.sendBulkReminder(interaction.guild, roleId);
             await interaction.editReply({ content: `✅ Wysłano przypomnienie do roli ${config.roleDisplayNames[selectedRole]}` });
         } catch (error) {
-            console.error('[REMINDER] ❌ Błąd wysyłania przypomnienia:', error);
+            logger.error('[REMINDER] ❌ Błąd wysyłania przypomnienia:', error);
             await interaction.editReply({ content: messages.errors.unknownError });
         }
     }
@@ -587,7 +590,7 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                     break;
             }
         } catch (error) {
-            console.error('[CONFIRM] ❌ Błąd potwierdzenia:', error);
+            logger.error('[CONFIRM] ❌ Błąd potwierdzenia:', error);
             await interaction.followUp({ content: messages.errors.unknownError, ephemeral: true });
         }
     } else if (interaction.customId.startsWith('cancel_')) {
@@ -698,11 +701,11 @@ async function registerSlashCommands(client) {
     ];
     
     try {
-        console.log('[COMMANDS] 🔄 Rejestracja komend slash...');
+        logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
         await client.application.commands.set(commands);
-        console.log('[COMMANDS] ✅ Komendy slash zostały zarejestrowane');
+        logger.info('[COMMANDS] ✅ Komendy slash zostały zarejestrowane');
     } catch (error) {
-        console.error('[COMMANDS] ❌ Błąd rejestracji komend:', error);
+        logger.error('[COMMANDS] ❌ Błąd rejestracji komend:', error);
     }
 }
 

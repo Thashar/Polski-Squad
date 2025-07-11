@@ -1,5 +1,8 @@
 const { formatTimeDifference } = require('../utils/helpers');
 
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Konklawe');
 class GameService {
     constructor(config, dataService) {
         this.config = config;
@@ -95,7 +98,7 @@ class GameService {
         }
         this.attempts[userId]++;
         this.dataService.saveAttempts(this.attempts);
-        console.log(`🎯 Próba ${this.attempts[userId]} od użytkownika ${userId}: "${attempt}"`);
+        logger.info(`🎯 Próba ${this.attempts[userId]} od użytkownika ${userId}: "${attempt}"`);
     }
 
     /**
@@ -128,7 +131,7 @@ class GameService {
         this.clearAttempts();
         this.resetHints();
         this.saveTriggerState();
-        console.log(`🔑 Nowe hasło: ${this.trigger} (ustawione o ${this.triggerSetTimestamp.toISOString()})`);
+        logger.info(`🔑 Nowe hasło: ${this.trigger} (ustawione o ${this.triggerSetTimestamp.toISOString()})`);
     }
 
     /**
