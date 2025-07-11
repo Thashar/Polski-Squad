@@ -61,6 +61,9 @@ function getTimestamp() {
     });
 }
 
+// Zmienna globalna do śledzenia ostatniego bota
+let lastBotName = null;
+
 function formatMessage(botName, message, level = 'info') {
     const timestamp = getTimestamp();
     const emoji = botEmojis[botName] || '🤖';
@@ -94,7 +97,19 @@ function formatMessage(botName, message, level = 'info') {
     const timeStamp = `${colors.gray}[${timestamp}]${colors.reset}`;
     const levelIndicator = `${levelColor}${levelEmoji}${colors.reset}`;
     
-    return `${separator}\n${header} ${timeStamp} ${levelIndicator} ${message}\n${separator}`;
+    // Sprawdź czy to nowy bot (inny niż poprzedni)
+    const isNewBot = lastBotName !== botName;
+    
+    // Zaktualizuj ostatni bot
+    lastBotName = botName;
+    
+    if (isNewBot) {
+        // Nowy bot - dodaj separator na górze i na dole
+        return `${separator}\n${header} ${timeStamp} ${levelIndicator} ${message}\n${separator}`;
+    } else {
+        // Ten sam bot - tylko wiadomość bez separatorów
+        return `${header} ${timeStamp} ${levelIndicator} ${message}`;
+    }
 }
 
 class ConsoleLogger {
@@ -136,14 +151,21 @@ function createBotLogger(botName) {
 }
 
 function setupGlobalLogging() {
+    // Reset stanu na początku sesji
+    lastBotName = null;
     // Można tutaj dodać globalne interceptory jeśli potrzebne
     console.log(`${colors.bright}${colors.green}🚀 System logowania został zainicjalizowany${colors.reset}`);
+}
+
+function resetLoggerState() {
+    lastBotName = null;
 }
 
 module.exports = {
     ConsoleLogger,
     createBotLogger,
     setupGlobalLogging,
+    resetLoggerState,
     colors,
     formatMessage
 };
