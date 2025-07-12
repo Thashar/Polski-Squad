@@ -12,7 +12,6 @@ const ReminderService = require('./services/reminderService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('StalkerLME');
-logger.info('Inicjalizacja bota Stalker LME...');
 
 const client = new Client({
     intents: [
@@ -40,11 +39,11 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logWithTimestamp(`Bot zalogowany jako ${client.user.tag}`, 'info');
-    logWithTimestamp(`Aktywny na ${client.guilds.cache.size} serwerach`, 'info');
+    logger.info(`Bot zalogowany jako ${client.user.tag}`);
+    logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
     
     client.guilds.cache.forEach(guild => {
-        logWithTimestamp(`- ${guild.name} (${guild.id})`, 'info');
+        logger.info(`- ${guild.name} (${guild.id})`);
     });
     
     // Inicjalizacja serwisów
@@ -89,7 +88,7 @@ client.once(Events.ClientReady, async () => {
     // Początkowe odświeżenie cache'u członków
     await refreshMemberCache();
     
-    logWithTimestamp('Bot Stalker LME jest gotowy do pracy!', 'info');
+    logger.info('Bot Stalker LME jest gotowy do pracy!');
 });
 
 // Obsługa interakcji
@@ -160,7 +159,7 @@ process.on('SIGTERM', async () => {
 // Funkcja do odświeżania cache'u członków
 async function refreshMemberCache() {
     try {
-        logger.info('\n👥 ==================== ODŚWIEŻANIE CACHE\'U CZŁONKÓW ====================');
+        logger.info('Odświeżanie cache\'u członków');
         
         let totalMembers = 0;
         let guildsProcessed = 0;
@@ -193,13 +192,13 @@ async function refreshMemberCache() {
             }
         }
         
-        logger.info('\n📊 PODSUMOWANIE ODŚWIEŻANIA CACHE\'U:');
+        logger.info('Podsumowanie odświeżania cache\'u:');
         logger.info(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
         logger.info(`👥 Łączna liczba członków: ${totalMembers}`);
         logger.info('✅ Odświeżanie cache\'u zakończone pomyślnie');
         
     } catch (error) {
-        logger.error('\n💥 ==================== BŁĄD ODŚWIEŻANIA CACHE\'U ====================');
+        logger.error('Błąd odświeżania cache\'u');
         logger.error('❌ Błąd odświeżania cache\'u członków:', error);
     }
 }
@@ -211,7 +210,6 @@ async function startBot() {
             throw new Error('STALKER_LME_TOKEN nie jest ustawiony w zmiennych środowiskowych');
         }
         
-        logWithTimestamp('Uruchamianie bota Stalker LME...', 'info');
         await client.login(config.token);
         return client;
     } catch (error) {

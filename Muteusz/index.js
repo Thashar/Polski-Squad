@@ -17,8 +17,6 @@ const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
 
-logger.info('🎯 Inicjalizacja bota Muteusz...');
-
 // Tworzenie klienta Discord
 const client = new Client({
     intents: [
@@ -146,8 +144,6 @@ async function startBot() {
             throw new Error('MUTEUSZ_TOKEN nie jest ustawiony w zmiennych środowiskowych');
         }
         
-        logWithTimestamp('Uruchamianie bota Muteusz...', 'info');
-        logger.info('🚀 Uruchamianie bota Discord z obsługą plików do 100 MB i automatycznym zarządzaniem rolami z przywracaniem...');
         
         await client.login(config.token);
         return client;

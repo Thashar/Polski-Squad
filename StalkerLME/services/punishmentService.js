@@ -11,7 +11,7 @@ class PunishmentService {
 
     async processPunishments(guild, foundUsers) {
         try {
-            logger.info('\n💾 ==================== DODAWANIE PUNKTÓW ====================');
+            logger.info('Dodawanie punktów');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             logger.info(`👥 Liczba użytkowników: ${foundUsers.length}`);
             
@@ -45,7 +45,7 @@ class PunishmentService {
             logger.info(`\n✅ Zakończono dodawanie punktów dla ${results.length} użytkowników`);
             return results;
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD DODAWANIA PUNKTÓW ====================');
+            logger.error('Błąd dodawania punktów');
             logger.error('❌ Błąd przetwarzania kar:', error);
             throw error;
         }
@@ -53,7 +53,7 @@ class PunishmentService {
 
     async updateUserRoles(member, points) {
         try {
-            logger.info(`\n🎭 ==================== AKTUALIZACJA RÓL ====================`);
+            logger.info('Aktualizacja ról');
             logger.info(`👤 Użytkownik: ${member.displayName} (${member.id})`);
             logger.info(`📊 Punkty: ${points}`);
             
@@ -90,7 +90,7 @@ class PunishmentService {
                     messages.push(`🚨 Nadano rolę zakazu loterii`);
                     logger.info('🚨 Nadano rolę zakazu loterii (5+ punktów)');
                 } else {
-                    logger.info('ℹ️ Użytkownik już ma rolę zakazu loterii');
+                    logger.info('Użytkownik już ma rolę zakazu loterii');
                 }
                 
             // Logika dla 3-4 punktów (tylko rola karania)
@@ -110,7 +110,7 @@ class PunishmentService {
                     messages.push(`🎭 Nadano rolę karania`);
                     logger.info('🎭 Nadano rolę karania (3+ punktów)');
                 } else {
-                    logger.info('ℹ️ Użytkownik już ma rolę karania');
+                    logger.info('Użytkownik już ma rolę karania');
                 }
                 
             // Logika dla 0-2 punktów (brak ról karnych)
@@ -130,11 +130,11 @@ class PunishmentService {
                 }
                 
                 if (!hasLotteryBanRole && !hasPunishmentRole) {
-                    logger.info('ℹ️ Użytkownik nie ma ról karnych');
+                    logger.info('Użytkownik nie ma ról karnych');
                 }
             }
             
-            const result = messages.length > 0 ? messages.join(', ') : `ℹ️ Brak zmian w rolach`;
+            const result = messages.length > 0 ? messages.join(', ') : 'Brak zmian w rolach';
             logger.info(`✅ Zakończono aktualizację ról: ${result}`);
             
             return `${member.displayName}: ${result}`;
@@ -147,7 +147,7 @@ class PunishmentService {
     async sendWarningIfNeeded(guild, member, points) {
         try {
             if (points !== 3 && points !== 5) {
-                return `ℹ️ Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 3 i 5)`;
+                return `Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 3 i 5)`;
             }
             
             const userRoleId = this.getUserRoleId(member);
@@ -278,7 +278,7 @@ class PunishmentService {
 
     async cleanupAllUsers(guild) {
         try {
-            logger.info('\n🧹 ==================== TYGODNIOWE CZYSZCZENIE ====================');
+            logger.info('Tygodniowe czyszczenie');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             
             const guildPunishments = await this.db.getGuildPunishments(guild.id);
@@ -307,12 +307,12 @@ class PunishmentService {
             
             await this.db.cleanupWeeklyPoints();
             
-            logger.info('\n📊 PODSUMOWANIE TYGODNIOWEGO CZYSZCZENIA:');
+            logger.info('Podsumowanie tygodniowego czyszczenia:');
             logger.info(`👥 Użytkowników przetworzonych: ${usersProcessed}`);
             logger.info(`🎭 Role zaktualizowane: ${rolesUpdated}`);
             logger.info('✅ Zakończono tygodniowe czyszczenie kar');
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD CZYSZCZENIA ====================');
+            logger.error('Błąd czyszczenia');
             logger.error('❌ Błąd czyszczenia kar:', error);
         }
     }

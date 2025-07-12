@@ -44,20 +44,17 @@ function initializeServices() {
         messageService
     );
 
-    logWithTimestamp('Wszystkie serwisy zostały zainicjalizowane', 'success');
+    logger.success('Wszystkie serwisy zostały zainicjalizowane');
 }
 
 /**
  * Handler dla zdarzenia ready
  */
 function onReady() {
-    logger.info('\n' + '🤖'.repeat(20));
-    logger.info('🤖 BOT KONTROLER JEST GOTOWY! 🤖');
-    logger.info('🤖'.repeat(20));
+    logger.info('BOT KONTROLER JEST GOTOWY!');
     logger.info(`📋 Zalogowany jako: ${client.user.tag}`);
     logger.info(`🌐 Serwery: ${client.guilds.cache.size}`);
     logger.info(`👥 Użytkownicy: ${client.users.cache.size}`);
-    logger.info('─'.repeat(50));
     logger.info('📡 MONITOROWANE KANAŁY:');
 
     Object.entries(config.channels).forEach(([key, channelConfig], index) => {
@@ -145,7 +142,6 @@ function setupEventHandlers() {
  */
 async function start() {
     try {
-        logWithTimestamp('Uruchamianie bota Kontroler...', 'info');
         initializeServices();
         setupEventHandlers();
         await client.login(config.token);

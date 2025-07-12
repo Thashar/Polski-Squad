@@ -273,7 +273,7 @@ function createSuccessEmbed(title, description, fields = []) {
  */
 function createInfoEmbed(title, description, fields = [], color = 0x0099FF) {
     const embed = {
-        title: `ℹ️ ${title}`,
+        title: title,
         description: description,
         color: color,
         timestamp: new Date().toISOString(),

@@ -24,19 +24,19 @@ class OCRService {
 
     async processImage(attachment) {
         try {
-            logger.info('\n🔍 ==================== ROZPOCZĘCIE ANALIZY OCR ====================');
+            logger.info('Rozpoczęcie analizy OCR');
             logger.info(`📷 Przetwarzanie obrazu: ${attachment.url}`);
             
             const response = await fetch(attachment.url);
             const arrayBuffer = await response.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             
-            logger.info('⚫⚪ ==================== KONWERSJA NA CZARNO-BIAŁY ====================');
+            logger.info('Konwersja na czarno-biały');
             logger.info('🎨 Rozpoczynam przetwarzanie obrazu...');
             const processedBuffer = await this.processImageWithSharp(buffer);
             logger.info('✅ Przetwarzanie obrazu zakończone');
             
-            logger.info('\n📖 ==================== URUCHAMIANIE OCR ====================');
+            logger.info('Uruchamianie OCR');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
                 logger: m => {
                     if (m.status === 'recognizing text') {
@@ -46,15 +46,15 @@ class OCRService {
                 tessedit_char_whitelist: this.config.ocr.polishAlphabet
             });
             
-            logger.info('\n📄 ==================== PEŁNY TEKST Z OCR ====================');
+            logger.info('Pełny tekst z OCR');
             logger.info('🔤 Odczytany tekst:');
-            logger.info('--- POCZĄTEK TEKSTU ---');
+            logger.info('Początek tekstu:');
             logger.info(text);
-            logger.info('--- KONIEC TEKSTU ---');
+            logger.info('Koniec tekstu');
             
             return text;
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD OCR ====================');
+            logger.error('Błąd OCR');
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
             throw error;
         }
@@ -80,7 +80,7 @@ class OCRService {
 
     extractPlayersFromText(text) {
         try {
-            logger.info('\n🔍 ==================== ANALIZA TEKSTU ====================');
+            logger.info('Analiza tekstu');
             logger.info('🎯 Szukanie graczy z wynikiem 0...');
             
             const lines = text.split('\n').filter(line => line.trim().length > 0);
@@ -103,11 +103,11 @@ class OCRService {
                 }
             }
             
-            logger.info(`\n🎯 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0`);
+            logger.info(`Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0`);
             logger.info(`👥 Lista: ${zeroScorePlayers.join(', ')}`);
             return zeroScorePlayers;
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD ANALIZY TEKSTU ====================');
+            logger.error('Błąd analizy tekstu');
             logger.error('❌ Błąd analizy tekstu:', error);
             return [];
         }
@@ -201,7 +201,7 @@ class OCRService {
 
     async findUsersInGuild(guild, playerNames, requestingMember = null) {
         try {
-            logger.info('\n👥 ==================== WYSZUKIWANIE UŻYTKOWNIKÓW ====================');
+            logger.info('Wyszukiwanie użytkowników');
             logger.info(`🏰 Serwer: ${guild.name}`);
             logger.info(`🔍 Szukane nazwy: ${playerNames.join(', ')}`);
             
@@ -279,13 +279,13 @@ class OCRService {
                 }
             }
             
-            logger.info(`\n✅ Dopasowano ${foundUsers.length}/${playerNames.length} użytkowników`);
+            logger.info(`Dopasowano ${foundUsers.length}/${playerNames.length} użytkowników`);
             if (restrictToRole) {
                 logger.info(`🎯 Wyszukiwanie ograniczone do roli: ${restrictToRole}`);
             }
             return foundUsers;
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD WYSZUKIWANIA ====================');
+            logger.error('Błąd wyszukiwania');
             logger.error('❌ Błąd wyszukiwania użytkowników:', error);
             return [];
         }

@@ -1,9 +1,9 @@
 const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
-const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
+const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
-.promises;
 const { logWithTimestamp } = require('../utils/helpers');
 
 class OCRService {

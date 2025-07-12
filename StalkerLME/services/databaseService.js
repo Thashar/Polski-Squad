@@ -1,7 +1,7 @@
-const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
+const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('StalkerLME');
-.promises;
 const path = require('path');
 
 class DatabaseService {
@@ -13,7 +13,7 @@ class DatabaseService {
 
     async initializeDatabase() {
         try {
-            logger.info('\n💾 ==================== INICJALIZACJA BAZY DANYCH ====================');
+            logger.info('Inicjalizacja bazy danych');
             logger.info('📁 Tworzenie katalogów...');
             
             await fs.mkdir(path.dirname(this.punishmentsFile), { recursive: true });
@@ -35,7 +35,7 @@ class DatabaseService {
             
             logger.info('✅ Baza danych została pomyślnie zainicjalizowana');
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD INICJALIZACJI BAZY ====================');
+            logger.error('Błąd inicjalizacji bazy');
             logger.error('❌ Błąd inicjalizacji bazy danych:', error);
         }
     }
@@ -103,7 +103,7 @@ class DatabaseService {
     }
 
     async addPunishmentPoints(guildId, userId, points, reason = 'Niepokonanie bossa') {
-        logger.info(`\n💾 Dodawanie punktów w bazie JSON...`);
+        logger.info('Dodawanie punktów w bazie JSON...');
         logger.info(`👤 Użytkownik: ${userId}`);
         logger.info(`🎭 Dodawane punkty: ${points}`);
         logger.info(`🏰 Serwer: ${guildId}`);
@@ -181,7 +181,7 @@ class DatabaseService {
     }
 
     async cleanupWeeklyPoints() {
-        logger.info('\n🗓️ ==================== TYGODNIOWE USUWANIE PUNKTÓW ====================');
+        logger.info('Tygodniowe usuwanie punktów');
         
         const punishments = await this.loadPunishments();
         const weeklyRemoval = await this.loadWeeklyRemoval();
@@ -202,7 +202,7 @@ class DatabaseService {
         logger.info('🔄 Rozpoczynam czyszczenie punktów...');
         
         for (const guildId in punishments) {
-            logger.info(`\n🏰 Przetwarzanie serwera: ${guildId}`);
+            logger.info(`Przetwarzanie serwera: ${guildId}`);
             let usersInGuild = 0;
             
             for (const userId in punishments[guildId]) {
@@ -230,7 +230,7 @@ class DatabaseService {
         await this.savePunishments(punishments);
         await this.saveWeeklyRemoval(weeklyRemoval);
         
-        logger.info('\n📊 PODSUMOWANIE TYGODNIOWEGO USUWANIA:');
+        logger.info('Podsumowanie tygodniowego usuwania:');
         logger.info(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
         logger.info(`👥 Użytkowników wyczyszczonych: ${totalCleaned}`);
         logger.info(`📅 Tydzień: ${weekKey}`);

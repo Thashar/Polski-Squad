@@ -1,7 +1,7 @@
-const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
+const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
-.promises;
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { logWithTimestamp, formatMessage } = require('../utils/helpers');
 

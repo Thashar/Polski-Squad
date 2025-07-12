@@ -65,24 +65,20 @@ const botConfigs = [
  */
 async function startBot(config) {
     const { name, loggerName, emoji, instance, hasSpecialHandling } = config;
-    const logger = createBotLogger(loggerName);
-    
-    logger.info(`Uruchamianie ${name}...`);
     
     try {
         if (typeof instance.start === 'function') {
             // Bot ma metodę start()
             await instance.start();
-            logger.success(`${name} został uruchomiony`);
         } else if (hasSpecialHandling && typeof instance.login === 'function') {
             // Specjalne traktowanie dla bota z metodą login()
             await instance.login();
-            logger.success(`${name} został uruchomiony`);
         } else {
             // Bot uruchamia się automatycznie po zaimportowaniu
-            logger.success(`${name} został uruchomiony automatycznie`);
+            // Brak akcji - bot już się uruchomił podczas importu
         }
     } catch (error) {
+        const logger = createBotLogger(loggerName);
         logger.error(`Błąd uruchomienia ${name}: ${error.message}`);
     }
 }
@@ -92,16 +88,10 @@ async function startBot(config) {
  */
 async function startAllBots() {
     setupGlobalLogging();
-    const mainLogger = createBotLogger('MAIN');
-    
-    mainLogger.info('Uruchamianie botów...');
     
     for (const botConfig of botConfigs) {
         await startBot(botConfig);
     }
-    
-    mainLogger.success('Proces uruchamiania botów zakończony!');
-    mainLogger.info(`Uruchomiono botów: ${botConfigs.length}`);
 }
 
 /**

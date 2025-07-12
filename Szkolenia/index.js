@@ -8,7 +8,6 @@ const { checkThreads } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Szkolenia');
-logger.info('Inicjalizacja bota Szkolenia...');
 
 const client = new Client({
     intents: [
@@ -32,14 +31,14 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logWithTimestamp(`Bot zalogowany jako ${client.user.tag}`, 'info');
-    logWithTimestamp(`Aktywny na ${client.guilds.cache.size} serwerach`, 'info');
+    logger.info(`Bot zalogowany jako ${client.user.tag}`);
+    logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
     
     client.guilds.cache.forEach(guild => {
-        logWithTimestamp(`- ${guild.name} (${guild.id})`, 'info');
+        logger.info(`- ${guild.name} (${guild.id})`);
     });
     
-    logWithTimestamp('Bot Szkolenia jest gotowy do pracy!', 'info');
+    logger.info('Bot Szkolenia jest gotowy do pracy!');
     
     // Uruchom automatyczne sprawdzanie wątków
     const intervalMs = config.timing.checkIntervalMinutes * 60 * 1000;
@@ -47,7 +46,7 @@ client.once(Events.ClientReady, async () => {
         checkThreads(client, sharedState, config);
     }, intervalMs);
     
-    logWithTimestamp(`Automatyczne sprawdzanie wątków uruchomione (co ${config.timing.checkIntervalMinutes} minut)`, 'info');
+    logger.info(`Automatyczne sprawdzanie wątków uruchomione (co ${config.timing.checkIntervalMinutes} minut)`);
 });
 
 // Obsługa przycisków
@@ -78,11 +77,9 @@ process.on('uncaughtException', error => {
 module.exports = {
     client,
     start: () => {
-        logWithTimestamp('Uruchamianie bota Szkolenia...', 'info');
         return client.login(config.token);
     },
     stop: () => {
-        logWithTimestamp('Zatrzymywanie bota Szkolenia...', 'info');
         return client.destroy();
     }
 };

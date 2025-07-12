@@ -1,35 +1,28 @@
 const { EmbedBuilder } = require('discord.js');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 /**
- * Loguje wiadomość z timestampem
+ * Loguje wiadomość z timestampem - używa nowego systemu logowania
  * @param {string} message - Wiadomość do zalogowania
- * @param {string} level - Poziom logowania (info, warn, error)
+ * @param {string} level - Poziom logowania (info, warn, error, success)
  */
 function logWithTimestamp(message, level = 'info') {
-    const timestamp = new Date().toLocaleString('pl-PL', {
-        timeZone: 'Europe/Warsaw',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-
-    const logPrefix = `[${timestamp}] [${level.toUpperCase()}]`;
-    
     switch(level.toLowerCase()) {
         case 'error':
-            console.error(`${logPrefix} ${message}`);
+            logger.error(message);
             break;
         case 'warn':
-            console.warn(`${logPrefix} ${message}`);
+            logger.warn(message);
+            break;
+        case 'success':
+            logger.success(message);
             break;
         case 'info':
-            console.info(`${logPrefix} ${message}`);
-            break;
         default:
-            console.log(`${logPrefix} ${message}`);
+            logger.info(message);
+            break;
     }
 }
 

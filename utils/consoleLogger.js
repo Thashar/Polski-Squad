@@ -70,7 +70,7 @@ function formatMessage(botName, message, level = 'info') {
     const color = botColors[botName] || colors.white;
     
     let levelColor = colors.white;
-    let levelEmoji = 'ℹ️';
+    let levelEmoji = '•';
     
     switch (level.toLowerCase()) {
         case 'error':
@@ -88,7 +88,7 @@ function formatMessage(botName, message, level = 'info') {
         case 'info':
         default:
             levelColor = colors.cyan;
-            levelEmoji = 'ℹ️';
+            levelEmoji = '•';
             break;
     }
     
@@ -104,8 +104,8 @@ function formatMessage(botName, message, level = 'info') {
     lastBotName = botName;
     
     if (isNewBot) {
-        // Nowy bot - dodaj separator na górze i na dole
-        return `${separator}\n${header} ${timeStamp} ${levelIndicator} ${message}\n${separator}`;
+        // Nowy bot - dodaj separator tylko na górze
+        return `${separator}\n${header} ${timeStamp} ${levelIndicator} ${message}`;
     } else {
         // Ten sam bot - tylko wiadomość bez separatorów
         return `${header} ${timeStamp} ${levelIndicator} ${message}`;
@@ -154,7 +154,6 @@ function setupGlobalLogging() {
     // Reset stanu na początku sesji
     lastBotName = null;
     // Można tutaj dodać globalne interceptory jeśli potrzebne
-    console.log(`${colors.bright}${colors.green}🚀 System logowania został zainicjalizowany${colors.reset}`);
 }
 
 function resetLoggerState() {

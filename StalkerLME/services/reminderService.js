@@ -11,7 +11,7 @@ class ReminderService {
 
     async sendReminders(guild, foundUsers) {
         try {
-            logger.info('\n📢 ==================== WYSYŁANIE PRZYPOMNIEŃ ====================');
+            logger.info('Wysyłanie przypomnień');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             logger.info(`👥 Znalezieni użytkownicy: ${foundUsers.length}`);
             
@@ -56,7 +56,7 @@ class ReminderService {
                 }
             }
             
-            logger.info('\n📊 PODSUMOWANIE PRZYPOMNIEŃ:');
+            logger.info('Podsumowanie przypomnień:');
             logger.info(`📤 Wysłanych wiadomości: ${sentMessages}`);
             logger.info(`🎭 Grup ról: ${roleGroups.size}`);
             logger.info(`👥 Łączna liczba użytkowników: ${foundUsers.length}`);
@@ -68,7 +68,7 @@ class ReminderService {
                 totalUsers: foundUsers.length
             };
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD PRZYPOMNIEŃ ====================');
+            logger.error('Błąd przypomnień');
             logger.error('❌ Błąd wysyłania przypomnień:', error);
             throw error;
         }
@@ -99,7 +99,7 @@ class ReminderService {
 
     async sendRoleReminders(guild, roleId) {
         try {
-            logger.info('\n📢 ==================== PRZYPOMNIENIA DLA ROLI ====================');
+            logger.info('Przypomnienia dla roli');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             logger.info(`🎭 Rola: ${roleId}`);
             
@@ -132,14 +132,14 @@ class ReminderService {
                 }
             }
             
-            logger.info('\n📊 PODSUMOWANIE PRZYPOMNIEŃ ROLI:');
+            logger.info('Podsumowanie przypomnień roli:');
             logger.info(`📤 Wysłanych przypomnień: ${remindersSent.length}`);
             logger.info(`👥 Członków roli: ${members.size}`);
             logger.info('✅ Przypomnienia dla roli zostały zakończone');
             
             return remindersSent;
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD PRZYPOMNIEŃ ROLI ====================');
+            logger.error('Błąd przypomnień roli');
             logger.error('❌ Błąd wysyłania przypomnień do roli:', error);
             throw error;
         }
@@ -147,7 +147,7 @@ class ReminderService {
 
     async sendBulkReminder(guild, roleId, customMessage = null) {
         try {
-            logger.info('\n📢 ==================== MASOWE PRZYPOMNIENIE ====================');
+            logger.info('Masowe przypomnienie');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             logger.info(`🎭 Rola: ${roleId}`);
             
@@ -185,7 +185,7 @@ class ReminderService {
             
             throw new Error('Nie znaleziono kanału ostrzeżeń dla tej roli');
         } catch (error) {
-            logger.error('\n💥 ==================== BŁĄD MASOWEGO PRZYPOMNIENIA ====================');
+            logger.error('Błąd masowego przypomnienia');
             logger.error('❌ Błąd wysyłania masowego przypomnienia:', error);
             throw error;
         }

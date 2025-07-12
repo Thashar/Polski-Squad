@@ -344,7 +344,7 @@ async function handlePointsCommand(interaction, config, databaseService, punishm
         } else {
             // amount === 0
             const userData = await databaseService.getUserPunishments(interaction.guild.id, user.id);
-            await interaction.editReply({ content: `ℹ️ ${user} ma obecnie ${userData.points} punktów karnych.` });
+            await interaction.editReply({ content: `${user} ma obecnie ${userData.points} punktów karnych.` });
         }
     } catch (error) {
         logger.error('[POINTS] ❌ Błąd komendy /points:', error);

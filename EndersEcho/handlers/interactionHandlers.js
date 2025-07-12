@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder } = require('discord.js');
 const { downloadFile, formatMessage } = require('../utils/helpers');
-const fs = require('fs')const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
+const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
-.promises;
 const path = require('path');
 
 class InteractionHandler {
