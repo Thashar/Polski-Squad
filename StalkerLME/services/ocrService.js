@@ -88,8 +88,26 @@ class OCRService {
             
             for (const line of lines) {
                 if (this.hasZeroScore(line)) {
-                    // Wyciągamy prawdopodobną nazwę gracza z linii - wybieramy najdłuższe słowo
-                    const words = line.split(/\s+/);
+                    // Podziel linię na 10 równych kolumn
+                    const lineLength = line.length;
+                    const columnWidth = lineLength / 10;
+                    
+                    // Kolumny 4-6 (indeksy 3-5) dla nicków - środkowa część
+                    const nickStartPos = Math.floor(columnWidth * 3);
+                    const nickEndPos = Math.floor(columnWidth * 6);
+                    const nickSection = line.substring(nickStartPos, nickEndPos).trim();
+                    
+                    // Kolumny 8-9 (indeksy 7-8) dla wyników - prawa część
+                    const scoreStartPos = Math.floor(columnWidth * 7);
+                    const scoreEndPos = Math.floor(columnWidth * 9);
+                    const scoreSection = line.substring(scoreStartPos, scoreEndPos).trim();
+                    
+                    logger.info(`📏 Linia: "${line}"`);
+                    logger.info(`👤 Nick section (kol 4-6): "${nickSection}"`);
+                    logger.info(`🎯 Score section (kol 8-9): "${scoreSection}"`);
+                    
+                    // Szukaj nicka w sekcji 4-6
+                    const words = nickSection.split(/\s+/);
                     const playerCandidates = words.filter(word => this.isLikelyPlayerName(word));
                     
                     if (playerCandidates.length > 0) {
@@ -114,8 +132,17 @@ class OCRService {
     }
 
     hasZeroScore(line) {
-        // Convert problematic patterns to 0
-        let processedLine = line.replace(/\(1\)/g, '0');  // Pattern (1)
+        // Podziel linię na 10 równych kolumn
+        const lineLength = line.length;
+        const columnWidth = lineLength / 10;
+        
+        // Kolumny 8-9 (indeksy 7-8) dla wyników - prawa część
+        const scoreStartPos = Math.floor(columnWidth * 7);
+        const scoreEndPos = Math.floor(columnWidth * 9);
+        const scoreSection = line.substring(scoreStartPos, scoreEndPos).trim();
+        
+        // Sprawdź wzorce zero tylko w sekcji wyników (kolumny 8-9)
+        let processedLine = scoreSection.replace(/\(1\)/g, '0');  // Pattern (1)
         processedLine = processedLine.replace(/\[1\]/g, '0');  // Pattern [1]
         processedLine = processedLine.replace(/\[1(?!\])/g, '0'); // Pattern [1 (no closing bracket)
         processedLine = processedLine.replace(/\(1(?!\))/g, '0'); // Pattern (1 (no closing bracket)
