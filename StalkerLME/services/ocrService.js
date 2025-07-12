@@ -62,15 +62,35 @@ class OCRService {
 
     async processImageWithSharp(imageBuffer) {
         try {
-            // Używamy Sharp do symulacji oryginalnej logiki Canvas
-            const processedBuffer = await sharp(imageBuffer)
+            // Najpierw sprawdzamy obecną rozdzielczość i zwiększamy ją
+            const image = sharp(imageBuffer);
+            const metadata = await image.metadata();
+            
+            logger.info(`📏 Oryginalna rozdzielczość: ${metadata.width}x${metadata.height}`);
+            
+            // Zwiększamy rozdzielczość 2x dla lepszego OCR
+            const scaleFactor = 2;
+            const newWidth = metadata.width * scaleFactor;
+            const newHeight = metadata.height * scaleFactor;
+            
+            logger.info(`📈 Zwiększam rozdzielczość do: ${newWidth}x${newHeight}`);
+            
+            // Przetwarzanie obrazu z fokusem na biały tekst
+            const processedBuffer = await image
+                .resize(newWidth, newHeight, {
+                    kernel: 'lanczos3' // Wysokiej jakości interpolacja
+                })
                 .greyscale()
-                .threshold(this.config.ocr.imageProcessing.whiteThreshold)
-                .linear(this.config.ocr.imageProcessing.contrast, this.config.ocr.imageProcessing.brightness)
-                .sharpen()
+                // Zwiększamy kontrast aby wydobyć biały tekst
+                .normalize() // Rozciąga histogram dla lepszego kontrastu
+                .linear(1.5, -50) // Zwiększamy kontrast i zmniejszamy jasność tła
+                // Threshold optymalizowany dla białego tekstu na ciemnym tle
+                .threshold(180) // Wyższy próg dla białego tekstu
+                .sharpen(2, 1, 2) // Ostrzejsze wyostrzenie
                 .png()
                 .toBuffer();
             
+            logger.info('✅ Obraz przetworzony z fokusem na biały tekst');
             return processedBuffer;
         } catch (error) {
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
@@ -88,26 +108,8 @@ class OCRService {
             
             for (const line of lines) {
                 if (this.hasZeroScore(line)) {
-                    // Podziel linię na 10 równych kolumn
-                    const lineLength = line.length;
-                    const columnWidth = lineLength / 10;
-                    
-                    // Kolumny 4-6 (indeksy 3-5) dla nicków - środkowa część
-                    const nickStartPos = Math.floor(columnWidth * 3);
-                    const nickEndPos = Math.floor(columnWidth * 6);
-                    const nickSection = line.substring(nickStartPos, nickEndPos).trim();
-                    
-                    // Kolumny 8-9 (indeksy 7-8) dla wyników - prawa część
-                    const scoreStartPos = Math.floor(columnWidth * 7);
-                    const scoreEndPos = Math.floor(columnWidth * 9);
-                    const scoreSection = line.substring(scoreStartPos, scoreEndPos).trim();
-                    
-                    logger.info(`📏 Linia: "${line}"`);
-                    logger.info(`👤 Nick section (kol 4-6): "${nickSection}"`);
-                    logger.info(`🎯 Score section (kol 8-9): "${scoreSection}"`);
-                    
-                    // Szukaj nicka w sekcji 4-6
-                    const words = nickSection.split(/\s+/);
+                    // Wyciągamy prawdopodobną nazwę gracza z linii - wybieramy najdłuższe słowo
+                    const words = line.split(/\s+/);
                     const playerCandidates = words.filter(word => this.isLikelyPlayerName(word));
                     
                     if (playerCandidates.length > 0) {
@@ -132,17 +134,8 @@ class OCRService {
     }
 
     hasZeroScore(line) {
-        // Podziel linię na 10 równych kolumn
-        const lineLength = line.length;
-        const columnWidth = lineLength / 10;
-        
-        // Kolumny 8-9 (indeksy 7-8) dla wyników - prawa część
-        const scoreStartPos = Math.floor(columnWidth * 7);
-        const scoreEndPos = Math.floor(columnWidth * 9);
-        const scoreSection = line.substring(scoreStartPos, scoreEndPos).trim();
-        
-        // Sprawdź wzorce zero tylko w sekcji wyników (kolumny 8-9)
-        let processedLine = scoreSection.replace(/\(1\)/g, '0');  // Pattern (1)
+        // Convert problematic patterns to 0
+        let processedLine = line.replace(/\(1\)/g, '0');  // Pattern (1)
         processedLine = processedLine.replace(/\[1\]/g, '0');  // Pattern [1]
         processedLine = processedLine.replace(/\[1(?!\])/g, '0'); // Pattern [1 (no closing bracket)
         processedLine = processedLine.replace(/\(1(?!\))/g, '0'); // Pattern (1 (no closing bracket)
@@ -258,21 +251,17 @@ class OCRService {
                         continue;
                     }
                     
-                    // Sprawdź podobieństwo z displayName i username, wybierz wyższą wartość
+                    // Sprawdź podobieństwo tylko z displayName (nick na serwerze)
                     const displaySimilarity = calculateNameSimilarity(playerName, member.displayName);
-                    const usernameSimilarity = calculateNameSimilarity(playerName, member.user.username);
                     
-                    const maxSimilarity = Math.max(displaySimilarity, usernameSimilarity);
-                    const matchedField = displaySimilarity >= usernameSimilarity ? 'displayName' : 'username';
-                    
-                    if (maxSimilarity >= 0.7) {
+                    if (displaySimilarity >= 0.7) {
                         candidates.push({
                             userId: userId,
                             member: member,
                             matchedName: playerName,
                             displayName: member.displayName,
-                            similarity: maxSimilarity,
-                            matchedField: matchedField
+                            similarity: displaySimilarity,
+                            matchedField: 'displayName'
                         });
                     }
                 }
@@ -291,14 +280,14 @@ class OCRService {
                         similarity: bestMatch.similarity
                     });
                     
-                    logger.info(`✅ Dopasowano: ${playerName} -> ${bestMatch.member.displayName} (${bestMatch.member.user.username}) - ${(bestMatch.similarity * 100).toFixed(1)}% podobieństwa`);
+                    logger.info(`✅ Dopasowano: ${playerName} -> ${bestMatch.member.displayName} - ${(bestMatch.similarity * 100).toFixed(1)}% podobieństwa`);
                     
                     // Pokaż alternatywnych kandydatów jeśli jest ich więcej
                     if (candidates.length > 1) {
                         logger.info(`   Alternatywni kandydaci:`);
                         for (let i = 1; i < Math.min(candidates.length, 3); i++) {
                             const alt = candidates[i];
-                            logger.info(`   - ${alt.member.displayName} (${alt.member.user.username}) - ${(alt.similarity * 100).toFixed(1)}%`);
+                            logger.info(`   - ${alt.member.displayName} - ${(alt.similarity * 100).toFixed(1)}%`);
                         }
                     }
                 } else {
