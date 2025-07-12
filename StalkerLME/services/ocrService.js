@@ -92,9 +92,9 @@ class OCRService {
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 
-                // Pomijaj pierwsze 3 i ostatnie 3 linie
-                if (i < 3 || i >= lines.length - 3) {
-                    logger.info(`⏭️ Pomijam linię ${i + 1} (pierwsze/ostatnie 3): "${line.trim()}"`);
+                // Pomijaj pierwsze 2 linie
+                if (i < 2) {
+                    logger.info(`⏭️ Pomijam linię ${i + 1} (pierwsze 2): "${line.trim()}"`);
                     continue;
                 }
                 
@@ -156,8 +156,12 @@ class OCRService {
             }
             
             const resultNicks = confirmedPlayers.map(p => p.detectedNick);
-            logger.info(`Końcowy wynik: ${confirmedPlayers.length} potwierdzonych graczy`);
-            logger.info(`👥 Lista: ${resultNicks.join(', ')}`);
+            const usersWithServerMatch = confirmedPlayers.filter(p => p.user !== null).length;
+            
+            logger.info(`📊 PODSUMOWANIE ANALIZY OCR:`);
+            logger.info(`   🎯 Wykrytych nicków z zerem: ${confirmedPlayers.length}`);
+            logger.info(`   ✅ Dopasowanych do użytkowników serwera: ${usersWithServerMatch}`);
+            logger.info(`   👥 Lista: ${resultNicks.join(', ')}`);
             return resultNicks;
         } catch (error) {
             logger.error('Błąd analizy tekstu');
@@ -186,8 +190,10 @@ class OCRService {
         processedLine = processedLine.replace(/\[[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\]/g, '0');  // Pattern [single letter] - treated as 0
         processedLine = processedLine.replace(/\(\d\)/g, '0');  // Pattern (single digit) - treated as 0
         processedLine = processedLine.replace(/\[\d\]/g, '0');  // Pattern [single digit] - treated as 0
-        processedLine = processedLine.replace(/\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\s/g, ' 0 ');  // Pattern single letter with spaces - treated as 0
-        processedLine = processedLine.replace(/\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]$/g, ' 0');  // Pattern single letter at end - treated as 0
+        // Pattern single letter with spaces - treated as 0 (but not if followed by digits)
+        processedLine = processedLine.replace(/\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\s(?!\d)/g, ' 0 ');
+        // Pattern single letter at end - treated as 0 (but only if not preceded by digit)
+        processedLine = processedLine.replace(/(?<!\d)\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]$/g, ' 0');
         processedLine = processedLine.replace(/\s\d\s/g, ' 0 ');  // Pattern single digit with spaces - treated as 0
         processedLine = processedLine.replace(/\s\d$/g, ' 0');  // Pattern single digit at end - treated as 0
         
@@ -243,7 +249,7 @@ class OCRService {
             /\[o\]/g, /\(o\)/g, /\(o/g, /o\)/g, /\[o/g, /o\]/g,
             /\([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\)/g, /\[[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\]/g,
             /\(\d\)/g, /\[\d\]/g,
-            /\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\s/g, /\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]$/g,
+            /\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\s(?!\d)/g, /(?<!\d)\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]$/g,
             /\s\d\s/g, /\s\d$/g,
             /\s+0\s+/g, /\s+0$/g, /^0\s+/g, /\s+0\.0\s+/g, /\s+0\.0$/g, /\s+0,0\s+/g, /\s+0,0$/g,
             /\s+o\s+/g, /\s+o$/g, /^o\s+/g,
