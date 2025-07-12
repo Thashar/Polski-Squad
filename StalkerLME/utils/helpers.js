@@ -183,7 +183,7 @@ function isNameSimilar(playerName, userName, threshold = 0.7) {
 }
 
 /**
- * Oblicza podobieństwo między dwoma nazwami graczy
+ * Oblicza podobieństwo między dwoma nazwami graczy z uwzględnieniem długości
  */
 function calculateNameSimilarity(playerName, userName) {
     const normalizedPlayer = normalizePlayerName(playerName);
@@ -202,9 +202,24 @@ function calculateNameSimilarity(playerName, userName) {
     // Algorytm Levenshtein dla podobieństwa
     const distance = levenshteinDistance(normalizedPlayer, normalizedUser);
     const maxLength = Math.max(normalizedPlayer.length, normalizedUser.length);
-    const similarity = 1 - (distance / maxLength);
+    const baseSimilarity = 1 - (distance / maxLength);
     
-    return similarity;
+    // Bonus za podobną długość - im bardziej podobna długość, tym wyższy bonus
+    const playerLength = normalizedPlayer.length;
+    const userLength = normalizedUser.length;
+    const lengthDifference = Math.abs(playerLength - userLength);
+    const maxLengthForComparison = Math.max(playerLength, userLength);
+    
+    // Współczynnik długości (1.0 = identyczna długość, 0.0 = bardzo różna długość)
+    const lengthSimilarity = maxLengthForComparison > 0 ? 1 - (lengthDifference / maxLengthForComparison) : 1;
+    
+    // Bonus za podobną długość (maksymalnie +0.1 do podobieństwa)
+    const lengthBonus = lengthSimilarity * 0.1;
+    
+    // Końcowe podobieństwo z bonusem za długość, ale nie więcej niż 1.0
+    const finalSimilarity = Math.min(1.0, baseSimilarity + lengthBonus);
+    
+    return finalSimilarity;
 }
 
 /**

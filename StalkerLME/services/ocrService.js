@@ -62,35 +62,18 @@ class OCRService {
 
     async processImageWithSharp(imageBuffer) {
         try {
-            // Najpierw sprawdzamy obecną rozdzielczość i zwiększamy ją
-            const image = sharp(imageBuffer);
-            const metadata = await image.metadata();
-            
-            logger.info(`📏 Oryginalna rozdzielczość: ${metadata.width}x${metadata.height}`);
-            
-            // Zwiększamy rozdzielczość 2x dla lepszego OCR
-            const scaleFactor = 2;
-            const newWidth = metadata.width * scaleFactor;
-            const newHeight = metadata.height * scaleFactor;
-            
-            logger.info(`📈 Zwiększam rozdzielczość do: ${newWidth}x${newHeight}`);
-            
             // Przetwarzanie obrazu z fokusem na biały tekst
-            const processedBuffer = await image
-                .resize(newWidth, newHeight, {
-                    kernel: 'lanczos3' // Wysokiej jakości interpolacja
-                })
+            const processedBuffer = await sharp(imageBuffer)
                 .greyscale()
                 // Zwiększamy kontrast aby wydobyć biały tekst
                 .normalize() // Rozciąga histogram dla lepszego kontrastu
                 .linear(1.5, -50) // Zwiększamy kontrast i zmniejszamy jasność tła
-                // Threshold optymalizowany dla białego tekstu na ciemnym tle
-                .threshold(180) // Wyższy próg dla białego tekstu
-                .sharpen(2, 1, 2) // Ostrzejsze wyostrzenie
+                // Threshold - wszystko poza białym tekstem staje się czarne
+                .threshold(200) // Wyższy próg - tylko bardzo jasne piksele (biały tekst) pozostają białe
                 .png()
                 .toBuffer();
             
-            logger.info('✅ Obraz przetworzony z fokusem na biały tekst');
+            logger.info('✅ Obraz przetworzony - biały tekst na czarnym tle');
             return processedBuffer;
         } catch (error) {
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
@@ -106,19 +89,52 @@ class OCRService {
             const lines = text.split('\n').filter(line => line.trim().length > 0);
             const zeroScorePlayers = [];
             
-            for (const line of lines) {
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
                 if (this.hasZeroScore(line)) {
-                    // Wyciągamy prawdopodobną nazwę gracza z linii - wybieramy najdłuższe słowo
+                    // Standardowe przetwarzanie linii z zerem
+                    const zeroElements = this.getZeroElementsFromLine(line);
                     const words = line.split(/\s+/);
-                    const playerCandidates = words.filter(word => this.isLikelyPlayerName(word));
+                    const playerCandidates = words.filter(word => {
+                        return !zeroElements.includes(word) && this.isLikelyPlayerName(word);
+                    });
                     
                     if (playerCandidates.length > 0) {
-                        // Znajdź najdłuższe słowo jako nick
                         const longestWord = playerCandidates.reduce((longest, current) => 
                             current.length > longest.length ? current : longest
                         );
                         zeroScorePlayers.push(longestWord);
-                        logger.info(`👤 Znaleziono gracza z wynikiem 0: ${longestWord} (najdłuższe z: ${playerCandidates.join(', ')})`);
+                        logger.info(`👤 Znaleziono gracza z wynikiem 0: ${longestWord} (najdłuższe z: ${playerCandidates.join(', ')}) | Pominięte wzorce zero: ${zeroElements.join(', ')}`);
+                    } else {
+                        logger.info(`⚠️ Pomijam linię - wszystkie słowa to wzorce zero: ${line.trim()}`);
+                    }
+                } else {
+                    // Sprawdź czy linia bez zera ma bardzo długie słowo (>15 znaków)
+                    const words = line.split(/\s+/);
+                    const longWords = words.filter(word => 
+                        this.isLikelyPlayerName(word) && word.length > 15
+                    );
+                    
+                    if (longWords.length > 0) {
+                        // Znajdź najdłuższe słowo
+                        const longestLongWord = longWords.reduce((longest, current) => 
+                            current.length > longest.length ? current : longest
+                        );
+                        
+                        // Sprawdź linię poniżej pod kątem zera
+                        if (i + 1 < lines.length) {
+                            const nextLine = lines[i + 1];
+                            if (this.hasZeroScore(nextLine)) {
+                                zeroScorePlayers.push(longestLongWord);
+                                logger.info(`👤 Znaleziono gracza z długim nickiem: ${longestLongWord} (${longestLongWord.length} znaków) - zero znalezione w następnej linii`);
+                                i++; // Pomijamy następną linię, bo już ją sprawdziliśmy
+                            } else {
+                                logger.info(`⚠️ Pomijam długi nick: ${longestLongWord} - brak zera w następnej linii`);
+                            }
+                        } else {
+                            logger.info(`⚠️ Pomijam długi nick: ${longestLongWord} - brak następnej linii do sprawdzenia`);
+                        }
                     }
                 }
             }
@@ -143,6 +159,16 @@ class OCRService {
         processedLine = processedLine.replace(/\[9\]/g, '0');  // Pattern [9] - treated as 0
         processedLine = processedLine.replace(/1\)/g, '0');   // Pattern 1) - treated as 0
         processedLine = processedLine.replace(/\(0\)/g, '0');  // Pattern (0) - treated as 0
+        processedLine = processedLine.replace(/\[o\]/g, '0');  // Pattern [o] - treated as 0
+        processedLine = processedLine.replace(/\(o\)/g, '0');  // Pattern (o) - treated as 0
+        processedLine = processedLine.replace(/\(o/g, '0');  // Pattern (o - treated as 0
+        processedLine = processedLine.replace(/o\)/g, '0');  // Pattern o) - treated as 0
+        processedLine = processedLine.replace(/\[o/g, '0');  // Pattern [o - treated as 0
+        processedLine = processedLine.replace(/o\]/g, '0');  // Pattern o] - treated as 0
+        processedLine = processedLine.replace(/\([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\)/g, '0');  // Pattern (single letter) - treated as 0
+        processedLine = processedLine.replace(/\[[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\]/g, '0');  // Pattern [single letter] - treated as 0
+        processedLine = processedLine.replace(/\(\d\)/g, '0');  // Pattern (single digit) - treated as 0
+        processedLine = processedLine.replace(/\[\d\]/g, '0');  // Pattern [single digit] - treated as 0
         
         const zeroPatterns = [
             /\s+0\s+/, /\s+0$/, /^0\s+/, /\s+0\.0\s+/, /\s+0\.0$/, /\s+0,0\s+/, /\s+0,0$/
@@ -182,7 +208,35 @@ class OCRService {
             }
         }
         
+        
         return false;
+    }
+
+    getZeroElementsFromLine(line) {
+        const zeroElements = [];
+        
+        // Wszystkie wzorce zero, które mogą wystąpić w linii
+        const zeroPatterns = [
+            /\(1\)/g, /\[1\]/g, /\[1(?!\])/g, /\(1(?!\))/g,
+            /\(9\)/g, /\[9\]/g, /1\)/g, /\(0\)/g,
+            /\[o\]/g, /\(o\)/g, /\(o/g, /o\)/g, /\[o/g, /o\]/g,
+            /\([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\)/g, /\[[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\]/g,
+            /\(\d\)/g, /\[\d\]/g,
+            /\s+0\s+/g, /\s+0$/g, /^0\s+/g, /\s+0\.0\s+/g, /\s+0\.0$/g, /\s+0,0\s+/g, /\s+0,0$/g,
+            /\s+o\s+/g, /\s+o$/g, /^o\s+/g,
+            /\s+zo\s+/g, /\s+zo$/g, /^zo\s+/g
+        ];
+        
+        // Znajdź wszystkie dopasowania w linii
+        for (const pattern of zeroPatterns) {
+            const matches = line.match(pattern);
+            if (matches) {
+                zeroElements.push(...matches.map(match => match.trim()));
+            }
+        }
+        
+        // Usuń duplikaty i puste stringi
+        return [...new Set(zeroElements)].filter(element => element.length > 0);
     }
 
     isLikelyPlayerName(word) {
