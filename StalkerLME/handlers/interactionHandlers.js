@@ -133,8 +133,8 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
             .setColor('#ff6b6b')
             .addFields(
-                { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${zeroScorePlayers.join(', ')}\``, inline: false },
-                { name: '✅ Dopasowano członków Discord', value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false }
+                { name: `📷 Znaleziono graczy z wynikiem 0 (${zeroScorePlayers.length})`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false },
+                { name: `✅ Dopasowano członków Discord (${foundUsers.length})`, value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false }
             )
             .setImage(attachment.url)
             .setTimestamp()
@@ -223,8 +223,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             .setDescription('Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?')
             .setColor('#ffa500')
             .addFields(
-                { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${zeroScorePlayers.join(', ')}\``, inline: false },
-                { name: '✅ Dopasowano członków Discord', value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false }
+                { name: `📷 Znaleziono graczy z wynikiem 0 (${zeroScorePlayers.length})`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false },
+                { name: `✅ Dopasowano członków Discord (${foundUsers.length})`, value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false }
             )
             .setImage(attachment.url)
             .setTimestamp()
