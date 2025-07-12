@@ -81,19 +81,31 @@ class OCRService {
         }
     }
 
-    extractPlayersFromText(text) {
+    async extractPlayersFromText(text, guild = null) {
         try {
             logger.info('Analiza tekstu');
-            logger.info('🎯 Szukanie graczy z wynikiem 0...');
+            logger.info('🎯 Nowa logika szukania graczy z wynikiem 0...');
             
             const lines = text.split('\n').filter(line => line.trim().length > 0);
-            const zeroScorePlayers = [];
+            const confirmedPlayers = [];
             
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 
-                if (this.hasZeroScore(line)) {
-                    // Standardowe przetwarzanie linii z zerem
+                // Pomijaj pierwsze 3 i ostatnie 3 linie
+                if (i < 3 || i >= lines.length - 3) {
+                    logger.info(`⏭️ Pomijam linię ${i + 1} (pierwsze/ostatnie 3): "${line.trim()}"`);
+                    continue;
+                }
+                
+                logger.info(`🔍 Analizuję linię ${i + 1}: "${line.trim()}"`);
+                
+                // Krok 1: Sprawdź czy linia zawiera zero
+                const hasZero = this.hasZeroScore(line);
+                logger.info(`   Zero w linii: ${hasZero ? '✅' : '❌'}`);
+                
+                if (hasZero) {
+                    // Krok 2: Znajdź potencjalne nicki (pomijając wzorce zero)
                     const zeroElements = this.getZeroElementsFromLine(line);
                     const words = line.split(/\s+/);
                     const playerCandidates = words.filter(word => {
@@ -101,47 +113,52 @@ class OCRService {
                     });
                     
                     if (playerCandidates.length > 0) {
-                        const longestWord = playerCandidates.reduce((longest, current) => 
+                        const detectedNick = playerCandidates.reduce((longest, current) => 
                             current.length > longest.length ? current : longest
                         );
-                        zeroScorePlayers.push(longestWord);
-                        logger.info(`👤 Znaleziono gracza z wynikiem 0: ${longestWord} (najdłuższe z: ${playerCandidates.join(', ')}) | Pominięte wzorce zero: ${zeroElements.join(', ')}`);
-                    } else {
-                        logger.info(`⚠️ Pomijam linię - wszystkie słowa to wzorce zero: ${line.trim()}`);
-                    }
-                } else {
-                    // Sprawdź czy linia bez zera ma bardzo długie słowo (>15 znaków)
-                    const words = line.split(/\s+/);
-                    const longWords = words.filter(word => 
-                        this.isLikelyPlayerName(word) && word.length > 15
-                    );
-                    
-                    if (longWords.length > 0) {
-                        // Znajdź najdłuższe słowo
-                        const longestLongWord = longWords.reduce((longest, current) => 
-                            current.length > longest.length ? current : longest
-                        );
+                        logger.info(`   🎯 Wykryty nick: "${detectedNick}"`);
                         
-                        // Sprawdź linię poniżej pod kątem zera
-                        if (i + 1 < lines.length) {
-                            const nextLine = lines[i + 1];
-                            if (this.hasZeroScore(nextLine)) {
-                                zeroScorePlayers.push(longestLongWord);
-                                logger.info(`👤 Znaleziono gracza z długim nickiem: ${longestLongWord} (${longestLongWord.length} znaków) - zero znalezione w następnej linii`);
-                                i++; // Pomijamy następną linię, bo już ją sprawdziliśmy
+                        // Krok 3: Sprawdź podobieństwo z użytkownikami na serwerze (jeśli mamy guild)
+                        if (guild) {
+                            const similarUser = await this.findSimilarUserOnServer(guild, detectedNick);
+                            if (similarUser) {
+                                logger.info(`   ✅ Znaleziono podobnego użytkownika: ${similarUser.displayName} (${(similarUser.similarity * 100).toFixed(1)}%)`);
+                                
+                                // Krok 4: Szukaj dodatkowego potwierdzenia zera
+                                const additionalZeroConfirmed = await this.confirmZeroWithAdditionalCheck(detectedNick, line, lines, i);
+                                
+                                if (additionalZeroConfirmed) {
+                                    confirmedPlayers.push({
+                                        detectedNick: detectedNick,
+                                        user: similarUser,
+                                        confirmed: true
+                                    });
+                                    logger.info(`   🎉 POTWIERDZONY: ${detectedNick} -> ${similarUser.displayName}`);
+                                } else {
+                                    logger.info(`   ⚠️ Brak dodatkowego potwierdzenia zera dla: ${detectedNick}`);
+                                }
                             } else {
-                                logger.info(`⚠️ Pomijam długi nick: ${longestLongWord} - brak zera w następnej linii`);
+                                logger.info(`   ❌ Brak podobnego użytkownika na serwerze dla: ${detectedNick}`);
                             }
                         } else {
-                            logger.info(`⚠️ Pomijam długi nick: ${longestLongWord} - brak następnej linii do sprawdzenia`);
+                            // Bez guild - dodaj bezpośrednio
+                            confirmedPlayers.push({
+                                detectedNick: detectedNick,
+                                user: null,
+                                confirmed: true
+                            });
+                            logger.info(`   ➕ Dodano bez sprawdzania serwera: ${detectedNick}`);
                         }
+                    } else {
+                        logger.info(`   ⚠️ Wszystkie słowa to wzorce zero: ${line.trim()}`);
                     }
                 }
             }
             
-            logger.info(`Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0`);
-            logger.info(`👥 Lista: ${zeroScorePlayers.join(', ')}`);
-            return zeroScorePlayers;
+            const resultNicks = confirmedPlayers.map(p => p.detectedNick);
+            logger.info(`Końcowy wynik: ${confirmedPlayers.length} potwierdzonych graczy`);
+            logger.info(`👥 Lista: ${resultNicks.join(', ')}`);
+            return resultNicks;
         } catch (error) {
             logger.error('Błąd analizy tekstu');
             logger.error('❌ Błąd analizy tekstu:', error);
@@ -169,6 +186,10 @@ class OCRService {
         processedLine = processedLine.replace(/\[[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\]/g, '0');  // Pattern [single letter] - treated as 0
         processedLine = processedLine.replace(/\(\d\)/g, '0');  // Pattern (single digit) - treated as 0
         processedLine = processedLine.replace(/\[\d\]/g, '0');  // Pattern [single digit] - treated as 0
+        processedLine = processedLine.replace(/\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\s/g, ' 0 ');  // Pattern single letter with spaces - treated as 0
+        processedLine = processedLine.replace(/\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]$/g, ' 0');  // Pattern single letter at end - treated as 0
+        processedLine = processedLine.replace(/\s\d\s/g, ' 0 ');  // Pattern single digit with spaces - treated as 0
+        processedLine = processedLine.replace(/\s\d$/g, ' 0');  // Pattern single digit at end - treated as 0
         
         const zeroPatterns = [
             /\s+0\s+/, /\s+0$/, /^0\s+/, /\s+0\.0\s+/, /\s+0\.0$/, /\s+0,0\s+/, /\s+0,0$/
@@ -222,6 +243,8 @@ class OCRService {
             /\[o\]/g, /\(o\)/g, /\(o/g, /o\)/g, /\[o/g, /o\]/g,
             /\([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\)/g, /\[[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\]/g,
             /\(\d\)/g, /\[\d\]/g,
+            /\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]\s/g, /\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]$/g,
+            /\s\d\s/g, /\s\d$/g,
             /\s+0\s+/g, /\s+0$/g, /^0\s+/g, /\s+0\.0\s+/g, /\s+0\.0$/g, /\s+0,0\s+/g, /\s+0,0$/g,
             /\s+o\s+/g, /\s+o$/g, /^o\s+/g,
             /\s+zo\s+/g, /\s+zo$/g, /^zo\s+/g
@@ -237,6 +260,56 @@ class OCRService {
         
         // Usuń duplikaty i puste stringi
         return [...new Set(zeroElements)].filter(element => element.length > 0);
+    }
+
+    async findSimilarUserOnServer(guild, detectedNick) {
+        try {
+            const members = await guild.members.fetch();
+            let bestMatch = null;
+            let bestSimilarity = 0;
+            
+            for (const [userId, member] of members) {
+                const similarity = calculateNameSimilarity(detectedNick, member.displayName);
+                
+                if (similarity >= 0.7 && similarity > bestSimilarity) {
+                    bestSimilarity = similarity;
+                    bestMatch = {
+                        userId: userId,
+                        member: member,
+                        displayName: member.displayName,
+                        similarity: similarity
+                    };
+                }
+            }
+            
+            return bestMatch;
+        } catch (error) {
+            logger.error('❌ Błąd wyszukiwania podobnego użytkownika:', error);
+            return null;
+        }
+    }
+
+    async confirmZeroWithAdditionalCheck(detectedNick, currentLine, allLines, currentIndex) {
+        // Szukaj dodatkowego zera za nickiem w tej samej linii
+        const nickPosition = currentLine.indexOf(detectedNick);
+        if (nickPosition !== -1) {
+            const afterNick = currentLine.substring(nickPosition + detectedNick.length);
+            if (this.hasZeroScore(afterNick)) {
+                logger.info(`   🔍 Znaleziono dodatkowe zero za nickiem w tej samej linii`);
+                return true;
+            }
+        }
+        
+        // Jeśli nick jest długi (>15 znaków), sprawdź następną linię
+        if (detectedNick.length > 15 && currentIndex + 1 < allLines.length) {
+            const nextLine = allLines[currentIndex + 1];
+            if (this.hasZeroScore(nextLine)) {
+                logger.info(`   🔍 Znaleziono zero w następnej linii dla długiego nicka (${detectedNick.length} znaków)`);
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     isLikelyPlayerName(word) {

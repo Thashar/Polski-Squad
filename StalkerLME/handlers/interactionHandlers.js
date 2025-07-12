@@ -79,7 +79,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
         
         const text = await ocrService.processImage(attachment);
-        const zeroScorePlayers = ocrService.extractPlayersFromText(text);
+        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild);
         
         if (zeroScorePlayers.length === 0) {
             await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
@@ -169,7 +169,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
         
         const text = await ocrService.processImage(attachment);
-        const zeroScorePlayers = ocrService.extractPlayersFromText(text);
+        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild);
         
         if (zeroScorePlayers.length === 0) {
             await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
