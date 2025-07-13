@@ -81,14 +81,37 @@ class OCRService {
         }
     }
 
-    async extractPlayersFromText(text, guild = null) {
+    async extractPlayersFromText(text, guild = null, requestingMember = null) {
         try {
             logger.info('Analiza tekstu');
-            logger.info('🎯 Logika: akceptuj graczy z zerem, odrzucaj z 3-cyfrowymi wynikami...');
+            logger.info('🎯 Nowa logika: najpierw dopasuj nicki z roli, potem sprawdź wyniki...');
+
+            if (!guild || !requestingMember) {
+                logger.error('❌ Brak guild lub requestingMember - nie można kontynuować');
+                return [];
+            }
+
+            // Krok 1: Określ rolę użytkownika i pobierz członków z tej roli
+            const userRole = this.getUserRole(requestingMember);
+            if (!userRole) {
+                logger.error('❌ Użytkownik nie ma żadnej z ról TARGET (0, 1, 2, main)');
+                return [];
+            }
+
+            const roleMembers = await this.getMembersFromRole(guild, userRole);
+            if (roleMembers.length === 0) {
+                logger.error(`❌ Nie znaleziono członków w roli: ${userRole}`);
+                return [];
+            }
+
+            logger.info(`🎯 Rola użytkownika: ${userRole}`);
+            logger.info(`👥 Znaleziono ${roleMembers.length} członków w roli`);
+            logger.info(`📝 Nicki w roli: ${roleMembers.map(m => m.displayName).join(', ')}`);
 
             const lines = text.split('\n').filter(line => line.trim().length > 0);
             const confirmedPlayers = [];
 
+            // Krok 2: Analizuj każdą linię w poszukiwaniu nicków
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
 
@@ -100,91 +123,55 @@ class OCRService {
 
                 logger.info(`🔍 Analizuję linię ${i + 1}: "${line.trim()}"`);
 
-                // Krok 1: Sprawdź czy linia zawiera zero lub potencjalnych graczy z wynikami
-                const hasZero = this.hasZeroScore(line);
-                const hasThreeDigitScore = this.hasThreeDigitScore(line);
-                
-                logger.info(`   Zero w linii: ${hasZero ? '✅' : '❌'}`);
-                logger.info(`   3-cyfrowy wynik w linii: ${hasThreeDigitScore ? '⚠️' : '❌'}`);
+                // Krok 3: Znajdź słowa w linii i dopasuj do nicków z roli
+                const words = line.split(/\s+/).filter(word => word.trim().length > 0);
+                logger.info(`   📝 Słowa w linii: ${words.join(', ')}`);
 
-                // Sprawdzaj linie, które mają zero lub mogą mieć graczy z 3-cyfrowymi wynikami do odrzucenia
-                if (hasZero || hasThreeDigitScore) {
-                    // Krok 2: Znajdź potencjalne nicki
-                    const zeroElements = this.getZeroElementsFromLine(line);
-                    const threeDigitElements = this.getThreeDigitElementsFromLine(line);
-                    const words = line.split(/\s+/);
-                    const playerCandidates = words.filter(word => {
-                        return !zeroElements.includes(word) && 
-                               !threeDigitElements.includes(word) && 
-                               this.isLikelyPlayerName(word);
-                    });
+                for (const word of words) {
+                    // Dopasuj słowo do nicków z roli
+                    const matchedMember = this.findBestMemberMatch(word, roleMembers);
+                    
+                    if (matchedMember) {
+                        logger.info(`   ✅ Dopasowano słowo "${word}" do gracza: ${matchedMember.member.displayName} (${(matchedMember.similarity * 100).toFixed(1)}%)`);
 
-                    if (playerCandidates.length > 0) {
-                        const detectedNick = playerCandidates.reduce((longest, current) => 
-                            current.length > longest.length ? current : longest
-                        );
-                        logger.info(`   🎯 Wykryty nick: "${detectedNick}"`);
-
-                        // Krok 3: Sprawdź podobieństwo z użytkownikami na serwerze (jeśli mamy guild)
-                        if (guild) {
-                            const similarUser = await this.findSimilarUserOnServer(guild, detectedNick);
-                            if (similarUser) {
-                                logger.info(`   ✅ Znaleziono podobnego użytkownika: ${similarUser.displayName} (${(similarUser.similarity * 100).toFixed(1)}%)`);
-
-                                // Krok 4: Sprawdź wynik gracza
-                                const scoreCheck = await this.checkPlayerScore(detectedNick, line, lines, i);
-
-                                if (scoreCheck.confirmed) {
-                                    confirmedPlayers.push({
-                                        detectedNick: detectedNick,
-                                        user: similarUser,
-                                        confirmed: true,
-                                        scoreType: scoreCheck.scoreType
-                                    });
-                                    logger.info(`   🎉 POTWIERDZONY: ${detectedNick} -> ${similarUser.displayName} (wynik: ${scoreCheck.scoreType})`);
-                                } else {
-                                    if (scoreCheck.scoreType === 'three-digit-rejected') {
-                                        logger.info(`   ⚠️ ODRZUCONY (3-cyfrowy wynik): ${detectedNick}`);
-                                    } else {
-                                        logger.info(`   ⚠️ Brak potwierdzenia wyniku dla: ${detectedNick}`);
-                                    }
-                                }
-                            } else {
-                                logger.info(`   ❌ Brak podobnego użytkownika na serwerze dla: ${detectedNick}`);
-                            }
-                        } else {
-                            // Bez guild - sprawdź wynik i dodaj
-                            const scoreCheck = await this.checkPlayerScore(detectedNick, line, lines, i);
-                            if (scoreCheck.confirmed) {
-                                confirmedPlayers.push({
-                                    detectedNick: detectedNick,
-                                    user: null,
-                                    confirmed: true,
-                                    scoreType: scoreCheck.scoreType
-                                });
-                                logger.info(`   ➕ Dodano bez sprawdzania serwera: ${detectedNick} (wynik: ${scoreCheck.scoreType})`);
-                            } else {
-                                if (scoreCheck.scoreType === 'three-digit-rejected') {
-                                    logger.info(`   ⚠️ ODRZUCONY (3-cyfrowy wynik): ${detectedNick}`);
-                                } else {
-                                    logger.info(`   ⚠️ Brak potwierdzenia wyniku dla: ${detectedNick}`);
-                                }
-                            }
+                        // Krok 4: Sprawdź wynik dla dopasowanego gracza
+                        const scoreResult = await this.checkPlayerScoreNew(word, line, lines, i);
+                        
+                        // Sprawdź czy gracz już nie został dodany
+                        const alreadyAdded = confirmedPlayers.find(p => p.user.userId === matchedMember.member.user.id);
+                        if (alreadyAdded) {
+                            logger.info(`   ⚠️ Gracz ${matchedMember.member.displayName} już został dodany, pomijam`);
+                            continue;
                         }
-                    } else {
-                        logger.info(`   ⚠️ Wszystkie słowa to wzorce wyników: ${line.trim()}`);
+
+                        confirmedPlayers.push({
+                            detectedNick: word,
+                            user: {
+                                userId: matchedMember.member.user.id,
+                                member: matchedMember.member,
+                                displayName: matchedMember.member.displayName,
+                                similarity: matchedMember.similarity
+                            },
+                            confirmed: true,
+                            scoreType: scoreResult.scoreType,
+                            scoreValue: scoreResult.scoreValue
+                        });
+
+                        logger.info(`   🎉 DODANO GRACZA: ${word} -> ${matchedMember.member.displayName} (wynik: ${scoreResult.scoreType} = ${scoreResult.scoreValue})`);
                     }
                 }
             }
 
             const resultNicks = confirmedPlayers.map(p => p.detectedNick);
-            const usersWithServerMatch = confirmedPlayers.filter(p => p.user !== null).length;
             const zeroScores = confirmedPlayers.filter(p => p.scoreType === 'zero').length;
+            const twoDigitScores = confirmedPlayers.filter(p => p.scoreType === 'two-digit').length;
+            const threeDigitScores = confirmedPlayers.filter(p => p.scoreType === 'three-digit').length;
 
             logger.info(`📊 PODSUMOWANIE ANALIZY OCR:`);
-            logger.info(`   🎯 Wykrytych nicków z zerem: ${confirmedPlayers.length}`);
-            logger.info(`   ✅ Dopasowanych do użytkowników serwera: ${usersWithServerMatch}`);
+            logger.info(`   🎯 Znalezionych graczy: ${confirmedPlayers.length}`);
             logger.info(`   🔢 Z wynikiem 0: ${zeroScores}`);
+            logger.info(`   📊 Z wynikiem 2-cyfrowym: ${twoDigitScores}`);
+            logger.info(`   📈 Z wynikiem 3-cyfrowym: ${threeDigitScores}`);
             logger.info(`   👥 Lista: ${resultNicks.join(', ')}`);
             return resultNicks;
         } catch (error) {
@@ -192,6 +179,165 @@ class OCRService {
             logger.error('❌ Błąd analizy tekstu:', error);
             return [];
         }
+    }
+
+    getUserRole(member) {
+        // Sprawdź które role TARGET ma użytkownik (0, 1, 2, main)
+        const targetRoleIds = Object.values(this.config.targetRoles);
+        
+        for (const [roleName, roleId] of Object.entries(this.config.targetRoles)) {
+            if (member.roles.cache.has(roleId)) {
+                return roleName;
+            }
+        }
+        
+        return null;
+    }
+
+    async getMembersFromRole(guild, roleName) {
+        try {
+            const roleId = this.config.targetRoles[roleName];
+            if (!roleId) {
+                logger.error(`❌ Nie znaleziono ID roli dla: ${roleName}`);
+                return [];
+            }
+
+            const members = await guild.members.fetch();
+            const roleMembers = members.filter(member => member.roles.cache.has(roleId));
+            
+            return Array.from(roleMembers.values());
+        } catch (error) {
+            logger.error(`❌ Błąd pobierania członków roli ${roleName}:`, error);
+            return [];
+        }
+    }
+
+    findBestMemberMatch(word, roleMembers) {
+        if (!word || word.length < 3) return null;
+
+        let bestMatch = null;
+        let bestSimilarity = 0;
+
+        for (const member of roleMembers) {
+            const similarity = calculateNameSimilarity(word, member.displayName);
+            
+            if (similarity >= 0.7 && similarity > bestSimilarity) {
+                bestSimilarity = similarity;
+                bestMatch = {
+                    member: member,
+                    similarity: similarity
+                };
+            }
+        }
+
+        return bestMatch;
+    }
+
+    async checkPlayerScoreNew(detectedNick, currentLine, allLines, currentIndex) {
+        logger.info(`   🔍 Sprawdzam wynik dla gracza: ${detectedNick}`);
+
+        // Znajdź pozycję nicka w linii
+        const nickPosition = currentLine.indexOf(detectedNick);
+        if (nickPosition === -1) {
+            logger.info(`   ⚠️ Nie znaleziono nicka w linii`);
+            return { scoreType: 'zero', scoreValue: '0' };
+        }
+
+        const afterNick = currentLine.substring(nickPosition + detectedNick.length);
+        logger.info(`   📝 Tekst po nicku: "${afterNick}"`);
+
+        // Krok 1: Sprawdź 3-cyfrowe liczby w tej samej linii
+        const threeDigitResult = this.findThreeDigitScore(afterNick);
+        if (threeDigitResult) {
+            logger.info(`   📈 Znaleziono 3-cyfrowy wynik w tej samej linii: ${threeDigitResult}`);
+            return { scoreType: 'three-digit', scoreValue: threeDigitResult };
+        }
+
+        // Krok 2: Dla długich nicków (≥13 znaków) sprawdź następną linię na 3-cyfrowe
+        if (detectedNick.length >= 13 && currentIndex + 1 < allLines.length) {
+            const nextLine = allLines[currentIndex + 1];
+            logger.info(`   📝 Sprawdzam następną linię dla długiego nicka: "${nextLine}"`);
+            
+            const nextLineThreeDigit = this.findThreeDigitScore(nextLine);
+            if (nextLineThreeDigit) {
+                logger.info(`   📈 Znaleziono 3-cyfrowy wynik w następnej linii: ${nextLineThreeDigit}`);
+                return { scoreType: 'three-digit', scoreValue: nextLineThreeDigit };
+            }
+        }
+
+        // Krok 3: Sprawdź 2-cyfrowe liczby w tej samej linii
+        const twoDigitResult = this.findTwoDigitScore(afterNick);
+        if (twoDigitResult) {
+            logger.info(`   📊 Znaleziono 2-cyfrowy wynik w tej samej linii: ${twoDigitResult}`);
+            return { scoreType: 'two-digit', scoreValue: twoDigitResult };
+        }
+
+        // Krok 4: Dla długich nicków sprawdź następną linię na 2-cyfrowe
+        if (detectedNick.length >= 13 && currentIndex + 1 < allLines.length) {
+            const nextLine = allLines[currentIndex + 1];
+            
+            const nextLineTwoDigit = this.findTwoDigitScore(nextLine);
+            if (nextLineTwoDigit) {
+                logger.info(`   📊 Znaleziono 2-cyfrowy wynik w następnej linii: ${nextLineTwoDigit}`);
+                return { scoreType: 'two-digit', scoreValue: nextLineTwoDigit };
+            }
+        }
+
+        // Krok 5: Jeśli nie ma żadnych wyników, uznaj za zero
+        logger.info(`   🔢 Nie znaleziono wyników liczbowych - uznano za zero`);
+        return { scoreType: 'zero', scoreValue: '0' };
+    }
+
+    findThreeDigitScore(text) {
+        // Wzorce dla 3-cyfrowych liczb
+        const patterns = [
+            /\s+(\d{3})\s+/,    // 3 cyfry otoczone spacjami
+            /\s+(\d{3})$/,      // 3 cyfry na końcu
+            /^(\d{3})\s+/,      // 3 cyfry na początku
+            /\s+(\d{3})\./,     // 3 cyfry przed kropką
+            /\s+(\d{3}),/,      // 3 cyfry przed przecinkiem
+            /\s+(\d{3})[a-zA-Z]/  // 3 cyfry przed literą
+        ];
+
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match) {
+                return match[1];
+            }
+        }
+
+        return null;
+    }
+
+    findTwoDigitScore(text) {
+        // Wzorce dla 2-cyfrowych liczb (z możliwymi dodatkowymi znakami)
+        const patterns = [
+            /\s+(\d{2})\s+/,        // 2 cyfry otoczone spacjami
+            /\s+(\d{2})$/,          // 2 cyfry na końcu
+            /^(\d{2})\s+/,          // 2 cyfry na początku
+            /\s+(\d{2})\./,         // 2 cyfry przed kropką
+            /\s+(\d{2}),/,          // 2 cyfry przed przecinkiem
+            /\s+(\d{2})[a-zA-Z]/,   // 2 cyfry przed literą
+            /\s+(\d{2})[^\d\s]/,    // 2 cyfry przed znakiem specjalnym
+            /[^\d](\d{2})[^\d]/,    // 2 cyfry między nie-cyframi
+            /\s+(\d{2})\)/,         // 2 cyfry przed )
+            /\((\d{2})\s+/,         // 2 cyfry po (
+            /\s+(\d{2})\]/,         // 2 cyfry przed ]
+            /\[(\d{2})\s+/          // 2 cyfry po [
+        ];
+
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match) {
+                const number = parseInt(match[1]);
+                // Sprawdź czy to sensowny wynik (10-99)
+                if (number >= 10 && number <= 99) {
+                    return match[1];
+                }
+            }
+        }
+
+        return null;
     }
 
     hasZeroScore(line) {
@@ -359,45 +505,6 @@ class OCRService {
             logger.error('❌ Błąd wyszukiwania podobnego użytkownika:', error);
             return null;
         }
-    }
-
-    async checkPlayerScore(detectedNick, currentLine, allLines, currentIndex) {
-        // Sprawdź najpierw czy po nicku w tej samej linii jest 3-cyfrowy wynik
-        const nickPosition = currentLine.indexOf(detectedNick);
-        if (nickPosition !== -1) {
-            const afterNick = currentLine.substring(nickPosition + detectedNick.length);
-            
-            // Sprawdź 3-cyfrowy wynik po nicku - jeśli jest, ODRZUĆ gracza
-            if (this.hasThreeDigitScore(afterNick)) {
-                logger.info(`   ❌ Znaleziono 3-cyfrowy wynik za nickiem - ODRZUCAM gracza`);
-                return { confirmed: false, scoreType: 'three-digit-rejected' };
-            }
-            
-            // Sprawdź zero po nicku - jeśli jest, POTWIERDŹ gracza
-            if (this.hasZeroScore(afterNick)) {
-                logger.info(`   🔍 Znaleziono zero za nickiem w tej samej linii`);
-                return { confirmed: true, scoreType: 'zero' };
-            }
-        }
-
-        // Jeśli nick jest długi (≥13 znaków), sprawdź następną linię
-        if (detectedNick.length >= 13 && currentIndex + 1 < allLines.length) {
-            const nextLine = allLines[currentIndex + 1];
-            
-            // Sprawdź najpierw 3-cyfrowy wynik w następnej linii - jeśli jest, ODRZUĆ gracza
-            if (this.hasThreeDigitScore(nextLine)) {
-                logger.info(`   ❌ Znaleziono 3-cyfrowy wynik w następnej linii dla długiego nicka - ODRZUCAM gracza`);
-                return { confirmed: false, scoreType: 'three-digit-rejected' };
-            }
-            
-            // Jeśli nie ma 3-cyfrowego, sprawdź zero
-            if (this.hasZeroScore(nextLine)) {
-                logger.info(`   🔍 Znaleziono zero w następnej linii dla długiego nicka (${detectedNick.length} znaków)`);
-                return { confirmed: true, scoreType: 'zero' };
-            }
-        }
-
-        return { confirmed: false, scoreType: null };
     }
 
     isLikelyPlayerName(word) {
