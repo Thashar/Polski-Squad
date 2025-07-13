@@ -130,62 +130,70 @@ class OCRService {
             
             const confirmedPlayers = [];
             
-            // Krok 3: Dla każdej linii sprawdź nicki z roli
+            // Krok 3: Dla każdej linii znajdź najlepiej dopasowany nick z roli
             for (let i = 0; i < validLines.length; i++) {
                 const line = validLines[i];
                 logger.info(`🔍 Linia ${i + 1}: "${line.trim()}"`);
                 
-                // Sprawdź czy w linii występuje któryś z nicków z roli
+                // Znajdź najlepsze dopasowanie ze wszystkich nicków z roli
+                let bestMatch = null;
+                let bestSimilarity = 0;
+                
                 for (const roleNick of roleNicks) {
                     const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
                     
-                    if (similarity >= 0.7) {
-                        logger.info(`   ✅ Znaleziono nick "${roleNick.displayName}" (${(similarity * 100).toFixed(1)}% podobieństwa)`);
-                        
-                        // Krok 4: Sprawdź koniec linii za nickiem dla wyniku
-                        let endResult = this.analyzeLineEnd(line, roleNick.displayName);
-                        logger.info(`   📊 Analiza za nickiem: ${endResult.type} (wartość: "${endResult.value}")`);
-                        
-                        // Jeśli nick ma 10+ liter i nie znaleziono wyniku/zera w tej linii, sprawdź następną linię
-                        if (roleNick.displayName.length >= 10 && endResult.type === 'unknown') {
-                            // Znajdź rzeczywistą następną linię w oryginalnych liniach, nie w filtrowanych
-                            const currentLineText = line.trim();
-                            const allLines = text.split('\n').filter(line => line.trim().length > 0);
-                            const currentLineIndex = allLines.findIndex(l => l.trim() === currentLineText);
-                            
-                            if (currentLineIndex !== -1 && currentLineIndex + 1 < allLines.length) {
-                                const nextLine = allLines[currentLineIndex + 1];
-                                logger.info(`   🔍 Nick długi (${roleNick.displayName.length} znaków), sprawdzam rzeczywistą następną linię: "${nextLine.trim()}"`);
-                                
-                                const nextEndResult = this.analyzeLineEnd(nextLine, null); // W następnej linii nie szukamy za nickiem
-                                logger.info(`   📊 Analiza następnej linii: ${nextEndResult.type} (wartość: "${nextEndResult.value}")`);
-                                
-                                if (nextEndResult.type !== 'unknown') {
-                                    endResult = nextEndResult;
-                                    logger.info(`   ✅ Użyto wyniku z następnej linii`);
-                                }
-                            }
-                        }
-                        
-                        if (endResult.type === 'zero' || endResult.type === 'unknown') {
-                            confirmedPlayers.push({
-                                detectedNick: roleNick.displayName,
-                                user: roleNick,
-                                confirmed: true,
-                                line: line.trim(),
-                                endValue: endResult.value
-                            });
-                            if (endResult.type === 'zero') {
-                                logger.info(`   🎉 POTWIERDZONY zero (wzorzec): ${roleNick.displayName}`);
-                            } else {
-                                logger.info(`   🎉 POTWIERDZONY zero (brak wyniku): ${roleNick.displayName}`);
-                            }
-                        } else if (endResult.type === 'negative') {
-                            logger.info(`   ❌ Wynik negatywny: ${roleNick.displayName} (${endResult.value})`);
-                        }
-                        
-                        break; // Jeden nick na linię
+                    if (similarity >= 0.7 && similarity > bestSimilarity) {
+                        bestSimilarity = similarity;
+                        bestMatch = roleNick;
                     }
+                }
+                
+                if (bestMatch) {
+                    logger.info(`   ✅ Najlepsze dopasowanie: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}% podobieństwa)`);
+                    
+                    // Krok 4: Sprawdź koniec linii za nickiem dla wyniku
+                    let endResult = this.analyzeLineEnd(line, bestMatch.displayName);
+                    logger.info(`   📊 Analiza za nickiem: ${endResult.type} (wartość: "${endResult.value}")`);
+                    
+                    // Jeśli nick ma 10+ liter i nie znaleziono wyniku/zera w tej linii, sprawdź następną linię
+                    if (bestMatch.displayName.length >= 10 && endResult.type === 'unknown') {
+                        // Znajdź rzeczywistą następną linię w oryginalnych liniach, nie w filtrowanych
+                        const currentLineText = line.trim();
+                        const allLines = text.split('\n').filter(line => line.trim().length > 0);
+                        const currentLineIndex = allLines.findIndex(l => l.trim() === currentLineText);
+                        
+                        if (currentLineIndex !== -1 && currentLineIndex + 1 < allLines.length) {
+                            const nextLine = allLines[currentLineIndex + 1];
+                            logger.info(`   🔍 Nick długi (${bestMatch.displayName.length} znaków), sprawdzam rzeczywistą następną linię: "${nextLine.trim()}"`);
+                            
+                            const nextEndResult = this.analyzeLineEnd(nextLine, null); // W następnej linii nie szukamy za nickiem
+                            logger.info(`   📊 Analiza następnej linii: ${nextEndResult.type} (wartość: "${nextEndResult.value}")`);
+                            
+                            if (nextEndResult.type !== 'unknown') {
+                                endResult = nextEndResult;
+                                logger.info(`   ✅ Użyto wyniku z następnej linii`);
+                            }
+                        }
+                    }
+                    
+                    if (endResult.type === 'zero' || endResult.type === 'unknown') {
+                        confirmedPlayers.push({
+                            detectedNick: bestMatch.displayName,
+                            user: bestMatch,
+                            confirmed: true,
+                            line: line.trim(),
+                            endValue: endResult.value
+                        });
+                        if (endResult.type === 'zero') {
+                            logger.info(`   🎉 POTWIERDZONY zero (wzorzec): ${bestMatch.displayName}`);
+                        } else {
+                            logger.info(`   🎉 POTWIERDZONY zero (brak wyniku): ${bestMatch.displayName}`);
+                        }
+                    } else if (endResult.type === 'negative') {
+                        logger.info(`   ❌ Wynik negatywny: ${bestMatch.displayName} (${endResult.value})`);
+                    }
+                } else {
+                    logger.info(`   ❌ Brak dopasowania powyżej 70% podobieństwa`);
                 }
             }
             
@@ -522,8 +530,18 @@ class OCRService {
             return 1.0; // 100% jeśli nick jest w linii
         }
         
-        // Sprawdź podobieństwo używając funkcji z helpers
-        return calculateNameSimilarity(nick, line);
+        // Znajdź najdłuższe słowo w linii
+        const words = line.split(/\s+/).filter(word => word.trim().length > 0);
+        if (words.length === 0) {
+            return 0;
+        }
+        
+        const longestWord = words.reduce((longest, current) => 
+            current.length > longest.length ? current : longest
+        );
+        
+        // Porównaj nick tylko z najdłuższym słowem
+        return calculateNameSimilarity(nick, longestWord);
     }
 
     analyzeLineEnd(line, nickName = null) {
