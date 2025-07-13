@@ -8,7 +8,7 @@ const confirmationData = new Map();
 
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService } = sharedState;
-    
+
     try {
         if (interaction.isCommand()) {
             await handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService);
@@ -19,13 +19,13 @@ async function handleInteraction(interaction, sharedState, config) {
         }
     } catch (error) {
         logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
-        
+
         const errorEmbed = new EmbedBuilder()
             .setTitle('❌ Wystąpił błąd')
             .setDescription(messages.errors.unknownError)
             .setColor('#FF0000')
             .setTimestamp();
-        
+
         if (interaction.replied || interaction.deferred) {
             await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
         } else {
@@ -39,7 +39,7 @@ async function handleSlashCommand(interaction, config, databaseService, ocrServi
         await interaction.reply({ content: messages.errors.noPermission, ephemeral: true });
         return;
     }
-    
+
     switch (interaction.commandName) {
         case 'punish':
             await handlePunishCommand(interaction, config, ocrService, punishmentService);
@@ -63,39 +63,39 @@ async function handleSlashCommand(interaction, config, databaseService, ocrServi
 
 async function handlePunishCommand(interaction, config, ocrService, punishmentService) {
     const attachment = interaction.options.getAttachment('image');
-    
+
     if (!attachment) {
         await interaction.reply({ content: messages.errors.noImage, ephemeral: true });
         return;
     }
-    
+
     if (!attachment.contentType?.startsWith('image/')) {
         await interaction.reply({ content: messages.errors.invalidImage, ephemeral: true });
         return;
     }
-    
+
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
         await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
-        
+
         const text = await ocrService.processImage(attachment);
         const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild);
-        
+
         if (zeroScorePlayers.length === 0) {
             await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
             return;
         }
-        
+
         const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers, interaction.member);
-        
+
         if (foundUsers.length === 0) {
             await interaction.editReply(`📷 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0: \`${zeroScorePlayers.join(', ')}\`\n❌ Ale nie udało się dopasować żadnego z nich do członków.`);
             return;
         }
-        
+
         // Generowanie unikalnego ID dla potwierdzenia
         const confirmationId = Date.now().toString();
-        
+
         // Zapisanie danych do mapy
         confirmationData.set(confirmationId, {
             action: 'punish',
@@ -106,28 +106,28 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             config: config,
             punishmentService: punishmentService
         });
-        
+
         // Usunięcie danych po 5 minut
         setTimeout(() => {
             confirmationData.delete(confirmationId);
         }, 5 * 60 * 1000);
-        
+
         // Tworzenie przycisków
         const confirmButton = new ButtonBuilder()
             .setCustomId(`confirm_punish_${confirmationId}`)
             .setLabel('✅ Tak')
             .setStyle(ButtonStyle.Success);
-        
+
         const cancelButton = new ButtonBuilder()
             .setCustomId(`cancel_punish_${confirmationId}`)
             .setLabel('❌ Nie')
             .setStyle(ButtonStyle.Danger);
-        
+
         const row = new ActionRowBuilder()
             .addComponents(confirmButton, cancelButton);
-        
+
         const matchedUsers = foundUsers.map(user => `${user.member.displayName} (${user.matchedName})`);
-        
+
         const confirmationEmbed = new EmbedBuilder()
             .setTitle('⚖️ Potwierdzenie dodania punktów karnych')
             .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
@@ -139,12 +139,12 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             .setImage(attachment.url)
             .setTimestamp()
             .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
-        
+
         await interaction.editReply({ 
             embeds: [confirmationEmbed],
             components: [row]
         });
-        
+
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
@@ -153,39 +153,39 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService) {
     const attachment = interaction.options.getAttachment('image');
-    
+
     if (!attachment) {
         await interaction.reply({ content: messages.errors.noImage, ephemeral: true });
         return;
     }
-    
+
     if (!attachment.contentType?.startsWith('image/')) {
         await interaction.reply({ content: messages.errors.invalidImage, ephemeral: true });
         return;
     }
-    
+
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
         await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
-        
+
         const text = await ocrService.processImage(attachment);
         const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild);
-        
+
         if (zeroScorePlayers.length === 0) {
             await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
             return;
         }
-        
+
         const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers, interaction.member);
-        
+
         if (foundUsers.length === 0) {
             await interaction.editReply(`📷 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0: \`${zeroScorePlayers.join(', ')}\`\n❌ Ale nie udało się dopasować żadnego z nich do członków.`);
             return;
         }
-        
+
         // Generowanie unikalnego ID dla potwierdzenia
         const confirmationId = Date.now().toString();
-        
+
         // Zapisanie danych do mapy
         confirmationData.set(confirmationId, {
             action: 'remind',
@@ -196,28 +196,28 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             config: config,
             reminderService: reminderService
         });
-        
+
         // Usunięcie danych po 5 minut
         setTimeout(() => {
             confirmationData.delete(confirmationId);
         }, 5 * 60 * 1000);
-        
+
         // Tworzenie przycisków
         const confirmButton = new ButtonBuilder()
             .setCustomId(`confirm_remind_${confirmationId}`)
             .setLabel('✅ Tak')
             .setStyle(ButtonStyle.Success);
-        
+
         const cancelButton = new ButtonBuilder()
             .setCustomId(`cancel_remind_${confirmationId}`)
             .setLabel('❌ Nie')
             .setStyle(ButtonStyle.Danger);
-        
+
         const row = new ActionRowBuilder()
             .addComponents(confirmButton, cancelButton);
-        
+
         const matchedUsers = foundUsers.map(user => `${user.member.displayName} (${user.matchedName})`);
-        
+
         const confirmationEmbed = new EmbedBuilder()
             .setTitle('🔍 Potwierdzenie wysłania przypomnienia')
             .setDescription('Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?')
@@ -229,12 +229,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             .setImage(attachment.url)
             .setTimestamp()
             .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
-        
+
         await interaction.editReply({ 
             embeds: [confirmationEmbed],
             components: [row]
         });
-        
+
     } catch (error) {
         logger.error('[REMIND] ❌ Błąd komendy /remind:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
@@ -244,14 +244,14 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
 async function handlePunishmentCommand(interaction, config, databaseService, punishmentService) {
     const category = interaction.options.getString('category');
     const roleId = config.targetRoles[category];
-    
+
     if (!roleId) {
         await interaction.reply({ content: 'Nieprawidłowa kategoria!', ephemeral: true });
         return;
     }
-    
+
     await interaction.deferReply();
-    
+
     // Odśwież cache członków przed sprawdzeniem rankingu
     try {
         logger.info('🔄 Odświeżanie cache\'u członków dla punishment...');
@@ -260,11 +260,11 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
     } catch (error) {
         logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
-    
+
     try {
         const ranking = await punishmentService.getRankingForRole(interaction.guild, roleId);
         const roleName = config.roleDisplayNames[category];
-        
+
         let rankingText = '';
         if (ranking.length === 0) {
             rankingText = 'Brak użytkowników z punktami karnymi w tej kategorii.';
@@ -275,18 +275,18 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
                 rankingText += `${i + 1}. ${user.member.displayName} - ${user.points} punktów ${punishmentEmoji}\n`;
             }
         }
-        
+
         // Sprawdź ostatnie usuwanie punktów
         const weeklyRemoval = await databaseService.loadWeeklyRemoval();
         const now = new Date();
         const currentWeek = `${now.getFullYear()}-W${databaseService.getWeekNumber(now)}`;
-        
+
         let lastRemovalText = 'Brak danych';
         if (weeklyRemoval[currentWeek]) {
             const removalDate = new Date(weeklyRemoval[currentWeek].date);
             lastRemovalText = `${removalDate.toLocaleDateString('pl-PL')} (${weeklyRemoval[currentWeek].cleanedUsers} użytkowników)`;
         }
-        
+
         // Następne usuwanie punktów
         const nextMonday = new Date();
         nextMonday.setDate(nextMonday.getDate() + (7 - nextMonday.getDay()) % 7);
@@ -295,12 +295,12 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
         }
         nextMonday.setHours(0, 0, 0, 0);
         const nextRemovalText = `${nextMonday.toLocaleDateString('pl-PL')} o 00:00`;
-        
+
         // Kanał ostrzeżeń
         const warningChannelId = config.warningChannels[roleId];
         const warningChannel = interaction.guild.channels.cache.get(warningChannelId);
         const warningChannelText = warningChannel ? `<#${warningChannelId}>` : 'Nie znaleziono kanału';
-        
+
         const embed = new EmbedBuilder()
             .setTitle(`📊 Ranking Punktów Karnych`)
             .setDescription(`**Kategoria:** ${roleName}\n\n${rankingText}`)
@@ -314,7 +314,7 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
             )
             .setTimestamp()
             .setFooter({ text: `Kategoria: ${category} | Punkty usuwane co tydzień w poniedziałek o północy (${config.timezone})` });
-        
+
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {
         logger.error('[PUNISHMENT] ❌ Błąd komendy /punishment:', error);
@@ -325,9 +325,9 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
 async function handlePointsCommand(interaction, config, databaseService, punishmentService) {
     const user = interaction.options.getUser('user');
     const amount = interaction.options.getInteger('amount');
-    
+
     await interaction.deferReply();
-    
+
     try {
         if (amount === null || amount === undefined) {
             // Usuń użytkownika z systemu
@@ -355,14 +355,14 @@ async function handlePointsCommand(interaction, config, databaseService, punishm
 async function handleDebugRolesCommand(interaction, config) {
     const category = interaction.options.getString('category');
     const roleId = config.targetRoles[category];
-    
+
     if (!roleId) {
         await interaction.reply({ content: 'Nieprawidłowa kategoria!', ephemeral: true });
         return;
     }
-    
+
     await interaction.deferReply();
-    
+
     // Odśwież cache członków przed sprawdzeniem ról
     try {
         logger.info('🔄 Odświeżanie cache\'u członków dla debug-roles...');
@@ -371,20 +371,20 @@ async function handleDebugRolesCommand(interaction, config) {
     } catch (error) {
         logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
-    
+
     try {
         const role = interaction.guild.roles.cache.get(roleId);
         const roleName = config.roleDisplayNames[category];
-        
+
         if (!role) {
             await interaction.editReply({ content: 'Nie znaleziono roli!', ephemeral: true });
             return;
         }
-        
+
         // Pobierz wszystkich członków z daną rolą
         const members = role.members;
         let membersList = '';
-        
+
         if (members.size === 0) {
             membersList = 'Brak członków z tą rolą.';
         } else {
@@ -399,16 +399,16 @@ async function handleDebugRolesCommand(interaction, config) {
                 count++;
             }
         }
-        
+
         // Informacje o roli karania
         const punishmentRole = interaction.guild.roles.cache.get(config.punishmentRoleId);
         const punishmentRoleInfo = punishmentRole ? `<@&${config.punishmentRoleId}>` : 'Nie znaleziono';
-        
+
         // Kanał ostrzeżeń
         const warningChannelId = config.warningChannels[roleId];
         const warningChannel = interaction.guild.channels.cache.get(warningChannelId);
         const warningChannelInfo = warningChannel ? `<#${warningChannelId}>` : 'Nie znaleziono';
-        
+
         const embed = new EmbedBuilder()
             .setTitle(`🔧 Debug - ${roleName}`)
             .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}`)
@@ -421,7 +421,7 @@ async function handleDebugRolesCommand(interaction, config) {
             .setColor('#0099FF')
             .setTimestamp()
             .setFooter({ text: `Debug wykonany przez ${interaction.user.tag}` });
-        
+
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {
         logger.error('[DEBUG] ❌ Błąd komendy /debug-roles:', error);
@@ -433,14 +433,14 @@ async function handleSelectMenu(interaction, config, reminderService) {
     if (interaction.customId === 'reminder_role_select') {
         const selectedRole = interaction.values[0];
         const roleId = config.targetRoles[selectedRole];
-        
+
         if (!roleId) {
             await interaction.reply({ content: 'Nieprawidłowa rola!', ephemeral: true });
             return;
         }
-        
+
         await interaction.deferReply();
-        
+
         try {
             await reminderService.sendBulkReminder(interaction.guild, roleId);
             await interaction.editReply({ content: `✅ Wysłano przypomnienie do roli ${config.roleDisplayNames[selectedRole]}` });
@@ -456,27 +456,27 @@ async function handleButton(interaction, config, databaseService, punishmentServ
         const parts = interaction.customId.split('_');
         const action = parts[1];
         const confirmationId = parts[2];
-        
+
         const data = confirmationData.get(confirmationId);
-        
+
         if (!data) {
             await interaction.reply({ content: 'Dane potwierdzenia wygasły. Spróbuj ponownie.', ephemeral: true });
             return;
         }
-        
+
         // Sprawdź czy użytkownik ma prawo do potwierdzenia
         if (data.originalUserId !== interaction.user.id) {
             await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', ephemeral: true });
             return;
         }
-        
+
         confirmationData.delete(confirmationId);
-        
+
         try {
             switch (action) {
                 case 'punish':
                     const results = await data.punishmentService.processPunishments(interaction.guild, data.foundUsers);
-                    
+
                     // Zaktualizuj ephemeral message z potwierdzeniem
                     const punishConfirmation = new EmbedBuilder()
                         .setTitle('✅ Punkty karne dodane')
@@ -484,27 +484,27 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                         .setColor('#00ff00')
                         .setTimestamp()
                         .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
-                    
+
                     await interaction.update({ 
                         embeds: [punishConfirmation],
                         components: []
                     });
-                    
+
                     // Oryginalny embed format dla publicznej wiadomości
                     const processedUsers = [];
                     let addedPoints = 0;
-                    
+
                     for (const result of results) {
                         const warningEmoji = result.points === 3 || result.points === 5 ? '📢' : '';
                         const punishmentEmoji = result.points >= 3 ? '🎭' : '';
                         processedUsers.push(`${result.user} - ${result.points} punktów ${punishmentEmoji}${warningEmoji}`);
                         addedPoints += 1;
                     }
-                    
+
                     const targetMembers = interaction.guild.members.cache.filter(member => 
                         Object.values(data.config.targetRoles).some(roleId => member.roles.cache.has(roleId))
                     );
-                    
+
                     // Wyślij publiczny embed z pełnym podsumowaniem
                     const punishEmbed = new EmbedBuilder()
                         .setTitle('📊 Analiza Zakończona')
@@ -519,7 +519,7 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                         .setImage(data.imageUrl)
                         .setTimestamp()
                         .setFooter({ text: `Przeanalizowano przez ${interaction.user.tag} | 🎭 = rola karania | 📢 = ostrzeżenie wysłane` });
-                    
+
                     await interaction.followUp({ 
                         embeds: [punishEmbed],
                         ephemeral: false
@@ -527,7 +527,7 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                     break;
                 case 'remind':
                     const reminderResult = await data.reminderService.sendReminders(interaction.guild, data.foundUsers);
-                    
+
                     // Zaktualizuj ephemeral message z potwierdzeniem
                     const confirmationSuccess = new EmbedBuilder()
                         .setTitle('✅ Przypomnienie wysłane')
@@ -535,26 +535,26 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                         .setColor('#00ff00')
                         .setTimestamp()
                         .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
-                    
+
                     await interaction.update({ 
                         embeds: [confirmationSuccess],
                         components: []
                     });
-                    
+
                     // Oblicz czas do deadline
                     const now = new Date();
                     const polandTime = new Date(now.toLocaleString('en-US', { timeZone: data.config.timezone }));
                     const deadline = new Date(polandTime);
                     deadline.setHours(data.config.bossDeadline.hour, data.config.bossDeadline.minute, 0, 0);
-                    
+
                     if (polandTime >= deadline) {
                         deadline.setDate(deadline.getDate() + 1);
                     }
-                    
+
                     const timeDiff = deadline - polandTime;
                     const hours = Math.floor(timeDiff / (1000 * 60 * 60));
                     const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-                    
+
                     let timeDisplay = '';
                     if (timeDiff > 0) {
                         if (hours > 0) {
@@ -565,9 +565,9 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                     } else {
                         timeDisplay = 'Deadline minął!';
                     }
-                    
+
                     const matchedUsers = data.foundUsers.map(user => `${user.member} (${user.matchedName})`);
-                    
+
                     // Wyślij publiczny embed z pełnym podsumowaniem
                     const reminderEmbed = new EmbedBuilder()
                         .setTitle('📢 Przypomnienie Wysłane')
@@ -582,7 +582,7 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                         .setImage(data.imageUrl)
                         .setTimestamp()
                         .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.tag} | Boss deadline: 17:50` });
-                    
+
                     await interaction.followUp({ 
                         embeds: [reminderEmbed],
                         ephemeral: false
@@ -596,16 +596,16 @@ async function handleButton(interaction, config, databaseService, punishmentServ
     } else if (interaction.customId.startsWith('cancel_')) {
         const parts = interaction.customId.split('_');
         const confirmationId = parts[2];
-        
+
         const data = confirmationData.get(confirmationId);
-        
+
         if (data && data.originalUserId !== interaction.user.id) {
             await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją anulować.', ephemeral: true });
             return;
         }
-        
+
         confirmationData.delete(confirmationId);
-        
+
         await interaction.update({ 
             content: '❌ Akcja została anulowana.', 
             components: [], 
@@ -643,7 +643,7 @@ async function registerSlashCommands(client) {
                     .setDescription('Zdjęcie do analizy')
                     .setRequired(true)
             ),
-        
+
         new SlashCommandBuilder()
             .setName('remind')
             .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0')
@@ -652,7 +652,7 @@ async function registerSlashCommands(client) {
                     .setDescription('Zdjęcie do analizy')
                     .setRequired(true)
             ),
-        
+
         new SlashCommandBuilder()
             .setName('punishment')
             .setDescription('Wyświetl ranking punktów karnych')
@@ -667,7 +667,7 @@ async function registerSlashCommands(client) {
                         { name: '🔥Polski Squad🔥', value: 'main' }
                     )
             ),
-        
+
         new SlashCommandBuilder()
             .setName('points')
             .setDescription('Dodaj lub odejmij punkty użytkownikowi')
@@ -683,7 +683,7 @@ async function registerSlashCommands(client) {
                     .setMinValue(-20)
                     .setMaxValue(20)
             ),
-        
+
         new SlashCommandBuilder()
             .setName('debug-roles')
             .setDescription('Debugowanie ról na serwerze')
@@ -699,7 +699,7 @@ async function registerSlashCommands(client) {
                     )
             )
     ];
-    
+
     try {
         logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
         await client.application.commands.set(commands);
