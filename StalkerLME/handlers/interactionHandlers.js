@@ -712,7 +712,7 @@ async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, i
                 const userMessages = messages.filter(msg => 
                     msg.author.id === member.user.id && 
                     msg.createdAt >= oneMonthAgo &&
-                    msg.reactions.cache.size > 0 // Ma reakcje
+                    msg.reactions && msg.reactions.cache && msg.reactions.cache.size > 0 // Ma reakcje
                 );
                 
                 if (userMessages.size > 0) {
