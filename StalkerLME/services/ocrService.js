@@ -31,10 +31,10 @@ class OCRService {
             const arrayBuffer = await response.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             
-            logger.info('Konwersja na czarno-biały');
-            logger.info('🎨 Rozpoczynam przetwarzanie obrazu...');
+            logger.info('Przetwarzanie obrazu - inwersja białego tekstu na czarny');
+            logger.info('🎨 Rozpoczynam przetwarzanie obrazu z inwersją...');
             const processedBuffer = await this.processImageWithSharp(buffer);
-            logger.info('✅ Przetwarzanie obrazu zakończone');
+            logger.info('✅ Przetwarzanie obrazu z inwersją zakończone');
             
             logger.info('Uruchamianie OCR');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
@@ -62,18 +62,35 @@ class OCRService {
 
     async processImageWithSharp(imageBuffer) {
         try {
-            // Przetwarzanie obrazu z fokusem na biały tekst
+            // Zaawansowane przetwarzanie obrazu dla czarnego tekstu
             const processedBuffer = await sharp(imageBuffer)
                 .greyscale()
-                // Zwiększamy kontrast aby wydobyć biały tekst
-                .normalize() // Rozciąga histogram dla lepszego kontrastu
-                .linear(1.5, -50) // Zwiększamy kontrast i zmniejszamy jasność tła
-                // Threshold - wszystko poza białym tekstem staje się czarne
-                .threshold(200) // Wyższy próg - tylko bardzo jasne piksele (biały tekst) pozostają białe
+                // 1. Zwiększamy rozdzielczość x3 dla lepszej jakości OCR
+                .resize({ width: null, height: null, fit: 'inside', withoutEnlargement: false, scale: 3 })
+                // 2. Delikatne rozmycie Gaussa - redukuje szum i artefakty
+                .blur(0.3)
+                // 3. Normalizacja dla pełnego wykorzystania zakresu tonalnego
+                .normalize()
+                // 4. INWERSJA OBRAZU - biały tekst staje się czarnym
+                .negate()
+                // 5. Gamma correction - poprawia czytelność środkowych tonów
+                .gamma(1.1)
+                // 6. Mocniejszy kontrast po inwersji dla ostrzejszego tekstu
+                .linear(2.2, -100) // Agresywniejszy kontrast
+                // 7. Wyostrzenie krawędzi tekstu
+                .sharpen({ sigma: 0.5, m1: 0, m2: 2, x1: 2, y2: 10 })
+                // 8. Operacja morfologiczna - zamykanie luk w literach
+                .convolve({
+                    width: 3,
+                    height: 3,
+                    kernel: [0, -1, 0, -1, 5, -1, 0, -1, 0]
+                })
+                // 9. Finalna binaryzacja - wszystkie odcienie szarości → białe, tekst → czarny
+                .threshold(130, { greyscale: false }) // Nieco wyższy próg po wszystkich operacjach
                 .png()
                 .toBuffer();
             
-            logger.info('✅ Obraz przetworzony - biały tekst na czarnym tle');
+            logger.info('✅ Obraz przetworzony - zaawansowane filtry dla czarnego tekstu (x3, blur, gamma, sharpen, morph)');
             return processedBuffer;
         } catch (error) {
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
@@ -81,86 +98,101 @@ class OCRService {
         }
     }
 
-    async extractPlayersFromText(text, guild = null) {
+    async extractPlayersFromText(text, guild = null, requestingMember = null) {
         try {
             logger.info('Analiza tekstu');
-            logger.info('🎯 Nowa logika szukania graczy z wynikiem 0...');
+            logger.info('🎯 Nowa logika: nick z roli → OCR → sprawdzanie końca linii...');
             
+            if (!guild || !requestingMember) {
+                logger.error('❌ Brak guild lub requestingMember - nie można kontynuować');
+                return [];
+            }
+            
+            // Krok 1: Pobierz nicki z odpowiedniej roli
+            const roleNicks = await this.getRoleNicks(guild, requestingMember);
+            if (roleNicks.length === 0) {
+                logger.info('❌ Brak nicków z odpowiedniej roli');
+                return [];
+            }
+            
+            logger.info(`👥 Znaleziono ${roleNicks.length} nicków z roli: ${roleNicks.map(n => n.displayName).join(', ')}`);
+            
+            // Krok 2: Przygotuj linie OCR
             const lines = text.split('\n').filter(line => line.trim().length > 0);
+            
+            // Oblicz średnią długość linii
+            const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / lines.length;
+            logger.info(`📏 Średnia długość linii: ${avgLineLength.toFixed(1)} znaków`);
+            
+            // Filtruj linie krótsze niż średnia
+            const validLines = lines.filter(line => line.trim().length >= avgLineLength);
+            logger.info(`📋 Analizuję ${validLines.length}/${lines.length} linii (dłuższe niż średnia)`);
+            
             const confirmedPlayers = [];
             
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
+            // Krok 3: Dla każdej linii sprawdź nicki z roli
+            for (let i = 0; i < validLines.length; i++) {
+                const line = validLines[i];
+                logger.info(`🔍 Linia ${i + 1}: "${line.trim()}"`);
                 
-                // Pomijaj pierwsze 2 linie
-                if (i < 2) {
-                    logger.info(`⏭️ Pomijam linię ${i + 1} (pierwsze 2): "${line.trim()}"`);
-                    continue;
-                }
-                
-                logger.info(`🔍 Analizuję linię ${i + 1}: "${line.trim()}"`);
-                
-                // Krok 1: Sprawdź czy linia zawiera zero
-                const hasZero = this.hasZeroScore(line);
-                logger.info(`   Zero w linii: ${hasZero ? '✅' : '❌'}`);
-                
-                if (hasZero) {
-                    // Krok 2: Znajdź potencjalne nicki (pomijając wzorce zero)
-                    const zeroElements = this.getZeroElementsFromLine(line);
-                    const words = line.split(/\s+/);
-                    const playerCandidates = words.filter(word => {
-                        return !zeroElements.includes(word) && this.isLikelyPlayerName(word);
-                    });
+                // Sprawdź czy w linii występuje któryś z nicków z roli
+                for (const roleNick of roleNicks) {
+                    const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
                     
-                    if (playerCandidates.length > 0) {
-                        const detectedNick = playerCandidates.reduce((longest, current) => 
-                            current.length > longest.length ? current : longest
-                        );
-                        logger.info(`   🎯 Wykryty nick: "${detectedNick}"`);
+                    if (similarity >= 0.7) {
+                        logger.info(`   ✅ Znaleziono nick "${roleNick.displayName}" (${(similarity * 100).toFixed(1)}% podobieństwa)`);
                         
-                        // Krok 3: Sprawdź podobieństwo z użytkownikami na serwerze (jeśli mamy guild)
-                        if (guild) {
-                            const similarUser = await this.findSimilarUserOnServer(guild, detectedNick);
-                            if (similarUser) {
-                                logger.info(`   ✅ Znaleziono podobnego użytkownika: ${similarUser.displayName} (${(similarUser.similarity * 100).toFixed(1)}%)`);
+                        // Krok 4: Sprawdź koniec linii za nickiem dla wyniku
+                        let endResult = this.analyzeLineEnd(line, roleNick.displayName);
+                        logger.info(`   📊 Analiza za nickiem: ${endResult.type} (wartość: "${endResult.value}")`);
+                        
+                        // Jeśli nick ma 10+ liter i nie znaleziono wyniku/zera w tej linii, sprawdź następną linię
+                        if (roleNick.displayName.length >= 10 && endResult.type === 'unknown') {
+                            // Znajdź rzeczywistą następną linię w oryginalnych liniach, nie w filtrowanych
+                            const currentLineText = line.trim();
+                            const allLines = text.split('\n').filter(line => line.trim().length > 0);
+                            const currentLineIndex = allLines.findIndex(l => l.trim() === currentLineText);
+                            
+                            if (currentLineIndex !== -1 && currentLineIndex + 1 < allLines.length) {
+                                const nextLine = allLines[currentLineIndex + 1];
+                                logger.info(`   🔍 Nick długi (${roleNick.displayName.length} znaków), sprawdzam rzeczywistą następną linię: "${nextLine.trim()}"`);
                                 
-                                // Krok 4: Szukaj dodatkowego potwierdzenia zera
-                                const additionalZeroConfirmed = await this.confirmZeroWithAdditionalCheck(detectedNick, line, lines, i);
+                                const nextEndResult = this.analyzeLineEnd(nextLine, null); // W następnej linii nie szukamy za nickiem
+                                logger.info(`   📊 Analiza następnej linii: ${nextEndResult.type} (wartość: "${nextEndResult.value}")`);
                                 
-                                if (additionalZeroConfirmed) {
-                                    confirmedPlayers.push({
-                                        detectedNick: detectedNick,
-                                        user: similarUser,
-                                        confirmed: true
-                                    });
-                                    logger.info(`   🎉 POTWIERDZONY: ${detectedNick} -> ${similarUser.displayName}`);
-                                } else {
-                                    logger.info(`   ⚠️ Brak dodatkowego potwierdzenia zera dla: ${detectedNick}`);
+                                if (nextEndResult.type !== 'unknown') {
+                                    endResult = nextEndResult;
+                                    logger.info(`   ✅ Użyto wyniku z następnej linii`);
                                 }
-                            } else {
-                                logger.info(`   ❌ Brak podobnego użytkownika na serwerze dla: ${detectedNick}`);
                             }
-                        } else {
-                            // Bez guild - dodaj bezpośrednio
-                            confirmedPlayers.push({
-                                detectedNick: detectedNick,
-                                user: null,
-                                confirmed: true
-                            });
-                            logger.info(`   ➕ Dodano bez sprawdzania serwera: ${detectedNick}`);
                         }
-                    } else {
-                        logger.info(`   ⚠️ Wszystkie słowa to wzorce zero: ${line.trim()}`);
+                        
+                        if (endResult.type === 'zero' || endResult.type === 'unknown') {
+                            confirmedPlayers.push({
+                                detectedNick: roleNick.displayName,
+                                user: roleNick,
+                                confirmed: true,
+                                line: line.trim(),
+                                endValue: endResult.value
+                            });
+                            if (endResult.type === 'zero') {
+                                logger.info(`   🎉 POTWIERDZONY zero (wzorzec): ${roleNick.displayName}`);
+                            } else {
+                                logger.info(`   🎉 POTWIERDZONY zero (brak wyniku): ${roleNick.displayName}`);
+                            }
+                        } else if (endResult.type === 'negative') {
+                            logger.info(`   ❌ Wynik negatywny: ${roleNick.displayName} (${endResult.value})`);
+                        }
+                        
+                        break; // Jeden nick na linię
                     }
                 }
             }
             
             const resultNicks = confirmedPlayers.map(p => p.detectedNick);
-            const usersWithServerMatch = confirmedPlayers.filter(p => p.user !== null).length;
             
             logger.info(`📊 PODSUMOWANIE ANALIZY OCR:`);
-            logger.info(`   🎯 Wykrytych nicków z zerem: ${confirmedPlayers.length}`);
-            logger.info(`   ✅ Dopasowanych do użytkowników serwera: ${usersWithServerMatch}`);
+            logger.info(`   🎯 Potwierdzonych graczy z zerem: ${confirmedPlayers.length}`);
             logger.info(`   👥 Lista: ${resultNicks.join(', ')}`);
             return resultNicks;
         } catch (error) {
@@ -438,6 +470,164 @@ class OCRService {
             logger.error('❌ Błąd wyszukiwania użytkowników:', error);
             return [];
         }
+    }
+
+    async getRoleNicks(guild, requestingMember) {
+        try {
+            const targetRoleIds = Object.values(this.config.targetRoles);
+            let userRoleId = null;
+            
+            // Znajdź rolę użytkownika wykonującego polecenie
+            for (const roleId of targetRoleIds) {
+                if (requestingMember.roles.cache.has(roleId)) {
+                    userRoleId = roleId;
+                    break;
+                }
+            }
+            
+            if (!userRoleId) {
+                logger.info('❌ Użytkownik nie posiada żadnej z ról TARGET');
+                return [];
+            }
+            
+            logger.info(`🎯 Pobieranie nicków z roli: ${userRoleId}`);
+            
+            const members = await guild.members.fetch();
+            const roleMembers = [];
+            
+            for (const [userId, member] of members) {
+                if (member.roles.cache.has(userRoleId)) {
+                    roleMembers.push({
+                        userId: userId,
+                        member: member,
+                        displayName: member.displayName
+                    });
+                }
+            }
+            
+            logger.info(`👥 Znaleziono ${roleMembers.length} członków z rolą ${userRoleId}`);
+            return roleMembers;
+        } catch (error) {
+            logger.error('❌ Błąd pobierania nicków z roli:', error);
+            return [];
+        }
+    }
+
+    calculateLineSimilarity(line, nick) {
+        const lineLower = line.toLowerCase();
+        const nickLower = nick.toLowerCase();
+        
+        // Sprawdź czy nick występuje w linii
+        if (lineLower.includes(nickLower)) {
+            return 1.0; // 100% jeśli nick jest w linii
+        }
+        
+        // Sprawdź podobieństwo używając funkcji z helpers
+        return calculateNameSimilarity(nick, line);
+    }
+
+    analyzeLineEnd(line, nickName = null) {
+        const trimmedLine = line.trim();
+        const words = trimmedLine.split(/\s+/);
+        
+        let searchText = trimmedLine;
+        
+        // Jeśli mamy nick, szukaj tylko za nickiem
+        if (nickName) {
+            const nickIndex = trimmedLine.toLowerCase().indexOf(nickName.toLowerCase());
+            if (nickIndex !== -1) {
+                // Tekst za nickiem
+                searchText = trimmedLine.substring(nickIndex + nickName.length).trim();
+                if (searchText.length === 0) {
+                    return { type: 'unknown', value: 'brak tekstu za nickiem' };
+                }
+            }
+        }
+        
+        const searchWords = searchText.split(/\s+/);
+        const lastWord = searchWords[searchWords.length - 1];
+        
+        // Sprawdź wzorce zera w tekście za nickiem
+        if (this.isZeroPattern(lastWord)) {
+            return { type: 'zero', value: lastWord };
+        }
+        
+        // Sprawdź czy w tekście za nickiem są liczby 2+ cyfrowe
+        const numberMatches = searchText.match(/\d{2,}/g);
+        if (numberMatches && numberMatches.length > 0) {
+            // Znajdź ostatnią liczbę 2+ cyfrową za nickiem
+            const lastNumber = numberMatches[numberMatches.length - 1];
+            return { type: 'negative', value: lastNumber };
+        }
+        
+        // Sprawdź czy to może być wzorzec zera w tekście za nickiem
+        for (const word of searchWords) {
+            if (this.isZeroPattern(word)) {
+                return { type: 'zero', value: word };
+            }
+        }
+        
+        return { type: 'unknown', value: lastWord };
+    }
+
+    isZeroPattern(word) {
+        // Wszystkie wzorce zera z wcześniejszych rozmów
+        const zeroPatterns = [
+            // Czyste cyfry
+            /^0$/,                    // czyste 0
+            /^1$/,                    // czyste 1
+            /^9$/,                    // czyste 9
+            /^o$/,                    // czyste o
+            
+            // W nawiasach okrągłych
+            /^\(0\)$/,               // (0)
+            /^\(1\)$/,               // (1)
+            /^\(9\)$/,               // (9)
+            /^\(o\)$/,               // (o)
+            
+            // W nawiasach kwadratowych
+            /^\[0\]$/,               // [0]
+            /^\[1\]$/,               // [1]
+            /^\[9\]$/,               // [9]
+            /^\[o\]$/,               // [o]
+            
+            // Z nawiasem na końcu
+            /^0\)$/,                 // 0)
+            /^1\)$/,                 // 1)
+            /^9\)$/,                 // 9)
+            /^o\)$/,                 // o)
+            
+            // Z otwartym nawiasem okrągłym na początku
+            /^\(0$/,                 // (0
+            /^\(1$/,                 // (1
+            /^\(9$/,                 // (9
+            /^\(o$/,                 // (o
+            
+            // Z otwartym nawiasem kwadratowym na początku
+            /^\[0$/,                 // [0
+            /^\[1$/,                 // [1
+            /^\[9$/,                 // [9
+            /^\[o$/,                 // [o
+            
+            // Z zamkniętym nawiasem kwadratowym na końcu
+            /^0\]$/,                 // 0]
+            /^1\]$/,                 // 1]
+            /^9\]$/,                 // 9]
+            /^o\]$/,                 // o]
+            
+            // Dodatkowe wzorce
+            /^zo$/                   // zo
+        ];
+        
+        const wordLower = word.toLowerCase();
+        
+        for (const pattern of zeroPatterns) {
+            if (pattern.test(wordLower)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     async cleanupTempFiles() {

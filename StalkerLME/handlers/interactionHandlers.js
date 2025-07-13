@@ -79,71 +79,15 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
         
         const text = await ocrService.processImage(attachment);
-        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild);
+        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
         
         if (zeroScorePlayers.length === 0) {
             await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
             return;
         }
         
-        const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers, interaction.member);
-        
-        if (foundUsers.length === 0) {
-            await interaction.editReply(`📷 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0: \`${zeroScorePlayers.join(', ')}\`\n❌ Ale nie udało się dopasować żadnego z nich do członków.`);
-            return;
-        }
-        
-        // Generowanie unikalnego ID dla potwierdzenia
-        const confirmationId = Date.now().toString();
-        
-        // Zapisanie danych do mapy
-        confirmationData.set(confirmationId, {
-            action: 'punish',
-            foundUsers: foundUsers,
-            zeroScorePlayers: zeroScorePlayers,
-            imageUrl: attachment.url,
-            originalUserId: interaction.user.id,
-            config: config,
-            punishmentService: punishmentService
-        });
-        
-        // Usunięcie danych po 5 minut
-        setTimeout(() => {
-            confirmationData.delete(confirmationId);
-        }, 5 * 60 * 1000);
-        
-        // Tworzenie przycisków
-        const confirmButton = new ButtonBuilder()
-            .setCustomId(`confirm_punish_${confirmationId}`)
-            .setLabel('✅ Tak')
-            .setStyle(ButtonStyle.Success);
-        
-        const cancelButton = new ButtonBuilder()
-            .setCustomId(`cancel_punish_${confirmationId}`)
-            .setLabel('❌ Nie')
-            .setStyle(ButtonStyle.Danger);
-        
-        const row = new ActionRowBuilder()
-            .addComponents(confirmButton, cancelButton);
-        
-        const matchedUsers = foundUsers.map(user => `${user.member.displayName} (${user.matchedName})`);
-        
-        const confirmationEmbed = new EmbedBuilder()
-            .setTitle('⚖️ Potwierdzenie dodania punktów karnych')
-            .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
-            .setColor('#ff6b6b')
-            .addFields(
-                { name: `📷 Znaleziono graczy z wynikiem 0 (${zeroScorePlayers.length})`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false },
-                { name: `✅ Dopasowano członków Discord (${foundUsers.length})`, value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false }
-            )
-            .setImage(attachment.url)
-            .setTimestamp()
-            .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
-        
-        await interaction.editReply({ 
-            embeds: [confirmationEmbed],
-            components: [row]
-        });
+        // Sprawdź urlopy przed potwierdzeniem (tylko dla punish)
+        await checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, attachment.url, config, punishmentService);
         
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
@@ -169,27 +113,21 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
         
         const text = await ocrService.processImage(attachment);
-        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild);
+        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
         
         if (zeroScorePlayers.length === 0) {
             await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
             return;
         }
         
-        const foundUsers = await ocrService.findUsersInGuild(interaction.guild, zeroScorePlayers, interaction.member);
-        
-        if (foundUsers.length === 0) {
-            await interaction.editReply(`📷 Znaleziono ${zeroScorePlayers.length} graczy z wynikiem 0: \`${zeroScorePlayers.join(', ')}\`\n❌ Ale nie udało się dopasować żadnego z nich do członków.`);
-            return;
-        }
-        
+        // W nowej logice zeroScorePlayers to już gotowa lista nicków użytkowników z odpowiednią rolą
         // Generowanie unikalnego ID dla potwierdzenia
         const confirmationId = Date.now().toString();
         
         // Zapisanie danych do mapy
         confirmationData.set(confirmationId, {
             action: 'remind',
-            foundUsers: foundUsers,
+            foundUsers: zeroScorePlayers, // Już są to nicki użytkowników
             zeroScorePlayers: zeroScorePlayers,
             imageUrl: attachment.url,
             originalUserId: interaction.user.id,
@@ -216,15 +154,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         const row = new ActionRowBuilder()
             .addComponents(confirmButton, cancelButton);
         
-        const matchedUsers = foundUsers.map(user => `${user.member.displayName} (${user.matchedName})`);
-        
         const confirmationEmbed = new EmbedBuilder()
             .setTitle('🔍 Potwierdzenie wysłania przypomnienia')
             .setDescription('Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?')
             .setColor('#ffa500')
             .addFields(
-                { name: `📷 Znaleziono graczy z wynikiem 0 (${zeroScorePlayers.length})`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false },
-                { name: `✅ Dopasowano członków Discord (${foundUsers.length})`, value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false }
+                { name: `✅ Znaleziono ${zeroScorePlayers.length} graczy z wynikiem ZERO`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false }
             )
             .setImage(attachment.url)
             .setTimestamp()
@@ -593,6 +528,46 @@ async function handleButton(interaction, config, databaseService, punishmentServ
             logger.error('[CONFIRM] ❌ Błąd potwierdzenia:', error);
             await interaction.followUp({ content: messages.errors.unknownError, ephemeral: true });
         }
+    } else if (interaction.customId.startsWith('vacation_')) {
+        const parts = interaction.customId.split('_');
+        const choice = parts[1]; // 'yes' lub 'no'
+        const vacationId = parts[2];
+        
+        const data = confirmationData.get(vacationId);
+        
+        if (!data) {
+            await interaction.reply({ content: 'Dane wygasły. Spróbuj ponownie.', ephemeral: true });
+            return;
+        }
+        
+        if (data.originalUserId !== interaction.user.id) {
+            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', ephemeral: true });
+            return;
+        }
+        
+        confirmationData.delete(vacationId);
+        
+        let finalPlayers = data.allPlayers;
+        
+        if (choice === 'no') {
+            // Usuń urlopowiczów z listy
+            finalPlayers = data.allPlayers.filter(player => !data.playersWithVacation.includes(player));
+            logger.info(`🏖️ Usunięto urlopowiczów z listy: ${data.playersWithVacation.join(', ')}`);
+        } else {
+            logger.info(`🏖️ Urlopowicze zostają w liście: ${data.playersWithVacation.join(', ')}`);
+        }
+        
+        if (finalPlayers.length === 0) {
+            await interaction.update({
+                content: 'Brak graczy do ukarania po wykluczeniu urlopowiczów.',
+                components: []
+            });
+            return;
+        }
+        
+        // Przejdź do finalnego potwierdzenia - używamy update zamiast editReply
+        await showFinalConfirmationWithUpdate(interaction, finalPlayers, data.imageUrl, data.config, data.punishmentService);
+        
     } else if (interaction.customId.startsWith('cancel_')) {
         const parts = interaction.customId.split('_');
         const confirmationId = parts[2];
@@ -707,6 +682,195 @@ async function registerSlashCommands(client) {
     } catch (error) {
         logger.error('[COMMANDS] ❌ Błąd rejestracji komend:', error);
     }
+}
+
+async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService) {
+    const vacationChannelId = '1269726207633522740';
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    try {
+        const vacationChannel = await interaction.guild.channels.fetch(vacationChannelId);
+        if (!vacationChannel) {
+            logger.warn('Kanał urlopów nie znaleziony, pomijam sprawdzenie');
+            return await showFinalConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService);
+        }
+        
+        const playersWithVacation = [];
+        
+        // Sprawdź każdego gracza
+        for (const playerNick of zeroScorePlayers) {
+            // Znajdź członka serwera po nicku
+            const members = await interaction.guild.members.fetch();
+            const member = members.find(m => m.displayName.toLowerCase() === playerNick.toLowerCase());
+            
+            if (member) {
+                // Sprawdź wiadomości na kanale urlopów
+                const messages = await vacationChannel.messages.fetch({ limit: 100 });
+                const userMessages = messages.filter(msg => 
+                    msg.author.id === member.user.id && 
+                    msg.createdAt >= oneMonthAgo &&
+                    msg.reactions.cache.size > 0 // Ma reakcje
+                );
+                
+                if (userMessages.size > 0) {
+                    playersWithVacation.push(playerNick);
+                    logger.info(`🏖️ ${playerNick} zgłaszał urlop w ostatnim miesiącu`);
+                }
+            }
+        }
+        
+        if (playersWithVacation.length > 0) {
+            // Pokaż pytanie o urlopowiczów
+            await showVacationQuestion(interaction, playersWithVacation, zeroScorePlayers, imageUrl, config, punishmentService);
+        } else {
+            // Przejdź do normalnego potwierdzenia
+            await showFinalConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService);
+        }
+        
+    } catch (error) {
+        logger.error('Błąd sprawdzania urlopów:', error);
+        await showFinalConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService);
+    }
+}
+
+async function showVacationQuestion(interaction, playersWithVacation, allPlayers, imageUrl, config, punishmentService) {
+    const vacationId = Date.now().toString();
+    
+    // Zapisz dane do mapy
+    confirmationData.set(vacationId, {
+        action: 'vacation_check',
+        playersWithVacation: playersWithVacation,
+        allPlayers: allPlayers,
+        imageUrl: imageUrl,
+        config: config,
+        punishmentService: punishmentService,
+        originalUserId: interaction.user.id
+    });
+    
+    // Usuń dane po 5 minut
+    setTimeout(() => {
+        confirmationData.delete(vacationId);
+    }, 5 * 60 * 1000);
+    
+    const playersText = playersWithVacation.map(nick => `**${nick}**`).join(', ');
+    
+    const yesButton = new ButtonBuilder()
+        .setCustomId(`vacation_yes_${vacationId}`)
+        .setLabel('✅ Tak')
+        .setStyle(ButtonStyle.Success);
+    
+    const noButton = new ButtonBuilder()
+        .setCustomId(`vacation_no_${vacationId}`)
+        .setLabel('❌ Nie')
+        .setStyle(ButtonStyle.Danger);
+    
+    const row = new ActionRowBuilder()
+        .addComponents(yesButton, noButton);
+    
+    await interaction.editReply({
+        content: `🏖️ ${playersText} zgłaszał/a urlop w ostatnim czasie.\nCzy w takim razie dodać punkty kary?`,
+        components: [row],
+        ephemeral: true
+    });
+}
+
+async function showFinalConfirmation(interaction, finalPlayers, imageUrl, config, punishmentService) {
+    const confirmationId = Date.now().toString();
+    
+    // Zapisz dane do mapy
+    confirmationData.set(confirmationId, {
+        action: 'punish',
+        foundUsers: finalPlayers,
+        zeroScorePlayers: finalPlayers,
+        imageUrl: imageUrl,
+        originalUserId: interaction.user.id,
+        config: config,
+        punishmentService: punishmentService
+    });
+    
+    // Usuń dane po 5 minut
+    setTimeout(() => {
+        confirmationData.delete(confirmationId);
+    }, 5 * 60 * 1000);
+    
+    const confirmButton = new ButtonBuilder()
+        .setCustomId(`confirm_punish_${confirmationId}`)
+        .setLabel('✅ Tak')
+        .setStyle(ButtonStyle.Success);
+    
+    const cancelButton = new ButtonBuilder()
+        .setCustomId(`cancel_punish_${confirmationId}`)
+        .setLabel('❌ Nie')
+        .setStyle(ButtonStyle.Danger);
+    
+    const row = new ActionRowBuilder()
+        .addComponents(confirmButton, cancelButton);
+    
+    const confirmationEmbed = new EmbedBuilder()
+        .setTitle('⚖️ Potwierdzenie dodania punktów karnych')
+        .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
+        .setColor('#ff6b6b')
+        .addFields(
+            { name: `✅ Znaleziono ${finalPlayers.length} graczy z wynikiem ZERO`, value: `\`${finalPlayers.join(', ')}\``, inline: false }
+        )
+        .setImage(imageUrl)
+        .setTimestamp()
+        .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
+    
+    await interaction.editReply({ 
+        embeds: [confirmationEmbed],
+        components: [row]
+    });
+}
+
+async function showFinalConfirmationWithUpdate(interaction, finalPlayers, imageUrl, config, punishmentService) {
+    const confirmationId = Date.now().toString();
+    
+    // Zapisz dane do mapy
+    confirmationData.set(confirmationId, {
+        action: 'punish',
+        foundUsers: finalPlayers,
+        zeroScorePlayers: finalPlayers,
+        imageUrl: imageUrl,
+        originalUserId: interaction.user.id,
+        config: config,
+        punishmentService: punishmentService
+    });
+    
+    // Usuń dane po 5 minut
+    setTimeout(() => {
+        confirmationData.delete(confirmationId);
+    }, 5 * 60 * 1000);
+    
+    const confirmButton = new ButtonBuilder()
+        .setCustomId(`confirm_punish_${confirmationId}`)
+        .setLabel('✅ Tak')
+        .setStyle(ButtonStyle.Success);
+    
+    const cancelButton = new ButtonBuilder()
+        .setCustomId(`cancel_punish_${confirmationId}`)
+        .setLabel('❌ Nie')
+        .setStyle(ButtonStyle.Danger);
+    
+    const row = new ActionRowBuilder()
+        .addComponents(confirmButton, cancelButton);
+    
+    const confirmationEmbed = new EmbedBuilder()
+        .setTitle('⚖️ Potwierdzenie dodania punktów karnych')
+        .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
+        .setColor('#ff6b6b')
+        .addFields(
+            { name: `✅ Znaleziono ${finalPlayers.length} graczy z wynikiem ZERO`, value: `\`${finalPlayers.join(', ')}\``, inline: false }
+        )
+        .setImage(imageUrl)
+        .setTimestamp()
+        .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
+    
+    await interaction.update({ 
+        embeds: [confirmationEmbed],
+        components: [row]
+    });
 }
 
 module.exports = {
