@@ -690,6 +690,8 @@ async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, i
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
     try {
+        logger.info(`🏖️ Rozpoczynam sprawdzanie urlopów dla ${zeroScorePlayers.length} graczy`);
+        
         const vacationChannel = await interaction.guild.channels.fetch(vacationChannelId);
         if (!vacationChannel) {
             logger.warn('Kanał urlopów nie znaleziony, pomijam sprawdzenie');
@@ -729,8 +731,14 @@ async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, i
         }
         
     } catch (error) {
-        logger.error('Błąd sprawdzania urlopów:', error);
-        await showFinalConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService);
+        logger.error('❌ Błąd sprawdzania urlopów:', error.message);
+        logger.error('❌ Stack trace:', error.stack);
+        try {
+            await showFinalConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService);
+        } catch (fallbackError) {
+            logger.error('❌ Błąd fallback confirmation:', fallbackError.message);
+            await interaction.editReply('❌ Wystąpił błąd podczas sprawdzania urlopów.');
+        }
     }
 }
 
@@ -770,8 +778,7 @@ async function showVacationQuestion(interaction, playersWithVacation, allPlayers
     
     await interaction.editReply({
         content: `🏖️ ${playersText} zgłaszał/a urlop w ostatnim czasie.\nCzy w takim razie dodać punkty kary?`,
-        components: [row],
-        ephemeral: true
+        components: [row]
     });
 }
 
