@@ -207,18 +207,29 @@ class DatabaseService {
             
             for (const userId in punishments[guildId]) {
                 const oldPoints = punishments[guildId][userId].points;
-                punishments[guildId][userId].points = 0;
-                punishments[guildId][userId].history.push({
-                    points: 0,
-                    reason: 'Automatyczne tygodniowe czyszczenie',
-                    date: now.toISOString()
-                });
-                logger.info(`➖ Użytkownik ${userId}: usunięto ${oldPoints} punktów`);
-                totalCleaned++;
-                usersInGuild++;
+                if (oldPoints > 0) {
+                    punishments[guildId][userId].points = Math.max(0, oldPoints - 1);
+                    const newPoints = punishments[guildId][userId].points;
+                    punishments[guildId][userId].history.push({
+                        points: -1,
+                        reason: 'Automatyczne tygodniowe usuwanie 1 punktu',
+                        date: now.toISOString()
+                    });
+                    logger.info(`➖ Użytkownik ${userId}: ${oldPoints} -> ${newPoints} punktów (usunięto 1)`);
+                    totalCleaned++;
+                    usersInGuild++;
+                    
+                    // Jeśli użytkownik ma teraz 0 punktów, usuń go z bazy
+                    if (newPoints === 0) {
+                        delete punishments[guildId][userId];
+                        logger.info(`🗑️ Użytkownik ${userId}: usunięty z bazy (0 punktów)`);
+                    }
+                } else {
+                    logger.info(`⏭️ Użytkownik ${userId}: już ma 0 punktów, pomijam`);
+                }
             }
             
-            logger.info(`✅ Serwer ${guildId}: ${usersInGuild} użytkowników wyczyszczonych`);
+            logger.info(`✅ Serwer ${guildId}: ${usersInGuild} użytkowników przetworzonych`);
             guildsProcessed++;
         }
         

@@ -76,7 +76,12 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
     
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
-        await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
+        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', ephemeral: true });
+        
+        // Odśwież cache członków przed analizą
+        logger.info('🔄 Odświeżanie cache\'u członków dla komendy /punish...');
+        await interaction.guild.members.fetch();
+        logger.info('✅ Cache członków odświeżony');
         
         const text = await ocrService.processImage(attachment);
         const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
@@ -110,7 +115,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
     
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
-        await interaction.reply({ content: '🔍 Analizuję zdjęcie...', ephemeral: true });
+        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', ephemeral: true });
+        
+        // Odśwież cache członków przed analizą
+        logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
+        await interaction.guild.members.fetch();
+        logger.info('✅ Cache członków odświeżony');
         
         const text = await ocrService.processImage(attachment);
         const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
@@ -243,12 +253,13 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
             .addFields(
                 { name: '🗓️ Ostatnie usuwanie punktów', value: lastRemovalText, inline: false },
                 { name: '⏰ Następne usuwanie punktów', value: nextRemovalText, inline: false },
-                { name: '🎭 Rola karania', value: `<@&${config.punishmentRoleId}>`, inline: false },
+                { name: '🎭 Rola karania (3+ punktów)', value: `<@&${config.punishmentRoleId}>`, inline: false },
+                { name: '🚨 Rola zakazu loterii (5+ punktów)', value: `<@&${config.lotteryBanRoleId}>`, inline: false },
                 { name: '📢 Kanał ostrzeżeń', value: warningChannelText, inline: false },
-                { name: '⚖️ Zasady', value: '3+ punktów = rola karania\n< 3 punktów = brak roli\nOstrzeżenia: 3 i 5 punktów', inline: false }
+                { name: '⚖️ Zasady', value: '3+ punktów = rola karania\n5+ punktów = zakaz loterii\n< 3 punktów = brak roli\nOstrzeżenia: 3 i 5 punktów', inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: `Kategoria: ${category} | Punkty usuwane co tydzień w poniedziałek o północy (${config.timezone})` });
+            .setFooter({ text: `Kategoria: ${category} | Co tydzień w poniedziałek o północy usuwany jest 1 punkt każdemu (${config.timezone})` });
         
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {

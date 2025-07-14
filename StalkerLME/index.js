@@ -77,16 +77,7 @@ client.once(Events.ClientReady, async () => {
         timezone: config.timezone
     });
     
-    // Uruchomienie zadania cron dla odświeżania cache'u członków (co godzinę)
-    cron.schedule('0 * * * *', async () => {
-        logWithTimestamp('Rozpoczynam odświeżanie cache\'u członków...', 'info');
-        await refreshMemberCache();
-    }, {
-        timezone: config.timezone
-    });
-    
-    // Początkowe odświeżenie cache'u członków
-    await refreshMemberCache();
+    // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
     
     logger.info('Bot Stalker LME jest gotowy do pracy!');
 });
