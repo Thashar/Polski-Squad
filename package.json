@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "local": "node index.js --local",
     "dev": "node index.js",
     "rekruter": "cd Rekruter && node index.js",
     "szkolenia": "cd Szkolenia && node index.js",

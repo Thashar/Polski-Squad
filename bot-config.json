@@ -1,0 +1,4 @@
+{
+  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe"],
+  "development": ["stalkerlme"]
+}

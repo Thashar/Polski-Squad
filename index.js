@@ -1,61 +1,52 @@
 // Import system logowania
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 
-// Import botów
-const rekruterBot = require('./Rekruter/index');
-const szkoleniaBot = require('./Szkolenia/index');
-const stalkerLMEBot = require('./StalkerLME/index');
-const muteuszBot = require('./Muteusz/index');
-const endersEchoBot = require('./EndersEcho/index');
-const KontrolerBot = require('./Kontroler/index');
-const konklaweBot = require('./Konklawe/index');
-
 /**
- * Konfiguracja botów z ich właściwościami TEST
+ * Konfiguracja botów z ich właściwościami
  */
 const botConfigs = [
     {
         name: 'Rekruter Bot',
         loggerName: 'Rekruter',
         emoji: '🎯',
-        instance: rekruterBot,
+        path: './Rekruter/index',
         hasSpecialHandling: true // Bot Rekruter ma dodatkową logikę dla login()
     },
     {
         name: 'Szkolenia Bot',
         loggerName: 'Szkolenia',
         emoji: '🎓',
-        instance: szkoleniaBot
+        path: './Szkolenia/index'
     },
     {
         name: 'Stalker LME Bot',
         loggerName: 'StalkerLME',
         emoji: '⚔️',
-        instance: stalkerLMEBot
+        path: './StalkerLME/index'
     },
     {
         name: 'Muteusz Bot',
         loggerName: 'Muteusz',
         emoji: '🤖',
-        instance: muteuszBot
+        path: './Muteusz/index'
     },
     {
         name: 'EndersEcho Bot',
         loggerName: 'EndersEcho',
         emoji: '🏆',
-        instance: endersEchoBot
+        path: './EndersEcho/index'
     },
     {
         name: 'Kontroler Bot',
         loggerName: 'Kontroler',
         emoji: '🎯',
-        instance: KontrolerBot
+        path: './Kontroler/index'
     },
     {
         name: 'Konklawe Bot',
         loggerName: 'Konklawe',
         emoji: '⛪',
-        instance: konklaweBot
+        path: './Konklawe/index'
     }
 ];
 
@@ -64,9 +55,12 @@ const botConfigs = [
  * @param {Object} config - Konfiguracja bota
  */
 async function startBot(config) {
-    const { name, loggerName, emoji, instance, hasSpecialHandling } = config;
+    const { name, loggerName, emoji, path, hasSpecialHandling } = config;
     
     try {
+        // Dynamiczny import bota tylko gdy jest potrzebny
+        const instance = require(path);
+        
         if (typeof instance.start === 'function') {
             // Bot ma metodę start()
             await instance.start();
@@ -84,14 +78,52 @@ async function startBot(config) {
 }
 
 /**
- * Uruchamia wszystkie boty sekwencyjnie
+ * Wczytuje konfigurację botów z pliku
+ */
+function loadBotConfig() {
+    try {
+        const fs = require('fs');
+        const config = JSON.parse(fs.readFileSync('./bot-config.json', 'utf8'));
+        
+        // Sprawdź czy uruchamiamy w trybie lokalnym (argument --local)
+        const isLocal = process.argv.includes('--local');
+        const environment = isLocal ? 'development' : 'production';
+        
+        return config[environment] || [];
+    } catch (error) {
+        console.error('❌ Błąd wczytywania konfiguracji botów:', error.message);
+        console.log('🔄 Używam domyślnej konfiguracji (wszystkie boty)');
+        return ['rekruter', 'szkolenia', 'stalker', 'muteusz', 'endersecho', 'kontroler', 'konklawe'];
+    }
+}
+
+/**
+ * Uruchamia wybrane boty na podstawie konfiguracji
  */
 async function startAllBots() {
     setupGlobalLogging();
     
-    for (const botConfig of botConfigs) {
+    const enabledBotNames = loadBotConfig();
+    const isLocal = process.argv.includes('--local');
+    const environment = isLocal ? 'development' : 'production';
+    
+    console.log(`🚀 Uruchamianie botów w trybie: ${environment}`);
+    console.log(`📋 Wybrane boty: ${enabledBotNames.join(', ')}`);
+    
+    const botsToStart = botConfigs.filter(bot => 
+        enabledBotNames.includes(bot.loggerName.toLowerCase())
+    );
+    
+    if (botsToStart.length === 0) {
+        console.log('⚠️  Brak botów do uruchomienia!');
+        return;
+    }
+    
+    for (const botConfig of botsToStart) {
         await startBot(botConfig);
     }
+    
+    console.log(`✅ Uruchomiono ${botsToStart.length} botów`);
 }
 
 /**
