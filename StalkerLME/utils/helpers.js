@@ -82,7 +82,7 @@ async function ensureDirectoryExists(dirPath) {
         await fs.mkdir(dirPath, { recursive: true });
         return true;
     } catch (error) {
-        console.error(`Błąd tworzenia folderu ${dirPath}:`, error);
+        logger.error(`Błąd tworzenia folderu ${dirPath}:`, error);
         return false;
     }
 }
@@ -98,7 +98,7 @@ async function safeReadJSON(filePath, defaultValue = {}) {
         }
         return defaultValue;
     } catch (error) {
-        console.error(`Błąd odczytu pliku JSON ${filePath}:`, error);
+        logger.error(`Błąd odczytu pliku JSON ${filePath}:`, error);
         return defaultValue;
     }
 }
@@ -112,7 +112,7 @@ async function safeWriteJSON(filePath, data) {
         await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
         return true;
     } catch (error) {
-        console.error(`Błąd zapisu pliku JSON ${filePath}:`, error);
+        logger.error(`Błąd zapisu pliku JSON ${filePath}:`, error);
         return false;
     }
 }
@@ -343,7 +343,7 @@ async function cleanupOldFiles(directoryPath, maxAgeHours = 24) {
             }
         }
     } catch (error) {
-        console.error(`Błąd czyszczenia starych plików z ${directoryPath}:`, error);
+        logger.error(`Błąd czyszczenia starych plików z ${directoryPath}:`, error);
     }
 }
 

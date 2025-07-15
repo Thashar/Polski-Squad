@@ -1,8 +1,9 @@
-const { logWithTimestamp } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
 
 class LogService {
     constructor(config) {
         this.config = config;
+        this.logger = createBotLogger('EndersEcho');
     }
 
     /**
@@ -15,7 +16,19 @@ class LogService {
         const prefix = interaction ? `[${interaction.user.tag}] ` : '';
         const fullMessage = `${prefix}${message}`;
         
-        logWithTimestamp(fullMessage, type);
+        switch(type) {
+            case 'error':
+                this.logger.error(fullMessage);
+                break;
+            case 'warn':
+                this.logger.warn(fullMessage);
+                break;
+            case 'success':
+                this.logger.info(`✅ ${fullMessage}`);
+                break;
+            default:
+                this.logger.info(fullMessage);
+        }
     }
 
     /**

@@ -92,7 +92,7 @@ function onReady() {
  * @param {Error} error - Błąd
  */
 function onError(error) {
-    logWithTimestamp(`Błąd klienta Discord: ${error.message}`, 'error');
+    logger.error(`Błąd klienta Discord: ${error.message}`);
 }
 
 /**
@@ -100,7 +100,7 @@ function onError(error) {
  * @param {Error} error - Błąd
  */
 function onUnhandledRejection(error) {
-    logWithTimestamp(`Nieobsłużone odrzucenie Promise: ${error.message}`, 'error');
+    logger.error(`Nieobsłużone odrzucenie Promise: ${error.message}`);
 }
 
 /**
@@ -108,7 +108,7 @@ function onUnhandledRejection(error) {
  * @param {Error} error - Błąd
  */
 function onUncaughtException(error) {
-    logWithTimestamp(`Nieobsłużony wyjątek: ${error.message}`, 'error');
+    logger.error(`Nieobsłużony wyjątek: ${error.message}`);
     process.exit(1);
 }
 
@@ -117,7 +117,7 @@ function onUncaughtException(error) {
  * @param {string} signal - Sygnał
  */
 function onShutdown(signal) {
-    logWithTimestamp(`Otrzymano sygnał ${signal}. Zamykanie bota...`, 'warn');
+    logger.warn(`Otrzymano sygnał ${signal}. Zamykanie bota...`);
     client.destroy();
     process.exit(0);
 }
@@ -146,7 +146,7 @@ async function start() {
         setupEventHandlers();
         await client.login(config.token);
     } catch (error) {
-        logWithTimestamp(`Błąd podczas logowania: ${error.message}`, 'error');
+        logger.error(`Błąd podczas logowania: ${error.message}`);
         process.exit(1);
     }
 }

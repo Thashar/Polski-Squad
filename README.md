@@ -25,6 +25,29 @@ Bot weryfikacji wyników dla kanałów Daily i CX z zaawansowaną analizą OCR i
 ### ⛪ Konklawe Bot
 Bot do gry słownej "Konklawe" z systemem haseł, podpowiedzi, timerów przypominających i medali Virtutti Papajlari.
 
+## System Logowania
+
+**WAŻNE: Wszystkie boty używają scentralizowanego systemu logowania.**
+
+### Zasady implementacji logów:
+
+```javascript
+// ✅ POPRAWNIE - zawsze używaj createBotLogger
+const { createBotLogger } = require('../../utils/consoleLogger');
+const logger = createBotLogger('BotName');
+
+logger.info('Wiadomość informacyjna');
+logger.error('Błąd');
+logger.warn('Ostrzeżenie');
+
+// ❌ BŁĘDNIE - nigdy nie używaj
+console.log('wiadomość');
+console.error('błąd');
+logWithTimestamp('wiadomość', 'info');
+```
+
+**Wszystkie logi muszą być prefixowane nazwą bota dla poprawnej identyfikacji w środowisku multi-bot.**
+
 ## Architektura Projektu
 
 ```

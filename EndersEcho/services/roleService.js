@@ -15,7 +15,7 @@ class RoleService {
      */
     async updateTopRoles(guild, sortedPlayers) {
         try {
-            logger.info('Rozpoczynam aktualizację ról TOP...');
+            // Rozpoczynam aktualizację ról TOP (bez logowania)
             
             // Pobierz role z serwera
             const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
@@ -37,7 +37,7 @@ class RoleService {
                 for (const [memberId, member] of membersWithRole) {
                     try {
                         await member.roles.remove(role);
-                        logger.info(`Usunięto rolę ${role.name} od ${member.user.tag}`);
+                        // Usunięto rolę (bez logowania)
                     } catch (error) {
                         logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, error.message);
                     }
@@ -68,7 +68,7 @@ class RoleService {
                         const member = await guild.members.fetch(player.userId);
                         if (member) {
                             await member.roles.add(targetRole);
-                            logger.info(`✅ Przyznano rolę ${targetRole.name} użytkownikowi ${member.user.tag} (pozycja ${position})`);
+                            // Przyznano rolę (bez logowania)
                         }
                     } catch (error) {
                         logger.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userId}:`, error.message);

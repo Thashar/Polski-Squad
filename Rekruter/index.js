@@ -109,7 +109,26 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    await handleInteraction(interaction, sharedState, config, client);
+    try {
+        await handleInteraction(interaction, sharedState, config, client);
+    } catch (error) {
+        logger.error('❌ Błąd podczas obsługi interakcji:', error);
+        
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                });
+            }
+        } catch (replyError) {
+            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
+        }
+    }
 });
 
 client.on('messageCreate', async message => {

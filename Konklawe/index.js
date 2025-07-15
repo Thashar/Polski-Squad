@@ -144,10 +144,29 @@ async function onReady() {
  * @param {Interaction} interaction - Interakcja Discord
  */
 async function onInteraction(interaction) {
-    if (interaction.isButton()) {
-        await interactionHandler.handleButtonInteraction(interaction);
-    } else if (interaction.isChatInputCommand()) {
-        await interactionHandler.handleSlashCommand(interaction);
+    try {
+        if (interaction.isButton()) {
+            await interactionHandler.handleButtonInteraction(interaction);
+        } else if (interaction.isChatInputCommand()) {
+            await interactionHandler.handleSlashCommand(interaction);
+        }
+    } catch (error) {
+        logger.error('❌ Błąd podczas obsługi interakcji:', error);
+        
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                });
+            }
+        } catch (replyError) {
+            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
+        }
     }
 }
 

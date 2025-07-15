@@ -51,7 +51,26 @@ client.once(Events.ClientReady, async () => {
 
 // Obsługa przycisków
 client.on(Events.InteractionCreate, async (interaction) => {
-    await handleInteraction(interaction, sharedState, config);
+    try {
+        await handleInteraction(interaction, sharedState, config);
+    } catch (error) {
+        logger.error('❌ Błąd podczas obsługi interakcji:', error);
+        
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                });
+            }
+        } catch (replyError) {
+            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
+        }
+    }
 });
 
 // Obsługa reakcji do zakładania wątku
@@ -61,15 +80,15 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 // Obsługa błędów
 client.on('error', error => {
-    logWithTimestamp(`Błąd klienta Discord: ${error.message}`, 'error');
+    logger.error(`Błąd klienta Discord: ${error.message}`);
 });
 
 process.on('unhandledRejection', error => {
-    logWithTimestamp(`Nieobsłużone odrzucenie Promise: ${error.message}`, 'error');
+    logger.error(`Nieobsłużone odrzucenie Promise: ${error.message}`);
 });
 
 process.on('uncaughtException', error => {
-    logWithTimestamp(`Nieobsłużony wyjątek: ${error.message}`, 'error');
+    logger.error(`Nieobsłużony wyjątek: ${error.message}`);
     process.exit(1);
 });
 

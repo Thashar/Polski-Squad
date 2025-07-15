@@ -164,10 +164,11 @@ class InteractionHandler {
             return;
         }
         
-        await interaction.reply({ 
-            content: this.config.messages.updateProcessing, 
-            ephemeral: true 
-        });
+        // Defer reply przed długimi operacjami OCR
+        await interaction.deferReply({ ephemeral: true });
+        
+        // Informuj użytkownika że rozpoczęto przetwarzanie
+        await interaction.editReply({ content: this.config.messages.updateProcessing });
         
         let tempImagePath = null;
         
@@ -232,14 +233,9 @@ class InteractionHandler {
                 imageAttachment.name
             );
             
-            // Edycja prywatnej odpowiedzi
+            // Publiczne ogłoszenie nowego rekordu
             await interaction.editReply({ 
-                content: this.config.messages.updateSuccess, 
-                embeds: [] 
-            });
-            
-            // Publiczne ogłoszenie
-            await interaction.followUp({ 
+                content: this.config.messages.updateSuccess,
                 embeds: [publicEmbed], 
                 files: [imageAttachment] 
             });
@@ -254,7 +250,7 @@ class InteractionHandler {
             }
             
             // Usunięcie pliku tymczasowego
-            await fs.unlink(tempImagePath).catch(console.error);
+            await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
             
         } catch (error) {
             await this.logService.logOCRError(error, 'handleUpdateCommand');

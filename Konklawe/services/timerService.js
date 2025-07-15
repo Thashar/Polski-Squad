@@ -140,7 +140,7 @@ class TimerService {
 
                         if (startChannel && startChannel.isTextBased()) {
                             const message = this.config.messages.autoReset
-                                .replace('{emoji}', this.config.emojis.warning2)
+                                .replace(/{emoji}/g, this.config.emojis.warning2)
                                 .replace('{minutes}', this.config.timers.autoResetMinutes);
                             await startChannel.send(message);
                             await startChannel.send(`Napisz **"${this.config.messages.defaultPassword}"** by rozpocząć grę.`);

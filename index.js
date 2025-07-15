@@ -1,6 +1,8 @@
 // Import system logowania
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 
+const logger = createBotLogger('Launcher');
+
 /**
  * Konfiguracja botów z ich właściwościami
  */
@@ -91,8 +93,8 @@ function loadBotConfig() {
         
         return config[environment] || [];
     } catch (error) {
-        console.error('❌ Błąd wczytywania konfiguracji botów:', error.message);
-        console.log('🔄 Używam domyślnej konfiguracji (wszystkie boty)');
+        logger.error('❌ Błąd wczytywania konfiguracji botów:', error.message);
+        logger.info('🔄 Używam domyślnej konfiguracji (wszystkie boty)');
         return ['rekruter', 'szkolenia', 'stalker', 'muteusz', 'endersecho', 'kontroler', 'konklawe'];
     }
 }
@@ -107,15 +109,15 @@ async function startAllBots() {
     const isLocal = process.argv.includes('--local');
     const environment = isLocal ? 'development' : 'production';
     
-    console.log(`🚀 Uruchamianie botów w trybie: ${environment}`);
-    console.log(`📋 Wybrane boty: ${enabledBotNames.join(', ')}`);
+    logger.info(`🚀 Uruchamianie botów w trybie: ${environment}`);
+    logger.info(`📋 Wybrane boty: ${enabledBotNames.join(', ')}`);
     
     const botsToStart = botConfigs.filter(bot => 
         enabledBotNames.includes(bot.loggerName.toLowerCase())
     );
     
     if (botsToStart.length === 0) {
-        console.log('⚠️  Brak botów do uruchomienia!');
+        logger.warn('⚠️  Brak botów do uruchomienia!');
         return;
     }
     
@@ -123,7 +125,7 @@ async function startAllBots() {
         await startBot(botConfig);
     }
     
-    console.log(`✅ Uruchomiono ${botsToStart.length} botów`);
+    logger.info(`✅ Uruchomiono ${botsToStart.length} botów`);
 }
 
 /**
@@ -131,7 +133,7 @@ async function startAllBots() {
  */
 function setupShutdownHandlers() {
     const shutdown = (signal) => {
-        console.log(`\n🛑 Otrzymano sygnał ${signal}. Zamykanie botów...`);
+        logger.warn(`\n🛑 Otrzymano sygnał ${signal}. Zamykanie botów...`);
         process.exit(0);
     };
     
@@ -139,12 +141,12 @@ function setupShutdownHandlers() {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     
     process.on('uncaughtException', (error) => {
-        console.error('❌ Nieobsłużony wyjątek:', error);
+        logger.error('❌ Nieobsłużony wyjątek:', error);
         process.exit(1);
     });
     
     process.on('unhandledRejection', (error) => {
-        console.error('❌ Nieobsłużone odrzucenie Promise:', error);
+        logger.error('❌ Nieobsłużone odrzucenie Promise:', error);
     });
 }
 
@@ -156,6 +158,6 @@ async function main() {
 
 // Uruchomienie aplikacji
 main().catch((error) => {
-    console.error('❌ Krytyczny błąd uruchomienia:', error);
+    logger.error('❌ Krytyczny błąd uruchomienia:', error);
     process.exit(1);
 });

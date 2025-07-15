@@ -133,15 +133,9 @@ class InteractionHandler {
         await this.timerService.setHintReminderTimer();
 
         if (!interaction.replied && !interaction.deferred) {
+            await interaction.deferReply();
             const message = this.config.messages.hintAdded.replace(/{emoji}/g, this.config.emojis.warning);
-            await interaction.reply(message);
-            setTimeout(async () => {
-                try {
-                    await interaction.editReply(`${message}\nDodana podpowiedź: ${hintText}`);
-                } catch (err) {
-                    logger.error('❌ Błąd podczas edycji odpowiedzi:', err);
-                }
-            }, 100);
+            await interaction.editReply(`${message}\nDodana podpowiedź: ${hintText}`);
         }
     }
 
@@ -151,11 +145,12 @@ class InteractionHandler {
      */
     async handleHintsCommand(interaction) {
         if (!interaction.replied && !interaction.deferred) {
+            await interaction.deferReply();
             if (this.gameService.hints.length === 0) {
-                await interaction.reply('Brak aktualnych podpowiedzi.');
+                await interaction.editReply('Brak aktualnych podpowiedzi.');
             } else {
                 const hintsList = this.gameService.hints.map((h, i) => `${i + 1}. ${h}`).join('\n');
-                await interaction.reply(`## 📌 **Podpowiedzi:** 📌\n${hintsList}`);
+                await interaction.editReply(`## 📌 **Podpowiedzi:** 📌\n${hintsList}`);
             }
         }
     }

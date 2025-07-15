@@ -1,12 +1,15 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 /**
  * Skrypt migracji ról z ENV do special_roles.json
  */
 async function migrateRolesFromEnv() {
     try {
-        console.log('🔄 Rozpoczynam migrację ról z ENV do pliku special_roles.json...');
+        logger.info('🔄 Rozpoczynam migrację ról z ENV do pliku special_roles.json...');
         
         // Role z pliku ENV (aktualne)
         const envRoles = [
@@ -43,7 +46,7 @@ async function migrateRolesFromEnv() {
             existingRoles = parsed.roles || [];
         } catch (error) {
             if (error.code !== 'ENOENT') {
-                console.error('❌ Błąd odczytu istniejącego pliku:', error.message);
+                logger.error('❌ Błąd odczytu istniejącego pliku:', error.message);
             }
         }
         
@@ -62,12 +65,12 @@ async function migrateRolesFromEnv() {
         
         await fs.writeFile(specialRolesFile, JSON.stringify(data, null, 2), 'utf8');
         
-        console.log(`✅ Migracja zakończona pomyślnie!`);
-        console.log(`📊 Statystyki migracji:`);
-        console.log(`   - Role z ENV: ${envRoles.length}`);
-        console.log(`   - Istniejące role specjalne: ${existingRoles.length}`);
-        console.log(`   - Łączna liczba ról: ${allRoles.length}`);
-        console.log(`   - Duplikaty usunięte: ${(envRoles.length + existingRoles.length) - allRoles.length}`);
+        logger.info(`✅ Migracja zakończona pomyślnie!`);
+        logger.info(`📊 Statystyki migracji:`);
+        logger.info(`   - Role z ENV: ${envRoles.length}`);
+        logger.info(`   - Istniejące role specjalne: ${existingRoles.length}`);
+        logger.info(`   - Łączna liczba ról: ${allRoles.length}`);
+        logger.info(`   - Duplikaty usunięte: ${(envRoles.length + existingRoles.length) - allRoles.length}`);
         
         return {
             success: true,
@@ -78,7 +81,7 @@ async function migrateRolesFromEnv() {
         };
         
     } catch (error) {
-        console.error('❌ Błąd podczas migracji:', error.message);
+        logger.error('❌ Błąd podczas migracji:', error.message);
         return {
             success: false,
             error: error.message
@@ -95,10 +98,10 @@ module.exports = {
 if (require.main === module) {
     migrateRolesFromEnv().then(result => {
         if (result.success) {
-            console.log('🎉 Migracja zakończona sukcesem!');
+            logger.info('🎉 Migracja zakończona sukcesem!');
             process.exit(0);
         } else {
-            console.error('💥 Migracja nie powiodła się:', result.error);
+            logger.error('💥 Migracja nie powiodła się:', result.error);
             process.exit(1);
         }
     });

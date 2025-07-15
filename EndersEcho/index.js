@@ -54,16 +54,27 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
         logger.error('Błąd podczas obsługi interakcji:', error);
         
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ 
-                content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                ephemeral: true 
-            });
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                });
+            }
+        } catch (replyError) {
+            // Jeśli nie można odpowiedzieć (np. timeout), loguj tylko błąd
+            logger.error('Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
         }
     }
 });
 
-client.on('error', console.error);
+client.on('error', error => {
+    logger.error('Błąd klienta Discord:', error);
+});
 
 /**
  * Startuje bota EndersEcho
@@ -102,7 +113,7 @@ module.exports = {
 
 // Uruchomienie jako standalone (jeśli uruchamiany bezpośrednio)
 if (require.main === module) {
-    startBot().catch(console.error);
+    startBot().catch(error => logger.error('Błąd uruchomienia bota:', error));
     
     // Graceful shutdown
     process.on('SIGINT', async () => {

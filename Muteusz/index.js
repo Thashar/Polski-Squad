@@ -79,7 +79,26 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
 // Obsługa interakcji
 client.on(Events.InteractionCreate, async (interaction) => {
-    await interactionHandler.handleInteraction(interaction);
+    try {
+        await interactionHandler.handleInteraction(interaction);
+    } catch (error) {
+        logger.error('❌ Błąd podczas obsługi interakcji:', error);
+        
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                });
+            }
+        } catch (replyError) {
+            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
+        }
+    }
 });
 
 // ==================== OBSŁUGA BŁĘDÓW ====================

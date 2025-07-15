@@ -84,7 +84,26 @@ client.once(Events.ClientReady, async () => {
 
 // Obsługa interakcji
 client.on(Events.InteractionCreate, async (interaction) => {
-    await handleInteraction(interaction, sharedState, config);
+    try {
+        await handleInteraction(interaction, sharedState, config);
+    } catch (error) {
+        logWithTimestamp(`❌ Błąd podczas obsługi interakcji: ${error.message}`, 'error');
+        
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
+                    ephemeral: true 
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({ 
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                });
+            }
+        } catch (replyError) {
+            logWithTimestamp(`❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout): ${replyError.message}`, 'error');
+        }
+    }
 });
 
 // Obsługa błędów
