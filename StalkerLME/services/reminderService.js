@@ -14,6 +14,7 @@ class ReminderService {
             logger.info('Wysyłanie przypomnień');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
             logger.info(`👥 Znalezieni użytkownicy: ${foundUsers.length}`);
+            logger.info(`📋 Struktura foundUsers:`, foundUsers);
             
             const timeUntilDeadline = this.calculateTimeUntilDeadline();
             const roleGroups = new Map();
@@ -69,7 +70,8 @@ class ReminderService {
             };
         } catch (error) {
             logger.error('Błąd przypomnień');
-            logger.error('❌ Błąd wysyłania przypomnień:', error);
+            logger.error('❌ Błąd wysyłania przypomnień:', error.message);
+            logger.error('❌ Stack trace:', error.stack);
             throw error;
         }
     }

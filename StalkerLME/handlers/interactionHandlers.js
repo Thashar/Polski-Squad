@@ -18,7 +18,8 @@ async function handleInteraction(interaction, sharedState, config) {
             await handleButton(interaction, config, databaseService, punishmentService);
         }
     } catch (error) {
-        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
+        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error.message);
+        logger.error('[INTERACTION] ❌ Stack trace:', error.stack);
         
         const errorEmbed = new EmbedBuilder()
             .setTitle('❌ Wystąpił błąd')
@@ -130,15 +131,26 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             return;
         }
         
-        // W nowej logice zeroScorePlayers to już gotowa lista nicków użytkowników z odpowiednią rolą
+        // Konwertuj nicki na obiekty z członkami dla reminderService
+        const foundUserObjects = [];
+        for (const nick of zeroScorePlayers) {
+            const member = interaction.guild.members.cache.find(m => 
+                m.displayName.toLowerCase() === nick.toLowerCase() || 
+                m.user.username.toLowerCase() === nick.toLowerCase()
+            );
+            if (member) {
+                foundUserObjects.push({ member: member, matchedName: nick });
+            }
+        }
+        
         // Generowanie unikalnego ID dla potwierdzenia
         const confirmationId = Date.now().toString();
         
         // Zapisanie danych do mapy
         confirmationData.set(confirmationId, {
             action: 'remind',
-            foundUsers: zeroScorePlayers, // Już są to nicki użytkowników
-            zeroScorePlayers: zeroScorePlayers,
+            foundUsers: foundUserObjects, // Obiekty z właściwością member
+            zeroScorePlayers: zeroScorePlayers, // Oryginalne nicki dla wyświetlenia
             imageUrl: attachment.url,
             originalUserId: interaction.user.id,
             config: config,
@@ -536,7 +548,8 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                     break;
             }
         } catch (error) {
-            logger.error('[CONFIRM] ❌ Błąd potwierdzenia:', error);
+            logger.error('[CONFIRM] ❌ Błąd potwierdzenia:', error.message);
+            logger.error('[CONFIRM] ❌ Stack trace:', error.stack);
             await interaction.followUp({ content: messages.errors.unknownError, ephemeral: true });
         }
     } else if (interaction.customId.startsWith('vacation_')) {
