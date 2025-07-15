@@ -54,6 +54,8 @@ logWithTimestamp('wiadomość', 'info');
 Polski-Squad-Bot-Collection/
 ├── index.js                    # Główny launcher wszystkich botów
 ├── package.json               # Zależności i skrypty NPM
+├── bot-config.json            # Konfiguracja które boty uruchamiać
+├── CLAUDE.md                  # Instrukcje dla Claude Code
 ├── utils/                     # Wspólne narzędzia
 │   ├── consoleLogger.js       # Centralny system logowania z kolorami
 │   └── discordLogger.js       # System logowania na kanały Discord
@@ -129,7 +131,7 @@ Polski-Squad-Bot-Collection/
 │   │   └── specialRolesService.js
 │   ├── utils/
 │   │   ├── helpers.js
-│   │   └── migration.js
+│   │   └── migration.js          # Skrypt migracji ról z ENV do JSON
 │   ├── data/
 │   │   └── special_roles.json
 │   └── temp/
@@ -186,11 +188,17 @@ Polski-Squad-Bot-Collection/
 
 ## Uruchamianie
 
+### Główne komendy:
 ```bash
-# Wszystkie boty razem
+# Wszystkie boty produkcyjne (na serwerze)
 npm start
 
-# Poszczególne boty
+# Boty rozwojowe (lokalnie)
+npm run local
+```
+
+### Poszczególne boty (legacy):
+```bash
 npm run rekruter
 npm run szkolenia  
 npm run stalker
@@ -199,6 +207,18 @@ npm run endersecho
 npm run kontroler
 npm run konklawe
 ```
+
+### Konfiguracja botów:
+Plik `bot-config.json` określa które boty uruchamiać:
+```json
+{
+  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe"],
+  "development": ["stalkerlme"]
+}
+```
+
+- **production** - boty uruchamiane przez `npm start`
+- **development** - boty uruchamiane przez `npm run local`
 
 ## Funkcje Systemowe
 
@@ -215,8 +235,10 @@ npm run konklawe
 
 ### 🔧 Zarządzanie Procesami
 - **Graceful shutdown** - obsługa sygnałów SIGINT/SIGTERM
-- **Automatyczny restart** botów po błędach
-- **Parallel startup** - wydajne uruchamianie wielu botów jednocześnie
+- **Selektywne uruchamianie** - różne zestawy botów dla production/development
+- **Lazy loading** - boty ładowane dynamicznie tylko gdy potrzebne
+- **Timeout handling** - odporna obsługa Discord API timeouts
+- **Error recovery** - graceful error handling dla wszystkich interakcji
 
 ## Technologie
 
@@ -245,3 +267,17 @@ REKRUTER_ROLE_ID=role_id
 - `ENDERSECHO_TOKEN` - Token Discord dla bota EndersEcho
 - `KONTROLER_TOKEN` - Token Discord dla bota Kontroler
 - `KONKLAWE_TOKEN` - Token Discord dla bota Konklawe
+
+## Development
+
+### Dla Claude Code:
+Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code, w tym:
+- Reguły implementacji logowania
+- Wzorce architektoniczne
+- Przykłady kodu
+- Zasady bezpieczeństwa
+
+### Debugowanie:
+- Wszystkie logi są prefixowane nazwą bota
+- Używaj `npm run local` do testowania pojedynczych botów
+- Edytuj `bot-config.json` aby zmienić które boty uruchamiać
