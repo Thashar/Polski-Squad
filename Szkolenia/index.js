@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
 
 const config = require('./config/config');
-const { logWithTimestamp } = require('./utils/helpers');
+// const { logWithTimestamp } = require('./utils/helpers'); // Usunięto, używaj createBotLogger
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads } = require('./services/threadService');

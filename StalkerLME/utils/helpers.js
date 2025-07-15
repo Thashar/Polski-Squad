@@ -339,7 +339,7 @@ async function cleanupOldFiles(directoryPath, maxAgeHours = 24) {
             
             if (now - stats.mtime.getTime() > maxAge) {
                 await fs.unlink(filePath);
-                logWithTimestamp(`Usunięto stary plik: ${file}`);
+                // Usunięto stary plik (log nie potrzebny)
             }
         }
     } catch (error) {
@@ -348,7 +348,7 @@ async function cleanupOldFiles(directoryPath, maxAgeHours = 24) {
 }
 
 module.exports = {
-    logWithTimestamp,
+    // logWithTimestamp - usunięto, używaj createBotLogger
     delay,
     createPolandDate,
     getCurrentPolandTime,

@@ -122,5 +122,5 @@ module.exports = {
     hasAnyRole,
     getUserName,
     getThreadOwner,
-    logWithTimestamp
+    // logWithTimestamp - usunięto, używaj createBotLogger
 };

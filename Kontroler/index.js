@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { logWithTimestamp } = require('./utils/helpers');
+// const { logWithTimestamp } = require('./utils/helpers'); // Usunięto, używaj createBotLogger
 
 // Import konfiguracji
 const config = require('./config/config');

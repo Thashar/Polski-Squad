@@ -115,10 +115,11 @@ class ReminderService {
             for (const [userId, member] of members) {
                 try {
                     const timeLeft = this.calculateTimeUntilDeadline();
+                    const timeMessage = messages.formatTimeMessage(timeLeft);
                     
                     const embed = new EmbedBuilder()
                         .setTitle('⏰ PRZYPOMNIENIE O BOSSIE')
-                        .setDescription(`Czas do deadline: **${timeLeft}**\n\nPamiętaj o pokonaniu bossa, aby uniknąć punktów karnych!`)
+                        .setDescription(`${timeMessage}\n\nPamiętaj o pokonaniu bossa, aby uniknąć punktów karnych!`)
                         .setColor('#FFA500')
                         .setTimestamp()
                         .setFooter({ text: 'System automatycznych przypomnień' });
@@ -158,10 +159,11 @@ class ReminderService {
             }
             
             const timeLeft = this.calculateTimeUntilDeadline();
+            const timeMessage = messages.formatTimeMessage(timeLeft);
             
             const embed = new EmbedBuilder()
                 .setTitle('⏰ PRZYPOMNIENIE O BOSSIE')
-                .setDescription(customMessage || `Czas do deadline: **${timeLeft}**\n\nPamiętaj o pokonaniu bossa, aby uniknąć punktów karnych!`)
+                .setDescription(customMessage || `${timeMessage}\n\nPamiętaj o pokonaniu bossa, aby uniknąć punktów karnych!`)
                 .setColor('#FFA500')
                 .setTimestamp()
                 .setFooter({ text: 'System automatycznych przypomnień' });

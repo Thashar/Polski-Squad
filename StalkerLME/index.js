@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, Events } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
-const { logWithTimestamp, delay } = require('./utils/helpers');
+const { delay } = require('./utils/helpers');
 const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 
 const DatabaseService = require('./services/databaseService');
@@ -55,14 +55,14 @@ client.once(Events.ClientReady, async () => {
     
     // Uruchomienie zadania cron dla czyszczenia punktów (poniedziałek o północy)
     cron.schedule('0 0 * * 1', async () => {
-        logWithTimestamp('Rozpoczynam tygodniowe czyszczenie punktów karnych...', 'info');
+        logger.info('Rozpoczynam tygodniowe czyszczenie punktów karnych...');
         
         for (const guild of client.guilds.cache.values()) {
             try {
                 await punishmentService.cleanupAllUsers(guild);
-                logWithTimestamp(`Wyczyszczono punkty dla serwera: ${guild.name}`, 'info');
+                logger.info(`Wyczyszczono punkty dla serwera: ${guild.name}`);
             } catch (error) {
-                logWithTimestamp(`Błąd czyszczenia punktów dla serwera ${guild.name}: ${error.message}`, 'error');
+                logger.error(`Błąd czyszczenia punktów dla serwera ${guild.name}: ${error.message}`);
             }
         }
     }, {
@@ -71,7 +71,7 @@ client.once(Events.ClientReady, async () => {
     
     // Uruchomienie zadania cron dla czyszczenia plików tymczasowych (codziennie o 02:00)
     cron.schedule('0 2 * * *', async () => {
-        logWithTimestamp('Rozpoczynam czyszczenie plików tymczasowych...', 'info');
+        logger.info('Rozpoczynam czyszczenie plików tymczasowych...');
         await ocrService.cleanupTempFiles();
     }, {
         timezone: config.timezone
@@ -87,7 +87,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
         await handleInteraction(interaction, sharedState, config);
     } catch (error) {
-        logWithTimestamp(`❌ Błąd podczas obsługi interakcji: ${error.message}`, 'error');
+        logger.error(`❌ Błąd podczas obsługi interakcji: ${error.message}`);
         
         try {
             if (!interaction.replied && !interaction.deferred) {
@@ -101,7 +101,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 });
             }
         } catch (replyError) {
-            logWithTimestamp(`❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout): ${replyError.message}`, 'error');
+            logger.error(`❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout): ${replyError.message}`);
         }
     }
 });
@@ -110,58 +110,58 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on('error', error => {
     // Ignoruj błędy WebSocket 520 - są tymczasowe
     if (error.message && error.message.includes('520')) {
-        logWithTimestamp('Tymczasowy błąd WebSocket 520 - automatyczne ponowne połączenie', 'warn');
+        logger.warn('Tymczasowy błąd WebSocket 520 - automatyczne ponowne połączenie');
         return;
     }
     
-    logWithTimestamp(`Błąd klienta Discord: ${error.message}`, 'error');
+    logger.error(`Błąd klienta Discord: ${error.message}`);
 });
 
 client.on('warn', warning => {
-    logWithTimestamp(`Ostrzeżenie Discord: ${warning}`, 'warn');
+    logger.warn(`Ostrzeżenie Discord: ${warning}`);
 });
 
 // Obsługa błędów procesów
 process.on('unhandledRejection', error => {
     // Ignoruj błędy WebSocket 520 - są tymczasowe
     if (error.message && error.message.includes('520')) {
-        logWithTimestamp('Tymczasowy błąd WebSocket 520 - ignoruję', 'warn');
+        logger.warn('Tymczasowy błąd WebSocket 520 - ignoruję');
         return;
     }
     
-    logWithTimestamp(`Nieobsłużone odrzucenie Promise: ${error.message}`, 'error');
+    logger.error(`Nieobsłużone odrzucenie Promise: ${error.message}`);
     logger.error(error);
 });
 
 process.on('uncaughtException', error => {
-    logWithTimestamp(`Nieobsłużony wyjątek: ${error.message}`, 'error');
+    logger.error(`Nieobsłużony wyjątek: ${error.message}`);
     logger.error(error);
     process.exit(1);
 });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-    logWithTimestamp('Otrzymano sygnał SIGINT, zamykam bota...', 'info');
+    logger.info('Otrzymano sygnał SIGINT, zamykam bota...');
     
     try {
         await client.destroy();
-        logWithTimestamp('Bot został pomyślnie zamknięty', 'info');
+        logger.info('Bot został pomyślnie zamknięty');
         process.exit(0);
     } catch (error) {
-        logWithTimestamp(`Błąd podczas zamykania bota: ${error.message}`, 'error');
+        logger.error(`Błąd podczas zamykania bota: ${error.message}`);
         process.exit(1);
     }
 });
 
 process.on('SIGTERM', async () => {
-    logWithTimestamp('Otrzymano sygnał SIGTERM, zamykam bota...', 'info');
+    logger.info('Otrzymano sygnał SIGTERM, zamykam bota...');
     
     try {
         await client.destroy();
-        logWithTimestamp('Bot został pomyślnie zamknięty', 'info');
+        logger.info('Bot został pomyślnie zamknięty');
         process.exit(0);
     } catch (error) {
-        logWithTimestamp(`Błąd podczas zamykania bota: ${error.message}`, 'error');
+        logger.error(`Błąd podczas zamykania bota: ${error.message}`);
         process.exit(1);
     }
 });
@@ -223,18 +223,18 @@ async function startBot() {
         await client.login(config.token);
         return client;
     } catch (error) {
-        logWithTimestamp(`Błąd uruchamiania bota: ${error.message}`, 'error');
+        logger.error(`Błąd uruchamiania bota: ${error.message}`);
         throw error;
     }
 }
 
 async function stopBot() {
     try {
-        logWithTimestamp('Zatrzymywanie bota Stalker LME...', 'info');
+        logger.info('Zatrzymywanie bota Stalker LME...');
         await client.destroy();
-        logWithTimestamp('Bot został zatrzymany', 'info');
+        logger.info('Bot został zatrzymany');
     } catch (error) {
-        logWithTimestamp(`Błąd zatrzymywania bota: ${error.message}`, 'error');
+        logger.error(`Błąd zatrzymywania bota: ${error.message}`);
         throw error;
     }
 }
