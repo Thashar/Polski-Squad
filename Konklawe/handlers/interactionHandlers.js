@@ -1,3 +1,4 @@
+const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -146,12 +147,30 @@ class InteractionHandler {
     async handleHintsCommand(interaction) {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply();
+            
+            const embed = new EmbedBuilder()
+                .setTitle('📌 Podpowiedzi do hasła')
+                .setColor('#FFD700')
+                .setTimestamp()
+                .setFooter({ text: 'Konklawe - System podpowiedzi' });
+            
             if (this.gameService.hints.length === 0) {
-                await interaction.editReply('Brak aktualnych podpowiedzi.');
+                embed.setDescription('🚫 Brak aktualnych podpowiedzi.\n\nPapież może dodać podpowiedź używając `/podpowiedz`.');
             } else {
-                const hintsList = this.gameService.hints.map((h, i) => `${i + 1}. ${h}`).join('\n');
-                await interaction.editReply(`## 📌 **Podpowiedzi:** 📌\n${hintsList}`);
+                const hintsList = this.gameService.hints.map((hint, index) => {
+                    const hintNumber = (index + 1).toString().padStart(2, '0');
+                    return `\`${hintNumber}.\` ${hint}`;
+                }).join('\n');
+                
+                embed.setDescription(hintsList);
+                embed.addFields({
+                    name: '📊 Statystyki',
+                    value: `Liczba podpowiedzi: **${this.gameService.hints.length}**`,
+                    inline: true
+                });
             }
+            
+            await interaction.editReply({ embeds: [embed] });
         }
     }
 

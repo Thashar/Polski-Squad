@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -19,8 +19,15 @@ class RankingService {
         const sorted = this.gameService.getSortedPlayers();
         
         if (sorted.length === 0) {
+            const embed = new EmbedBuilder()
+                .setTitle('🏆 Ranking Konklawe')
+                .setDescription('🚫 Jeszcze nikt nie odgadł hasła!\n\nSpróbuj swoich sił w grze słownej Konklawe.')
+                .setColor('#FFD700')
+                .setTimestamp()
+                .setFooter({ text: 'Konklawe - System rankingowy' });
+            
             return {
-                content: 'Jeszcze nikt nie odgadł hasła!',
+                embeds: [embed],
                 components: []
             };
         }
@@ -54,7 +61,14 @@ class RankingService {
         }
 
         const wynik = wynikLines.join('\n');
-        const content = `## 🏆 **Ranking Konklawe** 🏆\n${wynik}\n\n📄 Strona ${page + 1}/${totalPages} | Łącznie graczy: ${sorted.length}`;
+        
+        const embed = new EmbedBuilder()
+            .setTitle('🏆 Ranking Konklawe')
+            .setDescription(wynik)
+            .setColor('#FFD700')
+            .setTimestamp()
+            .setFooter({ text: `Strona ${page + 1}/${totalPages} | Łącznie graczy: ${sorted.length}` });
+        
         const row = new ActionRowBuilder();
 
         if (totalPages > 1) {
@@ -89,7 +103,7 @@ class RankingService {
         }
 
         return {
-            content: content,
+            embeds: [embed],
             components: totalPages > 1 ? [row] : []
         };
     }
@@ -104,8 +118,15 @@ class RankingService {
         const sorted = this.gameService.getSortedMedals();
         
         if (sorted.length === 0) {
+            const embed = new EmbedBuilder()
+                .setTitle(`${this.config.emojis.virtuttiPapajlari} Ranking Medali Virtutti Papajlari`)
+                .setDescription('🚫 Jeszcze nikt nie zdobył medalu Virtutti Papajlari!\n\nMedal otrzymuje gracz, który osiągnie **30 punktów** w rankingu.')
+                .setColor('#9B59B6')
+                .setTimestamp()
+                .setFooter({ text: 'Konklawe - System medali' });
+            
             return {
-                content: 'Jeszcze nikt nie zdobył medalu Virtutti Papajlari!',
+                embeds: [embed],
                 components: []
             };
         }
@@ -135,7 +156,14 @@ class RankingService {
         }
 
         const wynik = medalLines.join('\n');
-        const content = `## ${this.config.emojis.virtuttiPapajlari} **Ranking Medali Virtutti Papajlari** ${this.config.emojis.virtuttiPapajlari}\n${wynik}\n\n📄 Strona ${page + 1}/${totalPages} | Łącznie posiadaczy medali: ${sorted.length}`;
+        
+        const embed = new EmbedBuilder()
+            .setTitle(`${this.config.emojis.virtuttiPapajlari} Ranking Medali Virtutti Papajlari`)
+            .setDescription(wynik)
+            .setColor('#9B59B6')
+            .setTimestamp()
+            .setFooter({ text: `Strona ${page + 1}/${totalPages} | Łącznie posiadaczy medali: ${sorted.length}` });
+        
         const row = new ActionRowBuilder();
 
         if (totalPages > 1) {
@@ -170,7 +198,7 @@ class RankingService {
         }
 
         return {
-            content: content,
+            embeds: [embed],
             components: totalPages > 1 ? [row] : []
         };
     }
