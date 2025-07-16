@@ -203,11 +203,6 @@ class InteractionHandler {
                 }).join('\n');
                 
                 embed.setDescription(hintsList);
-                embed.addFields({
-                    name: '📊 Statystyki',
-                    value: `Liczba podpowiedzi: **${this.gameService.hints.length}**`,
-                    inline: true
-                });
             }
             
             await interaction.editReply({ embeds: [embed] });
