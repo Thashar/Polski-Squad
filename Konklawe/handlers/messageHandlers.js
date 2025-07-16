@@ -27,6 +27,7 @@ class MessageHandler {
                 message.content.toLowerCase() !== this.gameService.trigger.toLowerCase()) {
                 
                 this.gameService.addAttempt(message.author.id, message.content);
+                this.gameService.registerAttempt(message.author.id, message.content, false);
                 return;
             }
 
@@ -86,7 +87,7 @@ class MessageHandler {
         }
 
         this.timerService.clearAllTimers();
-        this.gameService.setNewPassword(newTrigger);
+        this.gameService.setNewPassword(newTrigger, message.author.id);
 
         await message.channel.send(`✅ Nowe hasło zostało ustawione jako: ${this.gameService.trigger}`);
 
@@ -114,6 +115,12 @@ class MessageHandler {
         const userId = message.author.id;
         const userAttempts = this.gameService.getUserAttempts(userId);
         const points = 1;
+
+        // Zarejestruj zwycięską próbę
+        this.gameService.registerAttempt(userId, currentTrigger, true);
+        
+        // Dodaj grę do historii przed wyczyszczeniem
+        this.gameService.addGameToHistory(userId);
 
         this.timerService.clearAllTimers();
         this.gameService.clearPassword();

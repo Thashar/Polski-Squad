@@ -139,6 +139,7 @@ class DataService {
                 trigger: data.trigger,
                 triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
                 triggerClearedTimestamp: data.clearedTimestamp ? new Date(data.clearedTimestamp) : null,
+                triggerSetBy: data.triggerSetBy || null,
                 timerStates: data.timerStates || {}
             };
         }
@@ -146,8 +147,93 @@ class DataService {
             trigger: null,
             triggerSetTimestamp: null,
             triggerClearedTimestamp: null,
+            triggerSetBy: null,
             timerStates: {}
         };
+    }
+
+    /**
+     * Zapisuje historię gry do pliku
+     * @param {Object} gameHistory - Historia gier
+     */
+    saveGameHistory(gameHistory) {
+        fs.writeFileSync(path.join(this.dataPath, 'gameHistory.json'), JSON.stringify(gameHistory, null, 2));
+    }
+
+    /**
+     * Wczytuje historię gry z pliku
+     * @returns {Object} - Historia gier
+     */
+    loadGameHistory() {
+        const historyPath = path.join(this.dataPath, 'gameHistory.json');
+        if (fs.existsSync(historyPath)) {
+            return JSON.parse(fs.readFileSync(historyPath));
+        }
+        return {
+            completedGames: [], // Historia ukończonych gier
+            totalGames: 0,
+            totalAttempts: 0,
+            averageAttempts: 0,
+            averageTime: 0
+        };
+    }
+
+    /**
+     * Dodaje ukończoną grę do historii
+     * @param {Object} gameData - Dane ukończonej gry
+     */
+    addCompletedGame(gameData) {
+        const history = this.loadGameHistory();
+        
+        // Dodaj nową grę na początek (najnowsze pierwsze)
+        history.completedGames.unshift({
+            id: Date.now().toString(),
+            password: gameData.password,
+            setBy: gameData.setBy,
+            setAt: gameData.setAt,
+            solvedBy: gameData.solvedBy,
+            solvedAt: gameData.solvedAt,
+            duration: gameData.duration,
+            totalAttempts: gameData.totalAttempts,
+            hintsUsed: gameData.hintsUsed,
+            playersInvolved: gameData.playersInvolved
+        });
+
+        // Zachowaj tylko ostatnie 50 gier dla wydajności
+        if (history.completedGames.length > 50) {
+            history.completedGames = history.completedGames.slice(0, 50);
+        }
+
+        // Aktualizuj statystyki globalne
+        history.totalGames = history.completedGames.length;
+        history.totalAttempts = history.completedGames.reduce((sum, game) => sum + game.totalAttempts, 0);
+        history.averageAttempts = history.totalGames > 0 ? (history.totalAttempts / history.totalGames).toFixed(1) : 0;
+        
+        const totalDuration = history.completedGames.reduce((sum, game) => sum + game.duration, 0);
+        history.averageTime = history.totalGames > 0 ? Math.floor(totalDuration / history.totalGames) : 0;
+
+        this.saveGameHistory(history);
+        logger.info('📊 Dodano ukończoną grę do historii:', gameData.password);
+    }
+
+    /**
+     * Zapisuje szczegóły prób graczy dla bieżącej gry
+     * @param {Object} playerAttempts - Szczegóły prób z timestampami
+     */
+    savePlayerAttempts(playerAttempts) {
+        fs.writeFileSync(path.join(this.dataPath, 'playerAttempts.json'), JSON.stringify(playerAttempts, null, 2));
+    }
+
+    /**
+     * Wczytuje szczegóły prób graczy
+     * @returns {Object} - Szczegóły prób z timestampami
+     */
+    loadPlayerAttempts() {
+        const attemptsPath = path.join(this.dataPath, 'playerAttempts.json');
+        if (fs.existsSync(attemptsPath)) {
+            return JSON.parse(fs.readFileSync(attemptsPath));
+        }
+        return {};
     }
 }
 

@@ -149,6 +149,8 @@ async function onInteraction(interaction) {
             await interactionHandler.handleButtonInteraction(interaction);
         } else if (interaction.isChatInputCommand()) {
             await interactionHandler.handleSlashCommand(interaction);
+        } else if (interaction.isStringSelectMenu()) {
+            await interactionHandler.handleSelectMenuInteraction(interaction);
         }
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);

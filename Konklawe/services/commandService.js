@@ -30,8 +30,8 @@ class CommandService {
                 .setName('wyniki')
                 .setDescription('Pokaż ranking graczy (tylko dla Ciebie)'),
             new SlashCommandBuilder()
-                .setName('medale')
-                .setDescription('Pokaż ranking medali Virtutti Papajlari (tylko dla Ciebie)')
+                .setName('statystyki')
+                .setDescription('Pokaż szczegółowe statystyki gry (tylko dla Ciebie)')
         ];
     }
 

@@ -12,9 +12,11 @@ class GameService {
         this.trigger = null;
         this.triggerSetTimestamp = null;
         this.triggerClearedTimestamp = null;
+        this.triggerSetBy = null; // Kto ustawił hasło
         this.scoreboard = {};
         this.virtuttiMedals = {};
         this.attempts = {};
+        this.playerAttempts = {}; // Szczegóły prób z timestampami
         this.konklaweUsed = false;
         this.hints = [];
         this.lastHintTimestamp = null;
@@ -52,10 +54,12 @@ class GameService {
         this.hints = hintsData.hints;
         this.lastHintTimestamp = hintsData.lastHintTimestamp;
         this.attempts = this.dataService.loadAttempts();
+        this.playerAttempts = this.dataService.loadPlayerAttempts();
         const triggerState = this.dataService.loadTriggerState();
         this.trigger = triggerState.trigger;
         this.triggerSetTimestamp = triggerState.triggerSetTimestamp;
         this.triggerClearedTimestamp = triggerState.triggerClearedTimestamp;
+        this.triggerSetBy = triggerState.triggerSetBy;
     }
 
     /**
@@ -66,6 +70,7 @@ class GameService {
             trigger: this.trigger,
             timestamp: this.triggerSetTimestamp ? this.triggerSetTimestamp.toISOString() : null,
             clearedTimestamp: this.triggerClearedTimestamp ? this.triggerClearedTimestamp.toISOString() : null,
+            triggerSetBy: this.triggerSetBy,
             timerStates: {
                 hasFirstHintReminder: !!this.firstHintReminderTimer,
                 hasSecondHintReminder: !!this.secondHintReminderTimer,
@@ -84,7 +89,69 @@ class GameService {
      */
     clearAttempts() {
         this.attempts = {};
+        this.playerAttempts = {};
         this.dataService.saveAttempts(this.attempts);
+        this.dataService.savePlayerAttempts(this.playerAttempts);
+    }
+
+    /**
+     * Rejestruje próbę odgadnięcia hasła
+     * @param {string} userId - ID użytkownika
+     * @param {string} attempt - Próba hasła
+     * @param {boolean} isCorrect - Czy próba była poprawna
+     */
+    registerAttempt(userId, attempt, isCorrect = false) {
+        // Zwiększ licznik prób
+        this.attempts[userId] = (this.attempts[userId] || 0) + 1;
+        
+        // Zapisz szczegóły próby z timestampem
+        if (!this.playerAttempts[userId]) {
+            this.playerAttempts[userId] = [];
+        }
+        
+        this.playerAttempts[userId].push({
+            attempt: attempt,
+            timestamp: new Date().toISOString(),
+            isCorrect: isCorrect
+        });
+
+        // Zapisz dane
+        this.dataService.saveAttempts(this.attempts);
+        this.dataService.savePlayerAttempts(this.playerAttempts);
+    }
+
+    /**
+     * Dodaje ukończoną grę do historii
+     * @param {string} solvedByUserId - ID użytkownika który rozwiązał
+     */
+    addGameToHistory(solvedByUserId) {
+        if (!this.trigger || !this.triggerSetTimestamp) return;
+
+        const now = new Date();
+        const duration = now - this.triggerSetTimestamp; // w milisekundach
+        const totalAttempts = Object.values(this.attempts).reduce((sum, attempts) => sum + attempts, 0);
+        
+        const gameData = {
+            password: this.trigger,
+            setBy: this.triggerSetBy,
+            setAt: this.triggerSetTimestamp.toISOString(),
+            solvedBy: solvedByUserId,
+            solvedAt: now.toISOString(),
+            duration: duration,
+            totalAttempts: totalAttempts,
+            hintsUsed: this.hints.length,
+            playersInvolved: Object.keys(this.attempts).length
+        };
+
+        this.dataService.addCompletedGame(gameData);
+    }
+
+    /**
+     * Pobiera historię gier
+     * @returns {Object} Historia gier
+     */
+    getGameHistory() {
+        return this.dataService.loadGameHistory();
     }
 
     /**
@@ -123,15 +190,17 @@ class GameService {
     /**
      * Ustawia nowe hasło
      * @param {string} newTrigger - Nowe hasło
+     * @param {string} setByUserId - ID użytkownika który ustawił hasło
      */
-    setNewPassword(newTrigger) {
+    setNewPassword(newTrigger, setByUserId = null) {
         this.trigger = newTrigger;
         this.triggerSetTimestamp = new Date();
         this.triggerClearedTimestamp = null;
+        this.triggerSetBy = setByUserId;
         this.clearAttempts();
         this.resetHints();
         this.saveTriggerState();
-        logger.info(`🔑 Nowe hasło: ${this.trigger} (ustawione o ${this.triggerSetTimestamp.toISOString()})`);
+        logger.info(`🔑 Nowe hasło: ${this.trigger} (ustawione o ${this.triggerSetTimestamp.toISOString()}) przez ${setByUserId || 'system'}`);
     }
 
     /**
