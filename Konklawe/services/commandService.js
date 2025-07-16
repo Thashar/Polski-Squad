@@ -27,9 +27,6 @@ class CommandService {
                 .setName('podpowiedzi')
                 .setDescription('Pokaż wszystkie aktualne podpowiedzi'),
             new SlashCommandBuilder()
-                .setName('wyniki')
-                .setDescription('Pokaż ranking graczy (tylko dla Ciebie)'),
-            new SlashCommandBuilder()
                 .setName('statystyki')
                 .setDescription('Pokaż szczegółowe statystyki gry (tylko dla Ciebie)')
         ];

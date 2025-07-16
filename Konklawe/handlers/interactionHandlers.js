@@ -106,8 +106,6 @@ class InteractionHandler {
                 await this.handleHintCommand(interaction);
             } else if (commandName === 'podpowiedzi') {
                 await this.handleHintsCommand(interaction);
-            } else if (commandName === 'wyniki') {
-                await this.handleResultsCommand(interaction);
             } else if (commandName === 'statystyki') {
                 await this.handleStatisticsCommand(interaction);
             }
@@ -161,17 +159,8 @@ class InteractionHandler {
             await interaction.deferReply();
             
             const embed = new EmbedBuilder()
-                .setTitle('✅ Podpowiedź dodana')
-                .setDescription(`${this.config.emojis.warning} **Nowa podpowiedź została dodana do gry!**`)
-                .addFields({
-                    name: '📝 Dodana podpowiedź',
-                    value: `\`\`\`${hintText}\`\`\``,
-                    inline: false
-                }, {
-                    name: '📊 Statystyki',
-                    value: `Łączna liczba podpowiedzi: **${this.gameService.hints.length}**`,
-                    inline: true
-                })
+                .setTitle(`${this.config.emojis.warning} Podpowiedź dodana ${this.config.emojis.warning}`)
+                .setDescription(`\`\`\`${hintText}\`\`\``)
                 .setColor('#00FF00')
                 .setTimestamp()
                 .setFooter({ text: `Dodał: ${interaction.user.tag}` });
@@ -209,27 +198,6 @@ class InteractionHandler {
         }
     }
 
-    /**
-     * Obsługuje komendę /wyniki
-     * @param {Interaction} interaction - Interakcja Discord
-     */
-    async handleResultsCommand(interaction) {
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.deferReply({ ephemeral: true });
-        }
-
-        try {
-            const resultsData = await this.rankingService.createResultsPage(interaction, 0);
-            await interaction.editReply(resultsData);
-        } catch (error) {
-            logger.error('❌ Błąd w komendzie wyniki:', error);
-            try {
-                await interaction.editReply('Wystąpił błąd podczas pobierania wyników.');
-            } catch (editError) {
-                logger.error('❌ Błąd podczas edycji odpowiedzi:', editError);
-            }
-        }
-    }
 
 
     /**
@@ -271,12 +239,17 @@ class InteractionHandler {
             .setLabel('📜 Historia gier')
             .setStyle(tab === 'history' ? ButtonStyle.Primary : ButtonStyle.Secondary);
 
+        const rankingButton = new ButtonBuilder()
+            .setCustomId(`stats_ranking_${interaction.user.id}`)
+            .setLabel('🏆 Aktualny ranking')
+            .setStyle(tab === 'ranking' ? ButtonStyle.Primary : ButtonStyle.Secondary);
+
         const globalButton = new ButtonBuilder()
             .setCustomId(`stats_global_${interaction.user.id}`)
-            .setLabel('🏆 Statystyki globalne')
+            .setLabel('📈 Statystyki globalne')
             .setStyle(tab === 'global' ? ButtonStyle.Primary : ButtonStyle.Secondary);
 
-        const row = new ActionRowBuilder().addComponents(currentButton, historyButton, globalButton);
+        const row = new ActionRowBuilder().addComponents(currentButton, historyButton, rankingButton, globalButton);
 
         let embed;
         
@@ -286,6 +259,9 @@ class InteractionHandler {
                 break;
             case 'history':
                 embed = await this.createHistoryEmbed(interaction);
+                break;
+            case 'ranking':
+                embed = await this.createRankingEmbed(interaction);
                 break;
             case 'global':
                 embed = await this.createGlobalStatsEmbed(interaction);
@@ -394,6 +370,46 @@ class InteractionHandler {
     }
 
     /**
+     * Tworzy embed z aktualnym rankingiem
+     */
+    async createRankingEmbed(interaction) {
+        const embed = new EmbedBuilder()
+            .setTitle('🏆 Aktualny ranking')
+            .setColor('#FFD700')
+            .setTimestamp()
+            .setFooter({ text: 'Konklawe - Aktualny ranking graczy' });
+
+        // Pobierz ranking z gameService
+        const ranking = Object.entries(this.gameService.scoreboard)
+            .filter(([userId, points]) => points > 0)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10);
+
+        if (ranking.length === 0) {
+            embed.setDescription('🚫 Brak graczy w rankingu.');
+            return embed;
+        }
+
+        // Stwórz listę graczy
+        const rankingList = await Promise.all(
+            ranking.map(async ([userId, points], index) => {
+                try {
+                    const member = await interaction.guild.members.fetch(userId);
+                    const name = member.nickname || member.user.username;
+                    const medalCount = this.gameService.virtuttiMedals[userId] || 0;
+                    const medalIcons = medalCount > 0 ? ` ${this.config.emojis.virtuttiPapajlari.repeat(medalCount)}` : '';
+                    return `${index + 1}. ${name} - ${points}${this.config.emojis.medal}${medalIcons}`;
+                } catch {
+                    return `${index + 1}. Nieznany użytkownik - ${points}${this.config.emojis.medal}`;
+                }
+            })
+        );
+
+        embed.setDescription(rankingList.join('\n'));
+        return embed;
+    }
+
+    /**
      * Tworzy embed z historią gier
      */
     async createHistoryEmbed(interaction) {
@@ -437,13 +453,6 @@ class InteractionHandler {
 
         embed.setDescription(gamesList.join('\n\n'));
 
-        // Statystyki ogólne
-        embed.addFields({
-            name: '📊 Statystyki ogólne',
-            value: `**Łącznie gier:** ${history.totalGames}\n**Średnie próby:** ${history.averageAttempts}\n**Średni czas:** ${this.formatDuration(history.averageTime)}`,
-            inline: true
-        });
-
         return embed;
     }
 
@@ -468,35 +477,37 @@ class InteractionHandler {
     }
 
     /**
-     * Tworzy embed z globalnym rankingiem
+     * Tworzy embed ze statystykami globalnymi
      */
     async createGlobalStatsEmbed(interaction) {
         const embed = new EmbedBuilder()
-            .setTitle('🏆 Ranking globalny')
+            .setTitle('📈 Statystyki globalne')
             .setColor('#F39C12')
             .setTimestamp()
             .setFooter({ text: 'Konklawe - Statystyki globalne' });
 
-        // TOP 3 graczy globalnie
-        const top3 = this.gameService.getTop3Players();
-        if (top3.length > 0) {
-            const top3Text = await Promise.all(
-                top3.map(async ([userId, points], index) => {
-                    try {
-                        const member = await interaction.guild.members.fetch(userId);
-                        const name = member.nickname || member.user.username;
-                        const medalCount = this.gameService.virtuttiMedals[userId] || 0;
-                        const medalIcons = medalCount > 0 ? ` ${this.config.emojis.virtuttiPapajlari.repeat(medalCount)}` : '';
-                        return `${index + 1}. ${name} - ${points}${this.config.emojis.medal}${medalIcons}`;
-                    } catch {
-                        return `${index + 1}. Nieznany użytkownik - ${points}${this.config.emojis.medal}`;
-                    }
-                })
+        // Statystyki ogólne na górze
+        const history = this.gameService.getGameHistory();
+        if (history.totalGames > 0) {
+            // Znajdź hasło nieodgadnięte najdłużej
+            const longestGame = history.completedGames.reduce((longest, current) => 
+                current.duration > longest.duration ? current : longest
+            );
+
+            // Znajdź hasło wymagające największej ilości prób
+            const mostAttemptsGame = history.completedGames.reduce((most, current) => 
+                current.totalAttempts > most.totalAttempts ? current : most
             );
 
             embed.addFields({
-                name: '🥇 TOP 3 gracze',
-                value: top3Text.join('\n'),
+                name: '📊 Statystyki ogólne',
+                value: `**Łącznie gier:** ${history.totalGames}\n**Średnie próby:** ${history.averageAttempts}\n**Średni czas:** ${this.formatDuration(history.averageTime)}\n\n**Najdłużej nieodgadnięte:** "${longestGame.password}" (${this.formatDuration(longestGame.duration)})\n**Najwięcej prób:** "${mostAttemptsGame.password}" (${mostAttemptsGame.totalAttempts} prób)`,
+                inline: false
+            });
+        } else {
+            embed.addFields({
+                name: '📊 Statystyki ogólne',
+                value: 'Brak danych - nie ukończono jeszcze żadnej gry.',
                 inline: false
             });
         }
