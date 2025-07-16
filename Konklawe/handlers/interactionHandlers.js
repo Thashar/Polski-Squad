@@ -382,8 +382,7 @@ class InteractionHandler {
         // Pobierz ranking z gameService
         const ranking = Object.entries(this.gameService.scoreboard)
             .filter(([userId, points]) => points > 0)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 10);
+            .sort(([,a], [,b]) => b - a);
 
         if (ranking.length === 0) {
             embed.setDescription('🚫 Brak graczy w rankingu.');
@@ -500,13 +499,13 @@ class InteractionHandler {
             );
 
             embed.addFields({
-                name: '📊 Statystyki ogólne',
-                value: `**Łącznie gier:** ${history.totalGames}\n**Średnie próby:** ${history.averageAttempts}\n**Średni czas:** ${this.formatDuration(history.averageTime)}\n\n**Najdłużej nieodgadnięte:** "${longestGame.password}" (${this.formatDuration(longestGame.duration)})\n**Najwięcej prób:** "${mostAttemptsGame.password}" (${mostAttemptsGame.totalAttempts} prób)`,
+                name: '',
+                value: `**Łącznie gier:** ${history.totalGames}\n**Próby średnio:** ${history.averageAttempts}\n**Średni czas:** ${this.formatDuration(history.averageTime)}\n\n**Najdłużej nieodgadnięte:** "${longestGame.password}" (${this.formatDuration(longestGame.duration)})\n**Najwięcej prób:** "${mostAttemptsGame.password}" (${mostAttemptsGame.totalAttempts} prób)`,
                 inline: false
             });
         } else {
             embed.addFields({
-                name: '📊 Statystyki ogólne',
+                name: '',
                 value: 'Brak danych - nie ukończono jeszcze żadnej gry.',
                 inline: false
             });
