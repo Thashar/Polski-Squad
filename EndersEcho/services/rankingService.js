@@ -158,6 +158,10 @@ class RankingService {
                     else if (code <= 0x7F || (code >= 0x80 && code <= 0x24F)) {
                         width += 1;
                     }
+                    // Znaki cyrylickie - szerokość 3
+                    else if (code >= 0x0400 && code <= 0x04FF) { // Cyrillic (dla Ӂ)
+                        width += 3;
+                    }
                     // Znaki CJK i szerokie - szerokość 2
                     else if (code >= 0x1100 && code <= 0x11FF || // Hangul Jamo
                              code >= 0x2E80 && code <= 0x2EFF || // CJK Radicals
@@ -172,8 +176,7 @@ class RankingService {
                              code >= 0x4E00 && code <= 0x9FFF || // CJK Unified Ideographs
                              code >= 0xAC00 && code <= 0xD7AF || // Hangul Syllables
                              code >= 0xF900 && code <= 0xFAFF || // CJK Compatibility Ideographs
-                             code >= 0xFF00 && code <= 0xFFEF || // Halfwidth and Fullwidth Forms
-                             code >= 0x0400 && code <= 0x04FF) { // Cyrillic (dla Ӂ)
+                             code >= 0xFF00 && code <= 0xFFEF) { // Halfwidth and Fullwidth Forms
                         width += 2;
                     }
                     // Inne znaki - szerokość 1
