@@ -826,6 +826,10 @@ class InteractionHandler {
                     count: deletedCount
                 });
                 await interaction.editReply({ content: successMessage });
+                
+                // Publiczne powiadomienie o sukcesie
+                await interaction.followUp({ content: successMessage, ephemeral: false });
+                
                 await this.logService.logMessage('success', `Usunięto ${deletedCount} wiadomości na kanale ${interaction.channel.name}`, interaction);
             } else {
                 await interaction.editReply({ content: this.config.messages.cleanNoMessages });
@@ -973,7 +977,7 @@ class InteractionHandler {
             return;
         }
 
-        const targetUser = interaction.options.getUser('uzytkownik');
+        const targetUser = interaction.options.getUser('użytkownik');
         const timeInMinutes = interaction.options.getInteger('czas');
         const reason = interaction.options.getString('powod');
 
@@ -1057,6 +1061,9 @@ class InteractionHandler {
 
             await interaction.editReply({ content: successMessage });
             
+            // Publiczne powiadomienie o sukcesie
+            await interaction.followUp({ content: successMessage, ephemeral: false });
+            
             // Dodatkowa informacja o automatycznym odciszeniu
             if (timeInMinutes) {
                 const unmuteScheduledMessage = formatMessage(this.config.messages.muteUnmuteScheduled, {
@@ -1092,7 +1099,7 @@ class InteractionHandler {
             return;
         }
 
-        const targetUser = interaction.options.getUser('uzytkownik');
+        const targetUser = interaction.options.getUser('użytkownik');
         const reason = interaction.options.getString('powod');
 
         if (!targetUser) {
@@ -1150,6 +1157,10 @@ class InteractionHandler {
             });
 
             await interaction.editReply({ content: successMessage });
+            
+            // Publiczne powiadomienie o sukcesie
+            await interaction.followUp({ content: successMessage, ephemeral: false });
+            
             await this.logService.logMessage('success', `Odciszono użytkownika ${targetUser.tag}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
 
         } catch (error) {
@@ -1177,7 +1188,7 @@ class InteractionHandler {
             return;
         }
 
-        const targetUser = interaction.options.getUser('uzytkownik');
+        const targetUser = interaction.options.getUser('użytkownik');
         const reason = interaction.options.getString('powod');
 
         if (!targetUser) {
@@ -1234,6 +1245,10 @@ class InteractionHandler {
             });
 
             await interaction.editReply({ content: successMessage });
+            
+            // Publiczne powiadomienie o sukcesie
+            await interaction.followUp({ content: successMessage, ephemeral: false });
+            
             await this.logService.logMessage('success', `Wyrzucono użytkownika ${targetUser.tag} z powodem: ${reason}`, interaction);
 
         } catch (error) {
@@ -1261,7 +1276,7 @@ class InteractionHandler {
             return;
         }
 
-        const targetUser = interaction.options.getUser('uzytkownik');
+        const targetUser = interaction.options.getUser('użytkownik');
         const reason = interaction.options.getString('powod');
         const deleteDays = interaction.options.getInteger('dni_wiadomosci') || this.config.moderation.ban.defaultDeleteDays;
 
@@ -1323,6 +1338,10 @@ class InteractionHandler {
             });
 
             await interaction.editReply({ content: successMessage });
+            
+            // Publiczne powiadomienie o sukcesie
+            await interaction.followUp({ content: successMessage, ephemeral: false });
+            
             await this.logService.logMessage('success', `Zbanowano użytkownika ${targetUser.tag} z powodem: ${reason}`, interaction);
 
         } catch (error) {
@@ -1395,6 +1414,10 @@ class InteractionHandler {
             });
 
             await interaction.editReply({ content: successMessage });
+            
+            // Publiczne powiadomienie o sukcesie
+            await interaction.followUp({ content: successMessage, ephemeral: false });
+            
             await this.logService.logMessage('success', `Odbanowano użytkownika ${banInfo.user.tag}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
 
         } catch (error) {
@@ -1426,7 +1449,7 @@ class InteractionHandler {
             return;
         }
 
-        const targetUser = interaction.options.getUser('uzytkownik');
+        const targetUser = interaction.options.getUser('użytkownik');
         const reason = interaction.options.getString('powod');
 
         if (!targetUser) {
@@ -1463,6 +1486,10 @@ class InteractionHandler {
             });
 
             await interaction.editReply({ content: successMessage });
+            
+            // Publiczne powiadomienie o sukcesie
+            await interaction.followUp({ content: successMessage, ephemeral: false });
+            
             await this.logService.logMessage('success', `Nadano ostrzeżenie użytkownikowi ${targetUser.tag} (${result.totalWarnings} łącznie) z powodem: ${reason}`, interaction);
 
         } catch (error) {
@@ -1490,7 +1517,7 @@ class InteractionHandler {
             return;
         }
 
-        const targetUser = interaction.options.getUser('uzytkownik');
+        const targetUser = interaction.options.getUser('użytkownik');
 
         if (!targetUser) {
             await interaction.reply({
