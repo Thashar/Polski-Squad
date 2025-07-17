@@ -794,8 +794,8 @@ class InteractionHandler {
             return;
         }
 
-        const user = interaction.options.getUser('uzytkownik');
-        const amount = interaction.options.getInteger('ilosc');
+        const user = interaction.options.getUser('użytkownik');
+        const amount = interaction.options.getInteger('ilość');
         const minutes = interaction.options.getInteger('czas');
 
         await interaction.deferReply({ ephemeral: true });
@@ -979,7 +979,7 @@ class InteractionHandler {
 
         const targetUser = interaction.options.getUser('użytkownik');
         const timeInMinutes = interaction.options.getInteger('czas');
-        const reason = interaction.options.getString('powod');
+        const reason = interaction.options.getString('powód');
 
         if (!targetUser) {
             await interaction.reply({
@@ -1100,7 +1100,7 @@ class InteractionHandler {
         }
 
         const targetUser = interaction.options.getUser('użytkownik');
-        const reason = interaction.options.getString('powod');
+        const reason = interaction.options.getString('powód');
 
         if (!targetUser) {
             await interaction.reply({
@@ -1189,7 +1189,7 @@ class InteractionHandler {
         }
 
         const targetUser = interaction.options.getUser('użytkownik');
-        const reason = interaction.options.getString('powod');
+        const reason = interaction.options.getString('powód');
 
         if (!targetUser) {
             await interaction.reply({
@@ -1277,8 +1277,8 @@ class InteractionHandler {
         }
 
         const targetUser = interaction.options.getUser('użytkownik');
-        const reason = interaction.options.getString('powod');
-        const deleteDays = interaction.options.getInteger('dni_wiadomosci') || this.config.moderation.ban.defaultDeleteDays;
+        const reason = interaction.options.getString('powód');
+        const deleteDays = interaction.options.getInteger('dni_wiadomości') || this.config.moderation.ban.defaultDeleteDays;
 
         if (!targetUser) {
             await interaction.reply({
@@ -1370,7 +1370,7 @@ class InteractionHandler {
         }
 
         const userId = interaction.options.getString('user_id');
-        const reason = interaction.options.getString('powod');
+        const reason = interaction.options.getString('powód');
 
         if (!userId) {
             await interaction.reply({
@@ -1450,7 +1450,7 @@ class InteractionHandler {
         }
 
         const targetUser = interaction.options.getUser('użytkownik');
-        const reason = interaction.options.getString('powod');
+        const reason = interaction.options.getString('powód');
 
         if (!targetUser) {
             await interaction.reply({
