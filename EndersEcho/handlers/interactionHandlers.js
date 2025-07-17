@@ -164,8 +164,8 @@ class InteractionHandler {
             return;
         }
         
-        // Defer reply przed długimi operacjami OCR
-        await interaction.deferReply();
+        // Defer reply przed długimi operacjami OCR - prywatnie podczas przetwarzania
+        await interaction.deferReply({ ephemeral: true });
         
         // Informuj użytkownika że rozpoczęto przetwarzanie
         await interaction.editReply({ content: this.config.messages.updateProcessing });
@@ -226,6 +226,7 @@ class InteractionHandler {
                     userName, bestScore, currentScore.score
                 );
                 
+                // Aktualizuj ephemeral message z informacją o braku pobicia rekordu
                 await interaction.editReply({ embeds: [resultEmbed] });
                 return;
             }
@@ -242,8 +243,13 @@ class InteractionHandler {
                 imageAttachment.name
             );
             
-            // Publiczne ogłoszenie nowego rekordu
+            // Aktualizuj ephemeral message z informacją o sukcesie
             await interaction.editReply({ 
+                content: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.' 
+            });
+            
+            // Wyślij publiczne ogłoszenie nowego rekordu jako nową wiadomość
+            await interaction.followUp({ 
                 embeds: [publicEmbed], 
                 files: [imageAttachment] 
             });
