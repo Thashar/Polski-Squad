@@ -130,8 +130,12 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
+            // Wyróżnij tylko osobę, która wywołuje ranking
+            const isCurrentUser = player.userId === userId;
+            const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
+            
             // Prosty format: pozycja nick • wynik (data) • boss
-            rankingText += `${position} **${displayName}** • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
+            rankingText += `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
             
             // Sprawdź limity Discord
             if (rankingText.length > 1800) {
