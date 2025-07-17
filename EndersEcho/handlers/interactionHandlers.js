@@ -165,7 +165,7 @@ class InteractionHandler {
         }
         
         // Defer reply przed długimi operacjami OCR
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply();
         
         // Informuj użytkownika że rozpoczęto przetwarzanie
         await interaction.editReply({ content: this.config.messages.updateProcessing });
