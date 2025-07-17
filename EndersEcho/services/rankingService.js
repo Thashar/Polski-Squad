@@ -106,8 +106,8 @@ class RankingService {
         
         // Formatowanie w code block dla lepszego wyrównania
         tableText += '```\n';
-        tableText += 'Pos  Nick               Wynik           Boss\n';
-        tableText += '================================================\n';
+        tableText += 'Pos  Nick               Wynik        Boss           Data\n';
+        tableText += '=========================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -119,7 +119,9 @@ class RankingService {
                 position = `${actualPosition}.`.padEnd(4);
             }
             
-            const date = new Date(player.timestamp).toLocaleDateString('pl-PL');
+            // Skrócona data - tylko dzień i miesiąc
+            const date = new Date(player.timestamp);
+            const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
             
             // Pobierz nick na serwerze
             let displayName = player.username;
@@ -133,12 +135,79 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Formatuj z odpowiednimi szerokościami
-            const nickCol = displayName.substring(0, 18).padEnd(18);
-            const scoreCol = `${this.formatScore(player.scoreValue)} (${date})`.substring(0, 15).padEnd(15);
-            const bossCol = bossName.substring(0, 15);
+            // Funkcja do liczenia rzeczywistej szerokości wizualnej tekstu
+            const getVisualWidth = (text) => {
+                let width = 0;
+                for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    const code = char.charCodeAt(0);
+                    
+                    // Znaki ASCII i łacińskie - szerokość 1
+                    if (code <= 0x7F || (code >= 0x80 && code <= 0x24F)) {
+                        width += 1;
+                    }
+                    // Znaki CJK, symbole specjalne - szerokość 2
+                    else if (code >= 0x1100 && code <= 0x11FF || // Hangul Jamo
+                             code >= 0x2E80 && code <= 0x2EFF || // CJK Radicals
+                             code >= 0x2F00 && code <= 0x2FDF || // Kangxi Radicals
+                             code >= 0x3000 && code <= 0x303F || // CJK Symbols and Punctuation
+                             code >= 0x3040 && code <= 0x309F || // Hiragana
+                             code >= 0x30A0 && code <= 0x30FF || // Katakana
+                             code >= 0x3100 && code <= 0x312F || // Bopomofo
+                             code >= 0x3130 && code <= 0x318F || // Hangul Compatibility Jamo
+                             code >= 0x3200 && code <= 0x32FF || // Enclosed CJK Letters and Months
+                             code >= 0x3400 && code <= 0x4DBF || // CJK Extension A
+                             code >= 0x4E00 && code <= 0x9FFF || // CJK Unified Ideographs
+                             code >= 0xAC00 && code <= 0xD7AF || // Hangul Syllables
+                             code >= 0xF900 && code <= 0xFAFF || // CJK Compatibility Ideographs
+                             code >= 0xFF00 && code <= 0xFFEF) { // Halfwidth and Fullwidth Forms
+                        width += 2;
+                    }
+                    // Inne znaki - szerokość 1
+                    else {
+                        width += 1;
+                    }
+                }
+                return width;
+            };
             
-            tableText += `${position} ${nickCol} ${scoreCol} ${bossCol}\n`;
+            // Funkcja do dopełniania tekstu do określonej szerokości wizualnej
+            const padToVisualWidth = (text, targetWidth) => {
+                const currentWidth = getVisualWidth(text);
+                const spacesNeeded = Math.max(0, targetWidth - currentWidth);
+                return text + ' '.repeat(spacesNeeded);
+            };
+            
+            // Funkcja do obcinania tekstu do określonej szerokości wizualnej
+            const truncateToVisualWidth = (text, maxWidth) => {
+                let result = '';
+                let currentWidth = 0;
+                
+                for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    const charWidth = getVisualWidth(char);
+                    
+                    if (currentWidth + charWidth > maxWidth) {
+                        break;
+                    }
+                    
+                    result += char;
+                    currentWidth += charWidth;
+                }
+                
+                return result;
+            };
+            
+            // Formatuj z odpowiednimi szerokościami wizualnymi
+            const truncatedNick = truncateToVisualWidth(displayName, 18);
+            const truncatedBoss = truncateToVisualWidth(bossName, 14);
+            
+            const nickCol = padToVisualWidth(truncatedNick, 18);
+            const scoreCol = padToVisualWidth(this.formatScore(player.scoreValue), 12);
+            const bossCol = padToVisualWidth(truncatedBoss, 14);
+            const dateCol = padToVisualWidth(shortDate, 5);
+            
+            tableText += `${position} ${nickCol} ${scoreCol} ${bossCol} ${dateCol}\n`;
             
             // Sprawdź limity Discord
             if (tableText.length > 1800) {
