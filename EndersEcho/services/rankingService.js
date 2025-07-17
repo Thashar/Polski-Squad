@@ -99,15 +99,14 @@ class RankingService {
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
         
-        // Tworzymy ranking w formie pól embed
+        // Tworzymy ranking w formie tabeli (wymuszony układ poziomy)
         const medals = this.config.scoring.medals;
         
-        // Przygotuj dane dla każdego gracza
-        const playerData = {
-            nicks: '',
-            scoresDates: '',
-            bosses: ''
-        };
+        let tableText = '';
+        
+        // Nagłówek tabeli używając spacji nierozdzielnych
+        tableText += '**Nick**　　　　　　　　　　**Wynik**　　　　　　　　　　**Boss**\n';
+        tableText += '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -137,18 +136,25 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            const nickLine = `${medal} ${displayName}`;
-            const scoreLine = `**${this.formatScore(player.scoreValue)}** *_(${date})_*`;
-            const bossLine = `${bossName}`;
+            // Użyj szerokiej spacji (U+3000) dla lepszego wyrównania
+            const nickText = `${medal} ${displayName}`;
+            const scoreText = `**${this.formatScore(player.scoreValue)}** _(${date})_`;
             
-            // Sprawdź limity Discord - zwiększony limit dla 10 graczy
-            if (playerData.scoresDates.length + scoreLine.length + '\n'.length <= 300) {
-                
-                playerData.nicks += (index === 0 ? '' : '\n') + nickLine;
-                playerData.scoresDates += (index === 0 ? '' : '\n') + scoreLine;
-                playerData.bosses += (index === 0 ? '' : '\n') + bossLine;
-                
-            } else {
+            // Funkcja do dopełniania szerokimi spacjami
+            const padWithWideSpace = (text, length) => {
+                const visibleLength = text.replace(/\*\*/g, '').replace(/_/g, '').length;
+                const spacesNeeded = Math.max(0, length - visibleLength);
+                return text + '　'.repeat(spacesNeeded);
+            };
+            
+            const nickCol = padWithWideSpace(nickText, 20);
+            const scoreCol = padWithWideSpace(scoreText, 20);
+            const bossCol = bossName;
+            
+            tableText += `${nickCol}${scoreCol}${bossCol}\n`;
+            
+            // Sprawdź limity Discord
+            if (tableText.length > 1500) {
                 break;
             }
         }
@@ -156,22 +162,8 @@ class RankingService {
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
             .setTitle(this.config.messages.rankingTitle)
+            .setDescription(tableText)
             .addFields(
-                {
-                    name: 'Nick',
-                    value: playerData.nicks || 'Brak',
-                    inline: true
-                },
-                {
-                    name: 'Wynik',
-                    value: playerData.scoresDates || 'Brak',
-                    inline: true
-                },
-                {
-                    name: 'Boss',
-                    value: playerData.bosses || 'Brak',
-                    inline: true
-                },
                 {
                     name: this.config.messages.rankingStats,
                     value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) + 
