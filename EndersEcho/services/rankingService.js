@@ -49,7 +49,7 @@ class RankingService {
      */
     parseScoreValue(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)([KMBTQS]?)$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)([KMBTQ]|QI)?$/);
         if (!match) return 0;
         
         const number = parseFloat(match[1]);
@@ -65,7 +65,7 @@ class RankingService {
      */
     formatScore(value) {
         const units = [
-            { name: 'S', value: 1000000000000000000 },
+            { name: 'Qi', value: 1000000000000000000 },
             { name: 'Q', value: 1000000000000000 },
             { name: 'T', value: 1000000000000 },
             { name: 'B', value: 1000000000 },
@@ -99,12 +99,30 @@ class RankingService {
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
         
-        let rankingText = '';
+        // Tworzymy ranking w formie pól embed
         const medals = this.config.scoring.medals;
+        
+        // Przygotuj dane dla każdego gracza
+        const playerData = {
+            nicks: '',
+            scoresDates: '',
+            bosses: ''
+        };
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
-            const medal = actualPosition <= 3 ? medals[actualPosition - 1] : `${actualPosition}.`;
+            let medal;
+            if (actualPosition <= 3) {
+                medal = medals[actualPosition - 1];
+            } else if (actualPosition >= 4 && actualPosition <= 9) {
+                medal = `${actualPosition}️⃣`;
+            } else if (actualPosition === 10) {
+                medal = '🔟';
+            } else {
+                // Dla pozycji 11+ używaj ikon dla każdej cyfry
+                const positionStr = actualPosition.toString();
+                medal = positionStr.split('').map(digit => `${digit}️⃣`).join('');
+            }
             const date = new Date(player.timestamp).toLocaleDateString('pl-PL');
             
             // Pobierz nick na serwerze
@@ -117,19 +135,66 @@ class RankingService {
                 logger.info(`Nie można pobrać membera ${player.userId}, używam zapisanego username`);
             }
             
-            // Wyróżnienie własnego wyniku
-            const isCurrentUser = player.userId === userId;
-            const highlight = isCurrentUser ? '' : '';
-            const highlightEnd = isCurrentUser ? '' : '';
+            const bossName = player.bossName || 'Nieznany';
             
-            rankingText += `${highlight}${medal} **${displayName}** - ${this.formatScore(player.scoreValue)} *(${date})*${highlightEnd}\n`;
+            // Usuń odstępy od góry i dołu (pierwszy i ostatni bez \n)
+            const isFirst = index === 0;
+            const isLast = index === currentPagePlayers.length - 1;
+            
+            const nickLine = isFirst ? 
+                `${medal} ${displayName}` : 
+                isLast ? 
+                `\n${medal} ${displayName}` : 
+                `\n${medal} ${displayName}`;
+            
+            // Ikona mieczów przed każdym wynikiem
+            const scoreLine = isFirst ? 
+                `⚔️ **${this.formatScore(player.scoreValue)}** *_(${date})_*` : 
+                isLast ? 
+                `\n⚔️ **${this.formatScore(player.scoreValue)}** *_(${date})_*` : 
+                `\n⚔️ **${this.formatScore(player.scoreValue)}** *_(${date})_*`;
+            
+            // Ikona czaszki przed każdą nazwą bossa
+            const bossLine = isFirst ? 
+                `💀 ${bossName}` : 
+                isLast ? 
+                `\n💀 ${bossName}` : 
+                `\n💀 ${bossName}`;
+            
+            // Sprawdź limity Discord - zwiększony limit dla 10 graczy
+            if (playerData.scoresDates.length + scoreLine.length <= 300) {
+                
+                playerData.nicks += nickLine;
+                playerData.scoresDates += scoreLine;
+                playerData.bosses += bossLine;
+                
+            } else {
+                logger.warn(`Przekroczono limit znaków dla gracza ${displayName} na pozycji ${actualPosition}`);
+                logger.warn(`Aktualne długości: nicks=${playerData.nicks.length}, scores=${playerData.scoresDates.length}, bosses=${playerData.bosses.length}`);
+                break;
+            }
         }
+        
         
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
             .setTitle(this.config.messages.rankingTitle)
-            .setDescription(rankingText)
             .addFields(
+                {
+                    name: 'Nick',
+                    value: playerData.nicks || 'Brak',
+                    inline: true
+                },
+                {
+                    name: 'Wynik',
+                    value: playerData.scoresDates || 'Brak',
+                    inline: true
+                },
+                {
+                    name: 'Boss',
+                    value: playerData.bosses || 'Brak',
+                    inline: true
+                },
                 {
                     name: this.config.messages.rankingStats,
                     value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) + 
@@ -257,9 +322,10 @@ class RankingService {
      * @param {string} userId - ID użytkownika
      * @param {string} userName - Nazwa użytkownika
      * @param {string} bestScore - Najlepszy wynik
+     * @param {string} bossName - Nazwa bossa
      * @returns {Promise<{isNewRecord: boolean, ranking: Object}>} - Wynik aktualizacji
      */
-    async updateUserRanking(userId, userName, bestScore) {
+    async updateUserRanking(userId, userName, bestScore, bossName = null) {
         const ranking = await this.loadRanking();
         const newScoreValue = this.parseScoreValue(bestScore);
         
@@ -272,7 +338,8 @@ class RankingService {
                 username: userName,
                 timestamp: new Date().toISOString(),
                 scoreValue: newScoreValue,
-                userId: userId
+                userId: userId,
+                bossName: bossName || 'Nieznany boss'
             };
             await this.saveRanking(ranking);
             isNewRecord = true;

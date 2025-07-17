@@ -200,12 +200,16 @@ class InteractionHandler {
                 return;
             }
             
+            // Ekstrakcja nazwy bossa
+            const bossName = this.ocrService.extractBossName(extractedText);
+            logger.info('Nazwa bossa:', bossName);
+            
             // Aktualizacja rankingu
             const userId = interaction.user.id;
             const userName = interaction.user.displayName || interaction.user.username;
             
             const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
-                userId, userName, bestScore
+                userId, userName, bestScore, bossName
             );
             
             await this.logService.logScoreUpdate(userName, bestScore, isNewRecord);

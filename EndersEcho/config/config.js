@@ -39,7 +39,7 @@ module.exports = {
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
         languages: 'pol+eng',
-        charWhitelist: '0123456789KMBTQS7.Best:Total ',
+        charWhitelist: '0123456789KMBTQSi7.Best:Total ',
         charWhitelistWords: 'BestTotalbesttotal: ',
         threshold: 200
     },
@@ -59,7 +59,7 @@ module.exports = {
             'B': 1000000000,
             'T': 1000000000000,
             'Q': 1000000000000000,
-            'S': 1000000000000000000
+            'Qi': 1000000000000000000
         },
         medals: ['🥇', '🥈', '🥉']
     },

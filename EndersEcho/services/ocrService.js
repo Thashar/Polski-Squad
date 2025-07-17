@@ -132,24 +132,26 @@ class OCRService {
      * @returns {string|null} - Wyodrębniony wynik lub null
      */
     extractScoreAfterBest(text) {
+        logger.info('Pełny tekst z OCR:');
+        logger.info(text);
         logger.info('Analizowany tekst OCR:', text);
         
         // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
-        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQS7]*)/gi;
+        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQSi7]*)/gi;
         let matches = text.match(bestScorePattern);
         
         logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
         
         if (!matches || matches.length === 0) {
             // Elastyczny wzorzec też uwzględnia cyfry końcowe
-            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?[KMBTQS7]*)/gi;
+            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?[KMBTQSi7]*)/gi;
             matches = [];
             let match;
             
             while ((match = flexiblePattern.exec(text)) !== null) {
                 const score = match[1];
                 const upperScore = score.toUpperCase();
-                const hasUnit = /[KMBTQS7]$/i.test(upperScore);
+                const hasUnit = /[KMBTQSi7]$/i.test(upperScore);
                 const isBigNumber = /^\d{4,}$/.test(score);
                 
                 if (hasUnit || isBigNumber) {
@@ -166,7 +168,7 @@ class OCRService {
             }
         } else {
             // Zaktualizowany wzorzec dla wyciągania wyniku
-            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?[KMBTQS7]*)/i);
+            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?[KMBTQSi7]*)/i);
             matches = scoreMatch ? [scoreMatch[1]] : [];
         }
         
@@ -181,6 +183,29 @@ class OCRService {
             return result;
         }
         
+        return null;
+    }
+
+    /**
+     * Wyodrębnia nazwę bossa z drugiej linijki tekstu OCR
+     * @param {string} text - Tekst z OCR
+     * @returns {string|null} - Nazwa bossa lub null
+     */
+    extractBossName(text) {
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length >= 2) {
+            const bossLine = lines[1];
+            logger.info('Druga linijka tekstu (boss):', bossLine);
+            
+            // Oczyszczenie nazwy bossa z niepotrzebnych znaków
+            const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
+            logger.info('Oczyszczona nazwa bossa:', cleanBossName);
+            
+            return cleanBossName || null;
+        }
+        
+        logger.info('Brak drugiej linijki dla nazwy bossa');
         return null;
     }
 }
