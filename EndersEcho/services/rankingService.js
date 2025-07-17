@@ -137,10 +137,6 @@ class RankingService {
             
             // Funkcja do liczenia szerokości tekstu - prostsze podejście
             const getVisualWidth = (text) => {
-                // Dla nicka Spermiarza dodaj dodatkowe miejsca
-                if (text.includes('ӁㆍSpea̷rmiarz Ӂ')) {
-                    return 22; // Zwiększone z powodu specjalnych znaków
-                }
                 
                 // Normalizuj tekst do formy NFD (decomposed) żeby rozdzielić znaki składowe
                 const normalizedText = text.normalize('NFD');
