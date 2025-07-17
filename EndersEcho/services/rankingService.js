@@ -106,7 +106,7 @@ class RankingService {
         
         // Formatowanie w code block dla lepszego wyrównania
         tableText += '```\n';
-        tableText += 'Pos  Nick               Wynik        Boss           Data\n';
+        tableText += 'Pos  Nick               Wynik    Boss             Data\n';
         tableText += '=========================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
@@ -200,11 +200,11 @@ class RankingService {
             
             // Formatuj z odpowiednimi szerokościami wizualnymi
             const truncatedNick = truncateToVisualWidth(displayName, 18);
-            const truncatedBoss = truncateToVisualWidth(bossName, 14);
+            const truncatedBoss = truncateToVisualWidth(bossName, 16);
             
             const nickCol = padToVisualWidth(truncatedNick, 18);
-            const scoreCol = padToVisualWidth(this.formatScore(player.scoreValue), 12);
-            const bossCol = padToVisualWidth(truncatedBoss, 14);
+            const scoreCol = padToVisualWidth(this.formatScore(player.scoreValue), 8);
+            const bossCol = padToVisualWidth(truncatedBoss, 16);
             const dateCol = padToVisualWidth(shortDate, 5);
             
             tableText += `${position} ${nickCol} ${scoreCol} ${bossCol} ${dateCol}\n`;
