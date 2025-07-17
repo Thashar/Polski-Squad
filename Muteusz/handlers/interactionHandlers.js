@@ -25,11 +25,6 @@ class InteractionHandler {
                     option.setName('rola')
                         .setDescription('Rola do usunięcia')
                         .setRequired(true)
-                )
-                .addBooleanOption(option =>
-                    option.setName('szybkie')
-                        .setDescription('Usuń rolę przez skasowanie i ponowne utworzenie (szybsze)')
-                        .setRequired(false)
                 ),
             
             new SlashCommandBuilder()
@@ -165,7 +160,6 @@ class InteractionHandler {
         }
         
         const roleToRemove = interaction.options.getRole('rola');
-        const quickMode = interaction.options.getBoolean('szybkie') || false;
         
         if (!roleToRemove) {
             await interaction.reply({
@@ -186,92 +180,68 @@ class InteractionHandler {
         await interaction.deferReply({ ephemeral: true });
         
         try {
-            if (quickMode && this.config.roles.enableQuickMode) {
-                await this.logService.logMessage('info', `Rozpoczynanie szybkiego usuwania roli ${roleToRemove.name}`, interaction);
-                
-                const roleData = {
-                    name: roleToRemove.name,
-                    color: roleToRemove.color,
-                    permissions: roleToRemove.permissions,
-                    mentionable: roleToRemove.mentionable,
-                    hoist: roleToRemove.hoist,
-                    position: roleToRemove.position
-                };
-                
-                await roleToRemove.delete();
-                await interaction.guild.roles.create(roleData);
-                
-                const successMessage = formatMessage(this.config.messages.quickModeSuccess, {
-                    roleName: roleData.name
+            const members = await interaction.guild.members.fetch();
+            const membersWithRole = members.filter(member => 
+                member.roles.cache.has(roleToRemove.id)
+            );
+            
+            if (membersWithRole.size === 0) {
+                const noUsersMessage = formatMessage(this.config.messages.noUsersWithRole, {
+                    roleName: roleToRemove.name
                 });
                 
-                await interaction.editReply({ content: successMessage });
-                await this.logService.logMessage('success', `Szybkie usunięcie roli ${roleData.name} zakończone pomyślnie`, interaction);
-                
-            } else {
-                const members = await interaction.guild.members.fetch();
-                const membersWithRole = members.filter(member => 
-                    member.roles.cache.has(roleToRemove.id)
-                );
-                
-                if (membersWithRole.size === 0) {
-                    const noUsersMessage = formatMessage(this.config.messages.noUsersWithRole, {
-                        roleName: roleToRemove.name
-                    });
-                    
-                    await interaction.editReply({ content: noUsersMessage });
-                    return;
-                }
-                
-                await this.logService.logMessage('info', `Rozpoczynanie usuwania roli ${roleToRemove.name} od ${membersWithRole.size} użytkowników`, interaction);
-                
-                let successCount = 0;
-                let errorCount = 0;
-                
-                const startMessage = formatMessage(this.config.messages.startingRemoval, {
-                    roleName: roleToRemove.name,
-                    userCount: membersWithRole.size
-                });
-                
-                await interaction.editReply({
-                    content: `${startMessage}\nSzacowany czas: ${Math.ceil(membersWithRole.size / 60)} minut`
-                });
-                
-                let delay = 0;
-                
-                for (const [memberId, member] of membersWithRole) {
-                    setTimeout(async () => {
-                        try {
-                            await member.roles.remove(roleToRemove);
-                            successCount++;
+                await interaction.editReply({ content: noUsersMessage });
+                return;
+            }
+            
+            await this.logService.logMessage('info', `Rozpoczynanie usuwania roli ${roleToRemove.name} od ${membersWithRole.size} użytkowników`, interaction);
+            
+            let successCount = 0;
+            let errorCount = 0;
+            
+            const startMessage = formatMessage(this.config.messages.startingRemoval, {
+                roleName: roleToRemove.name,
+                userCount: membersWithRole.size
+            });
+            
+            await interaction.editReply({
+                content: `${startMessage}\nSzacowany czas: ${Math.ceil(membersWithRole.size / 60)} minut`
+            });
+            
+            let delay = 0;
+            
+            for (const [memberId, member] of membersWithRole) {
+                setTimeout(async () => {
+                    try {
+                        await member.roles.remove(roleToRemove);
+                        successCount++;
+                        
+                        if (successCount % this.config.roles.maxRemovalsPerBatch === 0) {
+                            const progressMessage = formatMessage(this.config.messages.progressUpdate, {
+                                current: successCount,
+                                total: membersWithRole.size
+                            });
                             
-                            if (successCount % this.config.roles.maxRemovalsPerBatch === 0) {
-                                const progressMessage = formatMessage(this.config.messages.progressUpdate, {
-                                    current: successCount,
-                                    total: membersWithRole.size
-                                });
-                                
-                                await interaction.editReply({ content: progressMessage });
-                            }
-                            
-                            if (successCount + errorCount === membersWithRole.size) {
-                                const completionMessage = formatMessage(this.config.messages.completionSuccess, {
-                                    roleName: roleToRemove.name,
-                                    success: successCount,
-                                    errors: errorCount
-                                });
-                                
-                                await interaction.editReply({ content: completionMessage });
-                                await this.logService.logMessage('success', `Usuwanie roli ${roleToRemove.name} zakończone. Sukces: ${successCount}, Błędy: ${errorCount}`, interaction);
-                            }
-                        } catch (error) {
-                            errorCount++;
-                            await this.logService.logMessage('error', `Błąd podczas usuwania roli od ${member.user.tag}: ${error.message}`, interaction);
+                            await interaction.editReply({ content: progressMessage });
                         }
-                    }, delay);
-                    
-                    delay += this.config.roles.delayBetweenRemovals;
-                }
+                        
+                        if (successCount + errorCount === membersWithRole.size) {
+                            const completionMessage = formatMessage(this.config.messages.completionSuccess, {
+                                roleName: roleToRemove.name,
+                                success: successCount,
+                                errors: errorCount
+                            });
+                            
+                            await interaction.editReply({ content: completionMessage });
+                            await this.logService.logMessage('success', `Usuwanie roli ${roleToRemove.name} zakończone. Sukces: ${successCount}, Błędy: ${errorCount}`, interaction);
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        await this.logService.logMessage('error', `Błąd podczas usuwania roli od ${member.user.tag}: ${error.message}`, interaction);
+                    }
+                }, delay);
+                
+                delay += this.config.roles.delayBetweenRemovals;
             }
             
         } catch (error) {

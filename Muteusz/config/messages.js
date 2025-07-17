@@ -6,7 +6,6 @@ module.exports = {
     startingRemoval: "🔄 Rozpoczynam usuwanie roli **{roleName}** od {userCount} użytkowników...",
     progressUpdate: "⏳ Postęp: {current}/{total} użytkowników",
     completionSuccess: "✅ Usunięto rolę **{roleName}** od {success} użytkowników! Błędy: {errors}",
-    quickModeSuccess: "✅ Szybko usunięto rolę **{roleName}** przez ponowne utworzenie!",
     generalError: "❌ Wystąpił błąd podczas wykonywania operacji!",
     mediaReposted: "🎉 Repostowano: {fileName} od {userTag}",
     cacheUsed: "💾 Używanie cache dla: {fileName}",

@@ -56,7 +56,6 @@ module.exports = {
     
     roles: {
         requiredPermission: 'ManageRoles',
-        enableQuickMode: true,
         maxRemovalsPerBatch: 10,
         delayBetweenRemovals: 1000
     },
