@@ -204,6 +204,11 @@ class InteractionHandler {
             const bossName = this.ocrService.extractBossName(extractedText);
             logger.info('Nazwa bossa:', bossName);
             
+            // Debug - sprawdź czy mamy wszystkie dane
+            logger.info('DEBUG - extractedText długość:', extractedText ? extractedText.length : 'null');
+            logger.info('DEBUG - bestScore:', bestScore);
+            logger.info('DEBUG - bossName:', bossName);
+            
             // Aktualizacja rankingu
             const userId = interaction.user.id;
             const userName = interaction.user.displayName || interaction.user.username;
@@ -239,7 +244,6 @@ class InteractionHandler {
             
             // Publiczne ogłoszenie nowego rekordu
             await interaction.editReply({ 
-                content: this.config.messages.updateSuccess,
                 embeds: [publicEmbed], 
                 files: [imageAttachment] 
             });

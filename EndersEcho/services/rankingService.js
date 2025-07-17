@@ -169,8 +169,6 @@ class RankingService {
                 playerData.bosses += bossLine;
                 
             } else {
-                logger.warn(`Przekroczono limit znaków dla gracza ${displayName} na pozycji ${actualPosition}`);
-                logger.warn(`Aktualne długości: nicks=${playerData.nicks.length}, scores=${playerData.scoresDates.length}, bosses=${playerData.bosses.length}`);
                 break;
             }
         }
