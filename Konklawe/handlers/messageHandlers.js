@@ -122,6 +122,9 @@ class MessageHandler {
         // Dodaj grę do historii przed wyczyszczeniem
         this.gameService.addGameToHistory(userId);
 
+        // Oblicz czas PRZED wyczyszczeniem hasła
+        const timeText = this.gameService.getFormattedTimeSincePasswordSet();
+
         this.timerService.clearAllTimers();
         this.gameService.clearPassword();
 
@@ -138,7 +141,6 @@ class MessageHandler {
 
         // Statystyki odpowiedzi
         if (currentTrigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
-            const timeText = this.gameService.getFormattedTimeSincePasswordSet();
             let attemptsText = '';
             if (userAttempts > 0) {
                 attemptsText = `\nLiczba prób: **${userAttempts + 1}** 🎯`;
