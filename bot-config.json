@@ -1,5 +1,5 @@
 {
-  "production": ["rekruter", "endersecho", "szkolenia", "stalkerlme", "muteusz", "konklawe"],
+  "production": ["rekruter", "endersecho", "szkolenia", "stalkerlme", "muteusz", "kontroler", "konklawe"],
   "development": ["kontroler"]
 }
 
