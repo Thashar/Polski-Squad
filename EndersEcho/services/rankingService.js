@@ -99,26 +99,20 @@ class RankingService {
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
         
-        // Tworzymy ranking - format mobilny (jedno pole) vs desktop (trzy pola)
+        // Tworzymy ranking w jednym polu
         const medals = this.config.scoring.medals;
         
-        // Przygotuj dane dla każdego gracza w formacie mobilnym (wszystko w jednym polu)
-        let mobileRankingText = '';
+        let rankingText = '';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
-            let medal;
+            let position;
             if (actualPosition <= 3) {
-                medal = medals[actualPosition - 1];
-            } else if (actualPosition >= 4 && actualPosition <= 9) {
-                medal = `${actualPosition}️⃣`;
-            } else if (actualPosition === 10) {
-                medal = '🔟';
+                position = medals[actualPosition - 1];
             } else {
-                // Dla pozycji 11+ używaj ikon dla każdej cyfry
-                const positionStr = actualPosition.toString();
-                medal = positionStr.split('').map(digit => `${digit}️⃣`).join('');
+                position = `${actualPosition}.`;
             }
+            
             const date = new Date(player.timestamp).toLocaleDateString('pl-PL');
             
             // Pobierz nick na serwerze
@@ -133,20 +127,16 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Format mobilny: wszystko w jednej linii
-            const mobileLine = `${medal} **${displayName}** ⚔️ **${this.formatScore(player.scoreValue)}** _(${date})_ 💀 ${bossName}`;
+            // Format: pozycja Nick • wynik (data) • Boss
+            const rankingLine = `${position} **${displayName}** • **${this.formatScore(player.scoreValue)}** *(${date})* • ${bossName}`;
             
-            // Sprawdź limit znaków
-            if (mobileRankingText.length + mobileLine.length + 1 <= 1000) {
-                if (mobileRankingText.length > 0) {
-                    mobileRankingText += '\n';
-                }
-                mobileRankingText += mobileLine;
+            // Sprawdź limity Discord - zwiększony limit dla 10 graczy
+            if (rankingText.length + rankingLine.length + '\n'.length <= 1000) {
+                rankingText += (index === 0 ? '' : '\n') + rankingLine;
             } else {
                 break;
             }
         }
-        
         
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
@@ -154,7 +144,7 @@ class RankingService {
             .addFields(
                 {
                     name: '🏆 Ranking',
-                    value: mobileRankingText || 'Brak',
+                    value: rankingText || 'Brak',
                     inline: false
                 },
                 {
@@ -175,12 +165,14 @@ class RankingService {
      * @param {number} page - Aktualna strona
      * @param {number} totalPages - Całkowita liczba stron
      * @param {boolean} disabled - Czy przyciski mają być wyłączone
-     * @returns {ActionRowBuilder} - Rząd przycisków
+     * @param {boolean} mobileFormat - Czy aktualnie używany jest format mobilny
+     * @returns {Array<ActionRowBuilder>} - Rzędy przycisków
      */
-    createRankingButtons(page, totalPages, disabled = false) {
-        const row = new ActionRowBuilder();
+    createRankingButtons(page, totalPages, disabled = false, mobileFormat = false) {
+        // Pierwszy rząd - nawigacja
+        const navigationRow = new ActionRowBuilder();
         
-        row.addComponents(
+        navigationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_first')
                 .setLabel(this.config.messages.buttonFirst)
@@ -206,7 +198,24 @@ class RankingService {
                 .setDisabled(disabled || page >= totalPages - 1)
         );
         
-        return row;
+        // Drugi rząd - przełączanie formatów
+        const formatRow = new ActionRowBuilder();
+        
+        formatRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId('ranking_desktop')
+                .setLabel('🖥️ Desktop')
+                .setStyle(mobileFormat ? ButtonStyle.Secondary : ButtonStyle.Success)
+                .setDisabled(disabled),
+            
+            new ButtonBuilder()
+                .setCustomId('ranking_mobile')
+                .setLabel('📱 Mobilny')
+                .setStyle(mobileFormat ? ButtonStyle.Success : ButtonStyle.Secondary)
+                .setDisabled(disabled)
+        );
+        
+        return [navigationRow, formatRow];
     }
 
     /**
@@ -330,6 +339,11 @@ class RankingService {
      * @param {Object} rankingData - Dane rankingu
      */
     addActiveRanking(messageId, rankingData) {
+        // Dodaj domyślny format jeśli nie jest określony
+        if (rankingData.mobileFormat === undefined) {
+            rankingData.mobileFormat = false;
+        }
+        
         this.activeRankings.set(messageId, rankingData);
         
         // Automatyczne czyszczenie
