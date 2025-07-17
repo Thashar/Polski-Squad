@@ -106,8 +106,8 @@ class RankingService {
         
         // Formatowanie w code block dla lepszego wyrównania
         tableText += '```\n';
-        tableText += 'Pos  Nick               Wynik    Boss               Data\n';
-        tableText += '===========================================================\n';
+        tableText += 'Pos  Nick                 Wynik    Boss               Data\n';
+        tableText += '=============================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -158,10 +158,6 @@ class RankingService {
                     else if (code <= 0x7F || (code >= 0x80 && code <= 0x24F)) {
                         width += 1;
                     }
-                    // Znaki cyrylickie - szerokość 3
-                    else if (code >= 0x0400 && code <= 0x04FF) { // Cyrillic (dla Ӂ)
-                        width += 3;
-                    }
                     // Znaki CJK i szerokie - szerokość 2
                     else if (code >= 0x1100 && code <= 0x11FF || // Hangul Jamo
                              code >= 0x2E80 && code <= 0x2EFF || // CJK Radicals
@@ -176,7 +172,8 @@ class RankingService {
                              code >= 0x4E00 && code <= 0x9FFF || // CJK Unified Ideographs
                              code >= 0xAC00 && code <= 0xD7AF || // Hangul Syllables
                              code >= 0xF900 && code <= 0xFAFF || // CJK Compatibility Ideographs
-                             code >= 0xFF00 && code <= 0xFFEF) { // Halfwidth and Fullwidth Forms
+                             code >= 0xFF00 && code <= 0xFFEF || // Halfwidth and Fullwidth Forms
+                             code >= 0x0400 && code <= 0x04FF) { // Cyrillic (dla Ӂ)
                         width += 2;
                     }
                     // Inne znaki - szerokość 1
@@ -218,10 +215,10 @@ class RankingService {
             };
             
             // Formatuj z odpowiednimi szerokościami wizualnymi
-            const truncatedNick = truncateToVisualWidth(displayName, 18);
+            const truncatedNick = truncateToVisualWidth(displayName, 20);
             const truncatedBoss = truncateToVisualWidth(bossName, 18);
             
-            const nickCol = padToVisualWidth(truncatedNick, 18);
+            const nickCol = padToVisualWidth(truncatedNick, 20);
             const scoreCol = padToVisualWidth(this.formatScore(player.scoreValue), 8);
             const bossCol = padToVisualWidth(truncatedBoss, 18);
             const dateCol = padToVisualWidth(shortDate, 5);
