@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const WarningService = require('../services/warningService');
 
 const logger = createBotLogger('Muteusz');
 
@@ -10,6 +11,7 @@ class InteractionHandler {
         this.roleManagementService = roleManagementService;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
+        this.warningService = new WarningService(config, logger);
     }
 
     /**
@@ -51,7 +53,147 @@ class InteractionHandler {
             
             new SlashCommandBuilder()
                 .setName('special-roles')
-                .setDescription('Wyświetla wszystkie role specjalne na serwerze w przejrzysty sposób')
+                .setDescription('Wyświetla wszystkie role specjalne na serwerze w przejrzysty sposób'),
+            
+            new SlashCommandBuilder()
+                .setName('clean')
+                .setDescription('Usuwa wiadomości na kanale')
+                .addStringOption(option =>
+                    option.setName('typ')
+                        .setDescription('Typ usuwania wiadomości')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Ostatnie wiadomości', value: 'latest' },
+                            { name: 'Personalne wiadomości', value: 'user' },
+                            { name: 'Wiadomości w czasie', value: 'time' }
+                        )
+                )
+                .addIntegerOption(option =>
+                    option.setName('ilosc')
+                        .setDescription('Ilość wiadomości do usunięcia (max 100)')
+                        .setRequired(false)
+                        .setMinValue(1)
+                        .setMaxValue(100)
+                )
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik, którego wiadomości usunąć')
+                        .setRequired(false)
+                )
+                .addIntegerOption(option =>
+                    option.setName('minuty')
+                        .setDescription('Ilość minut wstecz do usunięcia wiadomości (max 1000)')
+                        .setRequired(false)
+                        .setMinValue(1)
+                        .setMaxValue(1000)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('mute')
+                .setDescription('Ucisza użytkownika na określony czas lub na stałe')
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik do uciszenia')
+                        .setRequired(true)
+                )
+                .addIntegerOption(option =>
+                    option.setName('czas')
+                        .setDescription('Czas w minutach (brak = na stałe)')
+                        .setRequired(false)
+                        .setMinValue(1)
+                        .setMaxValue(10080) // 7 dni
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód uciszenia')
+                        .setRequired(false)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('unmute')
+                .setDescription('Odcisza użytkownika usuwając rolę mute')
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik do odciszenia')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód odciszenia')
+                        .setRequired(false)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('kick')
+                .setDescription('Wyrzuca użytkownika z serwera')
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik do wyrzucenia')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód wyrzucenia')
+                        .setRequired(true)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('ban')
+                .setDescription('Banuje użytkownika na serwerze')
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik do zbanowania')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód bana')
+                        .setRequired(true)
+                )
+                .addIntegerOption(option =>
+                    option.setName('dni_wiadomosci')
+                        .setDescription('Ilość dni wiadomości do usunięcia (0-7)')
+                        .setRequired(false)
+                        .setMinValue(0)
+                        .setMaxValue(7)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('unban')
+                .setDescription('Odbanowuje użytkownika na serwerze')
+                .addStringOption(option =>
+                    option.setName('user_id')
+                        .setDescription('ID użytkownika do odbanowania')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód odbanowania')
+                        .setRequired(false)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('warn')
+                .setDescription('Nakłada ostrzeżenie na użytkownika')
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik do ostrzeżenia')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód ostrzeżenia')
+                        .setRequired(true)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('violations')
+                .setDescription('Wyświetla wszystkie ostrzeżenia użytkownika')
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik do sprawdzenia')
+                        .setRequired(true)
+                )
         ];
         
         try {
@@ -93,6 +235,30 @@ class InteractionHandler {
                 case 'special-roles':
                     await this.handleSpecialRolesCommand(interaction);
                     break;
+                case 'clean':
+                    await this.handleCleanCommand(interaction);
+                    break;
+                case 'mute':
+                    await this.handleMuteCommand(interaction);
+                    break;
+                case 'unmute':
+                    await this.handleUnmuteCommand(interaction);
+                    break;
+                case 'kick':
+                    await this.handleKickCommand(interaction);
+                    break;
+                case 'ban':
+                    await this.handleBanCommand(interaction);
+                    break;
+                case 'unban':
+                    await this.handleUnbanCommand(interaction);
+                    break;
+                case 'warn':
+                    await this.handleWarnCommand(interaction);
+                    break;
+                case 'violations':
+                    await this.handleViolationsCommand(interaction);
+                    break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -104,7 +270,18 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      */
     async handleButtonInteraction(interaction) {
-        if (!interaction.customId.startsWith('special_roles_')) return;
+        if (interaction.customId.startsWith('special_roles_')) {
+            await this.handleSpecialRolesButtonInteraction(interaction);
+        } else if (interaction.customId.startsWith('violations_')) {
+            await this.handleViolationsButtonInteraction(interaction);
+        }
+    }
+
+    /**
+     * Obsługuje interakcje przycisków dla ról specjalnych
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     */
+    async handleSpecialRolesButtonInteraction(interaction) {
         
         await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył przycisku ${interaction.customId}`, interaction);
         
@@ -608,6 +785,874 @@ class InteractionHandler {
             await interaction.editReply(messagePayload);
         } else {
             await interaction.reply({ ...messagePayload, ephemeral: true });
+        }
+    }
+
+    /**
+     * Obsługuje komendę czyszczenia wiadomości
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleCleanCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /clean`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.clean.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.cleanNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /clean bez uprawnień`, interaction);
+            return;
+        }
+
+        const type = interaction.options.getString('typ');
+        const amount = interaction.options.getInteger('ilosc');
+        const user = interaction.options.getUser('uzytkownik');
+        const minutes = interaction.options.getInteger('minuty');
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            let deletedCount = 0;
+
+            switch (type) {
+                case 'latest':
+                    deletedCount = await this.cleanLatestMessages(interaction, amount);
+                    break;
+                    
+                case 'user':
+                    deletedCount = await this.cleanUserMessages(interaction, user, amount);
+                    break;
+                    
+                case 'time':
+                    deletedCount = await this.cleanMessagesByTime(interaction, minutes);
+                    break;
+                    
+                default:
+                    await interaction.editReply({ content: this.config.messages.cleanInvalidType });
+                    return;
+            }
+
+            if (deletedCount > 0) {
+                const successMessage = formatMessage(this.config.messages.cleanSuccess, {
+                    count: deletedCount
+                });
+                await interaction.editReply({ content: successMessage });
+                await this.logService.logMessage('success', `Usunięto ${deletedCount} wiadomości na kanale ${interaction.channel.name}`, interaction);
+            } else {
+                await interaction.editReply({ content: this.config.messages.cleanNoMessages });
+            }
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.cleanError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas czyszczenia wiadomości: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Usuwa ostatnie wiadomości na kanale
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {number} amount - Ilość wiadomości do usunięcia
+     * @returns {number} Ilość usuniętych wiadomości
+     */
+    async cleanLatestMessages(interaction, amount) {
+        if (!amount) {
+            await interaction.editReply({ content: this.config.messages.cleanMissingAmount });
+            return 0;
+        }
+
+        const messages = await interaction.channel.messages.fetch({ 
+            limit: Math.min(amount, this.config.clean.maxMessages) 
+        });
+
+        if (messages.size === 0) {
+            return 0;
+        }
+
+        try {
+            await interaction.channel.bulkDelete(messages, true);
+            return messages.size;
+        } catch (error) {
+            if (error.code === 50034) {
+                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
+                return 0;
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Usuwa wiadomości konkretnego użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {User} user - Użytkownik, którego wiadomości usunąć
+     * @param {number} amount - Ilość wiadomości do usunięcia
+     * @returns {number} Ilość usuniętych wiadomości
+     */
+    async cleanUserMessages(interaction, user, amount) {
+        if (!user) {
+            await interaction.editReply({ content: this.config.messages.cleanMissingUser });
+            return 0;
+        }
+
+        if (!amount) {
+            await interaction.editReply({ content: this.config.messages.cleanMissingAmount });
+            return 0;
+        }
+
+        const messages = await interaction.channel.messages.fetch({ limit: 100 });
+        const userMessages = messages.filter(msg => msg.author.id === user.id);
+
+        if (userMessages.size === 0) {
+            return 0;
+        }
+
+        const messagesToDelete = userMessages.first(Math.min(amount, this.config.clean.maxMessages));
+        
+        try {
+            await interaction.channel.bulkDelete(messagesToDelete, true);
+            return messagesToDelete.length;
+        } catch (error) {
+            if (error.code === 50034) {
+                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
+                return 0;
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Usuwa wiadomości z określonego czasu
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {number} minutes - Ilość minut wstecz
+     * @returns {number} Ilość usuniętych wiadomości
+     */
+    async cleanMessagesByTime(interaction, minutes) {
+        if (!minutes) {
+            await interaction.editReply({ content: this.config.messages.cleanMissingMinutes });
+            return 0;
+        }
+
+        const timeLimit = Math.min(minutes, this.config.clean.maxMinutes);
+        const cutoffTime = new Date(Date.now() - (timeLimit * 60 * 1000));
+        
+        const messages = await interaction.channel.messages.fetch({ limit: 100 });
+        const recentMessages = messages.filter(msg => msg.createdAt >= cutoffTime);
+
+        if (recentMessages.size === 0) {
+            return 0;
+        }
+
+        try {
+            await interaction.channel.bulkDelete(recentMessages, true);
+            return recentMessages.size;
+        } catch (error) {
+            if (error.code === 50034) {
+                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
+                return 0;
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Obsługuje komendę uciszania użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleMuteCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /mute`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.mute.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.muteNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /mute bez uprawnień`, interaction);
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('uzytkownik');
+        const timeInMinutes = interaction.options.getInteger('czas');
+        const reason = interaction.options.getString('powod');
+
+        if (!targetUser) {
+            await interaction.reply({
+                content: "❌ Nie podano użytkownika do uciszenia!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            
+            if (!targetMember) {
+                await interaction.editReply({ content: "❌ Użytkownik nie jest członkiem tego serwera!" });
+                return;
+            }
+
+            // Sprawdź hierarchię ról
+            if (targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
+                await interaction.editReply({ content: this.config.messages.muteHierarchyError });
+                return;
+            }
+
+            // Pobierz rolę mute
+            const muteRole = interaction.guild.roles.cache.get(this.config.mute.muteRoleId);
+            if (!muteRole) {
+                await interaction.editReply({ content: this.config.messages.muteRoleNotFound });
+                return;
+            }
+
+            // Sprawdź czy użytkownik już ma rolę mute
+            if (targetMember.roles.cache.has(this.config.mute.muteRoleId)) {
+                const alreadyMutedMessage = formatMessage(this.config.messages.muteAlreadyMuted, {
+                    user: targetUser.tag
+                });
+                await interaction.editReply({ content: alreadyMutedMessage });
+                return;
+            }
+
+            // Dodaj rolę mute
+            await targetMember.roles.add(muteRole);
+
+            // Przygotuj wiadomość sukcesu
+            let timeText = "";
+            let reasonText = "";
+            
+            if (timeInMinutes) {
+                timeText = formatMessage(this.config.messages.muteSuccessTemporary, {
+                    duration: timeInMinutes
+                });
+                
+                // Ustaw automatyczne odciszenie
+                setTimeout(async () => {
+                    try {
+                        const memberToUnmute = await interaction.guild.members.fetch(targetUser.id);
+                        if (memberToUnmute && memberToUnmute.roles.cache.has(this.config.mute.muteRoleId)) {
+                            await memberToUnmute.roles.remove(muteRole);
+                            await this.logService.logMessage('info', `Automatyczne odciszenie użytkownika ${targetUser.tag} po ${timeInMinutes} minutach`, interaction);
+                        }
+                    } catch (error) {
+                        await this.logService.logMessage('error', `Błąd podczas automatycznego odciszania ${targetUser.tag}: ${error.message}`, interaction);
+                    }
+                }, timeInMinutes * 60 * 1000);
+            } else {
+                timeText = this.config.messages.muteSuccessPermanent;
+            }
+
+            if (reason) {
+                reasonText = `\n**Powód:** ${reason}`;
+            }
+
+            const successMessage = formatMessage(this.config.messages.muteSuccess, {
+                user: targetUser.tag,
+                time: timeText,
+                reason: reasonText
+            });
+
+            await interaction.editReply({ content: successMessage });
+            
+            // Dodatkowa informacja o automatycznym odciszeniu
+            if (timeInMinutes) {
+                const unmuteScheduledMessage = formatMessage(this.config.messages.muteUnmuteScheduled, {
+                    duration: timeInMinutes
+                });
+                await interaction.followUp({ content: unmuteScheduledMessage, ephemeral: true });
+            }
+
+            await this.logService.logMessage('success', `Uciszono użytkownika ${targetUser.tag}${timeInMinutes ? ` na ${timeInMinutes} minut` : ' na stałe'}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.muteError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas uciszania użytkownika: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Obsługuje komendę odciszania użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleUnmuteCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /unmute`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.mute.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.unmuteNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /unmute bez uprawnień`, interaction);
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('uzytkownik');
+        const reason = interaction.options.getString('powod');
+
+        if (!targetUser) {
+            await interaction.reply({
+                content: "❌ Nie podano użytkownika do odciszenia!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            
+            if (!targetMember) {
+                await interaction.editReply({ content: "❌ Użytkownik nie jest członkiem tego serwera!" });
+                return;
+            }
+
+            // Sprawdź hierarchię ról
+            if (targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
+                await interaction.editReply({ content: this.config.messages.unmuteHierarchyError });
+                return;
+            }
+
+            // Pobierz rolę mute
+            const muteRole = interaction.guild.roles.cache.get(this.config.mute.muteRoleId);
+            if (!muteRole) {
+                await interaction.editReply({ content: this.config.messages.unmuteRoleNotFound });
+                return;
+            }
+
+            // Sprawdź czy użytkownik ma rolę mute
+            if (!targetMember.roles.cache.has(this.config.mute.muteRoleId)) {
+                const notMutedMessage = formatMessage(this.config.messages.unmuteNotMuted, {
+                    user: targetUser.tag
+                });
+                await interaction.editReply({ content: notMutedMessage });
+                return;
+            }
+
+            // Usuń rolę mute
+            await targetMember.roles.remove(muteRole);
+
+            // Przygotuj wiadomość sukcesu
+            let reasonText = "";
+            if (reason) {
+                reasonText = `\n**Powód:** ${reason}`;
+            }
+
+            const successMessage = formatMessage(this.config.messages.unmuteSuccess, {
+                user: targetUser.tag,
+                reason: reasonText
+            });
+
+            await interaction.editReply({ content: successMessage });
+            await this.logService.logMessage('success', `Odciszono użytkownika ${targetUser.tag}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.unmuteError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas odciszania użytkownika: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Obsługuje komendę wyrzucania użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleKickCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /kick`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.moderation.kick.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.kickNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /kick bez uprawnień`, interaction);
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('uzytkownik');
+        const reason = interaction.options.getString('powod');
+
+        if (!targetUser) {
+            await interaction.reply({
+                content: "❌ Nie podano użytkownika do wyrzucenia!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            
+            if (!targetMember) {
+                await interaction.editReply({ content: "❌ Użytkownik nie jest członkiem tego serwera!" });
+                return;
+            }
+
+            // Sprawdź hierarchię ról
+            if (targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
+                await interaction.editReply({ content: this.config.messages.kickHierarchyError });
+                return;
+            }
+
+            // Wyślij DM przed wyrzuceniem
+            try {
+                const dmTitle = formatMessage(this.config.messages.kickDmTitle, {
+                    serverName: interaction.guild.name
+                });
+                const dmMessage = formatMessage(this.config.messages.kickDmMessage, {
+                    reason: reason
+                });
+                
+                await targetUser.send({
+                    embeds: [{
+                        title: dmTitle,
+                        description: dmMessage,
+                        color: 0xFF6B35,
+                        timestamp: new Date().toISOString()
+                    }]
+                });
+            } catch (dmError) {
+                await this.logService.logMessage('warn', `Nie udało się wysłać DM do ${targetUser.tag}: ${dmError.message}`, interaction);
+            }
+
+            // Wyrzuć użytkownika
+            await targetMember.kick(reason);
+
+            const successMessage = formatMessage(this.config.messages.kickSuccess, {
+                user: targetUser.tag,
+                reason: reason
+            });
+
+            await interaction.editReply({ content: successMessage });
+            await this.logService.logMessage('success', `Wyrzucono użytkownika ${targetUser.tag} z powodem: ${reason}`, interaction);
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.kickError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas wyrzucania użytkownika: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Obsługuje komendę banowania użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleBanCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /ban`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.moderation.ban.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.banNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /ban bez uprawnień`, interaction);
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('uzytkownik');
+        const reason = interaction.options.getString('powod');
+        const deleteDays = interaction.options.getInteger('dni_wiadomosci') || this.config.moderation.ban.defaultDeleteDays;
+
+        if (!targetUser) {
+            await interaction.reply({
+                content: "❌ Nie podano użytkownika do zbanowania!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Sprawdź czy użytkownik jest na serwerze
+            let targetMember = null;
+            try {
+                targetMember = await interaction.guild.members.fetch(targetUser.id);
+            } catch (fetchError) {
+                // Użytkownik nie jest na serwerze, ale można go zbanować
+            }
+
+            // Sprawdź hierarchię ról jeśli użytkownik jest na serwerze
+            if (targetMember && targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
+                await interaction.editReply({ content: this.config.messages.banHierarchyError });
+                return;
+            }
+
+            // Wyślij DM przed banem
+            try {
+                const dmTitle = formatMessage(this.config.messages.banDmTitle, {
+                    serverName: interaction.guild.name
+                });
+                const dmMessage = formatMessage(this.config.messages.banDmMessage, {
+                    reason: reason
+                });
+                
+                await targetUser.send({
+                    embeds: [{
+                        title: dmTitle,
+                        description: dmMessage,
+                        color: 0xFF0000,
+                        timestamp: new Date().toISOString()
+                    }]
+                });
+            } catch (dmError) {
+                await this.logService.logMessage('warn', `Nie udało się wysłać DM do ${targetUser.tag}: ${dmError.message}`, interaction);
+            }
+
+            // Zbanuj użytkownika
+            await interaction.guild.bans.create(targetUser.id, {
+                reason: reason,
+                deleteMessageDays: deleteDays
+            });
+
+            const successMessage = formatMessage(this.config.messages.banSuccess, {
+                user: targetUser.tag,
+                reason: reason
+            });
+
+            await interaction.editReply({ content: successMessage });
+            await this.logService.logMessage('success', `Zbanowano użytkownika ${targetUser.tag} z powodem: ${reason}`, interaction);
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.banError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas banowania użytkownika: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Obsługuje komendę odbanowania użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleUnbanCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /unban`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.moderation.unban.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.unbanNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /unban bez uprawnień`, interaction);
+            return;
+        }
+
+        const userId = interaction.options.getString('user_id');
+        const reason = interaction.options.getString('powod');
+
+        if (!userId) {
+            await interaction.reply({
+                content: "❌ Nie podano ID użytkownika do odbanowania!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Sprawdź czy ID jest prawidłowe
+        if (!/^\d{17,19}$/.test(userId)) {
+            await interaction.reply({
+                content: this.config.messages.unbanInvalidId,
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Sprawdź czy użytkownik jest zbanowany
+            const banInfo = await interaction.guild.bans.fetch(userId);
+            
+            if (!banInfo) {
+                await interaction.editReply({ content: this.config.messages.unbanUserNotFound });
+                return;
+            }
+
+            // Odbanuj użytkownika
+            await interaction.guild.bans.remove(userId, reason || 'Brak powodu');
+
+            let reasonText = "";
+            if (reason) {
+                reasonText = `\n**Powód:** ${reason}`;
+            }
+
+            const successMessage = formatMessage(this.config.messages.unbanSuccess, {
+                user: banInfo.user.tag,
+                reason: reasonText
+            });
+
+            await interaction.editReply({ content: successMessage });
+            await this.logService.logMessage('success', `Odbanowano użytkownika ${banInfo.user.tag}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
+
+        } catch (error) {
+            if (error.code === 10026) {
+                await interaction.editReply({ content: this.config.messages.unbanUserNotFound });
+            } else {
+                const errorMessage = formatMessage(this.config.messages.unbanError, {
+                    error: error.message
+                });
+                await interaction.editReply({ content: errorMessage });
+                await this.logService.logMessage('error', `Błąd podczas odbanowywania użytkownika: ${error.message}`, interaction);
+            }
+        }
+    }
+
+    /**
+     * Obsługuje komendę nadawania ostrzeżenia
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleWarnCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /warn`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.moderation.warn.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.warnNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /warn bez uprawnień`, interaction);
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('uzytkownik');
+        const reason = interaction.options.getString('powod');
+
+        if (!targetUser) {
+            await interaction.reply({
+                content: "❌ Nie podano użytkownika do ostrzeżenia!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        if (targetUser.id === interaction.user.id) {
+            await interaction.reply({
+                content: this.config.messages.warnSelfError,
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const result = this.warningService.addWarning(
+                targetUser.id,
+                interaction.user.id,
+                interaction.user.tag,
+                reason,
+                interaction.guild.id
+            );
+
+            const successMessage = formatMessage(this.config.messages.warnSuccess, {
+                user: targetUser.tag,
+                reason: reason,
+                total: result.totalWarnings
+            });
+
+            await interaction.editReply({ content: successMessage });
+            await this.logService.logMessage('success', `Nadano ostrzeżenie użytkownikowi ${targetUser.tag} (${result.totalWarnings} łącznie) z powodem: ${reason}`, interaction);
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.warnError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas nadawania ostrzeżenia: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Obsługuje komendę wyświetlania ostrzeżeń
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleViolationsCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /violations`, interaction);
+        
+        if (!interaction.member.permissions.has(this.config.moderation.warn.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.warnNoPermission,
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /violations bez uprawnień`, interaction);
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('uzytkownik');
+
+        if (!targetUser) {
+            await interaction.reply({
+                content: "❌ Nie podano użytkownika do sprawdzenia!",
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const warnings = this.warningService.getUserWarnings(targetUser.id, interaction.guild.id);
+            
+            if (warnings.length === 0) {
+                const emptyMessage = formatMessage(this.config.messages.violationsEmpty, {
+                    user: targetUser.tag
+                });
+                await interaction.editReply({ content: emptyMessage });
+                return;
+            }
+
+            const pages = this.warningService.paginateWarnings(warnings, this.config.warnings.maxPerPage);
+            await this.displayViolationsPage(interaction, targetUser, pages, 0);
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.violationsError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas pobierania ostrzeżeń: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Wyświetla stronę ostrzeżeń z przyciskami nawigacji
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {User} targetUser - Użytkownik
+     * @param {Array} pages - Podzielone strony ostrzeżeń
+     * @param {number} currentPage - Aktualna strona
+     */
+    async displayViolationsPage(interaction, targetUser, pages, currentPage) {
+        const page = pages[currentPage];
+        const totalWarnings = pages.reduce((sum, p) => sum + p.length, 0);
+        
+        const embed = new EmbedBuilder()
+            .setTitle(formatMessage(this.config.messages.violationsTitle, {
+                user: targetUser.tag
+            }))
+            .setColor('#FF6B35')
+            .setThumbnail(targetUser.displayAvatarURL())
+            .setTimestamp();
+
+        // Dodaj ostrzeżenia do embed
+        let description = '';
+        page.forEach((warning, index) => {
+            const warningNumber = (currentPage * this.config.warnings.maxPerPage) + index + 1;
+            const date = new Date(warning.timestamp).toLocaleString('pl-PL');
+            
+            description += `**${warningNumber}.** ${warning.reason}\n`;
+            description += `📅 ${date} • 👮 ${warning.moderator.tag}\n`;
+            description += `🆔 \`${warning.id}\`\n\n`;
+        });
+
+        embed.setDescription(description);
+
+        // Dodaj informacje o stronach
+        const pageInfo = formatMessage(this.config.messages.violationsPageInfo, {
+            current: currentPage + 1,
+            total: pages.length,
+            totalWarnings: totalWarnings
+        });
+        embed.setFooter({ text: pageInfo });
+
+        // Twórz przyciski nawigacji
+        const components = [];
+        
+        if (pages.length > 1) {
+            const row = new ActionRowBuilder();
+            
+            // Przycisk "Pierwsza"
+            const firstButton = new ButtonBuilder()
+                .setCustomId(`violations_first_${targetUser.id}_${currentPage}`)
+                .setLabel('⏮️ Pierwsza')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(currentPage === 0);
+            
+            // Przycisk "Poprzednia"
+            const prevButton = new ButtonBuilder()
+                .setCustomId(`violations_prev_${targetUser.id}_${currentPage}`)
+                .setLabel('◀️ Poprzednia')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === 0);
+            
+            // Przycisk "Następna"
+            const nextButton = new ButtonBuilder()
+                .setCustomId(`violations_next_${targetUser.id}_${currentPage}`)
+                .setLabel('Następna ▶️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === pages.length - 1);
+            
+            // Przycisk "Ostatnia"
+            const lastButton = new ButtonBuilder()
+                .setCustomId(`violations_last_${targetUser.id}_${currentPage}`)
+                .setLabel('Ostatnia ⏭️')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(currentPage === pages.length - 1);
+            
+            row.addComponents(firstButton, prevButton, nextButton, lastButton);
+            components.push(row);
+        }
+
+        const messagePayload = {
+            embeds: [embed],
+            components: components
+        };
+
+        if (interaction.replied || interaction.deferred) {
+            await interaction.editReply(messagePayload);
+        } else {
+            await interaction.reply({ ...messagePayload, ephemeral: true });
+        }
+    }
+
+    /**
+     * Obsługuje interakcje przycisków dla ostrzeżeń
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     */
+    async handleViolationsButtonInteraction(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył przycisku ${interaction.customId}`, interaction);
+        
+        try {
+            const parts = interaction.customId.split('_');
+            const action = parts[1]; // first, prev, next, last
+            const targetUserId = parts[2];
+            const currentPage = parseInt(parts[3]) || 0;
+            
+            const targetUser = await interaction.client.users.fetch(targetUserId);
+            const warnings = this.warningService.getUserWarnings(targetUserId, interaction.guild.id);
+            const pages = this.warningService.paginateWarnings(warnings, this.config.warnings.maxPerPage);
+            
+            let targetPage = currentPage;
+            
+            switch (action) {
+                case 'first':
+                    targetPage = 0;
+                    break;
+                case 'prev':
+                    targetPage = Math.max(0, currentPage - 1);
+                    break;
+                case 'next':
+                    targetPage = Math.min(pages.length - 1, currentPage + 1);
+                    break;
+                case 'last':
+                    targetPage = pages.length - 1;
+                    break;
+            }
+            
+            await this.displayViolationsPage(interaction, targetUser, pages, targetPage);
+            
+        } catch (error) {
+            await interaction.reply({ content: `❌ Wystąpił błąd podczas nawigacji: ${error.message}`, ephemeral: true });
+            await this.logService.logMessage('error', `Błąd podczas nawigacji przycisków violations: ${error.message}`, interaction);
         }
     }
 }

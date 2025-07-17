@@ -60,6 +60,52 @@ module.exports = {
         delayBetweenRemovals: 1000
     },
     
+    clean: {
+        requiredPermission: 'ModerateMembers',
+        maxMessages: 100,
+        maxMinutes: 1000
+    },
+    
+    mute: {
+        requiredPermission: 'ModerateMembers',
+        muteRoleId: '1204442133818249270',
+        maxTimeMinutes: 10080 // 7 dni
+    },
+    
+    moderation: {
+        kick: {
+            requiredPermission: 'KickMembers'
+        },
+        ban: {
+            requiredPermission: 'BanMembers',
+            defaultDeleteDays: 1
+        },
+        unban: {
+            requiredPermission: 'BanMembers'
+        },
+        warn: {
+            requiredPermission: 'ModerateMembers'
+        }
+    },
+    
+    warnings: {
+        maxPerPage: 10,
+        dataFile: './Muteusz/data/warnings.json'
+    },
+    
+    autoModeration: {
+        enabled: true,
+        violationWindow: 15, // okno czasowe w minutach
+        violationsBeforeWarn: 3, // ilość wyzwisk przed warnem
+        warningsBeforeMute: 3, // ilość warnów przed mute
+        muteTime: 60, // czas mute w minutach
+        exemptRoles: [], // role zwolnione z auto-moderacji
+        exemptChannels: [], // kanały zwolnione z auto-moderacji
+        logChannel: null, // kanał do logowania auto-moderacji
+        deleteMessages: true, // czy usuwać wiadomości z wyzwiskami
+        notifyUser: true // czy powiadamiać użytkownika o naruszeniach
+    },
+    
     logging: {
         enableConsoleLogging: true,
         enableChannelLogging: true,
