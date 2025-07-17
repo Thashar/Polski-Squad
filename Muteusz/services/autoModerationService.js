@@ -30,7 +30,7 @@ class AutoModerationService {
     }
 
     /**
-     * Domyślna lista wyzwisk polskich (wołacz)
+     * Domyślna lista wyzwisk polskich (różne formy)
      */
     getDefaultBadWords() {
         return [
@@ -59,7 +59,131 @@ class AutoModerationService {
             "kretyńsku", "debilek", "idioto", "głupku", "durniu", "tępaku", "matole",
             "niedorozwinięty", "upośledzonek", "niedorajdo", "maniekuszku", "bzdrenko",
             "kretynko", "dziecinku", "niemowlaku", "smarkaczu", "pisklaczy", "bachorze",
-            "szczeniaku", "gówniarzu", "smyku", "gołowązku", "zadzioro", "urwisie"
+            "szczeniaku", "gówniarzu", "smyku", "gołowązku", "zadzioro", "urwisie",
+            
+            // Zwroty i komendy wulgarne
+            "jebaj się", "spierdalaj", "wypierdalaj", "odpierdol się", "pieprz się",
+            "jeb się", "spadaj", "odwal się", "skurwysynie", "skurwielu", "skurwysynu",
+            "pojeb", "pojebany", "pojebana", "pojebane", "zjeb", "zjebany", "zjebana",
+            "wkurwiony", "wkurwiona", "wkurwione", "kurwa mać", "kurwa jego mać",
+            "chuj ci w dupę", "chuj ci w oko", "chuj ci w mordę", "chuj ci w ryj",
+            "pieprzy cię", "pierdol się", "pierdolisz", "pierdolony", "pierdolona",
+            "gówno", "gówna", "gównem", "gównie", "gówniany", "gówniara", "gówniarz",
+            "sraj", "srajcie", "srajmy", "sranie", "sranko", "sracze", "sraczu",
+            "szlag", "szlaga", "szlagiem", "szlakiem", "cholera", "cholernie", "cholerni",
+            "diabel", "diabła", "diabłu", "diabłem", "diabli", "diabolic", "diabełek",
+            "do dupy", "w dupie", "na dupie", "dupek", "dupcia", "dupsko", "dupasz",
+            "cipy", "cipę", "cipka", "cipko", "cipeczka", "cipucha", "cipusia",
+            "fiut", "fiuta", "fiutem", "fiutka", "fiutko", "fiutaś", "fiutaszek",
+            "jaja", "jaj", "jajco", "jajek", "jajkiem", "jajca", "jajcarz", "jajecznica",
+            "chuja", "chujek", "chujnia", "chujowy", "chujowa", "chujowe", "chujek",
+            "kurewski", "kurewska", "kurewskie", "kurewsko", "kurewnie", "kurewny",
+            "pierdolenie", "pierdolnij", "pierdolnął", "pierdolnęła", "pierdolnęło",
+            "zajebisty", "zajebista", "zajebiste", "zajebały", "zajebała", "zajebało",
+            "rozjebany", "rozjebana", "rozjebane", "rozjebał", "rozjebała", "rozjebało",
+            "przejebany", "przejebana", "przejebane", "przejebał", "przejebała", "przejebało",
+            "najebany", "najebana", "najebane", "najebał", "najebała", "najebało",
+            "wjebany", "wjebana", "wjebane", "wjebał", "wjebała", "wjebało",
+            "ujebany", "ujebana", "ujebane", "ujebał", "ujebała", "ujebało",
+            "dojebany", "dojebana", "dojebane", "dojebał", "dojebała", "dojebało",
+            "popierdolony", "popierdolona", "popierdolone", "popierdolił", "popierdoliła",
+            "zasrany", "zasrana", "zasrane", "zasrał", "zasrała", "zasrało",
+            "posrany", "posrana", "posrane", "posrał", "posrała", "posrało",
+            "nasrany", "nasrana", "nasrane", "nasrał", "nasrała", "nasrało",
+            "obsrany", "obsrana", "obsrane", "obsrał", "obsrała", "obsrało",
+            "obciągnij", "obciągaj", "obciągasz", "obciąganie", "obciągarka", "obciągacz",
+            "lizać", "liże", "liżesz", "liza", "lizanie", "lizaczka", "lizacz",
+            "ruchaj", "ruchać", "ruchanie", "ruchasz", "rucha", "ruchał", "ruchała",
+            "dupczenie", "dupczy", "dupczysz", "dupczył", "dupczyła", "dupczyło",
+            "pojebać", "pojebał", "pojebała", "pojebało", "pojebię", "pojebiesz",
+            "zjebać", "zjebał", "zjebała", "zjebało", "zjebię", "zjebiesz",
+            "wyjebać", "wyjebał", "wyjebała", "wyjebało", "wyjebię", "wyjebiesz",
+            "przejebać", "przejebał", "przejebała", "przejebało", "przejebię", "przejebiesz",
+            "najebać", "najebał", "najebała", "najebało", "najebię", "najebiesz",
+            "dojebać", "dojebał", "dojebała", "dojebało", "dojebię", "dojebiesz",
+            "ujebać", "ujebał", "ujebała", "ujebało", "ujebię", "ujebiesz",
+            "wjebać", "wjebał", "wjebała", "wjebało", "wjebię", "wjebiesz",
+            "rozjebać", "rozjebał", "rozjebała", "rozjebało", "rozjebię", "rozjebiesz",
+            "zasrać", "zasrał", "zasrała", "zasrało", "zasrę", "zasriesz",
+            "posrać", "posrał", "posrała", "posrało", "posrę", "posriesz",
+            "nasrać", "nasrał", "nasrała", "nasrało", "nasrę", "nasriesz",
+            "obsrać", "obsrał", "obsrała", "obsrało", "obsrę", "obsriesz",
+            "kurwisz", "kurwił", "kurwiła", "kurwiło", "kurwić", "kurwienie",
+            "pierdolisz", "pierdolił", "pierdoliła", "pierdoliło", "pierdolić",
+            "odpierdolisz", "odpierdolił", "odpierdoliła", "odpierdoliło", "odpierdolić",
+            "spierdolisz", "spierdolił", "spierdoliła", "spierdoliło", "spierdolić",
+            "wypierdolisz", "wypierdolił", "wypierdoliła", "wypierdoliło", "wypierdolić",
+            
+            // Wyszukane formy i zwroty wulgarne
+            "jebał cię pies", "jebał cię kot", "jebał cię osioł", "jebał cię diabeł",
+            "jebała cię kurwa", "jebała cię suka", "jebała cię dziwka", "jebała cię pizda",
+            "jebane gówno", "jebana kurwa", "jebany chuj", "jebana suka", "jebana pizda",
+            "pojebało cię", "pojebało go", "pojebało ją", "pojebało ich", "pojebało was",
+            "zjebało cię", "zjebało go", "zjebało ją", "zjebało ich", "zjebało was",
+            "chuj ci w dupę", "chuj ci w oko", "chuj ci w mordę", "chuj ci w ryj",
+            "chuj ci w gardło", "chuj ci w ucho", "chuj ci w dupe", "chuj ci w buzię",
+            "pizda ci w mordę", "pizda ci w ryj", "pizda ci w oko", "pizda ci w dupe",
+            "kurwa ci w dupę", "kurwa ci w mordę", "kurwa ci w ryj", "kurwa ci w oko",
+            "w dupie ci pies", "w dupie ci osioł", "w dupie ci diabeł", "w dupie ci kot",
+            "w dupie mam", "w dupie to mam", "w dupie was mam", "w dupie go mam",
+            "do dupy z gruszkami", "do dupy z jabłkami", "do dupy z koniem", "do dupy z psem",
+            "na chuj", "na chuja", "na kurwa", "na kurwę", "na pizda", "na pizdę",
+            "po chuj", "po chuja", "po kurwa", "po kurwę", "po pizda", "po pizdę",
+            "co za kurwa", "co za chuj", "co za pizda", "co za gówno", "co za suka",
+            "ale kurwa", "ale chuj", "ale pizda", "ale gówno", "ale suka", "ale dziwka",
+            "kurwa jego mać", "kurwa jego ojca", "kurwa jego babę", "kurwa jego rodzinę",
+            "chuj jego mać", "chuj jego ojca", "chuj jego babę", "chuj jego rodzinę",
+            "pierdol się", "pierdol sie", "pierdolisz się", "pierdolisz sie",
+            "jeb się", "jeb sie", "jebiesz się", "jebiesz sie", "jebać się", "jebać sie",
+            "sraj się", "sraj sie", "srasz się", "srasz sie", "srać się", "srać sie",
+            "gówno prawda", "gówno z tego", "gówno warte", "gówno warty", "gówno warta",
+            "chujowe", "chujowa", "chujowy", "chujowe to", "chujowa to", "chujowy to",
+            "kurewski", "kurewska", "kurewskie", "kurewsko", "kurewnie", "kurewny",
+            "pierdolony", "pierdolona", "pierdolone", "pierdolnie", "pierdolnięty",
+            "zajebisty", "zajebista", "zajebiste", "zajebało", "zajebany", "zajebana",
+            "rozjebany", "rozjebana", "rozjebane", "rozjebało", "rozjebał", "rozjebała",
+            "przejebany", "przejebana", "przejebane", "przejebało", "przejebał", "przejebała",
+            "najebany", "najebana", "najebane", "najebało", "najebał", "najebała",
+            "wjebany", "wjebana", "wjebane", "wjebało", "wjebał", "wjebała",
+            "ujebany", "ujebana", "ujebane", "ujebało", "ujebał", "ujebała",
+            "dojebany", "dojebana", "dojebane", "dojebało", "dojebał", "dojebała",
+            "zasrany", "zasrana", "zasrane", "zasrało", "zasrał", "zasrała",
+            "posrany", "posrana", "posrane", "posrało", "posrał", "posrała",
+            "nasrany", "nasrana", "nasrane", "nasrało", "nasrał", "nasrała",
+            "obsrany", "obsrana", "obsrane", "obsrało", "obsrał", "obsrała",
+            "kurwa mać", "kurwa jego mać", "kurwa jego ojca", "kurwa jego babę",
+            "chodź tu kurwo", "chodź tu chuju", "chodź tu pizdo", "chodź tu suko",
+            "ty kurwo", "ty chuju", "ty pizdo", "ty suko", "ty dziwko", "ty gnido",
+            "ty debilu", "ty idioto", "ty kretynie", "ty śmieciu", "ty bydlaku",
+            "ty szuju", "ty cwelu", "ty pedale", "ty żulu", "ty kutasie",
+            "twoja stara", "twoja stara to kurwa", "twoja stara to dziwka", "twoja stara to suka",
+            "twój stary", "twój stary to pedał", "twój stary to chuj", "twój stary to kutas",
+            "twoje matka", "twoja matka to kurwa", "twoja matka to dziwka", "twoja matka to suka",
+            "twoje ojciec", "twój ojciec to chuj", "twój ojciec to kutas", "twój ojciec to pedał",
+            "spierdalaj stąd", "wypierdalaj stąd", "odpierdol się stąd", "jebaj się stąd",
+            "idź się jebać", "idź się pieprzyć", "idź do dupy", "idź do chuja", "idź do pizdy",
+            "mam cię w dupie", "mam was w dupie", "mam to w dupie", "mam go w dupie",
+            "ssij chuja", "ssij kutasa", "ssij fiuta", "ssij pale", "ssij mi",
+            "lizać dupę", "lizać chuj", "lizać kutas", "lizać fiut", "lizać cipę",
+            "ruchać w dupę", "ruchać w cipę", "ruchać w mordę", "ruchać w ryj",
+            "jebać w dupę", "jebać w cipę", "jebać w mordę", "jebać w ryj",
+            "pierdolić w dupę", "pierdolić w cipę", "pierdolić w mordę", "pierdolić w ryj",
+            "chuj mnie to", "chuj mnie obchodzi", "chuj mnie interesuje", "chuj mnie to boli",
+            "kurwa mnie to", "kurwa mnie obchodzi", "kurwa mnie interesuje", "kurwa mnie to boli",
+            "gówno mnie to", "gówno mnie obchodzi", "gówno mnie interesuje", "gówno mnie to boli",
+            "pizda mnie to", "pizda mnie obchodzi", "pizda mnie interesuje", "pizda mnie to boli",
+            "fuck off", "fuck you", "fuck this", "fuck that", "fucking hell",
+            "son of a bitch", "piece of shit", "go to hell", "kiss my ass",
+            "suck my dick", "eat shit", "bullshit", "horseshit", "dickhead",
+            "asshole", "motherfucker", "cocksucker", "bastard", "bitch",
+            "damn it", "god damn", "what the fuck", "what the hell", "holy shit",
+            "shit happens", "no shit", "tough shit", "eat my shorts", "bite me",
+            "piss off", "piss on you", "go screw yourself", "screw you", "screw this",
+            "shithead", "shitface", "dipshit", "dumbass", "jackass", "smartass",
+            "kiss my butt", "up yours", "blow me", "suck it", "get stuffed",
+            "go jump off a cliff", "drop dead", "go die", "kill yourself",
+            "shut the hell up", "shut the fuck up", "fuck off and die",
+            "go fuck yourself", "fuck your mother", "your mom", "your mama"
         ];
     }
 
@@ -164,7 +288,9 @@ class AutoModerationService {
         
         // Zastąp znaki specjalne
         for (const [from, to] of Object.entries(replacements)) {
-            normalized = normalized.replace(new RegExp(from, 'g'), to);
+            // Escapuj znaki specjalne w wyrażeniu regularnym
+            const escapedFrom = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            normalized = normalized.replace(new RegExp(escapedFrom, 'g'), to);
         }
 
         // Usuń spacje wewnątrz słów (np. "k u r w a" -> "kurwa")
@@ -179,34 +305,52 @@ class AutoModerationService {
      * @returns {Array} Lista znalezionych wyzwisk
      */
     detectBadWords(text) {
+        if (!text || typeof text !== 'string' || text.trim().length === 0) {
+            return [];
+        }
+        
         const normalized = this.normalizeText(text);
-        const words = normalized.split(/\s+/);
         const foundBadWords = [];
 
-        for (const word of words) {
-            // Usuń znaki interpunkcyjne z początku i końca słowa
-            const cleanWord = word.replace(/^[^\w\u00C0-\u017F]+|[^\w\u00C0-\u017F]+$/g, '');
-            
-            for (const badWord of this.badWords) {
-                // Sprawdź czy całe słowo to wyzwisko (nie fragment)
-                if (cleanWord === badWord) {
+        for (const badWord of this.badWords) {
+            // Sprawdź czy tekst zawiera wyzwisko jako całe słowo lub frazę
+            if (badWord.includes(' ')) {
+                // Dla fraz (np. "jebaj się", "chuj ci w dupę")
+                if (normalized.includes(badWord)) {
                     foundBadWords.push({
                         word: badWord,
-                        original: word,
-                        normalized: cleanWord
+                        original: badWord,
+                        normalized: badWord
                     });
-                    break;
                 }
+            } else {
+                // Dla pojedynczych słów
+                const words = normalized.split(/\s+/).filter(word => word.length > 0);
                 
-                // Sprawdź czy słowo zaczyna się i kończy na wyzwisko (z możliwymi końcówkami)
-                const wordPattern = new RegExp(`^${badWord}(em|ami|ach|ów|y|i|a|e|o|u|ie|ę|ą)?$`);
-                if (wordPattern.test(cleanWord)) {
-                    foundBadWords.push({
-                        word: badWord,
-                        original: word,
-                        normalized: cleanWord
-                    });
-                    break;
+                for (const word of words) {
+                    // Usuń znaki interpunkcyjne z początku i końca słowa
+                    const cleanWord = word.replace(/^[^\w\u00C0-\u017F]+|[^\w\u00C0-\u017F]+$/g, '');
+                    
+                    // Sprawdź czy całe słowo to wyzwisko (nie fragment)
+                    if (cleanWord === badWord) {
+                        foundBadWords.push({
+                            word: badWord,
+                            original: word,
+                            normalized: cleanWord
+                        });
+                        break;
+                    }
+                    
+                    // Sprawdź czy słowo zaczyna się i kończy na wyzwisko (z możliwymi końcówkami)
+                    const wordPattern = new RegExp(`^${badWord}(em|ami|ach|ów|y|i|a|e|o|u|ie|ę|ą)?$`);
+                    if (wordPattern.test(cleanWord)) {
+                        foundBadWords.push({
+                            word: badWord,
+                            original: word,
+                            normalized: cleanWord
+                        });
+                        break;
+                    }
                 }
             }
         }
@@ -220,13 +364,14 @@ class AutoModerationService {
      * @returns {Object} Wynik analizy
      */
     async processMessage(message) {
-        if (!message.content || message.author.bot) {
+        if (!message || !message.content || message.author.bot) {
             return { action: 'ignore' };
         }
 
-        const userId = message.author.id;
-        const guildId = message.guild.id;
-        const badWords = this.detectBadWords(message.content);
+        try {
+            const userId = message.author.id;
+            const guildId = message.guild.id;
+            const badWords = this.detectBadWords(message.content);
 
         if (badWords.length === 0) {
             return { action: 'clean' };
@@ -301,6 +446,10 @@ class AutoModerationService {
             violationCount: userViolations.count,
             remaining: this.config.autoModeration.violationsBeforeWarn - userViolations.count
         };
+        } catch (error) {
+            this.logger.error(`Błąd podczas przetwarzania wiadomości: ${error.message}`);
+            return { action: 'ignore' };
+        }
     }
 
     /**

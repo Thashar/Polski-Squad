@@ -58,15 +58,10 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('clean')
                 .setDescription('Usuwa wiadomości na kanale')
-                .addStringOption(option =>
-                    option.setName('typ')
-                        .setDescription('Typ usuwania wiadomości')
-                        .setRequired(true)
-                        .addChoices(
-                            { name: 'Ostatnie wiadomości', value: 'latest' },
-                            { name: 'Personalne wiadomości', value: 'user' },
-                            { name: 'Wiadomości w czasie', value: 'time' }
-                        )
+                .addUserOption(option =>
+                    option.setName('uzytkownik')
+                        .setDescription('Użytkownik, którego wiadomości usunąć (opcjonalnie)')
+                        .setRequired(false)
                 )
                 .addIntegerOption(option =>
                     option.setName('ilosc')
@@ -75,13 +70,8 @@ class InteractionHandler {
                         .setMinValue(1)
                         .setMaxValue(100)
                 )
-                .addUserOption(option =>
-                    option.setName('uzytkownik')
-                        .setDescription('Użytkownik, którego wiadomości usunąć')
-                        .setRequired(false)
-                )
                 .addIntegerOption(option =>
-                    option.setName('minuty')
+                    option.setName('czas')
                         .setDescription('Ilość minut wstecz do usunięcia wiadomości (max 1000)')
                         .setRequired(false)
                         .setMinValue(1)
@@ -804,32 +794,31 @@ class InteractionHandler {
             return;
         }
 
-        const type = interaction.options.getString('typ');
-        const amount = interaction.options.getInteger('ilosc');
         const user = interaction.options.getUser('uzytkownik');
-        const minutes = interaction.options.getInteger('minuty');
+        const amount = interaction.options.getInteger('ilosc');
+        const minutes = interaction.options.getInteger('czas');
 
         await interaction.deferReply({ ephemeral: true });
 
         try {
             let deletedCount = 0;
 
-            switch (type) {
-                case 'latest':
-                    deletedCount = await this.cleanLatestMessages(interaction, amount);
-                    break;
-                    
-                case 'user':
-                    deletedCount = await this.cleanUserMessages(interaction, user, amount);
-                    break;
-                    
-                case 'time':
-                    deletedCount = await this.cleanMessagesByTime(interaction, minutes);
-                    break;
-                    
-                default:
-                    await interaction.editReply({ content: this.config.messages.cleanInvalidType });
-                    return;
+            // Określ typ operacji na podstawie podanych parametrów
+            if (user && amount) {
+                // Nick + ilość = usuń ilość wiadomości dla danego nicku
+                deletedCount = await this.cleanUserMessages(interaction, user, amount);
+            } else if (user && minutes) {
+                // Nick + czas = usuń wiadomości dla danego nicku w określonym czasie
+                deletedCount = await this.cleanUserMessagesByTime(interaction, user, minutes);
+            } else if (amount) {
+                // Sama ilość = usuń wstecz wiadomości na kanale
+                deletedCount = await this.cleanLatestMessages(interaction, amount);
+            } else if (minutes) {
+                // Sam czas = usuń wszystkie wiadomości w określonym czasie
+                deletedCount = await this.cleanMessagesByTime(interaction, minutes);
+            } else {
+                await interaction.editReply({ content: "❌ Musisz podać przynajmniej jeden parametr (ilość lub czas)!" });
+                return;
             }
 
             if (deletedCount > 0) {
@@ -858,11 +847,6 @@ class InteractionHandler {
      * @returns {number} Ilość usuniętych wiadomości
      */
     async cleanLatestMessages(interaction, amount) {
-        if (!amount) {
-            await interaction.editReply({ content: this.config.messages.cleanMissingAmount });
-            return 0;
-        }
-
         const messages = await interaction.channel.messages.fetch({ 
             limit: Math.min(amount, this.config.clean.maxMessages) 
         });
@@ -891,16 +875,6 @@ class InteractionHandler {
      * @returns {number} Ilość usuniętych wiadomości
      */
     async cleanUserMessages(interaction, user, amount) {
-        if (!user) {
-            await interaction.editReply({ content: this.config.messages.cleanMissingUser });
-            return 0;
-        }
-
-        if (!amount) {
-            await interaction.editReply({ content: this.config.messages.cleanMissingAmount });
-            return 0;
-        }
-
         const messages = await interaction.channel.messages.fetch({ limit: 100 });
         const userMessages = messages.filter(msg => msg.author.id === user.id);
 
@@ -929,11 +903,6 @@ class InteractionHandler {
      * @returns {number} Ilość usuniętych wiadomości
      */
     async cleanMessagesByTime(interaction, minutes) {
-        if (!minutes) {
-            await interaction.editReply({ content: this.config.messages.cleanMissingMinutes });
-            return 0;
-        }
-
         const timeLimit = Math.min(minutes, this.config.clean.maxMinutes);
         const cutoffTime = new Date(Date.now() - (timeLimit * 60 * 1000));
         
@@ -947,6 +916,38 @@ class InteractionHandler {
         try {
             await interaction.channel.bulkDelete(recentMessages, true);
             return recentMessages.size;
+        } catch (error) {
+            if (error.code === 50034) {
+                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
+                return 0;
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Usuwa wiadomości konkretnego użytkownika z określonego czasu
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {User} user - Użytkownik, którego wiadomości usunąć
+     * @param {number} minutes - Ilość minut wstecz
+     * @returns {number} Ilość usuniętych wiadomości
+     */
+    async cleanUserMessagesByTime(interaction, user, minutes) {
+        const timeLimit = Math.min(minutes, this.config.clean.maxMinutes);
+        const cutoffTime = new Date(Date.now() - (timeLimit * 60 * 1000));
+        
+        const messages = await interaction.channel.messages.fetch({ limit: 100 });
+        const userMessages = messages.filter(msg => 
+            msg.author.id === user.id && msg.createdAt >= cutoffTime
+        );
+
+        if (userMessages.size === 0) {
+            return 0;
+        }
+
+        try {
+            await interaction.channel.bulkDelete(userMessages, true);
+            return userMessages.size;
         } catch (error) {
             if (error.code === 50034) {
                 await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });

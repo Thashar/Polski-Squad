@@ -63,7 +63,10 @@ class MessageHandler {
             const result = await this.autoModerationService.processMessage(message);
             await this.handleModerationResult(message, result);
         } catch (error) {
-            await this.logService.logMessage('error', `Błąd auto-moderacji: ${error.message}`, message);
+            // Nie loguj błędów regex - są obsłużone w serwisie
+            if (!error.message.includes('Invalid regular expression')) {
+                await this.logService.logMessage('error', `Błąd auto-moderacji: ${error.message}`, message);
+            }
         }
     }
 
