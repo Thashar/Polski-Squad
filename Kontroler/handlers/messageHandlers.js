@@ -1,4 +1,4 @@
-const { logWithTimestamp, downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
+const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Kontroler');
@@ -23,7 +23,7 @@ class MessageHandler {
         const channelConfig = this.roleService.getChannelConfig(message.channel.id);
         if (!channelConfig) return;
 
-        logWithTimestamp(`Wykryto wiadomość na monitorowanym kanale ${channelConfig.name}`, 'info');
+        logger.info(`Wykryto wiadomość na monitorowanym kanale ${channelConfig.name}`);
 
         // Sprawdź czy to obraz
         const imageAttachment = message.attachments.find(attachment =>
@@ -45,7 +45,7 @@ class MessageHandler {
         try {
             member = await message.guild.members.fetch(message.author.id);
         } catch (error) {
-            logWithTimestamp(`Błąd pobierania informacji o członku: ${error.message}`, 'error');
+            logger.error(`Błąd pobierania informacji o członku: ${error.message}`);
             await message.reply({
                 content: this.config.messages.userInfoError,
                 allowedMentions: { repliedUser: false }
@@ -74,7 +74,7 @@ class MessageHandler {
                 allowedMentions: { repliedUser: false }
             });
         } catch (error) {
-            logWithTimestamp(`Błąd tworzenia wiadomości odpowiedzi: ${error.message}`, 'error');
+            logger.error(`Błąd tworzenia wiadomości odpowiedzi: ${error.message}`);
             return;
         }
 
@@ -135,7 +135,7 @@ class MessageHandler {
             await safeEditMessage(analysisMessage, this.config.messages.ocr);
             const result = await this.analysisService.analyzeImage(processedImagePath, displayName, username, channelConfig);
 
-            logWithTimestamp(`Wynik analizy: ${JSON.stringify(result)}`, 'info');
+            logger.info(`Wynik analizy: ${JSON.stringify(result)}`);
 
             if (result.found && result.isValid && result.score !== null) {
                 await this.handleSuccessfulAnalysis(analysisMessage, result, channelConfig, member, guild);
@@ -144,11 +144,11 @@ class MessageHandler {
             }
 
         } catch (error) {
-            logWithTimestamp(`BŁĄD PODCZAS ANALIZY: ${error.message}`, 'error');
+            logger.error(`BŁĄD PODCZAS ANALIZY: ${error.message}`);
             await safeEditMessage(analysisMessage, this.messageService.formatAnalysisErrorMessage(error.message));
         } finally {
             cleanupFiles(originalImagePath, processedImagePath);
-            logWithTimestamp('Zakończono czyszczenie pamięci', 'info');
+            logger.info('Zakończono czyszczenie pamięci');
             logger.info('='.repeat(70) + '\n');
         }
     }
@@ -180,7 +180,7 @@ class MessageHandler {
      * @param {Guild} guild - Serwer Discord
      */
     async handleSuccessfulAnalysis(analysisMessage, result, channelConfig, member, guild) {
-        logWithTimestamp('SUKCES! Wynik spełnia wymagania', 'success');
+        logger.info('SUKCES! Wynik spełnia wymagania');
 
         const roleResult = await this.roleService.assignRole(member, channelConfig.requiredRoleId, guild);
         
@@ -200,7 +200,7 @@ class MessageHandler {
      * @param {Object} channelConfig - Konfiguracja kanału
      */
     async handleFailedAnalysis(analysisMessage, result, channelConfig) {
-        logWithTimestamp(`Analiza nieudana: ${result.error || 'Niewystarczający wynik'}`, 'warn');
+        logger.info(`Analiza nieudana: ${result.error || 'Niewystarczający wynik'}`);
         const message = this.messageService.formatResultMessage(result, null, channelConfig);
         await safeEditMessage(analysisMessage, message);
     }

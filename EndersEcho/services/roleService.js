@@ -1,5 +1,3 @@
-const { logWithTimestamp } = require('../utils/helpers');
-
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
@@ -142,7 +140,7 @@ class RoleService {
             const newHolder = newHolders[i] ? newHolders[i].username : 'Brak';
             
             if (oldHolder !== newHolder) {
-                logWithTimestamp(`${positions[i]}: ${oldHolder} → ${newHolder}`, 'info');
+                logger.info(`${positions[i]}: ${oldHolder} → ${newHolder}`);
             }
         }
     }

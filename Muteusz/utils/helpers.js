@@ -111,7 +111,6 @@ function generateHash(url) {
 }
 
 module.exports = {
-    logWithTimestamp,
     formatMessage,
     createLogEmbed,
     getLogColor,

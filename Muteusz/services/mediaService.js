@@ -4,7 +4,10 @@ const https = require('https');
 const http = require('http');
 const crypto = require('crypto');
 const { EmbedBuilder } = require('discord.js');
-const { logWithTimestamp, formatMessage, isMediaFile } = require('../utils/helpers');
+const { formatMessage, isMediaFile } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 class MediaService {
     constructor(config) {
@@ -22,7 +25,7 @@ class MediaService {
         // Ustaw interwał czyszczenia cache co godzinę
         setInterval(() => this.cleanupCache(), 60 * 60 * 1000);
         
-        logWithTimestamp('Serwis mediów został zainicjalizowany', 'info');
+        logger.info('Serwis mediów został zainicjalizowany');
     }
 
     /**
@@ -33,7 +36,7 @@ class MediaService {
             await fs.access(this.cacheDir);
         } catch {
             await fs.mkdir(this.cacheDir, { recursive: true });
-            logWithTimestamp(`Utworzono folder cache: ${this.cacheDir}`, 'info');
+            logger.info(`Utworzono folder cache: ${this.cacheDir}`);
         }
     }
 
@@ -171,11 +174,11 @@ class MediaService {
             }
             
             if (cleanedFiles > 0) {
-                logWithTimestamp(`Wyczyszczono ${cleanedFiles} plików cache (${(cleanedSize / 1024 / 1024).toFixed(2)} MB)`, 'info');
+                logger.info(`Wyczyszczono ${cleanedFiles} plików cache (${(cleanedSize / 1024 / 1024).toFixed(2)} MB)`);
             }
             
         } catch (error) {
-            logWithTimestamp(`Błąd podczas czyszczenia cache: ${error.message}`, 'error');
+            logger.error(`Błąd podczas czyszczenia cache: ${error.message}`);
         }
     }
 
@@ -188,9 +191,9 @@ class MediaService {
         try {
             const targetChannel = client.channels.cache.get(this.config.media.targetChannelId);
             if (!targetChannel) {
-                logWithTimestamp(formatMessage(this.config.messages.channelNotFound, { 
+                logger.error(formatMessage(this.config.messages.channelNotFound, { 
                     channelId: this.config.media.targetChannelId 
-                }), 'error');
+                }));
                 return;
             }
 
@@ -210,10 +213,10 @@ class MediaService {
                 try {
                     // Sprawdź rozmiar pliku
                     if (attachment.size > this.config.media.maxFileSize) {
-                        logWithTimestamp(formatMessage(this.config.messages.fileTooLarge, {
+                        logger.warn(formatMessage(this.config.messages.fileTooLarge, {
                             fileName: attachment.name,
                             size: (attachment.size / 1024 / 1024).toFixed(2)
-                        }), 'warn');
+                        }));
                         continue;
                     }
                     
@@ -261,10 +264,10 @@ class MediaService {
                     }
 
                 } catch (error) {
-                    logWithTimestamp(formatMessage(this.config.messages.downloadError, {
+                    logger.error(formatMessage(this.config.messages.downloadError, {
                         fileName: attachment.name,
                         error: error.message
-                    }), 'error');
+                    }));
                     
                     if (cachedFilePath) {
                         try {
@@ -275,7 +278,7 @@ class MediaService {
             }
 
         } catch (error) {
-            logWithTimestamp(`Błąd w repostMedia: ${error.message}`, 'error');
+            logger.error(`Błąd w repostMedia: ${error.message}`);
         }
     }
 
@@ -289,9 +292,9 @@ class MediaService {
                 await fs.unlink(path.join(this.cacheDir, file));
             }
             await fs.rmdir(this.cacheDir);
-            logWithTimestamp('Wyczyszczono wszystkie pliki cache', 'info');
+            logger.info('Wyczyszczono wszystkie pliki cache');
         } catch (error) {
-            logWithTimestamp(`Błąd czyszczenia cache: ${error.message}`, 'error');
+            logger.error(`Błąd czyszczenia cache: ${error.message}`);
         }
     }
 }

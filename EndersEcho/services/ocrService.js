@@ -4,7 +4,6 @@ const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
-const { logWithTimestamp } = require('../utils/helpers');
 
 class OCRService {
     constructor(config) {

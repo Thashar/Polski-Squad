@@ -1,7 +1,9 @@
 const { Client, GatewayIntentBits, Events } = require('discord.js');
 
 const config = require('./config/config');
-const { logWithTimestamp } = require('./utils/helpers');
+const { createBotLogger } = require('../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 // Importuj serwisy
 const RoleManagementService = require('./services/roleManagementService');
@@ -144,10 +146,10 @@ process.on('SIGTERM', async () => {
         }
         
         client.destroy();
-        logWithTimestamp('Bot został pomyślnie zamknięty', 'info');
+        logger.info('Bot został pomyślnie zamknięty');
         process.exit(0);
     } catch (error) {
-        logWithTimestamp(`Błąd podczas zamykania bota: ${error.message}`, 'error');
+        logger.error(`Błąd podczas zamykania bota: ${error.message}`);
         process.exit(1);
     }
 });
@@ -167,7 +169,7 @@ async function startBot() {
         await client.login(config.token);
         return client;
     } catch (error) {
-        logWithTimestamp(`Błąd uruchamiania bota: ${error.message}`, 'error');
+        logger.error(`Błąd uruchamiania bota: ${error.message}`);
         throw error;
     }
 }
@@ -177,16 +179,16 @@ async function startBot() {
  */
 async function stopBot() {
     try {
-        logWithTimestamp('Zatrzymywanie bota Muteusz...', 'info');
+        logger.info('Zatrzymywanie bota Muteusz...');
         
         if (config.media.autoCleanup) {
             await mediaService.cleanupAllCache();
         }
         
         await client.destroy();
-        logWithTimestamp('Bot został zatrzymany', 'info');
+        logger.info('Bot został zatrzymany');
     } catch (error) {
-        logWithTimestamp(`Błąd zatrzymywania bota: ${error.message}`, 'error');
+        logger.error(`Błąd zatrzymywania bota: ${error.message}`);
         throw error;
     }
 }

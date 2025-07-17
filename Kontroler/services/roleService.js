@@ -1,4 +1,6 @@
-const { logWithTimestamp } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Kontroler');
 
 class RoleService {
     constructor(config) {
@@ -13,7 +15,7 @@ class RoleService {
     isUserBlocked(member) {
         const hasBlockedRole = member.roles.cache.has(this.config.blockedRole);
         if (hasBlockedRole) {
-            logWithTimestamp(`Użytkownik ${member.displayName} ma rolę blokującą (${this.config.blockedRole})`, 'warn');
+            logger.info(`Użytkownik ${member.displayName} ma rolę blokującą (${this.config.blockedRole})`);
         }
         return hasBlockedRole;
     }
@@ -43,7 +45,7 @@ class RoleService {
             }
 
             if (this.hasRequiredRole(member, roleId)) {
-                logWithTimestamp(`Użytkownik ${member.displayName} już posiada rolę ${role.name}`, 'info');
+                logger.info(`Użytkownik ${member.displayName} już posiada rolę ${role.name}`);
                 return {
                     success: true,
                     alreadyHad: true,
@@ -52,7 +54,7 @@ class RoleService {
             }
 
             await member.roles.add(role);
-            logWithTimestamp(`Przyznano rolę ${role.name} użytkownikowi ${member.displayName}`, 'success');
+            logger.info(`Przyznano rolę ${role.name} użytkownikowi ${member.displayName}`);
             
             return {
                 success: true,
@@ -61,7 +63,7 @@ class RoleService {
             };
 
         } catch (error) {
-            logWithTimestamp(`Błąd podczas przyznawania roli: ${error.message}`, 'error');
+            logger.error(`Błąd podczas przyznawania roli: ${error.message}`);
             return {
                 success: false,
                 error: error.message

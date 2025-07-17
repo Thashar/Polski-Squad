@@ -1,4 +1,4 @@
-const { logWithTimestamp, isSimilarNick } = require('../utils/helpers');
+const { isSimilarNick } = require('../utils/helpers');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -23,33 +23,33 @@ class AnalysisService {
             const scoreMatch = normalizedResult.normalized.match(/^(\d{1,4})$/);
             if (scoreMatch) {
                 const score = parseInt(scoreMatch[1]);
-                logWithTimestamp(`Znaleziona liczba: ${score}`, 'info');
+                logger.info(`Znaleziona liczba: ${score}`);
                 
                 if (score >= minRange && score <= maxRange && score % step === 0) {
-                    logWithTimestamp(`Prawidłowy wynik: ${score}`, 'success');
+                    logger.info(`Prawidłowy wynik: ${score}`);
                     return { isValid: true, score: score, variant: null };
                 } else if (score >= minRange && score <= maxRange) {
                     const roundedScore = Math.round(score / step) * step;
-                    logWithTimestamp(`Zaokrąglam ${score} do ${roundedScore}`, 'info');
+                    logger.info(`Zaokrąglam ${score} do ${roundedScore}`);
                     return { isValid: true, score: roundedScore, originalScore: score, rounded: true, variant: null };
                 }
             }
             return { isValid: false, score: null, variant: null };
         } else {
-            logWithTimestamp('Testuję warianty dla s/S...', 'info');
+            logger.info('Testuję warianty dla s/S...');
             
             // Test wariantu z 5
             const scoreMatch5 = normalizedResult.variant5.match(/^(\d{1,4})$/);
             if (scoreMatch5) {
                 const score5 = parseInt(scoreMatch5[1]);
-                logWithTimestamp(`Wariant z 5: ${score5}`, 'info');
+                logger.info(`Wariant z 5: ${score5}`);
                 
                 if (score5 >= minRange && score5 <= maxRange && score5 % step === 0) {
-                    logWithTimestamp(`Prawidłowy wynik (wariant 5): ${score5}`, 'success');
+                    logger.info(`Prawidłowy wynik (wariant 5): ${score5}`);
                     return { isValid: true, score: score5, variant: '5' };
                 } else if (score5 >= minRange && score5 <= maxRange) {
                     const roundedScore5 = Math.round(score5 / step) * step;
-                    logWithTimestamp(`Zaokrąglam ${score5} do ${roundedScore5} (wariant 5)`, 'info');
+                    logger.info(`Zaokrąglam ${score5} do ${roundedScore5} (wariant 5)`);
                     return { isValid: true, score: roundedScore5, originalScore: score5, rounded: true, variant: '5' };
                 }
             }
@@ -58,19 +58,19 @@ class AnalysisService {
             const scoreMatch8 = normalizedResult.variant8.match(/^(\d{1,4})$/);
             if (scoreMatch8) {
                 const score8 = parseInt(scoreMatch8[1]);
-                logWithTimestamp(`Wariant z 8: ${score8}`, 'info');
+                logger.info(`Wariant z 8: ${score8}`);
                 
                 if (score8 >= minRange && score8 <= maxRange && score8 % step === 0) {
-                    logWithTimestamp(`Prawidłowy wynik (wariant 8): ${score8}`, 'success');
+                    logger.info(`Prawidłowy wynik (wariant 8): ${score8}`);
                     return { isValid: true, score: score8, variant: '8' };
                 } else if (score8 >= minRange && score8 <= maxRange) {
                     const roundedScore8 = Math.round(score8 / step) * step;
-                    logWithTimestamp(`Zaokrąglam ${score8} do ${roundedScore8} (wariant 8)`, 'info');
+                    logger.info(`Zaokrąglam ${score8} do ${roundedScore8} (wariant 8)`);
                     return { isValid: true, score: roundedScore8, originalScore: score8, rounded: true, variant: '8' };
                 }
             }
             
-            logWithTimestamp('Żaden wariant nie jest prawidłowy', 'error');
+            logger.info('Żaden wariant nie jest prawidłowy');
             return { isValid: false, score: null, variant: null };
         }
     }
@@ -84,8 +84,8 @@ class AnalysisService {
      * @returns {Object} - Wynik analizy
      */
     async analyzeImage(imagePath, displayName, username, channelConfig) {
-        logWithTimestamp(`Rozpoczynam analizę OCR dla nicku: "${displayName}" (użytkownik: ${username})`, 'info');
-        logWithTimestamp(`Konfiguracja: min=${channelConfig.minimumScore}, zakres=${channelConfig.scoreRange}, krok=${channelConfig.scoreStep}, drugie wystąpienie=${channelConfig.requireSecondOccurrence}`, 'info');
+        logger.info(`Rozpoczynam analizę OCR dla nicku: "${displayName}" (użytkownik: ${username})`);
+        logger.info(`Konfiguracja: min=${channelConfig.minimumScore}, zakres=${channelConfig.scoreRange}, krok=${channelConfig.scoreStep}, drugie wystąpienie=${channelConfig.requireSecondOccurrence}`);
 
         try {
             const text = await this.ocrService.extractTextFromImage(imagePath);
@@ -94,7 +94,7 @@ class AnalysisService {
                 .map(line => line.trim())
                 .filter(line => line.length > 2);
 
-            logWithTimestamp(`Znaleziono ${lines.length} linii tekstu do analizy`, 'info');
+            logger.info(`Znaleziono ${lines.length} linii tekstu do analizy`);
 
             const displayNameNormalized = displayName.toLowerCase()
                 .replace(/[^a-z0-9ąćęłńóśźż\s]/g, ' ')
@@ -103,7 +103,7 @@ class AnalysisService {
 
             // FAZA 1: Dokładne dopasowanie
             const linesWithNick = [];
-            logWithTimestamp('FAZA 1: Szukam dokładnego dopasowania nicku...', 'info');
+            logger.info('FAZA 1: Szukam dokładnego dopasowania nicku...');
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -114,11 +114,11 @@ class AnalysisService {
 
                 if (lineNormalized.includes(displayNameNormalized)) {
                     linesWithNick.push({ index: i + 1, line: line, matchType: 'exact' });
-                    logWithTimestamp(`Znaleziono nick (dokładne dopasowanie) w linii ${i + 1}: "${line}"`, 'success');
+                    logger.info(`Znaleziono nick (dokładne dopasowanie) w linii ${i + 1}: "${line}"`);
                 }
             }
 
-            logWithTimestamp(`Dokładne dopasowania: ${linesWithNick.length}`, 'info');
+            logger.info(`Dokładne dopasowania: ${linesWithNick.length}`);
 
             // FAZA 2: Podobieństwo
             if (channelConfig.requireSecondOccurrence && linesWithNick.length < 2) {
@@ -131,7 +131,7 @@ class AnalysisService {
                 await this.findSimilarNicks(lines, displayName, linesWithNick, this.config.similarity.threshold);
             }
 
-            logWithTimestamp(`Nick "${displayName}" wystąpił łącznie ${linesWithNick.length} razy`, 'info');
+            logger.info(`Nick "${displayName}" wystąpił łącznie ${linesWithNick.length} razy`);
 
             // Walidacja wystąpień
             if (linesWithNick.length === 0) {
@@ -173,7 +173,7 @@ class AnalysisService {
             return await this.extractScoreFromLine(targetLine, displayName, channelConfig);
 
         } catch (error) {
-            logWithTimestamp(`Błąd podczas analizy OCR: ${error.message}`, 'error');
+            logger.error(`Błąd podczas analizy OCR: ${error.message}`);
             throw error;
         }
     }
@@ -186,7 +186,7 @@ class AnalysisService {
      * @param {number} threshold - Próg podobieństwa
      */
     async findSimilarNicks(lines, displayName, linesWithNick, threshold) {
-        logWithTimestamp(`Szukam podobieństwa z progiem ${(threshold * 100).toFixed(0)}%...`, 'info');
+        logger.info(`Szukam podobieństwa z progiem ${(threshold * 100).toFixed(0)}%...`);
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -205,7 +205,7 @@ class AnalysisService {
                 if (isSimilarNick(displayName, word, threshold)) {
                     const matchType = threshold === this.config.similarity.threshold ? 'similarity' : 'similarity_low';
                     linesWithNick.push({ index: i + 1, line: line, matchType: matchType, matchedWord: word });
-                    logWithTimestamp(`Znaleziono podobny nick w linii ${i + 1}: "${line}" (słowo: "${word}")`, 'success');
+                    logger.info(`Znaleziono podobny nick w linii ${i + 1}: "${line}" (słowo: "${word}")`);
                     break;
                 }
             }
@@ -227,14 +227,14 @@ class AnalysisService {
                 return priority[a.matchType] - priority[b.matchType];
             });
 
-            logWithTimestamp('Posortowane wystąpienia nicku:', 'info');
+            logger.info('Posortowane wystąpienia nicku:');
             linesWithNick.forEach((item, index) => {
                 logger.info(`  ${index + 1}. Linia ${item.index}: ${item.matchType} - "${item.line}"`);
             });
 
             for (let i = 0; i < linesWithNick.length; i++) {
                 if (linesWithNick[i].index > channelConfig.skipLines) {
-                    logWithTimestamp(`Analizuję wystąpienie w linii ${linesWithNick[i].index} (typ: ${linesWithNick[i].matchType})`, 'info');
+                    logger.info(`Analizuję wystąpienie w linii ${linesWithNick[i].index} (typ: ${linesWithNick[i].matchType})`);
                     return linesWithNick[i];
                 }
             }
@@ -245,7 +245,7 @@ class AnalysisService {
 
             const exactMatch = validLines.find(item => item.matchType === 'exact');
             const targetLine = exactMatch || validLines[0];
-            logWithTimestamp(`Analizuję wystąpienie w linii ${targetLine.index} (typ: ${targetLine.matchType})`, 'info');
+            logger.info(`Analizuję wystąpienie w linii ${targetLine.index} (typ: ${targetLine.matchType})`);
             return targetLine;
         }
 
@@ -261,7 +261,7 @@ class AnalysisService {
      */
     async extractScoreFromLine(targetLine, displayName, channelConfig) {
         const line = targetLine.line;
-        logWithTimestamp(`Analizuję wybraną linię: "${line}"`, 'info');
+        logger.info(`Analizuję wybraną linię: "${line}"`);
 
         let nickIndex = -1;
         let foundNickVariant = '';
@@ -279,7 +279,7 @@ class AnalysisService {
                 nickIndex = line.toLowerCase().indexOf(variant);
                 if (nickIndex !== -1) {
                     foundNickVariant = variant;
-                    logWithTimestamp(`Znaleziono wariant nicku "${variant}" na pozycji ${nickIndex}`, 'success');
+                    logger.info(`Znaleziono wariant nicku "${variant}" na pozycji ${nickIndex}`);
                     break;
                 }
             }
@@ -287,7 +287,7 @@ class AnalysisService {
             if (targetLine.matchedWord) {
                 nickIndex = line.toLowerCase().indexOf(targetLine.matchedWord);
                 foundNickVariant = targetLine.matchedWord;
-                logWithTimestamp(`Znaleziono podobny nick "${targetLine.matchedWord}" na pozycji ${nickIndex}`, 'success');
+                logger.info(`Znaleziono podobny nick "${targetLine.matchedWord}" na pozycji ${nickIndex}`);
             }
         }
 
@@ -296,18 +296,18 @@ class AnalysisService {
             let afterNick = line.substring(afterNickStart);
             
             afterNick = afterNick.replace(/^[^a-zA-Z0-9]*/, '').trim();
-            logWithTimestamp(`Tekst po nicku: "${afterNick}"`, 'info');
+            logger.info(`Tekst po nicku: "${afterNick}"`);
 
             const potentialScoreMatch = afterNick.match(/(\S+)\s*$/);
             if (potentialScoreMatch) {
                 const rawScore = potentialScoreMatch[1];
-                logWithTimestamp(`Potencjalny wynik: "${rawScore}"`, 'info');
+                logger.info(`Potencjalny wynik: "${rawScore}"`);
 
                 const normalizedResult = this.ocrService.normalizeScore(rawScore, channelConfig);
                 const validation = this.validateScore(normalizedResult, channelConfig);
 
                 if (validation.isValid) {
-                    logWithTimestamp(`Znaleziono prawidłowy wynik: ${validation.score}${validation.variant ? ` (s/S -> ${validation.variant})` : ''}`, 'success');
+                    logger.info(`Znaleziono prawidłowy wynik: ${validation.score}${validation.variant ? ` (s/S -> ${validation.variant})` : ''}`);
                     return {
                         found: true,
                         score: validation.score,

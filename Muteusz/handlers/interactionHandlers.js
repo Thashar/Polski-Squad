@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { logWithTimestamp, formatMessage } = require('../utils/helpers');
+const { formatMessage } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
     constructor(config, roleManagementService, logService, specialRolesService) {

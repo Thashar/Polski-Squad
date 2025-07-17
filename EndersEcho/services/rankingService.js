@@ -3,7 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { logWithTimestamp, formatMessage } = require('../utils/helpers');
+const { formatMessage } = require('../utils/helpers');
 
 class RankingService {
     constructor(config) {

@@ -1,6 +1,5 @@
 const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
-const { logWithTimestamp } = require('../utils/helpers');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -29,81 +28,41 @@ class OCRService {
      * @returns {string} - Ścieżka do przetworzonego obrazu
      */
     async preprocessImage(imagePath, channelConfig) {
-        logWithTimestamp('Rozpoczynam preprocessing obrazu...', 'info');
+        logger.info('Rozpoczynam preprocessing obrazu...');
         
         try {
             const outputPath = imagePath.replace(/\.(png|jpg|jpeg)$/i, '_processed.png');
             
             if (channelConfig.name === 'Daily') {
-                logWithTimestamp('Daily - używam metody dla białego tekstu na szarym tle', 'info');
+                logger.info('Daily - używam metody dla białego tekstu na szarym tle');
                 return await this.preprocessWhiteTextOnGray(imagePath, outputPath);
             } else {
-                logWithTimestamp('CX - używam zaawansowanej konwersji biało-czarnej', 'info');
+                logger.info('CX - używam zaawansowanej konwersji biało-czarnej');
                 return await this.preprocessBlackWhite(imagePath, outputPath);
             }
         } catch (error) {
-            logWithTimestamp(`Błąd preprocessingu: ${error.message}`, 'error');
+            logger.error(`Błąd preprocessingu: ${error.message}`);
             throw error;
         }
     }
 
     /**
-     * Preprocessing dla białego tekstu na szarym tle (Daily)
+     * Preprocessing dla białego tekstu na szarym tle (Daily) - ustawienia z Rekrutera dla ataku
      * @param {string} imagePath - Ścieżka do obrazu
      * @param {string} outputPath - Ścieżka wyjściowa
      * @returns {string} - Ścieżka do przetworzonego obrazu
      */
     async preprocessWhiteTextOnGray(imagePath, outputPath) {
-        const { data, info } = await sharp(imagePath)
-            .raw()
-            .toBuffer({ resolveWithObject: true });
+        logger.info('Użycie ustawień OCR z Rekrutera dla ataku (oryginalne ustawienia)');
         
-        logWithTimestamp(`Informacje o obrazie: ${info.width}x${info.height}, ${info.channels} kanały, ${Math.round(data.length / 1024)}KB`, 'info');
-
-        let whitePixels = 0;
-        let blackPixels = 0;
+        await sharp(imagePath)
+            .grayscale()
+            .threshold(200)
+            .negate()
+            .png()
+            .toFile(outputPath);
         
-        for (let i = 0; i < data.length; i += info.channels) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            
-            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-            
-            if (luminance >= this.config.ocr.luminanceThresholds.white) {
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-                whitePixels++;
-            } else if (luminance <= this.config.ocr.luminanceThresholds.black) {
-                data[i] = 0;
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-                blackPixels++;
-            } else {
-                data[i] = 0;
-                data[i + 1] = 0;
-                data[i + 2] = 0;
-                blackPixels++;
-            }
-        }
-
-        const totalPixels = whitePixels + blackPixels;
-        const whitePercentage = ((whitePixels / totalPixels) * 100).toFixed(1);
-        logWithTimestamp(`Pikseli białych: ${whitePixels} (${whitePercentage}%), czarnych: ${blackPixels}`, 'info');
-
-        await sharp(data, {
-            raw: {
-                width: info.width,
-                height: info.height,
-                channels: info.channels
-            }
-        })
-        .sharpen(2, 1, 2)
-        .png()
-        .toFile(outputPath);
-
-        logWithTimestamp('Preprocessing dla białego tekstu zakończony', 'success');
+        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak)');
         return outputPath;
     }
 
@@ -118,7 +77,7 @@ class OCRService {
             .raw()
             .toBuffer({ resolveWithObject: true });
         
-        logWithTimestamp(`Informacje o obrazie: ${info.width}x${info.height}, ${info.channels} kanały, ${Math.round(data.length / 1024)}KB`, 'info');
+        logger.info(`Informacje o obrazie: ${info.width}x${info.height}, ${info.channels} kanały, ${Math.round(data.length / 1024)}KB`);
 
         let whitePixels = 0;
         let blackPixels = 0;
@@ -143,7 +102,7 @@ class OCRService {
 
         const totalPixels = whitePixels + blackPixels;
         const whitePercentage = ((whitePixels / totalPixels) * 100).toFixed(1);
-        logWithTimestamp(`Pikseli białych: ${whitePixels} (${whitePercentage}%), czarnych: ${blackPixels}`, 'info');
+        logger.info(`Pikseli białych: ${whitePixels} (${whitePercentage}%), czarnych: ${blackPixels}`);
 
         await sharp(data, {
             raw: {
@@ -155,7 +114,7 @@ class OCRService {
         .png()
         .toFile(outputPath);
 
-        logWithTimestamp('Zaawansowany preprocessing zakończony', 'success');
+        logger.info('Zaawansowany preprocessing zakończony');
         return outputPath;
     }
 
@@ -165,7 +124,7 @@ class OCRService {
      * @returns {string} - Rozpoznany tekst
      */
     async extractTextFromImage(imagePath) {
-        logWithTimestamp('Rozpoczynam rozpoznawanie tekstu OCR...', 'info');
+        logger.info('Rozpoczynam rozpoznawanie tekstu OCR...');
         
         const { data: { text } } = await Tesseract.recognize(imagePath, this.config.ocr.languages, {
             logger: m => {
@@ -181,7 +140,7 @@ class OCRService {
             classify_bln_numeric_mode: '1'
         });
 
-        logWithTimestamp('Rozpoznany tekst:', 'info');
+        logger.info('Rozpoznany tekst:');
         logger.info('─'.repeat(50));
         logger.info(text);
         logger.info('─'.repeat(50));
@@ -196,11 +155,11 @@ class OCRService {
      * @returns {Object} - Znormalizowany wynik
      */
     normalizeScore(scoreText, channelConfig) {
-        logWithTimestamp(`Normalizacja wyniku: "${scoreText}"`, 'info');
+        logger.info(`Normalizacja wyniku: "${scoreText}"`);
         
         // Specjalny wyjątek dla Daily: "sg" -> "9"
         if (channelConfig.name === 'Daily' && scoreText.toLowerCase().includes('sg')) {
-            logWithTimestamp('DAILY: Wykryto "sg" - zamieniam na "9"', 'info');
+            logger.info('DAILY: Wykryto "sg" - zamieniam na "9"');
             scoreText = scoreText.toLowerCase().replace(/sg/g, '9');
         }
 
@@ -213,7 +172,7 @@ class OCRService {
 
         // Specjalne traktowanie 's' i 'S'
         if (normalized.includes('s') || normalized.includes('S')) {
-            logWithTimestamp('Wykryto s/S - testuję warianty 5 i 8', 'info');
+            logger.info('Wykryto s/S - testuję warianty 5 i 8');
             
             const variant5Text = normalized.replace(/[sS]/g, '5');
             const variant5Numbers = variant5Text.match(/\d+/g);
@@ -234,7 +193,7 @@ class OCRService {
         const numbersOnly = normalized.match(/\d+/g);
         const finalResult = numbersOnly ? numbersOnly.join('') : '';
         
-        logWithTimestamp(`Wynik po normalizacji: "${finalResult}"`, 'info');
+        logger.info(`Wynik po normalizacji: "${finalResult}"`);
         
         return {
             hasVariants: false,

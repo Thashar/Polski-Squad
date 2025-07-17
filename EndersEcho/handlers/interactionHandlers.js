@@ -271,7 +271,7 @@ class InteractionHandler {
             
             // Usunięcie pliku tymczasowego w przypadku błędu
             if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(console.error);
+                await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
             }
             
             await interaction.editReply(this.config.messages.updateError);

@@ -1,5 +1,7 @@
 const fs = require('fs').promises;
-const { logWithTimestamp } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 class RoleManagementService {
     constructor(config, specialRolesService) {
@@ -21,7 +23,7 @@ class RoleManagementService {
             if (error.code === 'ENOENT') {
                 return {};
             }
-            logWithTimestamp(`Błąd podczas odczytu pliku ról: ${error.message}`, 'error');
+            logger.error(`Błąd podczas odczytu pliku ról: ${error.message}`);
             return {};
         }
     }
@@ -38,9 +40,9 @@ class RoleManagementService {
             await fs.mkdir(dir, { recursive: true });
             
             await fs.writeFile(this.removedRolesFile, JSON.stringify(data, null, 2), 'utf8');
-            logWithTimestamp('Dane o usuniętych rolach zostały zapisane', 'info');
+            logger.info('Dane o usuniętych rolach zostały zapisane');
         } catch (error) {
-            logWithTimestamp(`Błąd podczas zapisu pliku ról: ${error.message}`, 'error');
+            logger.error(`Błąd podczas zapisu pliku ról: ${error.message}`);
         }
     }
 
@@ -64,7 +66,7 @@ class RoleManagementService {
         }
         
         await this.writeRemovedRoles(removedRoles);
-        logWithTimestamp(`Zapisano usunięte role dla użytkownika ${userId}: ${roleIds.join(', ')}`, 'info');
+        logger.info(`Zapisano usunięte role dla użytkownika ${userId}: ${roleIds.join(', ')}`);
     }
 
     /**
@@ -80,7 +82,7 @@ class RoleManagementService {
         if (removedRoles[userId]) {
             delete removedRoles[userId];
             await this.writeRemovedRoles(removedRoles);
-            logWithTimestamp(`Pobrano i usunięto zapisane role dla użytkownika ${userId}: ${userRoles.join(', ')}`, 'info');
+            logger.info(`Pobrano i usunięto zapisane role dla użytkownika ${userId}: ${userRoles.join(', ')}`);
         }
         
         return userRoles;
@@ -101,7 +103,7 @@ class RoleManagementService {
             const hasTriggerRole = newMember.roles.cache.has(triggerRoleId);
 
             if (hadTriggerRole && !hasTriggerRole) {
-                logWithTimestamp(`Użytkownik ${newMember.user.tag} stracił główną rolę (ID: ${triggerRoleId})`, 'info');
+                logger.info(`Użytkownik ${newMember.user.tag} stracił główną rolę (ID: ${triggerRoleId})`);
 
                 // Sprawdź które z określonych ról użytkownik nadal posiada
                 const currentRoles = newMember.roles.cache;
@@ -125,7 +127,7 @@ class RoleManagementService {
                         await newMember.roles.remove(rolesToRemoveFromUser, 'Automatyczne usunięcie ról po utracie głównej roli');
                         
                         const removedRoleNames = rolesToRemoveFromUser.map(role => role.name).join(', ');
-                        logWithTimestamp(`Automatycznie usunięto i zapisano role: ${removedRoleNames} od użytkownika ${newMember.user.tag}`, 'success');
+                        logger.info(`Automatycznie usunięto i zapisano role: ${removedRoleNames} od użytkownika ${newMember.user.tag}`);
 
                         return {
                             success: true,
@@ -134,18 +136,18 @@ class RoleManagementService {
                         };
 
                     } catch (error) {
-                        logWithTimestamp(`Błąd podczas automatycznego usuwania ról od ${newMember.user.tag}: ${error.message}`, 'error');
+                        logger.error(`Błąd podczas automatycznego usuwania ról od ${newMember.user.tag}: ${error.message}`);
                         return { success: false, error: error.message };
                     }
                 } else {
-                    logWithTimestamp(`Użytkownik ${newMember.user.tag} nie posiada żadnych ról do automatycznego usunięcia`, 'info');
+                    logger.info(`Użytkownik ${newMember.user.tag} nie posiada żadnych ról do automatycznego usunięcia`);
                 }
             }
 
             return { success: true, noAction: true };
 
         } catch (error) {
-            logWithTimestamp(`Błąd w handleRoleRemoval: ${error.message}`, 'error');
+            logger.error(`Błąd w handleRoleRemoval: ${error.message}`);
             return { success: false, error: error.message };
         }
     }
@@ -164,7 +166,7 @@ class RoleManagementService {
             const hasTriggerRole = newMember.roles.cache.has(triggerRoleId);
 
             if (!hadTriggerRole && hasTriggerRole) {
-                logWithTimestamp(`Użytkownik ${newMember.user.tag} odzyskał główną rolę (ID: ${triggerRoleId})`, 'info');
+                logger.info(`Użytkownik ${newMember.user.tag} odzyskał główną rolę (ID: ${triggerRoleId})`);
 
                 // Pobierz zapisane role użytkownika
                 const savedRoleIds = await this.getRemovedRoles(newMember.user.id);
@@ -181,7 +183,7 @@ class RoleManagementService {
                                 rolesToRestore.push(role);
                                 roleNamesToRestore.push(role.name);
                             } else {
-                                logWithTimestamp(`Rola o ID ${roleId} nie istnieje już na serwerze`, 'warn');
+                                logger.warn(`Rola o ID ${roleId} nie istnieje już na serwerze`);
                             }
                         }
 
@@ -189,7 +191,7 @@ class RoleManagementService {
                             // Przywróć role użytkownikowi
                             await newMember.roles.add(rolesToRestore, 'Automatyczne przywrócenie ról po odzyskaniu głównej roli');
                             
-                            logWithTimestamp(`Automatycznie przywrócono role: ${roleNamesToRestore.join(', ')} użytkownikowi ${newMember.user.tag}`, 'success');
+                            logger.info(`Automatycznie przywrócono role: ${roleNamesToRestore.join(', ')} użytkownikowi ${newMember.user.tag}`);
 
                             return {
                                 success: true,
@@ -199,18 +201,18 @@ class RoleManagementService {
                         }
 
                     } catch (error) {
-                        logWithTimestamp(`Błąd podczas automatycznego przywracania ról użytkownikowi ${newMember.user.tag}: ${error.message}`, 'error');
+                        logger.error(`Błąd podczas automatycznego przywracania ról użytkownikowi ${newMember.user.tag}: ${error.message}`);
                         return { success: false, error: error.message };
                     }
                 } else {
-                    logWithTimestamp(`Użytkownik ${newMember.user.tag} nie ma zapisanych ról do przywrócenia`, 'info');
+                    logger.info(`Użytkownik ${newMember.user.tag} nie ma zapisanych ról do przywrócenia`);
                 }
             }
 
             return { success: true, noAction: true };
 
         } catch (error) {
-            logWithTimestamp(`Błąd w handleRoleRestoration: ${error.message}`, 'error');
+            logger.error(`Błąd w handleRoleRestoration: ${error.message}`);
             return { success: false, error: error.message };
         }
     }

@@ -1,5 +1,7 @@
 const fs = require('fs').promises;
-const { logWithTimestamp } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 class SpecialRolesService {
     constructor(config) {
@@ -21,7 +23,7 @@ class SpecialRolesService {
             if (error.code === 'ENOENT') {
                 return [];
             }
-            logWithTimestamp(`Błąd podczas odczytu pliku ról specjalnych: ${error.message}`, 'error');
+            logger.error(`Błąd podczas odczytu pliku ról specjalnych: ${error.message}`);
             return [];
         }
     }
@@ -44,9 +46,9 @@ class SpecialRolesService {
             };
             
             await fs.writeFile(this.specialRolesFile, JSON.stringify(data, null, 2), 'utf8');
-            logWithTimestamp('Lista ról specjalnych została zapisana', 'info');
+            logger.info('Lista ról specjalnych została zapisana');
         } catch (error) {
-            logWithTimestamp(`Błąd podczas zapisu pliku ról specjalnych: ${error.message}`, 'error');
+            logger.error(`Błąd podczas zapisu pliku ról specjalnych: ${error.message}`);
             throw error;
         }
     }
@@ -82,7 +84,7 @@ class SpecialRolesService {
             currentRoles.push(roleId);
             await this.writeSpecialRoles(currentRoles);
             
-            logWithTimestamp(`Dodano rolę specjalną: ${roleId}`, 'success');
+            logger.info(`Dodano rolę specjalną: ${roleId}`);
             
             return {
                 success: true,
@@ -91,7 +93,7 @@ class SpecialRolesService {
             };
             
         } catch (error) {
-            logWithTimestamp(`Błąd dodawania roli specjalnej ${roleId}: ${error.message}`, 'error');
+            logger.error(`Błąd dodawania roli specjalnej ${roleId}: ${error.message}`);
             return {
                 success: false,
                 reason: 'error',
@@ -122,7 +124,7 @@ class SpecialRolesService {
             const updatedRoles = currentRoles.filter(id => id !== roleId);
             await this.writeSpecialRoles(updatedRoles);
             
-            logWithTimestamp(`Usunięto rolę specjalną: ${roleId}`, 'success');
+            logger.info(`Usunięto rolę specjalną: ${roleId}`);
             
             return {
                 success: true,
@@ -131,7 +133,7 @@ class SpecialRolesService {
             };
             
         } catch (error) {
-            logWithTimestamp(`Błąd usuwania roli specjalnej ${roleId}: ${error.message}`, 'error');
+            logger.error(`Błąd usuwania roli specjalnej ${roleId}: ${error.message}`);
             return {
                 success: false,
                 reason: 'error',
@@ -180,7 +182,7 @@ class SpecialRolesService {
             };
             
         } catch (error) {
-            logWithTimestamp(`Błąd pobierania informacji o rolach specjalnych: ${error.message}`, 'error');
+            logger.error(`Błąd pobierania informacji o rolach specjalnych: ${error.message}`);
             return {
                 success: false,
                 error: error.message
@@ -205,7 +207,7 @@ class SpecialRolesService {
                     validRoles.push(roleId);
                 } else {
                     removedCount++;
-                    logWithTimestamp(`Usunięto nieważną rolę specjalną: ${roleId}`, 'info');
+                    logger.info(`Usunięto nieważną rolę specjalną: ${roleId}`);
                 }
             }
             
@@ -220,7 +222,7 @@ class SpecialRolesService {
             };
             
         } catch (error) {
-            logWithTimestamp(`Błąd czyszczenia nieważnych ról: ${error.message}`, 'error');
+            logger.error(`Błąd czyszczenia nieważnych ról: ${error.message}`);
             return {
                 success: false,
                 error: error.message

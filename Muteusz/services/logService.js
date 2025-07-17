@@ -1,5 +1,4 @@
-const { logWithTimestamp, createLogEmbed } = require('../utils/helpers');
-
+const { createLogEmbed } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
@@ -15,7 +14,7 @@ class LogService {
      */
     initialize(client) {
         this.client = client;
-        logWithTimestamp('Serwis logowania został zainicjalizowany', 'info');
+        logger.info('Serwis logowania został zainicjalizowany');
     }
 
     /**
@@ -27,7 +26,13 @@ class LogService {
     async logMessage(type, message, interaction = null) {
         // Zawsze loguj do konsoli jeśli włączone
         if (this.config.logging.enableConsoleLogging) {
-            logWithTimestamp(message, type);
+            if (type === 'error') {
+                logger.error(message);
+            } else if (type === 'warn') {
+                logger.warn(message);
+            } else {
+                logger.info(message);
+            }
         }
         
         // Loguj do kanału jeśli włączone
@@ -74,7 +79,7 @@ class LogService {
                 await logChannel.send({ embeds: [embed] });
             }
         } catch (error) {
-            logWithTimestamp(`Błąd logowania usunięcia ról: ${error.message}`, 'error');
+            logger.error(`Błąd logowania usunięcia ról: ${error.message}`);
         }
     }
 
@@ -108,7 +113,7 @@ class LogService {
                 await logChannel.send({ embeds: [embed] });
             }
         } catch (error) {
-            logWithTimestamp(`Błąd logowania przywrócenia ról: ${error.message}`, 'error');
+            logger.error(`Błąd logowania przywrócenia ról: ${error.message}`);
         }
     }
 }

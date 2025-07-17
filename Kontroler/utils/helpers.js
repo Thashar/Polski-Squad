@@ -1,5 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Kontroler');
 
 /**
  * Loguje wiadomość z znacznikiem czasu
@@ -41,7 +44,7 @@ function formatMessage(template, params = {}) {
  * @param {string} filePath - Ścieżka docelowa
  */
 async function downloadFile(url, filePath) {
-    logWithTimestamp(`Pobieranie pliku z: ${url}`, 'info');
+    logger.info(`Pobieranie pliku z: ${url}`);
     
     try {
         const response = await fetch(url);
@@ -52,10 +55,10 @@ async function downloadFile(url, filePath) {
         const buffer = await response.arrayBuffer();
         fs.writeFileSync(filePath, Buffer.from(buffer));
         
-        logWithTimestamp(`Plik zapisany: ${path.basename(filePath)}`, 'success');
+        logger.info(`Plik zapisany: ${path.basename(filePath)}`);
         return filePath;
     } catch (error) {
-        logWithTimestamp(`Błąd pobierania pliku: ${error.message}`, 'error');
+        logger.error(`Błąd pobierania pliku: ${error.message}`);
         throw error;
     }
 }
@@ -69,9 +72,9 @@ function cleanupFiles(...filePaths) {
         if (filePath && fs.existsSync(filePath)) {
             try {
                 fs.unlinkSync(filePath);
-                logWithTimestamp(`Usunięto plik tymczasowy: ${path.basename(filePath)}`, 'info');
+                logger.info(`Usunięto plik tymczasowy: ${path.basename(filePath)}`);
             } catch (error) {
-                logWithTimestamp(`Błąd usuwania pliku ${filePath}: ${error.message}`, 'error');
+                logger.error(`Błąd usuwania pliku ${filePath}: ${error.message}`);
             }
         }
     });
@@ -90,9 +93,9 @@ async function safeEditMessage(message, content) {
         return true;
     } catch (error) {
         if (error.code === 10008) {
-            logWithTimestamp('Wiadomość została usunięta przez użytkownika - pomijam edycję', 'warn');
+            logger.warn('Wiadomość została usunięta przez użytkownika - pomijam edycję');
         } else {
-            logWithTimestamp(`Błąd edycji wiadomości: ${error.message}`, 'error');
+            logger.error(`Błąd edycji wiadomości: ${error.message}`);
         }
         return false;
     }
@@ -149,12 +152,11 @@ function isSimilarNick(nick1, nick2, threshold = 0.4) {
     const normalized2 = nick2.toLowerCase().replace(/[^a-z0-9]/g, '');
     const similarity = calculateSimilarity(normalized1, normalized2);
     
-    logWithTimestamp(`Podobieństwo "${normalized1}" vs "${normalized2}": ${(similarity * 100).toFixed(1)}%`, 'info');
+    logger.info(`Podobieństwo "${normalized1}" vs "${normalized2}": ${(similarity * 100).toFixed(1)}%`);
     return similarity >= threshold;
 }
 
 module.exports = {
-    logWithTimestamp,
     formatMessage,
     downloadFile,
     cleanupFiles,

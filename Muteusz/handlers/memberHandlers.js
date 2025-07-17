@@ -1,4 +1,6 @@
-const { logWithTimestamp } = require('../utils/helpers');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('Muteusz');
 
 class MemberHandler {
     constructor(config, roleManagementService, logService) {

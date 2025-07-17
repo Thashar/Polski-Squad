@@ -58,7 +58,6 @@ async function downloadFile(url, filepath) {
 }
 
 module.exports = {
-    logWithTimestamp,
     formatMessage,
     downloadFile
 };
