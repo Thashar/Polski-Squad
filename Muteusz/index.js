@@ -15,9 +15,6 @@ const SpecialRolesService = require('./services/specialRolesService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
 const MemberHandler = require('./handlers/memberHandlers');
-const { createBotLogger } = require('../utils/consoleLogger');
-
-const logger = createBotLogger('Muteusz');
 
 // Tworzenie klienta Discord
 const client = new Client({
