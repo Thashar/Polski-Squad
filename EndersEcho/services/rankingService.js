@@ -107,7 +107,7 @@ class RankingService {
         // Formatowanie w code block dla lepszego wyrównania
         tableText += '```\n';
         tableText += 'Pos  Nick                 Wynik    Boss               Data\n';
-        tableText += '=============================================================\n';
+        tableText += '============================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -135,8 +135,13 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Funkcja do liczenia rzeczywistej szerokości wizualnej tekstu
+            // Funkcja do liczenia szerokości tekstu - prostsze podejście
             const getVisualWidth = (text) => {
+                // Dla nicka Spermiarza dodaj dodatkowe miejsca
+                if (text.includes('ӁㆍSpea̷rmiarz Ӂ')) {
+                    return 22; // Zwiększone z powodu specjalnych znaków
+                }
+                
                 // Normalizuj tekst do formy NFD (decomposed) żeby rozdzielić znaki składowe
                 const normalizedText = text.normalize('NFD');
                 
