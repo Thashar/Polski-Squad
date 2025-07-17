@@ -99,20 +99,30 @@ class RankingService {
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
         
-        // Tworzymy ranking w jednym polu
+        // Tworzymy ranking w formie pól embed
         const medals = this.config.scoring.medals;
         
-        let rankingText = '';
+        // Przygotuj dane dla każdego gracza
+        const playerData = {
+            nicks: '',
+            scoresDates: '',
+            bosses: ''
+        };
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
-            let position;
+            let medal;
             if (actualPosition <= 3) {
-                position = medals[actualPosition - 1];
+                medal = medals[actualPosition - 1];
+            } else if (actualPosition >= 4 && actualPosition <= 9) {
+                medal = `${actualPosition}️⃣`;
+            } else if (actualPosition === 10) {
+                medal = '🔟';
             } else {
-                position = `${actualPosition}.`;
+                // Dla pozycji 11+ używaj ikon dla każdej cyfry
+                const positionStr = actualPosition.toString();
+                medal = positionStr.split('').map(digit => `${digit}️⃣`).join('');
             }
-            
             const date = new Date(player.timestamp).toLocaleDateString('pl-PL');
             
             // Pobierz nick na serwerze
@@ -127,12 +137,17 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Format: pozycja Nick • wynik (data) • Boss
-            const rankingLine = `${position} **${displayName}** • **${this.formatScore(player.scoreValue)}** *(${date})* • ${bossName}`;
+            const nickLine = `${medal} ${displayName}`;
+            const scoreLine = `**${this.formatScore(player.scoreValue)}** *_(${date})_*`;
+            const bossLine = `${bossName}`;
             
             // Sprawdź limity Discord - zwiększony limit dla 10 graczy
-            if (rankingText.length + rankingLine.length + '\n'.length <= 1000) {
-                rankingText += (index === 0 ? '' : '\n') + rankingLine;
+            if (playerData.scoresDates.length + scoreLine.length + '\n'.length <= 300) {
+                
+                playerData.nicks += (index === 0 ? '' : '\n') + nickLine;
+                playerData.scoresDates += (index === 0 ? '' : '\n') + scoreLine;
+                playerData.bosses += (index === 0 ? '' : '\n') + bossLine;
+                
             } else {
                 break;
             }
@@ -141,8 +156,22 @@ class RankingService {
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
             .setTitle(this.config.messages.rankingTitle)
-            .setDescription(rankingText || 'Brak')
             .addFields(
+                {
+                    name: 'Nick',
+                    value: playerData.nicks || 'Brak',
+                    inline: true
+                },
+                {
+                    name: 'Wynik',
+                    value: playerData.scoresDates || 'Brak',
+                    inline: true
+                },
+                {
+                    name: 'Boss',
+                    value: playerData.bosses || 'Brak',
+                    inline: true
+                },
                 {
                     name: this.config.messages.rankingStats,
                     value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) + 
