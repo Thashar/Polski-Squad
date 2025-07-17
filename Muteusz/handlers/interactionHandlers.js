@@ -59,12 +59,12 @@ class InteractionHandler {
                 .setName('clean')
                 .setDescription('Usuwa wiadomości na kanale')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik, którego wiadomości usunąć (opcjonalnie)')
                         .setRequired(false)
                 )
                 .addIntegerOption(option =>
-                    option.setName('ilosc')
+                    option.setName('ilość')
                         .setDescription('Ilość wiadomości do usunięcia (max 100)')
                         .setRequired(false)
                         .setMinValue(1)
@@ -82,7 +82,7 @@ class InteractionHandler {
                 .setName('mute')
                 .setDescription('Ucisza użytkownika na określony czas lub na stałe')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik do uciszenia')
                         .setRequired(true)
                 )
@@ -94,7 +94,7 @@ class InteractionHandler {
                         .setMaxValue(10080) // 7 dni
                 )
                 .addStringOption(option =>
-                    option.setName('powod')
+                    option.setName('powód')
                         .setDescription('Powód uciszenia')
                         .setRequired(false)
                 ),
@@ -103,12 +103,12 @@ class InteractionHandler {
                 .setName('unmute')
                 .setDescription('Odcisza użytkownika usuwając rolę mute')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik do odciszenia')
                         .setRequired(true)
                 )
                 .addStringOption(option =>
-                    option.setName('powod')
+                    option.setName('powód')
                         .setDescription('Powód odciszenia')
                         .setRequired(false)
                 ),
@@ -117,12 +117,12 @@ class InteractionHandler {
                 .setName('kick')
                 .setDescription('Wyrzuca użytkownika z serwera')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik do wyrzucenia')
                         .setRequired(true)
                 )
                 .addStringOption(option =>
-                    option.setName('powod')
+                    option.setName('powód')
                         .setDescription('Powód wyrzucenia')
                         .setRequired(true)
                 ),
@@ -131,17 +131,17 @@ class InteractionHandler {
                 .setName('ban')
                 .setDescription('Banuje użytkownika na serwerze')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik do zbanowania')
                         .setRequired(true)
                 )
                 .addStringOption(option =>
-                    option.setName('powod')
+                    option.setName('powód')
                         .setDescription('Powód bana')
                         .setRequired(true)
                 )
                 .addIntegerOption(option =>
-                    option.setName('dni_wiadomosci')
+                    option.setName('dni_wiadomości')
                         .setDescription('Ilość dni wiadomości do usunięcia (0-7)')
                         .setRequired(false)
                         .setMinValue(0)
@@ -157,7 +157,7 @@ class InteractionHandler {
                         .setRequired(true)
                 )
                 .addStringOption(option =>
-                    option.setName('powod')
+                    option.setName('powód')
                         .setDescription('Powód odbanowania')
                         .setRequired(false)
                 ),
@@ -166,12 +166,12 @@ class InteractionHandler {
                 .setName('warn')
                 .setDescription('Nakłada ostrzeżenie na użytkownika')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik do ostrzeżenia')
                         .setRequired(true)
                 )
                 .addStringOption(option =>
-                    option.setName('powod')
+                    option.setName('powód')
                         .setDescription('Powód ostrzeżenia')
                         .setRequired(true)
                 ),
@@ -180,7 +180,7 @@ class InteractionHandler {
                 .setName('violations')
                 .setDescription('Wyświetla wszystkie ostrzeżenia użytkownika')
                 .addUserOption(option =>
-                    option.setName('uzytkownik')
+                    option.setName('użytkownik')
                         .setDescription('Użytkownik do sprawdzenia')
                         .setRequired(true)
                 )
