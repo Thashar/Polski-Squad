@@ -106,8 +106,8 @@ class RankingService {
         
         // Formatowanie w code block dla lepszego wyrównania
         tableText += '```\n';
-        tableText += 'Pos  Nick               Wynik    Boss             Data\n';
-        tableText += '=========================================================\n';
+        tableText += 'Pos  Nick               Wynik    Boss               Data\n';
+        tableText += '===========================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -137,16 +137,28 @@ class RankingService {
             
             // Funkcja do liczenia rzeczywistej szerokości wizualnej tekstu
             const getVisualWidth = (text) => {
+                // Normalizuj tekst do formy NFD (decomposed) żeby rozdzielić znaki składowe
+                const normalizedText = text.normalize('NFD');
+                
                 let width = 0;
-                for (let i = 0; i < text.length; i++) {
-                    const char = text[i];
-                    const code = char.charCodeAt(0);
+                let i = 0;
+                
+                while (i < normalizedText.length) {
+                    const code = normalizedText.codePointAt(i);
                     
+                    // Znaki łączące (combining marks) - szerokość 0
+                    if (code >= 0x0300 && code <= 0x036F || // Combining Diacritical Marks
+                        code >= 0x1AB0 && code <= 0x1AFF || // Combining Diacritical Marks Extended
+                        code >= 0x1DC0 && code <= 0x1DFF || // Combining Diacritical Marks Supplement
+                        code >= 0x20D0 && code <= 0x20FF || // Combining Diacritical Marks for Symbols
+                        code >= 0xFE20 && code <= 0xFE2F) { // Combining Half Marks
+                        // Nie dodawaj szerokości dla znaków łączących
+                    }
                     // Znaki ASCII i łacińskie - szerokość 1
-                    if (code <= 0x7F || (code >= 0x80 && code <= 0x24F)) {
+                    else if (code <= 0x7F || (code >= 0x80 && code <= 0x24F)) {
                         width += 1;
                     }
-                    // Znaki CJK, symbole specjalne - szerokość 2
+                    // Znaki CJK i szerokie - szerokość 2
                     else if (code >= 0x1100 && code <= 0x11FF || // Hangul Jamo
                              code >= 0x2E80 && code <= 0x2EFF || // CJK Radicals
                              code >= 0x2F00 && code <= 0x2FDF || // Kangxi Radicals
@@ -160,13 +172,17 @@ class RankingService {
                              code >= 0x4E00 && code <= 0x9FFF || // CJK Unified Ideographs
                              code >= 0xAC00 && code <= 0xD7AF || // Hangul Syllables
                              code >= 0xF900 && code <= 0xFAFF || // CJK Compatibility Ideographs
-                             code >= 0xFF00 && code <= 0xFFEF) { // Halfwidth and Fullwidth Forms
+                             code >= 0xFF00 && code <= 0xFFEF || // Halfwidth and Fullwidth Forms
+                             code >= 0x0400 && code <= 0x04FF) { // Cyrillic (dla Ӂ)
                         width += 2;
                     }
                     // Inne znaki - szerokość 1
                     else {
                         width += 1;
                     }
+                    
+                    // Przeskocz do następnego code point (może być 2-bajtowy)
+                    i += (code > 0xFFFF) ? 2 : 1;
                 }
                 return width;
             };
@@ -200,11 +216,11 @@ class RankingService {
             
             // Formatuj z odpowiednimi szerokościami wizualnymi
             const truncatedNick = truncateToVisualWidth(displayName, 18);
-            const truncatedBoss = truncateToVisualWidth(bossName, 16);
+            const truncatedBoss = truncateToVisualWidth(bossName, 18);
             
             const nickCol = padToVisualWidth(truncatedNick, 18);
             const scoreCol = padToVisualWidth(this.formatScore(player.scoreValue), 8);
-            const bossCol = padToVisualWidth(truncatedBoss, 16);
+            const bossCol = padToVisualWidth(truncatedBoss, 18);
             const dateCol = padToVisualWidth(shortDate, 5);
             
             tableText += `${position} ${nickCol} ${scoreCol} ${bossCol} ${dateCol}\n`;
