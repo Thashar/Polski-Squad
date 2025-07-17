@@ -92,8 +92,8 @@ async function handleKeepOpen(interaction, state, config) {
         components: []
     });
 
-    // Zaktualizuj czas ostatniego przypomnienia
-    state.lastReminderMap.set(channel.id, Date.now());
+    // Nie aktualizuj czasu ostatniego przypomnienia - pozwól botowi przypominać co 24h
+    // state.lastReminderMap.set(channel.id, Date.now());
 }
 
 module.exports = {
