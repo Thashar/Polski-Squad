@@ -109,13 +109,12 @@ class InteractionHandler {
             const totalPages = Math.ceil(players.length / this.config.ranking.playersPerPage);
             const currentPage = 0;
             
-            const mobileFormat = false; // Domyślnie format desktop
-            const embed = await this.rankingService.createRankingEmbed(players, currentPage, totalPages, interaction.user.id, interaction.guild, mobileFormat);
-            const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false, mobileFormat);
+            const embed = await this.rankingService.createRankingEmbed(players, currentPage, totalPages, interaction.user.id, interaction.guild);
+            const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false);
             
             const reply = await interaction.editReply({
                 embeds: [embed],
-                components: buttons
+                components: [buttons]
             });
             
             // Przechowywanie informacji o aktywnej paginacji
@@ -124,8 +123,7 @@ class InteractionHandler {
                 currentPage: currentPage,
                 totalPages: totalPages,
                 userId: interaction.user.id,
-                messageId: reply.id,
-                mobileFormat: mobileFormat
+                messageId: reply.id
             });
             
         } catch (error) {
@@ -310,7 +308,6 @@ class InteractionHandler {
             }
             
             let newPage = rankingData.currentPage;
-            let mobileFormat = rankingData.mobileFormat || false;
             
             switch (interaction.customId) {
                 case 'ranking_first':
@@ -325,27 +322,20 @@ class InteractionHandler {
                 case 'ranking_last':
                     newPage = rankingData.totalPages - 1;
                     break;
-                case 'ranking_desktop':
-                    mobileFormat = false;
-                    break;
-                case 'ranking_mobile':
-                    mobileFormat = true;
-                    break;
             }
             
             // Aktualizacja danych
             rankingData.currentPage = newPage;
-            rankingData.mobileFormat = mobileFormat;
             this.rankingService.updateActiveRanking(interaction.message.id, rankingData);
             
             const embed = await this.rankingService.createRankingEmbed(
-                rankingData.players, newPage, rankingData.totalPages, rankingData.userId, interaction.guild, mobileFormat
+                rankingData.players, newPage, rankingData.totalPages, rankingData.userId, interaction.guild
             );
-            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false, mobileFormat);
+            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false);
             
             await interaction.editReply({
                 embeds: [embed],
-                components: buttons
+                components: [buttons]
             });
             
         } catch (error) {

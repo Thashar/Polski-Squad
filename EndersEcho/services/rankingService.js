@@ -141,12 +141,8 @@ class RankingService {
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
             .setTitle(this.config.messages.rankingTitle)
+            .setDescription(rankingText || 'Brak')
             .addFields(
-                {
-                    name: '🏆 Ranking',
-                    value: rankingText || 'Brak',
-                    inline: false
-                },
                 {
                     name: this.config.messages.rankingStats,
                     value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) + 
@@ -165,14 +161,12 @@ class RankingService {
      * @param {number} page - Aktualna strona
      * @param {number} totalPages - Całkowita liczba stron
      * @param {boolean} disabled - Czy przyciski mają być wyłączone
-     * @param {boolean} mobileFormat - Czy aktualnie używany jest format mobilny
-     * @returns {Array<ActionRowBuilder>} - Rzędy przycisków
+     * @returns {ActionRowBuilder} - Rząd przycisków
      */
-    createRankingButtons(page, totalPages, disabled = false, mobileFormat = false) {
-        // Pierwszy rząd - nawigacja
-        const navigationRow = new ActionRowBuilder();
+    createRankingButtons(page, totalPages, disabled = false) {
+        const row = new ActionRowBuilder();
         
-        navigationRow.addComponents(
+        row.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_first')
                 .setLabel(this.config.messages.buttonFirst)
@@ -198,24 +192,7 @@ class RankingService {
                 .setDisabled(disabled || page >= totalPages - 1)
         );
         
-        // Drugi rząd - przełączanie formatów
-        const formatRow = new ActionRowBuilder();
-        
-        formatRow.addComponents(
-            new ButtonBuilder()
-                .setCustomId('ranking_desktop')
-                .setLabel('🖥️ Desktop')
-                .setStyle(mobileFormat ? ButtonStyle.Secondary : ButtonStyle.Success)
-                .setDisabled(disabled),
-            
-            new ButtonBuilder()
-                .setCustomId('ranking_mobile')
-                .setLabel('📱 Mobilny')
-                .setStyle(mobileFormat ? ButtonStyle.Success : ButtonStyle.Secondary)
-                .setDisabled(disabled)
-        );
-        
-        return [navigationRow, formatRow];
+        return row;
     }
 
     /**
