@@ -130,8 +130,8 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Prosty format: pozycja • nick • wynik • boss • data
-            rankingText += `${position} • **${displayName}** • ${this.formatScore(player.scoreValue)} • ${bossName} • ${shortDate}\n`;
+            // Prosty format: pozycja nick • wynik (data) • boss
+            rankingText += `${position} **${displayName}** • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
             
             // Sprawdź limity Discord
             if (rankingText.length > 1800) {
