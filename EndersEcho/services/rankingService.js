@@ -99,15 +99,11 @@ class RankingService {
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
         
-        // Tworzymy ranking w formie pól embed
+        // Tworzymy ranking - format mobilny (jedno pole) vs desktop (trzy pola)
         const medals = this.config.scoring.medals;
         
-        // Przygotuj dane dla każdego gracza
-        const playerData = {
-            nicks: '',
-            scoresDates: '',
-            bosses: ''
-        };
+        // Przygotuj dane dla każdego gracza w formacie mobilnym (wszystko w jednym polu)
+        let mobileRankingText = '';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -137,37 +133,15 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Usuń odstępy od góry i dołu (pierwszy i ostatni bez \n)
-            const isFirst = index === 0;
-            const isLast = index === currentPagePlayers.length - 1;
+            // Format mobilny: wszystko w jednej linii
+            const mobileLine = `${medal} **${displayName}** ⚔️ **${this.formatScore(player.scoreValue)}** _(${date})_ 💀 ${bossName}`;
             
-            const nickLine = isFirst ? 
-                `${medal} ${displayName}` : 
-                isLast ? 
-                `\n${medal} ${displayName}` : 
-                `\n${medal} ${displayName}`;
-            
-            // Ikona mieczów przed każdym wynikiem
-            const scoreLine = isFirst ? 
-                `⚔️ **${this.formatScore(player.scoreValue)}** *_(${date})_*` : 
-                isLast ? 
-                `\n⚔️ **${this.formatScore(player.scoreValue)}** *_(${date})_*` : 
-                `\n⚔️ **${this.formatScore(player.scoreValue)}** *_(${date})_*`;
-            
-            // Ikona czaszki przed każdą nazwą bossa
-            const bossLine = isFirst ? 
-                `💀 ${bossName}` : 
-                isLast ? 
-                `\n💀 ${bossName}` : 
-                `\n💀 ${bossName}`;
-            
-            // Sprawdź limity Discord - zwiększony limit dla 10 graczy
-            if (playerData.scoresDates.length + scoreLine.length <= 300) {
-                
-                playerData.nicks += nickLine;
-                playerData.scoresDates += scoreLine;
-                playerData.bosses += bossLine;
-                
+            // Sprawdź limit znaków
+            if (mobileRankingText.length + mobileLine.length + 1 <= 1000) {
+                if (mobileRankingText.length > 0) {
+                    mobileRankingText += '\n';
+                }
+                mobileRankingText += mobileLine;
             } else {
                 break;
             }
@@ -179,19 +153,9 @@ class RankingService {
             .setTitle(this.config.messages.rankingTitle)
             .addFields(
                 {
-                    name: 'Nick',
-                    value: playerData.nicks || 'Brak',
-                    inline: true
-                },
-                {
-                    name: 'Wynik',
-                    value: playerData.scoresDates || 'Brak',
-                    inline: true
-                },
-                {
-                    name: 'Boss',
-                    value: playerData.bosses || 'Brak',
-                    inline: true
+                    name: '🏆 Ranking',
+                    value: mobileRankingText || 'Brak',
+                    inline: false
                 },
                 {
                     name: this.config.messages.rankingStats,
