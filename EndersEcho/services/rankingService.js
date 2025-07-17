@@ -104,9 +104,9 @@ class RankingService {
         
         let tableText = '';
         
-        // Nagłówek tabeli używając spacji nierozdzielnych
-        tableText += '**Nick**　　　　　　　　　　**Wynik**　　　　　　　　　　**Boss**\n';
-        tableText += '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n';
+        // Nagłówek tabeli z lepszym wyrównaniem
+        tableText += '**Nick**                    **Wynik**                 **Boss**\n';
+        tableText += '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
@@ -136,22 +136,26 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            // Użyj szerokiej spacji (U+3000) dla lepszego wyrównania
             const nickText = `${medal} ${displayName}`;
-            const scoreText = `**${this.formatScore(player.scoreValue)}** _(${date})_`;
+            const scoreText = `${this.formatScore(player.scoreValue)} (${date})`;
             
-            // Funkcja do dopełniania szerokimi spacjami
-            const padWithWideSpace = (text, length) => {
-                const visibleLength = text.replace(/\*\*/g, '').replace(/_/g, '').length;
-                const spacesNeeded = Math.max(0, length - visibleLength);
-                return text + '　'.repeat(spacesNeeded);
+            // Funkcja do liczenia rzeczywistej szerokości tekstu (bez emoji i formatowania)
+            const getDisplayWidth = (text) => {
+                // Usuń formatowanie Markdown
+                let cleaned = text.replace(/\*\*/g, '').replace(/_/g, '').replace(/\(/g, '').replace(/\)/g, '');
+                // Emoji zajmują więcej miejsca - przybliżona korekcja
+                const emojiCount = (text.match(/[\u{1F000}-\u{1F6FF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|🥇|🥈|🥉|🔟|️⃣/gu) || []).length;
+                return cleaned.length + (emojiCount * 1);
             };
             
-            const nickCol = padWithWideSpace(nickText, 20);
-            const scoreCol = padWithWideSpace(scoreText, 20);
-            const bossCol = bossName;
+            // Dopełnienie spacjami do wyrównania kolumn
+            const nickWidth = getDisplayWidth(nickText);
+            const scoreWidth = getDisplayWidth(scoreText);
             
-            tableText += `${nickCol}${scoreCol}${bossCol}\n`;
+            const nickSpaces = ' '.repeat(Math.max(0, 25 - nickWidth));
+            const scoreSpaces = ' '.repeat(Math.max(0, 25 - scoreWidth));
+            
+            tableText += `${nickText}${nickSpaces}${scoreText}${scoreSpaces}${bossName}\n`;
             
             // Sprawdź limity Discord
             if (tableText.length > 1500) {
