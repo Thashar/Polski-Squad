@@ -107,7 +107,7 @@ class RankingService {
         // Formatowanie w code block dla lepszego wyrównania
         tableText += '```\n';
         tableText += 'Pos  Nick                 Wynik    Boss               Data\n';
-        tableText += '============================================================\n';
+        tableText += '===========================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
