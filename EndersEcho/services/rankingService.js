@@ -104,24 +104,21 @@ class RankingService {
         
         let tableText = '';
         
-        // Nagłówek tabeli z lepszym wyrównaniem
-        tableText += '**Nick**                    **Wynik**                 **Boss**\n';
-        tableText += '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n';
+        // Formatowanie w code block dla lepszego wyrównania
+        tableText += '```\n';
+        tableText += 'Pos  Nick               Wynik           Boss\n';
+        tableText += '================================================\n';
         
         for (const [index, player] of currentPagePlayers.entries()) {
             const actualPosition = startIndex + index + 1;
-            let medal;
+            let position;
             if (actualPosition <= 3) {
-                medal = medals[actualPosition - 1];
-            } else if (actualPosition >= 4 && actualPosition <= 9) {
-                medal = `${actualPosition}️⃣`;
-            } else if (actualPosition === 10) {
-                medal = '🔟';
+                const medalMap = { 1: '1st', 2: '2nd', 3: '3rd' };
+                position = medalMap[actualPosition].padEnd(4);
             } else {
-                // Dla pozycji 11+ używaj ikon dla każdej cyfry
-                const positionStr = actualPosition.toString();
-                medal = positionStr.split('').map(digit => `${digit}️⃣`).join('');
+                position = `${actualPosition}.`.padEnd(4);
             }
+            
             const date = new Date(player.timestamp).toLocaleDateString('pl-PL');
             
             // Pobierz nick na serwerze
@@ -136,32 +133,20 @@ class RankingService {
             
             const bossName = player.bossName || 'Nieznany';
             
-            const nickText = `${medal} ${displayName}`;
-            const scoreText = `${this.formatScore(player.scoreValue)} (${date})`;
+            // Formatuj z odpowiednimi szerokościami
+            const nickCol = displayName.substring(0, 18).padEnd(18);
+            const scoreCol = `${this.formatScore(player.scoreValue)} (${date})`.substring(0, 15).padEnd(15);
+            const bossCol = bossName.substring(0, 15);
             
-            // Funkcja do liczenia rzeczywistej szerokości tekstu (bez emoji i formatowania)
-            const getDisplayWidth = (text) => {
-                // Usuń formatowanie Markdown
-                let cleaned = text.replace(/\*\*/g, '').replace(/_/g, '').replace(/\(/g, '').replace(/\)/g, '');
-                // Emoji zajmują więcej miejsca - przybliżona korekcja
-                const emojiCount = (text.match(/[\u{1F000}-\u{1F6FF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|🥇|🥈|🥉|🔟|️⃣/gu) || []).length;
-                return cleaned.length + (emojiCount * 1);
-            };
-            
-            // Dopełnienie spacjami do wyrównania kolumn
-            const nickWidth = getDisplayWidth(nickText);
-            const scoreWidth = getDisplayWidth(scoreText);
-            
-            const nickSpaces = ' '.repeat(Math.max(0, 25 - nickWidth));
-            const scoreSpaces = ' '.repeat(Math.max(0, 25 - scoreWidth));
-            
-            tableText += `${nickText}${nickSpaces}${scoreText}${scoreSpaces}${bossName}\n`;
+            tableText += `${position} ${nickCol} ${scoreCol} ${bossCol}\n`;
             
             // Sprawdź limity Discord
-            if (tableText.length > 1500) {
+            if (tableText.length > 1800) {
                 break;
             }
         }
+        
+        tableText += '```';
         
         const embed = new EmbedBuilder()
             .setColor(0xffd700)
