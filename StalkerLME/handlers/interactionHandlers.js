@@ -809,10 +809,26 @@ async function showVacationQuestion(interaction, playersWithVacation, allPlayers
 async function showFinalConfirmation(interaction, finalPlayers, imageUrl, config, punishmentService) {
     const confirmationId = Date.now().toString();
     
+    // Konwertuj nicki na obiekty z członkami dla punishmentService
+    const foundUserObjects = [];
+    for (const nick of finalPlayers) {
+        const member = interaction.guild.members.cache.find(m => 
+            m.displayName.toLowerCase() === nick.toLowerCase() || 
+            m.user.username.toLowerCase() === nick.toLowerCase()
+        );
+        if (member) {
+            foundUserObjects.push({ 
+                userId: member.id,
+                member: member, 
+                matchedName: nick 
+            });
+        }
+    }
+    
     // Zapisz dane do mapy
     confirmationData.set(confirmationId, {
         action: 'punish',
-        foundUsers: finalPlayers,
+        foundUsers: foundUserObjects,
         zeroScorePlayers: finalPlayers,
         imageUrl: imageUrl,
         originalUserId: interaction.user.id,
@@ -858,10 +874,26 @@ async function showFinalConfirmation(interaction, finalPlayers, imageUrl, config
 async function showFinalConfirmationWithUpdate(interaction, finalPlayers, imageUrl, config, punishmentService) {
     const confirmationId = Date.now().toString();
     
+    // Konwertuj nicki na obiekty z członkami dla punishmentService
+    const foundUserObjects = [];
+    for (const nick of finalPlayers) {
+        const member = interaction.guild.members.cache.find(m => 
+            m.displayName.toLowerCase() === nick.toLowerCase() || 
+            m.user.username.toLowerCase() === nick.toLowerCase()
+        );
+        if (member) {
+            foundUserObjects.push({ 
+                userId: member.id,
+                member: member, 
+                matchedName: nick 
+            });
+        }
+    }
+    
     // Zapisz dane do mapy
     confirmationData.set(confirmationId, {
         action: 'punish',
-        foundUsers: finalPlayers,
+        foundUsers: foundUserObjects,
         zeroScorePlayers: finalPlayers,
         imageUrl: imageUrl,
         originalUserId: interaction.user.id,

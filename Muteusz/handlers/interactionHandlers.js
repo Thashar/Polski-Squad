@@ -6,12 +6,24 @@ const WarningService = require('../services/warningService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, roleManagementService, logService, specialRolesService) {
+    constructor(config, roleManagementService, logService, specialRolesService, messageHandler = null) {
         this.config = config;
         this.roleManagementService = roleManagementService;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
+        this.messageHandler = messageHandler;
         this.warningService = new WarningService(config, logger);
+    }
+
+    /**
+     * Sprawdza czy użytkownik jest administratorem lub moderatorem
+     * @param {GuildMember} member - Członek serwera
+     * @returns {boolean} Czy użytkownik ma uprawnienia administratora/moderatora
+     */
+    isAdminOrModerator(member) {
+        if (!member || !member.permissions) return false;
+        
+        return member.permissions.has('Administrator') || member.permissions.has('ModerateMembers');
     }
 
     /**
@@ -999,6 +1011,12 @@ class InteractionHandler {
                 return;
             }
 
+            // Sprawdź czy cel to administrator lub moderator
+            if (this.isAdminOrModerator(targetMember)) {
+                await interaction.editReply({ content: "❌ Nie można uciszać administratorów ani moderatorów!" });
+                return;
+            }
+
             // Sprawdź hierarchię ról
             if (targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
                 await interaction.editReply({ content: this.config.messages.muteHierarchyError });
@@ -1209,6 +1227,12 @@ class InteractionHandler {
                 return;
             }
 
+            // Sprawdź czy cel to administrator lub moderator
+            if (this.isAdminOrModerator(targetMember)) {
+                await interaction.editReply({ content: "❌ Nie można wyrzucać administratorów ani moderatorów!" });
+                return;
+            }
+
             // Sprawdź hierarchię ról
             if (targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
                 await interaction.editReply({ content: this.config.messages.kickHierarchyError });
@@ -1297,6 +1321,12 @@ class InteractionHandler {
                 targetMember = await interaction.guild.members.fetch(targetUser.id);
             } catch (fetchError) {
                 // Użytkownik nie jest na serwerze, ale można go zbanować
+            }
+
+            // Sprawdź czy cel to administrator lub moderator (jeśli jest na serwerze)
+            if (targetMember && this.isAdminOrModerator(targetMember)) {
+                await interaction.editReply({ content: "❌ Nie można banować administratorów ani moderatorów!" });
+                return;
             }
 
             // Sprawdź hierarchię ról jeśli użytkownik jest na serwerze
@@ -1468,6 +1498,20 @@ class InteractionHandler {
             return;
         }
 
+        // Sprawdź czy cel to administrator lub moderator
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            if (targetMember && this.isAdminOrModerator(targetMember)) {
+                await interaction.reply({
+                    content: "❌ Nie można ostrzegać administratorów ani moderatorów!",
+                    ephemeral: false
+                });
+                return;
+            }
+        } catch (error) {
+            // Użytkownik nie jest na serwerze, ale można go ostrzec
+        }
+
         await interaction.deferReply({ ephemeral: false });
 
         try {
@@ -1569,18 +1613,34 @@ class InteractionHandler {
             const date = new Date(warning.timestamp).toLocaleString('pl-PL');
             
             description += `**${warningNumber}.** ${warning.reason}\n`;
-            description += `📅 ${date} • 👮 ${warning.moderator.tag}\n`;
-            description += `🆔 \`${warning.id}\`\n\n`;
+            description += `📅 ${date} • 👮 ${warning.moderator.tag}\n\n`;
         });
 
         embed.setDescription(description);
 
-        // Dodaj informacje o stronach
-        const pageInfo = formatMessage(this.config.messages.violationsPageInfo, {
+        // Pobierz liczbę niewidocznych ostrzeżeń (wyzwisk) do warna
+        let hiddenViolationsCount = 0;
+        if (this.messageHandler && this.messageHandler.getAutoModerationService) {
+            const autoModerationService = this.messageHandler.getAutoModerationService();
+            if (autoModerationService && autoModerationService.violationCounts) {
+                const userViolations = autoModerationService.violationCounts.get(targetUser.id);
+                if (userViolations) {
+                    hiddenViolationsCount = userViolations.count;
+                }
+            }
+        }
+
+        // Dodaj informacje o stronach i niewidocznych ostrzeżeniach
+        let pageInfo = formatMessage(this.config.messages.violationsPageInfo, {
             current: currentPage + 1,
             total: pages.length,
             totalWarnings: totalWarnings
         });
+        
+        if (hiddenViolationsCount > 0) {
+            pageInfo += `\n⚠️ Niewidoczne ostrzeżenia do warna: ${hiddenViolationsCount}`;
+        }
+        
         embed.setFooter({ text: pageInfo });
 
         // Twórz przyciski nawigacji
@@ -1654,6 +1714,128 @@ class InteractionHandler {
     }
 
     /**
+     * Aktualizuje stronę ostrzeżeń używając update zamiast reply
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {User} targetUser - Użytkownik
+     * @param {Array} pages - Podzielone strony ostrzeżeń
+     * @param {number} currentPage - Aktualna strona
+     */
+    async displayViolationsPageUpdate(interaction, targetUser, pages, currentPage) {
+        const page = pages[currentPage];
+        const totalWarnings = pages.reduce((sum, p) => sum + p.length, 0);
+        
+        const embed = new EmbedBuilder()
+            .setTitle(formatMessage(this.config.messages.violationsTitle, {
+                user: targetUser.tag
+            }))
+            .setColor('#FF6B35')
+            .setThumbnail(targetUser.displayAvatarURL())
+            .setTimestamp();
+
+        // Dodaj ostrzeżenia do embed
+        let description = '';
+        page.forEach((warning, index) => {
+            const warningNumber = (currentPage * this.config.warnings.maxPerPage) + index + 1;
+            const date = new Date(warning.timestamp).toLocaleString('pl-PL');
+            
+            description += `**${warningNumber}.** ${warning.reason}\n`;
+            description += `📅 ${date} • 👮 ${warning.moderator.tag}\n\n`;
+        });
+
+        embed.setDescription(description);
+
+        // Pobierz liczbę niewidocznych ostrzeżeń (wyzwisk) do warna
+        let hiddenViolationsCount = 0;
+        if (this.messageHandler && this.messageHandler.getAutoModerationService) {
+            const autoModerationService = this.messageHandler.getAutoModerationService();
+            if (autoModerationService && autoModerationService.violationCounts) {
+                const userViolations = autoModerationService.violationCounts.get(targetUser.id);
+                if (userViolations) {
+                    hiddenViolationsCount = userViolations.count;
+                }
+            }
+        }
+
+        // Dodaj informacje o stronach i niewidocznych ostrzeżeniach
+        let pageInfo = formatMessage(this.config.messages.violationsPageInfo, {
+            current: currentPage + 1,
+            total: pages.length,
+            totalWarnings: totalWarnings
+        });
+        
+        if (hiddenViolationsCount > 0) {
+            pageInfo += `\n⚠️ Niewidoczne ostrzeżenia do warna: ${hiddenViolationsCount}`;
+        }
+        
+        embed.setFooter({ text: pageInfo });
+
+        // Twórz przyciski nawigacji
+        const components = [];
+        
+        if (pages.length > 1) {
+            const row = new ActionRowBuilder();
+            
+            // Przycisk "Pierwsza"
+            const firstButton = new ButtonBuilder()
+                .setCustomId(`violations_first_${targetUser.id}_${currentPage}`)
+                .setLabel('⏮️ Pierwsza')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(currentPage === 0);
+            
+            // Przycisk "Poprzednia"
+            const prevButton = new ButtonBuilder()
+                .setCustomId(`violations_prev_${targetUser.id}_${currentPage}`)
+                .setLabel('◀️ Poprzednia')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === 0);
+            
+            // Przycisk "Następna"
+            const nextButton = new ButtonBuilder()
+                .setCustomId(`violations_next_${targetUser.id}_${currentPage}`)
+                .setLabel('Następna ▶️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === pages.length - 1);
+            
+            // Przycisk "Ostatnia"
+            const lastButton = new ButtonBuilder()
+                .setCustomId(`violations_last_${targetUser.id}_${currentPage}`)
+                .setLabel('Ostatnia ⏭️')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(currentPage === pages.length - 1);
+            
+            row.addComponents(firstButton, prevButton, nextButton, lastButton);
+            components.push(row);
+        }
+
+        // Dodaj przyciski do zarządzania ostrzeżeniami
+        const managementRow = new ActionRowBuilder();
+        
+        // Przycisk "Usuń ostatnie ostrzeżenie"
+        const removeLastButton = new ButtonBuilder()
+            .setCustomId(`violations_remove_last_${targetUser.id}`)
+            .setLabel('🗑️ Usuń ostatnie')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(totalWarnings === 0);
+        
+        // Przycisk "Usuń wszystkie ostrzeżenia"
+        const removeAllButton = new ButtonBuilder()
+            .setCustomId(`violations_remove_all_${targetUser.id}`)
+            .setLabel('🗑️ Usuń wszystkie')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(totalWarnings === 0);
+        
+        managementRow.addComponents(removeLastButton, removeAllButton);
+        components.push(managementRow);
+
+        const messagePayload = {
+            embeds: [embed],
+            components: components
+        };
+
+        await interaction.update(messagePayload);
+    }
+
+    /**
      * Obsługuje interakcje przycisków dla ostrzeżeń
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      */
@@ -1705,10 +1887,10 @@ class InteractionHandler {
                     break;
             }
             
-            await this.displayViolationsPage(interaction, targetUser, pages, targetPage);
+            await this.displayViolationsPageUpdate(interaction, targetUser, pages, targetPage);
             
         } catch (error) {
-            await interaction.reply({ content: `❌ Wystąpił błąd podczas nawigacji: ${error.message}`, ephemeral: true });
+            await interaction.update({ content: `❌ Wystąpił błąd podczas nawigacji: ${error.message}`, embeds: [], components: [] });
             await this.logService.logMessage('error', `Błąd podczas nawigacji przycisków violations: ${error.message}`, interaction);
         }
     }
@@ -1730,7 +1912,7 @@ class InteractionHandler {
                 if (result.success) {
                     successMessage = `🗑️ Usunięto ostatnie ostrzeżenie użytkownika **${targetUser.tag}**\n**Powód:** ${result.warning.reason}\n**Pozostałe ostrzeżenia:** ${result.remainingWarnings}`;
                 } else {
-                    await interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+                    await interaction.update({ content: `❌ ${result.message}`, embeds: [], components: [] });
                     return;
                 }
             } else if (action === 'all') {
@@ -1738,32 +1920,39 @@ class InteractionHandler {
                 
                 if (result.success) {
                     successMessage = `🗑️ Usunięto wszystkie ostrzeżenia użytkownika **${targetUser.tag}**\n**Usunięto:** ${result.removedCount} ostrzeżeń`;
+                    
+                    // Zeruj licznik wyzwisk w auto-moderacji
+                    if (this.messageHandler && this.messageHandler.getAutoModerationService) {
+                        const autoModerationService = this.messageHandler.getAutoModerationService();
+                        if (autoModerationService && autoModerationService.clearViolations) {
+                            autoModerationService.clearViolations(targetUser.id);
+                        }
+                    }
                 } else {
-                    await interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+                    await interaction.update({ content: `❌ ${result.message}`, embeds: [], components: [] });
                     return;
                 }
             }
             
-            // Publiczne powiadomienie o usunięciu
-            await interaction.reply({ content: successMessage, ephemeral: false });
-            
-            // Odśwież widok ostrzeżeń
+            // Odśwież widok ostrzeżeń - zaktualizuj obecną wiadomość
             const warnings = this.warningService.getUserWarnings(targetUser.id, interaction.guild.id);
             
             if (warnings.length > 0) {
                 const pages = this.warningService.paginateWarnings(warnings, this.config.warnings.maxPerPage);
-                await this.displayViolationsPage(interaction, targetUser, pages, 0);
+                await this.displayViolationsPageUpdate(interaction, targetUser, pages, 0);
             } else {
                 const emptyMessage = formatMessage(this.config.messages.violationsEmpty, {
                     user: targetUser.tag
                 });
-                await interaction.followUp({ content: emptyMessage, ephemeral: true });
+                await interaction.update({ content: emptyMessage, embeds: [], components: [] });
             }
+            
+            // Nie wysyłaj publicznych powiadomień o usuwaniu ostrzeżeń
             
             await this.logService.logMessage('success', `Usunięto ostrzeżenia użytkownika ${targetUser.tag} (${action})`, interaction);
             
         } catch (error) {
-            await interaction.reply({ content: `❌ Wystąpił błąd podczas usuwania ostrzeżeń: ${error.message}`, ephemeral: true });
+            await interaction.update({ content: `❌ Wystąpił błąd podczas usuwania ostrzeżeń: ${error.message}`, embeds: [], components: [] });
             await this.logService.logMessage('error', `Błąd podczas usuwania ostrzeżeń: ${error.message}`, interaction);
         }
     }

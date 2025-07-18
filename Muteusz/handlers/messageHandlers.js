@@ -56,6 +56,18 @@ class MessageHandler {
 
         // Sprawdź czy użytkownik ma zwolnioną rolę
         if (this.hasExemptRole(message.member)) {
+            // Loguj że użytkownik jest zwolniony (dla administratorów i moderatorów)
+            if (message.member.permissions.has('Administrator') || message.member.permissions.has('ModerateMembers')) {
+                try {
+                    const badWords = this.autoModerationService.detectBadWords(message.content);
+                    if (badWords.length > 0) {
+                        const badWordsText = badWords.map(word => word.original).join(', ');
+                        this.logger.info(`👑 Administrator/Moderator zwolniony: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText}`);
+                    }
+                } catch (error) {
+                    // Ignoruj błędy przy logowaniu
+                }
+            }
             return;
         }
 
@@ -77,6 +89,11 @@ class MessageHandler {
      */
     hasExemptRole(member) {
         if (!member || !member.roles) return false;
+        
+        // Sprawdź uprawnienia administratora i moderatora
+        if (member.permissions.has('Administrator') || member.permissions.has('ModerateMembers')) {
+            return true;
+        }
         
         return this.config.autoModeration.exemptRoles.some(roleId => 
             member.roles.cache.has(roleId)
@@ -114,33 +131,16 @@ class MessageHandler {
      * @param {Object} result - Wynik moderacji
      */
     async handleViolation(message, result) {
-        // Usuń wiadomość jeśli jest to skonfigurowane
-        if (this.config.autoModeration.deleteMessages) {
-            try {
-                await message.delete();
-            } catch (error) {
-                await this.logService.logMessage('warn', `Nie udało się usunąć wiadomości: ${error.message}`, message);
-            }
-        }
+        // Nie usuwaj wiadomości z wyzwiskami
 
-        // Powiadom użytkownika
-        if (this.config.autoModeration.notifyUser) {
-            const violationMessage = formatMessage(this.config.messages.autoModerationViolation, {
-                user: message.author.toString(),
-                current: result.violationCount,
-                max: this.config.autoModeration.violationsBeforeWarn
-            });
+        // Nie wysyłaj powiadomień o naruszeniach przed warnem
 
-            try {
-                const reply = await message.channel.send(violationMessage);
-                // Usuń powiadomienie po 10 sekundach
-                setTimeout(() => {
-                    reply.delete().catch(() => {});
-                }, 10000);
-            } catch (error) {
-                await this.logService.logMessage('warn', `Nie udało się wysłać powiadomienia o naruszeniu: ${error.message}`, message);
-            }
-        }
+        // Loguj wykroczenie w konsoli
+        const badWordsText = result.badWords ? 
+            result.badWords.map(word => word.original).join(', ') : 
+            'Brak';
+        
+        this.logger.warn(`🚨 Wykryto wyzwiska: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText} - Naruszenie ${result.violationCount}/3`);
 
         // Zaloguj naruszenie
         await this.logAutoModeration(message, 'violation', result);
@@ -152,29 +152,35 @@ class MessageHandler {
      * @param {Object} result - Wynik moderacji
      */
     async handleAutoWarn(message, result) {
-        // Usuń wiadomość
-        if (this.config.autoModeration.deleteMessages) {
-            try {
-                await message.delete();
-            } catch (error) {
-                await this.logService.logMessage('warn', `Nie udało się usunąć wiadomości: ${error.message}`, message);
-            }
-        }
+        // Nie usuwaj wiadomości z wyzwiskami
 
-        // Powiadom użytkownika
+        // Loguj automatyczny warn w konsoli
+        const badWordsText = result.badWords ? 
+            result.badWords.map(word => word.original).join(', ') : 
+            'Brak';
+        
+        this.logger.error(`⚠️ Automatyczny WARN: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText} - Łączne warny: ${result.warnResult.totalWarnings}`);
+
+        // Powiadom użytkownika o warnie (reply z pingiem)
         if (this.config.autoModeration.notifyUser) {
-            const warnMessage = formatMessage(this.config.messages.autoModerationWarn, {
-                user: message.author.toString(),
-                reason: result.warnResult.warning.reason,
-                total: result.warnResult.totalWarnings
-            });
+            // Pobierz liczbę ostrzeżeń w ciągu ostatniej godziny
+            const hourlyWarnings = this.autoModerationService.getUserWarningsInHour(message.author.id, message.guild.id);
+            
+            let warnMessage;
+            if (hourlyWarnings === 1) {
+                warnMessage = `🚨 ${message.author.toString()}, hamuj się z tymi wyzwiskami.`;
+            } else if (hourlyWarnings === 2) {
+                warnMessage = `🚨 ${message.author.toString()}, jeszcze raz i zostaniesz wyciszony.`;
+            } else if (hourlyWarnings >= 3) {
+                warnMessage = `🚨 ${message.author.toString()}, zostałeś uciszony na godzinę, ochłoń...`;
+            } else {
+                // Fallback dla innych przypadków
+                warnMessage = `🚨 ${message.author.toString()}, hamuj się z tymi wyzwiskami.`;
+            }
 
             try {
-                const reply = await message.channel.send(warnMessage);
-                // Usuń powiadomienie po 30 sekund
-                setTimeout(() => {
-                    reply.delete().catch(() => {});
-                }, 30000);
+                // Stwórz reply do wiadomości z pingiem
+                await this.createEphemeralReply(message, warnMessage);
             } catch (error) {
                 await this.logService.logMessage('warn', `Nie udało się wysłać powiadomienia o warnie: ${error.message}`, message);
             }
@@ -191,14 +197,14 @@ class MessageHandler {
      * @param {Object} result - Wynik moderacji
      */
     async handleAutoMute(message, result) {
-        // Usuń wiadomość
-        if (this.config.autoModeration.deleteMessages) {
-            try {
-                await message.delete();
-            } catch (error) {
-                await this.logService.logMessage('warn', `Nie udało się usunąć wiadomości: ${error.message}`, message);
-            }
-        }
+        // Nie usuwaj wiadomości z wyzwiskami
+
+        // Loguj automatyczny mute w konsoli
+        const badWordsText = result.badWords ? 
+            result.badWords.map(word => word.original).join(', ') : 
+            'Brak';
+        
+        this.logger.error(`🔇 Automatyczny MUTE: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText} - Powód: ${result.reason} - Czas: ${this.config.autoModeration.muteTime} min`);
 
         try {
             const member = await message.guild.members.fetch(message.author.id);
@@ -221,20 +227,13 @@ class MessageHandler {
                     }
                 }, this.config.autoModeration.muteTime * 60 * 1000);
 
-                // Powiadom użytkownika
+                // Powiadom użytkownika o mute (reply z pingiem)
                 if (this.config.autoModeration.notifyUser) {
-                    const muteMessage = formatMessage(this.config.messages.autoModerationMute, {
-                        user: message.author.toString(),
-                        reason: result.reason,
-                        duration: this.config.autoModeration.muteTime
-                    });
+                    const muteMessage = `🔇 ${message.author.toString()}, zostałeś uciszony na godzinę, ochłoń...`;
 
                     try {
-                        const reply = await message.channel.send(muteMessage);
-                        // Usuń powiadomienie po 60 sekund
-                        setTimeout(() => {
-                            reply.delete().catch(() => {});
-                        }, 60000);
+                        // Stwórz reply do wiadomości z pingiem
+                        await this.createEphemeralReply(message, muteMessage);
                     } catch (error) {
                         await this.logService.logMessage('warn', `Nie udało się wysłać powiadomienia o mute: ${error.message}`, message);
                     }
@@ -319,6 +318,32 @@ class MessageHandler {
      */
     removeBadWord(word) {
         this.autoModerationService.removeBadWord(word);
+    }
+
+    /**
+     * Pobiera serwis auto-moderacji
+     * @returns {AutoModerationService} Serwis auto-moderacji
+     */
+    getAutoModerationService() {
+        return this.autoModerationService;
+    }
+
+    /**
+     * Tworzy reply do wiadomości (bez usuwania, z pingiem)
+     * @param {Message} message - Wiadomość do której reply
+     * @param {string} content - Treść wiadomości
+     */
+    async createEphemeralReply(message, content) {
+        try {
+            // Stwórz zwykły reply z pingiem i bez usuwania
+            await message.reply({
+                content: content
+                // allowedMentions domyślnie pozwala na ping
+            });
+        } catch (error) {
+            // Fallback - wyślij na kanał
+            await message.channel.send(content);
+        }
     }
 }
 

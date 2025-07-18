@@ -34,8 +34,8 @@ const mediaService = new MediaService(config);
 const logService = new LogService(config);
 
 // Inicjalizacja handlerów
-const interactionHandler = new InteractionHandler(config, roleManagementService, logService, specialRolesService);
 const messageHandler = new MessageHandler(config, mediaService, logService);
+const interactionHandler = new InteractionHandler(config, roleManagementService, logService, specialRolesService, messageHandler);
 const memberHandler = new MemberHandler(config, roleManagementService, logService);
 
 // Obiekt zawierający wszystkie współdzielone stany

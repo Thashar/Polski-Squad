@@ -30,15 +30,15 @@ class AutoModerationService {
     }
 
     /**
-     * Domyślna lista wyzwisk polskich (różne formy)
+     * Domyślna lista wyzwisk polskich (tylko te skierowane bezpośrednio do osób)
      */
     getDefaultBadWords() {
         return [
-            // Podstawowe wyzwiska w wołaczu
+            // Podstawowe wyzwiska w wołaczu - skierowane bezpośrednio do osób
             "kurwo", "chuju", "pizdo", "suko", "dziwko", "debilu", "idioto", "kretynie",
             "śmieciu", "gnido", "bydlaku", "szuju", "cwelu", "pedale", "żulu", "kutasie",
             
-            // Wyszukane wyzwiska w wołaczu
+            // Wyszukane wyzwiska w wołaczu - skierowane bezpośrednio do osób
             "chamie", "barbarzyńco", "prostaku", "gburu", "wieśniaku", "ciemnocioto",
             "matole", "tępaku", "głąbie", "durniu", "głupcze", "imbecylu", "moherze",
             "cepie", "balwanie", "osłupie", "bałwanie", "ciulo", "pajaco", "klaunie",
@@ -61,97 +61,15 @@ class AutoModerationService {
             "kretynko", "dziecinku", "niemowlaku", "smarkaczu", "pisklaczy", "bachorze",
             "szczeniaku", "gówniarzu", "smyku", "gołowązku", "zadzioro", "urwisie",
             
-            // Zwroty i komendy wulgarne
+            // Zwroty bezpośrednio skierowane do osób
             "jebaj się", "spierdalaj", "wypierdalaj", "odpierdol się", "pieprz się",
             "jeb się", "spadaj", "odwal się", "skurwysynie", "skurwielu", "skurwysynu",
-            "pojeb", "pojebany", "pojebana", "pojebane", "zjeb", "zjebany", "zjebana",
-            "wkurwiony", "wkurwiona", "wkurwione", "kurwa mać", "kurwa jego mać",
-            "chuj ci w dupę", "chuj ci w oko", "chuj ci w mordę", "chuj ci w ryj",
-            "pieprzy cię", "pierdol się", "pierdolisz", "pierdolony", "pierdolona",
-            "gówno", "gówna", "gównem", "gównie", "gówniany", "gówniara", "gówniarz",
-            "sraj", "srajcie", "srajmy", "sranie", "sranko", "sracze", "sraczu",
-            "szlag", "szlaga", "szlagiem", "szlakiem", "cholera", "cholernie", "cholerni",
-            "diabel", "diabła", "diabłu", "diabłem", "diabli", "diabolic", "diabełek",
-            "do dupy", "w dupie", "na dupie", "dupek", "dupcia", "dupsko", "dupasz",
-            "cipy", "cipę", "cipka", "cipko", "cipeczka", "cipucha", "cipusia",
-            "fiut", "fiuta", "fiutem", "fiutka", "fiutko", "fiutaś", "fiutaszek",
-            "jaja", "jaj", "jajco", "jajek", "jajkiem", "jajca", "jajcarz", "jajecznica",
-            "chuja", "chujek", "chujnia", "chujowy", "chujowa", "chujowe", "chujek",
-            "kurewski", "kurewska", "kurewskie", "kurewsko", "kurewnie", "kurewny",
-            "pierdolenie", "pierdolnij", "pierdolnął", "pierdolnęła", "pierdolnęło",
-            "zajebisty", "zajebista", "zajebiste", "zajebały", "zajebała", "zajebało",
-            "rozjebany", "rozjebana", "rozjebane", "rozjebał", "rozjebała", "rozjebało",
-            "przejebany", "przejebana", "przejebane", "przejebał", "przejebała", "przejebało",
-            "najebany", "najebana", "najebane", "najebał", "najebała", "najebało",
-            "wjebany", "wjebana", "wjebane", "wjebał", "wjebała", "wjebało",
-            "ujebany", "ujebana", "ujebane", "ujebał", "ujebała", "ujebało",
-            "dojebany", "dojebana", "dojebane", "dojebał", "dojebała", "dojebało",
-            "popierdolony", "popierdolona", "popierdolone", "popierdolił", "popierdoliła",
-            "zasrany", "zasrana", "zasrane", "zasrał", "zasrała", "zasrało",
-            "posrany", "posrana", "posrane", "posrał", "posrała", "posrało",
-            "nasrany", "nasrana", "nasrane", "nasrał", "nasrała", "nasrało",
-            "obsrany", "obsrana", "obsrane", "obsrał", "obsrała", "obsrało",
-            "obciągnij", "obciągaj", "obciągasz", "obciąganie", "obciągarka", "obciągacz",
-            "lizać", "liże", "liżesz", "liza", "lizanie", "lizaczka", "lizacz",
-            "ruchaj", "ruchać", "ruchanie", "ruchasz", "rucha", "ruchał", "ruchała",
-            "dupczenie", "dupczy", "dupczysz", "dupczył", "dupczyła", "dupczyło",
-            "pojebać", "pojebał", "pojebała", "pojebało", "pojebię", "pojebiesz",
-            "zjebać", "zjebał", "zjebała", "zjebało", "zjebię", "zjebiesz",
-            "wyjebać", "wyjebał", "wyjebała", "wyjebało", "wyjebię", "wyjebiesz",
-            "przejebać", "przejebał", "przejebała", "przejebało", "przejebię", "przejebiesz",
-            "najebać", "najebał", "najebała", "najebało", "najebię", "najebiesz",
-            "dojebać", "dojebał", "dojebała", "dojebało", "dojebię", "dojebiesz",
-            "ujebać", "ujebał", "ujebała", "ujebało", "ujebię", "ujebiesz",
-            "wjebać", "wjebał", "wjebała", "wjebało", "wjebię", "wjebiesz",
-            "rozjebać", "rozjebał", "rozjebała", "rozjebało", "rozjebię", "rozjebiesz",
-            "zasrać", "zasrał", "zasrała", "zasrało", "zasrę", "zasriesz",
-            "posrać", "posrał", "posrała", "posrało", "posrę", "posriesz",
-            "nasrać", "nasrał", "nasrała", "nasrało", "nasrę", "nasriesz",
-            "obsrać", "obsrał", "obsrała", "obsrało", "obsrę", "obsriesz",
-            "kurwisz", "kurwił", "kurwiła", "kurwiło", "kurwić", "kurwienie",
-            "pierdolisz", "pierdolił", "pierdoliła", "pierdoliło", "pierdolić",
-            "odpierdolisz", "odpierdolił", "odpierdoliła", "odpierdoliło", "odpierdolić",
-            "spierdolisz", "spierdolił", "spierdoliła", "spierdoliło", "spierdolić",
-            "wypierdolisz", "wypierdolił", "wypierdoliła", "wypierdoliło", "wypierdolić",
-            
-            // Wyszukane formy i zwroty wulgarne
-            "jebał cię pies", "jebał cię kot", "jebał cię osioł", "jebał cię diabeł",
-            "jebała cię kurwa", "jebała cię suka", "jebała cię dziwka", "jebała cię pizda",
-            "jebane gówno", "jebana kurwa", "jebany chuj", "jebana suka", "jebana pizda",
-            "pojebało cię", "pojebało go", "pojebało ją", "pojebało ich", "pojebało was",
-            "zjebało cię", "zjebało go", "zjebało ją", "zjebało ich", "zjebało was",
+            "pojeb", "pierdol się",
             "chuj ci w dupę", "chuj ci w oko", "chuj ci w mordę", "chuj ci w ryj",
             "chuj ci w gardło", "chuj ci w ucho", "chuj ci w dupe", "chuj ci w buzię",
             "pizda ci w mordę", "pizda ci w ryj", "pizda ci w oko", "pizda ci w dupe",
             "kurwa ci w dupę", "kurwa ci w mordę", "kurwa ci w ryj", "kurwa ci w oko",
             "w dupie ci pies", "w dupie ci osioł", "w dupie ci diabeł", "w dupie ci kot",
-            "w dupie mam", "w dupie to mam", "w dupie was mam", "w dupie go mam",
-            "do dupy z gruszkami", "do dupy z jabłkami", "do dupy z koniem", "do dupy z psem",
-            "na chuj", "na chuja", "na kurwa", "na kurwę", "na pizda", "na pizdę",
-            "po chuj", "po chuja", "po kurwa", "po kurwę", "po pizda", "po pizdę",
-            "co za kurwa", "co za chuj", "co za pizda", "co za gówno", "co za suka",
-            "ale kurwa", "ale chuj", "ale pizda", "ale gówno", "ale suka", "ale dziwka",
-            "kurwa jego mać", "kurwa jego ojca", "kurwa jego babę", "kurwa jego rodzinę",
-            "chuj jego mać", "chuj jego ojca", "chuj jego babę", "chuj jego rodzinę",
-            "pierdol się", "pierdol sie", "pierdolisz się", "pierdolisz sie",
-            "jeb się", "jeb sie", "jebiesz się", "jebiesz sie", "jebać się", "jebać sie",
-            "sraj się", "sraj sie", "srasz się", "srasz sie", "srać się", "srać sie",
-            "gówno prawda", "gówno z tego", "gówno warte", "gówno warty", "gówno warta",
-            "chujowe", "chujowa", "chujowy", "chujowe to", "chujowa to", "chujowy to",
-            "kurewski", "kurewska", "kurewskie", "kurewsko", "kurewnie", "kurewny",
-            "pierdolony", "pierdolona", "pierdolone", "pierdolnie", "pierdolnięty",
-            "zajebisty", "zajebista", "zajebiste", "zajebało", "zajebany", "zajebana",
-            "rozjebany", "rozjebana", "rozjebane", "rozjebało", "rozjebał", "rozjebała",
-            "przejebany", "przejebana", "przejebane", "przejebało", "przejebał", "przejebała",
-            "najebany", "najebana", "najebane", "najebało", "najebał", "najebała",
-            "wjebany", "wjebana", "wjebane", "wjebało", "wjebał", "wjebała",
-            "ujebany", "ujebana", "ujebane", "ujebało", "ujebał", "ujebała",
-            "dojebany", "dojebana", "dojebane", "dojebało", "dojebał", "dojebała",
-            "zasrany", "zasrana", "zasrane", "zasrało", "zasrał", "zasrała",
-            "posrany", "posrana", "posrane", "posrało", "posrał", "posrała",
-            "nasrany", "nasrana", "nasrane", "nasrało", "nasrał", "nasrała",
-            "obsrany", "obsrana", "obsrane", "obsrało", "obsrał", "obsrała",
-            "kurwa mać", "kurwa jego mać", "kurwa jego ojca", "kurwa jego babę",
             "chodź tu kurwo", "chodź tu chuju", "chodź tu pizdo", "chodź tu suko",
             "ty kurwo", "ty chuju", "ty pizdo", "ty suko", "ty dziwko", "ty gnido",
             "ty debilu", "ty idioto", "ty kretynie", "ty śmieciu", "ty bydlaku",
@@ -162,28 +80,117 @@ class AutoModerationService {
             "twoje ojciec", "twój ojciec to chuj", "twój ojciec to kutas", "twój ojciec to pedał",
             "spierdalaj stąd", "wypierdalaj stąd", "odpierdol się stąd", "jebaj się stąd",
             "idź się jebać", "idź się pieprzyć", "idź do dupy", "idź do chuja", "idź do pizdy",
-            "mam cię w dupie", "mam was w dupie", "mam to w dupie", "mam go w dupie",
+            "mam cię w dupie", "mam was w dupie", "mam go w dupie",
             "ssij chuja", "ssij kutasa", "ssij fiuta", "ssij pale", "ssij mi",
             "lizać dupę", "lizać chuj", "lizać kutas", "lizać fiut", "lizać cipę",
             "ruchać w dupę", "ruchać w cipę", "ruchać w mordę", "ruchać w ryj",
             "jebać w dupę", "jebać w cipę", "jebać w mordę", "jebać w ryj",
             "pierdolić w dupę", "pierdolić w cipę", "pierdolić w mordę", "pierdolić w ryj",
-            "chuj mnie to", "chuj mnie obchodzi", "chuj mnie interesuje", "chuj mnie to boli",
-            "kurwa mnie to", "kurwa mnie obchodzi", "kurwa mnie interesuje", "kurwa mnie to boli",
-            "gówno mnie to", "gówno mnie obchodzi", "gówno mnie interesuje", "gówno mnie to boli",
-            "pizda mnie to", "pizda mnie obchodzi", "pizda mnie interesuje", "pizda mnie to boli",
-            "fuck off", "fuck you", "fuck this", "fuck that", "fucking hell",
-            "son of a bitch", "piece of shit", "go to hell", "kiss my ass",
-            "suck my dick", "eat shit", "bullshit", "horseshit", "dickhead",
-            "asshole", "motherfucker", "cocksucker", "bastard", "bitch",
-            "damn it", "god damn", "what the fuck", "what the hell", "holy shit",
-            "shit happens", "no shit", "tough shit", "eat my shorts", "bite me",
-            "piss off", "piss on you", "go screw yourself", "screw you", "screw this",
-            "shithead", "shitface", "dipshit", "dumbass", "jackass", "smartass",
-            "kiss my butt", "up yours", "blow me", "suck it", "get stuffed",
-            "go jump off a cliff", "drop dead", "go die", "kill yourself",
-            "shut the hell up", "shut the fuck up", "fuck off and die",
-            "go fuck yourself", "fuck your mother", "your mom", "your mama"
+            "jebał cię pies", "jebał cię kot", "jebał cię osioł", "jebał cię diabeł",
+            "jebała cię kurwa", "jebała cię suka", "jebała cię dziwka", "jebała cię pizda",
+            "pojebało cię", "pojebało go", "pojebało ją", "pojebało ich", "pojebało was",
+            "zjebało cię", "zjebało go", "zjebało ją", "zjebało ich", "zjebało was",
+            "pieprzy cię",
+            
+            // Nowe wyzwiska z czatu użytkowników - bardziej wyszukane formy
+            "jebać ci matkę", "jebać ci ojca", "jebać ci babę", "jebać ci dziadka",
+            "rucham ci matkę", "rucham ci ojca", "rucham ci babę", "rucham ci siostrę",
+            "rucham ci rodzinę", "rucham ci całą rodzinę", "rucham wasze matki",
+            "rucham wasze siostry", "rucham wasze baby", "rucham wasze rodziny",
+            "zjebię cię", "zjebię was", "zjebię go", "zjebię ją", "zjebię ich",
+            "zajebie cię", "zajebie was", "zajebie go", "zajebie ją", "zajebie ich",
+            "zajebie cię i twoją rodzinę", "zajebie was i wasze rodziny",
+            "śmieciu zjebany", "śmieciu pierdolony", "śmieciu sperdolony",
+            "niech ci matka zdechnie", "niech ci ojciec zdechnie", "niech ci rodzina zdechnie",
+            "niech zdechnie", "niech was diabli wezmą", "niech was piorun trzaśnie",
+            "wypierdalaj ty szmato", "wypierdalaj ty szmacie", "wypierdalaj ty gnido",
+            "szmato jebana", "szmato pierdolona", "szmato sperdolona", "szmato zjebana",
+            "pierdolę was w dupala", "pierdolę cię w dupala", "pierdolę go w dupala",
+            "do ryja w chuja ci wkładam", "do ryja ci wkładam", "w mordę ci wkładam",
+            "ssiesz lache za darmo", "ssiesz pale za darmo", "ssiesz kutasa za darmo",
+            "pierdolę wasze matki w dupę", "pierdolę wasze siostry w dupę",
+            "skaczę wam po głowach", "skaczę ci po głowie", "skaczę wam po rybach",
+            "chuj wam w dupę", "chuj ci w dupę", "chuj im w dupę", "chuj jej w dupę",
+            "sperdolony", "sperdolona", "sperdolone", "sperdolił", "sperdoliła",
+            "zjebany chuj", "zjebana kurwa", "zjebana suka", "zjebana pizda",
+            "zajebie cie", "zajebie was", "zajebie go", "zajebie ją", "zajebie ich",
+            "ty stara kurwo", "ty stary chuju", "ty stara suko", "ty stara pizdo",
+            "ty stara dziwko", "ty stary pedale", "ty stary żulu", "ty stary kutasie",
+            
+            // Podobne zwroty - rozszerzenia tematyczne
+            "jebać ci żonę", "jebać ci męża", "jebać ci dzieci", "jebać ci wnuki",
+            "rucham ci żonę", "rucham ci męża", "rucham ci dzieci", "rucham ci córkę",
+            "rucham ci syna", "rucham ci brata", "rucham ci bratową", "rucham ci szwagra",
+            "pierdolę ci żonę", "pierdolę ci męża", "pierdolę ci dzieci", "pierdolę ci rodzinę",
+            "chuj ci w żonę", "chuj ci w męża", "chuj ci w dzieci", "chuj ci w córkę",
+            "chuj ci w syna", "chuj ci w brata", "chuj ci w siostrę", "chuj ci w babę",
+            "niech ci żona zdechnie", "niech ci mąż zdechnie", "niech ci dzieci zdechną",
+            "niech ci syn zdechnie", "niech ci córka zdechnie", "niech ci brat zdechnie",
+            "zajebie ci żonę", "zajebie ci męża", "zajebie ci dzieci", "zajebie ci syna",
+            "zajebie ci córkę", "zajebie ci brata", "zajebie ci siostrę", "zajebie ci babę",
+            "śmieciu pierdolony", "śmieciu kurwiony", "śmieciu zjebany", "śmieciu sperdolony",
+            "gnido jebana", "gnido pierdolona", "gnido sperdolona", "gnido zjebana",
+            "bydlaku jebany", "bydlaku pierdolony", "bydlaku sperdolony", "bydlaku zjebany",
+            "debilu jebany", "debilu pierdolony", "debilu sperdolony", "debilu zjebany",
+            "kretynie jebany", "kretynie pierdolony", "kretynie sperdolony", "kretynie zjebany",
+            "idioto jebany", "idioto pierdolony", "idioto sperdolony", "idioto zjebany",
+            "chuju jebany", "chuju pierdolony", "chuju sperdolony", "chuju zjebany",
+            "kurwo jebana", "kurwo pierdolona", "kurwo sperdolona", "kurwo zjebana",
+            "suko jebana", "suko pierdolona", "suko sperdolona", "suko zjebana",
+            "pizdo jebana", "pizdo pierdolona", "pizdo sperdolona", "pizdo zjebana",
+            "dziwko jebana", "dziwko pierdolona", "dziwko sperdolona", "dziwko zjebana",
+            "pedale jebany", "pedale pierdolony", "pedale sperdolony", "pedale zjebany",
+            "żulu jebany", "żulu pierdolony", "żulu sperdolony", "żulu zjebany",
+            "kutasie jebany", "kutasie pierdolony", "kutasie sperdolony", "kutasie zjebany",
+            
+            // Wyzwiska skierowane do grupy osób (forma "wy")
+            "wy kurwy", "wy chuje", "wy pizdy", "wy suki", "wy dziwki", "wy debile", 
+            "wy idioci", "wy kretyny", "wy śmiecie", "wy gnidy", "wy bydlaki", 
+            "wy szuje", "wy cwele", "wy pedały", "wy żule", "wy kutasy",
+            "wy chamy", "wy barbarzyńcy", "wy prostacy", "wy gbory", "wy wieśniacy",
+            "wy ciemnocioty", "wy matołki", "wy tępacy", "wy głąby", "wy durnie",
+            "wy głupcy", "wy imbecyle", "wy mohery", "wy cepy", "wy balwany",
+            "wy osłupy", "wy bałwany", "wy ciule", "wy pajace", "wy klauni",
+            "wy błaźni", "wy mendy", "wy łajzy", "wy łobuzy", "wy szubrawcy",
+            "wy nicponie", "wy łajdacy", "wy bandziory", "wy hochsztaplerzy",
+            "wy oszuści", "wy kanaliki", "wy łotry", "wy zbóje", "wy rozbójnicy",
+            "wy bandyci", "wy gangsterzy", "wy złodzieje", "wy złoczyńcy",
+            "wy awanturnicy", "wy hulajnogi", "wy rozpustnicy", "wy hedoniści",
+            "wy pijacy", "wy alkohole", "wy narkomany", "wy ćpuny", "wy psychopaci",
+            "wy sadyści", "wy maniacy", "wy zboczency", "wy degeneraci", "wy patologii",
+            "wy marginesy", "wy szumowiny", "wy żyły", "wy pasożyty", "wy pijawki",
+            "wy darmozjady", "wy obibocy", "wy próżniacy", "wy leniwcy", "wy nieroboty",
+            "wy ofermy", "wy niedojdy", "wy nieudacznicy", "wy przegrywy", "wy frajery",
+            "wy naiwniacy", "wy głupcy", "wy bałwochwalcy", "wy fanatycy", "wy sekciarze",
+            "wy hipokryci", "wy świętoszki", "wy obłudnicy", "wy kłamczuchy",
+            "wy manipulatory", "wy intryganci", "wy karierowicze", "wy oportuniści",
+            "wy podlizywacze", "wy serwiliści", "wy pachołki", "wy lakaje", "wy sługusy",
+            "wy wasale", "wy ignoranci", "wy analfabeci", "wy niedouczki", "wy dzikusy",
+            "wy wandale", "wy niszczyciele", "wy burzyciele", "wy agitatorzy",
+            "wy ekstremiści", "wy radykałowie", "wy terroryści", "wy kretyńscy",
+            "wy niedorozwinieci", "wy upośledzeni", "wy niedorajdy", "wy smarkacze",
+            "wy pisklaki", "wy bachory", "wy szczeniaki", "wy gówniarze", "wy smyki",
+            "wy gołowązy", "wy zadziory", "wy urwisy",
+            
+            // Zwroty do grup z "was"
+            "mam was w dupie", "jebał was pies", "jebał was kot", "jebał was osioł",
+            "jebał was diabeł", "jebała was kurwa", "jebała was suka", "jebała was dziwka",
+            "jebała was pizda", "spierdalajcie", "wypierdalajcie", "odpierdolcie się",
+            "jebajcie się", "pierdolcie się", "spadajcie", "odwalcie się",
+            "spierdalajcie stąd", "wypierdalajcie stąd", "odpierdolcie się stąd",
+            "jebajcie się stąd", "idźcie się jebać", "idźcie się pieprzyć",
+            "idźcie do dupy", "idźcie do chuja", "idźcie do pizdy",
+            
+            // Angielskie wyzwiska skierowane bezpośrednio do osób
+            "fuck off", "fuck you", "go to hell", "kiss my ass",
+            "suck my dick", "eat shit", "dickhead", "asshole", "motherfucker", 
+            "cocksucker", "bastard", "bitch", "bite me", "piss off", "piss on you", 
+            "go screw yourself", "screw you", "shithead", "shitface", "dipshit", 
+            "dumbass", "jackass", "smartass", "kiss my butt", "up yours", "blow me", 
+            "suck it", "get stuffed", "go jump off a cliff", "drop dead", "go die", 
+            "kill yourself", "shut the hell up", "shut the fuck up", "fuck off and die",
+            "go fuck yourself", "fuck your mother", "your mom", "your mama",
+            "son of a bitch", "piece of shit"
         ];
     }
 
@@ -377,6 +384,11 @@ class AutoModerationService {
             return { action: 'clean' };
         }
 
+        // Loguj wszystkie wykryte wyzwiska w konsoli
+        const badWordsText = badWords.map(word => word.original).join(', ');
+        this.logger.info(`🔍 Wykryte wyzwiska: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText} - Treść: "${message.content}"`);
+        
+
         // Zwiększ licznik wyzwisk
         const now = Date.now();
         const windowMs = this.config.autoModeration.violationWindow * 60 * 1000; // 15 minut
@@ -406,10 +418,11 @@ class AutoModerationService {
 
         userViolations.count = userViolations.violations.length;
 
-        // Sprawdź czy przekroczono limit
-        if (userViolations.count >= this.config.autoModeration.violationsBeforeWarn) {
-            // Wyczyść licznik
-            this.violationCounts.delete(userId);
+        // Sprawdź czy przekroczono limit lub użytkownik już ma warny
+        const existingWarnings = this.getUserWarningsInHour(userId, guildId);
+        
+        if (userViolations.count >= this.config.autoModeration.violationsBeforeWarn || existingWarnings > 0) {
+            // Nie resetuj licznika - pozwól na kolejne warny
             
             // Dodaj automatyczny warn
             const warnResult = this.warningService.addWarning(
@@ -479,6 +492,17 @@ class AutoModerationService {
             if (now - data.firstViolation > windowMs) {
                 this.violationCounts.delete(userId);
             }
+        }
+    }
+
+    /**
+     * Czyści licznik wyzwisk dla konkretnego użytkownika
+     * @param {string} userId - ID użytkownika
+     */
+    clearViolations(userId) {
+        if (this.violationCounts.has(userId)) {
+            this.violationCounts.delete(userId);
+            this.logger.info(`Wyczyszczono licznik wyzwisk dla użytkownika ${userId}`);
         }
     }
 
