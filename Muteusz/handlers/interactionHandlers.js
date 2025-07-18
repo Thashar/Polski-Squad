@@ -1455,7 +1455,7 @@ class InteractionHandler {
         if (!targetUser) {
             await interaction.reply({
                 content: "❌ Nie podano użytkownika do ostrzeżenia!",
-                ephemeral: true
+                ephemeral: false
             });
             return;
         }
@@ -1463,12 +1463,12 @@ class InteractionHandler {
         if (targetUser.id === interaction.user.id) {
             await interaction.reply({
                 content: this.config.messages.warnSelfError,
-                ephemeral: true
+                ephemeral: false
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ ephemeral: false });
 
         try {
             const result = this.warningService.addWarning(
@@ -1479,23 +1479,14 @@ class InteractionHandler {
                 interaction.guild.id
             );
 
-            const successMessage = formatMessage(this.config.messages.warnSuccess, {
-                user: targetUser.tag,
-                reason: reason,
-                total: result.totalWarnings
-            });
+            const successMessage = `⚠️ Nadano ostrzeżenie użytkownikowi **${targetUser.tag}**\n**Powód:** ${reason}\n**Łączna liczba ostrzeżeń:** ${result.totalWarnings}`;
 
             await interaction.editReply({ content: successMessage });
-            
-            // Publiczne powiadomienie o sukcesie
-            await interaction.followUp({ content: successMessage, ephemeral: false });
             
             await this.logService.logMessage('success', `Nadano ostrzeżenie użytkownikowi ${targetUser.tag} (${result.totalWarnings} łącznie) z powodem: ${reason}`, interaction);
 
         } catch (error) {
-            const errorMessage = formatMessage(this.config.messages.warnError, {
-                error: error.message
-            });
+            const errorMessage = `❌ Wystąpił błąd podczas nadawania ostrzeżenia: ${error.message}`;
             await interaction.editReply({ content: errorMessage });
             await this.logService.logMessage('error', `Błąd podczas nadawania ostrzeżenia: ${error.message}`, interaction);
         }
@@ -1630,6 +1621,26 @@ class InteractionHandler {
             components.push(row);
         }
 
+        // Dodaj przyciski do zarządzania ostrzeżeniami
+        const managementRow = new ActionRowBuilder();
+        
+        // Przycisk "Usuń ostatnie ostrzeżenie"
+        const removeLastButton = new ButtonBuilder()
+            .setCustomId(`violations_remove_last_${targetUser.id}`)
+            .setLabel('🗑️ Usuń ostatnie')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(totalWarnings === 0);
+        
+        // Przycisk "Usuń wszystkie ostrzeżenia"
+        const removeAllButton = new ButtonBuilder()
+            .setCustomId(`violations_remove_all_${targetUser.id}`)
+            .setLabel('🗑️ Usuń wszystkie')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(totalWarnings === 0);
+        
+        managementRow.addComponents(removeLastButton, removeAllButton);
+        components.push(managementRow);
+
         const messagePayload = {
             embeds: [embed],
             components: components
@@ -1649,13 +1660,31 @@ class InteractionHandler {
     async handleViolationsButtonInteraction(interaction) {
         await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył przycisku ${interaction.customId}`, interaction);
         
+        // Sprawdź uprawnienia do zarządzania ostrzeżeniami
+        if (!interaction.member.permissions.has(this.config.moderation.warn.requiredPermission)) {
+            await interaction.reply({
+                content: this.config.messages.warnNoPermission,
+                ephemeral: true
+            });
+            return;
+        }
+        
         try {
             const parts = interaction.customId.split('_');
-            const action = parts[1]; // first, prev, next, last
-            const targetUserId = parts[2];
-            const currentPage = parseInt(parts[3]) || 0;
+            const action = parts[1]; // first, prev, next, last, remove
+            const subAction = parts[2]; // dla remove: last, all
+            const targetUserId = action === 'remove' ? parts[3] : parts[2];
+            const currentPage = parseInt(parts[4]) || parseInt(parts[3]) || 0;
             
             const targetUser = await interaction.client.users.fetch(targetUserId);
+            
+            // Obsługa przycisków usuwania
+            if (action === 'remove') {
+                await this.handleWarningRemoval(interaction, targetUser, subAction);
+                return;
+            }
+            
+            // Obsługa przycisków nawigacji
             const warnings = this.warningService.getUserWarnings(targetUserId, interaction.guild.id);
             const pages = this.warningService.paginateWarnings(warnings, this.config.warnings.maxPerPage);
             
@@ -1681,6 +1710,61 @@ class InteractionHandler {
         } catch (error) {
             await interaction.reply({ content: `❌ Wystąpił błąd podczas nawigacji: ${error.message}`, ephemeral: true });
             await this.logService.logMessage('error', `Błąd podczas nawigacji przycisków violations: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Obsługuje usuwanie ostrzeżeń
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {User} targetUser - Użytkownik
+     * @param {string} action - Akcja (last, all)
+     */
+    async handleWarningRemoval(interaction, targetUser, action) {
+        try {
+            let result;
+            let successMessage;
+            
+            if (action === 'last') {
+                result = this.warningService.removeLastWarning(targetUser.id, interaction.guild.id);
+                
+                if (result.success) {
+                    successMessage = `🗑️ Usunięto ostatnie ostrzeżenie użytkownika **${targetUser.tag}**\n**Powód:** ${result.warning.reason}\n**Pozostałe ostrzeżenia:** ${result.remainingWarnings}`;
+                } else {
+                    await interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+                    return;
+                }
+            } else if (action === 'all') {
+                result = this.warningService.removeAllWarnings(targetUser.id, interaction.guild.id);
+                
+                if (result.success) {
+                    successMessage = `🗑️ Usunięto wszystkie ostrzeżenia użytkownika **${targetUser.tag}**\n**Usunięto:** ${result.removedCount} ostrzeżeń`;
+                } else {
+                    await interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+                    return;
+                }
+            }
+            
+            // Publiczne powiadomienie o usunięciu
+            await interaction.reply({ content: successMessage, ephemeral: false });
+            
+            // Odśwież widok ostrzeżeń
+            const warnings = this.warningService.getUserWarnings(targetUser.id, interaction.guild.id);
+            
+            if (warnings.length > 0) {
+                const pages = this.warningService.paginateWarnings(warnings, this.config.warnings.maxPerPage);
+                await this.displayViolationsPage(interaction, targetUser, pages, 0);
+            } else {
+                const emptyMessage = formatMessage(this.config.messages.violationsEmpty, {
+                    user: targetUser.tag
+                });
+                await interaction.followUp({ content: emptyMessage, ephemeral: true });
+            }
+            
+            await this.logService.logMessage('success', `Usunięto ostrzeżenia użytkownika ${targetUser.tag} (${action})`, interaction);
+            
+        } catch (error) {
+            await interaction.reply({ content: `❌ Wystąpił błąd podczas usuwania ostrzeżeń: ${error.message}`, ephemeral: true });
+            await this.logService.logMessage('error', `Błąd podczas usuwania ostrzeżeń: ${error.message}`, interaction);
         }
     }
 }

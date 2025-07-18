@@ -172,6 +172,84 @@ class WarningService {
     }
 
     /**
+     * Usuwa ostatnie ostrzeżenie użytkownika
+     * @param {string} userId - ID użytkownika
+     * @param {string} guildId - ID serwera
+     * @returns {Object} Informacje o usuniętym ostrzeżeniu
+     */
+    removeLastWarning(userId, guildId) {
+        const warnings = this.loadWarnings();
+        
+        if (!warnings[userId] || warnings[userId].length === 0) {
+            return { success: false, message: 'Użytkownik nie ma żadnych ostrzeżeń' };
+        }
+
+        const userWarnings = warnings[userId].filter(warning => warning.guildId === guildId);
+        
+        if (userWarnings.length === 0) {
+            return { success: false, message: 'Użytkownik nie ma żadnych ostrzeżeń na tym serwerze' };
+        }
+
+        // Znajdź ostatnie ostrzeżenie (najnowsze)
+        const lastWarning = userWarnings[userWarnings.length - 1];
+        
+        // Usuń ostatnie ostrzeżenie
+        warnings[userId] = warnings[userId].filter(warning => warning.id !== lastWarning.id);
+
+        // Usuń użytkownika z listy jeśli nie ma więcej ostrzeżeń
+        if (warnings[userId].length === 0) {
+            delete warnings[userId];
+        }
+
+        this.saveWarnings(warnings);
+        this.logger.info(`Usunięto ostatnie ostrzeżenie dla użytkownika ${userId}`);
+        
+        return { 
+            success: true, 
+            warning: lastWarning,
+            remainingWarnings: warnings[userId] ? warnings[userId].filter(w => w.guildId === guildId).length : 0
+        };
+    }
+
+    /**
+     * Usuwa wszystkie ostrzeżenia użytkownika
+     * @param {string} userId - ID użytkownika
+     * @param {string} guildId - ID serwera
+     * @returns {Object} Informacje o usuniętych ostrzeżeniach
+     */
+    removeAllWarnings(userId, guildId) {
+        const warnings = this.loadWarnings();
+        
+        if (!warnings[userId]) {
+            return { success: false, message: 'Użytkownik nie ma żadnych ostrzeżeń' };
+        }
+
+        const userWarnings = warnings[userId].filter(warning => warning.guildId === guildId);
+        
+        if (userWarnings.length === 0) {
+            return { success: false, message: 'Użytkownik nie ma żadnych ostrzeżeń na tym serwerze' };
+        }
+
+        const removedCount = userWarnings.length;
+        
+        // Usuń wszystkie ostrzeżenia dla tego serwera
+        warnings[userId] = warnings[userId].filter(warning => warning.guildId !== guildId);
+
+        // Usuń użytkownika z listy jeśli nie ma więcej ostrzeżeń
+        if (warnings[userId].length === 0) {
+            delete warnings[userId];
+        }
+
+        this.saveWarnings(warnings);
+        this.logger.info(`Usunięto wszystkie ostrzeżenia (${removedCount}) dla użytkownika ${userId} na serwerze ${guildId}`);
+        
+        return { 
+            success: true, 
+            removedCount: removedCount
+        };
+    }
+
+    /**
      * Pobiera wszystkie ostrzeżenia na serwerze
      * @param {string} guildId - ID serwera
      * @returns {Array} Lista wszystkich ostrzeżeń
