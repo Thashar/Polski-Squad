@@ -1554,17 +1554,15 @@ class InteractionHandler {
 
         const targetUser = interaction.options.getUser('użytkownik');
 
-        if (!targetUser) {
-            await interaction.reply({
-                content: "❌ Nie podano użytkownika do sprawdzenia!",
-                ephemeral: true
-            });
-            return;
-        }
-
         await interaction.deferReply({ ephemeral: true });
 
         try {
+            if (!targetUser) {
+                // Jeśli nie wybrano użytkownika, pokaż ostatnie 10 warnów na serwerze
+                await this.displayServerWarnings(interaction);
+                return;
+            }
+
             const warnings = this.warningService.getUserWarnings(targetUser.id, interaction.guild.id);
             
             if (warnings.length === 0) {
@@ -1584,6 +1582,58 @@ class InteractionHandler {
             });
             await interaction.editReply({ content: errorMessage });
             await this.logService.logMessage('error', `Błąd podczas pobierania ostrzeżeń: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Wyświetla ostatnie 10 warnów na serwerze
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async displayServerWarnings(interaction) {
+        try {
+            // Pobierz wszystkie warny na serwerze
+            const allWarnings = this.warningService.getAllWarnings(interaction.guild.id);
+            
+            if (allWarnings.length === 0) {
+                await interaction.editReply({ 
+                    content: "✅ Brak ostrzeżeń na tym serwerze." 
+                });
+                return;
+            }
+
+            // Sortuj po dacie (najnowsze pierwsze) i weź pierwsze 10
+            const recentWarnings = allWarnings
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .slice(0, 10);
+
+            const embed = new EmbedBuilder()
+                .setTitle('📋 Ostatnie ostrzeżenia na serwerze')
+                .setColor('#FF6B35')
+                .setTimestamp()
+                .setFooter({ text: `Łącznie ostrzeżeń: ${allWarnings.length}` });
+
+            // Dodaj ostrzeżenia do embed
+            let description = '';
+            for (let i = 0; i < recentWarnings.length; i++) {
+                const warning = recentWarnings[i];
+                const date = new Date(warning.timestamp).toLocaleString('pl-PL');
+                const user = await interaction.client.users.fetch(warning.userId).catch(() => null);
+                const userTag = user ? user.tag : `ID: ${warning.userId}`;
+                
+                description += `**${i + 1}.** ${userTag}\n`;
+                description += `📅 ${date} • 👮 ${warning.moderator.tag}\n`;
+                description += `📝 ${warning.reason}\n\n`;
+            }
+
+            embed.setDescription(description);
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            const errorMessage = formatMessage(this.config.messages.violationsError, {
+                error: error.message
+            });
+            await interaction.editReply({ content: errorMessage });
+            await this.logService.logMessage('error', `Błąd podczas pobierania ostrzeżeń serwera: ${error.message}`, interaction);
         }
     }
 
