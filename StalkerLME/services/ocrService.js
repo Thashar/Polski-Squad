@@ -129,6 +129,7 @@ class OCRService {
             logger.info(`📋 Analizuję ${validLines.length}/${lines.length} linii (dłuższe niż średnia)`);
             
             const confirmedPlayers = [];
+            const processedNicks = new Set(); // Śledzenie już przetworzonych nicków z zerem
             
             // Krok 3: Dla każdej linii znajdź najlepiej dopasowany nick z roli
             for (let i = 0; i < validLines.length; i++) {
@@ -177,6 +178,15 @@ class OCRService {
                     }
                     
                     if (endResult.type === 'zero' || endResult.type === 'unknown') {
+                        // Sprawdź czy ten nick z zerem już został przetworzony
+                        if (processedNicks.has(bestMatch.displayName)) {
+                            logger.info(`   ⚠️ DUPLIKAT - nick "${bestMatch.displayName}" z zerem już został przetworzony, pomijam`);
+                            continue;
+                        }
+                        
+                        // Dodaj nick do zbioru przetworzonych
+                        processedNicks.add(bestMatch.displayName);
+                        
                         confirmedPlayers.push({
                             detectedNick: bestMatch.displayName,
                             user: bestMatch,
