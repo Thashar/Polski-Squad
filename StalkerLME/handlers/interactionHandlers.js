@@ -911,8 +911,16 @@ async function showUncertaintyQuestion(interaction, uncertainPlayers, allPlayers
     const row = new ActionRowBuilder()
         .addComponents(yesButton, noButton);
     
+    const embed = new EmbedBuilder()
+        .setTitle('❓ Niepewny wynik OCR')
+        .setDescription(`Bot nie jest pewny wyniku dla: ${playersText} (wykryto symbol ©).\nCzy dodać ${uncertainPlayers.length > 1 ? 'tych graczy' : 'tego gracza'} do listy z zerami?`)
+        .setColor('#FFA500')
+        .setImage(imageUrl)
+        .setTimestamp()
+        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.user.tag}` });
+    
     await interaction.editReply({
-        content: `❓ Bot nie jest pewny wyniku dla: ${playersText} (wykryto symbol ©).\nCzy dodać ${uncertainPlayers.length > 1 ? 'tych graczy' : 'tego gracza'} do listy z zerami?`,
+        embeds: [embed],
         components: [row]
     });
 }
@@ -951,10 +959,17 @@ async function showUncertaintyQuestionWithUpdate(interaction, uncertainPlayers, 
     const row = new ActionRowBuilder()
         .addComponents(yesButton, noButton);
     
+    const embed = new EmbedBuilder()
+        .setTitle('❓ Niepewny wynik OCR')
+        .setDescription(`Bot nie jest pewny wyniku dla: ${playersText} (wykryto symbol ©).\nCzy dodać ${uncertainPlayers.length > 1 ? 'tych graczy' : 'tego gracza'} do listy z zerami?`)
+        .setColor('#FFA500')
+        .setImage(imageUrl)
+        .setTimestamp()
+        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.user.tag}` });
+    
     await interaction.update({
-        content: `❓ Bot nie jest pewny wyniku dla: ${playersText} (wykryto symbol ©).\nCzy dodać ${uncertainPlayers.length > 1 ? 'tych graczy' : 'tego gracza'} do listy z zerami?`,
-        components: [row],
-        embeds: []
+        embeds: [embed],
+        components: [row]
     });
 }
 
