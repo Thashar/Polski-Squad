@@ -285,6 +285,19 @@ class OCRService {
                 if (threeDigitPattern.test(processedLine.trim())) {
                     return false;
                 }
+                
+                // Sprawdź czy po "o" nie ma dwóch liter lub cyfr
+                const twoCharAfterOPattern = /o[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/;
+                if (twoCharAfterOPattern.test(processedLine)) {
+                    return false;
+                }
+                
+                // Sprawdź czy po "o" nie ma spacji i dwóch liter/cyfr
+                const spaceAndTwoCharPattern = /o\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/;
+                if (spaceAndTwoCharPattern.test(processedLine)) {
+                    return false;
+                }
+                
                 return true;
             }
         }
@@ -652,6 +665,20 @@ class OCRService {
         ];
         
         const wordLower = word.toLowerCase();
+        
+        // Sprawdź czy po "o" nie ma dwóch liter lub cyfr (dla wzorców zaczynających się od "o")
+        if (wordLower.startsWith('o') && wordLower.length >= 3) {
+            const afterO = wordLower.substring(1);
+            if (/^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/.test(afterO)) {
+                return false;
+            }
+        }
+        
+        // Sprawdź czy po "o" nie ma spacji i dwóch liter/cyfr
+        const spaceAndTwoCharPattern = /o\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/;
+        if (spaceAndTwoCharPattern.test(wordLower)) {
+            return false;
+        }
         
         for (const pattern of zeroPatterns) {
             if (pattern.test(wordLower)) {
