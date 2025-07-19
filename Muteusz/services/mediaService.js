@@ -178,7 +178,8 @@ class MediaService {
             }
             
         } catch (error) {
-            logger.error(`Błąd podczas czyszczenia cache: ${error.message}`);
+            const errorMessage = error?.message || 'Nieznany błąd';
+            logger.error(`Błąd podczas czyszczenia cache: ${errorMessage}`);
         }
     }
 
@@ -264,9 +265,10 @@ class MediaService {
                     }
 
                 } catch (error) {
+                    const errorMessage = error?.message || 'Nieznany błąd';
                     logger.error(formatMessage(this.config.messages.downloadError, {
                         fileName: attachment.name,
-                        error: error.message
+                        error: errorMessage
                     }));
                     
                     if (cachedFilePath) {
@@ -278,7 +280,8 @@ class MediaService {
             }
 
         } catch (error) {
-            logger.error(`Błąd w repostMedia: ${error.message}`);
+            const errorMessage = error?.message || 'Nieznany błąd';
+            logger.error(`Błąd w repostMedia: ${errorMessage}`);
         }
     }
 
@@ -294,7 +297,8 @@ class MediaService {
             await fs.rmdir(this.cacheDir);
             logger.info('Wyczyszczono wszystkie pliki cache');
         } catch (error) {
-            logger.error(`Błąd czyszczenia cache: ${error.message}`);
+            const errorMessage = error?.message || 'Nieznany błąd';
+            logger.error(`Błąd czyszczenia cache: ${errorMessage}`);
         }
     }
 }

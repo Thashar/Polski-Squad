@@ -44,7 +44,8 @@ class LogService {
                     await logChannel.send({ embeds: [embed] });
                 }
             } catch (error) {
-                logger.error('Błąd podczas logowania do kanału:', error);
+                const errorMessage = error?.message || 'Nieznany błąd';
+                logger.error('Błąd podczas logowania do kanału:', errorMessage);
             }
         }
     }
@@ -79,7 +80,8 @@ class LogService {
                 await logChannel.send({ embeds: [embed] });
             }
         } catch (error) {
-            logger.error(`Błąd logowania usunięcia ról: ${error.message}`);
+            const errorMessage = error?.message || 'Nieznany błąd';
+            logger.error(`Błąd logowania usunięcia ról: ${errorMessage}`);
         }
     }
 
@@ -113,7 +115,8 @@ class LogService {
                 await logChannel.send({ embeds: [embed] });
             }
         } catch (error) {
-            logger.error(`Błąd logowania przywrócenia ról: ${error.message}`);
+            const errorMessage = error?.message || 'Nieznany błąd';
+            logger.error(`Błąd logowania przywrócenia ról: ${errorMessage}`);
         }
     }
 }

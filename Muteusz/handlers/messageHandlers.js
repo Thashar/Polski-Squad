@@ -77,7 +77,8 @@ class MessageHandler {
         } catch (error) {
             // Nie loguj błędów regex - są obsłużone w serwisie
             if (!error.message.includes('Invalid regular expression')) {
-                await this.logService.logMessage('error', `Błąd auto-moderacji: ${error.message}`, message);
+                const errorMessage = error?.message || 'Nieznany błąd';
+                await this.logService.logMessage('error', `Błąd auto-moderacji: ${errorMessage}`, message);
             }
         }
     }
