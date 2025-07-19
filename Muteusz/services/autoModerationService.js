@@ -319,50 +319,71 @@ class AutoModerationService {
         const normalized = this.normalizeText(text);
         const foundBadWords = [];
 
+        // Najpierw sprawdź całe frazy (długie zwroty)
         for (const badWord of this.badWords) {
-            // Sprawdź czy tekst zawiera wyzwisko jako całe słowo lub frazę
             if (badWord.includes(' ')) {
                 // Dla fraz (np. "jebaj się", "chuj ci w dupę")
                 if (normalized.includes(badWord)) {
                     foundBadWords.push({
                         word: badWord,
                         original: badWord,
-                        normalized: badWord
+                        normalized: badWord,
+                        type: 'phrase'
                     });
                 }
-            } else {
-                // Dla pojedynczych słów
-                const words = normalized.split(/\s+/).filter(word => word.length > 0);
+            }
+        }
+
+        // Jeśli znaleziono frazy, nie sprawdzaj pojedynczych słów
+        if (foundBadWords.length > 0) {
+            return foundBadWords;
+        }
+
+        // Sprawdź pojedyncze słowa tylko jeśli nie ma fraz
+        for (const badWord of this.badWords) {
+            if (!badWord.includes(' ')) {
+                // Dla pojedynczych słów - sprawdź tylko jako całe słowa z word boundaries
+                const wordBoundaryPattern = new RegExp(`\\b${badWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(em|ami|ach|ów|y|i|a|e|o|u|ie|ę|ą)?\\b`, 'i');
                 
-                for (const word of words) {
-                    // Usuń znaki interpunkcyjne z początku i końca słowa
-                    const cleanWord = word.replace(/^[^\w\u00C0-\u017F]+|[^\w\u00C0-\u017F]+$/g, '');
+                if (wordBoundaryPattern.test(normalized)) {
+                    // Dodatkowo sprawdź czy to nie jest część zwykłej frazy
+                    const isPartOfNormalPhrase = this.isPartOfNormalPhrase(normalized, badWord);
                     
-                    // Sprawdź czy całe słowo to wyzwisko (nie fragment)
-                    if (cleanWord === badWord) {
+                    if (!isPartOfNormalPhrase) {
                         foundBadWords.push({
                             word: badWord,
-                            original: word,
-                            normalized: cleanWord
+                            original: badWord,
+                            normalized: badWord,
+                            type: 'word'
                         });
-                        break;
-                    }
-                    
-                    // Sprawdź czy słowo zaczyna się i kończy na wyzwisko (z możliwymi końcówkami)
-                    const wordPattern = new RegExp(`^${badWord}(em|ami|ach|ów|y|i|a|e|o|u|ie|ę|ą)?$`);
-                    if (wordPattern.test(cleanWord)) {
-                        foundBadWords.push({
-                            word: badWord,
-                            original: word,
-                            normalized: cleanWord
-                        });
-                        break;
                     }
                 }
             }
         }
 
         return foundBadWords;
+    }
+
+    /**
+     * Sprawdza czy słowo jest częścią normalnej frazy i nie powinno być flagowane
+     * @param {string} text - Pełny tekst
+     * @param {string} word - Sprawdzane słowo
+     * @returns {boolean} True jeśli jest częścią normalnej frazy
+     */
+    isPartOfNormalPhrase(text, word) {
+        const normalPhrases = [
+            'w dupie', 'na dupie', 'z dupy', 'do dupy', 'przy dupie', 'pod dupą', 'nad dupą',
+            'pojebało', 'pojebane', 'pojebany', 'pojebana', 'pojebaną', 'pojebanego',
+            'nie dupie', 'nie dupa', 'w dupe', 'na dupe', 'z dupe', 'dupie maryni'
+        ];
+
+        for (const phrase of normalPhrases) {
+            if (text.includes(phrase) && phrase.includes(word)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
