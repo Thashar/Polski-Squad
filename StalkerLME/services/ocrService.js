@@ -549,26 +549,56 @@ class OCRService {
     }
 
     calculateLineSimilarity(line, nick) {
-        const lineLower = line.toLowerCase();
-        const nickLower = nick.toLowerCase();
+        const lineLower = line.toLowerCase().replace(/[^a-z0-9]/g, ''); // Usuń wszystkie znaki specjalne
+        const nickLower = nick.toLowerCase().replace(/[^a-z0-9]/g, '');
         
         // Sprawdź czy nick występuje w linii
         if (lineLower.includes(nickLower)) {
             return 1.0; // 100% jeśli nick jest w linii
         }
         
-        // Znajdź najdłuższe słowo w linii
-        const words = line.split(/\s+/).filter(word => word.trim().length > 0);
-        if (words.length === 0) {
-            return 0;
+        // Oblicz podobieństwo na podstawie kolejnych znaków z nicku
+        return this.calculateOrderedSimilarity(lineLower, nickLower);
+    }
+
+    /**
+     * Oblicza podobieństwo na podstawie kolejnych znaków z nicku znalezionych w linii OCR
+     * @param {string} ocrText - Tekst z OCR (bez znaków specjalnych)
+     * @param {string} nick - Nick do sprawdzenia (bez znaków specjalnych)
+     * @returns {number} Podobieństwo 0-1
+     */
+    calculateOrderedSimilarity(ocrText, nick) {
+        if (!nick || nick.length === 0) return 0;
+        if (!ocrText || ocrText.length === 0) return 0;
+        
+        let matchedChars = 0;
+        let ocrIndex = 0;
+        
+        // Przejdź przez każdy znak w nicku i sprawdź czy występuje w kolejności w OCR
+        for (let nickIndex = 0; nickIndex < nick.length; nickIndex++) {
+            const nickChar = nick[nickIndex];
+            
+            // Znajdź ten znak w OCR począwszy od aktualnej pozycji
+            let found = false;
+            for (let i = ocrIndex; i < ocrText.length; i++) {
+                if (ocrText[i] === nickChar) {
+                    matchedChars++;
+                    ocrIndex = i + 1; // Przesuń się za znaleziony znak
+                    found = true;
+                    break;
+                }
+            }
+            
+            // Jeśli nie znaleziono znaku, kontynuuj (nie resetuj ocrIndex)
+            if (!found) {
+                // Można dodać penalty za brak znaku, ale na razie kontynuujemy
+            }
         }
         
-        const longestWord = words.reduce((longest, current) => 
-            current.length > longest.length ? current : longest
-        );
+        // Podobieństwo = znalezione znaki / całkowita długość nicku
+        const similarity = matchedChars / nick.length;
         
-        // Porównaj nick tylko z najdłuższym słowem
-        return calculateNameSimilarity(nick, longestWord);
+        return similarity;
     }
 
     analyzeLineEnd(line, nickName = null) {
