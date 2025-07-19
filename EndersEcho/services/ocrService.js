@@ -187,6 +187,7 @@ class OCRService {
 
     /**
      * Wyodrębnia nazwę bossa z drugiej linijki tekstu OCR
+     * Jeśli druga linijka zawiera cyfry, używa pierwszej linijki
      * @param {string} text - Tekst z OCR
      * @returns {string|null} - Nazwa bossa lub null
      */
@@ -194,8 +195,22 @@ class OCRService {
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
         
         if (lines.length >= 2) {
-            const bossLine = lines[1];
-            logger.info('Druga linijka tekstu (boss):', bossLine);
+            const secondLine = lines[1];
+            logger.info('Druga linijka tekstu (boss):', secondLine);
+            
+            // Sprawdź czy druga linijka zawiera cyfry
+            const hasDigits = /\d/.test(secondLine);
+            
+            let bossLine;
+            if (hasDigits && lines.length >= 1) {
+                // Jeśli druga linijka ma cyfry, użyj pierwszej linijki
+                bossLine = lines[0];
+                logger.info('Druga linijka zawiera cyfry, używam pierwszej linijki:', bossLine);
+            } else {
+                // Standardowo używaj drugiej linijki
+                bossLine = secondLine;
+                logger.info('Używam drugiej linijki (brak cyfr):', bossLine);
+            }
             
             // Oczyszczenie nazwy bossa z niepotrzebnych znaków
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
@@ -204,7 +219,7 @@ class OCRService {
             return cleanBossName || null;
         }
         
-        logger.info('Brak drugiej linijki dla nazwy bossa');
+        logger.info('Brak wystarczającej liczby linijek dla nazwy bossa');
         return null;
     }
 }
