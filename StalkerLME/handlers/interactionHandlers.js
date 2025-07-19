@@ -472,11 +472,12 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                             { name: '✅ Dopasowano i dodano punkty', value: processedUsers.length > 0 ? processedUsers.join('\n') : 'Brak', inline: false },
                             { name: '📈 Dodano punktów', value: addedPoints.toString(), inline: true },
                             { name: '👥 Przeszukano członków', value: `${targetMembers.size}`, inline: true },
-                            { name: '🎭 Rola karania', value: `<@&${data.config.punishmentRoleId}>`, inline: true }
+                            { name: '🎭 Rola karania (3+ pkt)', value: `<@&${data.config.punishmentRoleId}>`, inline: true },
+                            { name: '🚨 Rola karania (5+ pkt)', value: `<@&${data.config.lotteryBanRoleId}>`, inline: true }
                         )
                         .setImage(data.imageUrl)
                         .setTimestamp()
-                        .setFooter({ text: `Przeanalizowano przez ${interaction.user.tag} | 🎭 = rola karania | 📢 = ostrzeżenie wysłane` });
+                        .setFooter({ text: `Przeanalizowano przez ${interaction.user.tag} | 🎭 = rola karania (3+ pkt) | 🚨 = rola karania (5+ pkt) | 📢 = ostrzeżenie wysłane` });
                     
                     await interaction.followUp({ 
                         embeds: [punishEmbed],
