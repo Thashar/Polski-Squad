@@ -184,6 +184,9 @@ class OCRService {
                             continue;
                         }
                         
+                        // Sprawdź czy na końcu linii jest symbol © (niepewność)
+                        const hasUncertainty = line.trim().endsWith('©');
+                        
                         // Dodaj nick do zbioru przetworzonych
                         processedNicks.add(bestMatch.displayName);
                         
@@ -192,12 +195,13 @@ class OCRService {
                             user: bestMatch,
                             confirmed: true,
                             line: line.trim(),
-                            endValue: endResult.value
+                            endValue: endResult.value,
+                            uncertain: hasUncertainty
                         });
                         if (endResult.type === 'zero') {
-                            logger.info(`   🎉 POTWIERDZONY zero (wzorzec): ${bestMatch.displayName}`);
+                            logger.info(`   🎉 POTWIERDZONY zero (wzorzec): ${bestMatch.displayName}${hasUncertainty ? ' [NIEPEWNY ©]' : ''}`);
                         } else {
-                            logger.info(`   🎉 POTWIERDZONY zero (brak wyniku): ${bestMatch.displayName}`);
+                            logger.info(`   🎉 POTWIERDZONY zero (brak wyniku): ${bestMatch.displayName}${hasUncertainty ? ' [NIEPEWNY ©]' : ''}`);
                         }
                     } else if (endResult.type === 'negative') {
                         logger.info(`   ❌ Wynik negatywny: ${bestMatch.displayName} (${endResult.value})`);

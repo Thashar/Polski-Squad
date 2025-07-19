@@ -93,7 +93,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         }
         
         // Sprawdź urlopy przed potwierdzeniem (tylko dla punish)
-        await checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, attachment.url, config, punishmentService);
+        await checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, attachment.url, config, punishmentService, text);
         
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
@@ -589,7 +589,46 @@ async function handleButton(interaction, config, databaseService, punishmentServ
             return;
         }
         
-        // Przejdź do finalnego potwierdzenia - używamy update zamiast editReply
+        // Sprawdź niepewne wyniki przed finalnym potwierdzeniem
+        await checkUncertainResultsWithUpdate(interaction, finalPlayers, data.imageUrl, data.config, data.punishmentService, data.ocrText);
+    } else if (interaction.customId.startsWith('uncertainty_')) {
+        const parts = interaction.customId.split('_');
+        const choice = parts[1]; // 'yes' lub 'no'
+        const uncertaintyId = parts[2];
+        
+        const data = confirmationData.get(uncertaintyId);
+        
+        if (!data) {
+            await interaction.reply({ content: 'Dane wygasły. Spróbuj ponownie.', ephemeral: true });
+            return;
+        }
+        
+        if (data.originalUserId !== interaction.user.id) {
+            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', ephemeral: true });
+            return;
+        }
+        
+        confirmationData.delete(uncertaintyId);
+        
+        let finalPlayers = data.allPlayers;
+        
+        if (choice === 'no') {
+            // Usuń niepewne wyniki z listy
+            finalPlayers = data.allPlayers.filter(player => !data.uncertainPlayers.includes(player));
+            logger.info(`❓ Usunięto niepewne wyniki z listy: ${data.uncertainPlayers.join(', ')}`);
+        } else {
+            logger.info(`❓ Niepewne wyniki zostają w liście: ${data.uncertainPlayers.join(', ')}`);
+        }
+        
+        if (finalPlayers.length === 0) {
+            await interaction.update({
+                content: 'Brak graczy do ukarania po wykluczeniu niepewnych wyników.',
+                components: []
+            });
+            return;
+        }
+        
+        // Przejdź do finalnego potwierdzenia
         await showFinalConfirmationWithUpdate(interaction, finalPlayers, data.imageUrl, data.config, data.punishmentService);
         
     } else if (interaction.customId.startsWith('cancel_')) {
@@ -708,7 +747,7 @@ async function registerSlashCommands(client) {
     }
 }
 
-async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService) {
+async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService, ocrText = '') {
     const vacationChannelId = '1269726207633522740';
     const oneMonthAgo = new Date();
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
@@ -748,10 +787,10 @@ async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, i
         
         if (playersWithVacation.length > 0) {
             // Pokaż pytanie o urlopowiczów
-            await showVacationQuestion(interaction, playersWithVacation, zeroScorePlayers, imageUrl, config, punishmentService);
+            await showVacationQuestion(interaction, playersWithVacation, zeroScorePlayers, imageUrl, config, punishmentService, ocrText);
         } else {
-            // Przejdź do normalnego potwierdzenia
-            await showFinalConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService);
+            // Sprawdź niepewne wyniki (© na końcu linii) przed finalnym potwierdzeniem
+            await checkUncertainResults(interaction, zeroScorePlayers, imageUrl, config, punishmentService, ocrText);
         }
         
     } catch (error) {
@@ -766,7 +805,160 @@ async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, i
     }
 }
 
-async function showVacationQuestion(interaction, playersWithVacation, allPlayers, imageUrl, config, punishmentService) {
+async function checkUncertainResults(interaction, players, imageUrl, config, punishmentService, ocrText) {
+    // Sprawdź które graczy mają symbol © na końcu linii
+    const uncertainPlayers = [];
+    const certainPlayers = [];
+    
+    for (const player of players) {
+        // Znajdź linię z tym graczem w tekście OCR
+        const lines = ocrText.split('\n');
+        let hasUncertainty = false;
+        
+        for (const line of lines) {
+            const normalizedLine = line.toLowerCase();
+            const normalizedPlayer = player.toLowerCase();
+            
+            if (normalizedLine.includes(normalizedPlayer) && line.trim().endsWith('©')) {
+                hasUncertainty = true;
+                break;
+            }
+        }
+        
+        if (hasUncertainty) {
+            uncertainPlayers.push(player);
+        } else {
+            certainPlayers.push(player);
+        }
+    }
+    
+    if (uncertainPlayers.length > 0) {
+        // Pokaż pytanie o niepewne wyniki
+        await showUncertaintyQuestion(interaction, uncertainPlayers, players, imageUrl, config, punishmentService);
+    } else {
+        // Przejdź do normalnego potwierdzenia
+        await showFinalConfirmation(interaction, players, imageUrl, config, punishmentService);
+    }
+}
+
+async function checkUncertainResultsWithUpdate(interaction, players, imageUrl, config, punishmentService, ocrText) {
+    // Sprawdź które graczy mają symbol © na końcu linii
+    const uncertainPlayers = [];
+    const certainPlayers = [];
+    
+    for (const player of players) {
+        // Znajdź linię z tym graczem w tekście OCR
+        const lines = ocrText.split('\n');
+        let hasUncertainty = false;
+        
+        for (const line of lines) {
+            const normalizedLine = line.toLowerCase();
+            const normalizedPlayer = player.toLowerCase();
+            
+            if (normalizedLine.includes(normalizedPlayer) && line.trim().endsWith('©')) {
+                hasUncertainty = true;
+                break;
+            }
+        }
+        
+        if (hasUncertainty) {
+            uncertainPlayers.push(player);
+        } else {
+            certainPlayers.push(player);
+        }
+    }
+    
+    if (uncertainPlayers.length > 0) {
+        // Pokaż pytanie o niepewne wyniki
+        await showUncertaintyQuestionWithUpdate(interaction, uncertainPlayers, players, imageUrl, config, punishmentService);
+    } else {
+        // Przejdź do normalnego potwierdzenia
+        await showFinalConfirmationWithUpdate(interaction, players, imageUrl, config, punishmentService);
+    }
+}
+
+async function showUncertaintyQuestion(interaction, uncertainPlayers, allPlayers, imageUrl, config, punishmentService) {
+    const uncertaintyId = Date.now().toString();
+    
+    // Zapisz dane do mapy
+    confirmationData.set(uncertaintyId, {
+        action: 'uncertainty_check',
+        uncertainPlayers: uncertainPlayers,
+        allPlayers: allPlayers,
+        imageUrl: imageUrl,
+        config: config,
+        punishmentService: punishmentService,
+        originalUserId: interaction.user.id
+    });
+    
+    // Usuń dane po 5 minut
+    setTimeout(() => {
+        confirmationData.delete(uncertaintyId);
+    }, 5 * 60 * 1000);
+    
+    const playersText = uncertainPlayers.map(nick => `**${nick}**`).join(', ');
+    
+    const yesButton = new ButtonBuilder()
+        .setCustomId(`uncertainty_yes_${uncertaintyId}`)
+        .setLabel('✅ Tak')
+        .setStyle(ButtonStyle.Success);
+    
+    const noButton = new ButtonBuilder()
+        .setCustomId(`uncertainty_no_${uncertaintyId}`)
+        .setLabel('❌ Nie')
+        .setStyle(ButtonStyle.Danger);
+    
+    const row = new ActionRowBuilder()
+        .addComponents(yesButton, noButton);
+    
+    await interaction.editReply({
+        content: `❓ Bot nie jest pewny wyniku dla: ${playersText} (wykryto symbol ©).\nCzy dodać ${uncertainPlayers.length > 1 ? 'tych graczy' : 'tego gracza'} do listy z zerami?`,
+        components: [row]
+    });
+}
+
+async function showUncertaintyQuestionWithUpdate(interaction, uncertainPlayers, allPlayers, imageUrl, config, punishmentService) {
+    const uncertaintyId = Date.now().toString();
+    
+    // Zapisz dane do mapy
+    confirmationData.set(uncertaintyId, {
+        action: 'uncertainty_check',
+        uncertainPlayers: uncertainPlayers,
+        allPlayers: allPlayers,
+        imageUrl: imageUrl,
+        config: config,
+        punishmentService: punishmentService,
+        originalUserId: interaction.user.id
+    });
+    
+    // Usuń dane po 5 minut
+    setTimeout(() => {
+        confirmationData.delete(uncertaintyId);
+    }, 5 * 60 * 1000);
+    
+    const playersText = uncertainPlayers.map(nick => `**${nick}**`).join(', ');
+    
+    const yesButton = new ButtonBuilder()
+        .setCustomId(`uncertainty_yes_${uncertaintyId}`)
+        .setLabel('✅ Tak')
+        .setStyle(ButtonStyle.Success);
+    
+    const noButton = new ButtonBuilder()
+        .setCustomId(`uncertainty_no_${uncertaintyId}`)
+        .setLabel('❌ Nie')
+        .setStyle(ButtonStyle.Danger);
+    
+    const row = new ActionRowBuilder()
+        .addComponents(yesButton, noButton);
+    
+    await interaction.update({
+        content: `❓ Bot nie jest pewny wyniku dla: ${playersText} (wykryto symbol ©).\nCzy dodać ${uncertainPlayers.length > 1 ? 'tych graczy' : 'tego gracza'} do listy z zerami?`,
+        components: [row],
+        embeds: []
+    });
+}
+
+async function showVacationQuestion(interaction, playersWithVacation, allPlayers, imageUrl, config, punishmentService, ocrText = '') {
     const vacationId = Date.now().toString();
     
     // Zapisz dane do mapy
@@ -777,7 +969,8 @@ async function showVacationQuestion(interaction, playersWithVacation, allPlayers
         imageUrl: imageUrl,
         config: config,
         punishmentService: punishmentService,
-        originalUserId: interaction.user.id
+        originalUserId: interaction.user.id,
+        ocrText: ocrText
     });
     
     // Usuń dane po 5 minut
