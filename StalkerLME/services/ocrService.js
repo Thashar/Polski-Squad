@@ -595,10 +595,20 @@ class OCRService {
             }
         }
         
-        // Podobieństwo = znalezione znaki / całkowita długość nicku
-        const similarity = matchedChars / nick.length;
+        // Podstawowe podobieństwo = znalezione znaki / całkowita długość nicku
+        const baseSimilarity = matchedChars / nick.length;
         
-        return similarity;
+        // Oblicz karę za różnicę w długości (proporcjonalny system)
+        const lengthDifference = Math.abs(ocrText.length - nick.length);
+        const maxLength = Math.max(ocrText.length, nick.length);
+        const lengthDifferencePercent = maxLength > 0 ? lengthDifference / maxLength : 0;
+        
+        // Proporcjonalna kara: jeśli różnica 50% = dziel przez 2, 25% = dziel przez 1.5, itd.
+        // Wzór: dzielnik = 1 + (procent różnicy)
+        const lengthPenaltyDivisor = 1 + lengthDifferencePercent;
+        const finalSimilarity = baseSimilarity / lengthPenaltyDivisor;
+        
+        return Math.max(0, finalSimilarity);
     }
 
     analyzeLineEnd(line, nickName = null) {
