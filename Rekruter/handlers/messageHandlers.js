@@ -35,6 +35,13 @@ async function handleMessage(
   if (message.channel.id !== RECRUIT_CHANNEL_ID) return;
   if (message.author.bot) return;
 
+  // Komenda !nick - zwraca PLㅣ + nick użytkownika
+  if (message.content.trim() === '!nick') {
+    const userDisplayName = message.member.displayName;
+    await message.reply(`PLㅣ${userDisplayName}`);
+    return;
+  }
+
   const step = state.userStates.get(message.author.id)?.step;
 
   switch (step) {
