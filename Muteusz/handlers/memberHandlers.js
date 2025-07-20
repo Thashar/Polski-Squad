@@ -67,6 +67,21 @@ class MemberHandler {
             const oldRoleIds = oldMember.roles.cache.map(role => role.id);
             const newRoleIds = newMember.roles.cache.map(role => role.id);
             const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
+            const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
+
+            // Sprawdź czy usunięto główną rolę - jeśli tak, nadaj rolę 1173760134527324270
+            const removedMainRoles = removedRoles.filter(id => mainRoles.includes(id));
+            if (removedMainRoles.length > 0) {
+                // Sprawdź czy użytkownik nie ma już roli 1173760134527324270
+                if (!newRoleIds.includes('1173760134527324270')) {
+                    try {
+                        await newMember.roles.add('1173760134527324270');
+                        this.logger.info(`🔄 Nadano rolę 1173760134527324270 dla ${newMember.displayName} (usunięto główną rolę: ${removedMainRoles.join(', ')})`);
+                    } catch (error) {
+                        this.logger.error(`❌ Błąd nadawania roli 1173760134527324270:`, error?.message || 'Nieznany błąd');
+                    }
+                }
+            }
 
             if (addedRoles.length === 0) return;
 
