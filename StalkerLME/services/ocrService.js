@@ -74,7 +74,7 @@ class OCRService {
                 // 4. INWERSJA OBRAZU - biały tekst staje się czarnym
                 .negate()
                 // 5. Gamma correction - poprawia czytelność środkowych tonów
-                .gamma(1.4)
+                .gamma(2.0)
                 // 6. Mocniejszy kontrast po inwersji dla ostrzejszego tekstu
                 .linear(2.2, -100) // Agresywniejszy kontrast
                 // 7. Wyostrzenie krawędzi tekstu
