@@ -32,15 +32,26 @@ async function handleMessage(
   client,
   RECRUIT_CHANNEL_ID
 ) {
-  if (message.channel.id !== RECRUIT_CHANNEL_ID) return;
   if (message.author.bot) return;
 
+  // Lista kanałów gdzie działa komenda !nick
+  const allowedChannels = [
+    RECRUIT_CHANNEL_ID,
+    '1262792174475673610', // STALKER_LME_WARNING_CHANNEL_0
+    '1200051393843695699', // STALKER_LME_WARNING_CHANNEL_1
+    '1194298890069999756', // STALKER_LME_WARNING_CHANNEL_2
+    '1194299628905042040'  // STALKER_LME_WARNING_CHANNEL_MAIN
+  ];
+
   // Komenda !nick - zwraca PLㅣ + nick użytkownika
-  if (message.content.trim() === '!nick') {
+  if (message.content.trim() === '!nick' && allowedChannels.includes(message.channel.id)) {
     const userDisplayName = message.member.displayName;
     await message.reply(`PLㅣ${userDisplayName}`);
     return;
   }
+
+  // Reszta logiki tylko dla kanału rekrutacyjnego
+  if (message.channel.id !== RECRUIT_CHANNEL_ID) return;
 
   const step = state.userStates.get(message.author.id)?.step;
 
