@@ -157,10 +157,19 @@ class OCRService {
     normalizeScore(scoreText, channelConfig) {
         logger.info(`Normalizacja wyniku: "${scoreText}"`);
         
-        // Specjalny wyjątek dla Daily: "sg" -> "9"
-        if (channelConfig.name === 'Daily' && scoreText.toLowerCase().includes('sg')) {
-            logger.info('DAILY: Wykryto "sg" - zamieniam na "9"');
-            scoreText = scoreText.toLowerCase().replace(/sg/g, '9');
+        // Specjalne wyjątki dla Daily
+        if (channelConfig.name === 'Daily') {
+            // Wyjątek 1: "sg" -> "9"
+            if (scoreText.toLowerCase().includes('sg')) {
+                logger.info('DAILY: Wykryto "sg" - zamieniam na "9"');
+                scoreText = scoreText.toLowerCase().replace(/sg/g, '9');
+            }
+            
+            // Wyjątek 2: "&" i "& " -> "9" (przed dwucyfrowym wynikiem)
+            if (scoreText.includes('&')) {
+                logger.info('DAILY: Wykryto "&" - zamieniam na "9"');
+                scoreText = scoreText.replace(/& /g, '9').replace(/&/g, '9');
+            }
         }
 
         let normalized = scoreText;
