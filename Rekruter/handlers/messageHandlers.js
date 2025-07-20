@@ -43,11 +43,40 @@ async function handleMessage(
     '1194299628905042040'  // STALKER_LME_WARNING_CHANNEL_MAIN
   ];
 
-  // Komenda !nick - zwraca PLㅣ + nick użytkownika
-  if (message.content.trim() === '!nick' && allowedChannels.includes(message.channel.id)) {
-    const userDisplayName = message.member.displayName;
-    await message.reply(`PLㅣ${userDisplayName}`);
-    return;
+  // Komendy dostępne na wybranych kanałach
+  if (allowedChannels.includes(message.channel.id)) {
+    const command = message.content.trim();
+    
+    // Komenda !nick - zwraca PLㅣ + nick użytkownika
+    if (command === '!nick') {
+      const userDisplayName = message.member.displayName;
+      await message.reply(`PLㅣ${userDisplayName}`);
+      return;
+    }
+    
+    // Komenda !clan - Polski Squad główny
+    if (command === '!clan') {
+      await message.reply('Aplikuj do: Polski Squad ID: 42578');
+      return;
+    }
+    
+    // Komenda !clan2 - PolskiSquad²
+    if (command === '!clan2') {
+      await message.reply('Aplikuj do: PolskiSquad² ID: 202226');
+      return;
+    }
+    
+    // Komenda !clan1 - PolskiSquad¹
+    if (command === '!clan1') {
+      await message.reply('Aplikuj do: PolskiSquad¹ ID: 125634');
+      return;
+    }
+    
+    // Komenda !clan0 - PolskiSquad⁰
+    if (command === '!clan0') {
+      await message.reply('Aplikuj do: PolskiSquad⁰ ID: 11616');
+      return;
+    }
   }
 
   // Reszta logiki tylko dla kanału rekrutacyjnego
