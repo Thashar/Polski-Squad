@@ -69,18 +69,29 @@ class MemberHandler {
             const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
             const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
 
-            // Sprawdź czy usunięto główną rolę - jeśli tak, nadaj rolę 1173760134527324270
+            // Sprawdź czy usunięto główną rolę - jeśli tak, poczekaj 5s i sprawdź ponownie
             const removedMainRoles = removedRoles.filter(id => mainRoles.includes(id));
             if (removedMainRoles.length > 0) {
-                // Sprawdź czy użytkownik nie ma już roli 1173760134527324270
-                if (!newRoleIds.includes('1173760134527324270')) {
+                // Poczekaj 5 sekund przed sprawdzeniem
+                setTimeout(async () => {
                     try {
-                        await newMember.roles.add('1173760134527324270');
-                        this.logger.info(`🔄 Nadano rolę 1173760134527324270 dla ${newMember.displayName} (usunięto główną rolę: ${removedMainRoles.join(', ')})`);
+                        // Pobierz świeże dane użytkownika
+                        const freshMember = await newMember.guild.members.fetch(newMember.id);
+                        const currentRoleIds = freshMember.roles.cache.map(role => role.id);
+                        
+                        // Sprawdź czy użytkownik nadal nie ma żadnej głównej roli
+                        const hasMainRole = mainRoles.some(roleId => currentRoleIds.includes(roleId));
+                        
+                        if (!hasMainRole && !currentRoleIds.includes('1173760134527324270')) {
+                            await freshMember.roles.add('1173760134527324270');
+                            this.logger.info(`🔄 Nadano rolę 1173760134527324270 dla ${freshMember.displayName} (brak głównych ról po 5s, usunięto: ${removedMainRoles.join(', ')})`);
+                        } else if (hasMainRole) {
+                            this.logger.info(`ℹ️ Nie nadano roli 1173760134527324270 dla ${freshMember.displayName} (posiada główną rolę)`);
+                        }
                     } catch (error) {
-                        this.logger.error(`❌ Błąd nadawania roli 1173760134527324270:`, error?.message || 'Nieznany błąd');
+                        this.logger.error(`❌ Błąd nadawania roli 1173760134527324270 po 5s:`, error?.message || 'Nieznany błąd');
                     }
-                }
+                }, 5000);
             }
 
             if (addedRoles.length === 0) return;
