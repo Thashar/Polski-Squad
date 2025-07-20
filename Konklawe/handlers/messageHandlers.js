@@ -26,7 +26,6 @@ class MessageHandler {
                 !message.member.roles.cache.has(this.config.roles.papal) &&
                 message.content.toLowerCase() !== this.gameService.trigger.toLowerCase()) {
                 
-                this.gameService.addAttempt(message.author.id, message.content);
                 this.gameService.registerAttempt(message.author.id, message.content, false);
                 return;
             }
