@@ -50,31 +50,36 @@ async function handleMessage(
     // Komenda !nick - zwraca PLㅣ + nick użytkownika
     if (command === '!nick') {
       const userDisplayName = message.member.displayName;
-      await message.reply(`PLㅣ${userDisplayName}`);
+      await message.channel.send(`PLㅣ${userDisplayName}`);
+      await safeDeleteMessage(message);
       return;
     }
     
     // Komenda !clan - Polski Squad główny
     if (command === '!clan') {
-      await message.reply('Aplikuj do: Polski Squad ID: 42578');
+      await message.channel.send('Aplikuj do: Polski Squad ID: 42578');
+      await safeDeleteMessage(message);
       return;
     }
     
     // Komenda !clan2 - PolskiSquad²
     if (command === '!clan2') {
-      await message.reply('Aplikuj do: PolskiSquad² ID: 202226');
+      await message.channel.send('Aplikuj do: PolskiSquad² ID: 202226');
+      await safeDeleteMessage(message);
       return;
     }
     
     // Komenda !clan1 - PolskiSquad¹
     if (command === '!clan1') {
-      await message.reply('Aplikuj do: PolskiSquad¹ ID: 125634');
+      await message.channel.send('Aplikuj do: PolskiSquad¹ ID: 125634');
+      await safeDeleteMessage(message);
       return;
     }
     
     // Komenda !clan0 - PolskiSquad⁰
     if (command === '!clan0') {
-      await message.reply('Aplikuj do: PolskiSquad⁰ ID: 11616');
+      await message.channel.send('Aplikuj do: PolskiSquad⁰ ID: 11616');
+      await safeDeleteMessage(message);
       return;
     }
   }
