@@ -47,6 +47,7 @@ async function handleMessage(
   if (message.content.trim() === '!nick' && allowedChannels.includes(message.channel.id)) {
     const userDisplayName = message.member.displayName;
     await message.reply(`PLㅣ${userDisplayName}`);
+    await safeDeleteMessage(message);
     return;
   }
 
