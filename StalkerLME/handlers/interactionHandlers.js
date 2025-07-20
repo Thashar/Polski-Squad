@@ -372,7 +372,8 @@ async function handleDebugRolesCommand(interaction, config) {
             .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}`)
             .addFields(
                 { name: '👥 Członkowie', value: membersList.length > 1024 ? membersList.substring(0, 1020) + '...' : membersList, inline: false },
-                { name: '🎭 Rola karania', value: punishmentRoleInfo, inline: true },
+                { name: '🎭 Rola karania (3+ pkt)', value: punishmentRoleInfo, inline: true },
+                { name: '🚨 Rola blokady loterii (5+ pkt)', value: `<@&${config.lotteryBanRoleId}>`, inline: true },
                 { name: '📢 Kanał ostrzeżeń', value: warningChannelInfo, inline: true },
                 { name: '⚙️ Konfiguracja', value: `Kategoria: ${category}\nStrefa czasowa: ${config.timezone}\nDeadline bossa: ${config.bossDeadline.hour}:${config.bossDeadline.minute.toString().padStart(2, '0')}`, inline: false }
             )
@@ -471,7 +472,6 @@ async function handleButton(interaction, config, databaseService, punishmentServ
                             { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
                             { name: '✅ Dopasowano i dodano punkty', value: processedUsers.length > 0 ? processedUsers.join('\n') : 'Brak', inline: false },
                             { name: '📈 Dodano punktów', value: addedPoints.toString(), inline: true },
-                            { name: '👥 Przeszukano członków', value: `${targetMembers.size}`, inline: true },
                             { name: '🎭 Rola karania (3+ pkt)', value: `<@&${data.config.punishmentRoleId}>`, inline: true },
                             { name: '🚨 Rola karania (5+ pkt)', value: `<@&${data.config.lotteryBanRoleId}>`, inline: true }
                         )
