@@ -5,25 +5,25 @@ Kolekcja botów Discord dla serwera Polish Squad, zawierająca siedem specjalist
 ## Boty
 
 ### 🎯 Rekruter Bot
-Bot do zarządzania procesem rekrutacji z weryfikacją kwalifikacji poprzez OCR.
+Bot do zarządzania procesem rekrutacji z weryfikacją kwalifikacji poprzez OCR oraz komendami clan (!nick, !clan, !clan0-2).
 
 ### 🎓 Szkolenia Bot
 Bot do zarządzania wątkami szkoleniowymi z automatycznymi przypomnieniami.
 
 ### ⚔️ Stalker LME Bot
-System kar dla graczy z analizą OCR obrazów do śledzenia pokonanych bossów.
+System kar dla graczy z analizą OCR obrazów do śledzenia pokonanych bossów. Zaawansowane algorytmy podobieństwa z proporcjonalną karą za różnicę długości tekstu.
 
 ### 🤖 Muteusz Bot
-Bot do zarządzania mediami i automatycznego zarządzania rolami z funkcjami przywracania.
+Bot do zarządzania mediami, automatycznego zarządzania rolami z funkcjami przywracania, auto-moderacji oraz systemu ekskluzywnych grup ról.
 
 ### 🏆 EndersEcho Bot
-Bot rankingowy z analizą OCR obrazów wyników gier. Automatycznie przyznaje role TOP 1-30 najlepszym graczom oraz ekstraktuje nazwy bossów z drugiej linijki OCR.
+Bot rankingowy z analizą OCR obrazów wyników gier. Automatycznie przyznaje role TOP 1-30 najlepszym graczom oraz ekstraktuje nazwy bossów z odpowiedniej linijki OCR (2. linia lub 1. linia jeśli 2. zawiera cyfry).
 
 ### 🎯 Kontroler Bot
-Bot weryfikacji wyników dla kanałów Daily i CX z zaawansowaną analizą OCR i systemem blokowania użytkowników z rolą karną.
+Bot weryfikacji wyników dla kanałów Daily i CX z zaawansowaną analizą OCR, normalizacją znaków (& → 9 w Daily) i systemem blokowania użytkowników z rolą karną.
 
 ### ⛪ Konklawe Bot
-Bot do gry słownej "Konklawe" z systemem haseł, podpowiedzi, timerów przypominających i medali Virtutti Papajlari. Zawiera system logowania historii gier i przyciskowe statystyki.
+Bot do gry słownej "Konklawe" z systemem haseł, podpowiedzi, timerów przypominających i medali Virtutti Papajlari. Zawiera system logowania historii gier i przyciskowe statystyki. Naprawiono problem podwójnego liczenia prób.
 
 ## System Logowania
 
@@ -122,17 +122,20 @@ Polski-Squad-Bot-Collection/
 │   │   └── messages.js
 │   ├── handlers/
 │   │   ├── interactionHandlers.js
-│   │   ├── memberHandlers.js
+│   │   ├── memberHandlers.js      # Ekskluzywne grupy ról + automatyczne zarządzanie
 │   │   └── messageHandlers.js
 │   ├── services/
+│   │   ├── autoModerationService.js
 │   │   ├── logService.js
 │   │   ├── mediaService.js
 │   │   ├── roleManagementService.js
-│   │   └── specialRolesService.js
+│   │   ├── specialRolesService.js
+│   │   └── warningService.js
 │   ├── utils/
 │   │   ├── helpers.js
 │   │   └── migration.js          # Skrypt migracji ról z ENV do JSON
 │   ├── data/
+│   │   ├── removed_roles.json    # Zapisane role do przywrócenia
 │   │   └── special_roles.json
 │   └── temp/
 │       └── media_cache/
