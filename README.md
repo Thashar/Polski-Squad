@@ -5,25 +5,25 @@ Kolekcja botów Discord dla serwera Polish Squad, zawierająca siedem specjalist
 ## Boty
 
 ### 🎯 Rekruter Bot
-Bot do zarządzania procesem rekrutacji z weryfikacją kwalifikacji poprzez OCR oraz komendami clan (!nick, !clan, !clan0-2).
+Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach.
 
 ### 🎓 Szkolenia Bot
-Bot do zarządzania wątkami szkoleniowymi z automatycznymi przypomnieniami.
+Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z automatycznymi przypomnieniami dla uczestników, aby nikt nie zapomniał o ważnych sesjach treningowych.
 
 ### ⚔️ Stalker LME Bot
-System kar dla graczy z analizą OCR obrazów do śledzenia pokonanych bossów. Zaawansowane algorytmy podobieństwa z proporcjonalną karą za różnicę długości tekstu.
+System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń i automatyczne resetowanie punktów.
 
 ### 🤖 Muteusz Bot
-Bot do zarządzania mediami, automatycznego zarządzania rolami z funkcjami przywracania, auto-moderacji oraz systemu ekskluzywnych grup ról.
+Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń.
 
 ### 🏆 EndersEcho Bot
-Bot rankingowy z analizą OCR obrazów wyników gier. Automatycznie przyznaje role TOP 1-30 najlepszym graczom oraz ekstraktuje nazwy bossów z odpowiedniej linijki OCR (2. linia lub 1. linia jeśli 2. zawiera cyfry).
+Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe.
 
 ### 🎯 Kontroler Bot
-Bot weryfikacji wyników dla kanałów Daily i CX z zaawansowaną analizą OCR, normalizacją znaków (& → 9 w Daily) i systemem blokowania użytkowników z rolą karną.
+Weryfikuje wyniki dla kanałów Daily i CX. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. Blokuje użytkowników z karami.
 
 ### ⛪ Konklawe Bot
-Bot do gry słownej "Konklawe" z systemem haseł, podpowiedzi, timerów przypominających i medali Virtutti Papajlari. Zawiera system logowania historii gier i przyciskowe statystyki. Naprawiono problem podwójnego liczenia prób.
+Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki.
 
 ## System Logowania
 
