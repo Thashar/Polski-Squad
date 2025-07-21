@@ -19,7 +19,7 @@ class MemberHandler {
         await this.handleExclusiveRoleGroups(oldMember, newMember);
         
         // Sprawdź czy są ustawienia automatycznego zarządzania rolami
-        if (!this.config.roleManagement || !this.config.roleManagement.triggerRoleId || !this.config.roleManagement.rolesToRemove) {
+        if (!this.config.roleManagement || !this.config.roleManagement.triggerRoleId) {
             return;
         }
 
