@@ -15,12 +15,32 @@ class MemberHandler {
      * @param {GuildMember} newMember - Nowy członek
      */
     async handleGuildMemberUpdate(oldMember, newMember) {
+        // Debug logging
+        this.logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
+        
         // Sprawdź zmiany ról do obsługi grup ekskluzywnych
         await this.handleExclusiveRoleGroups(oldMember, newMember);
         
         // Sprawdź czy są ustawienia automatycznego zarządzania rolami
         if (!this.config.roleManagement || !this.config.roleManagement.triggerRoleId) {
+            this.logger.info(`❌ Brak konfiguracji roleManagement lub triggerRoleId`);
             return;
+        }
+        
+        this.logger.info(`✅ Konfiguracja OK, triggerRoleId: ${this.config.roleManagement.triggerRoleId}`);
+        
+        // Debug informacje o rolach
+        const oldRoleIds = oldMember.roles.cache.map(r => r.id);
+        const newRoleIds = newMember.roles.cache.map(r => r.id);
+        const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
+        const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
+        
+        if (addedRoles.length > 0) {
+            this.logger.info(`➕ Dodane role: ${addedRoles.join(', ')}`);
+        }
+        if (removedRoles.length > 0) {
+            this.logger.info(`➖ Usunięte role: ${removedRoles.join(', ')}`);
+            this.logger.info(`🎯 Sprawdzam czy usunięto trigger rolę: ${this.config.roleManagement.triggerRoleId}`);
         }
 
         // Obsłuż usuwanie ról (gdy użytkownik traci główną rolę)

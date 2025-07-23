@@ -82,12 +82,10 @@ class InteractionHandler {
                         .setMinValue(1)
                         .setMaxValue(100)
                 )
-                .addIntegerOption(option =>
+                .addStringOption(option =>
                     option.setName('czas')
-                        .setDescription('Ilość minut wstecz do usunięcia wiadomości (max 1000)')
+                        .setDescription('Czas wstecz w formacie np. 2h30m (max 16h 40m)')
                         .setRequired(false)
-                        .setMinValue(1)
-                        .setMaxValue(1000)
                 ),
             
             new SlashCommandBuilder()
@@ -98,12 +96,10 @@ class InteractionHandler {
                         .setDescription('Użytkownik do uciszenia')
                         .setRequired(true)
                 )
-                .addIntegerOption(option =>
+                .addStringOption(option =>
                     option.setName('czas')
-                        .setDescription('Czas w minutach (brak = na stałe)')
+                        .setDescription('Czas w formacie np. 1d4h30m (d=dni, h=godziny, m=minuty, brak = na stałe)')
                         .setRequired(false)
-                        .setMinValue(1)
-                        .setMaxValue(10080) // 7 dni
                 )
                 .addStringOption(option =>
                     option.setName('powód')
@@ -808,7 +804,30 @@ class InteractionHandler {
 
         const user = interaction.options.getUser('użytkownik');
         const amount = interaction.options.getInteger('ilość');
-        const minutes = interaction.options.getInteger('czas');
+        const timeString = interaction.options.getString('czas');
+
+        // Parse time format for clean command
+        let minutes = null;
+        if (timeString) {
+            const parsedTime = this.parseTimeFormat(timeString);
+            if (parsedTime.error) {
+                await interaction.reply({
+                    content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 2h30m (2 godziny, 30 minut)`,
+                    ephemeral: true
+                });
+                return;
+            }
+            minutes = parsedTime.minutes;
+            
+            // Sprawdź limit (1000 minut = 16h 40m)
+            if (minutes > 1000) {
+                await interaction.reply({
+                    content: `❌ Maksymalny czas to 16h 40m (1000 minut)`,
+                    ephemeral: true
+                });
+                return;
+            }
+        }
 
         await interaction.deferReply({ ephemeral: true });
 
@@ -842,7 +861,8 @@ class InteractionHandler {
                 // Publiczne powiadomienie o sukcesie
                 await interaction.followUp({ content: successMessage, ephemeral: false });
                 
-                await this.logService.logMessage('success', `Usunięto ${deletedCount} wiadomości na kanale ${interaction.channel.name}`, interaction);
+                const timeInfo = timeString ? ` (${this.parseTimeFormat(timeString).formatted} wstecz)` : '';
+                await this.logService.logMessage('success', `Usunięto ${deletedCount} wiadomości na kanale ${interaction.channel.name}${timeInfo}`, interaction);
             } else {
                 await interaction.editReply({ content: this.config.messages.cleanNoMessages });
             }
@@ -990,8 +1010,22 @@ class InteractionHandler {
         }
 
         const targetUser = interaction.options.getUser('użytkownik');
-        const timeInMinutes = interaction.options.getInteger('czas');
+        const timeString = interaction.options.getString('czas');
         const reason = interaction.options.getString('powód');
+
+        // Parse time format (1d4h30m)
+        let timeInMinutes = null;
+        if (timeString) {
+            const parsedTime = this.parseTimeFormat(timeString);
+            if (parsedTime.error) {
+                await interaction.reply({
+                    content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 1d4h30m (1 dzień, 4 godziny, 30 minut)`,
+                    ephemeral: true
+                });
+                return;
+            }
+            timeInMinutes = parsedTime.minutes;
+        }
 
         if (!targetUser) {
             await interaction.reply({
@@ -1047,9 +1081,8 @@ class InteractionHandler {
             let reasonText = "";
             
             if (timeInMinutes) {
-                timeText = formatMessage(this.config.messages.muteSuccessTemporary, {
-                    duration: timeInMinutes
-                });
+                const parsedTime = this.parseTimeFormat(timeString);
+                timeText = ` na ${parsedTime.formatted}`;
                 
                 // Ustaw automatyczne odciszenie
                 setTimeout(async () => {
@@ -1057,7 +1090,7 @@ class InteractionHandler {
                         const memberToUnmute = await interaction.guild.members.fetch(targetUser.id);
                         if (memberToUnmute && memberToUnmute.roles.cache.has(this.config.mute.muteRoleId)) {
                             await memberToUnmute.roles.remove(muteRole);
-                            await this.logService.logMessage('info', `Automatyczne odciszenie użytkownika ${targetUser.tag} po ${timeInMinutes} minutach`, interaction);
+                            await this.logService.logMessage('info', `Automatyczne odciszenie użytkownika ${targetUser.tag} po ${parsedTime.formatted}`, interaction);
                         }
                     } catch (error) {
                         await this.logService.logMessage('error', `Błąd podczas automatycznego odciszania ${targetUser.tag}: ${error.message}`, interaction);
@@ -1084,13 +1117,13 @@ class InteractionHandler {
             
             // Dodatkowa informacja o automatycznym odciszeniu
             if (timeInMinutes) {
-                const unmuteScheduledMessage = formatMessage(this.config.messages.muteUnmuteScheduled, {
-                    duration: timeInMinutes
-                });
+                const parsedTime = this.parseTimeFormat(timeString);
+                const unmuteScheduledMessage = `🔄 Automatyczne odciszenie za ${parsedTime.formatted}`;
                 await interaction.followUp({ content: unmuteScheduledMessage, ephemeral: true });
             }
 
-            await this.logService.logMessage('success', `Uciszono użytkownika ${targetUser.tag}${timeInMinutes ? ` na ${timeInMinutes} minut` : ' na stałe'}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
+            const parsedTime = timeInMinutes ? this.parseTimeFormat(timeString) : null;
+            await this.logService.logMessage('success', `Uciszono użytkownika ${targetUser.tag}${timeInMinutes ? ` na ${parsedTime.formatted}` : ' na stałe'}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
 
         } catch (error) {
             const errorMessage = formatMessage(this.config.messages.muteError, {
@@ -2005,6 +2038,87 @@ class InteractionHandler {
             await interaction.update({ content: `❌ Wystąpił błąd podczas usuwania ostrzeżeń: ${error.message}`, embeds: [], components: [] });
             await this.logService.logMessage('error', `Błąd podczas usuwania ostrzeżeń: ${error.message}`, interaction);
         }
+    }
+
+    /**
+     * Parsuje format czasu typu "1d4h30m" na minuty
+     * @param {string} timeString - String z czasem do sparsowania
+     * @returns {Object} - {minutes: number, error: string|null, formatted: string}
+     */
+    parseTimeFormat(timeString) {
+        if (!timeString || typeof timeString !== 'string') {
+            return { error: 'Nie podano czasu' };
+        }
+
+        const timeString_clean = timeString.toLowerCase().trim();
+        
+        // Regex do wyciągnięcia dni, godzin i minut
+        const dayMatch = timeString_clean.match(/(\d+)d/);
+        const hourMatch = timeString_clean.match(/(\d+)h/);
+        const minuteMatch = timeString_clean.match(/(\d+)m/);
+        
+        // Sprawdź czy string zawiera tylko dozwolone znaki
+        if (!/^(\d+[dhm]\s*)+$/.test(timeString_clean)) {
+            return { error: 'Dozwolone są tylko cyfry i litery d, h, m (np. 1d4h30m)' };
+        }
+        
+        let totalMinutes = 0;
+        let days = 0, hours = 0, minutes = 0;
+        
+        if (dayMatch) {
+            days = parseInt(dayMatch[1]);
+            totalMinutes += days * 24 * 60; // dni na minuty
+        }
+        
+        if (hourMatch) {
+            hours = parseInt(hourMatch[1]);
+            totalMinutes += hours * 60; // godziny na minuty
+        }
+        
+        if (minuteMatch) {
+            minutes = parseInt(minuteMatch[1]);
+            totalMinutes += minutes;
+        }
+        
+        // Sprawdź czy podano jakikolwiek czas
+        if (totalMinutes === 0) {
+            return { error: 'Nie wykryto żadnego czasu w podanym formacie' };
+        }
+        
+        // Sprawdź limit (7 dni = 10080 minut)
+        const maxMinutes = this.config.mute.maxTimeMinutes;
+        if (totalMinutes > maxMinutes) {
+            return { error: `Maksymalny czas mute to ${this.formatTimeDisplay(maxMinutes)}` };
+        }
+        
+        const formatted = this.formatTimeDisplay(totalMinutes);
+        
+        return {
+            minutes: totalMinutes,
+            error: null,
+            formatted: formatted,
+            days: days,
+            hours: hours,
+            minutes_only: minutes
+        };
+    }
+
+    /**
+     * Formatuje minuty na czytelny format czasu
+     * @param {number} totalMinutes - Łączna liczba minut
+     * @returns {string} - Sformatowany czas (np. "1d 4h 30m")
+     */
+    formatTimeDisplay(totalMinutes) {
+        const days = Math.floor(totalMinutes / (24 * 60));
+        const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+        const minutes = totalMinutes % 60;
+        
+        let parts = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        
+        return parts.join(' ');
     }
 }
 
