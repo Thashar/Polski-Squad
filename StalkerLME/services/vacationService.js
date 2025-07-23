@@ -32,13 +32,14 @@ class VacationService {
             const vacationButton = new ButtonBuilder()
                 .setCustomId('vacation_request')
                 .setLabel('Zgłoś urlop')
+                .setEmoji('<:PepePaluszki:1341086255433121914>')
                 .setStyle(ButtonStyle.Success);
 
             const row = new ActionRowBuilder()
                 .addComponents(vacationButton);
 
             await vacationChannel.send({
-                content: '## Chcesz zgłosić urlop? Kliknij przycisk poniżej.',
+                content: '## Potrzebujesz urlopu?',
                 components: [row]
             });
 
@@ -199,7 +200,7 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
             
             // Sprawdź czy ostatnia wiadomość to wiadomość bota z przyciskiem urlopowym
             const isVacationMessage = lastMessage.author.bot && 
-                lastMessage.content === '## Chcesz zgłosić urlop? Kliknij przycisk poniżej.' &&
+                lastMessage.content === '## Potrzebujesz urlopu?' &&
                 lastMessage.components.length > 0 &&
                 lastMessage.components[0].components.some(comp => comp.customId === 'vacation_request');
 
