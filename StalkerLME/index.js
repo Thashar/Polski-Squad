@@ -56,13 +56,13 @@ client.once(Events.ClientReady, async () => {
     // Rejestracja komend slash
     await registerSlashCommands(client);
     
-    // Wyślij stałą wiadomość o urlopach na wszystkich serwerach
+    // Sprawdź i upewnij się, że wiadomość o urlopach jest ostatnia na kanale
     for (const guild of client.guilds.cache.values()) {
         try {
-            await vacationService.sendPermanentVacationMessage(guild);
-            logger.info(`✅ Wysłano wiadomość o urlopach dla serwera: ${guild.name}`);
+            await vacationService.ensureVacationMessageIsLast(guild);
+            logger.info(`✅ Sprawdzono wiadomość o urlopach dla serwera: ${guild.name}`);
         } catch (error) {
-            logger.error(`❌ Błąd wysyłania wiadomości o urlopach dla serwera ${guild.name}: ${error.message}`);
+            logger.error(`❌ Błąd sprawdzania wiadomości o urlopach dla serwera ${guild.name}: ${error.message}`);
         }
     }
     
