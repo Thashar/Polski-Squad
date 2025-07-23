@@ -6,6 +6,7 @@ class VacationService {
         this.logger = logger;
         this.cooldowns = new Map(); // userId -> lastRequestTime
         this.roleTimeouts = new Map(); // userId -> timeoutId
+        this.userInteractions = new Map(); // userId -> interaction (dla aktualizacji ephemeral message)
     }
 
     async sendPermanentVacationMessage(guild) {
@@ -39,7 +40,6 @@ class VacationService {
                 .addComponents(vacationButton);
 
             await vacationChannel.send({
-                content: '## Potrzebujesz urlopu?',
                 components: [row]
             });
 
@@ -120,12 +120,18 @@ Jeżeli zapoznałeś się z powyższymi zasadami i zgadzasz się z nimi naciśni
             // Ustaw cooldown
             this.setCooldown(userId);
 
-            const successMessage = `Wniosek został złożony.`;
+            const successMessage = `Możesz teraz napisać wniosek na czacie.
+Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
+
+**Po wysłaniu wiadomości nowy wniosek będziesz mógł złożyć dopiero za 6h!**`;
 
             await interaction.update({
                 content: successMessage,
                 components: []
             });
+
+            // Zapisz referencję do interakcji dla późniejszej aktualizacji
+            this.userInteractions.set(userId, interaction);
 
             // Sprawdź czy wiadomość o urlopach jest ostatnia
             await this.ensureVacationMessageIsLast(interaction.guild);
@@ -166,6 +172,23 @@ Jeżeli zapoznałeś się z powyższymi zasadami i zgadzasz się z nimi naciśni
                 
                 // Anuluj automatyczne usunięcie roli (użytkownik napisał wniosek)
                 this.clearRoleTimeout(message.author.id);
+
+                // Zaktualizuj ephemeral message użytkownika
+                const userInteraction = this.userInteractions.get(message.author.id);
+                if (userInteraction) {
+                    try {
+                        await userInteraction.editReply({
+                            content: 'Wniosek został złożony.',
+                            components: []
+                        });
+                        this.logger.info(`✅ Zaktualizowano ephemeral message dla ${message.author.tag}`);
+                    } catch (error) {
+                        this.logger.warn(`⚠️ Nie można zaktualizować ephemeral message dla ${message.author.tag}: ${error.message}`);
+                    }
+                    
+                    // Usuń referencję do interakcji
+                    this.userInteractions.delete(message.author.id);
+                }
             }
 
             // Sprawdź czy wiadomość bota z przyciskiem urlopowym jest ostatnia
@@ -197,7 +220,7 @@ Jeżeli zapoznałeś się z powyższymi zasadami i zgadzasz się z nimi naciśni
             
             // Sprawdź czy ostatnia wiadomość to wiadomość bota z przyciskiem urlopowym
             const isVacationMessage = lastMessage.author.bot && 
-                lastMessage.content === '## Potrzebujesz urlopu?' &&
+                (!lastMessage.content || lastMessage.content === '') &&
                 lastMessage.components.length > 0 &&
                 lastMessage.components[0].components.some(comp => comp.customId === 'vacation_request');
 
