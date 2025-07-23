@@ -5,6 +5,7 @@ class VacationService {
         this.config = config;
         this.logger = logger;
         this.cooldowns = new Map(); // userId -> lastRequestTime
+        this.roleTimeouts = new Map(); // userId -> timeoutId
     }
 
     async sendPermanentVacationMessage(guild) {
@@ -110,6 +111,9 @@ Jeżeli zapoznałeś się z powyższymi zasadami i zgadzasz się z nimi naciśni
             if (vacationRole) {
                 await member.roles.add(vacationRole);
                 this.logger.info(`✅ Nadano rolę urlopową użytkownikowi ${member.user.tag}`);
+                
+                // Ustaw automatyczne usunięcie roli po 15 minutach
+                this.setRoleTimeout(userId, interaction.guild);
             }
 
             // Ustaw cooldown
@@ -161,6 +165,9 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
             if (vacationRole && message.member.roles.cache.has(vacationRole.id)) {
                 await message.member.roles.remove(vacationRole);
                 this.logger.info(`✅ Usunięto rolę urlopową użytkownikowi ${message.author.tag} po napisaniu wniosku`);
+                
+                // Anuluj automatyczne usunięcie roli (użytkownik napisał wniosek)
+                this.clearRoleTimeout(message.author.id);
             }
 
             // Sprawdź czy wiadomość bota z przyciskiem urlopowym jest ostatnia
@@ -238,6 +245,47 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
 
     setCooldown(userId) {
         this.cooldowns.set(userId, Date.now());
+    }
+
+    setRoleTimeout(userId, guild) {
+        // Wyczyść istniejący timeout jeśli istnieje
+        this.clearRoleTimeout(userId);
+
+        // Ustaw nowy timeout na 15 minut (900000 ms)
+        const timeoutId = setTimeout(async () => {
+            try {
+                const member = await guild.members.fetch(userId);
+                const vacationRole = guild.roles.cache.get(this.config.vacations.vacationRequestRoleId);
+                
+                if (member && vacationRole && member.roles.cache.has(vacationRole.id)) {
+                    await member.roles.remove(vacationRole);
+                    this.logger.info(`⏰ Automatycznie usunięto rolę urlopową użytkownikowi ${member.user.tag} po 15 minutach`);
+                    
+                    // Sprawdź czy wiadomość o urlopach jest ostatnia
+                    await this.ensureVacationMessageIsLast(guild);
+                }
+                
+                // Usuń timeout z mapy
+                this.roleTimeouts.delete(userId);
+                
+            } catch (error) {
+                this.logger.error(`❌ Błąd automatycznego usuwania roli urlopowej: ${error.message}`);
+                this.roleTimeouts.delete(userId);
+            }
+        }, 15 * 60 * 1000); // 15 minut
+
+        // Zapisz timeout ID
+        this.roleTimeouts.set(userId, timeoutId);
+        this.logger.info(`⏱️ Ustawiono automatyczne usunięcie roli urlopowej za 15 minut dla użytkownika ${userId}`);
+    }
+
+    clearRoleTimeout(userId) {
+        const timeoutId = this.roleTimeouts.get(userId);
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            this.roleTimeouts.delete(userId);
+            this.logger.info(`🚫 Anulowano automatyczne usunięcie roli urlopowej dla użytkownika ${userId}`);
+        }
     }
 }
 
