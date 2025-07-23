@@ -62,7 +62,7 @@ class VacationService {
             }
 
             // Wyślij pierwszą wiadomość z zasadami
-            const rulesMessage = `Kilka ważnych zasad odnośnie zwracania urlopów:
+            const rulesMessage = `Kilka ważnych zasad odnośnie składania urlopów:
 - Urlopy zgłaszamy maksymalnie na 2 tygodnie przed rozpoczęciem urlopu,
 - Każdy urlop może trwać maksymalnie 2 tygodnie,
 - Jeżeli musisz przedłużyć urlop, zrób to dopiero w czasie jego trwania.
@@ -143,9 +143,6 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
                 content: 'Wniosek został zamknięty.',
                 components: []
             });
-
-            // Odśwież stałą wiadomość o urlopach
-            await this.sendPermanentVacationMessage(interaction.guild);
 
         } catch (error) {
             this.logger.error(`❌ Błąd anulowania wniosku: ${error.message}`);
