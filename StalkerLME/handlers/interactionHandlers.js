@@ -15,7 +15,7 @@ async function handleInteraction(interaction, sharedState, config) {
         } else if (interaction.isStringSelectMenu()) {
             await handleSelectMenu(interaction, config, reminderService);
         } else if (interaction.isButton()) {
-            await handleButton(interaction, config, databaseService, punishmentService);
+            await handleButton(interaction, sharedState);
         }
     } catch (error) {
         logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error.message);
@@ -410,8 +410,21 @@ async function handleSelectMenu(interaction, config, reminderService) {
     }
 }
 
-async function handleButton(interaction, config, databaseService, punishmentService) {
-    if (interaction.customId.startsWith('confirm_')) {
+async function handleButton(interaction, sharedState) {
+    const { config, databaseService, punishmentService } = sharedState;
+    if (interaction.customId === 'vacation_request') {
+        // Obsługa przycisku "Zgłoś urlop"
+        await sharedState.vacationService.handleVacationRequest(interaction);
+        return;
+    } else if (interaction.customId.startsWith('vacation_submit_')) {
+        // Obsługa przycisku "Złóż wniosek o urlop"
+        await sharedState.vacationService.handleVacationSubmit(interaction);
+        return;
+    } else if (interaction.customId.startsWith('vacation_cancel_')) {
+        // Obsługa przycisku "Nie otwieraj wniosku"
+        await sharedState.vacationService.handleVacationCancel(interaction);
+        return;
+    } else if (interaction.customId.startsWith('confirm_')) {
         const parts = interaction.customId.split('_');
         const action = parts[1];
         const confirmationId = parts[2];
@@ -650,15 +663,6 @@ async function handleButton(interaction, config, databaseService, punishmentServ
             components: [], 
             embeds: [] 
         });
-    } else if (interaction.customId === 'vacation_request') {
-        // Obsługa przycisku "Zgłoś urlop"
-        await sharedState.vacationService.handleVacationRequest(interaction);
-    } else if (interaction.customId.startsWith('vacation_submit_')) {
-        // Obsługa przycisku "Złóż wniosek o urlop"
-        await sharedState.vacationService.handleVacationSubmit(interaction);
-    } else if (interaction.customId.startsWith('vacation_cancel_')) {
-        // Obsługa przycisku "Nie otwieraj wniosku"
-        await sharedState.vacationService.handleVacationCancel(interaction);
     }
 }
 
