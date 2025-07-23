@@ -109,5 +109,15 @@ module.exports = {
         // Przy 5 punktach: zabierz punishmentRoleId, nadaj lotteryBanRoleId
         removeRoleId: '1230903957241467012',
         addRoleId: '1392812250263195718'
+    },
+    
+    // Konfiguracja systemu urlopów
+    vacations: {
+        // Kanał gdzie będzie wyświetlana stała wiadomość z przyciskiem
+        vacationChannelId: process.env.STALKER_LME_VACATION_CHANNEL_ID || '1269726207633522740',
+        // Rola nadawana użytkownikom do składania wniosku
+        vacationRequestRoleId: '1397677852966522920',
+        // Czas po którym użytkownik może złożyć kolejny wniosek (w godzinach)
+        cooldownHours: 6
     }
 };

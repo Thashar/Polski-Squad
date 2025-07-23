@@ -9,6 +9,7 @@ const DatabaseService = require('./services/databaseService');
 const OCRService = require('./services/ocrService');
 const PunishmentService = require('./services/punishmentService');
 const ReminderService = require('./services/reminderService');
+const VacationService = require('./services/vacationService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('StalkerLME');
@@ -27,6 +28,7 @@ const databaseService = new DatabaseService(config);
 const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config);
+const vacationService = new VacationService(config, logger);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
@@ -35,7 +37,8 @@ const sharedState = {
     databaseService,
     ocrService,
     punishmentService,
-    reminderService
+    reminderService,
+    vacationService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -52,6 +55,16 @@ client.once(Events.ClientReady, async () => {
     
     // Rejestracja komend slash
     await registerSlashCommands(client);
+    
+    // Wyślij stałą wiadomość o urlopach na wszystkich serwerach
+    for (const guild of client.guilds.cache.values()) {
+        try {
+            await vacationService.sendPermanentVacationMessage(guild);
+            logger.info(`✅ Wysłano wiadomość o urlopach dla serwera: ${guild.name}`);
+        } catch (error) {
+            logger.error(`❌ Błąd wysyłania wiadomości o urlopach dla serwera ${guild.name}: ${error.message}`);
+        }
+    }
     
     // Uruchomienie zadania cron dla czyszczenia punktów (poniedziałek o północy)
     cron.schedule('0 0 * * 1', async () => {
@@ -103,6 +116,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
         } catch (replyError) {
             logger.error(`❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout): ${replyError.message}`);
         }
+    }
+});
+
+// Obsługa wiadomości (dla usuwania roli urlopowej po napisaniu wniosku)
+client.on(Events.MessageCreate, async (message) => {
+    // Ignoruj wiadomości od botów
+    if (message.author.bot) return;
+    
+    try {
+        await vacationService.handleVacationMessage(message);
+    } catch (error) {
+        logger.error(`❌ Błąd podczas obsługi wiadomości urlopowej: ${error.message}`);
     }
 });
 

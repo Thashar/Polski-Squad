@@ -650,6 +650,15 @@ async function handleButton(interaction, config, databaseService, punishmentServ
             components: [], 
             embeds: [] 
         });
+    } else if (interaction.customId === 'vacation_request') {
+        // Obsługa przycisku "Zgłoś urlop"
+        await sharedState.vacationService.handleVacationRequest(interaction);
+    } else if (interaction.customId.startsWith('vacation_submit_')) {
+        // Obsługa przycisku "Złóż wniosek o urlop"
+        await sharedState.vacationService.handleVacationSubmit(interaction);
+    } else if (interaction.customId.startsWith('vacation_cancel_')) {
+        // Obsługa przycisku "Nie otwieraj wniosku"
+        await sharedState.vacationService.handleVacationCancel(interaction);
     }
 }
 
