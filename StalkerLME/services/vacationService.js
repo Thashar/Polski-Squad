@@ -125,8 +125,8 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
                 components: []
             });
 
-            // Odśwież stałą wiadomość o urlopach
-            await this.sendPermanentVacationMessage(interaction.guild);
+            // Sprawdź czy wiadomość o urlopach jest ostatnia
+            await this.ensureVacationMessageIsLast(interaction.guild);
 
         } catch (error) {
             this.logger.error(`❌ Błąd składania wniosku: ${error.message}`);
@@ -156,21 +156,54 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
                 return;
             }
 
-            // Sprawdź czy użytkownik ma rolę do składania wniosku
+            // Sprawdź czy użytkownik ma rolę do składania wniosku i usuń ją
             const vacationRole = message.guild.roles.cache.get(this.config.vacations.vacationRequestRoleId);
-            if (!vacationRole || !message.member.roles.cache.has(vacationRole.id)) {
-                return;
+            if (vacationRole && message.member.roles.cache.has(vacationRole.id)) {
+                await message.member.roles.remove(vacationRole);
+                this.logger.info(`✅ Usunięto rolę urlopową użytkownikowi ${message.author.tag} po napisaniu wniosku`);
             }
 
-            // Usuń rolę
-            await message.member.roles.remove(vacationRole);
-            this.logger.info(`✅ Usunięto rolę urlopową użytkownikowi ${message.author.tag} po napisaniu wniosku`);
-
-            // Odśwież stałą wiadomość o urlopach
-            await this.sendPermanentVacationMessage(message.guild);
+            // Sprawdź czy wiadomość bota z przyciskiem urlopowym jest ostatnia
+            await this.ensureVacationMessageIsLast(message.guild);
 
         } catch (error) {
             this.logger.error(`❌ Błąd obsługi wiadomości urlopowej: ${error.message}`);
+        }
+    }
+
+    async ensureVacationMessageIsLast(guild) {
+        try {
+            const vacationChannel = await guild.channels.fetch(this.config.vacations.vacationChannelId);
+            if (!vacationChannel) {
+                return;
+            }
+
+            // Pobierz najnowsze wiadomości z kanału
+            const messages = await vacationChannel.messages.fetch({ limit: 10 });
+            const messageList = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+            
+            if (messageList.length === 0) {
+                // Jeśli kanał jest pusty, wyślij wiadomość
+                await this.sendPermanentVacationMessage(guild);
+                return;
+            }
+
+            const lastMessage = messageList[messageList.length - 1];
+            
+            // Sprawdź czy ostatnia wiadomość to wiadomość bota z przyciskiem urlopowym
+            const isVacationMessage = lastMessage.author.bot && 
+                lastMessage.content === '## Chcesz zgłosić urlop? Kliknij przycisk poniżej.' &&
+                lastMessage.components.length > 0 &&
+                lastMessage.components[0].components.some(comp => comp.customId === 'vacation_request');
+
+            if (!isVacationMessage) {
+                // Wiadomość bota nie jest ostatnia lub nie istnieje - odśwież
+                this.logger.info('🔄 Wiadomość o urlopach nie jest ostatnia - odświeżam');
+                await this.sendPermanentVacationMessage(guild);
+            }
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd sprawdzania pozycji wiadomości urlopowej: ${error.message}`);
         }
     }
 
