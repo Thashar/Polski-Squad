@@ -11,7 +11,7 @@ Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy p
 Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z automatycznymi przypomnieniami dla uczestników, aby nikt nie zapomniał o ważnych sesjach treningowych.
 
 ### ⚔️ Stalker LME Bot
-System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń i automatyczne resetowanie punktów.
+System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń, automatyczne resetowanie punktów oraz **system zarządzania urlopami** z automatycznym monitorowaniem kanału i czasowymi ograniczeniami składania wniosków.
 
 ### 🤖 Muteusz Bot
 Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń.
@@ -157,7 +157,7 @@ Polski-Squad-Bot-Collection/
 │   │   └── helpers.js
 │   └── temp/
 │
-├── StalkerLME/                # Bot systemu kar
+├── StalkerLME/                # Bot systemu kar + urlopy
 │   ├── index.js
 │   ├── config/
 │   │   ├── config.js
@@ -168,7 +168,8 @@ Polski-Squad-Bot-Collection/
 │   │   ├── databaseService.js
 │   │   ├── ocrService.js
 │   │   ├── punishmentService.js
-│   │   └── reminderService.js
+│   │   ├── reminderService.js
+│   │   └── vacationService.js     # System zarządzania urlopami
 │   ├── utils/
 │   │   └── helpers.js
 │   ├── data/
