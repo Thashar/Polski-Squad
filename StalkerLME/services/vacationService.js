@@ -120,10 +120,7 @@ Jeżeli zapoznałeś się z powyższymi zasadami i zgadzasz się z nimi naciśni
             // Ustaw cooldown
             this.setCooldown(userId);
 
-            const successMessage = `Możesz teraz napisać wniosek na czacie.
-Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
-
-**Po wysłaniu wiadomości nowy wniosek będziesz mógł złożyć dopiero za 6h!**`;
+            const successMessage = `Wniosek został złożony.`;
 
             await interaction.update({
                 content: successMessage,
