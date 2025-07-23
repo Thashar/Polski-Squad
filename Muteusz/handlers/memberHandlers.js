@@ -173,6 +173,106 @@ class MemberHandler {
             this.logger.error('❌ Błąd obsługi grup ekskluzywnych ról:', error?.message || 'Nieznany błąd');
         }
     }
+
+    /**
+     * Obsługuje utratę boost przez użytkownika
+     * @param {GuildMember} member - Członek który stracił boost
+     */
+    async handleBoostLoss(member) {
+        try {
+            this.logger.info(`💔 Obsługa utraty boost: ${member.user.tag}`);
+            
+            // Pobierz role specjalne do usunięcia
+            const rolesToRemove = await this.specialRolesService.getAllRolesToRemove();
+            const rolesToRemoveFromUser = [];
+            const roleIdsToSave = [];
+
+            // Sprawdź które specjalne role użytkownik posiada
+            for (const roleId of rolesToRemove) {
+                if (member.roles.cache.has(roleId)) {
+                    const role = member.roles.cache.get(roleId);
+                    rolesToRemoveFromUser.push(role);
+                    roleIdsToSave.push(roleId);
+                }
+            }
+
+            if (rolesToRemoveFromUser.length > 0) {
+                try {
+                    // Zapisz usunięte role do pliku PRZED ich usunięciem
+                    await this.roleManagementService.addRemovedRoles(member.user.id, roleIdsToSave);
+                    
+                    // Usuń wszystkie znalezione role jednocześnie
+                    await member.roles.remove(rolesToRemoveFromUser, 'Automatyczne usunięcie ról po utracie boost');
+                    
+                    const removedRoleNames = rolesToRemoveFromUser.map(role => role.name).join(', ');
+                    this.logger.info(`🗑️ Automatycznie usunięto role po utracie boost: ${removedRoleNames} od ${member.user.tag}`);
+
+                    // Loguj do kanału
+                    await this.logService.logRoleRemoval(
+                        rolesToRemoveFromUser,
+                        member,
+                        'Utrata boost serwera'
+                    );
+
+                } catch (error) {
+                    this.logger.error(`❌ Błąd podczas usuwania ról po utracie boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
+                }
+            } else {
+                this.logger.info(`ℹ️ ${member.user.tag} nie posiada ról specjalnych do usunięcia po utracie boost`);
+            }
+        } catch (error) {
+            this.logger.error('❌ Błąd obsługi utraty boost:', error?.message || 'Nieznany błąd');
+        }
+    }
+
+    /**
+     * Obsługuje otrzymanie boost przez użytkownika
+     * @param {GuildMember} member - Członek który otrzymał boost
+     */
+    async handleBoostGain(member) {
+        try {
+            this.logger.info(`💖 Obsługa otrzymania boost: ${member.user.tag}`);
+            
+            // Sprawdź czy użytkownik ma zapisane role do przywrócenia
+            const rolesToRestore = await this.roleManagementService.getRemovedRoles(member.user.id);
+            
+            if (rolesToRestore && rolesToRestore.length > 0) {
+                const rolesToAdd = [];
+                
+                for (const roleId of rolesToRestore) {
+                    const role = member.guild.roles.cache.get(roleId);
+                    if (role && !member.roles.cache.has(roleId)) {
+                        rolesToAdd.push(role);
+                    }
+                }
+                
+                if (rolesToAdd.length > 0) {
+                    try {
+                        await member.roles.add(rolesToAdd, 'Automatyczne przywrócenie ról po otrzymaniu boost');
+                        
+                        const restoredRoleNames = rolesToAdd.map(role => role.name).join(', ');
+                        this.logger.info(`✅ Automatycznie przywrócono role po otrzymaniu boost: ${restoredRoleNames} dla ${member.user.tag}`);
+
+                        // Loguj do kanału
+                        await this.logService.logRoleRestoration(
+                            rolesToAdd,
+                            member,
+                            'Otrzymanie boost serwera'
+                        );
+
+                    } catch (error) {
+                        this.logger.error(`❌ Błąd podczas przywracania ról po otrzymaniu boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
+                    }
+                } else {
+                    this.logger.info(`ℹ️ Brak ról do przywrócenia dla ${member.user.tag} po otrzymaniu boost`);
+                }
+            } else {
+                this.logger.info(`ℹ️ ${member.user.tag} nie ma zapisanych ról do przywrócenia po otrzymaniu boost`);
+            }
+        } catch (error) {
+            this.logger.error('❌ Błąd obsługi otrzymania boost:', error?.message || 'Nieznany błąd');
+        }
+    }
 }
 
 module.exports = MemberHandler;

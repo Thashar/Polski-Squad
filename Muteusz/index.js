@@ -76,6 +76,26 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     await memberHandler.handleGuildMemberUpdate(oldMember, newMember);
 });
 
+// Dodatkowe sprawdzanie statusu premium (boost)
+client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+    // Sprawdź zmianę statusu premium (boost)
+    const oldPremium = oldMember.premiumSince;
+    const newPremium = newMember.premiumSince;
+    
+    // Jeśli użytkownik stracił boost
+    if (oldPremium && !newPremium) {
+        logger.info(`🔻 ${newMember.user.tag} stracił boost serwera`);
+        // Symuluj utratę roli - wywołaj handler ponownie
+        await memberHandler.handleBoostLoss(newMember);
+    }
+    
+    // Jeśli użytkownik otrzymał boost
+    if (!oldPremium && newPremium) {
+        logger.info(`🔺 ${newMember.user.tag} otrzymał boost serwera`);
+        await memberHandler.handleBoostGain(newMember);
+    }
+});
+
 // Obsługa interakcji
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
