@@ -44,7 +44,7 @@ class InteractionHandler {
             
             new SlashCommandBuilder()
                 .setName('remove')
-                .setDescription('Usuwa gracza z rankingu (tylko dla moderatorów)')
+                .setDescription('Usuwa gracza z rankingu (tylko dla administratorów)')
                 .addUserOption(option =>
                     option.setName('user')
                         .setDescription('Użytkownik do usunięcia z rankingu')
@@ -296,10 +296,10 @@ class InteractionHandler {
     async handleRemoveCommand(interaction) {
         await this.logService.logCommandUsage('remove', interaction);
 
-        // Sprawdź uprawnienia - tylko moderatorzy mogą usuwać graczy
-        if (!interaction.member.permissions.has('ManageRoles')) {
+        // Sprawdź uprawnienia - tylko administratorzy mogą usuwać graczy
+        if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({ 
-                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Zarządzanie rolami**', 
+                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**', 
                 ephemeral: true 
             });
             return;
