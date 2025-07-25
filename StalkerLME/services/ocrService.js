@@ -143,13 +143,6 @@ class OCRService {
                 for (const roleNick of roleNicks) {
                     const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
                     
-                    // Debug dla problemowego nicku
-                    if (roleNick.displayName === 'к๏ภгค21 ღ') {
-                        const cleanLine = line.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const cleanNick = roleNick.displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        logger.info(`   🐛 DEBUG Konrad21: linia="${cleanLine}" nick="${cleanNick}" podobieństwo=${(similarity * 100).toFixed(1)}%`);
-                    }
-                    
                     if (similarity >= 0.7 && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
                         bestMatch = roleNick;

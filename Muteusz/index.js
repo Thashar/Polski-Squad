@@ -124,29 +124,49 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // Obsługa błędów klienta
 client.on('error', error => {
-    logService.logMessage('error', `Błąd klienta Discord: ${error.message}`);
+    if (logService && logService.logMessage) {
+        logService.logMessage('error', `Błąd klienta Discord: ${error.message}`);
+    } else {
+        logger.error(`Błąd klienta Discord: ${error.message}`);
+    }
 });
 
 client.on('warn', warning => {
-    logService.logMessage('warn', `Ostrzeżenie Discord: ${warning}`);
+    if (logService && logService.logMessage) {
+        logService.logMessage('warn', `Ostrzeżenie Discord: ${warning}`);
+    } else {
+        logger.warn(`Ostrzeżenie Discord: ${warning}`);
+    }
 });
 
 // Obsługa błędów procesów
 process.on('unhandledRejection', async (error) => {
-    await logService.logMessage('error', `Nieobsłużony błąd: ${error.message}`);
+    if (logService && logService.logMessage) {
+        await logService.logMessage('error', `Nieobsłużony błąd: ${error.message}`);
+    } else {
+        logger.error(`Nieobsłużony błąd: ${error.message}`);
+    }
 });
 
 process.on('uncaughtException', async (error) => {
-    await logService.logMessage('error', `Nieobsłużony wyjątek: ${error.message}`);
+    if (logService && logService.logMessage) {
+        await logService.logMessage('error', `Nieobsłużony wyjątek: ${error.message}`);
+    } else {
+        logger.error(`Nieobsłużony wyjątek: ${error.message}`);
+    }
     process.exit(1);
 });
 
 // ==================== GRACEFUL SHUTDOWN ====================
 
 process.on('SIGINT', async () => {
-    await logService.logMessage('info', 'Zamykanie bota...');
+    if (logService && logService.logMessage) {
+        await logService.logMessage('info', 'Zamykanie bota...');
+    } else {
+        logger.info('Zamykanie bota...');
+    }
     
-    if (config.media.autoCleanup) {
+    if (config.media.autoCleanup && mediaService) {
         await mediaService.cleanupAllCache();
     }
     
@@ -155,10 +175,14 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-    await logService.logMessage('info', 'Otrzymano sygnał SIGTERM, zamykam bota...');
+    if (logService && logService.logMessage) {
+        await logService.logMessage('info', 'Otrzymano sygnał SIGTERM, zamykam bota...');
+    } else {
+        logger.info('Otrzymano sygnał SIGTERM, zamykam bota...');
+    }
     
     try {
-        if (config.media.autoCleanup) {
+        if (config.media.autoCleanup && mediaService) {
             await mediaService.cleanupAllCache();
         }
         
