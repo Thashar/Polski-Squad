@@ -16,18 +16,18 @@ class MemberHandler {
      */
     async handleGuildMemberUpdate(oldMember, newMember) {
         // Debug logging
-        this.logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
+        logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
         
         // Sprawdź zmiany ról do obsługi grup ekskluzywnych
         await this.handleExclusiveRoleGroups(oldMember, newMember);
         
         // Sprawdź czy są ustawienia automatycznego zarządzania rolami
         if (!this.config.roleManagement || !this.config.roleManagement.triggerRoleId) {
-            this.logger.info(`❌ Brak konfiguracji roleManagement lub triggerRoleId`);
+            logger.info(`❌ Brak konfiguracji roleManagement lub triggerRoleId`);
             return;
         }
         
-        this.logger.info(`✅ Konfiguracja OK, triggerRoleId: ${this.config.roleManagement.triggerRoleId}`);
+        logger.info(`✅ Konfiguracja OK, triggerRoleId: ${this.config.roleManagement.triggerRoleId}`);
         
         // Debug informacje o rolach
         const oldRoleIds = oldMember.roles.cache.map(r => r.id);
@@ -36,11 +36,11 @@ class MemberHandler {
         const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
         
         if (addedRoles.length > 0) {
-            this.logger.info(`➕ Dodane role: ${addedRoles.join(', ')}`);
+            logger.info(`➕ Dodane role: ${addedRoles.join(', ')}`);
         }
         if (removedRoles.length > 0) {
-            this.logger.info(`➖ Usunięte role: ${removedRoles.join(', ')}`);
-            this.logger.info(`🎯 Sprawdzam czy usunięto trigger rolę: ${this.config.roleManagement.triggerRoleId}`);
+            logger.info(`➖ Usunięte role: ${removedRoles.join(', ')}`);
+            logger.info(`🎯 Sprawdzam czy usunięto trigger rolę: ${this.config.roleManagement.triggerRoleId}`);
         }
 
         // Obsłuż usuwanie ról (gdy użytkownik traci główną rolę)
@@ -104,12 +104,12 @@ class MemberHandler {
                         
                         if (!hasMainRole && !currentRoleIds.includes('1173760134527324270')) {
                             await freshMember.roles.add('1173760134527324270');
-                            this.logger.info(`🔄 Nadano rolę 1173760134527324270 dla ${freshMember.displayName} (brak głównych ról po 5s, usunięto: ${removedMainRoles.join(', ')})`);
+                            logger.info(`🔄 Nadano rolę 1173760134527324270 dla ${freshMember.displayName} (brak głównych ról po 5s, usunięto: ${removedMainRoles.join(', ')})`);
                         } else if (hasMainRole) {
-                            this.logger.info(`ℹ️ Nie nadano roli 1173760134527324270 dla ${freshMember.displayName} (posiada główną rolę)`);
+                            logger.info(`ℹ️ Nie nadano roli 1173760134527324270 dla ${freshMember.displayName} (posiada główną rolę)`);
                         }
                     } catch (error) {
-                        this.logger.error(`❌ Błąd nadawania roli 1173760134527324270 po 5s:`, error?.message || 'Nieznany błąd');
+                        logger.error(`❌ Błąd nadawania roli 1173760134527324270 po 5s:`, error?.message || 'Nieznany błąd');
                     }
                 }, 5000);
             }
@@ -124,9 +124,9 @@ class MemberHandler {
                     for (const roleId of otherMainRoles) {
                         try {
                             await newMember.roles.remove(roleId);
-                            this.logger.info(`🔄 Usunięto główną rolę ${roleId} dla ${newMember.displayName} (przyznano ${addedRoleId})`);
+                            logger.info(`🔄 Usunięto główną rolę ${roleId} dla ${newMember.displayName} (przyznano ${addedRoleId})`);
                         } catch (error) {
-                            this.logger.error(`❌ Błąd usuwania głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
+                            logger.error(`❌ Błąd usuwania głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
                         }
                     }
                     
@@ -135,9 +135,9 @@ class MemberHandler {
                     for (const roleId of rolesToRemove) {
                         try {
                             await newMember.roles.remove(roleId);
-                            this.logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${newMember.displayName} (przyznano główną ${addedRoleId})`);
+                            logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${newMember.displayName} (przyznano główną ${addedRoleId})`);
                         } catch (error) {
-                            this.logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
+                            logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
                         }
                     }
                 }
@@ -149,9 +149,9 @@ class MemberHandler {
                     for (const roleId of otherSecondaryRoles) {
                         try {
                             await newMember.roles.remove(roleId);
-                            this.logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${newMember.displayName} (przyznano ${addedRoleId})`);
+                            logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${newMember.displayName} (przyznano ${addedRoleId})`);
                         } catch (error) {
-                            this.logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
+                            logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
                         }
                     }
                 }
@@ -162,15 +162,15 @@ class MemberHandler {
                     for (const roleId of mainRolesToRemove) {
                         try {
                             await newMember.roles.remove(roleId);
-                            this.logger.info(`🔄 Usunięto główną rolę ${roleId} dla ${newMember.displayName} (przyznano specjalną rolę ${addedRoleId})`);
+                            logger.info(`🔄 Usunięto główną rolę ${roleId} dla ${newMember.displayName} (przyznano specjalną rolę ${addedRoleId})`);
                         } catch (error) {
-                            this.logger.error(`❌ Błąd usuwania głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
+                            logger.error(`❌ Błąd usuwania głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
                         }
                     }
                 }
             }
         } catch (error) {
-            this.logger.error('❌ Błąd obsługi grup ekskluzywnych ról:', error?.message || 'Nieznany błąd');
+            logger.error('❌ Błąd obsługi grup ekskluzywnych ról:', error?.message || 'Nieznany błąd');
         }
     }
 
@@ -180,7 +180,7 @@ class MemberHandler {
      */
     async handleBoostLoss(member) {
         try {
-            this.logger.info(`💔 Obsługa utraty boost: ${member.user.tag}`);
+            logger.info(`💔 Obsługa utraty boost: ${member.user.tag}`);
             
             // Pobierz role specjalne do usunięcia
             const rolesToRemove = await this.specialRolesService.getAllRolesToRemove();
@@ -205,7 +205,7 @@ class MemberHandler {
                     await member.roles.remove(rolesToRemoveFromUser, 'Automatyczne usunięcie ról po utracie boost');
                     
                     const removedRoleNames = rolesToRemoveFromUser.map(role => role.name).join(', ');
-                    this.logger.info(`🗑️ Automatycznie usunięto role po utracie boost: ${removedRoleNames} od ${member.user.tag}`);
+                    logger.info(`🗑️ Automatycznie usunięto role po utracie boost: ${removedRoleNames} od ${member.user.tag}`);
 
                     // Loguj do kanału
                     await this.logService.logRoleRemoval(
@@ -215,13 +215,13 @@ class MemberHandler {
                     );
 
                 } catch (error) {
-                    this.logger.error(`❌ Błąd podczas usuwania ról po utracie boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
+                    logger.error(`❌ Błąd podczas usuwania ról po utracie boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
                 }
             } else {
-                this.logger.info(`ℹ️ ${member.user.tag} nie posiada ról specjalnych do usunięcia po utracie boost`);
+                logger.info(`ℹ️ ${member.user.tag} nie posiada ról specjalnych do usunięcia po utracie boost`);
             }
         } catch (error) {
-            this.logger.error('❌ Błąd obsługi utraty boost:', error?.message || 'Nieznany błąd');
+            logger.error('❌ Błąd obsługi utraty boost:', error?.message || 'Nieznany błąd');
         }
     }
 
@@ -231,7 +231,7 @@ class MemberHandler {
      */
     async handleBoostGain(member) {
         try {
-            this.logger.info(`💖 Obsługa otrzymania boost: ${member.user.tag}`);
+            logger.info(`💖 Obsługa otrzymania boost: ${member.user.tag}`);
             
             // Sprawdź czy użytkownik ma zapisane role do przywrócenia
             const rolesToRestore = await this.roleManagementService.getRemovedRoles(member.user.id);
@@ -251,7 +251,7 @@ class MemberHandler {
                         await member.roles.add(rolesToAdd, 'Automatyczne przywrócenie ról po otrzymaniu boost');
                         
                         const restoredRoleNames = rolesToAdd.map(role => role.name).join(', ');
-                        this.logger.info(`✅ Automatycznie przywrócono role po otrzymaniu boost: ${restoredRoleNames} dla ${member.user.tag}`);
+                        logger.info(`✅ Automatycznie przywrócono role po otrzymaniu boost: ${restoredRoleNames} dla ${member.user.tag}`);
 
                         // Loguj do kanału
                         await this.logService.logRoleRestoration(
@@ -261,16 +261,16 @@ class MemberHandler {
                         );
 
                     } catch (error) {
-                        this.logger.error(`❌ Błąd podczas przywracania ról po otrzymaniu boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
+                        logger.error(`❌ Błąd podczas przywracania ról po otrzymaniu boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
                     }
                 } else {
-                    this.logger.info(`ℹ️ Brak ról do przywrócenia dla ${member.user.tag} po otrzymaniu boost`);
+                    logger.info(`ℹ️ Brak ról do przywrócenia dla ${member.user.tag} po otrzymaniu boost`);
                 }
             } else {
-                this.logger.info(`ℹ️ ${member.user.tag} nie ma zapisanych ról do przywrócenia po otrzymaniu boost`);
+                logger.info(`ℹ️ ${member.user.tag} nie ma zapisanych ról do przywrócenia po otrzymaniu boost`);
             }
         } catch (error) {
-            this.logger.error('❌ Błąd obsługi otrzymania boost:', error?.message || 'Nieznany błąd');
+            logger.error('❌ Błąd obsługi otrzymania boost:', error?.message || 'Nieznany błąd');
         }
     }
 }
