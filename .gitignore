@@ -5,6 +5,7 @@
 # Node modules
 node_modules/
 Benson/
+d/
 
 # Logs
 *.log
