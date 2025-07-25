@@ -143,6 +143,13 @@ class OCRService {
                 for (const roleNick of roleNicks) {
                     const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
                     
+                    // Debug dla problemowego nicku
+                    if (roleNick.displayName === 'к๏ภгค21 ღ') {
+                        const cleanLine = line.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const cleanNick = roleNick.displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        logger.info(`   🐛 DEBUG Konrad21: linia="${cleanLine}" nick="${cleanNick}" podobieństwo=${(similarity * 100).toFixed(1)}%`);
+                    }
+                    
                     if (similarity >= 0.7 && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
                         bestMatch = roleNick;
@@ -552,8 +559,9 @@ class OCRService {
         const lineLower = line.toLowerCase().replace(/[^a-z0-9]/g, ''); // Usuń wszystkie znaki specjalne
         const nickLower = nick.toLowerCase().replace(/[^a-z0-9]/g, '');
         
-        // Sprawdź czy nick występuje w linii
-        if (lineLower.includes(nickLower)) {
+        // Sprawdź czy nick występuje w linii, ale tylko jeśli nick ma 3+ znaki
+        // To zapobiega false positive dla krótkich fragmentów jak "21"
+        if (nickLower.length >= 3 && lineLower.includes(nickLower)) {
             return 1.0; // 100% jeśli nick jest w linii
         }
         
@@ -571,6 +579,21 @@ class OCRService {
         if (!nick || nick.length === 0) return 0;
         if (!ocrText || ocrText.length === 0) return 0;
         
+        // Dla bardzo krótkich nicków (1-2 znaki) wymagaj wyższego progu podobieństwa
+        if (nick.length <= 2) {
+            // Dla krótkich nicków wymagaj dokładnego dopasowania lub bardzo wysokiej jakości
+            const exactMatch = ocrText === nick;
+            if (exactMatch) return 1.0;
+            
+            // W przeciwnym razie znacznie obniż podobieństwo dla krótkich nicków
+            const baseSimilarity = this.calculateBasicOrderedSimilarity(ocrText, nick);
+            return baseSimilarity * 0.3; // Drastyczne obniżenie dla krótkich nicków
+        }
+        
+        return this.calculateBasicOrderedSimilarity(ocrText, nick);
+    }
+    
+    calculateBasicOrderedSimilarity(ocrText, nick) {
         let matchedChars = 0;
         let ocrIndex = 0;
         
