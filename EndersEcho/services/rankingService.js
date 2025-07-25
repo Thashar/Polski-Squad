@@ -351,6 +351,29 @@ class RankingService {
     updateActiveRanking(messageId, rankingData) {
         this.activeRankings.set(messageId, rankingData);
     }
+
+    /**
+     * Usuwa gracza z rankingu
+     * @param {string} userId - ID użytkownika do usunięcia
+     * @returns {Promise<boolean>} - True jeśli gracz został usunięty, false jeśli nie był w rankingu
+     */
+    async removePlayerFromRanking(userId) {
+        try {
+            const ranking = await this.loadRanking();
+            
+            if (ranking[userId]) {
+                delete ranking[userId];
+                await this.saveRanking(ranking);
+                logger.info(`🗑️ Usunięto gracza ${userId} z rankingu`);
+                return true;
+            }
+            
+            return false;
+        } catch (error) {
+            logger.error('❌ Błąd podczas usuwania gracza z rankingu:', error);
+            return false;
+        }
+    }
 }
 
 module.exports = RankingService;

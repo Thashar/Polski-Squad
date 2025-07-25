@@ -29,15 +29,37 @@ class RoleService {
             
             const allTopRoles = [top1Role, top2Role, top3Role, top4to10Role, top11to30Role];
             
-            // Usuń wszystkie role TOP od wszystkich użytkowników
+            // Zbierz ID graczy w rankingu
+            const playerIds = new Set(sortedPlayers.map(player => player.userId));
+            
+            // Usuń role TOP od graczy którzy zniknęli z rankingu
             for (const role of allTopRoles) {
                 const membersWithRole = role.members;
                 for (const [memberId, member] of membersWithRole) {
-                    try {
-                        await member.roles.remove(role);
-                        // Usunięto rolę (bez logowania)
-                    } catch (error) {
-                        logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, error.message);
+                    // Jeśli gracz nie jest w rankingu, usuń mu rolę TOP
+                    if (!playerIds.has(memberId)) {
+                        try {
+                            await member.roles.remove(role);
+                            logger.info(`🗑️ Usunięto rolę ${role.name} od ${member.user.tag} (zniknął z rankingu)`);
+                        } catch (error) {
+                            logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, error.message);
+                        }
+                    }
+                }
+            }
+            
+            // Usuń wszystkie role TOP od wszystkich użytkowników w rankingu (reset)
+            for (const role of allTopRoles) {
+                const membersWithRole = role.members;
+                for (const [memberId, member] of membersWithRole) {
+                    // Tylko dla graczy w rankingu - resetuj role
+                    if (playerIds.has(memberId)) {
+                        try {
+                            await member.roles.remove(role);
+                            // Usunięto rolę (bez logowania)
+                        } catch (error) {
+                            logger.error(`Błąd resetowania roli ${role.name} od ${member.user.tag}:`, error.message);
+                        }
                     }
                 }
             }

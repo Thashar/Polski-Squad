@@ -40,6 +40,14 @@ class InteractionHandler {
                 .addAttachmentOption(option =>
                     option.setName('obraz')
                         .setDescription('Obraz z wynikiem zawierający "Best:" i "Total:"')
+                        .setRequired(true)),
+            
+            new SlashCommandBuilder()
+                .setName('remove')
+                .setDescription('Usuwa gracza z rankingu (tylko dla moderatorów)')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('Użytkownik do usunięcia z rankingu')
                         .setRequired(true))
         ];
 
@@ -79,6 +87,9 @@ class InteractionHandler {
                     break;
                 case 'update':
                     await this.handleUpdateCommand(interaction);
+                    break;
+                case 'remove':
+                    await this.handleRemoveCommand(interaction);
                     break;
             }
         } else if (interaction.isButton()) {
@@ -275,6 +286,52 @@ class InteractionHandler {
             }
             
             await interaction.editReply(this.config.messages.updateError);
+        }
+    }
+
+    /**
+     * Obsługuje komendę usuwania gracza z rankingu
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleRemoveCommand(interaction) {
+        await this.logService.logCommandUsage('remove', interaction);
+
+        // Sprawdź uprawnienia - tylko moderatorzy mogą usuwać graczy
+        if (!interaction.member.permissions.has('ManageRoles')) {
+            await interaction.reply({ 
+                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Zarządzanie rolami**', 
+                ephemeral: true 
+            });
+            return;
+        }
+
+        const targetUser = interaction.options.getUser('user');
+        
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Usuń gracza z rankingu
+            const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUser.id);
+            
+            if (!wasRemoved) {
+                await interaction.editReply(`❌ Gracz ${targetUser.tag} nie był w rankingu.`);
+                return;
+            }
+
+            // Aktualizuj role TOP po usunięciu gracza
+            try {
+                const updatedPlayers = await this.rankingService.getSortedPlayers();
+                await this.roleService.updateTopRoles(interaction.guild, updatedPlayers);
+                await this.logService.logMessage('success', `Gracz ${targetUser.tag} został usunięty z rankingu i zaktualizowano role TOP`, interaction);
+            } catch (roleError) {
+                await this.logService.logMessage('error', `Błąd aktualizacji ról TOP po usunięciu gracza: ${roleError.message}`, interaction);
+            }
+
+            await interaction.editReply(`✅ Gracz ${targetUser.tag} został pomyślnie usunięty z rankingu. Role TOP zostały zaktualizowane.`);
+            
+        } catch (error) {
+            await this.logService.logMessage('error', `Błąd usuwania gracza ${targetUser.tag} z rankingu: ${error.message}`, interaction);
+            await interaction.editReply(`❌ Wystąpił błąd podczas usuwania gracza z rankingu.`);
         }
     }
 

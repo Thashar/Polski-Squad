@@ -38,6 +38,7 @@ async function initializeBot() {
         logger.info('Dostępne komendy:');
         logger.info('- /update - aktualizuje wynik na podstawie załączonego obrazu');
         logger.info('- /ranking - pokazuje prywatny ranking graczy z paginacją');
+        logger.info('- /remove - usuwa gracza z rankingu (tylko moderatorzy)');
         logger.info(`Dozwolony kanał: ${config.allowedChannelId}`);
         
     } catch (error) {
