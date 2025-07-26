@@ -72,6 +72,9 @@ let lastBotName = null;
 const LOG_DIR = path.join(__dirname, '../logs');
 const LOG_FILE = path.join(LOG_DIR, 'bots.log');
 
+// Ładowanie .env na początku
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
 // Konfiguracja Discord webhook
 const WEBHOOK_URL = process.env.DISCORD_LOG_WEBHOOK_URL;
 const WEBHOOK_ENABLED = !!WEBHOOK_URL;
