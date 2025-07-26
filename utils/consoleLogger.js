@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 const colors = {
     reset: '\x1b[0m',
@@ -71,6 +72,10 @@ let lastBotName = null;
 const LOG_DIR = path.join(__dirname, '../logs');
 const LOG_FILE = path.join(LOG_DIR, 'bots.log');
 
+// Konfiguracja Discord webhook
+const WEBHOOK_URL = process.env.DISCORD_LOG_WEBHOOK_URL;
+const WEBHOOK_ENABLED = !!WEBHOOK_URL;
+
 // Upewnij się, że katalog logs istnieje
 function ensureLogDirectory() {
     if (!fs.existsSync(LOG_DIR)) {
@@ -108,6 +113,72 @@ function writeToLogFile(botName, message, level = 'info') {
     } catch (error) {
         // Jeśli nie można zapisać do pliku, nie przerywamy aplikacji
         console.error('Błąd zapisu do pliku log:', error.message);
+    }
+}
+
+// Funkcja do wysyłania logów przez Discord webhook
+function sendToDiscordWebhook(botName, message, level = 'info') {
+    if (!WEBHOOK_ENABLED) return;
+    
+    try {
+        const timestamp = getTimestamp();
+        const emoji = botEmojis[botName] || '🤖';
+        
+        let color = 0x00ff00; // Zielony domyślnie
+        switch (level.toLowerCase()) {
+            case 'error':
+                color = 0xff0000; // Czerwony
+                break;
+            case 'warn':
+                color = 0xffff00; // Żółty
+                break;
+            case 'success':
+                color = 0x00ff00; // Zielony
+                break;
+            case 'info':
+            default:
+                color = 0x0099ff; // Niebieski
+                break;
+        }
+        
+        const webhookData = {
+            embeds: [{
+                title: `${emoji} ${botName.toUpperCase()}`,
+                description: message,
+                color: color,
+                timestamp: new Date().toISOString(),
+                footer: {
+                    text: `Level: ${level.toUpperCase()}`
+                }
+            }]
+        };
+        
+        const data = JSON.stringify(webhookData);
+        const url = new URL(WEBHOOK_URL);
+        
+        const options = {
+            hostname: url.hostname,
+            path: url.pathname,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+        
+        const req = https.request(options, (res) => {
+            // Webhook wysłany pomyślnie (nie logujemy tego aby uniknąć nieskończonej pętli)
+        });
+        
+        req.on('error', (error) => {
+            // Nie logujemy błędów webhook aby uniknąć nieskończonej pętli
+        });
+        
+        req.write(data);
+        req.end();
+        
+    } catch (error) {
+        // Jeśli nie można wysłać webhook, nie przerywamy aplikacji
     }
 }
 
@@ -167,26 +238,31 @@ class ConsoleLogger {
     log(message) {
         console.log(formatMessage(this.botName, message, 'info'));
         writeToLogFile(this.botName, message, 'info');
+        sendToDiscordWebhook(this.botName, message, 'info');
     }
     
     error(message) {
         console.error(formatMessage(this.botName, message, 'error'));
         writeToLogFile(this.botName, message, 'error');
+        sendToDiscordWebhook(this.botName, message, 'error');
     }
     
     warn(message) {
         console.warn(formatMessage(this.botName, message, 'warn'));
         writeToLogFile(this.botName, message, 'warn');
+        sendToDiscordWebhook(this.botName, message, 'warn');
     }
     
     success(message) {
         console.log(formatMessage(this.botName, message, 'success'));
         writeToLogFile(this.botName, message, 'success');
+        sendToDiscordWebhook(this.botName, message, 'success');
     }
     
     info(message) {
         console.info(formatMessage(this.botName, message, 'info'));
         writeToLogFile(this.botName, message, 'info');
+        sendToDiscordWebhook(this.botName, message, 'info');
     }
 }
 
