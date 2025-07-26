@@ -219,10 +219,10 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
         if (isNewWebhookBot) {
             // Nowy bot - dodaj separator
             const separator = '────────────────────────────────────────────────────────────────────────────────';
-            webhookMessage = `${separator}\n*[${timestamp}]* ${emoji} **${botName.toUpperCase()}** ${levelEmoji} ${message}`;
+            webhookMessage = `${separator}\n[${timestamp}] ${emoji} **${botName.toUpperCase()}** ${levelEmoji} ${message}`;
         } else {
             // Ten sam bot - tylko wiadomość
-            webhookMessage = `*[${timestamp}]* ${emoji} **${botName.toUpperCase()}** ${levelEmoji} ${message}`;
+            webhookMessage = `[${timestamp}] ${emoji} **${botName.toUpperCase()}** ${levelEmoji} ${message}`;
         }
         
         const webhookData = {
