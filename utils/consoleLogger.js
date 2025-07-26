@@ -67,6 +67,7 @@ function getTimestamp() {
 
 // Zmienna globalna do śledzenia ostatniego bota
 let lastBotName = null;
+let lastWebhookBotName = null;
 
 // Konfiguracja logowania do pliku
 const LOG_DIR = path.join(__dirname, '../logs');
@@ -161,7 +162,21 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
                 break;
         }
         
-        const webhookMessage = `${emoji} ${botName.toUpperCase()} [${timestamp}] ${levelEmoji} ${message}`;
+        // Sprawdź czy to nowy bot (inny niż poprzedni w webhook)
+        const isNewWebhookBot = lastWebhookBotName !== botName;
+        
+        // Zaktualizuj ostatni bot dla webhook
+        lastWebhookBotName = botName;
+        
+        let webhookMessage;
+        if (isNewWebhookBot) {
+            // Nowy bot - dodaj separator
+            const separator = '────────────────────────────────────────────────────────────────────────────────';
+            webhookMessage = `${separator}\n${emoji} ${botName.toUpperCase()} [${timestamp}] ${levelEmoji} ${message}`;
+        } else {
+            // Ten sam bot - tylko wiadomość
+            webhookMessage = `${emoji} ${botName.toUpperCase()} [${timestamp}] ${levelEmoji} ${message}`;
+        }
         
         const webhookData = {
             content: webhookMessage
@@ -304,6 +319,7 @@ function setupGlobalLogging() {
 
 function resetLoggerState() {
     lastBotName = null;
+    lastWebhookBotName = null;
 }
 
 module.exports = {
