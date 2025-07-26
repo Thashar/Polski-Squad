@@ -144,16 +144,27 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
                 break;
         }
         
+        let levelEmoji = '•';
+        switch (level.toLowerCase()) {
+            case 'error':
+                levelEmoji = '❌';
+                break;
+            case 'warn':
+                levelEmoji = '⚠️';
+                break;
+            case 'success':
+                levelEmoji = '✅';
+                break;
+            case 'info':
+            default:
+                levelEmoji = '•';
+                break;
+        }
+        
+        const webhookMessage = `${emoji} ${botName.toUpperCase()} [${timestamp}] ${levelEmoji} ${message}`;
+        
         const webhookData = {
-            embeds: [{
-                title: `${emoji} ${botName.toUpperCase()}`,
-                description: message,
-                color: color,
-                timestamp: new Date().toISOString(),
-                footer: {
-                    text: `Level: ${level.toUpperCase()}`
-                }
-            }]
+            content: webhookMessage
         };
         
         const data = JSON.stringify(webhookData);
@@ -170,11 +181,15 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
         };
         
         const req = https.request(options, (res) => {
-            // Webhook wysłany pomyślnie (nie logujemy tego aby uniknąć nieskończonej pętli)
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                // Webhook wysłany pomyślnie
+            } else {
+                console.error('Webhook error status:', res.statusCode);
+            }
         });
         
         req.on('error', (error) => {
-            // Nie logujemy błędów webhook aby uniknąć nieskończonej pętli
+            console.error('Webhook request error:', error.message);
         });
         
         req.write(data);
