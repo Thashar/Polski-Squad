@@ -233,16 +233,6 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
             }
         }
         
-        // Sprawdź ostatnie usuwanie punktów
-        const weeklyRemoval = await databaseService.loadWeeklyRemoval();
-        const now = new Date();
-        const currentWeek = `${now.getFullYear()}-W${databaseService.getWeekNumber(now)}`;
-        
-        let lastRemovalText = 'Brak danych';
-        if (weeklyRemoval[currentWeek]) {
-            const removalDate = new Date(weeklyRemoval[currentWeek].date);
-            lastRemovalText = `${removalDate.toLocaleDateString('pl-PL')} (${weeklyRemoval[currentWeek].cleanedUsers} użytkowników)`;
-        }
         
         // Następne usuwanie punktów
         const nextMonday = new Date();
@@ -263,7 +253,6 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
             .setDescription(`**Kategoria:** ${roleName}\n\n${rankingText}`)
             .setColor('#ff6b6b')
             .addFields(
-                { name: '🗓️ Ostatnie usuwanie punktów', value: lastRemovalText, inline: false },
                 { name: '⏰ Następne usuwanie punktów', value: nextRemovalText, inline: false },
                 { name: '🎭 Rola karania (2+ punktów)', value: `<@&${config.punishmentRoleId}>`, inline: false },
                 { name: '🚨 Rola zakazu loterii (3+ punktów)', value: `<@&${config.lotteryBanRoleId}>`, inline: false },
