@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const colors = {
     reset: '\x1b[0m',
     bright: '\x1b[1m',
@@ -64,6 +67,50 @@ function getTimestamp() {
 // Zmienna globalna do śledzenia ostatniego bota
 let lastBotName = null;
 
+// Konfiguracja logowania do pliku
+const LOG_DIR = path.join(__dirname, '../logs');
+const LOG_FILE = path.join(LOG_DIR, 'bots.log');
+
+// Upewnij się, że katalog logs istnieje
+function ensureLogDirectory() {
+    if (!fs.existsSync(LOG_DIR)) {
+        fs.mkdirSync(LOG_DIR, { recursive: true });
+    }
+}
+
+// Funkcja do zapisywania do pliku (bez kolorów)
+function writeToLogFile(botName, message, level = 'info') {
+    try {
+        ensureLogDirectory();
+        
+        const timestamp = getTimestamp();
+        const emoji = botEmojis[botName] || '🤖';
+        
+        let levelEmoji = '•';
+        switch (level.toLowerCase()) {
+            case 'error':
+                levelEmoji = '❌';
+                break;
+            case 'warn':
+                levelEmoji = '⚠️';
+                break;
+            case 'success':
+                levelEmoji = '✅';
+                break;
+            case 'info':
+            default:
+                levelEmoji = '•';
+                break;
+        }
+        
+        const logEntry = `[${timestamp}] ${emoji} ${botName.toUpperCase()} ${levelEmoji} ${message}\n`;
+        fs.appendFileSync(LOG_FILE, logEntry, 'utf8');
+    } catch (error) {
+        // Jeśli nie można zapisać do pliku, nie przerywamy aplikacji
+        console.error('Błąd zapisu do pliku log:', error.message);
+    }
+}
+
 function formatMessage(botName, message, level = 'info') {
     const timestamp = getTimestamp();
     const emoji = botEmojis[botName] || '🤖';
@@ -119,22 +166,27 @@ class ConsoleLogger {
     
     log(message) {
         console.log(formatMessage(this.botName, message, 'info'));
+        writeToLogFile(this.botName, message, 'info');
     }
     
     error(message) {
         console.error(formatMessage(this.botName, message, 'error'));
+        writeToLogFile(this.botName, message, 'error');
     }
     
     warn(message) {
         console.warn(formatMessage(this.botName, message, 'warn'));
+        writeToLogFile(this.botName, message, 'warn');
     }
     
     success(message) {
         console.log(formatMessage(this.botName, message, 'success'));
+        writeToLogFile(this.botName, message, 'success');
     }
     
     info(message) {
         console.info(formatMessage(this.botName, message, 'info'));
+        writeToLogFile(this.botName, message, 'info');
     }
 }
 
