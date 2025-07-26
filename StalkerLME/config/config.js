@@ -55,10 +55,10 @@ module.exports = {
         process.env.STALKER_LME_MODERATOR_ROLE_4
     ],
     
-    // Rola dla użytkowników z 3+ punktami
+    // Rola dla użytkowników z 2+ punktami
     punishmentRoleId: process.env.STALKER_LME_PUNISHMENT_ROLE_ID,
     
-    // Rola dla użytkowników z 5+ punktami (zakaz loterii)
+    // Rola dla użytkowników z 3+ punktami (zakaz loterii)
     lotteryBanRoleId: process.env.STALKER_LME_LOTTERY_BAN_ROLE_ID,
     
     // Role docelowe dla różnych squadów
@@ -100,13 +100,13 @@ module.exports = {
     
     // Limity punktów
     pointLimits: {
-        punishmentRole: 3,
-        lotteryBan: 5
+        punishmentRole: 2,
+        lotteryBan: 3
     },
     
     // Mapowanie ról do zamiany
     roleSwapping: {
-        // Przy 5 punktach: zabierz punishmentRoleId, nadaj lotteryBanRoleId
+        // Przy 3 punktach: zabierz punishmentRoleId, nadaj lotteryBanRoleId
         removeRoleId: '1230903957241467012',
         addRoleId: '1392812250263195718'
     },

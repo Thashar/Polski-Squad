@@ -228,7 +228,7 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
         } else {
             for (let i = 0; i < ranking.length && i < 10; i++) {
                 const user = ranking[i];
-                const punishmentEmoji = user.points >= 3 ? '🎭' : '';
+                const punishmentEmoji = user.points >= 2 ? '🎭' : '';
                 rankingText += `${i + 1}. ${user.member.displayName} - ${user.points} punktów ${punishmentEmoji}\n`;
             }
         }
@@ -265,10 +265,10 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
             .addFields(
                 { name: '🗓️ Ostatnie usuwanie punktów', value: lastRemovalText, inline: false },
                 { name: '⏰ Następne usuwanie punktów', value: nextRemovalText, inline: false },
-                { name: '🎭 Rola karania (3+ punktów)', value: `<@&${config.punishmentRoleId}>`, inline: false },
-                { name: '🚨 Rola zakazu loterii (5+ punktów)', value: `<@&${config.lotteryBanRoleId}>`, inline: false },
+                { name: '🎭 Rola karania (2+ punktów)', value: `<@&${config.punishmentRoleId}>`, inline: false },
+                { name: '🚨 Rola zakazu loterii (3+ punktów)', value: `<@&${config.lotteryBanRoleId}>`, inline: false },
                 { name: '📢 Kanał ostrzeżeń', value: warningChannelText, inline: false },
-                { name: '⚖️ Zasady', value: '3+ punktów = rola karania\n5+ punktów = zakaz loterii\n< 3 punktów = brak roli\nOstrzeżenia: 3 i 5 punktów', inline: false }
+                { name: '⚖️ Zasady', value: '2+ punktów = rola karania\n3+ punktów = zakaz loterii\n< 2 punktów = brak roli\nOstrzeżenia: 2 i 3 punkty', inline: false }
             )
             .setTimestamp()
             .setFooter({ text: `Kategoria: ${category} | Co tydzień w poniedziałek o północy usuwany jest 1 punkt każdemu (${config.timezone})` });
@@ -372,8 +372,8 @@ async function handleDebugRolesCommand(interaction, config) {
             .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}`)
             .addFields(
                 { name: '👥 Członkowie', value: membersList.length > 1024 ? membersList.substring(0, 1020) + '...' : membersList, inline: false },
-                { name: '🎭 Rola karania (3+ pkt)', value: punishmentRoleInfo, inline: true },
-                { name: '🚨 Rola blokady loterii (5+ pkt)', value: `<@&${config.lotteryBanRoleId}>`, inline: true },
+                { name: '🎭 Rola karania (2+ pkt)', value: punishmentRoleInfo, inline: true },
+                { name: '🚨 Rola blokady loterii (3+ pkt)', value: `<@&${config.lotteryBanRoleId}>`, inline: true },
                 { name: '📢 Kanał ostrzeżeń', value: warningChannelInfo, inline: true },
                 { name: '⚙️ Konfiguracja', value: `Kategoria: ${category}\nStrefa czasowa: ${config.timezone}\nDeadline bossa: ${config.bossDeadline.hour}:${config.bossDeadline.minute.toString().padStart(2, '0')}`, inline: false }
             )
@@ -467,8 +467,8 @@ async function handleButton(interaction, sharedState) {
                     let addedPoints = 0;
                     
                     for (const result of results) {
-                        const warningEmoji = result.points === 3 || result.points === 5 ? '📢' : '';
-                        const punishmentEmoji = result.points >= 3 ? '🎭' : '';
+                        const warningEmoji = result.points === 2 || result.points === 3 ? '📢' : '';
+                        const punishmentEmoji = result.points >= 2 ? '🎭' : '';
                         processedUsers.push(`${result.user} - ${result.points} punktów ${punishmentEmoji}${warningEmoji}`);
                         addedPoints += 1;
                     }
@@ -485,12 +485,12 @@ async function handleButton(interaction, sharedState) {
                             { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
                             { name: '✅ Dopasowano i dodano punkty', value: processedUsers.length > 0 ? processedUsers.join('\n') : 'Brak', inline: false },
                             { name: '📈 Dodano punktów', value: addedPoints.toString(), inline: true },
-                            { name: '🎭 Rola karania (3+ pkt)', value: `<@&${data.config.punishmentRoleId}>`, inline: true },
-                            { name: '🚨 Rola karania (5+ pkt)', value: `<@&${data.config.lotteryBanRoleId}>`, inline: true }
+                            { name: '🎭 Rola karania (2+ pkt)', value: `<@&${data.config.punishmentRoleId}>`, inline: true },
+                            { name: '🚨 Rola karania (3+ pkt)', value: `<@&${data.config.lotteryBanRoleId}>`, inline: true }
                         )
                         .setImage(data.imageUrl)
                         .setTimestamp()
-                        .setFooter({ text: `Przeanalizowano przez ${interaction.user.tag} | 🎭 = rola karania (3+ pkt) | 🚨 = rola karania (5+ pkt) | 📢 = ostrzeżenie wysłane` });
+                        .setFooter({ text: `Przeanalizowano przez ${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 🚨 = rola karania (3+ pkt) | 📢 = ostrzeżenie wysłane` });
                     
                     await interaction.followUp({ 
                         embeds: [punishEmbed],

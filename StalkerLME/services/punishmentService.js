@@ -73,29 +73,29 @@ class PunishmentService {
             
             let messages = [];
             
-            // Logika dla 5+ punktów (zakaz loterii)
+            // Logika dla 3+ punktów (zakaz loterii)
             if (points >= this.config.pointLimits.lotteryBan) {
-                logger.info('🚫 Użytkownik ma 5+ punktów - stosowanie zakazu loterii');
+                logger.info('🚫 Użytkownik ma 3+ punktów - stosowanie zakazu loterii');
                 
-                // Usuń rolę karania (3+ punktów) jeśli ma
+                // Usuń rolę karania (2+ punktów) jeśli ma
                 if (hasPunishmentRole) {
                     await member.roles.remove(punishmentRole);
                     messages.push(`➖ Usunięto rolę karania`);
-                    logger.info('➖ Usunięto rolę karania (3+ punktów)');
+                    logger.info('➖ Usunięto rolę karania (2+ punktów)');
                 }
                 
-                // Dodaj rolę zakazu loterii (5+ punktów) jeśli nie ma
+                // Dodaj rolę zakazu loterii (3+ punktów) jeśli nie ma
                 if (!hasLotteryBanRole) {
                     await member.roles.add(lotteryBanRole);
                     messages.push(`🚨 Nadano rolę zakazu loterii`);
-                    logger.info('🚨 Nadano rolę zakazu loterii (5+ punktów)');
+                    logger.info('🚨 Nadano rolę zakazu loterii (3+ punktów)');
                 } else {
                     logger.info('Użytkownik już ma rolę zakazu loterii');
                 }
                 
-            // Logika dla 3-4 punktów (tylko rola karania)
+            // Logika dla 2 punktów (tylko rola karania)
             } else if (points >= this.config.pointLimits.punishmentRole) {
-                logger.info('⚠️ Użytkownik ma 3-4 punkty - stosowanie roli karania');
+                logger.info('⚠️ Użytkownik ma 2 punkty - stosowanie roli karania');
                 
                 // Usuń rolę zakazu loterii jeśli ma
                 if (hasLotteryBanRole) {
@@ -108,14 +108,14 @@ class PunishmentService {
                 if (!hasPunishmentRole) {
                     await member.roles.add(punishmentRole);
                     messages.push(`🎭 Nadano rolę karania`);
-                    logger.info('🎭 Nadano rolę karania (3+ punktów)');
+                    logger.info('🎭 Nadano rolę karania (2+ punktów)');
                 } else {
                     logger.info('Użytkownik już ma rolę karania');
                 }
                 
-            // Logika dla 0-2 punktów (brak ról karnych)
+            // Logika dla 0-1 punktów (brak ról karnych)
             } else {
-                logger.info('✅ Użytkownik ma mniej niż 3 punkty - usuwanie wszystkich ról karnych');
+                logger.info('✅ Użytkownik ma mniej niż 2 punkty - usuwanie wszystkich ról karnych');
                 
                 if (hasLotteryBanRole) {
                     await member.roles.remove(lotteryBanRole);
@@ -146,8 +146,8 @@ class PunishmentService {
 
     async sendWarningIfNeeded(guild, member, points) {
         try {
-            if (points !== 3 && points !== 5) {
-                return `Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 3 i 5)`;
+            if (points !== 2 && points !== 3) {
+                return `Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 2 i 3)`;
             }
             
             const userRoleId = this.getUserRoleId(member);
@@ -166,10 +166,10 @@ class PunishmentService {
             }
             
             let message = '';
-            if (points === 3) {
+            if (points === 2) {
                 message = `⚠️ **OSTRZEŻENIE** ⚠️\n\n${member} otrzymał rolę karną za zebrane punkty karne!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Niewystarczająca ilość walk z bossem\n\n*Co poniedziałek o północy automatycznie usuwany jest 1 punkt każdemu.*`;
-            } else if (points === 5) {
-                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii Glory!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Przekroczenie limitu 5 punktów kary\n\n*Co poniedziałek o północy automatycznie usuwany jest 1 punkt każdemu.*`;
+            } else if (points === 3) {
+                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii Glory!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Przekroczenie limitu 3 punktów kary\n\n*Co poniedziałek o północy automatycznie usuwany jest 1 punkt każdemu.*`;
             }
             
             if (message) {
