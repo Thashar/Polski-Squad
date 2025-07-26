@@ -108,7 +108,7 @@ module.exports = {
     
     logging: {
         enableConsoleLogging: true,
-        enableChannelLogging: true,
+        enableChannelLogging: false,
         logChannelId: process.env.MUTEUSZ_LOG_CHANNEL_ID
     },
     
