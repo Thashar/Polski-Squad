@@ -80,6 +80,11 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const WEBHOOK_URL = process.env.DISCORD_LOG_WEBHOOK_URL;
 const WEBHOOK_ENABLED = !!WEBHOOK_URL;
 
+// Kolejka webhook'ów i rate limiting
+const webhookQueue = [];
+let isProcessingQueue = false;
+const WEBHOOK_DELAY = 1000; // 1 sekunda między webhook'ami
+
 // Upewnij się, że katalog logs istnieje
 function ensureLogDirectory() {
     if (!fs.existsSync(LOG_DIR)) {
@@ -120,30 +125,72 @@ function writeToLogFile(botName, message, level = 'info') {
     }
 }
 
-// Funkcja do wysyłania logów przez Discord webhook
+// Funkcja do przetwarzania kolejki webhook'ów
+async function processWebhookQueue() {
+    if (isProcessingQueue || webhookQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    
+    while (webhookQueue.length > 0) {
+        const webhookData = webhookQueue.shift();
+        
+        try {
+            await sendWebhookRequest(webhookData);
+            // Czekaj między webhook'ami aby uniknąć rate limiting
+            await new Promise(resolve => setTimeout(resolve, WEBHOOK_DELAY));
+        } catch (error) {
+            // Kontynuuj mimo błędów
+        }
+    }
+    
+    isProcessingQueue = false;
+}
+
+// Funkcja do wysyłania pojedynczego webhook'a
+function sendWebhookRequest(webhookData) {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify(webhookData);
+        const url = new URL(WEBHOOK_URL);
+        
+        const options = {
+            hostname: url.hostname,
+            path: url.pathname,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+        
+        const req = https.request(options, (res) => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                resolve();
+            } else if (res.statusCode === 429) {
+                // Rate limit - spróbuj ponownie po dłuższym czasie
+                setTimeout(() => {
+                    sendWebhookRequest(webhookData).then(resolve).catch(reject);
+                }, 5000);
+            } else {
+                reject(new Error(`Webhook error status: ${res.statusCode}`));
+            }
+        });
+        
+        req.on('error', (error) => {
+            reject(error);
+        });
+        
+        req.write(data);
+        req.end();
+    });
+}
+
+// Funkcja do wysyłania logów przez Discord webhook (dodaje do kolejki)
 function sendToDiscordWebhook(botName, message, level = 'info') {
     if (!WEBHOOK_ENABLED) return;
     
     try {
         const timestamp = getTimestamp();
         const emoji = botEmojis[botName] || '🤖';
-        
-        let color = 0x00ff00; // Zielony domyślnie
-        switch (level.toLowerCase()) {
-            case 'error':
-                color = 0xff0000; // Czerwony
-                break;
-            case 'warn':
-                color = 0xffff00; // Żółty
-                break;
-            case 'success':
-                color = 0x00ff00; // Zielony
-                break;
-            case 'info':
-            default:
-                color = 0x0099ff; // Niebieski
-                break;
-        }
         
         let levelEmoji = '•';
         switch (level.toLowerCase()) {
@@ -182,36 +229,14 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
             content: webhookMessage
         };
         
-        const data = JSON.stringify(webhookData);
-        const url = new URL(WEBHOOK_URL);
+        // Dodaj do kolejki zamiast wysyłać od razu
+        webhookQueue.push(webhookData);
         
-        const options = {
-            hostname: url.hostname,
-            path: url.pathname,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(data)
-            }
-        };
-        
-        const req = https.request(options, (res) => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-                // Webhook wysłany pomyślnie
-            } else {
-                console.error('Webhook error status:', res.statusCode);
-            }
-        });
-        
-        req.on('error', (error) => {
-            console.error('Webhook request error:', error.message);
-        });
-        
-        req.write(data);
-        req.end();
+        // Uruchom przetwarzanie kolejki
+        setImmediate(processWebhookQueue);
         
     } catch (error) {
-        // Jeśli nie można wysłać webhook, nie przerywamy aplikacji
+        // Jeśli nie można dodać do kolejki, nie przerywamy aplikacji
     }
 }
 
