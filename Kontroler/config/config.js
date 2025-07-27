@@ -58,6 +58,7 @@ module.exports = {
         tempDir: path.join(__dirname, '../temp'),
         saveProcessedImages: true,
         processedDir: path.join(__dirname, '../processed'),
+        maxProcessedFiles: 50,
         languages: 'pol+eng',
         charWhitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż .,:-_[](){}',
         pagesegMode: 'AUTO',
