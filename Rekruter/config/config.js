@@ -48,5 +48,25 @@ module.exports = {
         clan2: process.env.CLAN2_ROLE,
         mainClan: process.env.MAIN_CLAN_ROLE
     },
+    
+    // Konfiguracja monitorowania użytkowników bez ról
+    roleMonitoring: {
+        enabled: true,
+        checkInterval: '0 */6 * * *', // Co 6 godzin
+        warning24Hours: 24 * 60 * 60 * 1000, // 24 godziny w ms
+        dataFile: './Rekruter/data/user_monitoring.json',
+        waitingRoomChannel: process.env.WAITING_ROOM_CHANNEL || 'poczekalnia'
+    },
+    
+    // Konfiguracja powiadomień o wejściach/wyjściach
+    memberNotifications: {
+        enabled: true,
+        channelId: '1170323972173340744',
+        emojis: {
+            join: '<:PepeBizensik:1278014731113857037>',
+            leave: '<:PepeRIP:1267576534252916849>'
+        }
+    },
+    
     messages
 };

@@ -112,5 +112,12 @@ module.exports = {
         logChannelId: process.env.MUTEUSZ_LOG_CHANNEL_ID
     },
     
+    // Konfiguracja kickowania użytkowników bez ról (współpraca z Rekruterem)
+    roleKicking: {
+        enabled: true,
+        checkInterval: '0 */2 * * *', // Co 2 godziny
+        rekruterDataPath: '../Rekruter/data/user_monitoring.json'
+    },
+    
     messages
 };

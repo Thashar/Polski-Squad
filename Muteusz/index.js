@@ -10,6 +10,7 @@ const RoleManagementService = require('./services/roleManagementService');
 const MediaService = require('./services/mediaService');
 const LogService = require('./services/logService');
 const SpecialRolesService = require('./services/specialRolesService');
+const RoleKickingService = require('./services/roleKickingService');
 
 // Importuj handlery
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -32,6 +33,7 @@ const specialRolesService = new SpecialRolesService(config);
 const roleManagementService = new RoleManagementService(config, specialRolesService);
 const mediaService = new MediaService(config);
 const logService = new LogService(config);
+const roleKickingService = new RoleKickingService(config);
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
@@ -59,6 +61,7 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj serwisy
     logService.initialize(client);
     await mediaService.initialize();
+    await roleKickingService.initialize(client);
     
     // Zarejestruj komendy slash
     await interactionHandler.registerSlashCommands(client);

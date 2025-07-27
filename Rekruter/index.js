@@ -6,9 +6,15 @@ const config = require('./config/config');
 const { delay } = require('./utils/helpers');
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleMessage } = require('./handlers/messageHandlers');
+const RoleMonitoringService = require('./services/roleMonitoringService');
+const MemberNotificationService = require('./services/memberNotificationService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
+
+// Inicjalizacja serwisów
+const roleMonitoringService = new RoleMonitoringService(config);
+const memberNotificationService = new MemberNotificationService(config);
 
 const client = new Client({
     intents: [
@@ -47,6 +53,10 @@ const sharedState = {
 client.once('ready', async () => {
     logger.info(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
     logger.info(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
+    
+    // Inicjalizacja serwisów
+    await roleMonitoringService.initialize(client);
+    memberNotificationService.initialize(client);
     
     // Inicjalizacja folderu temp
     try {
@@ -133,6 +143,16 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
     await handleMessage(message, sharedState, config, client, MONITORED_CHANNEL_ID);
+});
+
+// Obsługa dołączenia nowego członka
+client.on('guildMemberAdd', async member => {
+    await memberNotificationService.handleMemberJoin(member);
+});
+
+// Obsługa opuszczenia serwera przez członka
+client.on('guildMemberRemove', async member => {
+    await memberNotificationService.handleMemberLeave(member);
 });
 
 client.login(config.token);
