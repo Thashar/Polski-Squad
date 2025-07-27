@@ -56,6 +56,8 @@ module.exports = {
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
+        saveProcessedImages: true,
+        processedDir: path.join(__dirname, '../processed'),
         languages: 'pol+eng',
         charWhitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż .,:-_[](){}',
         pagesegMode: 'AUTO',

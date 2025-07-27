@@ -1,5 +1,7 @@
 const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
+const fs = require('fs').promises;
+const path = require('path');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -7,6 +9,21 @@ const logger = createBotLogger('Kontroler');
 class OCRService {
     constructor(config) {
         this.config = config;
+        this.ensureDirectories();
+    }
+
+    /**
+     * Tworzy niezbędne katalogi
+     */
+    async ensureDirectories() {
+        try {
+            if (this.config.ocr.saveProcessedImages) {
+                await fs.mkdir(this.config.ocr.processedDir, { recursive: true });
+            }
+            await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
+        } catch (error) {
+            logger.error(`Błąd tworzenia katalogów: ${error.message}`);
+        }
     }
 
     /**
@@ -63,6 +80,20 @@ class OCRService {
             .png()
             .toFile(outputPath);
         
+        // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+        if (this.config.ocr.saveProcessedImages) {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `daily_processed_${timestamp}.png`;
+            const savedPath = path.join(this.config.ocr.processedDir, filename);
+            
+            try {
+                await fs.copyFile(outputPath, savedPath);
+                logger.info(`💾 Zapisano przetworzone zdjęcie Daily: ${filename}`);
+            } catch (error) {
+                logger.error(`Błąd zapisu przetworzonego zdjęcia: ${error.message}`);
+            }
+        }
+        
         logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + gamma 3.0)');
         return outputPath;
     }
@@ -115,6 +146,20 @@ class OCRService {
         })
         .png()
         .toFile(outputPath);
+
+        // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+        if (this.config.ocr.saveProcessedImages) {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `cx_processed_${timestamp}.png`;
+            const savedPath = path.join(this.config.ocr.processedDir, filename);
+            
+            try {
+                await fs.copyFile(outputPath, savedPath);
+                logger.info(`💾 Zapisano przetworzone zdjęcie CX: ${filename}`);
+            } catch (error) {
+                logger.error(`Błąd zapisu przetworzonego zdjęcia: ${error.message}`);
+            }
+        }
 
         logger.info('Zaawansowany preprocessing zakończony');
         return outputPath;
