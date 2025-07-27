@@ -53,17 +53,17 @@ class OCRService {
      * @returns {string} - Ścieżka do przetworzonego obrazu
      */
     async preprocessWhiteTextOnGray(imagePath, outputPath) {
-        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z korekcją gamma 2.0');
+        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z korekcją gamma 2.5');
         
         await sharp(imagePath)
-            .gamma(this.config.ocr.gamma)
+            .gamma(2.5)
             .grayscale()
             .threshold(200)
             .negate()
             .png()
             .toFile(outputPath);
         
-        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + gamma)');
+        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + gamma 2.5)');
         return outputPath;
     }
 
