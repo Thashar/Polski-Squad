@@ -70,10 +70,16 @@ class OCRService {
      * @returns {string} - Ścieżka do przetworzonego obrazu
      */
     async preprocessWhiteTextOnGray(imagePath, outputPath) {
-        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z korekcją gamma 2.0 + redukcja szumów + delikatne rozmycie');
+        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie');
+        
+        // Najpierw pobierz metadane obrazu
+        const metadata = await sharp(imagePath).metadata();
+        const newWidth = metadata.width * 2;
+        const newHeight = metadata.height * 2;
         
         await sharp(imagePath)
-            .gamma(2.0)
+            .resize(newWidth, newHeight, { kernel: 'lanczos3' })
+            .gamma(3.0)
             .median(5)
             .blur(0.8)
             .grayscale()
@@ -96,7 +102,7 @@ class OCRService {
             }
         }
         
-        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + gamma 2.0 + redukcja szumów + rozmycie)');
+        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie)');
         return outputPath;
     }
 
