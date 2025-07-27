@@ -129,11 +129,6 @@ class OCRService {
         logger.info('Rozpoczynam rozpoznawanie tekstu OCR...');
         
         const { data: { text } } = await Tesseract.recognize(imagePath, this.config.ocr.languages, {
-            logger: m => {
-                if (m.status === 'recognizing text') {
-                    logger.info(`📖 OCR Progress: ${Math.round(m.progress * 100)}%`);
-                }
-            },
             tessedit_char_whitelist: this.config.ocr.charWhitelist,
             tessedit_pageseg_mode: Tesseract.PSM.AUTO,
             tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
@@ -142,10 +137,7 @@ class OCRService {
             classify_bln_numeric_mode: '1'
         });
 
-        logger.info('Rozpoznany tekst:');
-        logger.info('─'.repeat(50));
-        logger.info(text);
-        logger.info('─'.repeat(50));
+        logger.info(`Rozpoznany tekst: "${text.trim()}"`);
 
         return text;
     }

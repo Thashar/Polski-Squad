@@ -88,7 +88,6 @@ class OCRService {
             
             logger.info('Rozpoczynam OCR...');
             const { data: { text } } = await Tesseract.recognize(processedPath, this.config.ocr.languages, {
-                logger: m => logger.info(`OCR Progress: ${m.status} - ${m.progress}`),
                 tessedit_char_whitelist: this.config.ocr.charWhitelist
             });
             

@@ -38,11 +38,6 @@ class OCRService {
             
             logger.info('Uruchamianie OCR');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        logger.info(`📊 OCR Progress: ${Math.round(m.progress * 100)}%`);
-                    }
-                },
                 tessedit_char_whitelist: this.config.ocr.polishAlphabet
             });
             
