@@ -61,6 +61,7 @@ module.exports = {
         pagesegMode: 'AUTO',
         ocrEngineMode: 'LSTM_ONLY',
         whiteThreshold: 200,
+        gamma: 2.0,
         luminanceThresholds: {
             white: 200,
             black: 120
