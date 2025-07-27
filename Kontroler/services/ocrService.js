@@ -70,10 +70,10 @@ class OCRService {
      * @returns {string} - Ścieżka do przetworzonego obrazu
      */
     async preprocessWhiteTextOnGray(imagePath, outputPath) {
-        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z korekcją gamma 3.0 + redukcja szumów + delikatne rozmycie');
+        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z korekcją gamma 2.0 + redukcja szumów + delikatne rozmycie');
         
         await sharp(imagePath)
-            .gamma(3.0)
+            .gamma(2.0)
             .median(5)
             .blur(0.8)
             .grayscale()
@@ -96,7 +96,7 @@ class OCRService {
             }
         }
         
-        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + gamma 3.0 + redukcja szumów + rozmycie)');
+        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + gamma 2.0 + redukcja szumów + rozmycie)');
         return outputPath;
     }
 
