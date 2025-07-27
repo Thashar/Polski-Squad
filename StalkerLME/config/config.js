@@ -90,12 +90,22 @@ module.exports = {
         // Polski alfabet dla OCR whitelist (oryginalny)
         polishAlphabet: 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźżAĄBCĆDEĘFGHIJKLŁMNŃOÓPQRSŚTUVWXYZŹŻ0123456789.,;:!?-()[]{}/" ',
         
-        // Ustawienia przetwarzania obrazu (oryginalne)
+        // Ustawienia przetwarzania obrazu (ulepszone)
         imageProcessing: {
             whiteThreshold: 200,
             contrast: 2.0,
-            brightness: 20
-        }
+            brightness: 20,
+            gamma: 3.0,
+            median: 5,
+            blur: 0.8,
+            upscale: 2.0
+        },
+        
+        // Konfiguracja zapisywania przetworzonych obrazów
+        saveProcessedImages: true,
+        processedDir: './StalkerLME/processed',
+        maxProcessedFiles: 50,
+        tempDir: './StalkerLME/temp'
     },
     
     // Limity punktów

@@ -10,12 +10,16 @@ const logger = createBotLogger('StalkerLME');
 class OCRService {
     constructor(config) {
         this.config = config;
-        this.tempDir = './StalkerLME/temp';
+        this.tempDir = this.config.ocr.tempDir || './StalkerLME/temp';
+        this.processedDir = this.config.ocr.processedDir || './StalkerLME/processed';
     }
 
     async initializeOCR() {
         try {
             await fs.mkdir(this.tempDir, { recursive: true });
+            if (this.config.ocr.saveProcessedImages) {
+                await fs.mkdir(this.processedDir, { recursive: true });
+            }
             logger.info('[OCR] ✅ Serwis OCR zainicjalizowany');
         } catch (error) {
             logger.error('[OCR] ❌ Błąd inicjalizacji OCR:', error);
@@ -57,36 +61,58 @@ class OCRService {
 
     async processImageWithSharp(imageBuffer) {
         try {
+            // Pobierz wymiary oryginalnego obrazu dla upscaling
+            const metadata = await sharp(imageBuffer).metadata();
+            const newWidth = Math.round(metadata.width * this.config.ocr.imageProcessing.upscale);
+            const newHeight = Math.round(metadata.height * this.config.ocr.imageProcessing.upscale);
+            
+            // Ścieżka do zapisania przetworzonego obrazu
+            const timestamp = Date.now();
+            const outputPath = path.join(this.processedDir, `stalker_processed_${timestamp}.png`);
+            
             // Zaawansowane przetwarzanie obrazu dla czarnego tekstu
             const processedBuffer = await sharp(imageBuffer)
                 .greyscale()
-                // 1. Zwiększamy rozdzielczość x3 dla lepszej jakości OCR
-                .resize({ width: null, height: null, fit: 'inside', withoutEnlargement: false, scale: 3 })
-                // 2. Delikatne rozmycie Gaussa - redukuje szum i artefakty
-                .blur(0.3)
-                // 3. Normalizacja dla pełnego wykorzystania zakresu tonalnego
+                // 1. Zwiększanie rozdzielczości x2 (nowe)
+                .resize(newWidth, newHeight, { kernel: 'lanczos3' })
+                // 2. Gamma correction (nowe)
+                .gamma(this.config.ocr.imageProcessing.gamma)
+                // 3. Median filter - redukcja szumów (nowe)
+                .median(this.config.ocr.imageProcessing.median)
+                // 4. Blur - rozmycie krawędzi (nowe)
+                .blur(this.config.ocr.imageProcessing.blur)
+                // 5. Normalizacja dla pełnego wykorzystania zakresu tonalnego (zachowane)
                 .normalize()
-                // 4. INWERSJA OBRAZU - biały tekst staje się czarnym
+                // 6. INWERSJA OBRAZU - biały tekst staje się czarnym (zachowane)
                 .negate()
-                // 5. Gamma correction - poprawia czytelność środkowych tonów
-                .gamma(2.0)
-                // 6. Mocniejszy kontrast po inwersji dla ostrzejszego tekstu
-                .linear(2.2, -100) // Agresywniejszy kontrast
-                // 7. Wyostrzenie krawędzi tekstu
+                // 7. Mocniejszy kontrast po inwersji dla ostrzejszego tekstu (zachowane)
+                .linear(this.config.ocr.imageProcessing.contrast, -100)
+                // 8. Wyostrzenie krawędzi tekstu (zachowane)
                 .sharpen({ sigma: 0.5, m1: 0, m2: 2, x1: 2, y2: 10 })
-                // 8. Operacja morfologiczna - zamykanie luk w literach
+                // 9. Operacja morfologiczna - zamykanie luk w literach (zachowane)
                 .convolve({
                     width: 3,
                     height: 3,
                     kernel: [0, -1, 0, -1, 5, -1, 0, -1, 0]
                 })
-                // 9. Finalna binaryzacja - wszystkie odcienie szarości → białe, tekst → czarny
-                .threshold(130, { greyscale: false }) // Nieco wyższy próg po wszystkich operacjach
-                .png()
-                .toBuffer();
+                // 10. Finalna binaryzacja - wszystkie odcienie szarości → białe, tekst → czarny (zachowane)
+                .threshold(this.config.ocr.imageProcessing.whiteThreshold, { greyscale: false })
+                .png();
             
-            logger.info('✅ Obraz przetworzony - zaawansowane filtry dla czarnego tekstu (x3, blur, gamma, sharpen, morph)');
-            return processedBuffer;
+            // Zapisz przetworzony obraz jeśli włączone (nowe)
+            if (this.config.ocr.saveProcessedImages) {
+                await processedBuffer.toFile(outputPath);
+                logger.info(`💾 Zapisano przetworzony obraz: ${outputPath}`);
+                
+                // Wywołaj czyszczenie starych plików
+                await this.cleanupProcessedImages();
+            }
+            
+            // Zwróć buffer do OCR
+            const buffer = await processedBuffer.toBuffer();
+            
+            logger.info(`✅ Obraz przetworzony - upscale: ${this.config.ocr.imageProcessing.upscale}x, gamma: ${this.config.ocr.imageProcessing.gamma}, median: ${this.config.ocr.imageProcessing.median}, blur: ${this.config.ocr.imageProcessing.blur} + zaawansowane filtry dla czarnego tekstu`);
+            return buffer;
         } catch (error) {
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
             throw error;
@@ -757,6 +783,46 @@ class OCRService {
             }
         } catch (error) {
             logger.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych:', error);
+        }
+    }
+
+    async cleanupProcessedImages() {
+        try {
+            if (!this.config.ocr.saveProcessedImages) {
+                return;
+            }
+
+            const files = await fs.readdir(this.processedDir);
+            const processedFiles = files.filter(file => file.startsWith('stalker_processed_') && file.endsWith('.png'));
+            
+            if (processedFiles.length <= this.config.ocr.maxProcessedFiles) {
+                return;
+            }
+
+            // Sortuj pliki według czasu modyfikacji (najstarsze pierwsze)
+            const filesWithStats = await Promise.all(
+                processedFiles.map(async (file) => {
+                    const filePath = path.join(this.processedDir, file);
+                    const stats = await fs.stat(filePath);
+                    return { file, filePath, mtime: stats.mtime };
+                })
+            );
+
+            filesWithStats.sort((a, b) => a.mtime - b.mtime);
+
+            // Usuń najstarsze pliki, pozostawiając maksymalną liczbę
+            const filesToDelete = filesWithStats.slice(0, filesWithStats.length - this.config.ocr.maxProcessedFiles);
+            
+            for (const fileInfo of filesToDelete) {
+                await fs.unlink(fileInfo.filePath);
+                logger.info(`🗑️ Usunięto stary przetworzony obraz: ${fileInfo.file}`);
+            }
+
+            if (filesToDelete.length > 0) {
+                logger.info(`🧹 Wyczyszczono ${filesToDelete.length} starych przetworzonych obrazów, pozostało ${this.config.ocr.maxProcessedFiles}`);
+            }
+        } catch (error) {
+            logger.error('❌ Błąd czyszczenia przetworzonych obrazów:', error);
         }
     }
 }
