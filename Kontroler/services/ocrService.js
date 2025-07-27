@@ -74,8 +74,8 @@ class OCRService {
         
         await sharp(imagePath)
             .gamma(3.0)
-            .median(3)
-            .blur(0.5)
+            .median(5)
+            .blur(0.8)
             .grayscale()
             .threshold(200)
             .negate()
