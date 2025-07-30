@@ -205,9 +205,10 @@ class RankingService {
      * @param {string} userName - Nazwa użytkownika
      * @param {string} bestScore - Najlepszy wynik
      * @param {string} currentScore - Obecny wynik
+     * @param {string} attachmentName - Nazwa załącznika ze zdjęciem (opcjonalny)
      * @returns {EmbedBuilder} - Embed wyniku
      */
-    createResultEmbed(userName, bestScore, currentScore) {
+    createResultEmbed(userName, bestScore, currentScore, attachmentName = null) {
         const currentScoreValue = this.parseScoreValue(currentScore);
         const newScoreValue = this.parseScoreValue(bestScore);
         const difference = currentScoreValue - newScoreValue;
@@ -235,6 +236,10 @@ class RankingService {
             )
             .setTimestamp();
         
+        if (attachmentName) {
+            embed.setImage(`attachment://${attachmentName}`);
+        }
+        
         return embed;
     }
 
@@ -248,14 +253,14 @@ class RankingService {
      * @returns {EmbedBuilder} - Embed rekordu
      */
     createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null) {
-        let statusText = this.config.messages.recordSaved;
+        let newScoreText = `**${bestScore}**`;
         
         if (previousScore) {
             const previousScoreValue = this.parseScoreValue(previousScore);
             const newScoreValue = this.parseScoreValue(bestScore);
             const improvement = newScoreValue - previousScoreValue;
             const improvementText = `+${this.formatScore(improvement)}`;
-            statusText += `\n**Poprawa o:** ${improvementText}`;
+            newScoreText = `${bestScore} (progres ${improvementText})`;
         }
         
         const embed = new EmbedBuilder()
@@ -265,8 +270,8 @@ class RankingService {
             .setThumbnail(userAvatarUrl)
             .addFields(
                 {
-                    name: this.config.messages.recordNewScore,
-                    value: `**${bestScore}**`,
+                    name: '🏆 Nowy wynik',
+                    value: newScoreText,
                     inline: true
                 },
                 {
@@ -276,7 +281,7 @@ class RankingService {
                 },
                 {
                     name: this.config.messages.recordStatus,
-                    value: statusText,
+                    value: this.config.messages.recordSaved,
                     inline: false
                 }
             )

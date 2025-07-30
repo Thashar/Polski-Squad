@@ -231,14 +231,23 @@ class InteractionHandler {
             await this.logService.logScoreUpdate(userName, bestScore, isNewRecord);
             
             if (!isNewRecord) {
-                await fs.unlink(tempImagePath);
+                // Przygotuj załącznik ze zdjęciem dla wyniku bez pobicia rekordu
+                const imageAttachment = new AttachmentBuilder(tempImagePath, { 
+                    name: `wynik_${userName}_${Date.now()}.${attachment.name.split('.').pop()}` 
+                });
                 
                 const resultEmbed = this.rankingService.createResultEmbed(
-                    userName, bestScore, currentScore.score
+                    userName, bestScore, currentScore.score, imageAttachment.name
                 );
                 
                 // Aktualizuj ephemeral message z informacją o braku pobicia rekordu
-                await interaction.editReply({ embeds: [resultEmbed] });
+                await interaction.editReply({ 
+                    embeds: [resultEmbed],
+                    files: [imageAttachment]
+                });
+                
+                // Usuń plik tymczasowy po wysłaniu
+                await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
                 return;
             }
             
