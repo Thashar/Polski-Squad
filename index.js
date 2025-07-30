@@ -49,6 +49,12 @@ const botConfigs = [
         loggerName: 'Konklawe',
         emoji: '⛪',
         path: './Konklawe/index'
+    },
+    {
+        name: 'Wydarzynier Bot',
+        loggerName: 'Wydarzynier',
+        emoji: '🎉',
+        path: './Wydarzynier/index'
     }
 ];
 
@@ -95,7 +101,7 @@ function loadBotConfig() {
     } catch (error) {
         logger.error('❌ Błąd wczytywania konfiguracji botów:', error.message);
         logger.info('🔄 Używam domyślnej konfiguracji (wszystkie boty)');
-        return ['rekruter', 'szkolenia', 'stalker', 'muteusz', 'endersecho', 'kontroler', 'konklawe'];
+        return ['rekruter', 'szkolenia', 'stalker', 'muteusz', 'endersecho', 'kontroler', 'konklawe', 'wydarzynier'];
     }
 }
 

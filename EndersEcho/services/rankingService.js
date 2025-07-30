@@ -86,6 +86,41 @@ class RankingService {
     }
 
     /**
+     * Pobiera jednostkę z wyniku tekstowego
+     * @param {string} scoreText - Tekst wyniku
+     * @returns {string} - Jednostka lub pusty string
+     */
+    getScoreUnit(scoreText) {
+        const upperScore = scoreText.toUpperCase().trim();
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)([KMBTQ]|QI)?$/);
+        return match && match[2] ? match[2] : '';
+    }
+
+    /**
+     * Formatuje progres w określonej jednostce
+     * @param {number} improvement - Wartość progreso w jednostkach bazowych
+     * @param {string} targetUnit - Docelowa jednostka
+     * @returns {string} - Sformatowany progres
+     */
+    formatProgressInUnit(improvement, targetUnit) {
+        if (!targetUnit) {
+            return `+${improvement}`;
+        }
+
+        const unitValue = this.config.scoring.units[targetUnit];
+        if (!unitValue) {
+            return `+${this.formatScore(improvement)}`;
+        }
+
+        const unitImprovement = improvement / unitValue;
+        const formattedValue = unitImprovement % 1 === 0 ? 
+            unitImprovement.toString() : 
+            unitImprovement.toFixed(2);
+        
+        return `+${formattedValue}${targetUnit}`;
+    }
+
+    /**
      * Tworzy embed rankingu
      * @param {Array} players - Lista graczy
      * @param {number} page - Aktualna strona
@@ -259,7 +294,11 @@ class RankingService {
             const previousScoreValue = this.parseScoreValue(previousScore);
             const newScoreValue = this.parseScoreValue(bestScore);
             const improvement = newScoreValue - previousScoreValue;
-            const improvementText = `+${this.formatScore(improvement)}`;
+            
+            // Formatuj progres w tej samej jednostce co nowy wynik
+            const newScoreUnit = this.getScoreUnit(bestScore);
+            const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
+            
             newScoreText = `${bestScore} (progres ${improvementText})`;
         }
         
