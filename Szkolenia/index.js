@@ -4,7 +4,7 @@ const config = require('./config/config');
 // const { logWithTimestamp } = require('./utils/helpers'); // Usunięto, używaj createBotLogger
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
-const { checkThreads } = require('./services/threadService');
+const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Szkolenia');
@@ -20,8 +20,8 @@ const client = new Client({
     partials: [Partials.Message, Partials.Reaction, Partials.User],
 });
 
-// Mapa do śledzenia ostatnich przypomnień
-const lastReminderMap = new Map();
+// Mapa do śledzenia ostatnich przypomnień (będzie załadowana z pliku)
+let lastReminderMap = new Map();
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
@@ -37,6 +37,15 @@ client.once(Events.ClientReady, async () => {
     client.guilds.cache.forEach(guild => {
         logger.info(`- ${guild.name} (${guild.id})`);
     });
+    
+    // Załaduj dane przypomień z pliku
+    try {
+        lastReminderMap = await reminderStorage.loadReminders();
+        sharedState.lastReminderMap = lastReminderMap;
+        logger.info('✅ Dane przypomień zostały pomyślnie załadowane');
+    } catch (error) {
+        logger.error('❌ Błąd ładowania danych przypomień:', error.message);
+    }
     
     logger.info('Bot Szkolenia jest gotowy do pracy!');
     

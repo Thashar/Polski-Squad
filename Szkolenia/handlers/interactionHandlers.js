@@ -1,4 +1,5 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { reminderStorage } = require('../services/threadService');
 
 const logger = createBotLogger('Szkolenia');
 /**
@@ -65,7 +66,7 @@ async function handleLockThread(interaction, state, config) {
     });
 
     // Usuń wątek z mapy przypomnień
-    state.lastReminderMap.delete(channel.id);
+    await reminderStorage.removeReminder(state.lastReminderMap, channel.id);
 
     // Zablokuj wątek po krótkiej chwili
     setTimeout(async () => {

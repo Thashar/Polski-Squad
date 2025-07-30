@@ -1,6 +1,8 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const ReminderStorageService = require('./reminderStorageService');
 
 const logger = createBotLogger('Szkolenia');
+const reminderStorage = new ReminderStorageService();
 /**
  * Serwis zarządzania wątkami szkoleniowymi.
  * -------------------------------------------------
@@ -30,6 +32,9 @@ async function checkThreads(client, state, config) {
         const reminderThreshold = config.timing.inactiveReminderHours * 60 * 60 * 1000;
 
         const threads = await channel.threads.fetchActive();
+        
+        // Wyczyść nieistniejące wątki z danych przypomień
+        await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, threads.threads);
         
         for (const [id, thread] of threads.threads) {
             try {
@@ -115,7 +120,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
     });
 
     // Zaktualizuj czas ostatniego przypomnienia
-    state.lastReminderMap.set(thread.id, now);
+    await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
     logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
 }
 
@@ -126,7 +131,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
  * @param {Object} config - Konfiguracja aplikacji
  */
 async function deleteThread(thread, state, config) {
-    state.lastReminderMap.delete(thread.id);
+    await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
     await thread.delete(`Wątek nieaktywny przez ${config.timing.threadDeleteDays} dni`);
     logger.info(`🗑️ Usunięto wątek: ${thread.name}`);
 }
@@ -142,5 +147,6 @@ async function archiveThread(thread, config) {
 }
 
 module.exports = {
-    checkThreads
+    checkThreads,
+    reminderStorage
 };

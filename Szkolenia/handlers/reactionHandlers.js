@@ -1,4 +1,5 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { reminderStorage } = require('../services/threadService');
 
 const logger = createBotLogger('Szkolenia');
 /**
@@ -62,7 +63,7 @@ async function handleReactionAdd(reaction, user, state, config) {
             );
 
             // Inicjalizuj czas utworzenia wątku w mapie
-            state.lastReminderMap.set(thread.id, Date.now());
+            await reminderStorage.setReminder(state.lastReminderMap, thread.id, Date.now());
         }
 
     } catch (error) {
