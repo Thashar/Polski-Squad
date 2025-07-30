@@ -90,13 +90,9 @@ class OCRService {
         try {
             const outputPath = imagePath.replace(/\.(png|jpg|jpeg)$/i, '_processed.png');
             
-            if (channelConfig.name === 'Daily') {
-                logger.info('Daily - używam metody dla białego tekstu na szarym tle');
-                return await this.preprocessWhiteTextOnGray(imagePath, outputPath);
-            } else {
-                logger.info('CX - używam zaawansowanej konwersji biało-czarnej');
-                return await this.preprocessBlackWhite(imagePath, outputPath);
-            }
+            // Używaj tej samej metody dla Daily i CX
+            logger.info(`${channelConfig.name} - używam metody dla białego tekstu na szarym tle`);
+            return await this.preprocessWhiteTextOnGray(imagePath, outputPath);
         } catch (error) {
             logger.error(`Błąd preprocessingu: ${error.message}`);
             throw error;
