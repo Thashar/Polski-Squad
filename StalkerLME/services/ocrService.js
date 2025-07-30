@@ -45,11 +45,11 @@ class OCRService {
                 tessedit_char_whitelist: this.config.ocr.polishAlphabet
             });
             
-            logger.info('Pełny tekst z OCR');
-            logger.info('🔤 Odczytany tekst:');
-            logger.info('Początek tekstu:');
-            logger.info(text);
-            logger.info('Koniec tekstu');
+            logger.info('🔤 Odczytany tekst z OCR:');
+            const textLines = text.split('\n').filter(line => line.trim().length > 0);
+            textLines.forEach((line, index) => {
+                logger.info(`${index + 1}: ${line.trim()}`);
+            });
             
             return text;
         } catch (error) {
@@ -141,13 +141,13 @@ class OCRService {
             // Krok 2: Przygotuj linie OCR
             const lines = text.split('\n').filter(line => line.trim().length > 0);
             
-            // Oblicz średnią długość linii
+            // Oblicz średnią długość linii dla informacji
             const avgLineLength = lines.reduce((sum, line) => sum + line.trim().length, 0) / lines.length;
             logger.info(`📏 Średnia długość linii: ${avgLineLength.toFixed(1)} znaków`);
             
-            // Filtruj linie krótsze niż średnia
-            const validLines = lines.filter(line => line.trim().length >= avgLineLength);
-            logger.info(`📋 Analizuję ${validLines.length}/${lines.length} linii (dłuższe niż średnia)`);
+            // Analizuj wszystkie linie (usuń filtrowanie według średniej)
+            const validLines = lines.filter(line => line.trim().length >= 5); // Minimum 5 znaków
+            logger.info(`📋 Analizuję ${validLines.length}/${lines.length} linii (minimum 5 znaków)`);
             
             const confirmedPlayers = [];
             const processedNicks = new Set(); // Śledzenie już przetworzonych nicków z zerem
@@ -155,7 +155,7 @@ class OCRService {
             // Krok 3: Dla każdej linii znajdź najlepiej dopasowany nick z roli
             for (let i = 0; i < validLines.length; i++) {
                 const line = validLines[i];
-                logger.info(`🔍 Linia ${i + 1}: "${line.trim()}"`);
+                const lineNumber = lines.findIndex(l => l.trim() === line.trim()) + 1;
                 
                 // Znajdź najlepsze dopasowanie ze wszystkich nicków z roli
                 let bestMatch = null;
@@ -171,11 +171,8 @@ class OCRService {
                 }
                 
                 if (bestMatch) {
-                    logger.info(`   ✅ Najlepsze dopasowanie: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}% podobieństwa)`);
-                    
                     // Krok 4: Sprawdź koniec linii za nickiem dla wyniku
                     let endResult = this.analyzeLineEnd(line, bestMatch.displayName);
-                    logger.info(`   📊 Analiza za nickiem: ${endResult.type} (wartość: "${endResult.value}")`);
                     
                     // Jeśli nick ma 10+ liter i nie znaleziono wyniku/zera w tej linii, sprawdź następną linię
                     if (bestMatch.displayName.length >= 10 && endResult.type === 'unknown') {
@@ -186,14 +183,10 @@ class OCRService {
                         
                         if (currentLineIndex !== -1 && currentLineIndex + 1 < allLines.length) {
                             const nextLine = allLines[currentLineIndex + 1];
-                            logger.info(`   🔍 Nick długi (${bestMatch.displayName.length} znaków), sprawdzam rzeczywistą następną linię: "${nextLine.trim()}"`);
-                            
                             const nextEndResult = this.analyzeLineEnd(nextLine, null); // W następnej linii nie szukamy za nickiem
-                            logger.info(`   📊 Analiza następnej linii: ${nextEndResult.type} (wartość: "${nextEndResult.value}")`);
                             
                             if (nextEndResult.type !== 'unknown') {
                                 endResult = nextEndResult;
-                                logger.info(`   ✅ Użyto wyniku z następnej linii`);
                             }
                         }
                     }
@@ -201,7 +194,6 @@ class OCRService {
                     if (endResult.type === 'zero' || endResult.type === 'unknown') {
                         // Sprawdź czy ten nick z zerem już został przetworzony
                         if (processedNicks.has(bestMatch.displayName)) {
-                            logger.info(`   ⚠️ DUPLIKAT - nick "${bestMatch.displayName}" z zerem już został przetworzony, pomijam`);
                             continue;
                         }
                         
@@ -219,16 +211,13 @@ class OCRService {
                             endValue: endResult.value,
                             uncertain: hasUncertainty
                         });
-                        if (endResult.type === 'zero') {
-                            logger.info(`   🎉 POTWIERDZONY zero (wzorzec): ${bestMatch.displayName}${hasUncertainty ? ' [NIEPEWNY ©]' : ''}`);
-                        } else {
-                            logger.info(`   🎉 POTWIERDZONY zero (brak wyniku): ${bestMatch.displayName}${hasUncertainty ? ' [NIEPEWNY ©]' : ''}`);
-                        }
+                        
+                        logger.info(`   ✅ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) POTWIERDZONE ZERO!`);
                     } else if (endResult.type === 'negative') {
-                        logger.info(`   ❌ Wynik negatywny: ${bestMatch.displayName} (${endResult.value})`);
+                        logger.info(`   ❌ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) Wynik negatywny: ${endResult.value}`);
                     }
                 } else {
-                    logger.info(`   ❌ Brak dopasowania powyżej 70% podobieństwa`);
+                    // Nie loguj jeśli brak dopasowania - za dużo szumu
                 }
             }
             
