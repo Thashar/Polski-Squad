@@ -208,6 +208,11 @@ class RankingService {
      * @returns {EmbedBuilder} - Embed wyniku
      */
     createResultEmbed(userName, bestScore, currentScore) {
+        const currentScoreValue = this.parseScoreValue(currentScore);
+        const newScoreValue = this.parseScoreValue(bestScore);
+        const difference = currentScoreValue - newScoreValue;
+        const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
+        
         const embed = new EmbedBuilder()
             .setColor(0xff9900)
             .setTitle(this.config.messages.resultTitle)
@@ -224,7 +229,7 @@ class RankingService {
                 },
                 {
                     name: this.config.messages.resultStatus,
-                    value: formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore }),
+                    value: formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore }) + `\n**Różnica:** ${differenceText}`,
                     inline: false
                 }
             )
@@ -239,9 +244,20 @@ class RankingService {
      * @param {string} bestScore - Najlepszy wynik
      * @param {string} userAvatarUrl - URL awatara użytkownika
      * @param {string} attachmentName - Nazwa załącznika
+     * @param {string} previousScore - Poprzedni wynik (opcjonalny)
      * @returns {EmbedBuilder} - Embed rekordu
      */
-    createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName) {
+    createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null) {
+        let statusText = this.config.messages.recordSaved;
+        
+        if (previousScore) {
+            const previousScoreValue = this.parseScoreValue(previousScore);
+            const newScoreValue = this.parseScoreValue(bestScore);
+            const improvement = newScoreValue - previousScoreValue;
+            const improvementText = `+${this.formatScore(improvement)}`;
+            statusText += `\n**Poprawa o:** ${improvementText}`;
+        }
+        
         const embed = new EmbedBuilder()
             .setColor(0x00ff00)
             .setTitle(this.config.messages.recordTitle)
@@ -260,7 +276,7 @@ class RankingService {
                 },
                 {
                     name: this.config.messages.recordStatus,
-                    value: this.config.messages.recordSaved,
+                    value: statusText,
                     inline: false
                 }
             )

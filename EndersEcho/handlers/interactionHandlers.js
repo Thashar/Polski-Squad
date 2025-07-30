@@ -251,7 +251,8 @@ class InteractionHandler {
                 userName, 
                 bestScore, 
                 interaction.user.displayAvatarURL(),
-                imageAttachment.name
+                imageAttachment.name,
+                currentScore ? currentScore.score : null
             );
             
             // Aktualizuj ephemeral message z informacją o sukcesie
