@@ -57,16 +57,12 @@ class RoleKickingService {
      */
     async checkAndKickUsers() {
         try {
-            logger.info('Rozpoczynam sprawdzanie użytkowników do kicka...');
-            
             const rekruterData = await this.loadRekruterData();
             if (!rekruterData) {
-                logger.info('Brak danych z Rekrutera lub plik nie istnieje');
                 return;
             }
 
             const usersToKick = this.getUsersForKick(rekruterData);
-            logger.info(`Znaleziono ${usersToKick.length} użytkowników do kicka`);
 
             for (const userData of usersToKick) {
                 await this.kickUser(userData);
@@ -77,8 +73,6 @@ class RoleKickingService {
             if (usersToKick.length > 0) {
                 await this.updateRekruterData(rekruterData, usersToKick);
             }
-
-            logger.info('Zakończono sprawdzanie użytkowników do kicka');
         } catch (error) {
             logger.error(`Błąd podczas kickowania użytkowników: ${error.message}`);
         }
