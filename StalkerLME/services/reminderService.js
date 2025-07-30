@@ -11,10 +11,6 @@ class ReminderService {
 
     async sendReminders(guild, foundUsers) {
         try {
-            logger.info('Wysyłanie przypomnień');
-            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
-            logger.info(`👥 Znalezieni użytkownicy: ${foundUsers.length}`);
-            logger.info(`📋 Struktura foundUsers:`, foundUsers);
             
             const timeUntilDeadline = this.calculateTimeUntilDeadline();
             const roleGroups = new Map();
@@ -51,17 +47,12 @@ class ReminderService {
                         await warningChannel.send(reminderMessage);
                         sentMessages++;
                         
-                        logger.info(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} (${warningChannel.id}) dla ${members.length} użytkowników`);
-                        logger.info(`💬 Treść przypomnienia: ${reminderMessage.substring(0, 100)}...`);
+                        logger.info(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} dla ${members.length} użytkowników`);
                     }
                 }
             }
             
-            logger.info('Podsumowanie przypomnień:');
-            logger.info(`📤 Wysłanych wiadomości: ${sentMessages}`);
-            logger.info(`🎭 Grup ról: ${roleGroups.size}`);
-            logger.info(`👥 Łączna liczba użytkowników: ${foundUsers.length}`);
-            logger.info('✅ Przypomnienia zostały pomyślnie wysłane');
+            logger.info(`✅ Wysłano ${sentMessages} przypomnień dla ${foundUsers.length} użytkowników`);
             
             return {
                 sentMessages: sentMessages,

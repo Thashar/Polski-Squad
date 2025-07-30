@@ -35,10 +35,7 @@ class OCRService {
             const arrayBuffer = await response.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             
-            logger.info('Przetwarzanie obrazu - inwersja białego tekstu na czarny');
-            logger.info('🎨 Rozpoczynam przetwarzanie obrazu z inwersją...');
             const processedBuffer = await this.processImageWithSharp(buffer);
-            logger.info('✅ Przetwarzanie obrazu z inwersją zakończone');
             
             logger.info('Uruchamianie OCR');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
@@ -102,7 +99,6 @@ class OCRService {
             // Zapisz przetworzony obraz jeśli włączone (nowe)
             if (this.config.ocr.saveProcessedImages) {
                 await processedBuffer.toFile(outputPath);
-                logger.info(`💾 Zapisano przetworzony obraz: ${outputPath}`);
                 
                 // Wywołaj czyszczenie starych plików
                 await this.cleanupProcessedImages();
@@ -111,7 +107,6 @@ class OCRService {
             // Zwróć buffer do OCR
             const buffer = await processedBuffer.toBuffer();
             
-            logger.info(`✅ Obraz przetworzony - upscale: ${this.config.ocr.imageProcessing.upscale}x, gamma: ${this.config.ocr.imageProcessing.gamma}, median: ${this.config.ocr.imageProcessing.median}, blur: ${this.config.ocr.imageProcessing.blur} + zaawansowane filtry dla czarnego tekstu`);
             return buffer;
         } catch (error) {
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
@@ -535,7 +530,6 @@ class OCRService {
                 return [];
             }
             
-            logger.info(`🎯 Pobieranie nicków z roli: ${userRoleId}`);
             
             const members = await guild.members.fetch();
             const roleMembers = [];
