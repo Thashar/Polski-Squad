@@ -33,7 +33,8 @@ module.exports = {
     // Emoji
     emoji: {
         party: '<:I_Party:1400207104685510853>',
-        ticket: '<:I_Ticket:1400207169194037410>'
+        ticket: '<:I_Ticket:1400207169194037410>',
+        pin: '<:N_SSS:1275068676508356640>' // Emoji do przypinania w bazarze
     },
     
     // Ustawienia lobby

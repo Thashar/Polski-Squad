@@ -28,7 +28,13 @@ async function handleReactionAdd(reaction, user, sharedState) {
         // Ignoruj reakcje botów dla normalnej obsługi
         if (user.bot) return;
 
-        // Sprawdź czy to właściwy kanał
+        // Obsługa emoji do przypinania w kanałach bazaru
+        if (reaction.emoji.toString() === sharedState.config.emoji.pin) {
+            await handlePinReaction(reaction, user, sharedState);
+            return;
+        }
+
+        // Sprawdź czy to właściwy kanał party
         if (reaction.message.channel.id !== sharedState.config.channels.party) return;
 
         // Ponownie znajdź lobby (może już być sprawdzone wcześniej)
@@ -137,6 +143,58 @@ async function createJoinRequest(lobby, user, sharedState) {
 
     } catch (error) {
         logger.error('❌ Błąd podczas tworzenia prośby o dołączenie:', error);
+    }
+}
+
+/**
+ * Obsługuje reakcję pin (N_SSS) w kanałach bazaru
+ * @param {MessageReaction} reaction - Reakcja Discord
+ * @param {User} user - Użytkownik który dodał reakcję
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+async function handlePinReaction(reaction, user, sharedState) {
+    try {
+        const { message, emoji } = reaction;
+        const { channel, guild } = message;
+
+        // Sprawdź czy użytkownik ma uprawnienia moderatora lub administratora
+        const member = await guild.members.fetch(user.id);
+        if (!member.permissions.has('ModerateMembers') && !member.permissions.has('Administrator')) {
+            // Usuń reakcję jeśli użytkownik nie ma uprawnień
+            await reaction.users.remove(user.id);
+            return;
+        }
+
+        // Sprawdź czy to kanał bazaru
+        if (!sharedState.bazarService.isBazarChannel(channel.id)) {
+            // Usuń reakcję jeśli to nie kanał bazaru
+            await reaction.users.remove(user.id);
+            return;
+        }
+
+        // Przypnij wiadomość
+        const pinResult = await sharedState.bazarService.pinMessage(channel, message);
+        
+        if (pinResult) {
+            logger.info(`📌 ${user.tag} przypięli wiadomość w kanale bazaru: ${channel.name}`);
+            
+            // Usuń reakcję po przypięciu
+            await reaction.users.remove(user.id);
+        } else {
+            logger.warn(`❌ Nie udało się przypiąć wiadomości w kanale: ${channel.name}`);
+            // Usuń reakcję jeśli przypięcie się nie powiodło
+            await reaction.users.remove(user.id);
+        }
+
+    } catch (error) {
+        logger.error('❌ Błąd podczas obsługi reakcji pin:', error);
+        
+        // Spróbuj usunąć reakcję w przypadku błędu
+        try {
+            await reaction.users.remove(user.id);
+        } catch (removeError) {
+            logger.error('❌ Błąd podczas usuwania reakcji:', removeError);
+        }
     }
 }
 

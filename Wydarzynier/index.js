@@ -6,6 +6,7 @@ const { handleReactionAdd, handleReactionRemove } = require('./handlers/reaction
 const { handleMessageUpdate, handleMessageCreate } = require('./handlers/messageHandlers');
 const LobbyService = require('./services/lobbyService');
 const TimerService = require('./services/timerService');
+const BazarService = require('./services/bazarService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -24,11 +25,13 @@ const client = new Client({
 // Inicjalizacja serwisów
 const lobbyService = new LobbyService(config);
 const timerService = new TimerService(config);
+const bazarService = new BazarService(config);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
     lobbyService,
     timerService,
+    bazarService,
     client,
     config
 };
@@ -44,10 +47,11 @@ client.once(Events.ClientReady, async () => {
     // Wczytaj lobby i timery z plików
     await lobbyService.loadLobbies();
     await timerService.restoreTimers(sharedState);
+    await bazarService.initialize(client);
     
     // Zarejestruj komendy slash
     const { InteractionHandler } = require('./handlers/interactionHandlers');
-    const interactionHandler = new InteractionHandler(config, lobbyService, timerService);
+    const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
     await interactionHandler.registerSlashCommands(client);
     
     logger.info('Bot Wydarzynier jest gotowy do pracy!');

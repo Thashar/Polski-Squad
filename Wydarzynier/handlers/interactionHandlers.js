@@ -5,10 +5,11 @@ const { isAllowedChannel, delay } = require('../utils/helpers');
 const logger = createBotLogger('Wydarzynier');
 
 class InteractionHandler {
-    constructor(config, lobbyService, timerService) {
+    constructor(config, lobbyService, timerService, bazarService) {
         this.config = config;
         this.lobbyService = lobbyService;
         this.timerService = timerService;
+        this.bazarService = bazarService;
     }
 
     /**
@@ -19,7 +20,26 @@ class InteractionHandler {
         const commands = [
             new SlashCommandBuilder()
                 .setName('party')
-                .setDescription('Tworzy lobby do zbierania graczy na party')
+                .setDescription('Tworzy lobby do zbierania graczy na party'),
+            
+            new SlashCommandBuilder()
+                .setName('bazar')
+                .setDescription('Tworzy kategorię i kanały bazaru (tylko administratorzy)')
+                .addIntegerOption(option =>
+                    option.setName('godzina')
+                        .setDescription('Godzina startu resetów bazaru')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '17:00', value: 17 },
+                            { name: '18:00', value: 18 }
+                        )
+                )
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+            
+            new SlashCommandBuilder()
+                .setName('bazar-off')
+                .setDescription('Usuwa kategorię i kanały bazaru (tylko administratorzy)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -90,6 +110,10 @@ class InteractionHandler {
             }
 
             await this.createPartyLobby(interaction, sharedState);
+        } else if (commandName === 'bazar') {
+            await this.handleBazarCommand(interaction, sharedState);
+        } else if (commandName === 'bazar-off') {
+            await this.handleBazarOffCommand(interaction, sharedState);
         }
     }
 
@@ -466,6 +490,93 @@ class InteractionHandler {
     }
 
     /**
+     * Obsługuje komendę /bazar
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleBazarCommand(interaction, sharedState) {
+        try {
+            // Sprawdź uprawnienia administratora
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({
+                    content: '❌ Ta komenda wymaga uprawnień administratora.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const startHour = interaction.options.getInteger('godzina');
+            const result = await this.bazarService.createBazar(interaction.guild, startHour);
+
+            if (result.success) {
+                await interaction.editReply({
+                    content: `✅ ${result.message}\n📁 Kategoria: <#${result.categoryId}>\n📋 Kanały: ${result.channelIds.map(id => `<#${id}>`).join(', ')}`
+                });
+                logger.info(`Utworzono bazar dla serwera ${interaction.guild.name} z godziną startu ${startHour}:00`);
+            } else {
+                await interaction.editReply({
+                    content: `❌ ${result.message}`
+                });
+            }
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi komendy /bazar:', error);
+            
+            const errorMessage = '❌ Wystąpił błąd podczas tworzenia bazaru.';
+            if (interaction.deferred) {
+                await interaction.editReply({ content: errorMessage });
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        }
+    }
+
+    /**
+     * Obsługuje komendę /bazar-off
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleBazarOffCommand(interaction, sharedState) {
+        try {
+            // Sprawdź uprawnienia administratora
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({
+                    content: '❌ Ta komenda wymaga uprawnień administratora.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const result = await this.bazarService.removeBazar(interaction.guild);
+
+            if (result.success) {
+                await interaction.editReply({
+                    content: `✅ ${result.message}`
+                });
+                logger.info(`Usunięto bazar dla serwera ${interaction.guild.name}`);
+            } else {
+                await interaction.editReply({
+                    content: `❌ ${result.message}`
+                });
+            }
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi komendy /bazar-off:', error);
+            
+            const errorMessage = '❌ Wystąpił błąd podczas usuwania bazaru.';
+            if (interaction.deferred) {
+                await interaction.editReply({ content: errorMessage });
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        }
+    }
+
+    /**
      * Obsługuje przełączanie powiadomień o party
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      * @param {Object} sharedState - Współdzielony stan aplikacji
@@ -511,7 +622,7 @@ class InteractionHandler {
  * @param {Object} sharedState - Współdzielony stan aplikacji
  */
 async function handleInteraction(interaction, sharedState) {
-    const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService);
+    const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService, sharedState.bazarService);
     await handler.handleInteraction(interaction, sharedState);
 }
 
