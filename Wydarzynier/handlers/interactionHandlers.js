@@ -39,6 +39,11 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('bazar-off')
                 .setDescription('Usuwa kategorię i kanały bazaru (tylko administratorzy)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+            
+            new SlashCommandBuilder()
+                .setName('party-access')
+                .setDescription('Tworzy wiadomość z przyciskiem do roli powiadomień o party (tylko administratorzy)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         ];
 
@@ -114,6 +119,8 @@ class InteractionHandler {
             await this.handleBazarCommand(interaction, sharedState);
         } else if (commandName === 'bazar-off') {
             await this.handleBazarOffCommand(interaction, sharedState);
+        } else if (commandName === 'party-access') {
+            await this.handlePartyAccessCommand(interaction, sharedState);
         }
     }
 
@@ -216,7 +223,7 @@ class InteractionHandler {
         const { customId, user, message } = interaction;
         
         // Obsługa przycisku powiadomień o party (dostępny dla wszystkich)
-        if (customId === 'toggle_party_notifications') {
+        if (customId === 'toggle_party_notifications' || customId === 'party_access_notifications') {
             await this.handleToggleNotifications(interaction, sharedState);
             return;
         }
@@ -612,6 +619,51 @@ class InteractionHandler {
                 content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
                 ephemeral: true
             });
+        }
+    }
+
+    /**
+     * Obsługuje komendę /party-access
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handlePartyAccessCommand(interaction, sharedState) {
+        try {
+            // Sprawdź uprawnienia administratora
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({
+                    content: '❌ Ta komenda wymaga uprawnień administratora.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Utwórz przycisk do zarządzania rolą powiadomień
+            const notificationButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('party_access_notifications')
+                        .setLabel('🔔 Otrzymuj powiadomienia o Party')
+                        .setStyle(ButtonStyle.Success)
+                );
+
+            // Wyślij wiadomość z przyciskiem
+            await interaction.reply({
+                content: 'Chcesz otrzymywać powiadomienia o tworzonych przez użytkowników **Party?**',
+                components: [notificationButton]
+            });
+
+            logger.info(`✅ Wysłano wiadomość party-access przez ${interaction.user.tag} na kanale ${interaction.channel.name}`);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi komendy /party-access:', error);
+            
+            const errorMessage = '❌ Wystąpił błąd podczas tworzenia wiadomości party-access.';
+            if (interaction.deferred) {
+                await interaction.editReply({ content: errorMessage });
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
         }
     }
 }
