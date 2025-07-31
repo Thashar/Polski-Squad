@@ -48,7 +48,7 @@ module.exports = {
     // Wiadomości
     messages: {
         lobbyCreated: (userId) => 
-            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nPo wybraniu 5 chętnych będziecie mieli 15 min na rozmowę tutaj, po tym czasie wątek zostanie usunięty.`,
+            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 5 chętnych, masz na to godzinę, po tym czasie wątek lobby zostanie usunięty.`,
         
         partyAnnouncement: (displayName, currentPlayers, maxPlayers) => 
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})\nZostaw reakcję poniżej by dołączyć.`,
