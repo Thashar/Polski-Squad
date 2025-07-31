@@ -118,6 +118,13 @@ class OCRService {
             logger.info('Zastąpiono końcową cyfrę 7 na literę T');
         }
         
+        // Zamień 0 na końcu na Q (jeśli nie ma już jednostki M/B/T/Q/Qi)
+        // Sprawdź czy wynik kończy się cyfrą 0 i nie ma jednostki M/B/T/Q/Qi
+        if (/0$/.test(fixedScore) && !/[MBTQ]i?$/i.test(fixedScore)) {
+            fixedScore = fixedScore.replace(/0$/, 'Q');
+            logger.info('Zastąpiono końcową cyfrę 0 na literę Q');
+        }
+        
         logger.info('Oryginalny wynik:', scoreText);
         logger.info('Poprawiony wynik:', fixedScore);
         
@@ -135,21 +142,21 @@ class OCRService {
         logger.info('Analizowany tekst OCR:', text);
         
         // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
-        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQSi7]*)/gi;
+        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQSi70]*)/gi;
         let matches = text.match(bestScorePattern);
         
         logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
         
         if (!matches || matches.length === 0) {
             // Elastyczny wzorzec też uwzględnia cyfry końcowe
-            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?[KMBTQSi7]*)/gi;
+            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?[KMBTQSi70]*)/gi;
             matches = [];
             let match;
             
             while ((match = flexiblePattern.exec(text)) !== null) {
                 const score = match[1];
                 const upperScore = score.toUpperCase();
-                const hasUnit = /[KMBTQSi7]$/i.test(upperScore);
+                const hasUnit = /[KMBTQSi70]$/i.test(upperScore);
                 const isBigNumber = /^\d{4,}$/.test(score);
                 
                 if (hasUnit || isBigNumber) {
@@ -166,7 +173,7 @@ class OCRService {
             }
         } else {
             // Zaktualizowany wzorzec dla wyciągania wyniku
-            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?[KMBTQSi7]*)/i);
+            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?[KMBTQSi70]*)/i);
             matches = scoreMatch ? [scoreMatch[1]] : [];
         }
         
