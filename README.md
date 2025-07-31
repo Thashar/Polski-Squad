@@ -1,11 +1,11 @@
 # Polski Squad Discord Bot Collection
 
-Kolekcja botów Discord dla serwera Polish Squad, zawierająca siedem specjalistycznych botów z centralnym systemem logowania i zarządzania.
+Kolekcja botów Discord dla serwera Polish Squad, zawierająca osiem specjalistycznych botów z centralnym systemem logowania i zarządzania.
 
 ## Boty
 
 ### 🎯 Rekruter Bot
-Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach.
+Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach oraz **system powiadomień o boostach** - automatyczne wiadomości dziękczynne dla osób boostujących serwer z 10 różnymi sentencjami w stylu Survivor.io.
 
 ### 🎓 Szkolenia Bot
 Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z automatycznymi przypomnieniami dla uczestników, aby nikt nie zapomniał o ważnych sesjach treningowych.
@@ -17,13 +17,16 @@ System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników wal
 Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń.
 
 ### 🏆 EndersEcho Bot
-Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe.
+Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe. **Ulepszona korekcja OCR** - automatycznie poprawia błędy odczytu (TT→1T, 7→T, 0→Q).
 
 ### 🎯 Kontroler Bot
 Weryfikuje wyniki dla kanałów Daily i CX. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. Blokuje użytkowników z karami.
 
 ### ⛪ Konklawe Bot
 Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki.
+
+### 🎉 Wydarzynier Bot
+System zarządzania eventami i organizacji społeczności. **System lobby party** - tworzy prywatne wątki dla organizacji gier z systemem zaproszeń i automatycznym czyszczeniem. **Marketplace (Bazar)** - automatyczny system handlowy z cyklicznymi resetami co 2 godziny, ostrzeżeniami i systemem przypinania wiadomości. **Zarządzanie powiadomieniami** - interaktywny system zapisów na powiadomienia o eventach.
 
 ## System Logowania
 
@@ -177,17 +180,36 @@ Polski-Squad-Bot-Collection/
 │   │   └── weekly_removal.json
 │   └── temp/
 │
-└── Szkolenia/                 # Bot szkoleń
+├── Szkolenia/                 # Bot szkoleń
+│   ├── index.js
+│   ├── config/
+│   │   └── config.js
+│   ├── handlers/
+│   │   ├── interactionHandlers.js
+│   │   └── reactionHandlers.js
+│   ├── services/
+│   │   └── threadService.js
+│   └── utils/
+│       └── helpers.js
+│
+└── Wydarzynier/               # Bot eventów i marketplace
     ├── index.js
     ├── config/
     │   └── config.js
     ├── handlers/
     │   ├── interactionHandlers.js
+    │   ├── messageHandlers.js
     │   └── reactionHandlers.js
     ├── services/
-    │   └── threadService.js
-    └── utils/
-        └── helpers.js
+    │   ├── bazarService.js         # System marketplace z cyklicznymi resetami
+    │   ├── lobbyService.js         # System organizacji party
+    │   └── timerService.js         # Zarządzanie timerami i przypomnieniami
+    ├── utils/
+    │   └── helpers.js
+    └── data/
+        ├── bazar.json              # Stan marketplace i timerów
+        ├── lobbies.json            # Aktywne lobby party
+        └── timers.json             # Persystentne timery
 ```
 
 ## Uruchamianie
@@ -210,13 +232,14 @@ npm run muteusz
 npm run endersecho
 npm run kontroler
 npm run konklawe
+npm run wydarzynier
 ```
 
 ### Konfiguracja botów:
 Plik `bot-config.json` określa które boty uruchamiać:
 ```json
 {
-  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe"],
+  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe", "wydarzynier"],
   "development": ["stalkerlme"]
 }
 ```
@@ -271,6 +294,7 @@ REKRUTER_ROLE_ID=role_id
 - `ENDERSECHO_TOKEN` - Token Discord dla bota EndersEcho
 - `KONTROLER_TOKEN` - Token Discord dla bota Kontroler
 - `KONKLAWE_TOKEN` - Token Discord dla bota Konklawe
+- `WYDARZYNIER_TOKEN` - Token Discord dla bota Wydarzynier
 
 ## Development
 
