@@ -54,9 +54,9 @@ class LogService {
      * Loguje wydarzenie usunięcia roli
      * @param {Array} removedRoles - Usunięte role
      * @param {GuildMember} member - Członek serwera
-     * @param {string} triggerRoleId - ID roli wyzwalającej
+     * @param {string} reason - Przyczyna usunięcia ról
      */
-    async logRoleRemoval(removedRoles, member, triggerRoleId) {
+    async logRoleRemoval(removedRoles, member, reason) {
         if (!this.config.logging.enableChannelLogging || !this.config.logging.logChannelId || !this.client) return;
         
         try {
@@ -66,11 +66,11 @@ class LogService {
                 
                 const embed = new EmbedBuilder()
                     .setTitle('🔄 Automatyczne usunięcie i zapisanie ról')
-                    .setDescription(`Użytkownik stracił główną rolę, więc automatycznie usunięto powiązane role i zapisano je do przywrócenia.`)
+                    .setDescription(`Automatycznie usunięto powiązane role i zapisano je do przywrócenia.`)
                     .addFields([
                         { name: '👤 Użytkownik', value: `${member.user.tag} (${member.user.id})`, inline: true },
                         { name: '🏠 Serwer', value: member.guild.name, inline: true },
-                        { name: '🎯 Główna rola', value: `<@&${triggerRoleId}>`, inline: false },
+                        { name: '📝 Przyczyna', value: reason, inline: false },
                         { name: '🗑️ Usunięte i zapisane role', value: removedRoles.map(role => `<@&${role.id}>`).join(', '), inline: false }
                     ])
                     .setColor(0xFFA500)
@@ -89,9 +89,9 @@ class LogService {
      * Loguje wydarzenie przywrócenia roli
      * @param {Array} restoredRoles - Przywrócone role
      * @param {GuildMember} member - Członek serwera
-     * @param {string} triggerRoleId - ID roli wyzwalającej
+     * @param {string} reason - Przyczyna przywrócenia ról
      */
-    async logRoleRestoration(restoredRoles, member, triggerRoleId) {
+    async logRoleRestoration(restoredRoles, member, reason) {
         if (!this.config.logging.enableChannelLogging || !this.config.logging.logChannelId || !this.client) return;
         
         try {
@@ -101,11 +101,11 @@ class LogService {
                 
                 const embed = new EmbedBuilder()
                     .setTitle('✅ Automatyczne przywrócenie ról')
-                    .setDescription(`Użytkownik odzyskał główną rolę, więc automatycznie przywrócono wcześniej zapisane role.`)
+                    .setDescription(`Automatycznie przywrócono wcześniej zapisane role.`)
                     .addFields([
                         { name: '👤 Użytkownik', value: `${member.user.tag} (${member.user.id})`, inline: true },
                         { name: '🏠 Serwer', value: member.guild.name, inline: true },
-                        { name: '🎯 Główna rola', value: `<@&${triggerRoleId}>`, inline: false },
+                        { name: '📝 Przyczyna', value: reason, inline: false },
                         { name: '✅ Przywrócone role', value: restoredRoles.map(role => `<@&${role.id}>`).join(', '), inline: false }
                     ])
                     .setColor(0x00FF00)

@@ -3,10 +3,11 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 
 class MemberHandler {
-    constructor(config, roleManagementService, logService) {
+    constructor(config, logService, specialRolesService = null, roleManagementService = null) {
         this.config = config;
-        this.roleManagementService = roleManagementService;
         this.logService = logService;
+        this.specialRolesService = specialRolesService;
+        this.roleManagementService = roleManagementService;
     }
 
     /**
@@ -21,51 +22,7 @@ class MemberHandler {
         // Sprawdź zmiany ról do obsługi grup ekskluzywnych
         await this.handleExclusiveRoleGroups(oldMember, newMember);
         
-        // Sprawdź czy są ustawienia automatycznego zarządzania rolami
-        if (!this.config.roleManagement || !this.config.roleManagement.triggerRoleId) {
-            logger.info(`❌ Brak konfiguracji roleManagement lub triggerRoleId`);
-            return;
-        }
-        
-        logger.info(`✅ Konfiguracja OK, triggerRoleId: ${this.config.roleManagement.triggerRoleId}`);
-        
-        // Debug informacje o rolach
-        const oldRoleIds = oldMember.roles.cache.map(r => r.id);
-        const newRoleIds = newMember.roles.cache.map(r => r.id);
-        const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
-        const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
-        
-        if (addedRoles.length > 0) {
-            logger.info(`➕ Dodane role: ${addedRoles.join(', ')}`);
-        }
-        if (removedRoles.length > 0) {
-            logger.info(`➖ Usunięte role: ${removedRoles.join(', ')}`);
-            logger.info(`🎯 Sprawdzam czy usunięto trigger rolę: ${this.config.roleManagement.triggerRoleId}`);
-        }
-
-        // Obsłuż usuwanie ról (gdy użytkownik traci główną rolę)
-        const removalResult = await this.roleManagementService.handleRoleRemoval(oldMember, newMember);
-        
-        if (removalResult.success && !removalResult.noAction && removalResult.removedRoles) {
-            // Zaloguj do kanału
-            await this.logService.logRoleRemoval(
-                removalResult.removedRoles, 
-                removalResult.user, 
-                this.config.roleManagement.triggerRoleId
-            );
-        }
-        
-        // Obsłuż przywracanie ról (gdy użytkownik odzyskuje główną rolę)
-        const restorationResult = await this.roleManagementService.handleRoleRestoration(oldMember, newMember);
-        
-        if (restorationResult.success && !restorationResult.noAction && restorationResult.restoredRoles) {
-            // Zaloguj do kanału
-            await this.logService.logRoleRestoration(
-                restorationResult.restoredRoles, 
-                restorationResult.user, 
-                this.config.roleManagement.triggerRoleId
-            );
-        }
+        // Usunięto system zarządzania rolami TOP - EndersEcho już to obsługuje
     }
 
     /**
@@ -182,43 +139,19 @@ class MemberHandler {
         try {
             logger.info(`💔 Obsługa utraty boost: ${member.user.tag}`);
             
-            // Pobierz role specjalne do usunięcia
-            const rolesToRemove = await this.specialRolesService.getAllRolesToRemove();
-            const rolesToRemoveFromUser = [];
-            const roleIdsToSave = [];
-
-            // Sprawdź które specjalne role użytkownik posiada
-            for (const roleId of rolesToRemove) {
-                if (member.roles.cache.has(roleId)) {
-                    const role = member.roles.cache.get(roleId);
-                    rolesToRemoveFromUser.push(role);
-                    roleIdsToSave.push(roleId);
-                }
-            }
-
-            if (rolesToRemoveFromUser.length > 0) {
-                try {
-                    // Zapisz usunięte role do pliku PRZED ich usunięciem
-                    await this.roleManagementService.addRemovedRoles(member.user.id, roleIdsToSave);
-                    
-                    // Usuń wszystkie znalezione role jednocześnie
-                    await member.roles.remove(rolesToRemoveFromUser, 'Automatyczne usunięcie ról po utracie boost');
-                    
-                    const removedRoleNames = rolesToRemoveFromUser.map(role => role.name).join(', ');
-                    logger.info(`🗑️ Automatycznie usunięto role po utracie boost: ${removedRoleNames} od ${member.user.tag}`);
-
+            if (this.roleManagementService) {
+                const result = await this.roleManagementService.handleBoostLoss(member);
+                
+                if (result.success && result.removedRoles) {
                     // Loguj do kanału
                     await this.logService.logRoleRemoval(
-                        rolesToRemoveFromUser,
+                        result.removedRoles,
                         member,
                         'Utrata boost serwera'
                     );
-
-                } catch (error) {
-                    logger.error(`❌ Błąd podczas usuwania ról po utracie boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
                 }
             } else {
-                logger.info(`ℹ️ ${member.user.tag} nie posiada ról specjalnych do usunięcia po utracie boost`);
+                logger.warn('RoleManagementService nie jest dostępny dla handleBoostLoss');
             }
         } catch (error) {
             logger.error('❌ Błąd obsługi utraty boost:', error?.message || 'Nieznany błąd');
@@ -233,41 +166,19 @@ class MemberHandler {
         try {
             logger.info(`💖 Obsługa otrzymania boost: ${member.user.tag}`);
             
-            // Sprawdź czy użytkownik ma zapisane role do przywrócenia
-            const rolesToRestore = await this.roleManagementService.getRemovedRoles(member.user.id);
-            
-            if (rolesToRestore && rolesToRestore.length > 0) {
-                const rolesToAdd = [];
+            if (this.roleManagementService) {
+                const result = await this.roleManagementService.handleBoostGain(member);
                 
-                for (const roleId of rolesToRestore) {
-                    const role = member.guild.roles.cache.get(roleId);
-                    if (role && !member.roles.cache.has(roleId)) {
-                        rolesToAdd.push(role);
-                    }
-                }
-                
-                if (rolesToAdd.length > 0) {
-                    try {
-                        await member.roles.add(rolesToAdd, 'Automatyczne przywrócenie ról po otrzymaniu boost');
-                        
-                        const restoredRoleNames = rolesToAdd.map(role => role.name).join(', ');
-                        logger.info(`✅ Automatycznie przywrócono role po otrzymaniu boost: ${restoredRoleNames} dla ${member.user.tag}`);
-
-                        // Loguj do kanału
-                        await this.logService.logRoleRestoration(
-                            rolesToAdd,
-                            member,
-                            'Otrzymanie boost serwera'
-                        );
-
-                    } catch (error) {
-                        logger.error(`❌ Błąd podczas przywracania ról po otrzymaniu boost (${member.user.tag}):`, error?.message || 'Nieznany błąd');
-                    }
-                } else {
-                    logger.info(`ℹ️ Brak ról do przywrócenia dla ${member.user.tag} po otrzymaniu boost`);
+                if (result.success && result.restoredRoles) {
+                    // Loguj do kanału
+                    await this.logService.logRoleRestoration(
+                        result.restoredRoles,
+                        member,
+                        'Otrzymanie boost serwera'
+                    );
                 }
             } else {
-                logger.info(`ℹ️ ${member.user.tag} nie ma zapisanych ról do przywrócenia po otrzymaniu boost`);
+                logger.warn('RoleManagementService nie jest dostępny dla handleBoostGain');
             }
         } catch (error) {
             logger.error('❌ Błąd obsługi otrzymania boost:', error?.message || 'Nieznany błąd');

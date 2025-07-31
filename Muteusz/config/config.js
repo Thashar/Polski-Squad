@@ -12,8 +12,7 @@ const requiredEnvVars = [
     'MUTEUSZ_CLIENT_ID',
     'MUTEUSZ_GUILD_ID',
     'MUTEUSZ_TARGET_CHANNEL_ID',
-    'MUTEUSZ_LOG_CHANNEL_ID',
-    'MUTEUSZ_TRIGGER_ROLE_ID'
+    'MUTEUSZ_LOG_CHANNEL_ID'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -50,9 +49,6 @@ module.exports = {
         ]
     },
     
-    roleManagement: {
-        triggerRoleId: process.env.MUTEUSZ_TRIGGER_ROLE_ID
-    },
     
     roles: {
         requiredPermission: 'ManageRoles',

@@ -89,130 +89,112 @@ class RoleManagementService {
     }
 
     /**
-     * Obsługuje usuwanie ról gdy użytkownik traci główną rolę
-     * @param {GuildMember} oldMember - Stary członek
-     * @param {GuildMember} newMember - Nowy członek
+     * Obsługuje usuwanie ról gdy użytkownik traci boost serwera
+     * @param {GuildMember} member - Członek który stracił boost
      */
-    async handleRoleRemoval(oldMember, newMember) {
+    async handleBoostLoss(member) {
         try {
-            const triggerRoleId = this.config.roleManagement.triggerRoleId;
+            logger.info(`Obsługa utraty boost: ${member.user.tag}`);
+            
+            // Pobierz role specjalne do usunięcia
             const rolesToRemove = await this.specialRolesService.getAllRolesToRemove();
+            const rolesToRemoveFromUser = [];
+            const roleIdsToSave = [];
 
-            // Sprawdź czy użytkownik stracił główną rolę (trigger role)
-            const hadTriggerRole = oldMember.roles.cache.has(triggerRoleId);
-            const hasTriggerRole = newMember.roles.cache.has(triggerRoleId);
-
-            if (hadTriggerRole && !hasTriggerRole) {
-                logger.info(`Użytkownik ${newMember.user.tag} stracił główną rolę (ID: ${triggerRoleId})`);
-
-                // Sprawdź które z określonych ról użytkownik nadal posiada
-                const currentRoles = newMember.roles.cache;
-                const rolesToRemoveFromUser = [];
-                const roleIdsToSave = [];
-
-                for (const roleId of rolesToRemove) {
-                    if (currentRoles.has(roleId)) {
-                        const role = currentRoles.get(roleId);
-                        rolesToRemoveFromUser.push(role);
-                        roleIdsToSave.push(roleId);
-                    }
+            // Sprawdź które specjalne role użytkownik posiada
+            for (const roleId of rolesToRemove) {
+                if (member.roles.cache.has(roleId)) {
+                    const role = member.roles.cache.get(roleId);
+                    rolesToRemoveFromUser.push(role);
+                    roleIdsToSave.push(roleId);
                 }
+            }
 
-                if (rolesToRemoveFromUser.length > 0) {
-                    try {
-                        // Zapisz usunięte role do pliku PRZED ich usunięciem
-                        await this.addRemovedRoles(newMember.user.id, roleIdsToSave);
-                        
-                        // Usuń wszystkie znalezione role jednocześnie
-                        await newMember.roles.remove(rolesToRemoveFromUser, 'Automatyczne usunięcie ról po utracie głównej roli');
-                        
-                        const removedRoleNames = rolesToRemoveFromUser.map(role => role.name).join(', ');
-                        logger.info(`Automatycznie usunięto i zapisano role: ${removedRoleNames} od użytkownika ${newMember.user.tag}`);
+            if (rolesToRemoveFromUser.length > 0) {
+                try {
+                    // Zapisz usunięte role do pliku PRZED ich usunięciem
+                    await this.addRemovedRoles(member.user.id, roleIdsToSave);
+                    
+                    // Usuń wszystkie znalezione role jednocześnie
+                    await member.roles.remove(rolesToRemoveFromUser, 'Automatyczne usunięcie ról po utracie boost');
+                    
+                    const removedRoleNames = rolesToRemoveFromUser.map(role => role.name).join(', ');
+                    logger.info(`Automatycznie usunięto i zapisano role: ${removedRoleNames} od użytkownika ${member.user.tag}`);
 
-                        return {
-                            success: true,
-                            removedRoles: rolesToRemoveFromUser,
-                            user: newMember
-                        };
+                    return {
+                        success: true,
+                        removedRoles: rolesToRemoveFromUser,
+                        user: member
+                    };
 
-                    } catch (error) {
-                        logger.error(`Błąd podczas automatycznego usuwania ról od ${newMember.user.tag}: ${error.message}`);
-                        return { success: false, error: error.message };
-                    }
-                } else {
-                    logger.info(`Użytkownik ${newMember.user.tag} nie posiada żadnych ról do automatycznego usunięcia`);
+                } catch (error) {
+                    logger.error(`Błąd podczas automatycznego usuwania ról po utracie boost od ${member.user.tag}: ${error.message}`);
+                    return { success: false, error: error.message };
                 }
+            } else {
+                logger.info(`Użytkownik ${member.user.tag} nie posiada żadnych ról do automatycznego usunięcia po utracie boost`);
             }
 
             return { success: true, noAction: true };
 
         } catch (error) {
-            logger.error(`Błąd w handleRoleRemoval: ${error.message}`);
+            logger.error(`Błąd w handleBoostLoss: ${error.message}`);
             return { success: false, error: error.message };
         }
     }
 
     /**
-     * Obsługuje przywracanie ról gdy użytkownik odzyskuje główną rolę
-     * @param {GuildMember} oldMember - Stary członek
-     * @param {GuildMember} newMember - Nowy członek
+     * Obsługuje przywracanie ról gdy użytkownik odzyskuje boost serwera
+     * @param {GuildMember} member - Członek który otrzymał boost
      */
-    async handleRoleRestoration(oldMember, newMember) {
+    async handleBoostGain(member) {
         try {
-            const triggerRoleId = this.config.roleManagement.triggerRoleId;
+            logger.info(`Obsługa otrzymania boost: ${member.user.tag}`);
 
-            // Sprawdź czy użytkownik odzyskał główną rolę (trigger role)
-            const hadTriggerRole = oldMember.roles.cache.has(triggerRoleId);
-            const hasTriggerRole = newMember.roles.cache.has(triggerRoleId);
+            // Pobierz zapisane role użytkownika
+            const savedRoleIds = await this.getRemovedRoles(member.user.id);
 
-            if (!hadTriggerRole && hasTriggerRole) {
-                logger.info(`Użytkownik ${newMember.user.tag} odzyskał główną rolę (ID: ${triggerRoleId})`);
+            if (savedRoleIds.length > 0) {
+                try {
+                    const rolesToRestore = [];
+                    const roleNamesToRestore = [];
 
-                // Pobierz zapisane role użytkownika
-                const savedRoleIds = await this.getRemovedRoles(newMember.user.id);
-
-                if (savedRoleIds.length > 0) {
-                    try {
-                        const rolesToRestore = [];
-                        const roleNamesToRestore = [];
-
-                        // Sprawdź które role nadal istnieją na serwerze
-                        for (const roleId of savedRoleIds) {
-                            const role = newMember.guild.roles.cache.get(roleId);
-                            if (role) {
-                                rolesToRestore.push(role);
-                                roleNamesToRestore.push(role.name);
-                            } else {
-                                logger.warn(`Rola o ID ${roleId} nie istnieje już na serwerze`);
-                            }
+                    // Sprawdź które role nadal istnieją na serwerze i użytkownik ich nie ma
+                    for (const roleId of savedRoleIds) {
+                        const role = member.guild.roles.cache.get(roleId);
+                        if (role && !member.roles.cache.has(roleId)) {
+                            rolesToRestore.push(role);
+                            roleNamesToRestore.push(role.name);
+                        } else if (!role) {
+                            logger.warn(`Rola o ID ${roleId} nie istnieje już na serwerze`);
                         }
-
-                        if (rolesToRestore.length > 0) {
-                            // Przywróć role użytkownikowi
-                            await newMember.roles.add(rolesToRestore, 'Automatyczne przywrócenie ról po odzyskaniu głównej roli');
-                            
-                            logger.info(`Automatycznie przywrócono role: ${roleNamesToRestore.join(', ')} użytkownikowi ${newMember.user.tag}`);
-
-                            return {
-                                success: true,
-                                restoredRoles: rolesToRestore,
-                                user: newMember
-                            };
-                        }
-
-                    } catch (error) {
-                        logger.error(`Błąd podczas automatycznego przywracania ról użytkownikowi ${newMember.user.tag}: ${error.message}`);
-                        return { success: false, error: error.message };
                     }
-                } else {
-                    logger.info(`Użytkownik ${newMember.user.tag} nie ma zapisanych ról do przywrócenia`);
+
+                    if (rolesToRestore.length > 0) {
+                        // Przywróć role użytkownikowi
+                        await member.roles.add(rolesToRestore, 'Automatyczne przywrócenie ról po otrzymaniu boost');
+                        
+                        logger.info(`Automatycznie przywrócono role: ${roleNamesToRestore.join(', ')} użytkownikowi ${member.user.tag}`);
+
+                        return {
+                            success: true,
+                            restoredRoles: rolesToRestore,
+                            user: member
+                        };
+                    }
+
+                } catch (error) {
+                    logger.error(`Błąd podczas automatycznego przywracania ról po otrzymaniu boost użytkownikowi ${member.user.tag}: ${error.message}`);
+                    return { success: false, error: error.message };
                 }
+            } else {
+                logger.info(`Użytkownik ${member.user.tag} nie ma zapisanych ról do przywrócenia po otrzymaniu boost`);
             }
 
             return { success: true, noAction: true };
 
         } catch (error) {
-            logger.error(`Błąd w handleRoleRestoration: ${error.message}`);
+            logger.error(`Błąd w handleBoostGain: ${error.message}`);
             return { success: false, error: error.message };
         }
     }

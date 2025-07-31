@@ -6,10 +6,10 @@ const { createBotLogger } = require('../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 
 // Importuj serwisy
-const RoleManagementService = require('./services/roleManagementService');
 const MediaService = require('./services/mediaService');
 const LogService = require('./services/logService');
 const SpecialRolesService = require('./services/specialRolesService');
+const RoleManagementService = require('./services/roleManagementService');
 const RoleKickingService = require('./services/roleKickingService');
 
 // Importuj handlery
@@ -37,8 +37,8 @@ const roleKickingService = new RoleKickingService(config);
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
-const interactionHandler = new InteractionHandler(config, roleManagementService, logService, specialRolesService, messageHandler);
-const memberHandler = new MemberHandler(config, roleManagementService, logService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler);
+const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {

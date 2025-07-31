@@ -6,9 +6,8 @@ const WarningService = require('../services/warningService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, roleManagementService, logService, specialRolesService, messageHandler = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null) {
         this.config = config;
-        this.roleManagementService = roleManagementService;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.messageHandler = messageHandler;
