@@ -310,29 +310,28 @@ class BazarService {
         const currentHour = now.getHours();
         const currentMinute = now.getMinutes();
 
-        // Znajdź następną godzinę resetu (co 2h od startHour)
-        let targetHour = this.startHour;
+        // Stały cykl co 2 godziny przez całą dobę
+        // Parametr startHour określa przesunięcie w cyklu
+        // Dla startHour=18: resety o 0,2,4,6,8,10,12,14,16,18,20,22
+        // Dla startHour=17: resety o 1,3,5,7,9,11,13,15,17,19,21,23
         
-        // Jeśli obecna godzina jest późniejsza niż startHour dzisiaj
-        if (currentHour > this.startHour || (currentHour === this.startHour && currentMinute > 0)) {
-            // Znajdź następną godzinę resetu dzisiaj
-            while (targetHour <= currentHour) {
-                targetHour += 2;
-            }
-            
-            // Jeśli przekraczamy 24h, przenieś na następny dzień
-            if (targetHour >= 24) {
-                targetHour = this.startHour;
-                nextReset.setDate(nextReset.getDate() + 1);
-            }
-        }
-        // Jeśli obecna godzina jest wcześniejsza niż startHour dzisiaj
-        else if (currentHour < this.startHour) {
-            targetHour = this.startHour;
-        }
-        // Jeśli jest dokładnie startHour ale jeszcze nie minęła
-        else {
-            targetHour = this.startHour;
+        let targetHour = currentHour;
+        
+        // Sprawdź czy obecna godzina jest godziną resetu
+        const isResetHour = (targetHour % 2) === (this.startHour % 2);
+        
+        if (isResetHour && currentMinute === 0) {
+            // Jest dokładnie godzina resetu
+            targetHour = currentHour;
+        } else {
+            // Znajdź następną godzinę resetu
+            do {
+                targetHour++;
+                if (targetHour >= 24) {
+                    targetHour = 0;
+                    nextReset.setDate(nextReset.getDate() + 1);
+                }
+            } while ((targetHour % 2) !== (this.startHour % 2));
         }
 
         nextReset.setHours(targetHour);
