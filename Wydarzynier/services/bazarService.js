@@ -114,6 +114,10 @@ class BazarService {
                 });
                 channelIds.push(channel.id);
                 logger.info(`Utworzono kanał bazaru: ${channelName} (${channel.id})`);
+                
+                // Wyślij wiadomość startową
+                await channel.send('# Zapiąć pasy, otwieramy bazarek! <:PepeBizensik:1278014731113857037>');
+                logger.info(`Wysłano wiadomość startową do kanału: ${channelName}`);
             }
 
             this.channelIds = channelIds;
