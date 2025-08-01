@@ -593,8 +593,46 @@ class OCRService {
             return 1.0; // 100% jeśli nick jest w linii
         }
         
+        // Dodatkowe sprawdzenie: czy nick występuje z małymi błędami OCR
+        if (nickLower.length >= 5) {
+            const similarity = this.calculateFuzzyMatch(lineLower, nickLower);
+            if (similarity >= 0.9) {
+                return similarity; // Wysokie podobieństwo dla prawie idealnych dopasowań
+            }
+        }
+        
         // Oblicz podobieństwo na podstawie kolejnych znaków z nicku
         return this.calculateOrderedSimilarity(lineLower, nickLower);
+    }
+
+    /**
+     * Oblicza podobieństwo z tolerancją na małe błędy OCR
+     * Szuka nicka w linii z możliwością 1-2 błędnych znaków
+     */
+    calculateFuzzyMatch(lineLower, nickLower) {
+        // Szukaj pozycji gdzie nick może się zaczynać
+        for (let i = 0; i <= lineLower.length - nickLower.length; i++) {
+            const substring = lineLower.substring(i, i + nickLower.length);
+            
+            // Oblicz liczbę różnych znaków
+            let differences = 0;
+            for (let j = 0; j < nickLower.length; j++) {
+                if (substring[j] !== nickLower[j]) {
+                    differences++;
+                }
+            }
+            
+            // Jeśli różnica to maksymalnie 2 znaki dla nicków 8+ znaków
+            // lub 1 znak dla nicków 5-7 znaków
+            const maxDifferences = nickLower.length >= 8 ? 2 : 1;
+            
+            if (differences <= maxDifferences) {
+                const similarity = 1 - (differences / nickLower.length);
+                return Math.max(0.9, similarity); // Minimum 90% dla fuzzy match
+            }
+        }
+        
+        return 0; // Brak fuzzy match
     }
 
     /**
