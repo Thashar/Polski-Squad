@@ -41,7 +41,16 @@ module.exports = {
         languages: 'pol+eng',
         charWhitelist: '0123456789KMBTQSi7.Best:Total ',
         charWhitelistWords: 'BestTotalbesttotal: ',
-        threshold: 200
+        threshold: 200,
+        
+        // Szczegółowe logowanie OCR
+        detailedLogging: {
+            enabled: false,  // Domyślnie wyłączone
+            logImageProcessing: true,
+            logTextExtraction: true,
+            logScoreAnalysis: true,
+            logBossNameExtraction: true
+        }
     },
     
     // Konfiguracja obrazów

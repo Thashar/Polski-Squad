@@ -29,9 +29,18 @@ class OCRService {
                 .png()
                 .toFile(processedPath);
             
-            logger.info('Sprawdzam obecność wymaganych słów w obrazie...');
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logImageProcessing) {
+                logger.info('🔍 Szczegółowy debug: Sprawdzam obecność wymaganych słów w obrazie...');
+            } else {
+                logger.info('Sprawdzam obecność wymaganych słów w obrazie...');
+            }
+            
             const { data: { text } } = await Tesseract.recognize(processedPath, this.config.ocr.languages, {
-                logger: m => logger.info(`Word Check Progress: ${m.status}`),
+                logger: m => {
+                    if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logImageProcessing) {
+                        logger.info(`📊 Word Check Progress: ${m.status}`);
+                    }
+                },
                 tessedit_char_whitelist: this.config.ocr.charWhitelistWords
             });
             
@@ -40,9 +49,15 @@ class OCRService {
             const hasBest = /best\s*:/i.test(text.trim());
             const hasTotal = /total\s*:/i.test(text.trim());
             
-            logger.info('Tekst z obrazu:', text.trim());
-            logger.info('Znaleziono "Best:":', hasBest);
-            logger.info('Znaleziono "Total:":', hasTotal);
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
+                logger.info('📝 Szczegółowy debug: Tekst z obrazu:', text.trim());
+                logger.info('🔍 Szczegółowy debug: Znaleziono "Best:":', hasBest);
+                logger.info('🔍 Szczegółowy debug: Znaleziono "Total:":', hasTotal);
+            } else {
+                logger.info('Tekst z obrazu:', text.trim());
+                logger.info('Znaleziono "Best:":', hasBest);
+                logger.info('Znaleziono "Total:":', hasTotal);
+            }
             
             return hasBest && hasTotal;
         } catch (error) {
@@ -137,15 +152,25 @@ class OCRService {
      * @returns {string|null} - Wyodrębniony wynik lub null
      */
     extractScoreAfterBest(text) {
-        logger.info('Pełny tekst z OCR:');
-        logger.info(text);
-        logger.info('Analizowany tekst OCR:', text);
+        if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:');
+            logger.info(text);
+            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', text);
+        } else {
+            logger.info('Pełny tekst z OCR:');
+            logger.info(text);
+            logger.info('Analizowany tekst OCR:', text);
+        }
         
         // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
         const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQSi70]*)/gi;
         let matches = text.match(bestScorePattern);
         
-        logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
+        if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best (wzorzec 1):', matches);
+        } else {
+            logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
+        }
         
         if (!matches || matches.length === 0) {
             // Elastyczny wzorzec też uwzględnia cyfry końcowe

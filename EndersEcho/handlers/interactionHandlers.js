@@ -48,7 +48,15 @@ class InteractionHandler {
                 .addUserOption(option =>
                     option.setName('user')
                         .setDescription('Użytkownik do usunięcia z rankingu')
-                        .setRequired(true))
+                        .setRequired(true)),
+            
+            new SlashCommandBuilder()
+                .setName('ocr-debug')
+                .setDescription('Przełącz szczegółowe logowanie OCR')
+                .addBooleanOption(option =>
+                    option.setName('enabled')
+                        .setDescription('Włącz (true) lub wyłącz (false) szczegółowe logowanie')
+                        .setRequired(false))
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -90,6 +98,9 @@ class InteractionHandler {
                     break;
                 case 'remove':
                     await this.handleRemoveCommand(interaction);
+                    break;
+                case 'ocr-debug':
+                    await this.handleOcrDebugCommand(interaction);
                     break;
             }
         } else if (interaction.isButton()) {
@@ -422,6 +433,37 @@ class InteractionHandler {
                 });
             }
         }
+    }
+
+    /**
+     * Obsługuje komendę debug OCR
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleOcrDebugCommand(interaction) {
+        const enabled = interaction.options.getBoolean('enabled');
+        
+        if (enabled === null) {
+            // Sprawdź aktualny stan
+            const currentState = this.config.ocr.detailedLogging.enabled;
+            await interaction.reply({
+                content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
+                ephemeral: true
+            });
+            return;
+        }
+        
+        // Przełącz stan
+        this.config.ocr.detailedLogging.enabled = enabled;
+        
+        const statusText = enabled ? '✅ Włączone' : '❌ Wyłączone';
+        const emoji = enabled ? '🔍' : '🔇';
+        
+        logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+        
+        await interaction.reply({
+            content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
+            ephemeral: true
+        });
     }
 }
 

@@ -92,5 +92,20 @@ module.exports = {
         'g': '9', 'G': '6'
     },
     
+    // Konfiguracja OCR
+    ocr: {
+        tempDir: path.join(__dirname, '../temp'),
+        
+        // Szczegółowe logowanie OCR
+        detailedLogging: {
+            enabled: false,  // Domyślnie wyłączone
+            logImageProcessing: true,
+            logTextExtraction: true,
+            logNickDetection: true,
+            logScoreValidation: true,
+            logCharacterNormalization: true
+        }
+    },
+    
     messages
 };

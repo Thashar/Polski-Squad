@@ -313,6 +313,11 @@ class OCRService {
             }
         }
         
+        // Check "e" patterns (błąd OCR dla 0)
+        const ePatterns = [
+            /\s+e\s+/, /\s+e$/, /^e\s+/
+        ];
+        
         // Check "o" patterns
         for (const pattern of oPatterns) {
             if (pattern.test(processedLine)) {
@@ -330,6 +335,30 @@ class OCRService {
                 // Sprawdź czy po "o" nie ma spacji i dwóch liter/cyfr
                 const spaceAndTwoCharPattern = /o\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/;
                 if (spaceAndTwoCharPattern.test(processedLine)) {
+                    return false;
+                }
+                
+                return true;
+            }
+        }
+        
+        // Check "e" patterns (błąd OCR dla 0)
+        for (const pattern of ePatterns) {
+            if (pattern.test(processedLine)) {
+                const threeDigitPattern = /\d{3}$/;
+                if (threeDigitPattern.test(processedLine.trim())) {
+                    return false;
+                }
+                
+                // Sprawdź czy po "e" nie ma dwóch liter lub cyfr
+                const twoCharAfterEPattern = /e[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/;
+                if (twoCharAfterEPattern.test(processedLine)) {
+                    return false;
+                }
+                
+                // Sprawdź czy po "e" nie ma spacji i dwóch liter/cyfr
+                const spaceAndTwoCharEPattern = /e\s[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9]{2,}/;
+                if (spaceAndTwoCharEPattern.test(processedLine)) {
                     return false;
                 }
                 
@@ -355,7 +384,9 @@ class OCRService {
             /\s\d\s/g, /\s\d$/g,
             /\s+0\s+/g, /\s+0$/g, /^0\s+/g, /\s+0\.0\s+/g, /\s+0\.0$/g, /\s+0,0\s+/g, /\s+0,0$/g,
             /\s+o\s+/g, /\s+o$/g, /^o\s+/g,
-            /\s+zo\s+/g, /\s+zo$/g, /^zo\s+/g
+            /\s+e\s+/g, /\s+e$/g, /^e\s+/g,
+            /\s+zo\s+/g, /\s+zo$/g, /^zo\s+/g,
+            /\s+ze\s+/g, /\s+ze$/g, /^ze\s+/g
         ];
         
         // Znajdź wszystkie dopasowania w linii
@@ -752,45 +783,53 @@ class OCRService {
             /^1$/,                    // czyste 1
             /^9$/,                    // czyste 9
             /^o$/,                    // czyste o
+            /^e$/,                    // czyste e (błąd OCR)
             
             // W nawiasach okrągłych
             /^\(0\)$/,               // (0)
             /^\(1\)$/,               // (1)
             /^\(9\)$/,               // (9)
             /^\(o\)$/,               // (o)
+            /^\(e\)$/,               // (e) - błąd OCR
             
             // W nawiasach kwadratowych
             /^\[0\]$/,               // [0]
             /^\[1\]$/,               // [1]
             /^\[9\]$/,               // [9]
             /^\[o\]$/,               // [o]
+            /^\[e\]$/,               // [e] - błąd OCR
             
             // Z nawiasem na końcu
             /^0\)$/,                 // 0)
             /^1\)$/,                 // 1)
             /^9\)$/,                 // 9)
             /^o\)$/,                 // o)
+            /^e\)$/,                 // e) - błąd OCR
             
             // Z otwartym nawiasem okrągłym na początku
             /^\(0$/,                 // (0
             /^\(1$/,                 // (1
             /^\(9$/,                 // (9
             /^\(o$/,                 // (o
+            /^\(e$/,                 // (e - błąd OCR
             
             // Z otwartym nawiasem kwadratowym na początku
             /^\[0$/,                 // [0
             /^\[1$/,                 // [1
             /^\[9$/,                 // [9
             /^\[o$/,                 // [o
+            /^\[e$/,                 // [e - błąd OCR
             
             // Z zamkniętym nawiasem kwadratowym na końcu
             /^0\]$/,                 // 0]
             /^1\]$/,                 // 1]
             /^9\]$/,                 // 9]
             /^o\]$/,                 // o]
+            /^e\]$/,                 // e] - błąd OCR
             
             // Dodatkowe wzorce
-            /^zo$/                   // zo
+            /^zo$/,                  // zo
+            /^ze$/                   // ze - błąd OCR
         ];
         
         const wordLower = word.toLowerCase();
