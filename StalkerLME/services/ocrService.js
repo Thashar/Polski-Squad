@@ -171,7 +171,7 @@ class OCRService {
                         }
                     }
                     
-                    if (similarity >= 0.7 && similarity > bestSimilarity) {
+                    if (similarity >= 0.6 && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
                         bestMatch = roleNick;
                     }
