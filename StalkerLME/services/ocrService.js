@@ -157,7 +157,7 @@ class OCRService {
                 let bestSimilarity = 0;
                 
                 for (const roleNick of roleNicks) {
-                    const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
+                    const similarity = calculateNameSimilarity(roleNick.displayName, line);
                     
                     if (similarity >= 0.7 && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
@@ -552,84 +552,6 @@ class OCRService {
         }
     }
 
-    calculateLineSimilarity(line, nick) {
-        const lineLower = line.toLowerCase().replace(/[^a-z0-9]/g, ''); // Usuń wszystkie znaki specjalne
-        const nickLower = nick.toLowerCase().replace(/[^a-z0-9]/g, '');
-        
-        // Sprawdź czy nick występuje w linii, ale tylko jeśli nick ma 3+ znaki
-        // To zapobiega false positive dla krótkich fragmentów jak "21"
-        if (nickLower.length >= 3 && lineLower.includes(nickLower)) {
-            return 1.0; // 100% jeśli nick jest w linii
-        }
-        
-        // Oblicz podobieństwo na podstawie kolejnych znaków z nicku
-        return this.calculateOrderedSimilarity(lineLower, nickLower);
-    }
-
-    /**
-     * Oblicza podobieństwo na podstawie kolejnych znaków z nicku znalezionych w linii OCR
-     * @param {string} ocrText - Tekst z OCR (bez znaków specjalnych)
-     * @param {string} nick - Nick do sprawdzenia (bez znaków specjalnych)
-     * @returns {number} Podobieństwo 0-1
-     */
-    calculateOrderedSimilarity(ocrText, nick) {
-        if (!nick || nick.length === 0) return 0;
-        if (!ocrText || ocrText.length === 0) return 0;
-        
-        // Dla bardzo krótkich nicków (1-2 znaki) wymagaj wyższego progu podobieństwa
-        if (nick.length <= 2) {
-            // Dla krótkich nicków wymagaj dokładnego dopasowania lub bardzo wysokiej jakości
-            const exactMatch = ocrText === nick;
-            if (exactMatch) return 1.0;
-            
-            // W przeciwnym razie znacznie obniż podobieństwo dla krótkich nicków
-            const baseSimilarity = this.calculateBasicOrderedSimilarity(ocrText, nick);
-            return baseSimilarity * 0.3; // Drastyczne obniżenie dla krótkich nicków
-        }
-        
-        return this.calculateBasicOrderedSimilarity(ocrText, nick);
-    }
-    
-    calculateBasicOrderedSimilarity(ocrText, nick) {
-        let matchedChars = 0;
-        let ocrIndex = 0;
-        
-        // Przejdź przez każdy znak w nicku i sprawdź czy występuje w kolejności w OCR
-        for (let nickIndex = 0; nickIndex < nick.length; nickIndex++) {
-            const nickChar = nick[nickIndex];
-            
-            // Znajdź ten znak w OCR począwszy od aktualnej pozycji
-            let found = false;
-            for (let i = ocrIndex; i < ocrText.length; i++) {
-                if (ocrText[i] === nickChar) {
-                    matchedChars++;
-                    ocrIndex = i + 1; // Przesuń się za znaleziony znak
-                    found = true;
-                    break;
-                }
-            }
-            
-            // Jeśli nie znaleziono znaku, kontynuuj (nie resetuj ocrIndex)
-            if (!found) {
-                // Można dodać penalty za brak znaku, ale na razie kontynuujemy
-            }
-        }
-        
-        // Podstawowe podobieństwo = znalezione znaki / całkowita długość nicku
-        const baseSimilarity = matchedChars / nick.length;
-        
-        // Oblicz karę za różnicę w długości (proporcjonalny system)
-        const lengthDifference = Math.abs(ocrText.length - nick.length);
-        const maxLength = Math.max(ocrText.length, nick.length);
-        const lengthDifferencePercent = maxLength > 0 ? lengthDifference / maxLength : 0;
-        
-        // Proporcjonalna kara: jeśli różnica 50% = dziel przez 2, 25% = dziel przez 1.5, itd.
-        // Wzór: dzielnik = 1 + (procent różnicy)
-        const lengthPenaltyDivisor = 1 + lengthDifferencePercent;
-        const finalSimilarity = baseSimilarity / lengthPenaltyDivisor;
-        
-        return Math.max(0, finalSimilarity);
-    }
 
     analyzeLineEnd(line, nickName = null) {
         const trimmedLine = line.trim();
