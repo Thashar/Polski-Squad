@@ -157,9 +157,7 @@ class OCRService {
                 let bestSimilarity = 0;
                 
                 for (const roleNick of roleNicks) {
-                    // Wyciągnij nick gracza z linii OCR zamiast porównywać całą linię
-                    const extractedPlayerName = this.extractPlayerNameFromLine(line);
-                    const similarity = calculateNameSimilarity(roleNick.displayName, extractedPlayerName || line);
+                    const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
                     
                     if (similarity >= 0.7 && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
@@ -554,60 +552,6 @@ class OCRService {
         }
     }
 
-    /**
-     * Wyciąga nick gracza z linii OCR usuwając prefix "PL |" i sufiks z wynikiem
-     * @param {string} line - Linia OCR do analizy
-     * @returns {string} - Wyciągnięty nick gracza lub null jeśli nie znaleziono
-     */
-    extractPlayerNameFromLine(line) {
-        if (!line || line.trim().length === 0) {
-            return null;
-        }
-        
-        const trimmedLine = line.trim();
-        
-        // Wzorce do usunięcia prefiksów z linii OCR
-        const prefixPatterns = [
-            /^[^\w]*PL\s*\|\s*/i,        // "PL |", "| PL |", "|PL|" itp.
-            /^[^\w]*\|\s*PL\s*\|\s*/i,   // "| PL |" na początku
-            /^[^\w]*\d+[^\w]*PL\s*\|\s*/i, // "5 PL |" itp.
-            /^[^\w]*[|]\s*/,             // Same "|" na początku
-            /^[^\w]*/                    // Wszelkie inne znaki specjalne na początku
-        ];
-        
-        let cleanedLine = trimmedLine;
-        
-        // Usuń prefiksy
-        for (const pattern of prefixPatterns) {
-            const match = cleanedLine.match(pattern);
-            if (match) {
-                cleanedLine = cleanedLine.substring(match[0].length);
-                break; // Usuń tylko pierwszy pasujący prefix
-            }
-        }
-        
-        // Podziel na słowa i znajdź prawdopodobny nick gracza
-        const words = cleanedLine.split(/\s+/).filter(word => word.length > 0);
-        
-        if (words.length === 0) {
-            return null;
-        }
-        
-        // Znajdź pierwszy słowo które wygląda jak nick gracza
-        for (const word of words) {
-            // Nick gracza to zazwyczaj słowo które:
-            // - Ma przynajmniej 3 znaki
-            // - Ma maksymalnie 20 znaków  
-            // - Zawiera litery (nie jest czystą liczbą)
-            // - Nie jest wzorcem wyniku (nie kończy się na 0, nie zawiera tylko cyfr po spacji)
-            if (this.isLikelyPlayerName(word)) {
-                return word;
-            }
-        }
-        
-        // Jeśli nie znaleziono prawdopodobnego nicka, zwróć pierwsze słowo
-        return words[0];
-    }
 
     calculateLineSimilarity(line, nick) {
         const lineLower = line.toLowerCase().replace(/[^a-z0-9]/g, ''); // Usuń wszystkie znaki specjalne
