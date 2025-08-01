@@ -152,12 +152,24 @@ class OCRService {
                 const line = validLines[i];
                 const lineNumber = lines.findIndex(l => l.trim() === line.trim()) + 1;
                 
+                // Szczegółowe logowanie analizy linii
+                if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logLineAnalysis) {
+                    logger.info(`   📋 Linia ${lineNumber}: "${line.trim()}"`);
+                }
+                
                 // Znajdź najlepsze dopasowanie ze wszystkich nicków z roli
                 let bestMatch = null;
                 let bestSimilarity = 0;
                 
                 for (const roleNick of roleNicks) {
                     const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
+                    
+                    // Szczegółowe logowanie podobieństwa
+                    if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logSimilarityCalculations) {
+                        if (similarity >= this.config.ocr.detailedLogging.similarityThreshold) {
+                            logger.info(`      🔍 "${roleNick.displayName}" vs "${line.trim()}" → ${(similarity * 100).toFixed(1)}%`);
+                        }
+                    }
                     
                     if (similarity >= 0.7 && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
@@ -166,8 +178,18 @@ class OCRService {
                 }
                 
                 if (bestMatch) {
+                    // Szczegółowe logowanie dopasowania
+                    if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logNickMatching) {
+                        logger.info(`      ✅ Najlepsze dopasowanie: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%)`);
+                    }
+                    
                     // Krok 4: Sprawdź koniec linii za nickiem dla wyniku
                     let endResult = this.analyzeLineEnd(line, bestMatch.displayName);
+                    
+                    // Szczegółowe logowanie analizy końca linii
+                    if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logEndAnalysis) {
+                        logger.info(`      🔚 Analiza końca linii: typ="${endResult.type}", wartość="${endResult.value}"`);
+                    }
                     
                     // Jeśli nick ma 10+ liter i nie znaleziono wyniku/zera w tej linii, sprawdź następną linię
                     if (bestMatch.displayName.length >= 10 && endResult.type === 'unknown') {
@@ -180,8 +202,16 @@ class OCRService {
                             const nextLine = allLines[currentLineIndex + 1];
                             const nextEndResult = this.analyzeLineEnd(nextLine, null); // W następnej linii nie szukamy za nickiem
                             
+                            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logEndAnalysis) {
+                                logger.info(`      🔄 Sprawdzanie następnej linii dla długiego nicka: "${nextLine.trim()}"`);
+                                logger.info(`      🔚 Wynik następnej linii: typ="${nextEndResult.type}", wartość="${nextEndResult.value}"`);
+                            }
+                            
                             if (nextEndResult.type !== 'unknown') {
                                 endResult = nextEndResult;
+                                if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logEndAnalysis) {
+                                    logger.info(`      ✅ Użyto wyniku z następnej linii`);
+                                }
                             }
                         }
                     }

@@ -57,6 +57,9 @@ async function handleSlashCommand(interaction, config, databaseService, ocrServi
         case 'debug-roles':
             await handleDebugRolesCommand(interaction, config);
             break;
+        case 'ocr-debug':
+            await handleOcrDebugCommand(interaction, config);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
     }
@@ -738,6 +741,15 @@ async function registerSlashCommands(client) {
                         { name: '💥PolskiSquad²💥', value: '2' },
                         { name: '🔥Polski Squad🔥', value: 'main' }
                     )
+            ),
+        
+        new SlashCommandBuilder()
+            .setName('ocr-debug')
+            .setDescription('Przełącz szczegółowe logowanie OCR')
+            .addBooleanOption(option =>
+                option.setName('enabled')
+                    .setDescription('Włącz (true) lub wyłącz (false) szczegółowe logowanie')
+                    .setRequired(false)
             )
     ];
     
@@ -1144,6 +1156,33 @@ async function showFinalConfirmationWithUpdate(interaction, finalPlayers, imageU
     await interaction.update({ 
         embeds: [confirmationEmbed],
         components: [row]
+    });
+}
+
+async function handleOcrDebugCommand(interaction, config) {
+    const enabled = interaction.options.getBoolean('enabled');
+    
+    if (enabled === null) {
+        // Sprawdź aktualny stan
+        const currentState = config.ocr.detailedLogging.enabled;
+        await interaction.reply({
+            content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
+            ephemeral: true
+        });
+        return;
+    }
+    
+    // Przełącz stan
+    config.ocr.detailedLogging.enabled = enabled;
+    
+    const statusText = enabled ? '✅ Włączone' : '❌ Wyłączone';
+    const emoji = enabled ? '🔍' : '🔇';
+    
+    logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+    
+    await interaction.reply({
+        content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
+        ephemeral: true
     });
 }
 

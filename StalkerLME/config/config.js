@@ -105,7 +105,17 @@ module.exports = {
         saveProcessedImages: true,
         processedDir: './StalkerLME/processed',
         maxProcessedFiles: 50,
-        tempDir: './StalkerLME/temp'
+        tempDir: './StalkerLME/temp',
+        
+        // Szczegółowe logowanie OCR
+        detailedLogging: {
+            enabled: false,  // Domyślnie wyłączone
+            logSimilarityCalculations: true,
+            logLineAnalysis: true,
+            logNickMatching: true,
+            logEndAnalysis: true,
+            similarityThreshold: 0.3  // Loguj tylko podobieństwa powyżej tego progu
+        }
     },
     
     // Limity punktów
