@@ -28,7 +28,21 @@ class CommandService {
                 .setDescription('Pokaż wszystkie aktualne podpowiedzi'),
             new SlashCommandBuilder()
                 .setName('statystyki')
-                .setDescription('Pokaż szczegółowe statystyki gry (tylko dla Ciebie)')
+                .setDescription('Pokaż szczegółowe statystyki gry (tylko dla Ciebie)'),
+            new SlashCommandBuilder()
+                .setName('blessing')
+                .setDescription('Udziel błogosławieństwa innemu użytkownikowi (tylko Virtutti Papajlari)')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik do błogosławienia')
+                        .setRequired(true)),
+            new SlashCommandBuilder()
+                .setName('virtue-check')
+                .setDescription('Sprawdź cnoty innego użytkownika (tylko Virtutti Papajlari)')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik do sprawdzenia cnót')
+                        .setRequired(true))
         ];
     }
 

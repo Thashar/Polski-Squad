@@ -23,7 +23,7 @@ Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy 
 Weryfikuje wyniki dla kanałów Daily i CX. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. Blokuje użytkowników z karami.
 
 ### ⛪ Konklawe Bot
-Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki. **Losowe odpowiedzi JP2** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/100 na otrzymanie losowej odpowiedzi z emoji JP2roll.
+Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki. **Losowe odpowiedzi JP2** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/100 na otrzymanie losowej odpowiedzi z emoji JP2roll. **Specjalne komendy VIP**: `/blessing` (błogosławieństwa) i `/virtue-check` (sprawdzanie cnót) z cooldownami i limitami dziennymi - dostępne globalnie tylko dla posiadaczy medalu.
 
 ### 🎉 Wydarzynier Bot
 System zarządzania eventami i organizacji społeczności. **System lobby party** - tworzy prywatne wątki dla organizacji gier z systemem zaproszeń i automatycznym czyszczeniem. **Marketplace (Bazar)** - automatyczny system handlowy z cyklicznymi resetami co 2 godziny, ostrzeżeniami i systemem przypinania wiadomości. **Zarządzanie powiadomieniami** - interaktywny system zapisów na powiadomienia o eventach.

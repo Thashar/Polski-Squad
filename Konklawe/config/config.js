@@ -44,5 +44,51 @@ module.exports = {
     },
     randomResponse: {
         virtuttiPapajlariChance: 100 // 1 in 100 chance (1%)
+    },
+    virtuttiPapajlari: {
+        cooldownMinutes: 10,
+        dailyLimit: 5,
+        blessings: [
+            "🙏 Niech Ci się zawsze trafia zielone światło na przejściach! ✨",
+            "💫 Błogosławię Cię mocą nieśmiertelnych memów! 🌟",
+            "👑 Niech Twój internet nigdy się nie zawiesza podczas ważnych momentów! 🕊️",
+            "⭐ Błogosławię Cię łaską zawsze trafnych gifów w odpowiedzi! 💫",
+            "✨ Niech Twoje baterie w telefonie zawsze mają więcej niż 20%! 🙏",
+            "🌟 Niech Ci się zawsze udaje znaleźć miejsce parkingowe! 🚗",
+            "🙏 Błogosławię Cię łaską nigdy nie zapomnianych haseł! 🔐",
+            "💫 Niech Twoje kanapki nigdy nie spadną masłem w dół! 🥪",
+            "✨ Błogosławię Cię mocą zawsze działających słuchawek! 🎧",
+            "👑 Niech Ci się zawsze udaje trafić w USB za pierwszym razem! 💻",
+            "🕊️ Błogosławię Cię łaską bezpiecznych aktualizacji! ⬆️",
+            "⭐ Niech Twoja pizza zawsze będzie idealne! 🍕"
+        ],
+        virtues: [
+            "Memiczność",
+            "Cierpliwość na Loading",
+            "Mądrość Googlowania",
+            "Pokora przed Bugami",
+            "Wytrwałość w Kolejkach",
+            "Łaska WiFi",
+            "Cnota Backup'owania",
+            "Mądrość Update'ów",
+            "Pokora przed Autocorrectem",
+            "Świętość Dark Mode"
+        ],
+        papalAdvice: [
+            "Módl się więcej do Google'a, synu.",
+            "Potrzebujesz więcej błogosławieństwa stackoverflow.",
+            "Idź i naucz się ctrl+z, dziecko.",
+            "Twoja cnota wymaga więcej tutoriali na YouTube.",
+            "Idź i naucz się więcej skrótów klawiszowych, dziecko.",
+            "Potrzebujesz więcej medytacji nad Stack Overflow.",
+            "Módl się częściej do dokumentacji, synu.",
+            "Twoja dusza wymaga więcej backup'ów.",
+            "Idź i przeczytaj changelog, moje dziecko.",
+            "Potrzebujesz błogosławieństwa lepszych komentarzy w kodzie.",
+            "Módl się za szybszy internet, synu.",
+            "Twoja cnota wymaga więcej ctrl+s.",
+            "Idź i naucz się git'a, dziecko.",
+            "Potrzebujesz więcej debugowania w życiu."
+        ]
     }
 };

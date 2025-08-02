@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const VirtuttiService = require('../services/virtuttiService');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
@@ -8,6 +9,12 @@ class InteractionHandler {
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
+        this.virtuttiService = new VirtuttiService(config);
+        
+        // Czyszczenie starych danych co godzinę
+        setInterval(() => {
+            this.virtuttiService.cleanup();
+        }, 60 * 60 * 1000);
     }
 
     /**
@@ -90,6 +97,15 @@ class InteractionHandler {
      */
     async handleSlashCommand(interaction) {
         try {
+            const { commandName } = interaction;
+            
+            // Komendy specjalne dla Virtutti Papajlari - działają globalnie
+            if (commandName === 'blessing' || commandName === 'virtue-check') {
+                await this.handleVirtuttiPapajlariCommand(interaction);
+                return;
+            }
+            
+            // Pozostałe komendy tylko na odpowiednim kanale
             if (interaction.channel.id !== this.config.channels.command) {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({
@@ -99,8 +115,6 @@ class InteractionHandler {
                 }
                 return;
             }
-
-            const { commandName } = interaction;
 
             if (commandName === 'podpowiedz') {
                 await this.handleHintCommand(interaction);
@@ -551,6 +565,152 @@ class InteractionHandler {
         }
 
         return embed;
+    }
+
+    /**
+     * Obsługuje komendy specjalne dla Virtutti Papajlari
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleVirtuttiPapajlariCommand(interaction) {
+        // Sprawdź czy użytkownik ma rolę Virtutti Papajlari
+        if (!interaction.member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
+            return await interaction.reply({
+                content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy medalu Virtutti Papajlari!',
+                ephemeral: true
+            });
+        }
+
+        const { commandName } = interaction;
+        
+        if (commandName === 'blessing') {
+            await this.handleBlessingCommand(interaction);
+        } else if (commandName === 'virtue-check') {
+            await this.handleVirtueCheckCommand(interaction);
+        }
+    }
+
+    /**
+     * Obsługuje komendę /blessing
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleBlessingCommand(interaction) {
+        const targetUser = interaction.options.getUser('użytkownik');
+        const userId = interaction.user.id;
+        
+        // Sprawdź cooldown i limity
+        const canUse = this.virtuttiService.canUseCommand(userId, 'blessing');
+        if (!canUse.canUse) {
+            return await interaction.reply({
+                content: `⏰ ${canUse.reason}`,
+                ephemeral: true
+            });
+        }
+
+        // Zarejestruj użycie
+        this.virtuttiService.registerUsage(userId, 'blessing');
+
+        // Pobierz losowe błogosławieństwo
+        const blessing = this.virtuttiService.getRandomBlessing();
+        
+        // Dodaj reakcje do oryginalnej wiadomości (jeśli to możliwe)
+        const blessingReactions = ['🙏', '✨', '👑', '💫', '🕊️', '⭐', '🌟'];
+        const randomReaction = blessingReactions[Math.floor(Math.random() * blessingReactions.length)];
+
+        try {
+            // Wyślij błogosławieństwo
+            await interaction.reply({
+                content: `🙏 **Błogosławieństwo od ${interaction.user.displayName}** ${randomReaction}\n\n${targetUser.toString()}, ${blessing}`,
+                ephemeral: false
+            });
+
+            logger.info(`🙏 ${interaction.user.tag} błogosławi ${targetUser.tag}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas wysyłania błogosławieństwa: ${error.message}`);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas udzielania błogosławieństwa.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Obsługuje komendę /virtue-check
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleVirtueCheckCommand(interaction) {
+        const targetUser = interaction.options.getUser('użytkownik');
+        const userId = interaction.user.id;
+        
+        // Sprawdź cooldown i limity
+        const canUse = this.virtuttiService.canUseCommand(userId, 'virtueCheck');
+        if (!canUse.canUse) {
+            return await interaction.reply({
+                content: `⏰ ${canUse.reason}`,
+                ephemeral: true
+            });
+        }
+
+        // Zarejestruj użycie
+        this.virtuttiService.registerUsage(userId, 'virtueCheck');
+
+        // Pobierz losowe cnoty i radę
+        const virtues = this.virtuttiService.getRandomVirtues();
+        const advice = this.virtuttiService.getRandomPapalAdvice();
+        
+        // Stwórz embed z wynikami
+        const embed = new EmbedBuilder()
+            .setTitle(`🔍 **Sprawdzenie cnót dla ${targetUser.displayName}**`)
+            .setColor('#FFD700')
+            .setThumbnail(targetUser.displayAvatarURL())
+            .setTimestamp()
+            .setFooter({ 
+                text: `Sprawdził: ${interaction.user.displayName} | Cooldown: ${this.config.virtuttiPapajlari.cooldownMinutes} min`,
+                iconURL: interaction.user.displayAvatarURL()
+            });
+
+        // Dodaj cnoty
+        const virtuesText = virtues.map(virtue => {
+            let emoji = '📱';
+            if (virtue.percentage >= 80) emoji = '⭐';
+            else if (virtue.percentage >= 60) emoji = '✨';
+            else if (virtue.percentage >= 40) emoji = '💫';
+            else if (virtue.percentage >= 20) emoji = '📱';
+            else emoji = '💔';
+            
+            return `• **${virtue.name}:** **${virtue.percentage}%** ${emoji}`;
+        }).join('\n');
+
+        embed.addFields({
+            name: '📊 **Wyniki duchowe:**',
+            value: virtuesText,
+            inline: false
+        });
+
+        embed.addFields({
+            name: '⛪ **Papieska rada:**',
+            value: `*"${advice}"*`,
+            inline: false
+        });
+
+        const dailyUsage = this.virtuttiService.dailyUsage.get(userId);
+        const remainingUses = this.config.virtuttiPapajlari.dailyLimit - (dailyUsage?.virtueCheck || 0);
+        
+        embed.addFields({
+            name: '📈 **Status:**',
+            value: `Pozostałe sprawdzenia dzisiaj: **${remainingUses}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+            inline: false
+        });
+
+        try {
+            await interaction.reply({ embeds: [embed], ephemeral: false });
+            logger.info(`🔍 ${interaction.user.tag} sprawdza cnoty ${targetUser.tag}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas sprawdzania cnót: ${error.message}`);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas sprawdzania cnót.',
+                ephemeral: true
+            });
+        }
     }
 
 }
