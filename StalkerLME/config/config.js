@@ -103,7 +103,7 @@ module.exports = {
         
         // Konfiguracja zapisywania przetworzonych obrazów
         saveProcessedImages: true,
-        processedDir: './processed_ocr',
+        processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 100,
         tempDir: './StalkerLME/temp',
         
