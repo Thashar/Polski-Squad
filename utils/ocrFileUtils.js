@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Generuje nazwę pliku w formacie [BOT][ GODZINA-DATA ][] lub [BOT][ GODZINA-DATA ][TYP]
+ * Generuje nazwę pliku w formacie [BOT][ hh:mm:ss rrrr-mm-dd ][] lub [BOT][ hh:mm:ss rrrr-mm-dd ][TYP]
  * @param {string} botName - Nazwa bota (np. 'KONTROLER', 'STALKER', 'ENDERSECHO', 'REKRUTER')
  * @param {string} type - Typ zdjęcia (np. 'daily', 'cx', 'stalker', 'endersecho', 'rekruter')
  * @returns {string} - Nazwa pliku
@@ -10,14 +10,14 @@ const path = require('path');
 function generateProcessedFilename(botName, type) {
     const now = new Date();
     
-    // Format GODZINA-DATA: HH-MM-SS_YYYY-MM-DD
+    // Format GODZINA-DATA: hh:mm:ss rrrr-mm-dd
     const hour = now.getHours().toString().padStart(2, '0');
     const minute = now.getMinutes().toString().padStart(2, '0');
     const second = now.getSeconds().toString().padStart(2, '0');
     const year = now.getFullYear();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
-    const timeStr = `${hour}-${minute}-${second}_${year}-${month}-${day}`;
+    const timeStr = `${hour}:${minute}:${second} ${year}-${month}-${day}`;
     
     // Dodaj spacje w nawiasach kwadratowych i określ czy pokazać typ
     const botNamePart = `[${botName.toUpperCase()}]`;
