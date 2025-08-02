@@ -85,20 +85,18 @@ module.exports = {
             "Świętość Dark Mode"
         ],
         papalAdvice: [
-            "Módl się więcej do Google'a, synu.",
-            "Potrzebujesz więcej błogosławieństwa stackoverflow.",
-            "Idź i naucz się ctrl+z, dziecko.",
-            "Twoja cnota wymaga więcej tutoriali na YouTube.",
-            "Idź i naucz się więcej skrótów klawiszowych, dziecko.",
-            "Potrzebujesz więcej medytacji nad Stack Overflow.",
-            "Módl się częściej do dokumentacji, synu.",
-            "Twoja dusza wymaga więcej backup'ów.",
-            "Idź i przeczytaj changelog, moje dziecko.",
-            "Potrzebujesz błogosławieństwa lepszych komentarzy w kodzie.",
-            "Módl się za szybszy internet, synu.",
-            "Twoja cnota wymaga więcej ctrl+s.",
-            "Idź i naucz się git'a, dziecko.",
-            "Potrzebujesz więcej debugowania w życiu."
+            "Żebyś więcej gemów odkładał na bok, synu.",
+            "Potrzebujesz więcej tobleronów w swoim życiu.",
+            "Idź i nie padaj na Ops Retreat, dziecko.",
+            "Twoja cnota wymaga awansu do wyższego klanu.",
+            "Żebyś nie zapomniał o boost'cie serwera, synu.",
+            "Potrzebujesz więcej Awaken Cores w swojej duszy.",
+            "Idź i nie zbijaj ostatni bossa, moje dziecko.",
+            "Twoje EQ wymaga lepszego setup'u. Musisz zgłębić Danke, synu.",
+            "Żeby ZO było zawsze zrobione w terminie, synu.",
+            "Potrzebujesz przejść kilka pięter na PoT, synu.",
+            "Módl się, żeby Cię Habby nie wyjebało na kasę, dziecko.",
+            "Żebyś doszedł do Championa w cnociach, synu."
         ]
     }
 };
