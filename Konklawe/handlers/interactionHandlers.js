@@ -619,7 +619,7 @@ class InteractionHandler {
         try {
             // Wyślij błogosławieństwo
             await interaction.reply({
-                content: `**${targetUser.displayName} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`,
+                content: `**${targetUser.toString()} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`,
                 ephemeral: false
             });
 
