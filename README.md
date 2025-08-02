@@ -59,9 +59,11 @@ Polski-Squad-Bot-Collection/
 ├── package.json               # Zależności i skrypty NPM
 ├── bot-config.json            # Konfiguracja które boty uruchamiać
 ├── CLAUDE.md                  # Instrukcje dla Claude Code
+├── processed_ocr/             # 🆕 Wspólny folder przetworzonych obrazów OCR (max 100 plików)
 ├── utils/                     # Wspólne narzędzia
 │   ├── consoleLogger.js       # Centralny system logowania z kolorami
-│   └── discordLogger.js       # System logowania na kanały Discord
+│   ├── discordLogger.js       # System logowania na kanały Discord
+│   └── ocrFileUtils.js        # 🆕 Narzędzia do zarządzania plikami OCR
 ├── 
 ├── EndersEcho/                # Bot rankingowy z analizą OCR
 │   ├── index.js
@@ -267,6 +269,48 @@ Plik `bot-config.json` określa które boty uruchamiać:
 - **Timeout handling** - odporna obsługa Discord API timeouts
 - **Error recovery** - graceful error handling dla wszystkich interakcji
 
+## System OCR i Debugowanie
+
+### 🔍 Zaawansowane funkcje OCR
+- **Cztery boty z OCR**: Rekruter, StalkerLME, EndersEcho, Kontroler
+- **Wspólny folder przetworzonych obrazów**: `processed_ocr/` w katalogu głównym  
+- **Format nazw plików**: `[BOTNAME][HH-MM-SS_YYYY-MM-DD][typ].png`
+- **Automatyczna rotacja**: maksymalnie 100 plików dla wszystkich botów razem
+- **Szczegółowe logowanie**: przełączalne tryb debug za pomocą `/ocr-debug`
+
+### 🛠️ Komendy debugowania OCR
+**Dostępne tylko dla administratorów:**
+```
+/ocr-debug true          # Włącz szczegółowe logowanie OCR
+/ocr-debug false         # Wyłącz szczegółowe logowanie OCR
+/ocr-debug               # Sprawdź aktualny stan logowania
+```
+
+### 📁 Przykłady nazw przetworzonych plików
+```
+[KONTROLER][14-23-45_2025-08-02][daily].png    # Analiza kanału Daily
+[KONTROLER][14-23-47_2025-08-02][cx].png       # Analiza kanału CX
+[STALKER][14-24-12_2025-08-02][stalker].png    # System kar Stalker
+[ENDERSECHO][14-25-30_2025-08-02][endersecho].png # Analiza wyników rankingu
+[REKRUTER][14-26-15_2025-08-02][rekruter].png  # Weryfikacja kwalifikacji
+```
+
+### 🔧 Konfiguracja OCR (jednolita dla wszystkich botów)
+```javascript
+ocr: {
+    saveProcessedImages: true,
+    processedDir: path.join(__dirname, '../../processed_ocr'),
+    maxProcessedFiles: 100,
+    detailedLogging: {
+        enabled: false,  // Przełączane przez /ocr-debug
+        logImageProcessing: true,
+        logTextExtraction: true,
+        logScoreAnalysis: true,
+        // Specyficzne opcje dla każdego bota...
+    }
+}
+```
+
 ## Technologie
 
 - **Node.js** + **Discord.js v14**
@@ -309,3 +353,9 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 - Wszystkie logi są prefixowane nazwą bota
 - Używaj `npm run local` do testowania pojedynczych botów
 - Edytuj `bot-config.json` aby zmienić które boty uruchamiać
+
+### Debugowanie OCR:
+- Użyj `/ocr-debug true` aby włączyć szczegółowe logowanie OCR (tylko administratorzy)
+- Przetworzone obrazy są automatycznie zapisywane w `processed_ocr/` z timestampami
+- Format nazw: `[BOTNAME][czas][typ].png` ułatwia identyfikację problemów
+- Maksymalnie 100 plików - najstarsze automatycznie usuwane
