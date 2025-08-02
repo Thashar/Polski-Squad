@@ -91,7 +91,9 @@ class OCRService {
                 .toFile(outputPath);
             
             // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+            logger.info(`🔧 Debug: saveProcessedImages = ${this.config.ocr.saveProcessedImages}`);
             if (this.config.ocr.saveProcessedImages) {
+                logger.info(`🔧 Debug: Zapisuję przetworzony obraz EndersEcho z: ${outputPath}`);
                 await saveProcessedImage(
                     outputPath,
                     this.config.ocr.processedDir,
@@ -100,6 +102,8 @@ class OCRService {
                     this.config.ocr.maxProcessedFiles,
                     logger
                 );
+            } else {
+                logger.info(`🔧 Debug: Zapisywanie przetworzonych obrazów WYŁĄCZONE`);
             }
             
             logger.info('Obraz został przetworzony dla białego tekstu');

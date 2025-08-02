@@ -98,7 +98,9 @@ class OCRService {
             .toFile(outputPath);
         
         // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+        logger.info(`🔧 Debug: saveProcessedImages = ${this.config.ocr.saveProcessedImages}`);
         if (this.config.ocr.saveProcessedImages) {
+            logger.info(`🔧 Debug: Zapisuję przetworzony obraz daily z: ${outputPath}`);
             await saveProcessedImage(
                 outputPath,
                 this.config.ocr.processedDir,
@@ -107,6 +109,8 @@ class OCRService {
                 this.config.ocr.maxProcessedFiles,
                 logger
             );
+        } else {
+            logger.info(`🔧 Debug: Zapisywanie przetworzonych obrazów WYŁĄCZONE`);
         }
         
         logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie)');
@@ -163,7 +167,9 @@ class OCRService {
         .toFile(outputPath);
 
         // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+        logger.info(`🔧 Debug: saveProcessedImages = ${this.config.ocr.saveProcessedImages}`);
         if (this.config.ocr.saveProcessedImages) {
+            logger.info(`🔧 Debug: Zapisuję przetworzony obraz cx z: ${outputPath}`);
             await saveProcessedImage(
                 outputPath,
                 this.config.ocr.processedDir,
@@ -172,6 +178,8 @@ class OCRService {
                 this.config.ocr.maxProcessedFiles,
                 logger
             );
+        } else {
+            logger.info(`🔧 Debug: Zapisywanie przetworzonych obrazów WYŁĄCZONE`);
         }
 
         logger.info('Zaawansowany preprocessing zakończony');
