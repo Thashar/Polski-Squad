@@ -68,6 +68,16 @@ module.exports = {
         luminanceThresholds: {
             white: 200,
             black: 120
+        },
+        
+        // Szczegółowe logowanie OCR
+        detailedLogging: {
+            enabled: false,  // Domyślnie wyłączone
+            logImageProcessing: true,
+            logTextExtraction: true,
+            logNickDetection: true,
+            logScoreValidation: true,
+            logCharacterNormalization: true
         }
     },
     
@@ -90,16 +100,6 @@ module.exports = {
         'l': '1', 'I': '1', 'i': '1',
         'B': '8',
         'g': '9', 'G': '6'
-    },
-    
-    // Szczegółowe logowanie OCR
-    detailedLogging: {
-        enabled: false,  // Domyślnie wyłączone
-        logImageProcessing: true,
-        logTextExtraction: true,
-        logNickDetection: true,
-        logScoreValidation: true,
-        logCharacterNormalization: true
     },
     
     messages
