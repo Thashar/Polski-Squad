@@ -86,20 +86,116 @@ class VirtuttiService {
     }
 
     /**
-     * Pobiera losowe cnoty z procentami
-     * @returns {Array} - Lista cnót z procentami
+     * Pobiera losowe cnoty z procentami i opisami
+     * @returns {Array} - Lista cnót z procentami i opisami
      */
     getRandomVirtues() {
         const virtues = this.config.virtuttiPapajlari.virtues;
         const selectedVirtues = virtues
             .sort(() => 0.5 - Math.random())
             .slice(0, 3)
-            .map(virtue => ({
-                name: virtue,
-                percentage: Math.floor(Math.random() * 101)
-            }));
+            .map(virtue => {
+                const percentage = Math.floor(Math.random() * 101);
+                return {
+                    name: virtue,
+                    percentage: percentage,
+                    description: this.getVirtueDescription(virtue, percentage)
+                };
+            });
         
         return selectedVirtues;
+    }
+
+    /**
+     * Pobiera opis cnoty na podstawie nazwy i procentu
+     * @param {string} virtueName - Nazwa cnoty
+     * @param {number} percentage - Procent cnoty (0-100)
+     * @returns {string} - Opis cnoty
+     */
+    getVirtueDescription(virtueName, percentage) {
+        const descriptions = {
+            "Memiczność": {
+                high: "Mistrz internetowej kultury! Twoje memy są legendarne.",
+                good: "Solidna znajomość memów. Jesteś na bieżąco z trendami.",
+                medium: "Podstawowa wiedza memowa. Czasami łapiesz żarty.",
+                low: "Memy cię omijają. Potrzebujesz więcej r/dankmemes.",
+                veryLow: "Co to jest mem? Musisz nadrobić zaległości."
+            },
+            "Cierpliwość na Loading": {
+                high: "Zen master ładowania! Nie denerwuje cię żaden spinner.",
+                good: "Dobrze radzisz sobie z czekaniem na strony.",
+                medium: "Czasami tracisz cierpliwość przy 3 sekundach.",
+                low: "Klikasz F5 co 2 sekundy. Uspokój się.",
+                veryLow: "Twoja cierpliwość = 0ms. Potrzebujesz terapii."
+            },
+            "Mądrość Googlowania": {
+                high: "Google Guru! Znajdziesz wszystko w pierwszym wynikce.",
+                good: "Sprawnie nawigujesz po wynikach wyszukiwania.",
+                medium: "Potrafisz znaleźć to czego szukasz... czasami.",
+                low: "Szukasz 'jak naprawić komputer' w Bingu.",
+                veryLow: "Pytasz na forum zamiast googlować. Grzech!"
+            },
+            "Pokora przed Bugami": {
+                high: "Bugi to twoi przyjaciele. Akceptujesz je z godnością.",
+                good: "Rozumiesz że błędy to część procesu rozwoju.",
+                medium: "Czasami się denerwujesz na niedziałający kod.",
+                low: "Każdy bug to dla ciebie osobista obraza.",
+                veryLow: "Krzyczysz na monitor. Bug nie słyszy."
+            },
+            "Wytrwałość w Kolejkach": {
+                high: "Kolejki to dla ciebie medytacja. Stoicki spokój.",
+                good: "Cierpliwie czekasz, może przeglądasz telefon.",
+                medium: "Po 10 minutach zaczynasz się niecierpliwić.",
+                low: "Zmieniasz kolejki co 3 minuty szukając szybszej.",
+                veryLow: "Kolejka = torture. Zamawiasz wszystko online."
+            },
+            "Łaska WiFi": {
+                high: "Internet nigdy cię nie zawodzi. Magiczne połączenia.",
+                good: "Zazwyczaj masz stabilne połączenie.",
+                medium: "Czasami musisz resetować router.",
+                low: "WiFi cię nie lubi. Często się rozłącza.",
+                veryLow: "Internet to twój największy wróg. Dial-up vibes."
+            },
+            "Cnota Backup'owania": {
+                high: "Backup masterclass! Masz kopie swoich kopii.",
+                good: "Regularnie robisz kopie ważnych rzeczy.",
+                medium: "Pamiętasz o backup'ie... czasami.",
+                low: "Backup? Co to takiego? Żyjesz niebezpiecznie.",
+                veryLow: "Stracisz wszystko i będziesz płakać. Backup NOW!"
+            },
+            "Mądrość Update'ów": {
+                high: "Update master! Wiesz kiedy aktualizować a kiedy czekać.",
+                good: "Rozsądnie podchodzisz do aktualizacji systemu.",
+                medium: "Czasami klikasz 'Remind me later' zbyt często.",
+                low: "Update'y cię przerażają. Nigdy nie aktualizujesz.",
+                veryLow: "Używasz Windows XP w 2025. Help."
+            },
+            "Pokora przed Autocorrectem": {
+                high: "Autocorrect to twój przyjaciel. Akceptujesz jego mądrość.",
+                good: "Zazwyczaj poprawki są w porządku.",
+                medium: "Czasami autocorrect zmienia sens na absurd.",
+                low: "Walczysz z autocorrectem jak z wiatrakami.",
+                veryLow: "Ducking autocorrect! (widzisz co zrobił?)"
+            },
+            "Świętość Dark Mode": {
+                high: "Dark mode everywhere! Twoje oczy są błogosławione.",
+                good: "Używasz dark mode w większości aplikacji.",
+                medium: "Mieszasz light i dark mode zależnie od nastroju.",
+                low: "Czasami używasz light mode. Grzech venialny.",
+                veryLow: "Light mode only? Twoje oczy potrzebują exorcyzmów!"
+            }
+        };
+
+        const virtueDescriptions = descriptions[virtueName];
+        if (!virtueDescriptions) {
+            return "Tajemnicza cnota, której nikt nie potrafi opisać.";
+        }
+
+        if (percentage >= 80) return virtueDescriptions.high;
+        if (percentage >= 60) return virtueDescriptions.good;
+        if (percentage >= 40) return virtueDescriptions.medium;
+        if (percentage >= 20) return virtueDescriptions.low;
+        return virtueDescriptions.veryLow;
     }
 
     /**

@@ -668,7 +668,7 @@ class InteractionHandler {
                 iconURL: interaction.user.displayAvatarURL()
             });
 
-        // Dodaj cnoty
+        // Dodaj cnoty z opisami
         const virtuesText = virtues.map(virtue => {
             let emoji = '📱';
             if (virtue.percentage >= 80) emoji = '⭐';
@@ -677,8 +677,8 @@ class InteractionHandler {
             else if (virtue.percentage >= 20) emoji = '📱';
             else emoji = '💔';
             
-            return `• **${virtue.name}:** **${virtue.percentage}%** ${emoji}`;
-        }).join('\n');
+            return `• **${virtue.name}:** **${virtue.percentage}%** ${emoji}\n  *"${virtue.description}"*`;
+        }).join('\n\n');
 
         embed.addFields({
             name: '📊 **Wyniki duchowe:**',
