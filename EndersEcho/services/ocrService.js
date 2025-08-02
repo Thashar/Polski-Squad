@@ -130,18 +130,24 @@ class OCRService {
         // Sprawdź czy wynik kończy się cyfrą 7 i nie ma jednostki K/M/B/T/Q/S
         if (/7$/.test(fixedScore) && !/[KMBTQS]$/i.test(fixedScore)) {
             fixedScore = fixedScore.replace(/7$/, 'T');
-            logger.info('Zastąpiono końcową cyfrę 7 na literę T');
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+                logger.info('Zastąpiono końcową cyfrę 7 na literę T');
+            }
         }
         
         // Zamień 0 na końcu na Q (jeśli nie ma już jednostki M/B/T/Q/Qi)
         // Sprawdź czy wynik kończy się cyfrą 0 i nie ma jednostki M/B/T/Q/Qi
         if (/0$/.test(fixedScore) && !/[MBTQ]i?$/i.test(fixedScore)) {
             fixedScore = fixedScore.replace(/0$/, 'Q');
-            logger.info('Zastąpiono końcową cyfrę 0 na literę Q');
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+                logger.info('Zastąpiono końcową cyfrę 0 na literę Q');
+            }
         }
         
-        logger.info('Oryginalny wynik:', scoreText);
-        logger.info('Poprawiony wynik:', fixedScore);
+        if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+            logger.info('Oryginalny wynik:', scoreText);
+            logger.info('Poprawiony wynik:', fixedScore);
+        }
         
         return fixedScore;
     }
@@ -153,12 +159,10 @@ class OCRService {
      */
     extractScoreAfterBest(text) {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:');
-            logger.info(text);
+            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:', text);
             logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', text);
         } else {
-            logger.info('Pełny tekst z OCR:');
-            logger.info(text);
+            logger.info('Pełny tekst z OCR:', text);
             logger.info('Analizowany tekst OCR:', text);
         }
         
@@ -227,7 +231,9 @@ class OCRService {
         
         if (lines.length >= 2) {
             const secondLine = lines[1];
-            logger.info('Druga linijka tekstu (boss):', secondLine);
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                logger.info('Druga linijka tekstu (boss):', secondLine);
+            }
             
             // Sprawdź czy druga linijka zawiera cyfry
             const hasDigits = /\d/.test(secondLine);
@@ -236,16 +242,22 @@ class OCRService {
             if (hasDigits && lines.length >= 1) {
                 // Jeśli druga linijka ma cyfry, użyj pierwszej linijki
                 bossLine = lines[0];
-                logger.info('Druga linijka zawiera cyfry, używam pierwszej linijki:', bossLine);
+                if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                    logger.info('Druga linijka zawiera cyfry, używam pierwszej linijki:', bossLine);
+                }
             } else {
                 // Standardowo używaj drugiej linijki
                 bossLine = secondLine;
-                logger.info('Używam drugiej linijki (brak cyfr):', bossLine);
+                if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                    logger.info('Używam drugiej linijki (brak cyfr):', bossLine);
+                }
             }
             
             // Oczyszczenie nazwy bossa z niepotrzebnych znaków
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
-            logger.info('Oczyszczona nazwa bossa:', cleanBossName);
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                logger.info('Oczyszczona nazwa bossa:', cleanBossName);
+            }
             
             return cleanBossName || null;
         }

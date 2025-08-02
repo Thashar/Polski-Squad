@@ -224,12 +224,14 @@ class InteractionHandler {
             
             // Ekstrakcja nazwy bossa
             const bossName = this.ocrService.extractBossName(extractedText);
-            logger.info('Nazwa bossa:', bossName);
-            
-            // Debug - sprawdź czy mamy wszystkie dane
-            logger.info('DEBUG - extractedText długość:', extractedText ? extractedText.length : 'null');
-            logger.info('DEBUG - bestScore:', bestScore);
-            logger.info('DEBUG - bossName:', bossName);
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                logger.info('Nazwa bossa:', bossName);
+                
+                // Debug - sprawdź czy mamy wszystkie dane
+                logger.info('DEBUG - extractedText długość:', extractedText ? extractedText.length : 'null');
+                logger.info('DEBUG - bestScore:', bestScore);
+                logger.info('DEBUG - bossName:', bossName);
+            }
             
             // Aktualizacja rankingu
             const userId = interaction.user.id;
