@@ -115,5 +115,12 @@ module.exports = {
         rekruterDataPath: '../Rekruter/data/user_monitoring.json'
     },
     
+    // Konfiguracja losowych odpowiedzi
+    randomResponse: {
+        virtuttiPapajlariRoleId: '1387383527653376081',
+        virtuttiPapajlariChance: 250, // 1 in 250 chance
+        pepeSoldierEmoji: '<:PepeSolidierVirtittiPapajlari:1401322467397472459>'
+    },
+    
     messages
 };

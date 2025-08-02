@@ -14,7 +14,7 @@ Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z auto
 System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń, automatyczne resetowanie punktów oraz **system zarządzania urlopami** z automatycznym monitorowaniem kanału i czasowymi ograniczeniami składania wniosków.
 
 ### 🤖 Muteusz Bot
-Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń.
+Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń. **Losowe odpowiedzi PepeSoldier** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/250 na otrzymanie losowej odpowiedzi z emoji PepeSoldier.
 
 ### 🏆 EndersEcho Bot
 Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe. **Ulepszona korekcja OCR** - automatycznie poprawia błędy odczytu (TT→1T, 7→T, 0→Q).

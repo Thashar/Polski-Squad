@@ -30,6 +30,19 @@ class MessageHandler {
             return;
         }
         
+        // Losowa odpowiedź dla użytkowników z rolą Virtutti Papajlari
+        if (message.member && message.member.roles.cache.has(this.config.randomResponse.virtuttiPapajlariRoleId)) {
+            const randomChance = Math.floor(Math.random() * this.config.randomResponse.virtuttiPapajlariChance) + 1;
+            if (randomChance === 1) { // Szansa 1/N gdzie N = virtuttiPapajlariChance
+                try {
+                    await message.reply(this.config.randomResponse.pepeSoldierEmoji);
+                    logger.info(`🎲 Losowa odpowiedź PepeSoldier dla ${message.author.tag} (1/${this.config.randomResponse.virtuttiPapajlariChance})`);
+                } catch (error) {
+                    logger.error(`❌ Błąd wysyłania losowej odpowiedzi PepeSoldier: ${error.message}`);
+                }
+            }
+        }
+        
         // Obsługa załączników (oryginalny kod)
         if (message.attachments.size > 0 && message.channel.id !== this.config.media.targetChannelId) {
             await this.mediaService.repostMedia(message, client);
