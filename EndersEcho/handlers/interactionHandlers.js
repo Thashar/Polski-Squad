@@ -440,6 +440,15 @@ class InteractionHandler {
      * @param {CommandInteraction} interaction - Interakcja komendy
      */
     async handleOcrDebugCommand(interaction) {
+        // Sprawdź uprawnienia administratora
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+                ephemeral: true
+            });
+            return;
+        }
+        
         const enabled = interaction.options.getBoolean('enabled');
         
         if (enabled === null) {

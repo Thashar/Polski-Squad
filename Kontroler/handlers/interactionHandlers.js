@@ -34,6 +34,15 @@ async function handleInteraction(interaction, config) {
  * Obsługuje komendę debug OCR
  */
 async function handleOcrDebugCommand(interaction, config) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+    
     const enabled = interaction.options.getBoolean('enabled');
     
     if (enabled === null) {
