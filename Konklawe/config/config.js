@@ -41,5 +41,8 @@ module.exports = {
     },
     achievements: {
         virtuttiPapajlariThreshold: 30
+    },
+    randomResponse: {
+        virtuttiPapajlariChance: 100 // 1 in 100 chance (1%)
     }
 };

@@ -19,6 +19,19 @@ class MessageHandler {
         try {
             if (message.author.bot) return;
 
+            // Losowa odpowiedź dla użytkowników z rolą Virtutti Papajlari
+            if (message.member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
+                const randomChance = Math.floor(Math.random() * this.config.randomResponse.virtuttiPapajlariChance) + 1;
+                if (randomChance === 1) { // Szansa 1/N gdzie N = virtuttiPapajlariChance
+                    try {
+                        await message.reply(`# ${this.config.emojis.jp2roll}`);
+                        logger.info(`🎲 Losowa odpowiedź JP2roll dla ${message.author.tag} (1/${this.config.randomResponse.virtuttiPapajlariChance})`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd wysyłania losowej odpowiedzi JP2roll: ${error.message}`);
+                    }
+                }
+            }
+
             // Rejestrowanie prób odgadnięcia
             if (message.channel.id === this.config.channels.attempts &&
                 this.gameService.trigger &&
