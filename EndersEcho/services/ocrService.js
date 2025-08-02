@@ -2,12 +2,22 @@ const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 
 const logger = createBotLogger('EndersEcho');
 
 class OCRService {
     constructor(config) {
         this.config = config;
+    }
+
+    /**
+     * Inicjalizuje folder dla przetworzonych obrazów
+     */
+    async initialize() {
+        if (this.config.ocr.saveProcessedImages) {
+            await fs.mkdir(this.config.ocr.processedDir, { recursive: true });
+        }
     }
 
     /**
@@ -79,6 +89,18 @@ class OCRService {
                 .negate()
                 .png()
                 .toFile(outputPath);
+            
+            // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+            if (this.config.ocr.saveProcessedImages) {
+                await saveProcessedImage(
+                    outputPath,
+                    this.config.ocr.processedDir,
+                    'ENDERSECHO',
+                    'endersecho',
+                    this.config.ocr.maxProcessedFiles,
+                    logger
+                );
+            }
             
             logger.info('Obraz został przetworzony dla białego tekstu');
         } catch (error) {

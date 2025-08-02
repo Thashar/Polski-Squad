@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 
 const logger = createBotLogger('Kontroler');
 class OCRService {
@@ -29,42 +30,6 @@ class OCRService {
     /**
      * Usuwa najstarsze pliki jeśli przekroczono limit
      */
-    async cleanupOldProcessedFiles() {
-        try {
-            if (!this.config.ocr.saveProcessedImages) return;
-
-            const files = await fs.readdir(this.config.ocr.processedDir);
-            const pngFiles = files.filter(file => file.endsWith('.png'));
-            
-            if (pngFiles.length <= this.config.ocr.maxProcessedFiles) return;
-
-            // Pobierz statystyki plików z czasem modyfikacji
-            const fileStats = await Promise.all(
-                pngFiles.map(async file => {
-                    const filePath = path.join(this.config.ocr.processedDir, file);
-                    const stats = await fs.stat(filePath);
-                    return { file, filePath, mtime: stats.mtime };
-                })
-            );
-
-            // Posortuj po czasie modyfikacji (najstarsze pierwsze)
-            fileStats.sort((a, b) => a.mtime - b.mtime);
-
-            // Usuń najstarsze pliki
-            const filesToDelete = fileStats.slice(0, fileStats.length - this.config.ocr.maxProcessedFiles);
-            
-            for (const { file, filePath } of filesToDelete) {
-                await fs.unlink(filePath);
-                logger.info(`🗑️ Usunięto stary plik: ${file}`);
-            }
-
-            if (filesToDelete.length > 0) {
-                logger.info(`🧹 Usunięto ${filesToDelete.length} starych plików (limit: ${this.config.ocr.maxProcessedFiles})`);
-            }
-        } catch (error) {
-            logger.error(`Błąd czyszczenia starych plików: ${error.message}`);
-        }
-    }
 
     /**
      * Sprawdza czy piksel jest biały lub bardzo jasny
@@ -134,19 +99,14 @@ class OCRService {
         
         // Zapisz przetworzone zdjęcie na dysku jeśli włączone
         if (this.config.ocr.saveProcessedImages) {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `daily_processed_${timestamp}.png`;
-            const savedPath = path.join(this.config.ocr.processedDir, filename);
-            
-            try {
-                await fs.copyFile(outputPath, savedPath);
-                logger.info(`💾 Zapisano przetworzone zdjęcie Daily: ${filename}`);
-                
-                // Wyczyść stare pliki jeśli przekroczono limit
-                await this.cleanupOldProcessedFiles();
-            } catch (error) {
-                logger.error(`Błąd zapisu przetworzonego zdjęcia: ${error.message}`);
-            }
+            await saveProcessedImage(
+                outputPath,
+                this.config.ocr.processedDir,
+                'KONTROLER',
+                'daily',
+                this.config.ocr.maxProcessedFiles,
+                logger
+            );
         }
         
         logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie)');
@@ -204,19 +164,14 @@ class OCRService {
 
         // Zapisz przetworzone zdjęcie na dysku jeśli włączone
         if (this.config.ocr.saveProcessedImages) {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `cx_processed_${timestamp}.png`;
-            const savedPath = path.join(this.config.ocr.processedDir, filename);
-            
-            try {
-                await fs.copyFile(outputPath, savedPath);
-                logger.info(`💾 Zapisano przetworzone zdjęcie CX: ${filename}`);
-                
-                // Wyczyść stare pliki jeśli przekroczono limit
-                await this.cleanupOldProcessedFiles();
-            } catch (error) {
-                logger.error(`Błąd zapisu przetworzonego zdjęcia: ${error.message}`);
-            }
+            await saveProcessedImage(
+                outputPath,
+                this.config.ocr.processedDir,
+                'KONTROLER',
+                'cx',
+                this.config.ocr.maxProcessedFiles,
+                logger
+            );
         }
 
         logger.info('Zaawansowany preprocessing zakończony');

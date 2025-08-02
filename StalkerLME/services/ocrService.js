@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { calculateNameSimilarity } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 
 const logger = createBotLogger('StalkerLME');
 
@@ -63,9 +64,9 @@ class OCRService {
             const newWidth = Math.round(metadata.width * this.config.ocr.imageProcessing.upscale);
             const newHeight = Math.round(metadata.height * this.config.ocr.imageProcessing.upscale);
             
-            // Ścieżka do zapisania przetworzonego obrazu
+            // Ścieżka tymczasowa do zapisania przetworzonego obrazu
             const timestamp = Date.now();
-            const outputPath = path.join(this.processedDir, `stalker_processed_${timestamp}.png`);
+            const tempOutputPath = path.join(this.processedDir, `temp_stalker_${timestamp}.png`);
             
             // Zaawansowane przetwarzanie obrazu dla czarnego tekstu
             const processedBuffer = await sharp(imageBuffer)
@@ -98,10 +99,20 @@ class OCRService {
             
             // Zapisz przetworzony obraz jeśli włączone (nowe)
             if (this.config.ocr.saveProcessedImages) {
-                await processedBuffer.toFile(outputPath);
+                await processedBuffer.toFile(tempOutputPath);
                 
-                // Wywołaj czyszczenie starych plików
-                await this.cleanupProcessedImages();
+                // Zapisz z właściwą nazwą i wywołaj czyszczenie
+                await saveProcessedImage(
+                    tempOutputPath,
+                    this.processedDir,
+                    'STALKER',
+                    'stalker',
+                    this.config.ocr.maxProcessedFiles,
+                    logger
+                );
+                
+                // Usuń plik tymczasowy
+                await fs.unlink(tempOutputPath).catch(() => {});
             }
             
             // Zwróć buffer do OCR
@@ -877,45 +888,6 @@ class OCRService {
         }
     }
 
-    async cleanupProcessedImages() {
-        try {
-            if (!this.config.ocr.saveProcessedImages) {
-                return;
-            }
-
-            const files = await fs.readdir(this.processedDir);
-            const processedFiles = files.filter(file => file.startsWith('stalker_processed_') && file.endsWith('.png'));
-            
-            if (processedFiles.length <= this.config.ocr.maxProcessedFiles) {
-                return;
-            }
-
-            // Sortuj pliki według czasu modyfikacji (najstarsze pierwsze)
-            const filesWithStats = await Promise.all(
-                processedFiles.map(async (file) => {
-                    const filePath = path.join(this.processedDir, file);
-                    const stats = await fs.stat(filePath);
-                    return { file, filePath, mtime: stats.mtime };
-                })
-            );
-
-            filesWithStats.sort((a, b) => a.mtime - b.mtime);
-
-            // Usuń najstarsze pliki, pozostawiając maksymalną liczbę
-            const filesToDelete = filesWithStats.slice(0, filesWithStats.length - this.config.ocr.maxProcessedFiles);
-            
-            for (const fileInfo of filesToDelete) {
-                await fs.unlink(fileInfo.filePath);
-                logger.info(`🗑️ Usunięto stary przetworzony obraz: ${fileInfo.file}`);
-            }
-
-            if (filesToDelete.length > 0) {
-                logger.info(`🧹 Wyczyszczono ${filesToDelete.length} starych przetworzonych obrazów, pozostało ${this.config.ocr.maxProcessedFiles}`);
-            }
-        } catch (error) {
-            logger.error('❌ Błąd czyszczenia przetworzonych obrazów:', error);
-        }
-    }
 }
 
 module.exports = OCRService;

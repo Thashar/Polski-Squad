@@ -43,6 +43,11 @@ module.exports = {
         charWhitelistWords: 'BestTotalbesttotal: ',
         threshold: 200,
         
+        // Zapisywanie przetworzonych obrazów
+        saveProcessedImages: true,
+        processedDir: path.join(__dirname, '../../processed_ocr'),
+        maxProcessedFiles: 100,
+        
         // Szczegółowe logowanie OCR
         detailedLogging: {
             enabled: false,  // Domyślnie wyłączone

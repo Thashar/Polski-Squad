@@ -57,8 +57,8 @@ module.exports = {
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
         saveProcessedImages: true,
-        processedDir: path.join(__dirname, '../processed'),
-        maxProcessedFiles: 50,
+        processedDir: path.join(__dirname, '../../processed_ocr'),
+        maxProcessedFiles: 100,
         languages: 'pol+eng',
         charWhitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż .,:-_[](){}',
         pagesegMode: 'AUTO',

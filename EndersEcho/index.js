@@ -32,6 +32,9 @@ async function initializeBot() {
     try {
         logger.info(`Bot zalogowany jako ${client.user.tag}!`);
         
+        // Inicjalizuj OCR service
+        await ocrService.initialize();
+        
         // Rejestracja slash commands
         await interactionHandler.registerSlashCommands(client);
         

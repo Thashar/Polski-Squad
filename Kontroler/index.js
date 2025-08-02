@@ -32,8 +32,9 @@ let ocrService, analysisService, roleService, messageService, messageHandler;
 /**
  * Inicjalizuje wszystkie serwisy
  */
-function initializeServices() {
+async function initializeServices() {
     ocrService = new OCRService(config);
+    await ocrService.ensureDirectories();
     analysisService = new AnalysisService(config, ocrService);
     roleService = new RoleService(config);
     messageService = new MessageService(config);
@@ -147,7 +148,7 @@ function setupEventHandlers() {
  */
 async function start() {
     try {
-        initializeServices();
+        await initializeServices();
         setupEventHandlers();
         await client.login(config.token);
     } catch (error) {

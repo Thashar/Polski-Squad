@@ -103,8 +103,8 @@ module.exports = {
         
         // Konfiguracja zapisywania przetworzonych obrazów
         saveProcessedImages: true,
-        processedDir: './StalkerLME/processed',
-        maxProcessedFiles: 50,
+        processedDir: './processed_ocr',
+        maxProcessedFiles: 100,
         tempDir: './StalkerLME/temp',
         
         // Szczegółowe logowanie OCR

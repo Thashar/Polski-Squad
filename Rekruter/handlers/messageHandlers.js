@@ -13,7 +13,8 @@ const {
 
 const {
   extractOptimizedStatsFromImage,
-  downloadImage
+  downloadImage,
+  initializeOCR
 } = require('../services/ocrService');
 
 const { proposeNicknameChange } = require('../services/nicknameService');

@@ -8,6 +8,7 @@ const { handleInteraction, registerSlashCommands } = require('./handlers/interac
 const { handleMessage } = require('./handlers/messageHandlers');
 const RoleMonitoringService = require('./services/roleMonitoringService');
 const MemberNotificationService = require('./services/memberNotificationService');
+const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
@@ -60,6 +61,7 @@ client.once('ready', async () => {
     // Inicjalizacja serwisów
     await roleMonitoringService.initialize(client);
     memberNotificationService.initialize(client);
+    await initializeOCR(config);
     
     // Inicjalizacja folderu temp
     try {

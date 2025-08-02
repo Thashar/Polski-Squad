@@ -5,6 +5,7 @@ const http = require('http');
 const sharp = require('sharp');
 const { updateUserEphemeralReply } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 
 const logger = createBotLogger('Rekruter');
 
@@ -42,6 +43,18 @@ async function preprocessImageForWhiteText(inputPath, outputPath, config = null)
             .threshold(80)      // Threshold -80 (Sharp używa dodatnich wartości)
             .png()
             .toFile(outputPath);
+        
+        // Zapisz przetworzone zdjęcie na dysku jeśli włączone
+        if (config?.ocr?.saveProcessedImages) {
+            await saveProcessedImage(
+                outputPath,
+                config.ocr.processedDir,
+                'REKRUTER',
+                'rekruter',
+                config.ocr.maxProcessedFiles,
+                logger
+            );
+        }
         
         if (config?.ocr?.detailedLogging?.enabled && config.ocr.detailedLogging.logPreprocessing) {
             logger.info(`✅ Szczegółowy debug: [IMAGE] Przetworzono obraz z inwersją przed grayscale i threshold 80`);
@@ -740,7 +753,18 @@ async function extractOptimizedStatsFromImage(imagePath, userId, userEphemeralRe
     }
 }
 
+/**
+ * Inicjalizuje folder dla przetworzonych obrazów
+ */
+async function initializeOCR(config) {
+    if (config?.ocr?.saveProcessedImages) {
+        const fs = require('fs').promises;
+        await fs.mkdir(config.ocr.processedDir, { recursive: true });
+    }
+}
+
 module.exports = {
+    initializeOCR,
     downloadImage,
     preprocessImageForWhiteText,
     preprocessImageForNickDetection,
