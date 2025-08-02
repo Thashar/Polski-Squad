@@ -27,16 +27,27 @@ async function downloadImage(url, filepath) {
     });
 }
 
-async function preprocessImageForWhiteText(inputPath, outputPath) {
+async function preprocessImageForWhiteText(inputPath, outputPath, config = null) {
     try {
-        logger.info(`[IMAGE] Przetwarzanie obrazu: ${inputPath} -> ${outputPath}`);
+        if (config?.ocr?.detailedLogging?.enabled && config.ocr.detailedLogging.logPreprocessing) {
+            logger.info(`🔍 Szczegółowy debug: [IMAGE] Przetwarzanie obrazu: ${inputPath} -> ${outputPath}`);
+            logger.info(`📐 Szczegółowy debug: Stosowanie inwersji + grayscale + threshold 80`);
+        } else {
+            logger.info(`[IMAGE] Przetwarzanie obrazu: ${inputPath} -> ${outputPath}`);
+        }
+        
         await sharp(inputPath)
             .negate()           // Inwersja przed konwersją na szarość
             .grayscale()
             .threshold(80)      // Threshold -80 (Sharp używa dodatnich wartości)
             .png()
             .toFile(outputPath);
-        logger.info(`[IMAGE] ✅ Przetworzono obraz z inwersją przed grayscale i threshold 80`);
+        
+        if (config?.ocr?.detailedLogging?.enabled && config.ocr.detailedLogging.logPreprocessing) {
+            logger.info(`✅ Szczegółowy debug: [IMAGE] Przetworzono obraz z inwersją przed grayscale i threshold 80`);
+        } else {
+            logger.info(`[IMAGE] ✅ Przetworzono obraz z inwersją przed grayscale i threshold 80`);
+        }
     } catch (error) {
         logger.error(`[IMAGE] ❌ Błąd przetwarzania obrazu:`, error);
         throw error;

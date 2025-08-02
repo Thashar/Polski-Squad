@@ -68,5 +68,20 @@ module.exports = {
         }
     },
     
+    // Konfiguracja OCR
+    ocr: {
+        tempDir: path.join(__dirname, '../temp'),
+        
+        // Szczegółowe logowanie OCR
+        detailedLogging: {
+            enabled: false,  // Domyślnie wyłączone
+            logImageProcessing: true,
+            logTextExtraction: true,
+            logQualificationAnalysis: true,
+            logNicknameExtraction: true,
+            logPreprocessing: true
+        }
+    },
+    
     messages
 };

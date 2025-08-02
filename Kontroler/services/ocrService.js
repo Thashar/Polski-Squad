@@ -106,12 +106,20 @@ class OCRService {
      * @returns {string} - Ścieżka do przetworzonego obrazu
      */
     async preprocessWhiteTextOnGray(imagePath, outputPath) {
-        logger.info('Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie');
+        if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logImageProcessing) {
+            logger.info('🔍 Szczegółowy debug: Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie');
+        } else {
+            logger.info('Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie');
+        }
         
         // Najpierw pobierz metadane obrazu
         const metadata = await sharp(imagePath).metadata();
         const newWidth = metadata.width * 2;
         const newHeight = metadata.height * 2;
+        
+        if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logImageProcessing) {
+            logger.info(`📐 Szczegółowy debug: Zmiana rozdzielczości z ${metadata.width}x${metadata.height} na ${newWidth}x${newHeight}`);
+        }
         
         await sharp(imagePath)
             .resize(newWidth, newHeight, { kernel: 'lanczos3' })

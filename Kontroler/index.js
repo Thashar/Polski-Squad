@@ -12,6 +12,7 @@ const MessageService = require('./services/messageService');
 
 // Import handlerów
 const MessageHandler = require('./handlers/messageHandlers');
+const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Kontroler');
@@ -126,8 +127,12 @@ function onShutdown(signal) {
  * Konfiguruje event handlery
  */
 function setupEventHandlers() {
-    client.once('ready', onReady);
+    client.once('ready', async () => {
+        await onReady();
+        await registerSlashCommands(client, config);
+    });
     client.on('messageCreate', (message) => messageHandler.handleMessage(message));
+    client.on('interactionCreate', (interaction) => handleInteraction(interaction, config));
     client.on('error', onError);
 
     // Obsługa zamykania

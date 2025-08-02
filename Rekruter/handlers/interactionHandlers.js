@@ -18,6 +18,18 @@ const {
 /*  GŁÓWNA FUNKCJA EKSPORTOWANA                                               */
 /* -------------------------------------------------------------------------- */
 async function handleInteraction(interaction, state, config, client) {
+  // Obsługa slash commands
+  if (interaction.isChatInputCommand()) {
+    switch (interaction.commandName) {
+      case 'ocr-debug':
+        await handleOcrDebugCommand(interaction, config);
+        return;
+      default:
+        await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
+        return;
+    }
+  }
+  
   if (!interaction.isButton()) return;
 
   await delay(1_000);                                          // drobny „debounce”
@@ -206,4 +218,68 @@ async function handleOtherPurpose(interaction, state, config) {
   );
 }
 
-module.exports = { handleInteraction };
+/**
+ * Obsługuje komendę debug OCR
+ */
+async function handleOcrDebugCommand(interaction, config) {
+    const enabled = interaction.options.getBoolean('enabled');
+    
+    if (enabled === null) {
+        // Sprawdź aktualny stan
+        const currentState = config.ocr.detailedLogging.enabled;
+        await interaction.reply({
+            content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
+            ephemeral: true
+        });
+        return;
+    }
+    
+    // Przełącz stan
+    config.ocr.detailedLogging.enabled = enabled;
+    
+    const statusText = enabled ? '✅ Włączone' : '❌ Wyłączone';
+    const emoji = enabled ? '🔍' : '🔇';
+    
+    const { createBotLogger } = require('../../utils/consoleLogger');
+    const logger = createBotLogger('Rekruter');
+    logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+    
+    await interaction.reply({
+        content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
+        ephemeral: true
+    });
+}
+
+/**
+ * Rejestruje komendy slash
+ */
+async function registerSlashCommands(client, config) {
+    const { SlashCommandBuilder, REST, Routes } = require('discord.js');
+    const { createBotLogger } = require('../../utils/consoleLogger');
+    const logger = createBotLogger('Rekruter');
+    
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('ocr-debug')
+            .setDescription('Przełącz szczegółowe logowanie OCR')
+            .addBooleanOption(option =>
+                option.setName('enabled')
+                    .setDescription('Włącz (true) lub wyłącz (false) szczegółowe logowanie')
+                    .setRequired(false))
+    ];
+
+    const rest = new REST().setToken(config.token);
+    
+    try {
+        logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commands }
+        );
+        logger.info('[COMMANDS] ✅ Komendy slash zarejestrowane pomyślnie');
+    } catch (error) {
+        logger.error('[COMMANDS] ❌ Błąd rejestracji komend slash:', error);
+    }
+}
+
+module.exports = { handleInteraction, registerSlashCommands };

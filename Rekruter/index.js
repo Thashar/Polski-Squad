@@ -4,7 +4,7 @@ const path = require('path');
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
-const { handleInteraction } = require('./handlers/interactionHandlers');
+const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 const { handleMessage } = require('./handlers/messageHandlers');
 const RoleMonitoringService = require('./services/roleMonitoringService');
 const MemberNotificationService = require('./services/memberNotificationService');
@@ -53,6 +53,9 @@ const sharedState = {
 client.once('ready', async () => {
     logger.info(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
     logger.info(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
+    
+    // Rejestracja komend slash
+    await registerSlashCommands(client, config);
     
     // Inicjalizacja serwisów
     await roleMonitoringService.initialize(client);
