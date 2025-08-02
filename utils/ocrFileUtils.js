@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Generuje nazwę pliku w formacie [BOT][GODZINA-DATA][TYP].png
+ * Generuje nazwę pliku w formacie [BOT][ GODZINA-DATA ][] lub [BOT][ GODZINA-DATA ][TYP]
  * @param {string} botName - Nazwa bota (np. 'KONTROLER', 'STALKER', 'ENDERSECHO', 'REKRUTER')
  * @param {string} type - Typ zdjęcia (np. 'daily', 'cx', 'stalker', 'endersecho', 'rekruter')
  * @returns {string} - Nazwa pliku
@@ -19,7 +19,17 @@ function generateProcessedFilename(botName, type) {
     const day = now.getDate().toString().padStart(2, '0');
     const timeStr = `${hour}-${minute}-${second}_${year}-${month}-${day}`;
     
-    return `[${botName.toUpperCase()}][${timeStr}][${type}].png`;
+    // Dodaj spacje w nawiasach kwadratowych i określ czy pokazać typ
+    const botNamePart = `[${botName.toUpperCase()}]`;
+    const timePart = `[ ${timeStr} ]`;
+    
+    // Tylko Kontroler z daily/cx pokazuje typ, inne boty mają pustą sekcję
+    let typePart = '[]';
+    if (botName.toUpperCase() === 'KONTROLER' && (type === 'daily' || type === 'cx')) {
+        typePart = `[${type}]`;
+    }
+    
+    return `${botNamePart}${timePart}${typePart}.png`;
 }
 
 /**

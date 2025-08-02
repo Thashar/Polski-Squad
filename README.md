@@ -274,7 +274,7 @@ Plik `bot-config.json` określa które boty uruchamiać:
 ### 🔍 Zaawansowane funkcje OCR
 - **Cztery boty z OCR**: Rekruter, StalkerLME, EndersEcho, Kontroler
 - **Wspólny folder przetworzonych obrazów**: `processed_ocr/` w katalogu głównym  
-- **Format nazw plików**: `[BOTNAME][HH-MM-SS_YYYY-MM-DD][typ].png`
+- **Format nazw plików**: `[BOTNAME][ HH-MM-SS_YYYY-MM-DD ][]` lub `[KONTROLER][ HH-MM-SS_YYYY-MM-DD ][daily/cx]`
 - **Automatyczna rotacja**: maksymalnie 100 plików dla wszystkich botów razem
 - **Szczegółowe logowanie**: przełączalne tryb debug za pomocą `/ocr-debug`
 
@@ -288,11 +288,11 @@ Plik `bot-config.json` określa które boty uruchamiać:
 
 ### 📁 Przykłady nazw przetworzonych plików
 ```
-[KONTROLER][14-23-45_2025-08-02][daily].png    # Analiza kanału Daily
-[KONTROLER][14-23-47_2025-08-02][cx].png       # Analiza kanału CX
-[STALKER][14-24-12_2025-08-02][stalker].png    # System kar Stalker
-[ENDERSECHO][14-25-30_2025-08-02][endersecho].png # Analiza wyników rankingu
-[REKRUTER][14-26-15_2025-08-02][rekruter].png  # Weryfikacja kwalifikacji
+[KONTROLER][ 14-23-45_2025-08-02 ][daily].png  # Analiza kanału Daily
+[KONTROLER][ 14-23-47_2025-08-02 ][cx].png     # Analiza kanału CX
+[STALKER][ 14-24-12_2025-08-02 ][].png         # System kar Stalker
+[ENDERSECHO][ 14-25-30_2025-08-02 ][].png      # Analiza wyników rankingu
+[REKRUTER][ 14-26-15_2025-08-02 ][].png        # Weryfikacja kwalifikacji
 ```
 
 ### 🔧 Konfiguracja OCR (jednolita dla wszystkich botów)
@@ -357,5 +357,5 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 ### Debugowanie OCR:
 - Użyj `/ocr-debug true` aby włączyć szczegółowe logowanie OCR (tylko administratorzy)
 - Przetworzone obrazy są automatycznie zapisywane w `processed_ocr/` z timestampami
-- Format nazw: `[BOTNAME][czas][typ].png` ułatwia identyfikację problemów
+- Format nazw: `[BOTNAME][ czas ][]` lub `[KONTROLER][ czas ][daily/cx]` ułatwia identyfikację problemów
 - Maksymalnie 100 plików - najstarsze automatycznie usuwane
