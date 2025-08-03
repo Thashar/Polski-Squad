@@ -837,10 +837,10 @@ class InteractionHandler {
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Auto-delete')) {
-            // Auto-delete przez 5 minut z szansą 1/10
+            // Auto-delete przez 5 minut z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'autoDelete',
-                data: { chance: 10 }, // 1/10 szansa
+                data: { chance: 3.33 }, // 1/3.33 szansa (30%)
                 endTime: now + (5 * 60 * 1000) // 5 minut
             });
             this.saveActiveCurses();
@@ -856,20 +856,20 @@ class InteractionHandler {
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Emoji spam')) {
-            // Emoji spam przez 5 minut z szansą 1/10
+            // Emoji spam przez 5 minut z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'emojiSpam',
-                data: { chance: 5 }, // 1/5 szansa (20%)
+                data: { chance: 3.33 }, // 1/3.33 szansa (30%)
                 endTime: now + (5 * 60 * 1000) // 5 minut
             });
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Forced caps')) {
-            // Forced caps przez 3 minuty
+            // Forced caps przez 5 minut z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'forcedCaps',
-                data: {},
-                endTime: now + (3 * 60 * 1000)
+                data: { chance: 30 },
+                endTime: now + (5 * 60 * 1000)
             });
             this.saveActiveCurses();
         }
@@ -942,9 +942,9 @@ class InteractionHandler {
                 break;
                 
             case 'autoDelete':
-                // Losowa szansa 1/10 na usunięcie wiadomości
-                const deleteChance = Math.floor(Math.random() * curse.data.chance) + 1;
-                if (deleteChance === 1) {
+                // Losowa szansa 30% na usunięcie wiadomości
+                const deleteChance = Math.random() * 100;
+                if (deleteChance < 30) {
                     setTimeout(async () => {
                         try {
                             await message.delete();
@@ -956,9 +956,9 @@ class InteractionHandler {
                 break;
                 
             case 'emojiSpam':
-                // Losowa szansa 1/5 na emoji spam (20%)
-                const emojiChance = Math.floor(Math.random() * curse.data.chance) + 1;
-                if (emojiChance === 1) {
+                // Losowa szansa 30% na emoji spam
+                const emojiChance = Math.random() * 100;
+                if (emojiChance < 30) {
                     const emojis = ['😀', '😂', '🤣', '😭', '😡', '💀', '👻', '🔥', '💯', '❤️'];
                     try {
                         for (const emoji of emojis) {
@@ -971,10 +971,11 @@ class InteractionHandler {
                 break;
                 
             case 'forcedCaps':
-                if (!message.content.match(/^[A-Z\s\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/)) {
+                // Losowa szansa 30% na forced caps
+                const capsChance = Math.random() * 100;
+                if (capsChance < 30 && !message.content.match(/^[A-Z\s\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/)) {
                     try {
-                        await message.delete();
-                        const capsMessage = await message.channel.send(`${message.author.toString()}: ${message.content.toUpperCase()}`);
+                        const capsMessage = await message.channel.send(`${message.author.username}: ${message.content.toUpperCase()}`);
                     } catch (error) {
                         logger.error(`❌ Błąd forced caps: ${error.message}`);
                     }

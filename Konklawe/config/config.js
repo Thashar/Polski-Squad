@@ -101,10 +101,10 @@ module.exports = {
         curses: [
             "🔇 Mute na 5 minut - czasowe wyciszenie",
             "⏰ Slow mode personal - musi czekać 30 sekund między wiadomościami na 5 minut", 
-            "🗑️ Auto-delete - przez 5 minut losowo usuwa wiadomości z szansą 1/10",
+            "🗑️ Auto-delete - przez 5 minut losowo usuwa wiadomości z szansą 30%",
             "📢 Random ping - bot pinguje go losowo przez następne 5 minut",
-            "😀 Emoji spam - przez 5 minut losowo reaguje emoji z szansą 1/5 (20%)",
-            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 3 minuty"
+            "😀 Emoji spam - przez 5 minut losowo reaguje emoji z szansą 30%",
+            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 5 minut z szansą 30%"
         ],
         forcedNickname: "Przeklęty",
         nicknameTime: 5 // minutes
