@@ -759,23 +759,28 @@ class InteractionHandler {
         try {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
             
-            // Zawsze zmień nickname na "Przeklęty"
+            // Zawsze dodaj "Przeklęty" do obecnego nicku
             const originalNickname = targetMember.nickname || targetUser.username;
+            const cursedNickname = `${this.config.virtuttiPapajlari.forcedNickname} ${originalNickname}`;
+            
+            // Czas trwania zmiany nicku - zawsze 5 minut
+            const nicknameDuration = curse.duration;
+            
             try {
-                await targetMember.setNickname(this.config.virtuttiPapajlari.forcedNickname);
+                await targetMember.setNickname(cursedNickname);
                 
-                // Przywróć nickname po 5 minutach
+                // Przywróć nickname po określonym czasie
                 setTimeout(async () => {
                     try {
                         const memberToRestore = await interaction.guild.members.fetch(targetUser.id);
-                        if (memberToRestore && memberToRestore.nickname === this.config.virtuttiPapajlari.forcedNickname) {
+                        if (memberToRestore && memberToRestore.nickname === cursedNickname) {
                             await memberToRestore.setNickname(originalNickname);
-                            logger.info(`🔄 Przywrócono nickname dla ${targetUser.tag}: ${originalNickname}`);
+                            logger.info(`🔄 Przywrócono nickname dla ${targetUser.tag}: ${originalNickname} (po ${nicknameDuration} min)`);
                         }
                     } catch (error) {
                         logger.error(`❌ Błąd przywracania nickname: ${error.message}`);
                     }
-                }, curse.duration * 60 * 1000);
+                }, nicknameDuration * 60 * 1000);
                 
             } catch (error) {
                 logger.warn(`⚠️ Nie udało się zmienić nickname dla ${targetUser.tag}: ${error.message}`);
@@ -813,11 +818,11 @@ class InteractionHandler {
         const userId = targetMember.id;
         const now = Date.now();
         
-        if (curseDescription.includes('Mute na 1 minutę')) {
-            // Mute na 1 minutę
+        if (curseDescription.includes('Mute na 5 minut')) {
+            // Mute na 5 minut
             try {
-                await targetMember.timeout(60 * 1000, 'Klątwa - mute na 1 minutę');
-                logger.info(`🔇 Zmutowano ${targetMember.user.tag} na 1 minutę (klątwa)`);
+                await targetMember.timeout(5 * 60 * 1000, 'Klątwa - mute na 5 minut');
+                logger.info(`🔇 Zmutowano ${targetMember.user.tag} na 5 minut (klątwa)`);
             } catch (error) {
                 logger.error(`❌ Błąd mutowania: ${error.message}`);
             }
@@ -854,7 +859,7 @@ class InteractionHandler {
             // Emoji spam przez 5 minut z szansą 1/10
             this.activeCurses.set(userId, {
                 type: 'emojiSpam',
-                data: { chance: 10 }, // 1/10 szansa
+                data: { chance: 5 }, // 1/5 szansa (20%)
                 endTime: now + (5 * 60 * 1000) // 5 minut
             });
             this.saveActiveCurses();
@@ -951,7 +956,7 @@ class InteractionHandler {
                 break;
                 
             case 'emojiSpam':
-                // Losowa szansa 1/10 na emoji spam
+                // Losowa szansa 1/5 na emoji spam (20%)
                 const emojiChance = Math.floor(Math.random() * curse.data.chance) + 1;
                 if (emojiChance === 1) {
                     const emojis = ['😀', '😂', '🤣', '😭', '😡', '💀', '👻', '🔥', '💯', '❤️'];
