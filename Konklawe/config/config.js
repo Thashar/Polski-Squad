@@ -99,14 +99,16 @@ module.exports = {
             "Żebyś doszedł do Championa w cnociach, synu."
         ],
         curses: [
-            "🔇 Mute na 5 minut - czasowe wyciszenie",
             "⏰ Slow mode personal - musi czekać 30 sekund między wiadomościami na 5 minut", 
             "🗑️ Auto-delete - przez 5 minut losowo usuwa wiadomości z szansą 30%",
             "📢 Random ping - bot pinguje go losowo przez następne 5 minut",
             "😀 Emoji spam - przez 5 minut losowo reaguje emoji z szansą 30%",
-            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 5 minut z szansą 30%"
+            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 5 minut z szansą 30%",
+            "💤 Random timeout - przez 5 minut losowo wysyła na przerwę i przywraca",
+            "🎭 Special role - nakłada specjalną rolę na 5 minut"
         ],
         forcedNickname: "Przeklęty",
-        nicknameTime: 5 // minutes
+        nicknameTime: 5, // minutes
+        specialRoleId: "1204442133818249270" // ID roli do nakładania w klątwie
     }
 };

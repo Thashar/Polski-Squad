@@ -818,16 +818,7 @@ class InteractionHandler {
         const userId = targetMember.id;
         const now = Date.now();
         
-        if (curseDescription.includes('Mute na 5 minut')) {
-            // Mute na 5 minut
-            try {
-                await targetMember.timeout(5 * 60 * 1000, 'Klątwa - mute na 5 minut');
-                logger.info(`🔇 Zmutowano ${targetMember.user.tag} na 5 minut (klątwa)`);
-            } catch (error) {
-                logger.error(`❌ Błąd mutowania: ${error.message}`);
-            }
-            
-        } else if (curseDescription.includes('Slow mode personal')) {
+        if (curseDescription.includes('Slow mode personal')) {
             // Slow mode - 30 sekund między wiadomościami przez 5 minut
             this.activeCurses.set(userId, {
                 type: 'slowMode',
@@ -872,7 +863,98 @@ class InteractionHandler {
                 endTime: now + (5 * 60 * 1000)
             });
             this.saveActiveCurses();
+            
+        } else if (curseDescription.includes('Random timeout')) {
+            // Random timeout przez 5 minut
+            this.activeCurses.set(userId, {
+                type: 'randomTimeout',
+                data: { isTimedOut: false },
+                endTime: now + (5 * 60 * 1000)
+            });
+            this.startRandomTimeout(userId, targetMember);
+            this.saveActiveCurses();
+            
+        } else if (curseDescription.includes('Special role')) {
+            // Special role na 5 minut
+            try {
+                const specialRole = interaction.guild.roles.cache.get(this.config.virtuttiPapajlari.specialRoleId);
+                if (specialRole) {
+                    await targetMember.roles.add(specialRole);
+                    logger.info(`🎭 Nadano specjalną rolę ${targetMember.user.tag} (klątwa)`);
+                    
+                    // Usuń rolę po 5 minutach
+                    setTimeout(async () => {
+                        try {
+                            const memberToUpdate = await interaction.guild.members.fetch(targetMember.id);
+                            if (memberToUpdate && memberToUpdate.roles.cache.has(this.config.virtuttiPapajlari.specialRoleId)) {
+                                await memberToUpdate.roles.remove(specialRole);
+                                logger.info(`🎭 Usunięto specjalną rolę ${targetMember.user.tag} (koniec klątwy)`);
+                            }
+                        } catch (error) {
+                            logger.error(`❌ Błąd usuwania specjalnej roli: ${error.message}`);
+                        }
+                    }, 5 * 60 * 1000);
+                } else {
+                    logger.warn(`⚠️ Nie znaleziono specjalnej roli o ID: ${this.config.virtuttiPapajlari.specialRoleId}`);
+                }
+            } catch (error) {
+                logger.error(`❌ Błąd nakładania specjalnej roli: ${error.message}`);
+            }
         }
+    }
+
+    /**
+     * Rozpoczyna losowe timeout/przywracanie
+     * @param {string} userId - ID użytkownika
+     * @param {GuildMember} targetMember - Docelowy członek
+     */
+    startRandomTimeout(userId, targetMember) {
+        const timeoutInterval = setInterval(async () => {
+            const curse = this.activeCurses.get(userId);
+            if (!curse || curse.type !== 'randomTimeout' || Date.now() > curse.endTime) {
+                // Koniec klątwy - upewnij się że użytkownik nie jest na timeout
+                if (curse && curse.data.isTimedOut) {
+                    try {
+                        const member = await targetMember.guild.members.fetch(userId);
+                        await member.timeout(null, 'Koniec klątwy random timeout');
+                        logger.info(`💤 Przywrócono użytkownika ${member.user.tag} (koniec klątwy)`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd przywracania z timeout: ${error.message}`);
+                    }
+                }
+                clearInterval(timeoutInterval);
+                return;
+            }
+
+            // Losowa akcja co 30-90 sekund
+            const randomDelay = (Math.random() * 60 + 30) * 1000; // 30-90 sekund
+            
+            setTimeout(async () => {
+                try {
+                    const member = await targetMember.guild.members.fetch(userId);
+                    const currentCurse = this.activeCurses.get(userId);
+                    if (!currentCurse || currentCurse.type !== 'randomTimeout') return;
+
+                    if (currentCurse.data.isTimedOut) {
+                        // Przywróć z timeout
+                        await member.timeout(null, 'Klątwa - random przywrócenie');
+                        currentCurse.data.isTimedOut = false;
+                        this.saveActiveCurses();
+                        logger.info(`💤 Przywrócono użytkownika ${member.user.tag} (klątwa)`);
+                    } else {
+                        // Wyślij na timeout (1-3 minuty)
+                        const timeoutDuration = (Math.random() * 2 + 1) * 60 * 1000; // 1-3 minuty
+                        await member.timeout(timeoutDuration, 'Klątwa - random timeout');
+                        currentCurse.data.isTimedOut = true;
+                        this.saveActiveCurses();
+                        logger.info(`💤 Wysłano na timeout użytkownika ${member.user.tag} (klątwa)`);
+                    }
+                } catch (error) {
+                    logger.error(`❌ Błąd random timeout: ${error.message}`);
+                }
+            }, randomDelay);
+
+        }, 45000); // Sprawdzaj co 45 sekund
     }
 
     /**
