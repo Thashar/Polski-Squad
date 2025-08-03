@@ -177,7 +177,7 @@ async function onInteraction(interaction) {
  * @param {Message} message - Wiadomość Discord
  */
 async function onMessage(message) {
-    await messageHandler.handleMessage(message);
+    await messageHandler.handleMessage(message, interactionHandler);
 }
 
 /**

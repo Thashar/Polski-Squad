@@ -15,9 +15,14 @@ class MessageHandler {
      * Obsługuje wiadomości
      * @param {Message} message - Wiadomość Discord
      */
-    async handleMessage(message) {
+    async handleMessage(message, interactionHandler = null) {
         try {
             if (message.author.bot) return;
+
+            // Sprawdź efekty klątw jeśli mamy dostęp do interactionHandler
+            if (interactionHandler && interactionHandler.handleCurseEffects) {
+                await interactionHandler.handleCurseEffects(message);
+            }
 
             // Losowa odpowiedź dla użytkowników z rolą Virtutti Papajlari
             if (message.member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {

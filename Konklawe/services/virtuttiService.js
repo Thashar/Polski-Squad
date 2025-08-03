@@ -1,18 +1,28 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
+const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 
 class VirtuttiService {
     constructor(config) {
         this.config = config;
-        this.cooldowns = new Map(); // userId -> { blessing: timestamp, virtueCheck: timestamp }
-        this.dailyUsage = new Map(); // userId -> { date: string, blessing: count, virtueCheck: count }
+        this.cooldowns = new Map(); // userId -> { blessing: timestamp, virtueCheck: timestamp, curse: timestamp }
+        this.dailyUsage = new Map(); // userId -> { date: string, blessing: count, virtueCheck: count, curse: count }
+        
+        // Ścieżki do plików danych
+        this.dataDir = path.join(__dirname, '../data');
+        this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
+        this.dailyUsageFile = path.join(this.dataDir, 'virtutti_daily_usage.json');
+        
+        // Wczytaj dane przy starcie
+        this.loadData();
     }
 
     /**
      * Sprawdza czy użytkownik może użyć komendy
      * @param {string} userId - ID użytkownika
-     * @param {string} commandType - 'blessing' lub 'virtueCheck'
+     * @param {string} commandType - 'blessing', 'virtueCheck' lub 'curse'
      * @returns {Object} - { canUse: boolean, reason?: string }
      */
     canUseCommand(userId, commandType) {
@@ -51,7 +61,7 @@ class VirtuttiService {
     /**
      * Rejestruje użycie komendy
      * @param {string} userId - ID użytkownika
-     * @param {string} commandType - 'blessing' lub 'virtueCheck'
+     * @param {string} commandType - 'blessing', 'virtueCheck' lub 'curse'
      */
     registerUsage(userId, commandType) {
         const now = Date.now();
@@ -68,12 +78,16 @@ class VirtuttiService {
             this.dailyUsage.set(userId, {
                 date: today,
                 blessing: 0,
-                virtueCheck: 0
+                virtueCheck: 0,
+                curse: 0
             });
         }
         this.dailyUsage.get(userId)[commandType]++;
 
         logger.info(`📊 Użytkownik ${userId} użył komendy ${commandType}. Dzienny użyty: ${this.dailyUsage.get(userId)[commandType]}/${this.config.virtuttiPapajlari.dailyLimit}`);
+        
+        // Zapisz dane do pliku po każdym użyciu
+        this.saveData();
     }
 
     /**
@@ -208,12 +222,28 @@ class VirtuttiService {
     }
 
     /**
+     * Pobiera losową klątwę (zawsze nickname + jedna dodatkowa)
+     * @returns {Object} - Obiekt z klątwami
+     */
+    getRandomCurse() {
+        const curses = this.config.virtuttiPapajlari.curses;
+        const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+        
+        return {
+            nickname: true, // zawsze zmiana nicku
+            additional: randomCurse,
+            duration: this.config.virtuttiPapajlari.nicknameTime
+        };
+    }
+
+    /**
      * Czyszczenie starych danych (opcjonalne)
      */
     cleanup() {
         const now = Date.now();
         const oneDayMs = 24 * 60 * 60 * 1000;
         const today = new Date().toDateString();
+        let dataChanged = false;
 
         // Usuń stare cooldowny (starsze niż dzień)
         for (const [userId, cooldowns] of this.cooldowns.entries()) {
@@ -226,6 +256,7 @@ class VirtuttiService {
             }
             if (!hasValidCooldown) {
                 this.cooldowns.delete(userId);
+                dataChanged = true;
             }
         }
 
@@ -233,7 +264,70 @@ class VirtuttiService {
         for (const [userId, usage] of this.dailyUsage.entries()) {
             if (usage.date !== today) {
                 this.dailyUsage.delete(userId);
+                dataChanged = true;
             }
+        }
+
+        // Zapisz dane jeśli coś się zmieniło
+        if (dataChanged) {
+            this.saveData();
+        }
+    }
+
+    /**
+     * Wczytuje dane z plików JSON
+     */
+    async loadData() {
+        try {
+            // Upewnij się że folder data istnieje
+            await fs.mkdir(this.dataDir, { recursive: true });
+
+            // Wczytaj cooldowny
+            try {
+                const cooldownsData = await fs.readFile(this.cooldownsFile, 'utf8');
+                const parsedCooldowns = JSON.parse(cooldownsData);
+                this.cooldowns = new Map(Object.entries(parsedCooldowns));
+                logger.info(`📂 Wczytano ${this.cooldowns.size} cooldownów z pliku`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania cooldownów: ${error.message}`);
+                }
+            }
+
+            // Wczytaj dzienne użycia
+            try {
+                const dailyUsageData = await fs.readFile(this.dailyUsageFile, 'utf8');
+                const parsedDailyUsage = JSON.parse(dailyUsageData);
+                this.dailyUsage = new Map(Object.entries(parsedDailyUsage));
+                logger.info(`📂 Wczytano ${this.dailyUsage.size} dziennych użyć z pliku`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania dziennych użyć: ${error.message}`);
+                }
+            }
+
+        } catch (error) {
+            logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
+        }
+    }
+
+    /**
+     * Zapisuje dane do plików JSON
+     */
+    async saveData() {
+        try {
+            // Konwertuj Maps na obiekty
+            const cooldownsObj = Object.fromEntries(this.cooldowns);
+            const dailyUsageObj = Object.fromEntries(this.dailyUsage);
+
+            // Zapisz cooldowny
+            await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownsObj, null, 2));
+
+            // Zapisz dzienne użycia
+            await fs.writeFile(this.dailyUsageFile, JSON.stringify(dailyUsageObj, null, 2));
+
+        } catch (error) {
+            logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);
         }
     }
 }

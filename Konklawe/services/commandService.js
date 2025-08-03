@@ -42,6 +42,13 @@ class CommandService {
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik do sprawdzenia cnót')
+                        .setRequired(true)),
+            new SlashCommandBuilder()
+                .setName('curse')
+                .setDescription('Rzuć klątwę na innego użytkownika (tylko Virtutti Papajlari)')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik do przeklęcia')
                         .setRequired(true))
         ];
     }

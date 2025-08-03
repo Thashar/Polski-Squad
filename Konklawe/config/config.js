@@ -97,6 +97,16 @@ module.exports = {
             "Potrzebujesz przejść kilka pięter na PoT, synu.",
             "Módl się, żeby Cię Habby nie wyjebało na kasę, dziecko.",
             "Żebyś doszedł do Championa w cnociach, synu."
-        ]
+        ],
+        curses: [
+            "🔇 Mute na 1 minutę - czasowe wyciszenie",
+            "⏰ Slow mode personal - musi czekać 30 sekund między wiadomościami na 5 minut", 
+            "🗑️ Auto-delete - przez 5 minut losowo usuwa wiadomości z szansą 1/10",
+            "📢 Random ping - bot pinguje go losowo przez następne 5 minut",
+            "😀 Emoji spam - przez 5 minut losowo reaguje emoji z szansą 1/10",
+            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 3 minuty"
+        ],
+        forcedNickname: "Przeklęty",
+        nicknameTime: 5 // minutes
     }
 };

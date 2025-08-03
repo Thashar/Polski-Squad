@@ -1,6 +1,8 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const VirtuttiService = require('../services/virtuttiService');
+const fs = require('fs').promises;
+const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
@@ -10,10 +12,18 @@ class InteractionHandler {
         this.rankingService = rankingService;
         this.timerService = timerService;
         this.virtuttiService = new VirtuttiService(config);
+        this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
+        
+        // Ścieżka do pliku aktywnych klątw
+        this.cursesFile = path.join(__dirname, '../data/active_curses.json');
+        
+        // Wczytaj aktywne klątwy przy starcie
+        this.loadActiveCurses();
         
         // Czyszczenie starych danych co godzinę
         setInterval(() => {
             this.virtuttiService.cleanup();
+            this.cleanupExpiredCurses();
         }, 60 * 60 * 1000);
     }
 
@@ -100,7 +110,7 @@ class InteractionHandler {
             const { commandName } = interaction;
             
             // Komendy specjalne dla Virtutti Papajlari - działają globalnie
-            if (commandName === 'blessing' || commandName === 'virtue-check') {
+            if (commandName === 'blessing' || commandName === 'virtue-check' || commandName === 'curse') {
                 await this.handleVirtuttiPapajlariCommand(interaction);
                 return;
             }
@@ -586,6 +596,8 @@ class InteractionHandler {
             await this.handleBlessingCommand(interaction);
         } else if (commandName === 'virtue-check') {
             await this.handleVirtueCheckCommand(interaction);
+        } else if (commandName === 'curse') {
+            await this.handleCurseCommand(interaction);
         }
     }
 
@@ -710,6 +722,327 @@ class InteractionHandler {
                 content: '❌ Wystąpił błąd podczas sprawdzania cnót.',
                 ephemeral: true
             });
+        }
+    }
+
+    /**
+     * Obsługuje komendę /curse
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleCurseCommand(interaction) {
+        const targetUser = interaction.options.getUser('użytkownik');
+        const userId = interaction.user.id;
+        
+        // Sprawdź cooldown i limity (używamy tego samego systemu co blessing)
+        const canUse = this.virtuttiService.canUseCommand(userId, 'curse');
+        if (!canUse.canUse) {
+            return await interaction.reply({
+                content: `⏰ ${canUse.reason}`,
+                ephemeral: true
+            });
+        }
+
+        // Nie można rzucić klątwy na siebie
+        if (targetUser.id === interaction.user.id) {
+            return await interaction.reply({
+                content: '💀 Nie możesz rzucić klątwy na samego siebie!',
+                ephemeral: true
+            });
+        }
+
+        // Zarejestruj użycie
+        this.virtuttiService.registerUsage(userId, 'curse');
+
+        // Pobierz losową klątwę
+        const curse = this.virtuttiService.getRandomCurse();
+        
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            
+            // Zawsze zmień nickname na "Przeklęty"
+            const originalNickname = targetMember.nickname || targetUser.username;
+            try {
+                await targetMember.setNickname(this.config.virtuttiPapajlari.forcedNickname);
+                
+                // Przywróć nickname po 5 minutach
+                setTimeout(async () => {
+                    try {
+                        const memberToRestore = await interaction.guild.members.fetch(targetUser.id);
+                        if (memberToRestore && memberToRestore.nickname === this.config.virtuttiPapajlari.forcedNickname) {
+                            await memberToRestore.setNickname(originalNickname);
+                            logger.info(`🔄 Przywrócono nickname dla ${targetUser.tag}: ${originalNickname}`);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Błąd przywracania nickname: ${error.message}`);
+                    }
+                }, curse.duration * 60 * 1000);
+                
+            } catch (error) {
+                logger.warn(`⚠️ Nie udało się zmienić nickname dla ${targetUser.tag}: ${error.message}`);
+            }
+
+            // Wyślij klątwę
+            const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
+            const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+
+            // Wykonaj dodatkową klątwę
+            await this.executeCurse(interaction, targetMember, curse.additional);
+
+            await interaction.reply({
+                content: `💀 **${targetUser.toString()} zostałeś przeklęty!**`,
+                ephemeral: false
+            });
+
+            logger.info(`💀 ${interaction.user.tag} przeklął ${targetUser.tag}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas rzucania klątwy: ${error.message}`);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas rzucania klątwy.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Wykonuje konkretną klątwę
+     * @param {Interaction} interaction - Interakcja Discord
+     * @param {GuildMember} targetMember - Docelowy członek serwera
+     * @param {string} curseDescription - Opis klątwy
+     */
+    async executeCurse(interaction, targetMember, curseDescription) {
+        const userId = targetMember.id;
+        const now = Date.now();
+        
+        if (curseDescription.includes('Mute na 1 minutę')) {
+            // Mute na 1 minutę
+            try {
+                await targetMember.timeout(60 * 1000, 'Klątwa - mute na 1 minutę');
+                logger.info(`🔇 Zmutowano ${targetMember.user.tag} na 1 minutę (klątwa)`);
+            } catch (error) {
+                logger.error(`❌ Błąd mutowania: ${error.message}`);
+            }
+            
+        } else if (curseDescription.includes('Slow mode personal')) {
+            // Slow mode - 30 sekund między wiadomościami przez 5 minut
+            this.activeCurses.set(userId, {
+                type: 'slowMode',
+                data: { lastMessage: 0 },
+                endTime: now + (5 * 60 * 1000)
+            });
+            this.saveActiveCurses();
+            
+        } else if (curseDescription.includes('Auto-delete')) {
+            // Auto-delete przez 5 minut z szansą 1/10
+            this.activeCurses.set(userId, {
+                type: 'autoDelete',
+                data: { chance: 10 }, // 1/10 szansa
+                endTime: now + (5 * 60 * 1000) // 5 minut
+            });
+            this.saveActiveCurses();
+            
+        } else if (curseDescription.includes('Random ping')) {
+            // Random ping przez 5 minut
+            this.activeCurses.set(userId, {
+                type: 'randomPing',
+                data: { channel: interaction.channel },
+                endTime: now + (5 * 60 * 1000)
+            });
+            this.startRandomPing(userId, interaction.channel);
+            this.saveActiveCurses();
+            
+        } else if (curseDescription.includes('Emoji spam')) {
+            // Emoji spam przez 5 minut z szansą 1/10
+            this.activeCurses.set(userId, {
+                type: 'emojiSpam',
+                data: { chance: 10 }, // 1/10 szansa
+                endTime: now + (5 * 60 * 1000) // 5 minut
+            });
+            this.saveActiveCurses();
+            
+        } else if (curseDescription.includes('Forced caps')) {
+            // Forced caps przez 3 minuty
+            this.activeCurses.set(userId, {
+                type: 'forcedCaps',
+                data: {},
+                endTime: now + (3 * 60 * 1000)
+            });
+            this.saveActiveCurses();
+        }
+    }
+
+    /**
+     * Rozpoczyna losowe pingowanie
+     * @param {string} userId - ID użytkownika
+     * @param {Channel} channel - Kanał do pingowania
+     */
+    startRandomPing(userId, channel) {
+        const pingInterval = setInterval(async () => {
+            const curse = this.activeCurses.get(userId);
+            if (!curse || curse.type !== 'randomPing' || Date.now() > curse.endTime) {
+                clearInterval(pingInterval);
+                return;
+            }
+            
+            try {
+                await channel.send(`<@${userId}> 👻`);
+                setTimeout(async () => {
+                    try {
+                        const messages = await channel.messages.fetch({ limit: 1 });
+                        const lastMessage = messages.first();
+                        if (lastMessage && lastMessage.content === `<@${userId}> 👻`) {
+                            await lastMessage.delete();
+                        }
+                    } catch (error) {
+                        // Ignoruj błędy usuwania
+                    }
+                }, 2000);
+            } catch (error) {
+                logger.error(`❌ Błąd random ping: ${error.message}`);
+            }
+        }, Math.random() * 60000 + 30000); // 30-90 sekund między pingami
+    }
+
+    /**
+     * Sprawdza czy wiadomość powinna być obsłużona przez klątwę
+     * @param {Message} message - Wiadomość Discord
+     */
+    async handleCurseEffects(message) {
+        if (message.author.bot) return;
+        
+        const userId = message.author.id;
+        const curse = this.activeCurses.get(userId);
+        
+        if (!curse || Date.now() > curse.endTime) {
+            if (curse) {
+                this.activeCurses.delete(userId);
+                this.saveActiveCurses();
+            }
+            return;
+        }
+        
+        switch (curse.type) {
+            case 'slowMode':
+                const timeSinceLastMessage = Date.now() - curse.data.lastMessage;
+                if (timeSinceLastMessage < 30000) {
+                    try {
+                        await message.delete();
+                        const warning = await message.channel.send(`${message.author.toString()} musisz czekać ${Math.ceil((30000 - timeSinceLastMessage) / 1000)} sekund! 🐌`);
+                        setTimeout(() => warning.delete().catch(() => {}), 3000);
+                    } catch (error) {
+                        logger.error(`❌ Błąd slow mode: ${error.message}`);
+                    }
+                } else {
+                    curse.data.lastMessage = Date.now();
+                }
+                break;
+                
+            case 'autoDelete':
+                // Losowa szansa 1/10 na usunięcie wiadomości
+                const deleteChance = Math.floor(Math.random() * curse.data.chance) + 1;
+                if (deleteChance === 1) {
+                    setTimeout(async () => {
+                        try {
+                            await message.delete();
+                        } catch (error) {
+                            // Ignoruj błędy usuwania
+                        }
+                    }, 3000);
+                }
+                break;
+                
+            case 'emojiSpam':
+                // Losowa szansa 1/10 na emoji spam
+                const emojiChance = Math.floor(Math.random() * curse.data.chance) + 1;
+                if (emojiChance === 1) {
+                    const emojis = ['😀', '😂', '🤣', '😭', '😡', '💀', '👻', '🔥', '💯', '❤️'];
+                    try {
+                        for (const emoji of emojis) {
+                            await message.react(emoji);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Błąd emoji spam: ${error.message}`);
+                    }
+                }
+                break;
+                
+            case 'forcedCaps':
+                if (!message.content.match(/^[A-Z\s\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/)) {
+                    try {
+                        await message.delete();
+                        const capsMessage = await message.channel.send(`${message.author.toString()}: ${message.content.toUpperCase()}`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd forced caps: ${error.message}`);
+                    }
+                }
+                break;
+        }
+    }
+
+    /**
+     * Czyści wygasłe klątwy
+     */
+    cleanupExpiredCurses() {
+        const now = Date.now();
+        let dataChanged = false;
+        
+        for (const [userId, curse] of this.activeCurses.entries()) {
+            if (now > curse.endTime) {
+                this.activeCurses.delete(userId);
+                dataChanged = true;
+            }
+        }
+        
+        if (dataChanged) {
+            this.saveActiveCurses();
+        }
+    }
+
+    /**
+     * Wczytuje aktywne klątwy z pliku
+     */
+    async loadActiveCurses() {
+        try {
+            const cursesData = await fs.readFile(this.cursesFile, 'utf8');
+            const parsedCurses = JSON.parse(cursesData);
+            
+            // Odtwórz klątwy z pliku, ale tylko te które jeszcze są aktywne
+            const now = Date.now();
+            for (const [userId, curse] of Object.entries(parsedCurses)) {
+                if (curse.endTime > now) {
+                    this.activeCurses.set(userId, curse);
+                    
+                    // Przywróć random ping jeśli był aktywny
+                    if (curse.type === 'randomPing') {
+                        // Nie możemy przywrócić dokładnego kanału, więc tę klątwę pomijamy
+                        this.activeCurses.delete(userId);
+                    }
+                }
+            }
+            
+            logger.info(`📂 Wczytano ${this.activeCurses.size} aktywnych klątw z pliku`);
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                logger.warn(`⚠️ Błąd wczytywania aktywnych klątw: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * Zapisuje aktywne klątwy do pliku
+     */
+    async saveActiveCurses() {
+        try {
+            // Konwertuj Map na obiekt, ale pomijaj random ping (nie da się zapisać kanału)
+            const cursesToSave = {};
+            for (const [userId, curse] of this.activeCurses.entries()) {
+                if (curse.type !== 'randomPing') {
+                    cursesToSave[userId] = curse;
+                }
+            }
+            
+            await fs.writeFile(this.cursesFile, JSON.stringify(cursesToSave, null, 2));
+        } catch (error) {
+            logger.error(`❌ Błąd zapisywania aktywnych klątw: ${error.message}`);
         }
     }
 
