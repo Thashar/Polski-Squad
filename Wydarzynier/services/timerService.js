@@ -210,11 +210,8 @@ class TimerService {
 
                         // Utwórz przyciski dla właściciela lobby
                         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-                        const warningButtons = new ActionRowBuilder();
-                        
-                        if (!currentLobby.isExtended) {
-                            // Lobby nie było przedłużone - pokaż oba przyciski
-                            warningButtons.addComponents(
+                        const warningButtons = new ActionRowBuilder()
+                            .addComponents(
                                 new ButtonBuilder()
                                     .setCustomId(`extend_lobby_${lobbyId}`)
                                     .setLabel('Przedłuż o 15 min')
@@ -226,16 +223,6 @@ class TimerService {
                                     .setEmoji('🔒')
                                     .setStyle(ButtonStyle.Danger)
                             );
-                        } else {
-                            // Lobby było przedłużone - pokaż tylko przycisk zamknięcia
-                            warningButtons.addComponents(
-                                new ButtonBuilder()
-                                    .setCustomId(`close_lobby_${lobbyId}`)
-                                    .setLabel('Zamknij lobby')
-                                    .setEmoji('🔒')
-                                    .setStyle(ButtonStyle.Danger)
-                            );
-                        }
 
                         await thread.send({
                             content: this.config.messages.lobbyWarning(currentLobby.ownerId),

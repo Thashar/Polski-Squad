@@ -205,12 +205,9 @@ class InteractionHandler {
                     const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
                     if (!currentLobby) return;
 
-                    // Utwórz przyciski w zależności od tego, czy lobby było już przedłużone
-                    const warningButtons = new ActionRowBuilder();
-                    
-                    if (!currentLobby.isExtended) {
-                        // Lobby nie było przedłużone - pokaż oba przyciski
-                        warningButtons.addComponents(
+                    // Utwórz przyciski dla właściciela lobby
+                    const warningButtons = new ActionRowBuilder()
+                        .addComponents(
                             new ButtonBuilder()
                                 .setCustomId(`extend_lobby_${lobbyId}`)
                                 .setLabel('Przedłuż o 15 min')
@@ -222,16 +219,6 @@ class InteractionHandler {
                                 .setEmoji('🔒')
                                 .setStyle(ButtonStyle.Danger)
                         );
-                    } else {
-                        // Lobby było przedłużone - pokaż tylko przycisk zamknięcia
-                        warningButtons.addComponents(
-                            new ButtonBuilder()
-                                .setCustomId(`close_lobby_${lobbyId}`)
-                                .setLabel('Zamknij lobby')
-                                .setEmoji('🔒')
-                                .setStyle(ButtonStyle.Danger)
-                        );
-                    }
 
                     await thread.send({
                         content: this.config.messages.lobbyWarning(currentLobby.ownerId),
@@ -474,12 +461,9 @@ class InteractionHandler {
                     const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
                     if (!currentLobby) return;
 
-                    // Utwórz przyciski w zależności od tego, czy lobby było już przedłużone
-                    const warningButtons = new ActionRowBuilder();
-                    
-                    if (!currentLobby.isExtended) {
-                        // Lobby nie było przedłużone - pokaż oba przyciski
-                        warningButtons.addComponents(
+                    // Utwórz przyciski dla właściciela lobby
+                    const warningButtons = new ActionRowBuilder()
+                        .addComponents(
                             new ButtonBuilder()
                                 .setCustomId(`extend_lobby_${lobbyId}`)
                                 .setLabel('Przedłuż o 15 min')
@@ -491,16 +475,6 @@ class InteractionHandler {
                                 .setEmoji('🔒')
                                 .setStyle(ButtonStyle.Danger)
                         );
-                    } else {
-                        // Lobby było przedłużone - pokaż tylko przycisk zamknięcia
-                        warningButtons.addComponents(
-                            new ButtonBuilder()
-                                .setCustomId(`close_lobby_${lobbyId}`)
-                                .setLabel('Zamknij lobby')
-                                .setEmoji('🔒')
-                                .setStyle(ButtonStyle.Danger)
-                        );
-                    }
 
                     await thread.send({
                         content: this.config.messages.lobbyWarning(currentLobby.ownerId),
@@ -1105,14 +1079,6 @@ class InteractionHandler {
                 return;
             }
 
-            // Sprawdź czy lobby zostało już przedłużone
-            if (lobby.isExtended) {
-                await interaction.followUp({
-                    content: '❌ To lobby zostało już przedłużone. Można przedłużyć tylko raz.',
-                    ephemeral: true
-                });
-                return;
-            }
 
             // Pobierz wątek
             const thread = await sharedState.client.channels.fetch(lobby.threadId);
@@ -1120,9 +1086,18 @@ class InteractionHandler {
             // Utwórz nowy timer na 15 minut
             const warningCallback = async (lobbyId) => {
                 try {
-                    // Utwórz tylko przycisk zamknięcia (lobby już przedłużone)
+                    // Pobierz aktualne dane lobby
+                    const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
+                    if (!currentLobby) return;
+
+                    // Utwórz przyciski dla właściciela lobby
                     const warningButtons = new ActionRowBuilder()
                         .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`extend_lobby_${lobbyId}`)
+                                .setLabel('Przedłuż o 15 min')
+                                .setEmoji('⏰')
+                                .setStyle(ButtonStyle.Primary),
                             new ButtonBuilder()
                                 .setCustomId(`close_lobby_${lobbyId}`)
                                 .setLabel('Zamknij lobby')
@@ -1131,7 +1106,7 @@ class InteractionHandler {
                         );
 
                     await thread.send({
-                        content: this.config.messages.lobbyWarning(lobby.ownerId),
+                        content: this.config.messages.lobbyWarning(currentLobby.ownerId),
                         components: [warningButtons]
                     });
                 } catch (error) {
@@ -1147,9 +1122,6 @@ class InteractionHandler {
                 }
             };
 
-            // Oznacz lobby jako przedłużone
-            lobby.isExtended = true;
-            await sharedState.lobbyService.saveLobbies();
 
             // Utwórz nowy timer na 15 minut
             await sharedState.timerService.createFullLobbyTimer(
@@ -1163,9 +1135,6 @@ class InteractionHandler {
                 content: '✅ **Lobby zostało przedłużone o 15 minut!**',
                 components: []
             });
-
-            // Wyślij informację do wątku
-            await thread.send('⏰ **Lobby zostało przedłużone o 15 minut przez właściciela!**');
 
             logger.info(`⏰ Lobby ${lobbyId} zostało przedłużone o 15 minut przez ${interaction.user.tag}`);
 
