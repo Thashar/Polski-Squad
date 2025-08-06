@@ -964,14 +964,16 @@ class InteractionHandler {
      */
     async handlePartyCloseCommand(interaction, sharedState) {
         try {
+            // Defer interaction na początku aby uniknąć timeout
+            await interaction.deferReply({ ephemeral: true });
+
             // Znajdź lobby właściciela
             const ownerLobby = sharedState.lobbyService.getAllActiveLobbies()
                 .find(lobby => lobby.ownerId === interaction.user.id);
             
             if (!ownerLobby) {
-                await interaction.reply({
-                    content: '❌ Nie masz aktywnego lobby.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '❌ Nie masz aktywnego lobby.'
                 });
                 return;
             }
@@ -987,19 +989,22 @@ class InteractionHandler {
             // Usuń lobby używając istniejącej funkcji
             await this.deleteLobby(ownerLobby, sharedState);
 
-            await interaction.reply({
-                content: '✅ Lobby zostało pomyślnie zamknięte.',
-                ephemeral: true
+            await interaction.editReply({
+                content: '✅ Lobby zostało pomyślnie zamknięte.'
             });
 
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi komendy /party-close:', error);
             
-            const errorMessage = '❌ Wystąpił błąd podczas zamykania lobby.';
-            if (interaction.deferred) {
-                await interaction.editReply({ content: errorMessage });
-            } else {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+            try {
+                const errorMessage = '❌ Wystąpił błąd podczas zamykania lobby.';
+                if (interaction.deferred) {
+                    await interaction.editReply({ content: errorMessage });
+                } else {
+                    await interaction.reply({ content: errorMessage, ephemeral: true });
+                }
+            } catch (replyError) {
+                logger.error('❌ Nie można odpowiedzieć na interakcję /party-close:', replyError);
             }
         }
     }
