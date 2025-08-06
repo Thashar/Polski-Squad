@@ -200,10 +200,30 @@ class TimerService {
 
             // Przywróć timery
             for (const { lobbyId, timerData, lobby } of timersToRestore) {
-                const warningCallback = async () => {
+                const warningCallback = async (lobbyId) => {
                     try {
                         const thread = await sharedState.client.channels.fetch(lobby.threadId);
-                        await thread.send(this.config.messages.lobbyWarning);
+                        
+                        // Utwórz przyciski dla właściciela lobby
+                        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+                        const warningButtons = new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(`extend_lobby_${lobbyId}`)
+                                    .setLabel('Przedłuż o 15 min')
+                                    .setEmoji('⏰')
+                                    .setStyle(ButtonStyle.Primary),
+                                new ButtonBuilder()
+                                    .setCustomId(`close_lobby_${lobbyId}`)
+                                    .setLabel('Zamknij lobby')
+                                    .setEmoji('🔒')
+                                    .setStyle(ButtonStyle.Danger)
+                            );
+
+                        await thread.send({
+                            content: this.config.messages.lobbyWarning,
+                            components: [warningButtons]
+                        });
                     } catch (error) {
                         logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla lobby ${lobbyId}:`, error);
                     }
