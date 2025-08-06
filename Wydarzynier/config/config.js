@@ -41,19 +41,23 @@ module.exports = {
     lobby: {
         maxPlayers: 7, // Założyciel + 6 osób
         discussionTime: 15 * 60 * 1000, // 15 minut w ms po zapełnieniu
-        maxDuration: 30 * 60 * 1000, // 30 minut maksymalny czas trwania lobby
+        maxDuration: 15 * 60 * 1000, // 15 minut maksymalny czas trwania lobby
         fullLobbyDuration: 15 * 60 * 1000, // 15 minut po zapełnieniu lobby
         warningTime: 5 * 60 * 1000, // 5 minut przed usunięciem - ostrzeżenie
+        repositionInterval: 5 * 60 * 1000, // 5 minut - interwał repozycjonowania ogłoszeń
         threadName: (username) => `🎉 ${username} - Party Lobby`
     },
     
     // Wiadomości
     messages: {
         lobbyCreated: (userId) => 
-            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to 30 minut, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
+            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to 15 minut, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
         
         partyAnnouncement: (displayName, currentPlayers, maxPlayers) => 
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,
+        
+        partyAnnouncementReposition: (displayName, currentPlayers, maxPlayers) => 
+            `# ${displayName} stworzył/a lobby i szuka osób do Party <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,
         
         joinRequest: (displayName) => 
             `${displayName} chce dołączyć do party. Czy chcesz na to pozwolić?`,

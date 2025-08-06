@@ -241,7 +241,7 @@ class InteractionHandler {
             );
 
             await interaction.editReply({
-                content: `✅ Lobby zostało utworzone! Wątek: <#${thread.id}>\n⏰ Lobby zostanie automatycznie usunięte po 30 minutach.`
+                content: `✅ Lobby zostało utworzone! Wątek: <#${thread.id}>\n⏰ Lobby zostanie automatycznie usunięte po 15 minutach.`
             });
 
 

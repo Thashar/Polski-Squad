@@ -58,6 +58,9 @@ client.once(Events.ClientReady, async () => {
     const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
     await interactionHandler.registerSlashCommands(client);
     
+    // Uruchom system repozycjonowania ogłoszeń co 5 minut
+    startRepositionSystem(sharedState);
+    
     logger.info('Bot Wydarzynier jest gotowy do pracy!');
 });
 
@@ -231,6 +234,86 @@ process.on('uncaughtException', error => {
     logger.error(`Nieobsłużony wyjątek: ${error.message}`);
     process.exit(1);
 });
+
+/**
+ * Uruchamia system repozycjonowania ogłoszeń lobby co 5 minut
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+function startRepositionSystem(sharedState) {
+    // Sprawdzaj co minutę czy są lobby do repozycjonowania
+    setInterval(async () => {
+        try {
+            const lobbiesForRepositioning = sharedState.lobbyService.getLobbiesForRepositioning(
+                sharedState.config.lobby.repositionInterval
+            );
+
+            for (const lobby of lobbiesForRepositioning) {
+                await repositionLobbyAnnouncement(lobby, sharedState);
+            }
+        } catch (error) {
+            logger.error('❌ Błąd podczas repozycjonowania lobby:', error);
+        }
+    }, 60000); // Co minutę sprawdzaj
+}
+
+/**
+ * Repozycjonuje ogłoszenie lobby (usuwa stare i tworzy nowe na górze)
+ * @param {Object} lobby - Dane lobby
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+async function repositionLobbyAnnouncement(lobby, sharedState) {
+    try {
+        const channel = await sharedState.client.channels.fetch(sharedState.config.channels.party);
+        
+        // Sprawdź czy minęło dokładnie 5 minut od ostatniego repozycjonowania
+        const now = Date.now();
+        const timeSinceLastReposition = now - lobby.lastRepositionTime;
+        if (timeSinceLastReposition < sharedState.config.lobby.repositionInterval) {
+            return;
+        }
+
+        // Usuń stare ogłoszenie
+        try {
+            const oldMessage = await channel.messages.fetch(lobby.announcementMessageId);
+            await oldMessage.delete();
+        } catch (deleteError) {
+            // Ignoruj błędy usuwania (wiadomość może już nie istnieć)
+        }
+
+        // Utwórz nowe ogłoszenie na górze
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        
+        const joinButton = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`join_lobby_${Date.now()}`)
+                    .setLabel('Dołącz do Party')
+                    .setEmoji(sharedState.config.emoji.ticket)
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+        const newMessage = await channel.send({
+            content: sharedState.config.messages.partyAnnouncementReposition(
+                lobby.ownerDisplayName, 
+                lobby.players.length, 
+                sharedState.config.lobby.maxPlayers
+            ),
+            components: [joinButton]
+        });
+
+        // Zaktualizuj ID wiadomości w lobby
+        lobby.announcementMessageId = newMessage.id;
+        sharedState.lobbyService.updateRepositionTime(lobby.id);
+        
+        // Zapisz zmiany
+        await sharedState.lobbyService.saveLobbies();
+
+        logger.info(`🔄 Repozycjonowano ogłoszenie lobby ${lobby.id} właściciela ${lobby.ownerDisplayName}`);
+
+    } catch (error) {
+        logger.error(`❌ Błąd podczas repozycjonowania lobby ${lobby.id}:`, error);
+    }
+}
 
 // Eksportuj funkcje do zarządzania botem
 module.exports = {

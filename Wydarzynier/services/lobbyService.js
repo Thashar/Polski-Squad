@@ -44,7 +44,8 @@ class LobbyService {
             players: [ownerId], // Właściciel jest automatycznie w lobby
             pendingRequests: new Map(), // Mapa oczekujących próśb dołączenia
             isFull: false,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            lastRepositionTime: Date.now() // Czas ostatniego repozycjonowania
         };
 
         this.activeLobbyies.set(lobby.id, lobby);
@@ -230,7 +231,8 @@ class LobbyService {
                     announcementMessageId: lobby.announcementMessageId,
                     players: lobby.players,
                     isFull: lobby.isFull,
-                    createdAt: lobby.createdAt
+                    createdAt: lobby.createdAt,
+                    lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt
                 };
             }
 
@@ -254,7 +256,8 @@ class LobbyService {
                 // Odtwórz lobby z dodaniem pustej mapy pendingRequests
                 const lobby = {
                     ...lobbyData,
-                    pendingRequests: new Map()
+                    pendingRequests: new Map(),
+                    lastRepositionTime: lobbyData.lastRepositionTime || lobbyData.createdAt
                 };
                 
                 this.activeLobbyies.set(lobbyId, lobby);
@@ -268,6 +271,40 @@ class LobbyService {
                 logger.error('❌ Błąd podczas wczytywania lobby:', error);
             }
         }
+    }
+
+    /**
+     * Aktualizuje czas ostatniego repozycjonowania lobby
+     * @param {string} lobbyId - ID lobby
+     */
+    updateRepositionTime(lobbyId) {
+        const lobby = this.activeLobbyies.get(lobbyId);
+        if (lobby) {
+            lobby.lastRepositionTime = Date.now();
+        }
+    }
+
+    /**
+     * Pobiera lobby które wymagają repozycjonowania (niepełne i starsze niż 5 min od ostatniego repozycjonowania)
+     * @param {number} repositionInterval - Interwał repozycjonowania w ms
+     * @returns {Array} - Lista lobby do repozycjonowania
+     */
+    getLobbiesForRepositioning(repositionInterval) {
+        const now = Date.now();
+        const lobbiesForRepositioning = [];
+
+        for (const lobby of this.activeLobbyies.values()) {
+            // Pomiń pełne lobby
+            if (lobby.isFull) continue;
+            
+            // Sprawdź czy minęło wystarczająco czasu od ostatniego repozycjonowania
+            const timeSinceLastReposition = now - lobby.lastRepositionTime;
+            if (timeSinceLastReposition >= repositionInterval) {
+                lobbiesForRepositioning.push(lobby);
+            }
+        }
+
+        return lobbiesForRepositioning;
     }
 }
 
