@@ -77,11 +77,7 @@ async function handleReactionAdd(reaction, user, sharedState) {
         }
 
         // Utwórz wiadomość z przyciskami w wątku lobby
-        logger.info(`🚀 Wywołanie createJoinRequest dla użytkownika ${user.username}`);
         await createJoinRequest(lobby, user, sharedState);
-        
-        // Reakcja zostaje na wiadomości - inne osoby też mogą kliknąć
-
 
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi dodania reakcji:', error);
@@ -107,17 +103,13 @@ async function handleReactionRemove(reaction, user, sharedState) {
  */
 async function createJoinRequest(lobby, user, sharedState) {
     try {
-        logger.info(`🎯 Tworzenie prośby o dołączenie dla użytkownika ${user.username} do lobby ${lobby.id}`);
-        
         // Pobierz wątek lobby
         const thread = await sharedState.client.channels.fetch(lobby.threadId);
-        logger.info(`🧵 Znaleziono wątek: ${thread.name}`);
         
         // Pobierz dane członka serwera dla wyświetlenia nicku
         const guild = thread.guild;
         const member = await guild.members.fetch(user.id);
         const displayName = member.displayName || user.username;
-        logger.info(`👤 Nazwa wyświetlana użytkownika: ${displayName}`);
 
         // Utwórz przyciski
         const row = new ActionRowBuilder()
@@ -133,16 +125,13 @@ async function createJoinRequest(lobby, user, sharedState) {
             );
 
         // Wyślij wiadomość z przyciskami
-        logger.info(`💬 Wysyłanie wiadomości z prośbą do wątku...`);
         const requestMessage = await thread.send({
             content: sharedState.config.messages.joinRequest(displayName),
             components: [row]
         });
-        logger.info(`✅ Wysłano wiadomość z ID: ${requestMessage.id}`);
 
         // Zarejestruj oczekującą prośbę
         sharedState.lobbyService.addPendingRequest(lobby.id, user.id, requestMessage.id);
-        logger.info(`📋 Zarejestrowano oczekującą prośbę`);
 
     } catch (error) {
         logger.error('❌ Błąd podczas tworzenia prośby o dołączenie:', error);
