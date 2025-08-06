@@ -155,16 +155,23 @@ class InteractionHandler {
             // Wyślij wiadomość powitania w wątku
             await thread.send(this.config.messages.lobbyCreated(user.id));
 
+            // Utwórz przycisk do dołączania
+            const joinButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`join_lobby_${Date.now()}`)
+                        .setLabel('Dołącz do Party')
+                        .setEmoji(this.config.emoji.ticket)
+                        .setStyle(ButtonStyle.Primary)
+                );
+
             // Utwórz wiadomość ogłoszeniową na kanale głównym
-            const announcementMessage = await channel.send(
-                this.config.messages.partyAnnouncement(displayName, 1, this.config.lobby.maxPlayers)
-            );
+            const announcementMessage = await channel.send({
+                content: this.config.messages.partyAnnouncement(displayName, 1, this.config.lobby.maxPlayers),
+                components: [joinButton]
+            });
 
-            // Dodaj reakcję do wiadomości ogłoszeniowej
-            await announcementMessage.react(this.config.emoji.ticket);
-
-            // Okresowo sprawdzaj czy nie ma nieprawidłowych reakcji
-            this.startReactionCleanup(announcementMessage, sharedState);
+            // Buttony nie wymagają czyszczenia reakcji
 
             // Zarejestruj lobby w serwisie
             const lobby = await sharedState.lobbyService.createLobby(
@@ -225,6 +232,12 @@ class InteractionHandler {
         // Obsługa przycisku powiadomień o party (dostępny dla wszystkich)
         if (customId === 'toggle_party_notifications' || customId === 'party_access_notifications') {
             await this.handleToggleNotifications(interaction, sharedState);
+            return;
+        }
+
+        // Obsługa przycisku dołączania do lobby
+        if (customId.startsWith('join_lobby_')) {
+            await this.handleJoinLobbyButton(interaction, sharedState);
             return;
         }
         
@@ -591,6 +604,114 @@ class InteractionHandler {
                 await interaction.reply({ content: errorMessage, ephemeral: true });
             }
         }
+    }
+
+    /**
+     * Obsługuje przycisk dołączania do lobby
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleJoinLobbyButton(interaction, sharedState) {
+        const { user, message } = interaction;
+
+        // Znajdź lobby na podstawie wiadomości
+        const lobby = sharedState.lobbyService.getLobbyByAnnouncementId(message.id);
+        if (!lobby) {
+            await interaction.reply({
+                content: '❌ Nie znaleziono lobby dla tej wiadomości.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Sprawdź czy lobby nie jest pełne
+        if (lobby.isFull) {
+            await interaction.reply({
+                content: sharedState.config.messages.lobbyFullEphemeral,
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Sprawdź czy użytkownik to nie właściciel lobby
+        if (user.id === lobby.ownerId) {
+            await interaction.reply({
+                content: '❌ Nie możesz dołączyć do własnego lobby.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Sprawdź czy użytkownik już jest w lobby
+        if (lobby.players.includes(user.id)) {
+            await interaction.reply({
+                content: '❌ Już jesteś w tym lobby.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Sprawdź czy użytkownik ma już oczekującą prośbę
+        if (sharedState.lobbyService.hasPendingRequest(lobby.id, user.id)) {
+            await interaction.reply({
+                content: '❌ Masz już wysłaną prośbę do tego lobby.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Utwórz prośbę o dołączenie
+        try {
+            await this.createJoinRequestFromButton(lobby, user, sharedState);
+            await interaction.reply({
+                content: '✅ Wysłano prośbę o dołączenie do lobby!',
+                ephemeral: true
+            });
+        } catch (error) {
+            logger.error('❌ Błąd podczas tworzenia prośby:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas wysyłania prośby.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Tworzy prośbę o dołączenie z button interaction
+     * @param {Object} lobby - Dane lobby
+     * @param {User} user - Użytkownik chcący dołączyć
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async createJoinRequestFromButton(lobby, user, sharedState) {
+        // Pobierz wątek lobby
+        const thread = await sharedState.client.channels.fetch(lobby.threadId);
+        
+        // Pobierz dane członka serwera dla wyświetlenia nicku
+        const guild = thread.guild;
+        const member = await guild.members.fetch(user.id);
+        const displayName = member.displayName || user.username;
+
+        // Utwórz przyciski
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`accept_${user.id}`)
+                    .setLabel('Tak')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`reject_${user.id}`)
+                    .setLabel('Nie')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+        // Wyślij wiadomość z przyciskami
+        const requestMessage = await thread.send({
+            content: sharedState.config.messages.joinRequest(displayName),
+            components: [row]
+        });
+
+        // Zarejestruj oczekującą prośbę
+        sharedState.lobbyService.addPendingRequest(lobby.id, user.id, requestMessage.id);
     }
 
     /**

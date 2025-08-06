@@ -24,60 +24,8 @@ async function handleReactionAdd(reaction, user, sharedState) {
             return;
         }
 
-        // Sprawdź czy to właściwy kanał party
-        if (reaction.message.channel.id !== sharedState.config.channels.party) return;
-
-        // Sprawdź czy to wiadomość lobby
-        const lobby = sharedState.lobbyService.getLobbyByAnnouncementId(reaction.message.id);
-        if (!lobby) return;
-
-        // Dla wiadomości lobby, usuń wszystkie nieprawidłowe reakcje
-        if (reaction.emoji.toString() !== sharedState.config.emoji.ticket) {
-            await reaction.users.remove(user.id);
-            return;
-        }
-
-        // Sprawdź czy lobby nie jest pełne
-        if (lobby.isFull) {
-            // Usuń reakcję i wyślij ephemeral message
-            await reaction.users.remove(user.id);
-            
-            // Wyślij ephemeral message (symulacja - w rzeczywistości można użyć webhook lub interaction)
-            const channel = reaction.message.channel;
-            const ephemeralMsg = await channel.send(`<@${user.id}> ${sharedState.config.messages.lobbyFullEphemeral}`);
-            
-            // Usuń wiadomość po 5 sekundach
-            setTimeout(async () => {
-                try {
-                    await ephemeralMsg.delete();
-                } catch (error) {
-                    // Ignoruj błędy usuwania
-                }
-            }, 5000);
-            
-            return;
-        }
-
-        // Sprawdź czy użytkownik to nie właściciel lobby
-        if (user.id === lobby.ownerId) {
-            await reaction.users.remove(user.id);
-            return;
-        }
-
-        // Sprawdź czy użytkownik już jest w lobby
-        if (lobby.players.includes(user.id)) {
-            await reaction.users.remove(user.id);
-            return;
-        }
-
-        // Sprawdź czy użytkownik ma już oczekującą prośbę
-        if (sharedState.lobbyService.hasPendingRequest(lobby.id, user.id)) {
-            await reaction.users.remove(user.id);
-            return;
-        }
-
-        // Utwórz wiadomość z przyciskami w wątku lobby
-        await createJoinRequest(lobby, user, sharedState);
+        // Lobby teraz używa buttonów zamiast reakcji, więc nic nie robimy dla wiadomości lobby
+        // Reakcje są obsługiwane tylko dla funkcji pin w bazarze
 
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi dodania reakcji:', error);
