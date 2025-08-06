@@ -57,7 +57,16 @@ class InteractionHandler {
             
             new SlashCommandBuilder()
                 .setName('party-close')
-                .setDescription('Zamyka i usuwa twoje lobby')
+                .setDescription('Zamyka i usuwa twoje lobby'),
+            
+            new SlashCommandBuilder()
+                .setName('party-add')
+                .setDescription('Dodaje użytkownika bezpośrednio do twojego lobby')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik do dodania do lobby')
+                        .setRequired(true)
+                )
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -138,6 +147,8 @@ class InteractionHandler {
             await this.handlePartyKickCommand(interaction, sharedState);
         } else if (commandName === 'party-close') {
             await this.handlePartyCloseCommand(interaction, sharedState);
+        } else if (commandName === 'party-add') {
+            await this.handlePartyAddCommand(interaction, sharedState);
         }
     }
 
@@ -1228,6 +1239,98 @@ class InteractionHandler {
                 }
             } catch (replyError) {
                 logger.error('❌ Nie można odpowiedzieć na interakcję zamknięcia:', replyError);
+            }
+        }
+    }
+
+    /**
+     * Obsługuje komendę /party-add
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handlePartyAddCommand(interaction, sharedState) {
+        try {
+            // Defer interaction na początku aby uniknąć timeout
+            await interaction.deferReply({ ephemeral: true });
+
+            const targetUser = interaction.options.getUser('użytkownik');
+            
+            // Znajdź lobby właściciela
+            const ownerLobby = sharedState.lobbyService.getAllActiveLobbies()
+                .find(lobby => lobby.ownerId === interaction.user.id);
+            
+            if (!ownerLobby) {
+                await interaction.editReply({
+                    content: '❌ Nie masz aktywnego lobby.'
+                });
+                return;
+            }
+
+            // Sprawdź czy lobby nie jest pełne
+            if (ownerLobby.isFull) {
+                await interaction.editReply({
+                    content: '❌ Twoje lobby jest już pełne.'
+                });
+                return;
+            }
+
+            // Sprawdź czy użytkownik już jest w lobby
+            if (ownerLobby.players.includes(targetUser.id)) {
+                await interaction.editReply({
+                    content: `❌ ${targetUser.displayName || targetUser.username} już jest w twoim lobby.`
+                });
+                return;
+            }
+
+            // Sprawdź czy to nie właściciel próbuje dodać siebie
+            if (targetUser.id === interaction.user.id) {
+                await interaction.editReply({
+                    content: '❌ Już jesteś w swoim lobby jako właściciel.'
+                });
+                return;
+            }
+
+            // Dodaj gracza do lobby (bez procedury akceptacji)
+            const added = sharedState.lobbyService.addPlayerToLobby(ownerLobby.id, targetUser.id);
+            
+            if (added) {
+                // Dodaj gracza do wątku
+                const thread = await sharedState.client.channels.fetch(ownerLobby.threadId);
+                await thread.members.add(targetUser.id);
+
+                // Wyślij wiadomość o dodaniu gracza
+                await thread.send(sharedState.config.messages.playerAdded(targetUser.id));
+
+                // Aktualizuj wiadomość ogłoszeniową z nową liczbą graczy
+                await this.updateAnnouncementMessage(ownerLobby, sharedState);
+
+                // Sprawdź czy lobby jest pełne
+                if (ownerLobby.isFull) {
+                    await this.handleFullLobby(ownerLobby, sharedState);
+                }
+
+                await interaction.editReply({
+                    content: `✅ Dodano **${targetUser.displayName || targetUser.username}** do lobby.`
+                });
+
+            } else {
+                await interaction.editReply({
+                    content: '❌ Nie można dodać gracza do lobby.'
+                });
+            }
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi komendy /party-add:', error);
+            
+            try {
+                const errorMessage = '❌ Wystąpił błąd podczas dodawania gracza do lobby.';
+                if (interaction.deferred) {
+                    await interaction.editReply({ content: errorMessage });
+                } else {
+                    await interaction.reply({ content: errorMessage, ephemeral: true });
+                }
+            } catch (replyError) {
+                logger.error('❌ Nie można odpowiedzieć na interakcję /party-add:', replyError);
             }
         }
     }
