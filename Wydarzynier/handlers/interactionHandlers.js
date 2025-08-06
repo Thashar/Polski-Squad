@@ -460,6 +460,16 @@ class InteractionHandler {
                     }
                 }
 
+                // Upewnij się, że bot ma swoją reakcję ticket
+                const ticketReaction = message.reactions.cache.find(r => r.emoji.toString() === allowedEmoji);
+                if (!ticketReaction || !ticketReaction.users.cache.has(sharedState.client.user.id)) {
+                    try {
+                        await message.react(allowedEmoji);
+                    } catch (error) {
+                        logger.error('❌ Błąd podczas dodawania reakcji bota:', error);
+                    }
+                }
+
             } catch (error) {
                 logger.error('❌ Błąd podczas okresowego czyszczenia reakcji:', error);
                 clearInterval(interval);

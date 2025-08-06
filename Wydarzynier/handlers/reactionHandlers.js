@@ -79,10 +79,8 @@ async function handleReactionAdd(reaction, user, sharedState) {
         // Utwórz wiadomość z przyciskami w wątku lobby
         logger.info(`🚀 Wywołanie createJoinRequest dla użytkownika ${user.username}`);
         await createJoinRequest(lobby, user, sharedState);
-
-        // Usuń reakcję użytkownika
-        logger.info(`🗑️ Usuwanie reakcji użytkownika ${user.username}`);
-        await reaction.users.remove(user.id);
+        
+        // Reakcja zostaje na wiadomości - inne osoby też mogą kliknąć
 
 
     } catch (error) {
