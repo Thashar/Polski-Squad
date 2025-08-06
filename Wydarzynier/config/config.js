@@ -39,7 +39,7 @@ module.exports = {
     
     // Ustawienia lobby
     lobby: {
-        maxPlayers: 6, // Założyciel + 5 osób
+        maxPlayers: 7, // Założyciel + 6 osób
         discussionTime: 15 * 60 * 1000, // 15 minut w ms po zapełnieniu
         maxDuration: 60 * 60 * 1000, // 1 godzina maksymalny czas trwania lobby
         warningTime: 5 * 60 * 1000, // 5 minut przed usunięciem - ostrzeżenie
@@ -49,7 +49,7 @@ module.exports = {
     // Wiadomości
     messages: {
         lobbyCreated: (userId) => 
-            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 5 chętnych, masz na to godzinę, po tym czasie wątek lobby zostanie usunięty.`,
+            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to godzinę, po tym czasie wątek lobby zostanie usunięty.`,
         
         partyAnnouncement: (displayName, currentPlayers, maxPlayers) => 
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})\nZostaw reakcję poniżej by dołączyć.`,
