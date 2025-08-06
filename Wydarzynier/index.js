@@ -122,6 +122,13 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
             // Sprawdź czy użytkownik jest na liście zaakceptowanych graczy
             if (!lobby.players.includes(member.id)) {
                 try {
+                    // Sprawdź czy to administrator - jeśli tak, ignoruj jego obecność ale nie dodawaj do lobby
+                    const guildMember = await thread.guild.members.fetch(member.id).catch(() => null);
+                    if (guildMember && guildMember.permissions.has('Administrator')) {
+                        logger.info(`🛡️ Administrator ${member.user?.username} wszedł do lobby - ignoruję jego obecność`);
+                        continue; // Nie usuwaj administratora, ale też nie dodawaj go do lobby
+                    }
+                    
                     // Usuń nieupoważnionego członka
                     await thread.members.remove(member.id);
                     
@@ -149,6 +156,13 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
         for (const member of removedMembers.values()) {
             // Ignoruj bota
             if (member.user?.bot) continue;
+            
+            // Ignoruj administratorów - nie są częścią oficjalnego lobby
+            const guildMember = await thread.guild.members.fetch(member.id).catch(() => null);
+            if (guildMember && guildMember.permissions.has('Administrator')) {
+                logger.info(`🛡️ Administrator ${member.user?.username} opuścił lobby - ignoruję (nie był oficjalnie w lobby)`);
+                continue;
+            }
             
             // Usuń z listy graczy jeśli był na liście
             const playerIndex = lobby.players.indexOf(member.id);

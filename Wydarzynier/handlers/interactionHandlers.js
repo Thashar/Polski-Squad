@@ -44,7 +44,16 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('party-access')
                 .setDescription('Tworzy wiadomość z przyciskiem do roli powiadomień o party (tylko administratorzy)')
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+            
+            new SlashCommandBuilder()
+                .setName('party-kick')
+                .setDescription('Usuwa gracza z twojego party')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik do usunięcia z party')
+                        .setRequired(true)
+                )
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -121,6 +130,8 @@ class InteractionHandler {
             await this.handleBazarOffCommand(interaction, sharedState);
         } else if (commandName === 'party-access') {
             await this.handlePartyAccessCommand(interaction, sharedState);
+        } else if (commandName === 'party-kick') {
+            await this.handlePartyKickCommand(interaction, sharedState);
         }
     }
 
@@ -750,6 +761,113 @@ class InteractionHandler {
                 content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
                 ephemeral: true
             });
+        }
+    }
+
+    /**
+     * Obsługuje komendę /party-kick
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handlePartyKickCommand(interaction, sharedState) {
+        try {
+            const targetUser = interaction.options.getUser('użytkownik');
+            
+            // Znajdź lobby właściciela
+            const ownerLobby = sharedState.lobbyService.getAllActiveLobbies()
+                .find(lobby => lobby.ownerId === interaction.user.id);
+            
+            if (!ownerLobby) {
+                await interaction.reply({
+                    content: '❌ Nie masz aktywnego lobby.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Sprawdź czy użytkownik jest w lobby
+            const playerIndex = ownerLobby.players.indexOf(targetUser.id);
+            if (playerIndex === -1) {
+                await interaction.reply({
+                    content: `❌ ${targetUser.displayName || targetUser.username} nie jest w twoim lobby.`,
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Nie można wykopać siebie
+            if (targetUser.id === interaction.user.id) {
+                await interaction.reply({
+                    content: '❌ Nie możesz wykopać samego siebie z lobby.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Usuń gracza z lobby
+            ownerLobby.players.splice(playerIndex, 1);
+            
+            // Sprawdź czy lobby nie jest już pełne
+            if (ownerLobby.isFull && ownerLobby.players.length < this.config.lobby.maxPlayers) {
+                ownerLobby.isFull = false;
+            }
+
+            // Zapisz zmiany
+            await sharedState.lobbyService.saveLobbies();
+
+            // Usuń gracza z wątku
+            try {
+                const thread = await sharedState.client.channels.fetch(ownerLobby.threadId);
+                await thread.members.remove(targetUser.id);
+                
+                // Wyślij informację w wątku
+                await thread.send(`👢 **${targetUser.displayName || targetUser.username}** został usunięty z lobby przez właściciela.`);
+            } catch (threadError) {
+                logger.error('❌ Błąd podczas usuwania z wątku:', threadError);
+            }
+
+            // Aktualizuj wiadomość ogłoszeniową
+            try {
+                const channel = await sharedState.client.channels.fetch(this.config.channels.party);
+                const announcementMessage = await channel.messages.fetch(ownerLobby.announcementMessageId).catch(() => null);
+                
+                if (announcementMessage) {
+                    const updatedContent = this.config.messages.partyAnnouncement(
+                        ownerLobby.ownerDisplayName, 
+                        ownerLobby.players.length, 
+                        this.config.lobby.maxPlayers
+                    );
+                    
+                    await announcementMessage.edit({
+                        content: updatedContent,
+                        components: announcementMessage.components // Zachowaj przycisk
+                    });
+                }
+            } catch (error) {
+                logger.error('❌ Błąd podczas aktualizacji wiadomości:', error);
+            }
+
+            // Wyślij prywatną wiadomość do usuniętego gracza
+            try {
+                await targetUser.send(`👢 Zostałeś usunięty z lobby **${ownerLobby.ownerDisplayName}** przez właściciela.`);
+            } catch (dmError) {
+                // Ignoruj błędy DM
+            }
+
+            await interaction.reply({
+                content: `✅ Usunięto **${targetUser.displayName || targetUser.username}** z lobby.`,
+                ephemeral: true
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi komendy /party-kick:', error);
+            
+            const errorMessage = '❌ Wystąpił błąd podczas usuwania gracza z lobby.';
+            if (interaction.deferred) {
+                await interaction.editReply({ content: errorMessage });
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
         }
     }
 
