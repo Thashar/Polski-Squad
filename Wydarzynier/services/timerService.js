@@ -221,7 +221,7 @@ class TimerService {
                             );
 
                         await thread.send({
-                            content: this.config.messages.lobbyWarning,
+                            content: this.config.messages.lobbyWarning(lobby.ownerId),
                             components: [warningButtons]
                         });
                     } catch (error) {

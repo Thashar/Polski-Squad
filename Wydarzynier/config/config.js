@@ -71,8 +71,8 @@ module.exports = {
         lobbyFull: 
             '# Lobby zapełnione!\nMacie 15 minut, po tym czasie zostanie usunięte! Bawcie się dobrze <a:peepParty:1400241867421122730>\nJeżeli chcesz otrzymywać powiadomienia o kolejnych party kliknij przycisk poniżej.',
         
-        lobbyWarning: 
-            '⚠️ **Uwaga!** Za 5 minut lobby zostanie zamknięte!',
+        lobbyWarning: (ownerId) => 
+            `⚠️ **Uwaga!** <@${ownerId}> Za 5 minut lobby zostanie zamknięte!`,
         
         lobbyFullEphemeral: 
             'To lobby jest już pełne! Spróbuj dołączyć do innego.',

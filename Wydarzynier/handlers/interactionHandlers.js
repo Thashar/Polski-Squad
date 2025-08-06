@@ -217,7 +217,7 @@ class InteractionHandler {
                         );
 
                     await thread.send({
-                        content: this.config.messages.lobbyWarning,
+                        content: this.config.messages.lobbyWarning(lobby.ownerId),
                         components: [warningButtons]
                     });
                 } catch (error) {
@@ -469,7 +469,7 @@ class InteractionHandler {
                         );
 
                     await thread.send({
-                        content: this.config.messages.lobbyWarning,
+                        content: this.config.messages.lobbyWarning(lobby.ownerId),
                         components: [warningButtons]
                     });
                 } catch (error) {
@@ -1093,7 +1093,7 @@ class InteractionHandler {
                         );
 
                     await thread.send({
-                        content: this.config.messages.lobbyWarning,
+                        content: this.config.messages.lobbyWarning(lobby.ownerId),
                         components: [warningButtons]
                     });
                 } catch (error) {
