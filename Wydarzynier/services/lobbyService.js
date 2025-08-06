@@ -45,7 +45,8 @@ class LobbyService {
             pendingRequests: new Map(), // Mapa oczekujących próśb dołączenia
             isFull: false,
             createdAt: Date.now(),
-            lastRepositionTime: Date.now() // Czas ostatniego repozycjonowania
+            lastRepositionTime: Date.now(), // Czas ostatniego repozycjonowania
+            isExtended: false // Czy lobby zostało już przedłużone
         };
 
         this.activeLobbyies.set(lobby.id, lobby);
@@ -232,7 +233,8 @@ class LobbyService {
                     players: lobby.players,
                     isFull: lobby.isFull,
                     createdAt: lobby.createdAt,
-                    lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt
+                    lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt,
+                    isExtended: lobby.isExtended || false
                 };
             }
 
@@ -257,7 +259,8 @@ class LobbyService {
                 const lobby = {
                     ...lobbyData,
                     pendingRequests: new Map(),
-                    lastRepositionTime: lobbyData.lastRepositionTime || lobbyData.createdAt
+                    lastRepositionTime: lobbyData.lastRepositionTime || lobbyData.createdAt,
+                    isExtended: lobbyData.isExtended || false
                 };
                 
                 this.activeLobbyies.set(lobbyId, lobby);
