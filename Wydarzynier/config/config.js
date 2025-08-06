@@ -41,7 +41,8 @@ module.exports = {
     lobby: {
         maxPlayers: 7, // Założyciel + 6 osób
         discussionTime: 15 * 60 * 1000, // 15 minut w ms po zapełnieniu
-        maxDuration: 60 * 60 * 1000, // 1 godzina maksymalny czas trwania lobby
+        maxDuration: 30 * 60 * 1000, // 30 minut maksymalny czas trwania lobby
+        fullLobbyDuration: 15 * 60 * 1000, // 15 minut po zapełnieniu lobby
         warningTime: 5 * 60 * 1000, // 5 minut przed usunięciem - ostrzeżenie
         threadName: (username) => `🎉 ${username} - Party Lobby`
     },
@@ -49,7 +50,7 @@ module.exports = {
     // Wiadomości
     messages: {
         lobbyCreated: (userId) => 
-            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to godzinę, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
+            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to 30 minut, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
         
         partyAnnouncement: (displayName, currentPlayers, maxPlayers) => 
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,
@@ -64,7 +65,7 @@ module.exports = {
             'Osoba zakładająca party nie wyraziła zgody na Twoje dołączenie. Spróbuj następnym razem!',
         
         lobbyFull: 
-            '# Lobby zapełnione!\nMacie 1h od utworzenia tego lobby, po tym czasie zostanie usunięte! Bawcie się dobrze <a:peepParty:1400241867421122730>\nJeżeli chcesz otrzymywać powiadomienia o kolejnych party kliknij przycisk poniżej.',
+            '# Lobby zapełnione!\nMacie 15 minut, po tym czasie zostanie usunięte! Bawcie się dobrze <a:peepParty:1400241867421122730>\nJeżeli chcesz otrzymywać powiadomienia o kolejnych party kliknij przycisk poniżej.',
         
         lobbyWarning: 
             '⚠️ **Uwaga!** Za 5 minut lobby zostanie zamknięte!',

@@ -56,7 +56,8 @@ class TimerService {
             createdAt,
             warningTime,
             deleteTime,
-            warningExecuted: warningDelay === 0
+            warningExecuted: warningDelay === 0,
+            isFullLobby: false // Oznacza czy lobby jest pełne i ma skrócony timer
         };
 
         // Ustaw timer ostrzeżenia (jeśli jeszcze nie minął)
@@ -66,7 +67,7 @@ class TimerService {
                 timerData.warningExecuted = true;
                 await this.saveTimersToFile();
                 if (warningCallback) {
-                    await warningCallback();
+                    await warningCallback(lobbyId); // Przekaż lobbyId do callback
                 }
             }, warningDelay);
 
@@ -89,6 +90,65 @@ class TimerService {
         await this.saveTimersToFile();
 
         logger.info(`⏰ Utworzono timer dla lobby ${lobbyId} - ostrzeżenie za ${Math.round(warningDelay/1000/60)}min, usunięcie za ${Math.round(deleteDelay/1000/60)}min`);
+    }
+
+    /**
+     * Tworzy skrócony timer 15 minut dla pełnego lobby
+     * @param {string} lobbyId - ID lobby
+     * @param {Function} warningCallback - Funkcja wywoływana przy ostrzeżeniu
+     * @param {Function} deleteCallback - Funkcja wywoływana przy usunięciu
+     */
+    async createFullLobbyTimer(lobbyId, warningCallback, deleteCallback) {
+        // Usuń istniejący timer jeśli istnieje
+        this.removeTimer(lobbyId);
+
+        const now = Date.now();
+        const fullLobbyDuration = this.config.lobby.fullLobbyDuration; // 15 minut
+        const warningTime = now + fullLobbyDuration - this.config.lobby.warningTime; // 5 minut przed końcem
+        const deleteTime = now + fullLobbyDuration;
+
+        const warningDelay = Math.max(0, warningTime - now);
+        const deleteDelay = Math.max(0, deleteTime - now);
+
+        const timerData = {
+            lobbyId,
+            createdAt: now,
+            warningTime,
+            deleteTime,
+            warningExecuted: warningDelay === 0,
+            isFullLobby: true // Oznacza że to timer dla pełnego lobby
+        };
+
+        // Ustaw timer ostrzeżenia (jeśli jeszcze nie minął)
+        if (warningDelay > 0) {
+            const warningTimer = setTimeout(async () => {
+                logger.info(`⚠️ Wysyłanie ostrzeżenia dla pełnego lobby ${lobbyId}`);
+                timerData.warningExecuted = true;
+                await this.saveTimersToFile();
+                if (warningCallback) {
+                    await warningCallback(lobbyId); // Przekaż lobbyId do callback
+                }
+            }, warningDelay);
+
+            timerData.warningTimer = warningTimer;
+        }
+
+        // Ustaw timer usunięcia
+        const deleteTimer = setTimeout(async () => {
+            logger.info(`🗑️ Usuwanie pełnego lobby ${lobbyId} - czas 15 minut minął`);
+            if (deleteCallback) {
+                await deleteCallback();
+            }
+            this.removeTimer(lobbyId);
+        }, deleteDelay);
+
+        timerData.deleteTimer = deleteTimer;
+        this.activeTimers.set(lobbyId, timerData);
+
+        // Zapisz do pliku
+        await this.saveTimersToFile();
+
+        logger.info(`⏰ Utworzono timer 15 minut dla pełnego lobby ${lobbyId} - ostrzeżenie za ${Math.round(warningDelay/1000/60)}min, usunięcie za ${Math.round(deleteDelay/1000/60)}min`);
     }
 
     /**
@@ -215,7 +275,8 @@ class TimerService {
                     createdAt: timerData.createdAt,
                     warningTime: timerData.warningTime,
                     deleteTime: timerData.deleteTime,
-                    warningExecuted: timerData.warningExecuted
+                    warningExecuted: timerData.warningExecuted,
+                    isFullLobby: timerData.isFullLobby || false
                 };
             }
 

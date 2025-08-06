@@ -20,6 +20,10 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
     partials: [Partials.Message, Partials.Reaction, Partials.User],
+    rest: {
+        timeout: 60000, // 60 sekund timeout dla REST API
+        retries: 3      // 3 próby w przypadku błędu
+    }
 });
 
 // Inicjalizacja serwisów

@@ -199,9 +199,27 @@ class InteractionHandler {
             );
 
             // Utwórz timer dla lobby
-            const warningCallback = async () => {
+            const warningCallback = async (lobbyId) => {
                 try {
-                    await thread.send(this.config.messages.lobbyWarning);
+                    // Utwórz przyciski dla właściciela lobby
+                    const warningButtons = new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`extend_lobby_${lobbyId}`)
+                                .setLabel('Przedłuż o 15 min')
+                                .setEmoji('⏰')
+                                .setStyle(ButtonStyle.Primary),
+                            new ButtonBuilder()
+                                .setCustomId(`close_lobby_${lobbyId}`)
+                                .setLabel('Zamknij lobby')
+                                .setEmoji('🔒')
+                                .setStyle(ButtonStyle.Danger)
+                        );
+
+                    await thread.send({
+                        content: this.config.messages.lobbyWarning,
+                        components: [warningButtons]
+                    });
                 } catch (error) {
                     logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla lobby ${lobby.id}:`, error);
                 }
@@ -223,7 +241,7 @@ class InteractionHandler {
             );
 
             await interaction.editReply({
-                content: `✅ Lobby zostało utworzone! Wątek: <#${thread.id}>\n⏰ Lobby zostanie automatycznie usunięte po 1 godzinie.`
+                content: `✅ Lobby zostało utworzone! Wątek: <#${thread.id}>\n⏰ Lobby zostanie automatycznie usunięte po 30 minutach.`
             });
 
 
@@ -255,6 +273,18 @@ class InteractionHandler {
         // Obsługa przycisku dołączania do lobby
         if (customId.startsWith('join_lobby_')) {
             await this.handleJoinLobbyButton(interaction, sharedState);
+            return;
+        }
+
+        // Obsługa przycisku przedłużenia lobby (tylko właściciel)
+        if (customId.startsWith('extend_lobby_')) {
+            await this.handleExtendLobbyButton(interaction, sharedState);
+            return;
+        }
+
+        // Obsługa przycisku zamknięcia lobby (tylko właściciel)
+        if (customId.startsWith('close_lobby_')) {
+            await this.handleCloseLobbyButton(interaction, sharedState);
             return;
         }
         
@@ -419,6 +449,48 @@ class InteractionHandler {
                 content: this.config.messages.lobbyFull,
                 components: [notificationButton]
             });
+
+            // Ustaw nowy timer na 15 minut od zapełnienia
+            const warningCallback = async (lobbyId) => {
+                try {
+                    // Utwórz przyciski dla właściciela lobby
+                    const warningButtons = new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`extend_lobby_${lobbyId}`)
+                                .setLabel('Przedłuż o 15 min')
+                                .setEmoji('⏰')
+                                .setStyle(ButtonStyle.Primary),
+                            new ButtonBuilder()
+                                .setCustomId(`close_lobby_${lobbyId}`)
+                                .setLabel('Zamknij lobby')
+                                .setEmoji('🔒')
+                                .setStyle(ButtonStyle.Danger)
+                        );
+
+                    await thread.send({
+                        content: this.config.messages.lobbyWarning,
+                        components: [warningButtons]
+                    });
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla pełnego lobby ${lobby.id}:`, error);
+                }
+            };
+
+            const deleteCallback = async () => {
+                try {
+                    await this.deleteLobby(lobby, sharedState);
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas usuwania pełnego lobby ${lobby.id}:`, error);
+                }
+            };
+
+            // Zastąp istniejący timer nowym 15-minutowym
+            await sharedState.timerService.createFullLobbyTimer(
+                lobby.id,
+                warningCallback,
+                deleteCallback
+            );
 
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi pełnego lobby:', error);
@@ -965,6 +1037,181 @@ class InteractionHandler {
                 await interaction.editReply({ content: errorMessage });
             } else {
                 await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        }
+    }
+
+    /**
+     * Obsługuje przycisk przedłużenia lobby o 15 minut
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleExtendLobbyButton(interaction, sharedState) {
+        try {
+            // Defer interaction na początku aby uniknąć timeout
+            await interaction.deferUpdate();
+            
+            const lobbyId = interaction.customId.replace('extend_lobby_', '');
+            const lobby = sharedState.lobbyService.getLobby(lobbyId);
+            
+            if (!lobby) {
+                await interaction.editReply({
+                    content: '❌ Nie znaleziono lobby.',
+                    components: []
+                });
+                return;
+            }
+
+            // Sprawdź czy użytkownik to właściciel lobby
+            if (interaction.user.id !== lobby.ownerId) {
+                await interaction.editReply({
+                    content: '❌ Tylko właściciel lobby może przedłużyć czas.',
+                    components: []
+                });
+                return;
+            }
+
+            // Pobierz wątek
+            const thread = await sharedState.client.channels.fetch(lobby.threadId);
+
+            // Utwórz nowy timer na 15 minut
+            const warningCallback = async (lobbyId) => {
+                try {
+                    // Utwórz przyciski dla właściciela lobby
+                    const warningButtons = new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`extend_lobby_${lobbyId}`)
+                                .setLabel('Przedłuż o 15 min')
+                                .setEmoji('⏰')
+                                .setStyle(ButtonStyle.Primary),
+                            new ButtonBuilder()
+                                .setCustomId(`close_lobby_${lobbyId}`)
+                                .setLabel('Zamknij lobby')
+                                .setEmoji('🔒')
+                                .setStyle(ButtonStyle.Danger)
+                        );
+
+                    await thread.send({
+                        content: this.config.messages.lobbyWarning,
+                        components: [warningButtons]
+                    });
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla przedłużonego lobby ${lobbyId}:`, error);
+                }
+            };
+
+            const deleteCallback = async () => {
+                try {
+                    await this.deleteLobby(lobby, sharedState);
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas usuwania przedłużonego lobby ${lobbyId}:`, error);
+                }
+            };
+
+            // Utwórz nowy timer na 15 minut
+            await sharedState.timerService.createFullLobbyTimer(
+                lobbyId,
+                warningCallback,
+                deleteCallback
+            );
+
+            // Zaktualizuj wiadomość ostrzeżenia
+            await interaction.editReply({
+                content: '✅ **Lobby zostało przedłużone o 15 minut!**',
+                components: []
+            });
+
+            // Wyślij informację do wątku
+            await thread.send('⏰ **Lobby zostało przedłużone o 15 minut przez właściciela!**');
+
+            logger.info(`⏰ Lobby ${lobbyId} zostało przedłużone o 15 minut przez ${interaction.user.tag}`);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas przedłużania lobby:', error);
+            try {
+                if (interaction.deferred) {
+                    await interaction.editReply({
+                        content: '❌ Wystąpił błąd podczas przedłużania lobby.',
+                        components: []
+                    });
+                } else {
+                    await interaction.reply({
+                        content: '❌ Wystąpił błąd podczas przedłużania lobby.',
+                        ephemeral: true
+                    });
+                }
+            } catch (replyError) {
+                logger.error('❌ Nie można odpowiedzieć na interakcję przedłużenia:', replyError);
+            }
+        }
+    }
+
+    /**
+     * Obsługuje przycisk zamknięcia lobby
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleCloseLobbyButton(interaction, sharedState) {
+        try {
+            // Defer interaction na początku aby uniknąć timeout
+            await interaction.deferUpdate();
+            
+            const lobbyId = interaction.customId.replace('close_lobby_', '');
+            const lobby = sharedState.lobbyService.getLobby(lobbyId);
+            
+            if (!lobby) {
+                await interaction.editReply({
+                    content: '❌ Nie znaleziono lobby.',
+                    components: []
+                });
+                return;
+            }
+
+            // Sprawdź czy użytkownik to właściciel lobby
+            if (interaction.user.id !== lobby.ownerId) {
+                await interaction.editReply({
+                    content: '❌ Tylko właściciel lobby może zamknąć lobby.',
+                    components: []
+                });
+                return;
+            }
+
+            // Wyślij wiadomość pożegnalną w wątku przed zamknięciem
+            try {
+                const thread = await sharedState.client.channels.fetch(lobby.threadId);
+                await thread.send(`🔒 **Lobby zostało zamknięte przez właściciela.**\nDziękujemy za udział!`);
+            } catch (threadError) {
+                logger.error('❌ Błąd podczas wysyłania wiadomości pożegnalnej:', threadError);
+            }
+
+            // Zaktualizuj wiadomość ostrzeżenia
+            await interaction.editReply({
+                content: '🔒 **Lobby zostało zamknięte przez właściciela.**',
+                components: []
+            });
+
+            // Usuń lobby
+            await this.deleteLobby(lobby, sharedState);
+
+            logger.info(`🔒 Lobby ${lobbyId} zostało zamknięte przez właściciela ${interaction.user.tag}`);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas zamykania lobby:', error);
+            try {
+                if (interaction.deferred) {
+                    await interaction.editReply({
+                        content: '❌ Wystąpił błąd podczas zamykania lobby.',
+                        components: []
+                    });
+                } else {
+                    await interaction.reply({
+                        content: '❌ Wystąpił błąd podczas zamykania lobby.',
+                        ephemeral: true
+                    });
+                }
+            } catch (replyError) {
+                logger.error('❌ Nie można odpowiedzieć na interakcję zamknięcia:', replyError);
             }
         }
     }
