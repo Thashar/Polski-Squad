@@ -1089,27 +1089,27 @@ class InteractionHandler {
             const lobby = sharedState.lobbyService.getLobby(lobbyId);
             
             if (!lobby) {
-                await interaction.editReply({
+                await interaction.followUp({
                     content: '❌ Nie znaleziono lobby.',
-                    components: []
+                    ephemeral: true
                 });
                 return;
             }
 
             // Sprawdź czy użytkownik to właściciel lobby
             if (interaction.user.id !== lobby.ownerId) {
-                await interaction.editReply({
+                await interaction.followUp({
                     content: '❌ Tylko właściciel lobby może przedłużyć czas.',
-                    components: []
+                    ephemeral: true
                 });
                 return;
             }
 
             // Sprawdź czy lobby zostało już przedłużone
             if (lobby.isExtended) {
-                await interaction.editReply({
+                await interaction.followUp({
                     content: '❌ To lobby zostało już przedłużone. Można przedłużyć tylko raz.',
-                    components: []
+                    ephemeral: true
                 });
                 return;
             }
@@ -1203,18 +1203,18 @@ class InteractionHandler {
             const lobby = sharedState.lobbyService.getLobby(lobbyId);
             
             if (!lobby) {
-                await interaction.editReply({
+                await interaction.followUp({
                     content: '❌ Nie znaleziono lobby.',
-                    components: []
+                    ephemeral: true
                 });
                 return;
             }
 
             // Sprawdź czy użytkownik to właściciel lobby
             if (interaction.user.id !== lobby.ownerId) {
-                await interaction.editReply({
+                await interaction.followUp({
                     content: '❌ Tylko właściciel lobby może zamknąć lobby.',
-                    components: []
+                    ephemeral: true
                 });
                 return;
             }
