@@ -49,7 +49,7 @@ module.exports = {
     // Wiadomości
     messages: {
         lobbyCreated: (userId) => 
-            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to godzinę, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Tip:** Możesz usunąć gracza z lobby używając komendy \`/party-kick @użytkownik\``,
+            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to godzinę, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
         
         partyAnnouncement: (displayName, currentPlayers, maxPlayers) => 
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,

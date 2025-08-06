@@ -53,7 +53,11 @@ class InteractionHandler {
                     option.setName('użytkownik')
                         .setDescription('Użytkownik do usunięcia z party')
                         .setRequired(true)
-                )
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('party-close')
+                .setDescription('Zamyka i usuwa twoje lobby')
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -132,6 +136,8 @@ class InteractionHandler {
             await this.handlePartyAccessCommand(interaction, sharedState);
         } else if (commandName === 'party-kick') {
             await this.handlePartyKickCommand(interaction, sharedState);
+        } else if (commandName === 'party-close') {
+            await this.handlePartyCloseCommand(interaction, sharedState);
         }
     }
 
@@ -863,6 +869,53 @@ class InteractionHandler {
             logger.error('❌ Błąd podczas obsługi komendy /party-kick:', error);
             
             const errorMessage = '❌ Wystąpił błąd podczas usuwania gracza z lobby.';
+            if (interaction.deferred) {
+                await interaction.editReply({ content: errorMessage });
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        }
+    }
+
+    /**
+     * Obsługuje komendę /party-close
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handlePartyCloseCommand(interaction, sharedState) {
+        try {
+            // Znajdź lobby właściciela
+            const ownerLobby = sharedState.lobbyService.getAllActiveLobbies()
+                .find(lobby => lobby.ownerId === interaction.user.id);
+            
+            if (!ownerLobby) {
+                await interaction.reply({
+                    content: '❌ Nie masz aktywnego lobby.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Wyślij wiadomość pożegnalną w wątku przed zamknięciem
+            try {
+                const thread = await sharedState.client.channels.fetch(ownerLobby.threadId);
+                await thread.send(`🔒 **Lobby zostało zamknięte przez właściciela.**\nDziękujemy za udział!`);
+            } catch (threadError) {
+                logger.error('❌ Błąd podczas wysyłania wiadomości pożegnalnej:', threadError);
+            }
+
+            // Usuń lobby używając istniejącej funkcji
+            await this.deleteLobby(ownerLobby, sharedState);
+
+            await interaction.reply({
+                content: '✅ Lobby zostało pomyślnie zamknięte.',
+                ephemeral: true
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi komendy /party-close:', error);
+            
+            const errorMessage = '❌ Wystąpił błąd podczas zamykania lobby.';
             if (interaction.deferred) {
                 await interaction.editReply({ content: errorMessage });
             } else {
