@@ -15,18 +15,18 @@ async function handleReactionAdd(reaction, user, sharedState) {
         if (reaction.partial) await reaction.fetch();
         if (reaction.message.partial) await reaction.message.fetch();
 
-        // Sprawdź czy to wiadomość lobby przed sprawdzaniem czy to bot
+        // Ignoruj reakcje botów na początku
+        if (user.bot) return;
+
+        // Sprawdź czy to wiadomość lobby
         const lobby = sharedState.lobbyService.getLobbyByAnnouncementId(reaction.message.id);
         if (lobby) {
-            // Dla wiadomości lobby, usuń wszystkie nieprawidłowe reakcje niezależnie od tego kto je dodał
+            // Dla wiadomości lobby, usuń wszystkie nieprawidłowe reakcje
             if (reaction.emoji.toString() !== sharedState.config.emoji.ticket) {
-                await reaction.remove();
-                    return;
+                await reaction.users.remove(user.id);
+                return;
             }
         }
-
-        // Ignoruj reakcje botów dla normalnej obsługi
-        if (user.bot) return;
 
         // Obsługa emoji do przypinania w kanałach bazaru
         if (reaction.emoji.toString() === sharedState.config.emoji.pin) {
@@ -37,7 +37,7 @@ async function handleReactionAdd(reaction, user, sharedState) {
         // Sprawdź czy to właściwy kanał party
         if (reaction.message.channel.id !== sharedState.config.channels.party) return;
 
-        // Ponownie znajdź lobby (może już być sprawdzone wcześniej)
+        // Sprawdź czy mamy lobby do dalszej obsługi
         if (!lobby) return;
 
         // Sprawdź czy lobby nie jest pełne
