@@ -182,7 +182,15 @@ class OCRService {
                         }
                     }
                     
-                    if (similarity >= 0.6 && similarity > bestSimilarity) {
+                    // Dynamiczny próg podobieństwa na podstawie długości nicka
+                    let requiredSimilarity = 0.6;
+                    if (roleNick.displayName.length <= 5) {
+                        requiredSimilarity = 0.75; // Wyższy próg dla krótkich nicków
+                    } else if (roleNick.displayName.length <= 8) {
+                        requiredSimilarity = 0.7;  // Średni próg dla średnich nicków
+                    }
+                    
+                    if (similarity >= requiredSimilarity && similarity > bestSimilarity) {
                         bestSimilarity = similarity;
                         bestMatch = roleNick;
                     }
@@ -192,6 +200,29 @@ class OCRService {
                     // Szczegółowe logowanie dopasowania
                     if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logNickMatching) {
                         logger.info(`      ✅ Najlepsze dopasowanie: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%)`);
+                    }
+                    
+                    // DODATKOWA WALIDACJA: Dla niskiego/średniego podobieństwa sprawdź czy to nie fragment innego słowa
+                    const maxFragmentCheckSimilarity = bestMatch.displayName.length <= 5 ? 0.85 : 0.8;
+                    if (bestSimilarity < maxFragmentCheckSimilarity) {
+                        const lineLower = line.toLowerCase().trim();
+                        const nickLower = bestMatch.displayName.toLowerCase();
+                        
+                        // Sprawdź czy nick znajduje się jako kompletne słowo, a nie fragment
+                        const wordBoundaryPattern = new RegExp(`\\b${nickLower}\\b`);
+                        if (!wordBoundaryPattern.test(lineLower)) {
+                            // Nick nie występuje jako kompletne słowo - może być fragmentem
+                            // Sprawdź czy cała linia może być jednym słowem zawierającym nick jako fragment
+                            const words = lineLower.split(/\s+/);
+                            const containsAsFragment = words.some(word => 
+                                word.includes(nickLower) && word !== nickLower && word.length > nickLower.length
+                            );
+                            
+                            if (containsAsFragment) {
+                                logger.info(`      ⚠️ Nick "${bestMatch.displayName}" wykryty jako fragment słowa "${words.find(w => w.includes(nickLower) && w !== nickLower)}", pomijam`);
+                                continue; // Pomiń to dopasowanie
+                            }
+                        }
                     }
                     
                     // Krok 4: Sprawdź koniec linii za nickiem dla wyniku
@@ -756,6 +787,24 @@ class OCRService {
                 searchText = trimmedLine.substring(nickIndex + nickName.length).trim();
                 if (searchText.length === 0) {
                     return { type: 'unknown', value: 'brak tekstu za nickiem' };
+                }
+                
+                // NOWA WALIDACJA: Sprawdź czy "tekst za nickiem" nie jest częścią samego nicka
+                // To się dzieje gdy OCR błędnie rozpoznaje nick lub gdy mamy częściowe dopasowanie
+                const originalLine = trimmedLine.toLowerCase();
+                const nickLower = nickName.toLowerCase();
+                const searchTextLower = searchText.toLowerCase();
+                
+                // Jeśli całą linię można interpretować jako ciągły tekst (nick+końcówka)
+                // i nie ma wyraźnego separatora (spacja, przecinek, etc.) między nickiem a tekstem
+                if (searchTextLower.length <= 3 && 
+                    !searchText.match(/^\s/) && // nie zaczyna się od spacji
+                    !searchText.match(/^[,.\-_|]/) && // nie zaczyna się od separatora
+                    originalLine === (nickLower + searchTextLower)) { // cała linia to nick+końcówka
+                    
+                    // Sprawdź czy to może być błędne rozpoznanie nicka jako nick+wynik
+                    // Przykład: "boisz" rozpoznane jako "Boqus" + "z"
+                    return { type: 'unknown', value: `możliwa część nicka: "${searchText}"` };
                 }
             }
         }
