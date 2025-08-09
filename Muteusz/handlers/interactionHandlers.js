@@ -6,11 +6,12 @@ const WarningService = require('../services/warningService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.messageHandler = messageHandler;
+        this.roleKickingService = roleKickingService;
         this.warningService = new WarningService(config, logger);
     }
 
@@ -190,6 +191,15 @@ class InteractionHandler {
                     option.setName('użytkownik')
                         .setDescription('Użytkownik do sprawdzenia')
                         .setRequired(true)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('test-kick')
+                .setDescription('Testuje system kickowania użytkowników bez ról')
+                .addBooleanOption(option =>
+                    option.setName('produkcyjny')
+                        .setDescription('Czy uruchomić w trybie produkcyjnym (rzeczywiste kickowanie)')
+                        .setRequired(false)
                 )
         ];
         
@@ -255,6 +265,9 @@ class InteractionHandler {
                     break;
                 case 'violations':
                     await this.handleViolationsCommand(interaction);
+                    break;
+                case 'test-kick':
+                    await this.handleTestKickCommand(interaction);
                     break;
             }
         } else if (interaction.isButton()) {
@@ -2118,6 +2131,59 @@ class InteractionHandler {
         if (minutes > 0) parts.push(`${minutes}m`);
         
         return parts.join(' ');
+    }
+
+    /**
+     * Obsługuje testową komendę kickowania
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleTestKickCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /test-kick`, interaction);
+        
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy testowej.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        if (!this.roleKickingService) {
+            await interaction.reply({
+                content: '❌ Serwis kickowania nie jest dostępny.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        const productionMode = interaction.options.getBoolean('produkcyjny') || false;
+        const dryRun = !productionMode;
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const modeText = productionMode ? '⚠️ TRYB PRODUKCYJNY - BĘDZIE RZECZYWISTE KICKOWANIE!' : '🧪 TRYB TESTOWY - TYLKO SYMULACJA';
+            await interaction.editReply({ content: `${modeText}\n\nUruchamiam system kickowania...` });
+            
+            // Wywołaj manualnie sprawdzenie kickowania
+            await this.roleKickingService.manualCheck(dryRun);
+            
+            const resultText = productionMode ? 
+                '✅ System kickowania został uruchomiony w trybie produkcyjnym.' : 
+                '✅ Test systemu kickowania został ukończony. Sprawdź logi dla szczegółów.';
+            
+            await interaction.editReply({ content: resultText });
+            
+            const logText = productionMode ? 
+                `System kickowania został uruchomiony w trybie PRODUKCYJNYM przez ${interaction.user.tag}` :
+                `Test systemu kickowania został uruchomiony przez ${interaction.user.tag}`;
+            
+            await this.logService.logMessage('success', logText, interaction);
+            
+        } catch (error) {
+            await interaction.editReply({ content: `❌ Błąd podczas testu kickowania: ${error.message}` });
+            await this.logService.logMessage('error', `Błąd podczas testu kickowania: ${error.message}`, interaction);
+        }
     }
 }
 

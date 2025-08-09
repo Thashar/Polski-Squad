@@ -54,23 +54,32 @@ class RoleKickingService {
 
     /**
      * Sprawdza i kickuje użytkowników bez ról
+     * @param {boolean} dryRun - Czy tylko symulować (nie kickować rzeczywiście)
      */
-    async checkAndKickUsers() {
+    async checkAndKickUsers(dryRun = false) {
         try {
+            logger.info('🔍 Rozpoczynam sprawdzanie użytkowników do kickowania...');
             const rekruterData = await this.loadRekruterData();
             if (!rekruterData) {
+                logger.info('❌ Brak danych Rekrutera - przerywam sprawdzanie');
                 return;
             }
 
             const usersToKick = this.getUsersForKick(rekruterData);
+            logger.info(`📋 Znaleziono ${usersToKick.length} użytkowników do kickowania`);
+
+            if (usersToKick.length === 0) {
+                logger.info('✅ Brak użytkowników do kickowania');
+                return;
+            }
 
             for (const userData of usersToKick) {
-                await this.kickUser(userData);
+                await this.kickUser(userData, dryRun);
                 await this.delay(1000); // Opóźnienie między kickami
             }
 
-            // Aktualizuj dane Rekrutera po kickach
-            if (usersToKick.length > 0) {
+            // Aktualizuj dane Rekrutera po kickach (tylko w trybie produkcyjnym)
+            if (usersToKick.length > 0 && !dryRun) {
                 await this.updateRekruterData(rekruterData, usersToKick);
             }
         } catch (error) {
@@ -84,10 +93,15 @@ class RoleKickingService {
      */
     async loadRekruterData() {
         try {
+            logger.info(`Próba ładowania danych Rekrutera z: ${this.rekruterDataPath}`);
             const data = await fs.readFile(this.rekruterDataPath, 'utf8');
-            return JSON.parse(data);
+            const parsedData = JSON.parse(data);
+            logger.info(`Załadowano dane Rekrutera - znaleziono ${Object.keys(parsedData).length} użytkowników do monitorowania`);
+            return parsedData;
         } catch (error) {
-            if (error.code !== 'ENOENT') {
+            if (error.code === 'ENOENT') {
+                logger.warn(`Plik danych Rekrutera nie istnieje: ${this.rekruterDataPath}`);
+            } else {
                 logger.error(`Błąd ładowania danych Rekrutera: ${error.message}`);
             }
             return null;
@@ -123,10 +137,17 @@ class RoleKickingService {
         const kick48h = 48 * 60 * 60 * 1000; // 48 godzin w ms
         const usersToKick = [];
 
+        logger.info(`🕐 Sprawdzanie użytkowników - obecny czas: ${new Date(now).toISOString()}`);
+        logger.info(`⏰ Próg kickowania: ${kick48h / (60 * 60 * 1000)}h = ${kick48h}ms`);
+
         for (const [userId, userData] of Object.entries(rekruterData)) {
             const timeSinceJoin = now - userData.joinedAt;
+            const hoursWaiting = (timeSinceJoin / (60 * 60 * 1000)).toFixed(1);
+            
+            logger.info(`👤 Użytkownik ${userId}: czeka ${hoursWaiting}h (${timeSinceJoin}ms od ${new Date(userData.joinedAt).toISOString()})`);
             
             if (timeSinceJoin >= kick48h) {
+                logger.info(`🎯 Użytkownik ${userId} kwalifikuje się do kicka`);
                 usersToKick.push({
                     userId,
                     guildId: userData.guildId,
@@ -143,8 +164,9 @@ class RoleKickingService {
     /**
      * Kickuje konkretnego użytkownika
      * @param {Object} userData - Dane użytkownika do kicka
+     * @param {boolean} dryRun - Czy tylko symulować (nie kickować rzeczywiście)
      */
-    async kickUser(userData) {
+    async kickUser(userData, dryRun = false) {
         try {
             const guild = this.client.guilds.cache.get(userData.guildId);
             if (!guild) {
@@ -160,8 +182,24 @@ class RoleKickingService {
 
             // Sprawdź czy nadal nie ma ról (ostatnia kontrola)
             const hasRoles = member.roles.cache.size > 1;
+            const roleNames = member.roles.cache.map(role => role.name).filter(name => name !== '@everyone');
+            
+            logger.info(`🔍 Sprawdzanie ról użytkownika ${member.user.tag}:`);
+            logger.info(`📊 Liczba ról: ${member.roles.cache.size} (włączając @everyone)`);
+            logger.info(`📝 Role: ${roleNames.length > 0 ? roleNames.join(', ') : 'Brak ról poza @everyone'}`);
+            
             if (hasRoles) {
-                logger.info(`Użytkownik ${member.user.tag} otrzymał role - anulowanie kicka`);
+                logger.info(`✅ Użytkownik ${member.user.tag} ma role - anulowanie kicka`);
+                // Usuń z monitorowania Rekrutera, skoro ma role
+                if (!dryRun) {
+                    await this.removeFromRekruterData(userData.userId);
+                }
+                return;
+            }
+
+            if (dryRun) {
+                logger.info(`🧪 SYMULACJA: Użytkownik ${member.user.tag} zostałby kicknięty za 48h bez ról`);
+                logger.info(`📋 Powód: Automatyczny kick - 48h bez wypełnienia ankiety rekrutacyjnej`);
                 return;
             }
 
@@ -238,11 +276,37 @@ Bot Muteusz`;
     }
 
     /**
+     * Usuwa użytkownika z danych Rekrutera (gdy otrzyma role)
+     * @param {string} userId - ID użytkownika do usunięcia
+     */
+    async removeFromRekruterData(userId) {
+        try {
+            const rekruterData = await this.loadRekruterData();
+            if (rekruterData && rekruterData[userId]) {
+                delete rekruterData[userId];
+                await fs.writeFile(this.rekruterDataPath, JSON.stringify(rekruterData, null, 2));
+                logger.info(`🗑️ Usunięto użytkownika ${userId} z monitorowania Rekrutera`);
+            }
+        } catch (error) {
+            logger.error(`Błąd podczas usuwania użytkownika z danych Rekrutera: ${error.message}`);
+        }
+    }
+
+    /**
      * Zatrzymuje serwis
      */
     stop() {
         this.stopCronJob();
         logger.info('Serwis kickowania użytkowników został zatrzymany');
+    }
+
+    /**
+     * Metoda testowa do ręcznego wywołania sprawdzenia (tylko symulacja)
+     * @param {boolean} dryRun - Czy tylko symulować (nie kickować)
+     */
+    async manualCheck(dryRun = true) {
+        logger.info(`🧪 Ręczne wywołanie sprawdzania użytkowników... ${dryRun ? '(TRYB TESTOWY - BEZ KICKANIA)' : '(TRYB PRODUKCYJNY)'}`);
+        await this.checkAndKickUsers(dryRun);
     }
 }
 

@@ -37,7 +37,7 @@ const roleKickingService = new RoleKickingService(config);
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService);
 
 // Obiekt zawierający wszystkie współdzielone stany
