@@ -112,7 +112,7 @@ module.exports = {
     roleKicking: {
         enabled: true,
         checkInterval: '0 */2 * * *', // Co 2 godziny
-        rekruterDataPath: '../Rekruter/data/user_monitoring.json'
+        rekruterDataPath: path.join(__dirname, '../../Rekruter/data/user_monitoring.json')
     },
     
     // Konfiguracja losowych odpowiedzi

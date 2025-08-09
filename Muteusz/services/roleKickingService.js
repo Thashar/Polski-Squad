@@ -10,7 +10,7 @@ class RoleKickingService {
         this.config = config;
         this.client = null;
         this.cronJob = null;
-        this.rekruterDataPath = path.resolve(this.config.roleKicking.rekruterDataPath);
+        this.rekruterDataPath = this.config.roleKicking.rekruterDataPath;
     }
 
     /**
