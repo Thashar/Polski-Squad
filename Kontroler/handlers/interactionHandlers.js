@@ -28,6 +28,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery-debug':
                     await handleLotteryDebugCommand(interaction, config, lotteryService);
                     break;
+                case 'lottery-test':
+                    await handleLotteryTestCommand(interaction, config, lotteryService);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -582,6 +585,80 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
 }
 
 /**
+ * Obsługuje komendę lottery-test
+ */
+async function handleLotteryTestCommand(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    if (!lotteryService) {
+        await interaction.reply({
+            content: '❌ Serwis loterii nie jest dostępny.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const lotteryId = interaction.options.getString('id');
+    
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const activeLotteries = lotteryService.getActiveLotteries();
+        const lottery = activeLotteries.find(l => l.id === lotteryId);
+        
+        if (!lottery) {
+            if (activeLotteries.length === 0) {
+                await interaction.editReply({
+                    content: '❌ Nie znaleziono loterii o podanym ID.\n\n📋 **Brak aktywnych loterii.**'
+                });
+                return;
+            }
+
+            const lotteryList = activeLotteries.map(l => `• \`${l.id}\` - ${l.name}`).join('\n');
+            await interaction.editReply({
+                content: `❌ Nie znaleziono loterii o ID: \`${lotteryId}\`\n\n` +
+                        `📋 **Aktywne loterie:**\n${lotteryList}`
+            });
+            return;
+        }
+
+        await interaction.editReply({ 
+            content: `🧪 **Testowe uruchomienie loterii:**\n\n` +
+                    `🎰 **Loteria:** ${lottery.name}\n` +
+                    `🆔 **ID:** \`${lottery.id}\`\n\n` +
+                    `⏳ Uruchamiam losowanie... Sprawdź logi i kanał wyników.`
+        });
+
+        // Uruchom loterię testowo
+        logger.info(`🧪 TESTOWE uruchomienie loterii przez ${interaction.user.tag}: ${lottery.id}`);
+        await lotteryService.executeLottery(lotteryId);
+
+        // Powiadom o zakończeniu
+        await interaction.followUp({ 
+            content: `✅ **Testowe losowanie zakończone!**\n\n` +
+                    `Sprawdź:\n` +
+                    `• 📺 Kanał wyników: <#${lottery.channelId}>\n` +
+                    `• 📋 Logi w konsoli\n` +
+                    `• 🐛 \`/lottery-debug\` dla szczegółów`,
+            ephemeral: true 
+        });
+
+    } catch (error) {
+        await interaction.editReply({
+            content: `❌ Błąd podczas testowego uruchomienia: ${error.message}`
+        });
+        logger.error('❌ Błąd testowego uruchomienia loterii:', error);
+    }
+}
+
+/**
  * Rejestruje komendy slash
  */
 async function registerSlashCommands(client, config) {
@@ -671,7 +748,15 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('lottery-debug')
-            .setDescription('Debugowanie systemu loterii (admin only)')
+            .setDescription('Debugowanie systemu loterii (admin only)'),
+
+        new SlashCommandBuilder()
+            .setName('lottery-test')
+            .setDescription('Testowe uruchomienie loterii (admin only)')
+            .addStringOption(option =>
+                option.setName('id')
+                    .setDescription('ID loterii do testowego uruchomienia')
+                    .setRequired(true))
     ];
 
     const rest = new REST().setToken(config.token);

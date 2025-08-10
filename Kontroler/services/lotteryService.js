@@ -241,6 +241,11 @@ class LotteryService {
             }
 
             logger.info(`🎰 Rozpoczynam losowanie: ${lottery.name}`);
+            logger.info(`📋 Szczegóły loterii:`);
+            logger.info(`   - Rola docelowa: ${lottery.targetRoleId}`);
+            logger.info(`   - Rola klanu: ${lottery.clanRoleId}`);
+            logger.info(`   - Kanał: ${lottery.channelId}`);
+            logger.info(`   - Zwycięzców: ${lottery.winnersCount}`);
 
             const guild = this.client.guilds.cache.get(this.config.guildId);
             if (!guild) {
@@ -254,46 +259,78 @@ class LotteryService {
                 return;
             }
 
+            logger.info(`✅ Znaleziono serwer: ${guild.name} i kanał: ${channel.name}`);
+
             // Pobierz członków z odpowiednimi rolami
+            logger.info('🔄 Pobieranie członków serwera...');
             await guild.members.fetch();
+            logger.info(`👥 Załadowano ${guild.members.cache.size} członków`);
             
             const eligibleMembers = guild.members.cache.filter(member => {
-                // Musi mieć rolę docelową
-                if (!member.roles.cache.has(lottery.targetRoleId)) return false;
+                const hasTargetRole = member.roles.cache.has(lottery.targetRoleId);
+                const hasClanRole = member.roles.cache.has(lottery.clanRoleId);
+                const hasBlockedRole = member.roles.cache.has(this.config.blockedRole);
+                const isBot = member.user.bot;
                 
-                // Musi mieć rolę klanu
-                if (!member.roles.cache.has(lottery.clanRoleId)) return false;
+                const isEligible = hasTargetRole && hasClanRole && !hasBlockedRole && !isBot;
                 
-                // Nie może mieć roli blokującej
-                if (member.roles.cache.has(this.config.blockedRole)) return false;
+                if (isEligible) {
+                    logger.info(`✅ Kwalifikuje się: ${member.user.tag} (${member.id})`);
+                } else {
+                    const reasons = [];
+                    if (!hasTargetRole) reasons.push(`brak roli docelowej (${lottery.targetRoleId})`);
+                    if (!hasClanRole) reasons.push(`brak roli klanu (${lottery.clanRoleId})`);
+                    if (hasBlockedRole) reasons.push('ma rolę blokującą');
+                    if (isBot) reasons.push('to bot');
+                    
+                    if (hasTargetRole || hasClanRole) { // Log tylko jeśli ma przynajmniej jedną z wymaganych ról
+                        logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
+                    }
+                }
                 
-                // Nie może być botem
-                if (member.user.bot) return false;
-                
-                return true;
+                return isEligible;
             });
 
+            logger.info(`🎯 Znaleziono ${eligibleMembers.size} kwalifikujących się uczestników`);
+
             if (eligibleMembers.size === 0) {
+                const { EmbedBuilder } = require('discord.js');
+                logger.warn('⚠️ Brak uczestników - wysyłam powiadomienie');
+                
                 await channel.send({
                     embeds: [new EmbedBuilder()
                         .setTitle('🎰 Loteria - Brak uczestników')
-                        .setDescription(`Nie znaleziono żadnych kwalifikujących się uczestników dla loterii **${lottery.name}**`)
+                        .setDescription(`Nie znaleziono żadnych kwalifikujących się uczestników dla loterii **${lottery.name}**\n\n` +
+                                      `**Wymagania:**\n` +
+                                      `• Rola docelowa: <@&${lottery.targetRoleId}>\n` +
+                                      `• Rola klanu: <@&${lottery.clanRoleId}>\n` +
+                                      `• Brak roli blokującej: <@&${this.config.blockedRole}>`)
                         .setColor('#ff6b6b')
                         .setTimestamp()]
                 });
                 return;
             }
 
+            logger.info(`🎲 Przeprowadzam losowanie spośród ${eligibleMembers.size} uczestników na ${lottery.winnersCount} zwycięzców`);
+
             // Przeprowadź losowanie
             const winners = this.drawWinners(eligibleMembers, lottery.winnersCount);
             
+            logger.info(`🏆 Wylosowano ${winners.length} zwycięzców:`);
+            winners.forEach((winner, index) => {
+                logger.info(`   ${index + 1}. ${winner.user.tag} (${winner.id})`);
+            });
+
             // Zapisz wyniki
+            logger.info('💾 Zapisywanie wyników loterii...');
             await this.saveLotteryResult(lottery, eligibleMembers, winners);
 
             // Opublikuj wyniki
+            logger.info('📢 Publikowanie wyników...');
             await this.publishResults(channel, lottery, eligibleMembers, winners);
 
             // Zaplanuj następne losowanie
+            logger.info('📅 Planowanie następnego losowania...');
             lottery.lastDraw = new Date().toISOString();
             lottery.nextDraw = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute);
             
@@ -303,6 +340,7 @@ class LotteryService {
 
         } catch (error) {
             logger.error(`❌ Błąd wykonywania loterii ${lotteryId}:`, error);
+            logger.error('Stack trace:', error.stack);
         }
     }
 
@@ -385,35 +423,49 @@ class LotteryService {
      * Publikuje wyniki loterii
      */
     async publishResults(channel, lottery, participants, winners) {
-        const embed = new EmbedBuilder()
-            .setTitle('🎰 WYNIKI LOTERII')
-            .setDescription(`**${lottery.name}**`)
-            .setColor('#00ff00')
-            .addFields(
-                {
-                    name: '👥 Liczba uczestników',
-                    value: participants.size.toString(),
-                    inline: true
-                },
-                {
-                    name: '🎯 Liczba zwycięzców',
-                    value: winners.length.toString(),
-                    inline: true
-                },
-                {
-                    name: '🏆 Zwycięzcy',
-                    value: winners.length > 0 
-                        ? winners.map((winner, index) => `${index + 1}. ${winner.displayName} (<@${winner.user.id}>)`).join('\n')
-                        : 'Brak zwycięzców',
-                    inline: false
-                }
-            )
-            .setFooter({ 
-                text: `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}` 
-            })
-            .setTimestamp();
+        try {
+            logger.info('📝 Tworzenie embed z wynikami...');
+            
+            const { EmbedBuilder } = require('discord.js');
+            const embed = new EmbedBuilder()
+                .setTitle('🎰 WYNIKI LOTERII')
+                .setDescription(`**${lottery.name}**`)
+                .setColor('#00ff00')
+                .addFields(
+                    {
+                        name: '👥 Liczba uczestników',
+                        value: participants.size.toString(),
+                        inline: true
+                    },
+                    {
+                        name: '🎯 Liczba zwycięzców',
+                        value: winners.length.toString(),
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Zwycięzcy',
+                        value: winners.length > 0 
+                            ? winners.map((winner, index) => `${index + 1}. ${winner.displayName} (<@${winner.user.id}>)`).join('\n')
+                            : 'Brak zwycięzców',
+                        inline: false
+                    }
+                )
+                .setFooter({ 
+                    text: `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}` 
+                })
+                .setTimestamp();
 
-        await channel.send({ embeds: [embed] });
+            logger.info(`📤 Wysyłanie wyników na kanał: ${channel.name} (${channel.id})`);
+            
+            const message = await channel.send({ embeds: [embed] });
+            
+            logger.info(`✅ Wyniki zostały opublikowane - ID wiadomości: ${message.id}`);
+            
+        } catch (error) {
+            logger.error('❌ Błąd publikowania wyników:', error);
+            logger.error('Stack trace:', error.stack);
+            throw error;
+        }
     }
 
     /**
