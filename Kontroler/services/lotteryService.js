@@ -110,13 +110,21 @@ class LotteryService {
             channelId
         } = lotteryData;
 
-        // Generuj unikalny ID
-        const lotteryId = `lottery_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
         const clan = this.config.lottery.clans[clanKey];
         if (!clan) {
             throw new Error(`Nieprawidłowy klucz klanu: ${clanKey}`);
         }
+
+        // Generuj czytelny ID z datą, rolą i klanem
+        const nextDrawDate = this.calculateNextDraw(dayOfWeek, hour, minute);
+        const formattedDate = new Date(nextDrawDate).toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+        const roleShort = targetRole.name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
+        const clanShort = clanKey.toLowerCase();
+        const randomSuffix = Math.random().toString(36).substr(2, 4);
+        
+        const lotteryId = `${formattedDate}_${roleShort}_${clanShort}_${randomSuffix}`;
+        
+        logger.info(`🆔 Generowanie ID loterii: ${lotteryId} (data: ${formattedDate}, rola: ${roleShort}, klan: ${clanShort})`);
 
         const lottery = {
             id: lotteryId,
@@ -135,7 +143,7 @@ class LotteryService {
             createdBy: interaction.user.id,
             createdAt: new Date().toISOString(),
             lastDraw: null,
-            nextDraw: this.calculateNextDraw(dayOfWeek, hour, minute)
+            nextDraw: nextDrawDate
         };
 
         // Zapisz loterię
@@ -378,7 +386,9 @@ class LotteryService {
                     inline: false
                 }
             )
-            .setFooter({ text: `Loteria ID: ${lottery.id} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}` })
+            .setFooter({ 
+                text: `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}` 
+            })
             .setTimestamp();
 
         await channel.send({ embeds: [embed] });
@@ -516,6 +526,21 @@ class LotteryService {
      */
     getActiveLotteries() {
         return Array.from(this.activeLotteries.values());
+    }
+
+    /**
+     * Formatuje ID loterii dla wyświetlania
+     */
+    formatLotteryIdForDisplay(lotteryId) {
+        const parts = lotteryId.split('_');
+        if (parts.length >= 3) {
+            const datePart = parts[0];
+            const rolePart = parts[1];
+            const clanPart = parts[2];
+            const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
+            return `${formattedDate}|${rolePart}|${clanPart}`;
+        }
+        return lotteryId;
     }
 
     /**
