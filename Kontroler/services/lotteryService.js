@@ -261,35 +261,48 @@ class LotteryService {
 
             logger.info(`✅ Znaleziono serwer: ${guild.name} i kanał: ${channel.name}`);
 
-            // Pobierz członków z odpowiednimi rolami
-            logger.info('🔄 Pobieranie członków serwera...');
-            await guild.members.fetch();
-            logger.info(`👥 Załadowano ${guild.members.cache.size} członków`);
+            // Pobierz członków z wymaganymi rolami (optymalizacja)
+            logger.info('🔄 Pobieranie członków z rolami klanu i docelową...');
             
-            const eligibleMembers = guild.members.cache.filter(member => {
-                const hasTargetRole = member.roles.cache.has(lottery.targetRoleId);
+            const targetRole = guild.roles.cache.get(lottery.targetRoleId);
+            const clanRole = guild.roles.cache.get(lottery.clanRoleId);
+            
+            if (!targetRole) {
+                logger.error(`❌ Nie znaleziono roli docelowej: ${lottery.targetRoleId}`);
+                return;
+            }
+            
+            if (!clanRole) {
+                logger.error(`❌ Nie znaleziono roli klanu: ${lottery.clanRoleId}`);
+                return;
+            }
+            
+            logger.info(`🎯 Rola docelowa: ${targetRole.name} (${targetRole.members.size} członków)`);
+            logger.info(`🏰 Rola klanu: ${clanRole.name} (${clanRole.members.size} członków)`);
+            
+            // Znajdź członków którzy mają obie wymagane role
+            const eligibleMembers = new Map();
+            
+            // Iteruj przez członków roli docelowej i sprawdź czy mają też rolę klanu
+            for (const [memberId, member] of targetRole.members) {
                 const hasClanRole = member.roles.cache.has(lottery.clanRoleId);
                 const hasBlockedRole = member.roles.cache.has(this.config.blockedRole);
                 const isBot = member.user.bot;
                 
-                const isEligible = hasTargetRole && hasClanRole && !hasBlockedRole && !isBot;
+                const isEligible = hasClanRole && !hasBlockedRole && !isBot;
                 
                 if (isEligible) {
                     logger.info(`✅ Kwalifikuje się: ${member.user.tag} (${member.id})`);
+                    eligibleMembers.set(memberId, member);
                 } else {
                     const reasons = [];
-                    if (!hasTargetRole) reasons.push(`brak roli docelowej (${lottery.targetRoleId})`);
                     if (!hasClanRole) reasons.push(`brak roli klanu (${lottery.clanRoleId})`);
                     if (hasBlockedRole) reasons.push('ma rolę blokującą');
                     if (isBot) reasons.push('to bot');
                     
-                    if (hasTargetRole || hasClanRole) { // Log tylko jeśli ma przynajmniej jedną z wymaganych ról
-                        logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
-                    }
+                    logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
                 }
-                
-                return isEligible;
-            });
+            }
 
             logger.info(`🎯 Znaleziono ${eligibleMembers.size} kwalifikujących się uczestników`);
 
@@ -373,7 +386,7 @@ class LotteryService {
                 lotteryName: lottery.name,
                 date: new Date().toISOString(),
                 participantCount: participants.size,
-                participants: participants.map(member => ({
+                participants: Array.from(participants.values()).map(member => ({
                     id: member.user.id,
                     username: member.user.username,
                     displayName: member.displayName
