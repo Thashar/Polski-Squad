@@ -9,6 +9,7 @@ const OCRService = require('./services/ocrService');
 const AnalysisService = require('./services/analysisService');
 const RoleService = require('./services/roleService');
 const MessageService = require('./services/messageService');
+const LotteryService = require('./services/lotteryService');
 
 // Import handlerów
 const MessageHandler = require('./handlers/messageHandlers');
@@ -27,7 +28,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let ocrService, analysisService, roleService, messageService, messageHandler;
+let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService;
 
 /**
  * Inicjalizuje wszystkie serwisy
@@ -38,6 +39,7 @@ async function initializeServices() {
     analysisService = new AnalysisService(config, ocrService);
     roleService = new RoleService(config);
     messageService = new MessageService(config);
+    lotteryService = new LotteryService(config);
     messageHandler = new MessageHandler(
         config,
         ocrService,
@@ -86,6 +88,14 @@ function onReady() {
     logger.info('⚠️ INTELIGENTNE WYKLUCZENIE: CX pomija 1 linię, Daily pomija 3 linie');
     logger.info('🔢 POPRAWKA: Wyciąganie tylko cyfr z rozpoznanego tekstu');
     logger.info('🚫 NOWA FUNKCJA: Blokowanie użytkowników z rolą karną');
+    logger.info('─'.repeat(50));
+    logger.info('🎰 SYSTEM LOTERII:');
+    logger.info(`   Dostępne klany: ${Object.keys(config.lottery.clans).length}`);
+    Object.entries(config.lottery.clans).forEach(([key, clan]) => {
+        logger.info(`   ${key}: ${clan.displayName} (${clan.roleId})`);
+    });
+    logger.info('   Komendy: /lottery, /reroll');
+    logger.info('   Automatyczne losowania z harmonogramem cron');
     logger.info('─'.repeat(50) + '\n');
 }
 
@@ -120,6 +130,12 @@ function onUncaughtException(error) {
  */
 function onShutdown(signal) {
     logger.warn(`Otrzymano sygnał ${signal}. Zamykanie bota...`);
+    
+    // Zatrzymaj serwis loterii
+    if (lotteryService) {
+        lotteryService.stop();
+    }
+    
     client.destroy();
     process.exit(0);
 }
@@ -130,10 +146,12 @@ function onShutdown(signal) {
 function setupEventHandlers() {
     client.once('ready', async () => {
         await onReady();
+        // Inicjalizuj serwis loterii z klientem Discord
+        await lotteryService.initialize(client);
         await registerSlashCommands(client, config);
     });
     client.on('messageCreate', (message) => messageHandler.handleMessage(message));
-    client.on('interactionCreate', (interaction) => handleInteraction(interaction, config));
+    client.on('interactionCreate', (interaction) => handleInteraction(interaction, config, lotteryService));
     client.on('error', onError);
 
     // Obsługa zamykania

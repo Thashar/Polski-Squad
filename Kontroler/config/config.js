@@ -102,5 +102,46 @@ module.exports = {
         'g': '9', 'G': '6'
     },
     
+    // Konfiguracja systemu loterii
+    lottery: {
+        dataFile: path.join(__dirname, '../data/lottery_history.json'),
+        
+        // Definicje klanów (na podstawie Stalker bot)
+        clans: {
+            'main': {
+                name: 'Polski Squad',
+                roleId: process.env.STALKER_LME_TARGET_ROLE_MAIN || '1170351983092383814',
+                displayName: '🔥Polski Squad🔥'
+            },
+            '0': {
+                name: 'PolskiSquad⁰',
+                roleId: process.env.STALKER_LME_TARGET_ROLE_0 || '1170351932735193179',
+                displayName: '🎮PolskiSquad⁰🎮'
+            },
+            '1': {
+                name: 'PolskiSquad¹',
+                roleId: process.env.STALKER_LME_TARGET_ROLE_1 || '1170351955560927262',
+                displayName: '⚡PolskiSquad¹⚡'
+            },
+            '2': {
+                name: 'PolskiSquad²',
+                roleId: process.env.STALKER_LME_TARGET_ROLE_2 || '1170351976075210752',
+                displayName: '💥PolskiSquad²💥'
+            }
+        },
+        
+        // Dozwolone dni tygodnia
+        allowedDays: ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'],
+        dayMap: {
+            'poniedziałek': 1,
+            'wtorek': 2,
+            'środa': 3,
+            'czwartek': 4,
+            'piątek': 5,
+            'sobota': 6,
+            'niedziela': 0
+        }
+    },
+    
     messages
 };
