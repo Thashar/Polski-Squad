@@ -25,6 +25,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery-list':
                     await handleLotteryListCommand(interaction, config, lotteryService);
                     break;
+                case 'lottery-debug':
+                    await handleLotteryDebugCommand(interaction, config, lotteryService);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -505,6 +508,80 @@ async function handleLotteryListCommand(interaction, config, lotteryService) {
 }
 
 /**
+ * Obsługuje komendę lottery-debug
+ */
+async function handleLotteryDebugCommand(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    if (!lotteryService) {
+        await interaction.reply({
+            content: '❌ Serwis loterii nie jest dostępny.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const activeLotteries = lotteryService.getActiveLotteries();
+        const cronJobsCount = lotteryService.cronJobs ? lotteryService.cronJobs.size : 0;
+        
+        let debugInfo = `🐛 **DEBUG INFORMACJE LOTERII**\n\n`;
+        debugInfo += `📊 **Stan systemu:**\n`;
+        debugInfo += `• Aktywne loterie w pamięci: ${activeLotteries.length}\n`;
+        debugInfo += `• Aktywne cron jobs: ${cronJobsCount}\n`;
+        debugInfo += `• Plik danych: ${config.lottery.dataFile}\n\n`;
+        
+        if (activeLotteries.length > 0) {
+            debugInfo += `🎯 **Aktywne loterie:**\n`;
+            for (const lottery of activeLotteries) {
+                const hasCronJob = lotteryService.cronJobs && lotteryService.cronJobs.has(lottery.id);
+                const nextDraw = new Date(lottery.nextDraw).toLocaleString('pl-PL');
+                debugInfo += `• **${lottery.id}**\n`;
+                debugInfo += `  └ Nazwa: ${lottery.name}\n`;
+                debugInfo += `  └ Następne losowanie: ${nextDraw}\n`;
+                debugInfo += `  └ Cron job: ${hasCronJob ? '✅ Aktywny' : '❌ Brak'}\n`;
+                debugInfo += `  └ Pattern: ${lottery.minute} ${lottery.hour} * * ${config.lottery.dayMap[lottery.dayOfWeek]}\n\n`;
+            }
+        } else {
+            debugInfo += `📋 **Brak aktywnych loterii**\n\n`;
+        }
+        
+        // Sprawdź plik danych
+        try {
+            const fs = require('fs').promises;
+            const fileData = await fs.readFile(config.lottery.dataFile, 'utf8');
+            const parsed = JSON.parse(fileData);
+            debugInfo += `📄 **Plik danych:**\n`;
+            debugInfo += `• Aktywne w pliku: ${Object.keys(parsed.activeLotteries || {}).length}\n`;
+            debugInfo += `• Historia: ${parsed.results ? parsed.results.length : 0}\n`;
+            debugInfo += `• Reroll: ${parsed.rerolls ? parsed.rerolls.length : 0}\n`;
+            debugInfo += `• Ostatnia aktualizacja: ${parsed.lastUpdated || 'Nieznana'}\n`;
+        } catch (error) {
+            debugInfo += `📄 **Plik danych:** ❌ Błąd odczytu: ${error.message}\n`;
+        }
+        
+        await interaction.editReply({ content: debugInfo });
+        
+        logger.info(`🐛 ${interaction.user.tag} sprawdził debug loterii`);
+        
+    } catch (error) {
+        await interaction.editReply({
+            content: `❌ Błąd podczas debugowania: ${error.message}`
+        });
+        logger.error('❌ Błąd debugowania loterii:', error);
+    }
+}
+
+/**
  * Rejestruje komendy slash
  */
 async function registerSlashCommands(client, config) {
@@ -590,7 +667,11 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('lottery-list')
-            .setDescription('Wyświetla listę wszystkich aktywnych loterii i historię')
+            .setDescription('Wyświetla listę wszystkich aktywnych loterii i historię'),
+
+        new SlashCommandBuilder()
+            .setName('lottery-debug')
+            .setDescription('Debugowanie systemu loterii (admin only)')
     ];
 
     const rest = new REST().setToken(config.token);

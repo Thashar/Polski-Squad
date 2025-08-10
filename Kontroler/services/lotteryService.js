@@ -80,7 +80,8 @@ class LotteryService {
                 const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
                 existingData = JSON.parse(data);
             } catch (error) {
-                // Plik nie istnieje lub jest uszkodzony
+                // Plik nie istnieje lub jest uszkodzony - użyj pustej struktury
+                logger.warn('⚠️ Nie można wczytać istniejących danych loterii, tworzę nowe');
             }
             
             const dataToSave = {
@@ -89,9 +90,12 @@ class LotteryService {
                 lastUpdated: new Date().toISOString()
             };
             
+            logger.info(`💾 Zapisywanie ${this.activeLotteries.size} aktywnych loterii do pliku`);
             await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(dataToSave, null, 2));
+            logger.info('✅ Dane loterii zostały zapisane pomyślnie');
         } catch (error) {
             logger.error('❌ Błąd zapisu danych loterii:', error);
+            throw error;
         }
     }
 
@@ -117,7 +121,8 @@ class LotteryService {
 
         // Generuj czytelny ID z datą, rolą i klanem
         const nextDrawDate = this.calculateNextDraw(dayOfWeek, hour, minute);
-        const formattedDate = new Date(nextDrawDate).toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+        const nextDrawTimestamp = new Date(nextDrawDate).getTime();
+        const formattedDate = new Date(nextDrawTimestamp).toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
         const roleShort = targetRole.name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
         const clanShort = clanKey.toLowerCase();
         const randomSuffix = Math.random().toString(36).substr(2, 4);
@@ -188,23 +193,40 @@ class LotteryService {
      * Planuje następne losowanie
      */
     scheduleNextLottery(lotteryId, lottery) {
-        // Usuń istniejący cron job jeśli istnieje
-        if (this.cronJobs.has(lotteryId)) {
-            this.cronJobs.get(lotteryId).destroy();
+        try {
+            // Usuń istniejący cron job jeśli istnieje
+            if (this.cronJobs.has(lotteryId)) {
+                const oldJob = this.cronJobs.get(lotteryId);
+                if (oldJob && typeof oldJob.destroy === 'function') {
+                    oldJob.destroy();
+                }
+                this.cronJobs.delete(lotteryId);
+            }
+
+            const dayNum = this.config.lottery.dayMap[lottery.dayOfWeek];
+            
+            if (dayNum === undefined) {
+                throw new Error(`Nieprawidłowy dzień tygodnia: ${lottery.dayOfWeek}`);
+            }
+            
+            // Utwórz cron pattern: minute hour * * dayOfWeek
+            const cronPattern = `${lottery.minute} ${lottery.hour} * * ${dayNum}`;
+            logger.info(`🕐 Tworzę cron pattern: ${cronPattern} dla loterii ${lotteryId}`);
+            
+            const job = cron.schedule(cronPattern, async () => {
+                logger.info(`🎰 Wykonywanie zaplanowanej loterii: ${lotteryId}`);
+                await this.executeLottery(lotteryId);
+            }, {
+                timezone: "Europe/Warsaw"
+            });
+
+            this.cronJobs.set(lotteryId, job);
+            
+            logger.info(`📅 Zaplanowano loterię ${lotteryId} na ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} (pattern: ${cronPattern})`);
+        } catch (error) {
+            logger.error(`❌ Błąd planowania loterii ${lotteryId}:`, error);
+            throw error;
         }
-
-        const dayNum = this.config.lottery.dayMap[lottery.dayOfWeek];
-        
-        // Utwórz cron pattern: minute hour * * dayOfWeek
-        const cronPattern = `${lottery.minute} ${lottery.hour} * * ${dayNum}`;
-        
-        const job = cron.schedule(cronPattern, async () => {
-            await this.executeLottery(lotteryId);
-        });
-
-        this.cronJobs.set(lotteryId, job);
-        
-        logger.info(`📅 Zaplanowano loterię ${lotteryId} na ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`);
     }
 
     /**
@@ -506,19 +528,42 @@ class LotteryService {
      * Usuwa loterię
      */
     async removeLottery(lotteryId) {
-        // Zatrzymaj cron job
-        if (this.cronJobs.has(lotteryId)) {
-            this.cronJobs.get(lotteryId).destroy();
-            this.cronJobs.delete(lotteryId);
+        try {
+            // Zatrzymaj cron job
+            if (this.cronJobs.has(lotteryId)) {
+                const job = this.cronJobs.get(lotteryId);
+                logger.info(`🛑 Zatrzymywanie cron job dla loterii: ${lotteryId}`);
+                
+                if (job && typeof job.destroy === 'function') {
+                    job.destroy();
+                } else if (job && typeof job.stop === 'function') {
+                    job.stop();
+                } else {
+                    logger.warn(`⚠️ Cron job dla ${lotteryId} nie ma metody destroy() ani stop()`);
+                }
+                
+                this.cronJobs.delete(lotteryId);
+                logger.info(`✅ Usunięto cron job dla: ${lotteryId}`);
+            } else {
+                logger.warn(`⚠️ Nie znaleziono cron job dla loterii: ${lotteryId}`);
+            }
+
+            // Usuń z aktywnych loterii
+            if (this.activeLotteries.has(lotteryId)) {
+                this.activeLotteries.delete(lotteryId);
+                logger.info(`✅ Usunięto loterię z aktywnych: ${lotteryId}`);
+            } else {
+                logger.warn(`⚠️ Nie znaleziono aktywnej loterii: ${lotteryId}`);
+            }
+
+            // Zapisz zmiany
+            await this.saveLotteryData();
+
+            logger.info(`🗑️ Pomyślnie usunięto loterię: ${lotteryId}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas usuwania loterii ${lotteryId}:`, error);
+            throw error;
         }
-
-        // Usuń z aktywnych loterii
-        this.activeLotteries.delete(lotteryId);
-
-        // Zapisz zmiany
-        await this.saveLotteryData();
-
-        logger.info(`🗑️ Usunięto loterię: ${lotteryId}`);
     }
 
     /**
@@ -548,8 +593,18 @@ class LotteryService {
      */
     stop() {
         // Zatrzymaj wszystkie cron jobs
-        for (const job of this.cronJobs.values()) {
-            job.destroy();
+        for (const [lotteryId, job] of this.cronJobs.entries()) {
+            try {
+                if (job && typeof job.destroy === 'function') {
+                    job.destroy();
+                } else if (job && typeof job.stop === 'function') {
+                    job.stop();
+                } else {
+                    logger.warn(`⚠️ Nie można zatrzymać cron job dla loterii ${lotteryId}: brak metody destroy() lub stop()`);
+                }
+            } catch (error) {
+                logger.error(`❌ Błąd zatrzymywania cron job ${lotteryId}:`, error);
+            }
         }
         this.cronJobs.clear();
         
