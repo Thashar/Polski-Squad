@@ -268,7 +268,7 @@ class LotteryService {
             await guild.roles.fetch();
             
             const targetRole = guild.roles.cache.get(lottery.targetRoleId);
-            const clanRole = guild.roles.cache.get(lottery.clanRoleId);
+            const clanRole = lottery.clanRoleId ? guild.roles.cache.get(lottery.clanRoleId) : null;
             const blockedRole = guild.roles.cache.get(this.config.blockedRole);
             
             if (!targetRole) {
@@ -276,13 +276,17 @@ class LotteryService {
                 return;
             }
             
-            if (!clanRole) {
+            if (lottery.clanRoleId && !clanRole) {
                 logger.error(`❌ Nie znaleziono roli klanu: ${lottery.clanRoleId}`);
                 return;
             }
             
             logger.info(`🎯 Rola docelowa: ${targetRole.name}`);
-            logger.info(`🏰 Rola klanu: ${clanRole.name}`);
+            if (clanRole) {
+                logger.info(`🏰 Rola klanu: ${clanRole.name}`);
+            } else {
+                logger.info(`🌍 Zakres: Cały serwer (bez ograniczenia do klanu)`);
+            }
             
             if (blockedRole) {
                 logger.info(`🚫 Rola blokująca: ${blockedRole.name} (${blockedRole.members.size} członków z blokadą)`);

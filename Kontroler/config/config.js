@@ -108,6 +108,11 @@ module.exports = {
         
         // Definicje klanów (na podstawie Stalker bot)
         clans: {
+            'server': {
+                name: 'Cały Serwer',
+                roleId: null, // null oznacza brak ograniczenia do konkretnego klanu
+                displayName: '🌍 Cały Serwer 🌍'
+            },
             'main': {
                 name: 'Polski Squad',
                 roleId: process.env.STALKER_LME_TARGET_ROLE_MAIN || '1170351983092383814',
