@@ -290,49 +290,40 @@ class LotteryService {
                 logger.warn(`⚠️ Nie znaleziono roli blokującej o ID: ${this.config.blockedRole}`);
             }
             
-            // Inteligentne pobieranie członków w zależności od rozmiaru serwera
-            logger.info('🔄 Odświeżanie członków serwera...');
-            logger.info(`📊 Aktualny cache: ${guild.members.cache.size} członków, szacowany rozmiar serwera: ${guild.memberCount}`);
+            // Zoptymalizowane pobieranie - skupiamy się tylko na członkach klanu
+            logger.info('🔄 Pobieranie członków klanu...');
+            logger.info(`🏰 Rola klanu: ${clanRole.name} (${clanRole.members.size} członków w cache)`);
             
-            try {
-                let fetchStrategy = 'full';
-                let fetchOptions = {};
-                
-                // Wybierz strategię w zależności od rozmiaru serwera
-                if (guild.memberCount > 10000) {
-                    fetchStrategy = 'limited';
-                    fetchOptions = { limit: 2000 };
-                    logger.info('🏢 Duży serwer - pobieranie ograniczonej liczby członków (2000)');
-                } else if (guild.memberCount > 5000) {
-                    fetchStrategy = 'limited';
-                    fetchOptions = { limit: 5000 };
-                    logger.info('🏬 Średni serwer - pobieranie ograniczonej liczby członków (5000)');
-                } else {
-                    logger.info('🏠 Mały serwer - pobieranie wszystkich członków');
-                }
-                
-                // Ustaw timeout 45 sekund dla pobierania członków
-                await Promise.race([
-                    guild.members.fetch(fetchOptions),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Timeout podczas pobierania członków')), 45000)
-                    )
-                ]);
-                
-                logger.info(`✅ Pomyślnie odświeżono ${guild.members.cache.size} członków (strategia: ${fetchStrategy})`);
-                
-            } catch (error) {
-                logger.warn(`⚠️ Nie udało się odświeżyć członków: ${error.message}`);
-                logger.info('🔄 Próbuję fallback z minimalnym pobieraniem...');
+            // Jeśli rola klanu nie ma członków w cache, spróbuj odświeżyć
+            if (clanRole.members.size === 0) {
+                logger.info('🔄 Rola klanu nie ma członków - odświeżanie...');
                 
                 try {
-                    // Ostatnia próba - pobierz tylko 500 członków
-                    await guild.members.fetch({ limit: 500 });
-                    logger.info(`✅ Fallback - pobrano ${guild.members.cache.size} członków`);
-                } catch (fallbackError) {
-                    logger.warn(`⚠️ Wszystkie próby pobierania nie powiodły się: ${fallbackError.message}`);
-                    logger.info(`ℹ️ Kontynuuję z aktualnym cache (${guild.members.cache.size} członków)`);
+                    // Najpierw spróbuj odświeżyć konkretną rolę
+                    await clanRole.fetch();
+                    logger.info(`🏰 Po odświeżeniu roli klanu: ${clanRole.members.size} członków`);
+                    
+                    // Jeśli nadal 0, pobierz więcej członków serwera
+                    if (clanRole.members.size === 0) {
+                        logger.info('🔄 Nadal brak członków klanu - pobieranie większej próbki serwera...');
+                        
+                        await Promise.race([
+                            guild.members.fetch({ limit: 1000 }),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Timeout podczas pobierania członków')), 30000)
+                            )
+                        ]);
+                        
+                        logger.info(`📊 Po pobraniu próbki: ${guild.members.cache.size} członków w cache`);
+                        logger.info(`🏰 Rola klanu teraz ma: ${clanRole.members.size} członków`);
+                    }
+                    
+                } catch (error) {
+                    logger.warn(`⚠️ Nie udało się odświeżyć członków klanu: ${error.message}`);
+                    logger.info(`ℹ️ Kontynuuję z aktualnym cache (${clanRole.members.size} członków klanu)`);
                 }
+            } else {
+                logger.info(`✅ Rola klanu ma ${clanRole.members.size} członków w cache`);
             }
             
             logger.info(`🎯 Rola docelowa: ${targetRole.name} (${targetRole.members.size} członków po odświeżeniu)`);
@@ -358,42 +349,9 @@ class LotteryService {
                 }
             }
             
-            // Znajdź członków którzy mają obie wymagane role
-            const eligibleMembers = new Map();
-            
-            if (targetRole.members.size === 0) {
-                logger.warn(`⚠️ Rola docelowa "${targetRole.name}" nie ma żadnych członków!`);
-                logger.info(`🔍 Sprawdzam wszystkich członków serwera pod kątem roli docelowej...`);
-                
-                // Jeśli rola docelowa nie ma członków, sprawdź ręcznie wszystkich członków
-                let foundWithTargetRole = 0;
-                for (const [memberId, member] of guild.members.cache) {
-                    if (member.roles.cache.has(lottery.targetRoleId)) {
-                        foundWithTargetRole++;
-                        logger.info(`🎯 Członek z rolą docelową: ${member.user.tag} (${member.id})`);
-                    }
-                }
-                logger.info(`📊 Znaleziono ${foundWithTargetRole} członków z rolą docelową przez sprawdzenie wszystkich członków`);
-            }
-            
-            if (clanRole.members.size === 0) {
-                logger.warn(`⚠️ Rola klanu "${clanRole.name}" nie ma żadnych członków!`);
-                logger.info(`🔍 Sprawdzam wszystkich członków serwera pod kątem roli klanu...`);
-                
-                // Jeśli rola klanu nie ma członków, sprawdź ręcznie wszystkich członków
-                let foundWithClanRole = 0;
-                for (const [memberId, member] of guild.members.cache) {
-                    if (member.roles.cache.has(lottery.clanRoleId)) {
-                        foundWithClanRole++;
-                        logger.info(`🏰 Członek z rolą klanu: ${member.user.tag} (${member.id})`);
-                    }
-                }
-                logger.info(`📊 Znaleziono ${foundWithClanRole} członków z rolą klanu przez sprawdzenie wszystkich członków`);
-            }
-            
             // Debug roli blokującej
             if (blockedRole && blockedRole.members.size > 0) {
-                logger.info(`🚫 Członkowie z rolą blokującą "${blockedRole.name}":`);
+                logger.info(`🚫 Członkowie z rolą blokującą "${blockedRole.name}" (${blockedRole.members.size}):`);
                 for (const [memberId, member] of blockedRole.members) {
                     logger.info(`   🚫 ${member.user.tag} (${member.id}) - zablokowany w loterii`);
                 }
@@ -401,70 +359,63 @@ class LotteryService {
                 logger.info(`✅ Brak członków z rolą blokującą "${blockedRole.name}"`);
             }
             
-            logger.info('🔍 Rozpoczynam wyszukiwanie kwalifikowanych członków...');
+            // NOWA LOGIKA: Iteruj przez członków KLANU i sprawdź czy mają rolę docelową
+            logger.info('🔍 Rozpoczynam wyszukiwanie kwalifikowanych członków klanu...');
+            logger.info(`📊 Sprawdzam ${clanRole.members.size} członków klanu ${clanRole.name}`);
             
-            // Iteruj przez członków roli docelowej i sprawdź czy mają też rolę klanu
-            for (const [memberId, member] of targetRole.members) {
-                const hasClanRole = member.roles.cache.has(lottery.clanRoleId);
+            const eligibleMembers = new Map();
+            let checkedClanMembers = 0;
+            
+            for (const [memberId, member] of clanRole.members) {
+                checkedClanMembers++;
+                
+                const hasTargetRole = member.roles.cache.has(lottery.targetRoleId);
                 const hasBlockedRole = member.roles.cache.has(this.config.blockedRole);
                 const isBot = member.user.bot;
                 
-                const isEligible = hasClanRole && !hasBlockedRole && !isBot;
+                const isEligible = hasTargetRole && !hasBlockedRole && !isBot;
                 
                 if (isEligible) {
-                    logger.info(`✅ Kwalifikuje się: ${member.user.tag} (${member.id})`);
+                    logger.info(`✅ Kwalifikuje się: ${member.user.tag} (${member.id}) - członek klanu z rolą docelową`);
                     eligibleMembers.set(memberId, member);
                 } else {
                     const reasons = [];
-                    if (!hasClanRole) reasons.push(`brak roli klanu (${lottery.clanRoleId})`);
+                    if (!hasTargetRole) reasons.push(`brak roli docelowej (${lottery.targetRoleId})`);
                     if (hasBlockedRole) reasons.push(`ma rolę blokującą (${this.config.blockedRole})`);
                     if (isBot) reasons.push('to bot');
                     
-                    logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
+                    // Log tylko jeśli ma przynajmniej jedną istotną przyczynę dyskwalifikacji
+                    if (!hasTargetRole || hasBlockedRole) {
+                        logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
+                    }
                 }
             }
             
-            // Jeśli nie znaleziono nikogo przez członków roli docelowej, spróbuj przez wszystkich członków
-            if (eligibleMembers.size === 0) {
-                logger.info('🔍 Nie znaleziono kwalifikowanych członków przez rolę docelową, sprawdzam alternatywnie...');
+            logger.info(`📊 Sprawdzono ${checkedClanMembers} członków klanu, znaleziono ${eligibleMembers.size} kwalifikowanych`);
+            
+            // Jeśli rola klanu była pusta, spróbuj alternatywnego podejścia
+            if (eligibleMembers.size === 0 && clanRole.members.size === 0) {
+                logger.warn('⚠️ Rola klanu nie ma członków - próbuję alternatywnego wyszukiwania...');
                 
-                // Limit skanowania dla wydajności
-                const maxMembersToCheck = Math.min(guild.members.cache.size, 5000);
-                logger.info(`📊 Skanowanie ${maxMembersToCheck} członków z ${guild.members.cache.size} w cache...`);
+                // Sprawdź ręcznie członków z rolą docelową pod kątem przynależności do klanu
+                logger.info(`🔍 Sprawdzam ${targetRole.members.size} członków z rolą docelową pod kątem klanu...`);
                 
-                let checkedMembers = 0;
-                for (const [memberId, member] of guild.members.cache) {
-                    if (checkedMembers >= maxMembersToCheck) {
-                        logger.info(`⏸️ Przerwano skanowanie po sprawdzeniu ${checkedMembers} członków (limit wydajności)`);
-                        break;
-                    }
-                    
-                    const hasTargetRole = member.roles.cache.has(lottery.targetRoleId);
+                for (const [memberId, member] of targetRole.members) {
                     const hasClanRole = member.roles.cache.has(lottery.clanRoleId);
                     const hasBlockedRole = member.roles.cache.has(this.config.blockedRole);
                     const isBot = member.user.bot;
                     
-                    const isEligible = hasTargetRole && hasClanRole && !hasBlockedRole && !isBot;
+                    const isEligible = hasClanRole && !hasBlockedRole && !isBot;
                     
                     if (isEligible) {
-                        logger.info(`✅ Kwalifikuje się (znaleziony przez pełne skanowanie): ${member.user.tag} (${member.id})`);
+                        logger.info(`✅ Alternatywnie znaleziony: ${member.user.tag} (${member.id})`);
                         eligibleMembers.set(memberId, member);
-                    } else if (hasTargetRole || hasClanRole) {
-                        // Log tylko jeśli ma przynajmniej jedną z wymaganych ról
-                        const reasons = [];
-                        if (!hasTargetRole) reasons.push(`brak roli docelowej (${lottery.targetRoleId})`);
-                        if (!hasClanRole) reasons.push(`brak roli klanu (${lottery.clanRoleId})`);
-                        if (hasBlockedRole) reasons.push(`ma rolę blokującą (${this.config.blockedRole})`);
-                        if (isBot) reasons.push('to bot');
-                        
-                        logger.info(`❌ Nie kwalifikuje się (pełne skanowanie): ${member.user.tag} - ${reasons.join(', ')}`);
                     }
-                    
-                    checkedMembers++;
                 }
                 
-                logger.info(`📊 Pełne skanowanie sprawdziło ${checkedMembers} członków i znalazło ${eligibleMembers.size} kwalifikowanych`);
+                logger.info(`📊 Alternatywne wyszukiwanie znalazło ${eligibleMembers.size} kwalifikowanych członków`);
             }
+            
 
             logger.info(`🎯 Znaleziono ${eligibleMembers.size} kwalifikujących się uczestników`);
 
