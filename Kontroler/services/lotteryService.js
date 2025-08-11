@@ -267,6 +267,19 @@ class LotteryService {
             // Odśwież cache ról
             await guild.roles.fetch();
             
+            // Debug - pokaż wszystkie role na serwerze dla weryfikacji ID
+            logger.info('🔍 DEBUG - Lista wszystkich ról na serwerze:');
+            const sortedRoles = guild.roles.cache
+                .filter(role => role.name !== '@everyone')
+                .sort((a, b) => b.position - a.position)
+                .map(role => `   ${role.name} (ID: ${role.id}) - ${role.members.size} członków`)
+                .slice(0, 20); // Pokaż tylko pierwsze 20 ról
+            
+            sortedRoles.forEach(roleInfo => logger.info(roleInfo));
+            if (guild.roles.cache.size > 21) {
+                logger.info(`   ... i ${guild.roles.cache.size - 21} innych ról`);
+            }
+            
             const targetRole = guild.roles.cache.get(lottery.targetRoleId);
             const clanRole = lottery.clanRoleId ? guild.roles.cache.get(lottery.clanRoleId) : null;
             const blockedRole = guild.roles.cache.get(this.config.blockedRole);
@@ -305,23 +318,40 @@ class LotteryService {
                     logger.info('🔄 Rola klanu nie ma członków - odświeżanie...');
                     
                     try {
-                        // Najpierw spróbuj odświeżyć konkretną rolę
-                        await clanRole.fetch();
-                        logger.info(`🏰 Po odświeżeniu roli klanu: ${clanRole.members.size} członków`);
+                        // Pobierz więcej członków serwera (role są już w cache po guild.roles.fetch())
+                        logger.info('🔄 Pobieranie większej próbki członków serwera...');
                         
-                        // Jeśli nadal 0, pobierz więcej członków serwera
+                        await Promise.race([
+                            guild.members.fetch({ limit: 1000 }),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Timeout podczas pobierania członków')), 30000)
+                            )
+                        ]);
+                        
+                        logger.info(`📊 Po pobraniu próbki: ${guild.members.cache.size} członków w cache`);
+                        logger.info(`🏰 Rola klanu teraz ma: ${clanRole.members.size} członków`);
+                        
+                        // Debug - sprawdź czy rola klanu w ogóle istnieje
                         if (clanRole.members.size === 0) {
-                            logger.info('🔄 Nadal brak członków klanu - pobieranie większej próbki serwera...');
+                            logger.warn(`🔍 DEBUG - Sprawdzam czy rola klanu istnieje:`);
+                            logger.warn(`   - ID roli klanu: ${lottery.clanRoleId}`);
+                            logger.warn(`   - Nazwa roli: ${clanRole.name}`);
+                            logger.warn(`   - Pozycja roli: ${clanRole.position}`);
+                            logger.warn(`   - Czy rola jest zarządzana przez bota: ${clanRole.managed}`);
                             
-                            await Promise.race([
-                                guild.members.fetch({ limit: 1000 }),
-                                new Promise((_, reject) => 
-                                    setTimeout(() => reject(new Error('Timeout podczas pobierania członków')), 30000)
-                                )
-                            ]);
-                            
-                            logger.info(`📊 Po pobraniu próbki: ${guild.members.cache.size} członków w cache`);
-                            logger.info(`🏰 Rola klanu teraz ma: ${clanRole.members.size} członków`);
+                            // Sprawdź ręcznie czy ktoś ma tę rolę
+                            let foundManually = 0;
+                            for (const [memberId, member] of guild.members.cache) {
+                                if (member.roles.cache.has(lottery.clanRoleId)) {
+                                    foundManually++;
+                                    logger.info(`🔍 Znaleziono ręcznie: ${member.user.tag} ma rolę klanu`);
+                                    if (foundManually >= 3) {
+                                        logger.info(`🔍 ... i więcej (pokazano tylko pierwsze 3)`);
+                                        break;
+                                    }
+                                }
+                            }
+                            logger.warn(`📊 Ręczne sprawdzenie znalazło ${foundManually} członków z rolą klanu`);
                         }
                         
                     } catch (error) {
@@ -341,23 +371,40 @@ class LotteryService {
                     logger.info('🔄 Rola docelowa nie ma członków - odświeżanie...');
                     
                     try {
-                        // Najpierw spróbuj odświeżyć konkretną rolę
-                        await targetRole.fetch();
-                        logger.info(`🎯 Po odświeżeniu roli docelowej: ${targetRole.members.size} członków`);
+                        // Pobierz więcej członków serwera (role są już w cache po guild.roles.fetch())
+                        logger.info('🔄 Pobieranie próbki członków serwera...');
                         
-                        // Jeśli nadal 0, pobierz więcej członków serwera
+                        await Promise.race([
+                            guild.members.fetch({ limit: 2000 }),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Timeout podczas pobierania członków')), 45000)
+                            )
+                        ]);
+                        
+                        logger.info(`📊 Po pobraniu próbki: ${guild.members.cache.size} członków w cache`);
+                        logger.info(`🎯 Rola docelowa teraz ma: ${targetRole.members.size} członków`);
+                        
+                        // Debug - sprawdź czy rola docelowa w ogóle istnieje
                         if (targetRole.members.size === 0) {
-                            logger.info('🔄 Nadal brak członków z rolą docelową - pobieranie próbki serwera...');
+                            logger.warn(`🔍 DEBUG - Sprawdzam czy rola docelowa istnieje:`);
+                            logger.warn(`   - ID roli docelowej: ${lottery.targetRoleId}`);
+                            logger.warn(`   - Nazwa roli: ${targetRole.name}`);
+                            logger.warn(`   - Pozycja roli: ${targetRole.position}`);
+                            logger.warn(`   - Czy rola jest zarządzana przez bota: ${targetRole.managed}`);
                             
-                            await Promise.race([
-                                guild.members.fetch({ limit: 2000 }),
-                                new Promise((_, reject) => 
-                                    setTimeout(() => reject(new Error('Timeout podczas pobierania członków')), 45000)
-                                )
-                            ]);
-                            
-                            logger.info(`📊 Po pobraniu próbki: ${guild.members.cache.size} członków w cache`);
-                            logger.info(`🎯 Rola docelowa teraz ma: ${targetRole.members.size} członków`);
+                            // Sprawdź ręcznie czy ktoś ma tę rolę
+                            let foundManually = 0;
+                            for (const [memberId, member] of guild.members.cache) {
+                                if (member.roles.cache.has(lottery.targetRoleId)) {
+                                    foundManually++;
+                                    logger.info(`🔍 Znaleziono ręcznie: ${member.user.tag} ma rolę docelową`);
+                                    if (foundManually >= 3) {
+                                        logger.info(`🔍 ... i więcej (pokazano tylko pierwsze 3)`);
+                                        break;
+                                    }
+                                }
+                            }
+                            logger.warn(`📊 Ręczne sprawdzenie znalazło ${foundManually} członków z rolą docelową`);
                         }
                         
                     } catch (error) {
@@ -384,17 +431,24 @@ class LotteryService {
                 logger.warn('⚠️ Role nadal nie mają członków w cache - próbuję alternatywne podejście...');
                 
                 try {
-                    // Spróbuj odświeżyć konkretne role
-                    await targetRole.fetch();
-                    if (clanRole) await clanRole.fetch();
+                    // Pobierz więcej członków serwera (role są już odświeżone)
+                    logger.info('🔄 Ostatnia próba - pobieranie dodatkowych członków...');
                     
-                    logger.info(`🔄 Po odświeżeniu ról:`);
+                    await Promise.race([
+                        guild.members.fetch({ limit: 3000 }),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Timeout podczas finalnego pobierania członków')), 60000)
+                        )
+                    ]);
+                    
+                    logger.info(`🔄 Po finalnym pobieraniu:`);
+                    logger.info(`📊 Członkowie w cache: ${guild.members.cache.size}`);
                     logger.info(`🎯 Rola docelowa: ${targetRole.name} (${targetRole.members.size} członków)`);
                     if (clanRole) {
                         logger.info(`🏰 Rola klanu: ${clanRole.name} (${clanRole.members.size} członków)`);
                     }
                 } catch (roleError) {
-                    logger.warn(`⚠️ Nie udało się odświeżyć ról: ${roleError.message}`);
+                    logger.warn(`⚠️ Nie udało się pobrać dodatkowych członków: ${roleError.message}`);
                 }
             }
             
