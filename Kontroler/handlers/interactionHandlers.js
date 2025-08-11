@@ -16,8 +16,8 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery':
                     await handleLotteryCommand(interaction, config, lotteryService);
                     break;
-                case 'reroll':
-                    await handleRerollCommand(interaction, config, lotteryService);
+                case 'lottery-reroll':
+                    await handleLotteryRerollCommand(interaction, config, lotteryService);
                     break;
                 case 'lottery-remove':
                     await handleLotteryRemoveCommand(interaction, config, lotteryService);
@@ -40,8 +40,8 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery_test_select':
                     await handleLotteryTestSelect(interaction, config, lotteryService);
                     break;
-                case 'reroll_lottery_select':
-                    await handleRerollLotterySelect(interaction, config, lotteryService);
+                case 'lottery_reroll_select':
+                    await handleLotteryRerollSelect(interaction, config, lotteryService);
                     break;
                 default:
                     await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
@@ -238,9 +238,9 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
 }
 
 /**
- * Obsługuje komendę reroll
+ * Obsługuje komendę lottery-reroll
  */
-async function handleRerollCommand(interaction, config, lotteryService) {
+async function handleLotteryRerollCommand(interaction, config, lotteryService) {
     // Sprawdź uprawnienia administratora
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
@@ -289,7 +289,7 @@ async function handleRerollCommand(interaction, config, lotteryService) {
         });
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('reroll_lottery_select')
+            .setCustomId('lottery_reroll_select')
             .setPlaceholder('🎲 Wybierz loterię do ponownego losowania...')
             .setMinValues(1)
             .setMaxValues(1)
@@ -868,7 +868,7 @@ async function registerSlashCommands(client, config) {
                     .setRequired(true)),
 
         new SlashCommandBuilder()
-            .setName('reroll')
+            .setName('lottery-reroll')
             .setDescription('Przeprowadza ponowne losowanie dla wybranej historycznej loterii'),
 
         new SlashCommandBuilder()

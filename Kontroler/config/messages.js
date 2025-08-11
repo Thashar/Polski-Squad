@@ -23,8 +23,8 @@ module.exports = {
     analysisAlreadyHasRole: '✅ **Analiza zakończona!**\n🎯 **Wynik:** {score}\nℹ️ **Już posiadasz wymaganą rolę**',
     
     // Informacje o loteriach
-    dailyLottery: '\n\nMożesz wziąć udział w loterii za Daily.\nWybierz odpowiedni kanał z loterią do którego masz dostęp:\nhttps://discord.com/channels/1170323970692743240/1257784287864815677 https://discord.com/channels/1170323970692743240/1297845241256218664 https://discord.com/channels/1170323970692743240/1261921367935287398 https://discord.com/channels/1170323970692743240/1262153143630958762',
-    cxLottery: '\n\nMożesz wziąć udział w loterii za CX.\nWybierz odpowiedni kanał z loterią do którego masz dostęp:\nhttps://discord.com/channels/1170323970692743240/1257784287864815677 https://discord.com/channels/1170323970692743240/1297845241256218664 https://discord.com/channels/1170323970692743240/1261921367935287398 https://discord.com/channels/1170323970692743240/1262153143630958762',
+    dailyLottery: '\n\nBierzesz udział w loterii Daily.\n**Nie musisz nic robić!** Wyniki pojawią się na jednym z poniższych kanałów w stosownym czasie!\nhttps://discord.com/channels/1170323970692743240/1257784287864815677 https://discord.com/channels/1170323970692743240/1297845241256218664 https://discord.com/channels/1170323970692743240/1261921367935287398 https://discord.com/channels/1170323970692743240/1262153143630958762',
+    cxLottery: '\n\nBierzesz udział w loterii CX.\n**Nie musisz nic robić!** Wyniki pojawią się na jednym z poniższych kanałów w stosownym czasie!\nhttps://discord.com/channels/1170323970692743240/1257784287864815677 https://discord.com/channels/1170323970692743240/1297845241256218664 https://discord.com/channels/1170323970692743240/1261921367935287398 https://discord.com/channels/1170323970692743240/1262153143630958762',
     
     // Dodatkowe informacje
     similarityMatch: '\n🔍 **Dopasowanie:** Nick znaleziony przez podobieństwo',
