@@ -40,6 +40,12 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery_remove_select':
                     await handleLotteryRemoveSelect(interaction, config, lotteryService);
                     break;
+                case 'lottery_test_select':
+                    await handleLotteryTestSelect(interaction, config, lotteryService);
+                    break;
+                case 'reroll_lottery_select':
+                    await handleRerollLotterySelect(interaction, config, lotteryService);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
             }
@@ -255,10 +261,7 @@ async function handleRerollCommand(interaction, config, lotteryService) {
         return;
     }
 
-    const resultIndex = interaction.options.getInteger('indeks');
-    const additionalWinners = interaction.options.getInteger('dodatkowi') || 1;
-
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply({ ephemeral: true });
 
     try {
         // Pobierz historię loterii
@@ -266,66 +269,61 @@ async function handleRerollCommand(interaction, config, lotteryService) {
         
         if (history.length === 0) {
             await interaction.editReply({
-                content: '❌ Brak historii loterii do ponownego losowania.'
+                content: '📋 **Brak historii loterii do ponownego losowania.**\n\n💡 Przeprowadź najpierw jakąś loterię używając `/lottery` lub `/lottery-test`.'
             });
             return;
         }
 
-        if (resultIndex >= history.length || resultIndex < 0) {
-            await interaction.editReply({
-                content: `❌ Nieprawidłowy indeks. Dostępne indeksy: 0-${history.length - 1}\n\n` +
-                        `📋 **Ostatnie loterie:**\n` +
-                        history.slice(-5).map((result, index) => 
-                            `**${history.length - 5 + index}.** ${result.lotteryName} - ${new Date(result.date).toLocaleString('pl-PL')}`
-                        ).join('\n')
-            });
-            return;
-        }
-
-        const result = await lotteryService.rerollLottery(interaction, resultIndex, additionalWinners);
+        // Stwórz Select Menu z historią loterii (ostatnie 20)
+        const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
         
-        if (result.success) {
-            const { EmbedBuilder } = require('discord.js');
+        const recentHistory = history.slice(-20); // Ostatnie 20 loterii
+        const selectOptions = recentHistory.map((result, index) => {
+            const originalIndex = history.length - recentHistory.length + index;
+            const date = new Date(result.date).toLocaleDateString('pl-PL');
+            const time = new Date(result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
             
-            const embed = new EmbedBuilder()
-                .setTitle('🎰 PONOWNE LOSOWANIE')
-                .setDescription(`**${result.originalResult.lotteryName}**`)
-                .setColor('#ffa500')
-                .addFields(
-                    {
-                        name: '📅 Oryginalna loteria',
-                        value: new Date(result.originalResult.date).toLocaleString('pl-PL'),
-                        inline: true
-                    },
-                    {
-                        name: '👥 Pula do ponownego losowania',
-                        value: (result.originalResult.participantCount - result.originalResult.winners.length).toString(),
-                        inline: true
-                    },
-                    {
-                        name: '🏆 Nowi zwycięzcy',
-                        value: result.newWinners.length > 0 
-                            ? result.newWinners.map((winner, index) => 
-                                `${index + 1}. ${winner.displayName} (<@${winner.id}>)`
-                              ).join('\n')
-                            : 'Brak nowych zwycięzców',
-                        inline: false
-                    }
-                )
-                .setFooter({ 
-                    text: `Ponowne losowanie wykonane przez ${interaction.user.tag} | Oryginalna loteria: ${result.originalResult.lotteryId}` 
-                })
-                .setTimestamp();
+            return {
+                label: `${result.lotteryName}`,
+                description: `${date} ${time} | ${result.participantCount} uczestników | ${result.winners.length} zwycięzców`,
+                value: originalIndex.toString(),
+                emoji: '🎲'
+            };
+        });
 
-            await interaction.editReply({ embeds: [embed] });
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('reroll_lottery_select')
+            .setPlaceholder('🎲 Wybierz loterię do ponownego losowania...')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(selectOptions);
 
-            logger.info(`✅ ${interaction.user.tag} wykonał ponowne losowanie dla: ${result.originalResult.lotteryName}`);
-        }
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🎲 PONOWNE LOSOWANIE')
+            .setDescription(`Wybierz loterię z historii do ponownego losowania.\n\n` +
+                           `📊 **Historia loterii:** ${history.length} (pokazano ostatnie ${Math.min(20, history.length)})\n\n` +
+                           `ℹ️ **Jak to działa:**\n` +
+                           `• Losowanie spośród uczestników którzy nie wygrali w oryginalnej loterii\n` +
+                           `• Sprawdza aktualne role użytkowników\n` +
+                           `• Domyślnie wybiera 1 dodatkowego zwycięzcę`)
+            .setColor('#ffa500')
+            .setFooter({ 
+                text: `Żądanie od ${interaction.user.tag}` 
+            })
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
     } catch (error) {
         await interaction.editReply({
-            content: `❌ Błąd podczas ponownego losowania: ${error.message}`
+            content: `❌ Błąd podczas ładowania historii loterii: ${error.message}`
         });
-        logger.error('❌ Błąd ponownego losowania:', error);
+        logger.error('❌ Błąd ładowania historii dla reroll:', error);
     }
 }
 
@@ -501,6 +499,164 @@ async function handleLotteryRemoveSelect(interaction, config, lotteryService) {
             components: []
         });
         logger.error('❌ Błąd usuwania loterii przez Select Menu:', error);
+    }
+}
+
+/**
+ * Obsługuje wybór loterii do testowego uruchomienia z Select Menu
+ */
+async function handleLotteryTestSelect(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    if (!lotteryService) {
+        await interaction.reply({
+            content: '❌ Serwis loterii nie jest dostępny.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const lotteryId = interaction.values[0];
+
+    await interaction.deferUpdate();
+
+    try {
+        // Sprawdź czy loteria nadal istnieje
+        const activeLotteries = lotteryService.getActiveLotteries();
+        const lottery = activeLotteries.find(l => l.id === lotteryId);
+        
+        if (!lottery) {
+            await interaction.editReply({
+                content: `❌ **Loteria nie została znaleziona!**\n\n` +
+                        `Loteria o ID \`${lotteryId}\` mogła zostać już usunięta lub nie istnieje.\n\n` +
+                        `💡 Użyj \`/lottery-list\` aby sprawdzić aktywne loterie.`,
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        await interaction.editReply({
+            content: `🧪 **Testowe uruchomienie loterii:**\n\n` +
+                    `🎰 **Loteria:** ${lottery.name}\n` +
+                    `🆔 **ID:** \`${lottery.id}\`\n\n` +
+                    `⏳ Uruchamiam losowanie... Sprawdź logi i kanał wyników.`,
+            embeds: [],
+            components: []
+        });
+
+        // Uruchom loterię testowo
+        logger.info(`🧪 TESTOWE uruchomienie loterii przez ${interaction.user.tag}: ${lottery.id}`);
+        await lotteryService.executeLottery(lotteryId);
+
+        // Powiadom o zakończeniu
+        await interaction.followUp({
+            content: `✅ **Testowe losowanie zakończone!**\n\n` +
+                    `Sprawdź:\n` +
+                    `• 📺 Kanał wyników: <#${lottery.channelId}>\n` +
+                    `• 📋 Logi w konsoli\n` +
+                    `• 🐛 \`/lottery-debug\` dla szczegółów`,
+            ephemeral: true
+        });
+
+        logger.info(`✅ ${interaction.user.tag} wykonał testowe uruchomienie loterii przez Select Menu: ${lottery.name} (${lotteryId})`);
+
+    } catch (error) {
+        await interaction.editReply({
+            content: `❌ **Błąd podczas testowego uruchomienia!**\n\n` +
+                    `Szczegóły: ${error.message}\n\n` +
+                    `💡 Spróbuj ponownie lub sprawdź logi serwera.`,
+            embeds: [],
+            components: []
+        });
+        logger.error('❌ Błąd testowego uruchomienia loterii przez Select Menu:', error);
+    }
+}
+
+/**
+ * Obsługuje wybór loterii do ponownego losowania z Select Menu
+ */
+async function handleRerollLotterySelect(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    if (!lotteryService) {
+        await interaction.reply({
+            content: '❌ Serwis loterii nie jest dostępny.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const resultIndex = parseInt(interaction.values[0]);
+
+    await interaction.deferUpdate();
+
+    try {
+        const result = await lotteryService.rerollLottery(interaction, resultIndex, 1); // Domyślnie 1 dodatkowy zwycięzca
+        
+        if (result.success) {
+            const { EmbedBuilder } = require('discord.js');
+            
+            const embed = new EmbedBuilder()
+                .setTitle('🎰 PONOWNE LOSOWANIE')
+                .setDescription(`**${result.originalResult.lotteryName}**`)
+                .setColor('#ffa500')
+                .addFields(
+                    {
+                        name: '📅 Oryginalna loteria',
+                        value: new Date(result.originalResult.date).toLocaleString('pl-PL'),
+                        inline: true
+                    },
+                    {
+                        name: '👥 Pula do ponownego losowania',
+                        value: (result.originalResult.participantCount - result.originalResult.winners.length).toString(),
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Nowi zwycięzcy',
+                        value: result.newWinners.length > 0 
+                            ? result.newWinners.map((winner, index) => 
+                                `${index + 1}. ${winner.displayName} (<@${winner.id}>)`
+                              ).join('\n')
+                            : 'Brak nowych zwycięzców',
+                        inline: false
+                    }
+                )
+                .setFooter({ 
+                    text: `Ponowne losowanie wykonane przez ${interaction.user.tag} | Oryginalna loteria: ${result.originalResult.lotteryId}` 
+                })
+                .setTimestamp();
+
+            await interaction.editReply({ 
+                embeds: [embed],
+                components: []
+            });
+
+            logger.info(`✅ ${interaction.user.tag} wykonał ponowne losowanie przez Select Menu dla: ${result.originalResult.lotteryName}`);
+        }
+    } catch (error) {
+        await interaction.editReply({
+            content: `❌ **Błąd podczas ponownego losowania!**\n\n` +
+                    `Szczegóły: ${error.message}\n\n` +
+                    `💡 Sprawdź czy użytkownicy z oryginalnej loterii nadal mają odpowiednie role.`,
+            embeds: [],
+            components: []
+        });
+        logger.error('❌ Błąd ponownego losowania przez Select Menu:', error);
     }
 }
 
@@ -712,57 +868,57 @@ async function handleLotteryTestCommand(interaction, config, lotteryService) {
         return;
     }
 
-    const lotteryId = interaction.options.getString('id');
-    
-    await interaction.deferReply({ ephemeral: true });
+    const activeLotteries = lotteryService.getActiveLotteries();
 
-    try {
-        const activeLotteries = lotteryService.getActiveLotteries();
-        const lottery = activeLotteries.find(l => l.id === lotteryId);
-        
-        if (!lottery) {
-            if (activeLotteries.length === 0) {
-                await interaction.editReply({
-                    content: '❌ Nie znaleziono loterii o podanym ID.\n\n📋 **Brak aktywnych loterii.**'
-                });
-                return;
-            }
-
-            const lotteryList = activeLotteries.map(l => `• \`${l.id}\` - ${l.name}`).join('\n');
-            await interaction.editReply({
-                content: `❌ Nie znaleziono loterii o ID: \`${lotteryId}\`\n\n` +
-                        `📋 **Aktywne loterie:**\n${lotteryList}`
-            });
-            return;
-        }
-
-        await interaction.editReply({ 
-            content: `🧪 **Testowe uruchomienie loterii:**\n\n` +
-                    `🎰 **Loteria:** ${lottery.name}\n` +
-                    `🆔 **ID:** \`${lottery.id}\`\n\n` +
-                    `⏳ Uruchamiam losowanie... Sprawdź logi i kanał wyników.`
+    if (activeLotteries.length === 0) {
+        await interaction.reply({
+            content: '📋 **Brak aktywnych loterii do testowania.**\n\n💡 Użyj `/lottery` aby utworzyć nową loterię.',
+            ephemeral: true
         });
-
-        // Uruchom loterię testowo
-        logger.info(`🧪 TESTOWE uruchomienie loterii przez ${interaction.user.tag}: ${lottery.id}`);
-        await lotteryService.executeLottery(lotteryId);
-
-        // Powiadom o zakończeniu
-        await interaction.followUp({ 
-            content: `✅ **Testowe losowanie zakończone!**\n\n` +
-                    `Sprawdź:\n` +
-                    `• 📺 Kanał wyników: <#${lottery.channelId}>\n` +
-                    `• 📋 Logi w konsoli\n` +
-                    `• 🐛 \`/lottery-debug\` dla szczegółów`,
-            ephemeral: true 
-        });
-
-    } catch (error) {
-        await interaction.editReply({
-            content: `❌ Błąd podczas testowego uruchomienia: ${error.message}`
-        });
-        logger.error('❌ Błąd testowego uruchomienia loterii:', error);
+        return;
     }
+
+    // Stwórz Select Menu z aktywnymi loteriami
+    const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+    
+    const selectOptions = activeLotteries.map(lottery => {
+        const datePart = lottery.id.split('_')[0];
+        const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
+        const clan = config.lottery.clans[lottery.clanKey];
+        
+        return {
+            label: `${lottery.name}`,
+            description: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | ${formattedDate}`,
+            value: lottery.id,
+            emoji: '🧪'
+        };
+    });
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('lottery_test_select')
+        .setPlaceholder('🧪 Wybierz loterię do testowego uruchomienia...')
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(selectOptions);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    const embed = new EmbedBuilder()
+        .setTitle('🧪 TESTOWE URUCHOMIENIE LOTERII')
+        .setDescription(`Wybierz loterię do testowego uruchomienia.\n\n` +
+                       `📊 **Aktywnych loterii:** ${activeLotteries.length}\n\n` +
+                       `⚠️ **Uwaga:** Testowe uruchomienie wykonuje pełne losowanie z publikacją wyników w kanale. Użyj tylko do debugowania!`)
+        .setColor('#ffa500')
+        .setFooter({ 
+            text: `Żądanie od ${interaction.user.tag}` 
+        })
+        .setTimestamp();
+
+    await interaction.reply({
+        embeds: [embed],
+        components: [row],
+        ephemeral: true
+    });
 }
 
 /**
@@ -828,18 +984,7 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('reroll')
-            .setDescription('Przeprowadza ponowne losowanie dla wybranej historycznej loterii')
-            .addIntegerOption(option =>
-                option.setName('indeks')
-                    .setDescription('Indeks loterii z historii (0 = najstarsza)')
-                    .setRequired(true)
-                    .setMinValue(0))
-            .addIntegerOption(option =>
-                option.setName('dodatkowi')
-                    .setDescription('Liczba dodatkowych zwycięzców (domyślnie 1)')
-                    .setRequired(false)
-                    .setMinValue(1)
-                    .setMaxValue(10)),
+            .setDescription('Przeprowadza ponowne losowanie dla wybranej historycznej loterii'),
 
         new SlashCommandBuilder()
             .setName('lottery-remove')
@@ -856,10 +1001,6 @@ async function registerSlashCommands(client, config) {
         new SlashCommandBuilder()
             .setName('lottery-test')
             .setDescription('Testowe uruchomienie loterii (admin only)')
-            .addStringOption(option =>
-                option.setName('id')
-                    .setDescription('ID loterii do testowego uruchomienia')
-                    .setRequired(true))
     ];
 
     const rest = new REST().setToken(config.token);
