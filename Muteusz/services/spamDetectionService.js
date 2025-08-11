@@ -23,7 +23,7 @@ class SpamDetectionService {
             this.cleanupOldMessages();
         }, 5 * 60 * 1000);
         
-        this.logger.info(`🔍 SpamDetectionService zainicjalizowany - wykrywanie duplikatów linków zewnętrznych i zaproszeń Discord (timeout: ${this.timeoutDuration / (24 * 60 * 60 * 1000)} dni)`);
+        this.logger.info(`🔍 SpamDetectionService zainicjalizowany - wykrywanie duplikatów/podobnych wiadomości z linkami (timeout: ${this.timeoutDuration / (24 * 60 * 60 * 1000)} dni)`);
     }
     
     /**
@@ -64,9 +64,9 @@ class SpamDetectionService {
             now - msg.timestamp < this.timeWindow
         );
         
-        // Sprawdź duplikaty
+        // Sprawdź duplikaty (identyczne i podobne wiadomości z linkami)
         const duplicates = recentMessages.filter(msg => 
-            this.normalizeMessage(msg.content) === this.normalizeMessage(message.content)
+            this.areMessagesSimilar(msg.content, message.content)
         );
         
         const duplicateCount = duplicates.length + 1; // +1 za aktualną wiadomość
@@ -82,11 +82,11 @@ class SpamDetectionService {
         // Zaktualizuj historię użytkownika
         this.userMessages.set(userId, recentMessages);
         
-        this.logger.info(`🔍 ${message.author.tag} - duplikaty z linkami: ${duplicateCount}/${this.maxDuplicates}`);
+        this.logger.info(`🔍 ${message.author.tag} - duplikaty/podobne z linkami: ${duplicateCount}/${this.maxDuplicates}`);
         
         // Jeśli osiągnięto limit duplikatów
         if (duplicateCount >= this.maxDuplicates) {
-            this.logger.warn(`🚨 SPAM DETECT: ${message.author.tag} wysłał ${duplicateCount} identycznych wiadomości z linkami/zaproszeniami`);
+            this.logger.warn(`🚨 SPAM DETECT: ${message.author.tag} wysłał ${duplicateCount} identycznych/podobnych wiadomości z linkami/zaproszeniami`);
             
             return {
                 isSpam: true,
@@ -141,6 +141,84 @@ class SpamDetectionService {
      */
     normalizeMessage(content) {
         return content.toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+    
+    /**
+     * Sprawdza podobieństwo wiadomości z linkami (dla ukrytych linków w długim tekście)
+     * @param {string} content1 - Pierwsza wiadomość
+     * @param {string} content2 - Druga wiadomość
+     * @returns {boolean} Czy wiadomości są podobne
+     */
+    areMessagesSimilar(content1, content2) {
+        const normalized1 = this.normalizeMessage(content1);
+        const normalized2 = this.normalizeMessage(content2);
+        
+        // Jeśli wiadomości są identyczne
+        if (normalized1 === normalized2) {
+            return true;
+        }
+        
+        // Wyciągnij linki z obu wiadomości
+        const links1 = this.extractSuspiciousLinks(content1);
+        const links2 = this.extractSuspiciousLinks(content2);
+        
+        // Jeśli nie ma linków w obu, nie porównuj
+        if (links1.length === 0 || links2.length === 0) {
+            return false;
+        }
+        
+        // Sprawdź czy mają wspólne linki
+        const commonLinks = links1.filter(link => links2.includes(link));
+        if (commonLinks.length === 0) {
+            return false;
+        }
+        
+        // Usuń linki z wiadomości i porównaj pozostały tekst
+        let text1 = content1;
+        let text2 = content2;
+        
+        // Usuń wszystkie podejrzane linki
+        const allLinks = [...new Set([...links1, ...links2])];
+        for (const link of allLinks) {
+            const escapedLink = link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            text1 = text1.replace(new RegExp(escapedLink, 'gi'), '');
+            text2 = text2.replace(new RegExp(escapedLink, 'gi'), '');
+        }
+        
+        // Normalizuj teksty po usunięciu linków
+        const normalizedText1 = this.normalizeMessage(text1);
+        const normalizedText2 = this.normalizeMessage(text2);
+        
+        // Jeśli teksty są bardzo podobne (minimum 70% podobieństwa)
+        const similarity = this.calculateTextSimilarity(normalizedText1, normalizedText2);
+        
+        this.logger.info(`🔍 Podobieństwo tekstów: ${(similarity * 100).toFixed(1)}% (${similarity >= 0.7 ? 'PODOBNE' : 'różne'})`);
+        
+        return similarity >= 0.7; // 70% podobieństwa
+    }
+    
+    /**
+     * Oblicza podobieństwo między dwoma tekstami (algorytm Jaro-Winkler uproszczony)
+     * @param {string} text1 - Pierwszy tekst
+     * @param {string} text2 - Drugi tekst  
+     * @returns {number} Podobieństwo od 0 do 1
+     */
+    calculateTextSimilarity(text1, text2) {
+        if (text1 === text2) return 1.0;
+        if (text1.length === 0 && text2.length === 0) return 1.0;
+        if (text1.length === 0 || text2.length === 0) return 0.0;
+        
+        // Uproszczony algorytm podobieństwa oparty na wspólnych słowach
+        const words1 = text1.split(' ').filter(w => w.length > 2);
+        const words2 = text2.split(' ').filter(w => w.length > 2);
+        
+        if (words1.length === 0 && words2.length === 0) return 1.0;
+        if (words1.length === 0 || words2.length === 0) return 0.0;
+        
+        const commonWords = words1.filter(word => words2.includes(word));
+        const totalWords = new Set([...words1, ...words2]).size;
+        
+        return commonWords.length / totalWords;
     }
     
     /**
@@ -231,7 +309,7 @@ class SpamDetectionService {
             const embed = new EmbedBuilder()
                 .setTitle('🚨 SPAM DETECTED - Automatyczny Timeout')
                 .setColor('#ff4444')
-                .setDescription(`Użytkownik wysłał ${result.duplicateCount} identycznych wiadomości z linkami zewnętrznymi lub zaproszeniami Discord`)
+                .setDescription(`Użytkownik wysłał ${result.duplicateCount} identycznych/podobnych wiadomości z linkami zewnętrznymi lub zaproszeniami Discord`)
                 .addFields(
                     {
                         name: '👤 Użytkownik',
