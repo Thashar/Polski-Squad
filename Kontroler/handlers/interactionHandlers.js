@@ -22,9 +22,6 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery-remove':
                     await handleLotteryRemoveCommand(interaction, config, lotteryService);
                     break;
-                case 'lottery-list':
-                    await handleLotteryListCommand(interaction, config, lotteryService);
-                    break;
                 case 'lottery-debug':
                     await handleLotteryDebugCommand(interaction, config, lotteryService);
                     break;
@@ -435,7 +432,7 @@ async function handleLotteryRemoveSelect(interaction, config, lotteryService) {
             await interaction.editReply({
                 content: `❌ **Loteria nie została znaleziona!**\n\n` +
                         `Loteria o ID \`${lotteryId}\` mogła zostać już usunięta lub nie istnieje.\n\n` +
-                        `💡 Użyj \`/lottery-list\` aby sprawdzić aktywne loterie.`,
+                        `💡 Użyj \`/lottery-debug\` aby sprawdzić aktywne loterie.`,
                 embeds: [],
                 components: []
             });
@@ -536,7 +533,7 @@ async function handleLotteryTestSelect(interaction, config, lotteryService) {
             await interaction.editReply({
                 content: `❌ **Loteria nie została znaleziona!**\n\n` +
                         `Loteria o ID \`${lotteryId}\` mogła zostać już usunięta lub nie istnieje.\n\n` +
-                        `💡 Użyj \`/lottery-list\` aby sprawdzić aktywne loterie.`,
+                        `💡 Użyj \`/lottery-debug\` aby sprawdzić aktywne loterie.`,
                 embeds: [],
                 components: []
             });
@@ -660,118 +657,6 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
     }
 }
 
-/**
- * Obsługuje komendę lottery-list
- */
-async function handleLotteryListCommand(interaction, config, lotteryService) {
-    // Sprawdź uprawnienia administratora
-    if (!interaction.member.permissions.has('Administrator')) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
-        });
-        return;
-    }
-
-    if (!lotteryService) {
-        await interaction.reply({
-            content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
-        });
-        return;
-    }
-
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-        const activeLotteries = lotteryService.getActiveLotteries();
-        const history = await lotteryService.getLotteryHistory();
-
-        const { EmbedBuilder } = require('discord.js');
-        
-        const embed = new EmbedBuilder()
-            .setTitle('🎰 ZARZĄDZANIE LOTERIAMI')
-            .setColor('#00ff00')
-            .setTimestamp();
-
-        // Aktywne loterie
-        if (activeLotteries.length > 0) {
-            const activeList = activeLotteries.map(lottery => {
-                const nextDraw = new Date(lottery.nextDraw).toLocaleString('pl-PL');
-                const clan = config.lottery.clans[lottery.clanKey];
-                
-                // Parsuj ID dla lepszej czytelności
-                const idParts = lottery.id.split('_');
-                const datePart = idParts[0];
-                const rolePart = idParts[1] || '';
-                const clanPart = idParts[2] || '';
-                const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
-                
-                return `**${lottery.name}**\n` +
-                       `🆔 \`${lottery.id}\`\n` +
-                       `📊 **ID**: ${formattedDate} | ${rolePart} | ${clanPart}\n` +
-                       `🏰 ${clan ? clan.displayName : 'Nieznany klan'}\n` +
-                       `📅 ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} (co ${lottery.frequency} dni)\n` +
-                       `🏆 ${lottery.winnersCount} zwycięzców\n` +
-                       `📺 <#${lottery.channelId}>\n` +
-                       `⏭️ Następne: ${nextDraw}`;
-            }).join('\n\n');
-
-            embed.addFields({
-                name: `🎯 Aktywne Loterie (${activeLotteries.length})`,
-                value: activeList.length > 1024 ? activeList.substring(0, 1020) + '...' : activeList,
-                inline: false
-            });
-        } else {
-            embed.addFields({
-                name: '🎯 Aktywne Loterie (0)',
-                value: 'Brak aktywnych loterii',
-                inline: false
-            });
-        }
-
-        // Historia
-        if (history.length > 0) {
-            const recentHistory = history.slice(-3).map(result => {
-                const date = new Date(result.date).toLocaleDateString('pl-PL');
-                return `**${result.lotteryName}**\n` +
-                       `📅 ${date} | 👥 ${result.participantCount} uczestników | 🏆 ${result.winners.length} zwycięzców`;
-            }).join('\n\n');
-
-            embed.addFields({
-                name: `📜 Ostatnie Loterie (${history.length} w historii)`,
-                value: recentHistory,
-                inline: false
-            });
-        }
-
-        // Instrukcje
-        embed.addFields({
-            name: '🛠️ Zarządzanie',
-            value: `• \`/lottery\` - Utwórz nową loterię\n` +
-                   `• \`/lottery-remove id:<ID>\` - Usuń loterię\n` +
-                   `• \`/reroll indeks:<numer>\` - Ponowne losowanie\n` +
-                   `• \`/lottery-list\` - Ta lista\n\n` +
-                   `📋 **Format ID**: \`YYYYMMDD_rola_klan_xxxx\`\n` +
-                   `   Np: \`20250112_daily_main_a3b7\``,
-            inline: false
-        });
-
-        embed.setFooter({
-            text: `Sprawdzone przez ${interaction.user.tag} | Kontroler Bot`
-        });
-
-        await interaction.editReply({ embeds: [embed] });
-
-        logger.info(`📋 ${interaction.user.tag} sprawdził listę loterii`);
-
-    } catch (error) {
-        await interaction.editReply({
-            content: `❌ Błąd podczas pobierania listy loterii: ${error.message}`
-        });
-        logger.error('❌ Błąd listy loterii:', error);
-    }
-}
 
 /**
  * Obsługuje komendę lottery-debug
@@ -990,9 +875,6 @@ async function registerSlashCommands(client, config) {
             .setName('lottery-remove')
             .setDescription('Usuwa aktywną loterię (lista wyboru)'),
 
-        new SlashCommandBuilder()
-            .setName('lottery-list')
-            .setDescription('Wyświetla listę wszystkich aktywnych loterii i historię'),
 
         new SlashCommandBuilder()
             .setName('lottery-debug')

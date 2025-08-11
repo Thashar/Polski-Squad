@@ -95,7 +95,7 @@ function onReady() {
     Object.entries(config.lottery.clans).forEach(([key, clan]) => {
         logger.info(`   ${key}: ${clan.displayName} (${clan.roleId})`);
     });
-    logger.info('   Komendy: /lottery, /lottery-remove, /lottery-list, /reroll');
+    logger.info('   Komendy: /lottery, /lottery-remove, /reroll');
     logger.info('   Automatyczne losowania z harmonogramem cron');
     logger.info('─'.repeat(50) + '\n');
 }
