@@ -2,6 +2,7 @@ const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const AutoModerationService = require('../services/autoModerationService');
 const WarningService = require('../services/warningService');
+const SpamDetectionService = require('../services/spamDetectionService');
 
 const logger = createBotLogger('Muteusz');
 
@@ -12,6 +13,7 @@ class MessageHandler {
         this.logService = logService;
         this.warningService = new WarningService(config, logger);
         this.autoModerationService = new AutoModerationService(config, logger, this.warningService);
+        this.spamDetectionService = new SpamDetectionService(config, logger);
         
         // Uruchom czyszczenie co 5 minut
         setInterval(() => {
@@ -50,6 +52,27 @@ class MessageHandler {
 
         // Auto-moderacja
         await this.handleAutoModeration(message);
+        
+        // Detekcja spamu z linkami
+        await this.handleSpamDetection(message);
+    }
+
+    /**
+     * Obsługuje detekcję spamu z linkami
+     * @param {Message} message - Wiadomość Discord
+     */
+    async handleSpamDetection(message) {
+        try {
+            // Sprawdź wiadomość pod kątem spamu
+            const result = await this.spamDetectionService.processMessage(message);
+            
+            // Jeśli wykryto spam, wykonaj akcje
+            if (result.isSpam) {
+                await this.spamDetectionService.executeAntiSpamActions(message, result);
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd detekcji spamu: ${error.message}`);
+        }
     }
 
     /**

@@ -122,5 +122,14 @@ module.exports = {
         pepeSoldierEmoji: '<:PepeSolidierVirtittiPapajlari:1401322467397472459>'
     },
     
+    // Konfiguracja detekcji spamu z linkami
+    spamDetection: {
+        enabled: true,
+        maxDuplicates: 3, // Po 3 duplikatach = timeout
+        timeWindow: 30 * 60 * 1000, // 30 minut okno czasowe
+        timeoutDuration: 7 * 24 * 60 * 60 * 1000, // 7 dni timeout
+        alertChannelId: '1173653205557719140' // Kanał do powiadomień
+    },
+    
     messages
 };
