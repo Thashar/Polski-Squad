@@ -34,6 +34,15 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
+        } else if (interaction.isStringSelectMenu()) {
+            // Obsługa Select Menu
+            switch (interaction.customId) {
+                case 'lottery_remove_select':
+                    await handleLotteryRemoveSelect(interaction, config, lotteryService);
+                    break;
+                default:
+                    await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
+            }
         }
     } catch (error) {
         logger.error('❌ Błąd obsługi interakcji:', error);
@@ -341,36 +350,96 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
         return;
     }
 
-    const lotteryId = interaction.options.getString('id');
+    const activeLotteries = lotteryService.getActiveLotteries();
 
-    await interaction.deferReply({ ephemeral: true });
+    if (activeLotteries.length === 0) {
+        await interaction.reply({
+            content: '📋 **Brak aktywnych loterii do usunięcia.**\n\n💡 Użyj `/lottery` aby utworzyć nową loterię.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Stwórz Select Menu z aktywnymi loteriami
+    const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+    
+    const selectOptions = activeLotteries.map(lottery => {
+        const datePart = lottery.id.split('_')[0];
+        const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
+        const clan = config.lottery.clans[lottery.clanKey];
+        
+        return {
+            label: `${lottery.name}`,
+            description: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | ${formattedDate}`,
+            value: lottery.id,
+            emoji: '🎰'
+        };
+    });
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('lottery_remove_select')
+        .setPlaceholder('🗑️ Wybierz loterię do usunięcia...')
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(selectOptions);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    const embed = new EmbedBuilder()
+        .setTitle('🗑️ USUWANIE LOTERII')
+        .setDescription(`Wybierz loterię do usunięcia z listy poniżej.\n\n` +
+                       `📊 **Aktywnych loterii:** ${activeLotteries.length}\n\n` +
+                       `⚠️ **Uwaga:** Usunięcie loterii zatrzyma wszystkie automatyczne losowania dla wybranej loterii.`)
+        .setColor('#ff6b6b')
+        .setFooter({ 
+            text: `Żądanie od ${interaction.user.tag}` 
+        })
+        .setTimestamp();
+
+    await interaction.reply({
+        embeds: [embed],
+        components: [row],
+        ephemeral: true
+    });
+}
+
+/**
+ * Obsługuje wybór loterii do usunięcia z Select Menu
+ */
+async function handleLotteryRemoveSelect(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    if (!lotteryService) {
+        await interaction.reply({
+            content: '❌ Serwis loterii nie jest dostępny.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const lotteryId = interaction.values[0];
+
+    await interaction.deferUpdate();
 
     try {
-        // Sprawdź czy loteria istnieje
+        // Sprawdź czy loteria nadal istnieje
         const activeLotteries = lotteryService.getActiveLotteries();
         const lottery = activeLotteries.find(l => l.id === lotteryId);
         
         if (!lottery) {
-            // Pokaż dostępne loterie
-            if (activeLotteries.length === 0) {
-                await interaction.editReply({
-                    content: '❌ Nie znaleziono loterii o podanym ID.\n\n📋 **Brak aktywnych loterii.**'
-                });
-                return;
-            }
-
-            const lotteryList = activeLotteries.map(l => {
-                const datePart = l.id.split('_')[0];
-                const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
-                return `**${l.id}** - ${l.name}\n` +
-                       `   📅 ${l.dayOfWeek} o ${l.hour}:${l.minute.toString().padStart(2, '0')} (${formattedDate})\n` +
-                       `   ⏭️ Następne: ${new Date(l.nextDraw).toLocaleString('pl-PL')}`;
-            }).join('\n\n');
-
             await interaction.editReply({
-                content: `❌ Nie znaleziono loterii o ID: \`${lotteryId}\`\n\n` +
-                        `📋 **Aktywne loterie:**\n${lotteryList}\n\n` +
-                        `💡 Użyj pełnego ID loterii lub skorzystaj z \`/lottery-list\``
+                content: `❌ **Loteria nie została znaleziona!**\n\n` +
+                        `Loteria o ID \`${lotteryId}\` mogła zostać już usunięta lub nie istnieje.\n\n` +
+                        `💡 Użyj \`/lottery-list\` aby sprawdzić aktywne loterie.`,
+                embeds: [],
+                components: []
             });
             return;
         }
@@ -378,22 +447,60 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
         // Usuń loterię
         await lotteryService.removeLottery(lotteryId);
 
+        const { EmbedBuilder } = require('discord.js');
+        
+        const successEmbed = new EmbedBuilder()
+            .setTitle('✅ LOTERIA USUNIĘTA')
+            .setDescription(`Loteria została pomyślnie usunięta i wszystkie automatyczne losowania zostały zatrzymane.`)
+            .setColor('#00ff00')
+            .addFields(
+                {
+                    name: '🗑️ Usunięta loteria',
+                    value: `**${lottery.name}**`,
+                    inline: false
+                },
+                {
+                    name: '📅 Harmonogram',
+                    value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                    inline: true
+                },
+                {
+                    name: '🏆 Zwycięzców',
+                    value: lottery.winnersCount.toString(),
+                    inline: true
+                },
+                {
+                    name: '📺 Kanał',
+                    value: `<#${lottery.channelId}>`,
+                    inline: true
+                },
+                {
+                    name: '🆔 ID Loterii',
+                    value: `\`${lottery.id}\``,
+                    inline: false
+                }
+            )
+            .setFooter({ 
+                text: `Usunięte przez ${interaction.user.tag}` 
+            })
+            .setTimestamp();
+
         await interaction.editReply({
-            content: `✅ **Loteria została usunięta pomyślnie!**\n\n` +
-                    `🗑️ **Usunięto:** ${lottery.name}\n` +
-                    `📅 **Harmonogram:** ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}\n` +
-                    `🏆 **Zwycięzców:** ${lottery.winnersCount}\n` +
-                    `🆔 **ID:** \`${lottery.id}\`\n\n` +
-                    `⚠️ **Automatyczne losowania zostały zatrzymane.**`
+            embeds: [successEmbed],
+            components: []
         });
 
-        logger.info(`✅ ${interaction.user.tag} usunął loterię: ${lottery.name} (${lotteryId})`);
+        logger.info(`✅ ${interaction.user.tag} usunął loterię przez Select Menu: ${lottery.name} (${lotteryId})`);
 
     } catch (error) {
         await interaction.editReply({
-            content: `❌ Błąd podczas usuwania loterii: ${error.message}`
+            content: `❌ **Błąd podczas usuwania loterii!**\n\n` +
+                    `Szczegóły: ${error.message}\n\n` +
+                    `💡 Spróbuj ponownie lub skontaktuj się z administratorem.`,
+            embeds: [],
+            components: []
         });
-        logger.error('❌ Błąd usuwania loterii:', error);
+        logger.error('❌ Błąd usuwania loterii przez Select Menu:', error);
     }
 }
 
@@ -736,11 +843,7 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('lottery-remove')
-            .setDescription('Usuwa aktywną loterię')
-            .addStringOption(option =>
-                option.setName('id')
-                    .setDescription('ID loterii do usunięcia')
-                    .setRequired(true)),
+            .setDescription('Usuwa aktywną loterię (lista wyboru)'),
 
         new SlashCommandBuilder()
             .setName('lottery-list')
