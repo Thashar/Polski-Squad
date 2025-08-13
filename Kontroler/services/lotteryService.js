@@ -761,10 +761,7 @@ class LotteryService {
 
             const originalResult = history[resultIndex];
             
-            // Pobierz członków którzy nie wygrali w oryginalnej loterii
-            const guild = this.client.guilds.cache.get(this.config.guildId);
-            await guild.members.fetch();
-
+            // Pobierz uczestników którzy nie wygrali w oryginalnej loterii
             const originalWinnerIds = originalResult.winners.map(w => w.id);
             const eligibleForReroll = originalResult.participants.filter(p => !originalWinnerIds.includes(p.id));
 
@@ -772,25 +769,16 @@ class LotteryService {
                 throw new Error('Brak osób kwalifikujących się do ponownego losowania');
             }
 
-            // Sprawdź czy uczestnicy nadal są na serwerze i mają odpowiednie role
-            const validParticipants = [];
-            for (const participant of eligibleForReroll) {
-                const member = guild.members.cache.get(participant.id);
-                if (member && 
-                    member.roles.cache.has(originalResult.targetRole) &&
-                    member.roles.cache.has(originalResult.clanRole) &&
-                    !member.roles.cache.has(this.config.blockedRole)) {
-                    validParticipants.push(member);
-                }
-            }
-
-            if (validParticipants.length === 0) {
-                throw new Error('Brak aktualnie kwalifikujących się osób do ponownego losowania');
-            }
+            // Użyj oryginalnych uczestników bez sprawdzania aktualnych ról
+            // Konwertuj do formatu wymaganego przez drawWinners
+            const participantsMap = new Map();
+            eligibleForReroll.forEach(participant => {
+                participantsMap.set(participant.id, participant);
+            });
 
             // Przeprowadź ponowne losowanie
-            const additionalWinnersCount = Math.min(additionalWinners, validParticipants.length);
-            const newWinners = this.drawWinners(new Map(validParticipants.map(m => [m.id, m])), additionalWinnersCount);
+            const additionalWinnersCount = Math.min(additionalWinners, eligibleForReroll.length);
+            const newWinners = this.drawWinners(participantsMap, additionalWinnersCount);
 
             // Zapisz wynik ponownego losowania
             const rerollResult = {
@@ -799,11 +787,11 @@ class LotteryService {
                 originalDate: originalResult.date,
                 rerollDate: new Date().toISOString(),
                 originalParticipantCount: originalResult.participantCount,
-                rerollParticipantCount: validParticipants.length,
+                rerollParticipantCount: eligibleForReroll.length,
                 originalWinners: originalResult.winners,
                 newWinners: newWinners.map(winner => ({
-                    id: winner.user.id,
-                    username: winner.user.username,
+                    id: winner.id,
+                    username: winner.username,
                     displayName: winner.displayName
                 })),
                 targetRole: originalResult.targetRole,
