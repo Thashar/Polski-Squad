@@ -742,7 +742,18 @@ class LotteryService {
         try {
             const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
             const parsed = JSON.parse(data);
-            return parsed.results || [];
+            
+            // Połącz oryginalne wyniki z rerolls i posortuj po dacie
+            const results = parsed.results || [];
+            const rerolls = parsed.rerolls || [];
+            
+            const allHistory = [...results, ...rerolls].sort((a, b) => {
+                const dateA = new Date(a.originalDate || a.date);
+                const dateB = new Date(b.originalDate || b.date);
+                return dateA - dateB;
+            });
+            
+            return allHistory;
         } catch (error) {
             return [];
         }
@@ -761,9 +772,23 @@ class LotteryService {
 
             const originalResult = history[resultIndex];
             
-            // Pobierz uczestników którzy nie wygrali w oryginalnej loterii
-            const originalWinnerIds = originalResult.winners.map(w => w.id);
-            const eligibleForReroll = originalResult.participants.filter(p => !originalWinnerIds.includes(p.id));
+            // Pobierz oryginalnych uczestników i zwycięzców (dla rerolls może być zagnieżdżone)
+            let originalParticipants = originalResult.participants;
+            let allOriginalWinners = [];
+            
+            // Jeśli to reroll, pobierz dane z oryginalnej loterii i wszystkie poprzednie zwycięzców
+            if (originalResult.originalWinners) {
+                // To jest reroll - zachowaj oryginalnych uczestników
+                originalParticipants = originalResult.participants;
+                allOriginalWinners = [...originalResult.originalWinners, ...originalResult.newWinners];
+            } else {
+                // To jest oryginalna loteria
+                allOriginalWinners = originalResult.winners;
+            }
+            
+            // Usuń wszystkich dotychczasowych zwycięzców z puli
+            const originalWinnerIds = allOriginalWinners.map(w => w.id);
+            const eligibleForReroll = originalParticipants.filter(p => !originalWinnerIds.includes(p.id));
 
             if (eligibleForReroll.length === 0) {
                 throw new Error('Brak osób kwalifikujących się do ponownego losowania');
@@ -780,15 +805,47 @@ class LotteryService {
             const additionalWinnersCount = Math.min(additionalWinners, eligibleForReroll.length);
             const newWinners = this.drawWinners(participantsMap, additionalWinnersCount);
 
+            // Wygeneruj unikalne ID dla rerollu
+            let rerollNumber = 1;
+            let baseId = originalResult.lotteryId;
+            
+            // Jeśli to już reroll, pobierz bazowe ID
+            if (baseId.includes('_reroll')) {
+                const parts = baseId.split('_reroll');
+                baseId = parts[0];
+            }
+            
+            // Znajdź najwyższy numer rerollu dla tego bazowego ID
+            const lotteryData = await this.loadLotteryData();
+            const existingRerolls = lotteryData.rerolls || [];
+            
+            existingRerolls.forEach(reroll => {
+                if (reroll.lotteryId.startsWith(baseId + '_reroll')) {
+                    const match = reroll.lotteryId.match(/_reroll(\d+)$/);
+                    if (match) {
+                        const num = parseInt(match[1]);
+                        if (num >= rerollNumber) {
+                            rerollNumber = num + 1;
+                        }
+                    } else if (reroll.lotteryId === baseId + '_reroll') {
+                        // Pierwszy reroll bez numeru
+                        if (rerollNumber === 1) {
+                            rerollNumber = 2;
+                        }
+                    }
+                }
+            });
+
             // Zapisz wynik ponownego losowania
             const rerollResult = {
-                lotteryId: originalResult.lotteryId + '_reroll',
-                lotteryName: originalResult.lotteryName + ' (Ponowne losowanie)',
-                originalDate: originalResult.date,
+                lotteryId: rerollNumber === 1 ? baseId + '_reroll' : baseId + '_reroll' + rerollNumber,
+                lotteryName: (originalResult.lotteryName.replace(/ \(Reroll \d+\)$/, '').replace(/ \(Ponowne losowanie\)$/, '')) + ` (Reroll ${rerollNumber})`,
+                originalDate: originalResult.originalDate || originalResult.date,
                 rerollDate: new Date().toISOString(),
-                originalParticipantCount: originalResult.participantCount,
+                originalParticipantCount: originalResult.originalParticipantCount || originalResult.participantCount,
                 rerollParticipantCount: eligibleForReroll.length,
-                originalWinners: originalResult.winners,
+                participants: originalParticipants,
+                originalWinners: originalResult.originalWinners || originalResult.winners,
                 newWinners: newWinners.map(winner => ({
                     id: winner.id,
                     username: winner.username,
