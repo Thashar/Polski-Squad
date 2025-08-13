@@ -974,6 +974,61 @@ class LotteryService {
         
         logger.info('🛑 Serwis loterii został zatrzymany');
     }
+
+    /**
+     * Usuwa loterię z historii
+     */
+    async removeHistoricalLottery(historyIndex) {
+        try {
+            const data = await this.loadLotteryData();
+            const history = [...(data.results || []), ...(data.rerolls || [])].sort((a, b) => {
+                const dateA = new Date(a.originalDate || a.date);
+                const dateB = new Date(b.originalDate || b.date);
+                return dateA - dateB;
+            });
+
+            if (historyIndex >= history.length || historyIndex < 0) {
+                throw new Error('Nieprawidłowy indeks loterii historycznej');
+            }
+
+            const lotteryToRemove = history[historyIndex];
+            logger.info(`🗑️ Usuwanie loterii historycznej: ${lotteryToRemove.lotteryName} (${lotteryToRemove.lotteryId})`);
+
+            // Usuń z odpowiedniej tablicy
+            if (lotteryToRemove.lotteryId && lotteryToRemove.lotteryId.includes('_reroll')) {
+                // To jest reroll - usuń z tablicy rerolls
+                if (data.rerolls) {
+                    data.rerolls = data.rerolls.filter(reroll => reroll.lotteryId !== lotteryToRemove.lotteryId);
+                }
+            } else {
+                // To jest oryginalna loteria - usuń z tablicy results
+                if (data.results) {
+                    data.results = data.results.filter(result => result.lotteryId !== lotteryToRemove.lotteryId);
+                }
+                
+                // Usuń także wszystkie związane rerolls
+                if (data.rerolls) {
+                    const baseId = lotteryToRemove.lotteryId;
+                    data.rerolls = data.rerolls.filter(reroll => !reroll.lotteryId.startsWith(baseId + '_reroll'));
+                    logger.info(`🗑️ Usunięto także wszystkie rerolls dla loterii: ${baseId}`);
+                }
+            }
+
+            // Zapisz zmiany
+            data.lastUpdated = new Date().toISOString();
+            await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(data, null, 2));
+            
+            logger.info(`✅ Pomyślnie usunięto loterię historyczną: ${lotteryToRemove.lotteryName}`);
+            return {
+                success: true,
+                removedLottery: lotteryToRemove
+            };
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas usuwania loterii historycznej:`, error);
+            throw error;
+        }
+    }
 }
 
 module.exports = LotteryService;

@@ -37,8 +37,11 @@ async function handleInteraction(interaction, config, lotteryService = null) {
         } else if (interaction.isStringSelectMenu()) {
             // Obsługa Select Menu
             switch (interaction.customId) {
-                case 'lottery_remove_select':
-                    await handleLotteryRemoveSelect(interaction, config, lotteryService);
+                case 'lottery_remove_planned_select':
+                    await handleLotteryRemovePlannedSelect(interaction, config, lotteryService);
+                    break;
+                case 'lottery_remove_historical_select':
+                    await handleLotteryRemoveHistoricalSelect(interaction, config, lotteryService);
                     break;
                 case 'lottery_test_select':
                     await handleLotteryTestSelect(interaction, config, lotteryService);
@@ -366,17 +369,30 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
         return;
     }
 
+    const removeType = interaction.options.getString('typ');
+    
+    if (removeType === 'planned') {
+        await handlePlannedLotteryRemove(interaction, config, lotteryService);
+    } else if (removeType === 'historical') {
+        await handleHistoricalLotteryRemove(interaction, config, lotteryService);
+    }
+}
+
+/**
+ * Obsługuje usuwanie zaplanowanych loterii
+ */
+async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
     const activeLotteries = lotteryService.getActiveLotteries();
 
     if (activeLotteries.length === 0) {
         await interaction.reply({
-            content: '📋 **Brak aktywnych loterii do usunięcia.**\n\n💡 Użyj `/lottery` aby utworzyć nową loterię.',
+            content: '📋 **Brak zaplanowanych loterii do usunięcia.**\n\n💡 Użyj `/lottery` aby utworzyć nową loterię.',
             ephemeral: true
         });
         return;
     }
 
-    // Stwórz Select Menu z aktywnymi loteriami
+    // Stwórz Select Menu z zaplanowanymi loteriami
     const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     
     const selectOptions = activeLotteries.map(lottery => {
@@ -393,8 +409,8 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
     });
 
     const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('lottery_remove_select')
-        .setPlaceholder('🗑️ Wybierz loterię do usunięcia...')
+        .setCustomId('lottery_remove_planned_select')
+        .setPlaceholder('🗑️ Wybierz zaplanowaną loterię do usunięcia...')
         .setMinValues(1)
         .setMaxValues(1)
         .addOptions(selectOptions);
@@ -402,9 +418,9 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
     const row = new ActionRowBuilder().addComponents(selectMenu);
 
     const embed = new EmbedBuilder()
-        .setTitle('🗑️ USUWANIE LOTERII')
-        .setDescription(`Wybierz loterię do usunięcia z listy poniżej.\n\n` +
-                       `📊 **Aktywnych loterii:** ${activeLotteries.length}\n\n` +
+        .setTitle('🗑️ USUWANIE ZAPLANOWANEJ LOTERII')
+        .setDescription(`Wybierz zaplanowaną loterię do usunięcia z listy poniżej.\n\n` +
+                       `📊 **Zaplanowanych loterii:** ${activeLotteries.length}\n\n` +
                        `⚠️ **Uwaga:** Usunięcie loterii zatrzyma wszystkie automatyczne losowania dla wybranej loterii.`)
         .setColor('#ff6b6b')
         .setFooter({ 
@@ -420,9 +436,67 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
 }
 
 /**
- * Obsługuje wybór loterii do usunięcia z Select Menu
+ * Obsługuje usuwanie historycznych loterii
  */
-async function handleLotteryRemoveSelect(interaction, config, lotteryService) {
+async function handleHistoricalLotteryRemove(interaction, config, lotteryService) {
+    const history = await lotteryService.getLotteryHistory();
+
+    if (history.length === 0) {
+        await interaction.reply({
+            content: '📋 **Brak historycznych loterii do usunięcia.**\n\n💡 Przeprowadź najpierw jakąś loterię używając `/lottery` lub `/lottery-test`.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Stwórz Select Menu z ostatnimi 20 loteriami historycznymi
+    const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+    
+    const recentHistory = history.slice(-20); // Ostatnie 20 loterii
+    const selectOptions = recentHistory.map((result, index) => {
+        const originalIndex = history.length - recentHistory.length + index;
+        const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL');
+        const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+        
+        return {
+            label: `${result.lotteryName}`,
+            description: `${date} ${time} | ${result.participantCount || result.originalParticipantCount} uczestników | ${(result.winners || result.newWinners || []).length} zwycięzców`,
+            value: originalIndex.toString(),
+            emoji: result.lotteryId && result.lotteryId.includes('_reroll') ? '🔄' : '🎲'
+        };
+    });
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('lottery_remove_historical_select')
+        .setPlaceholder('🗑️ Wybierz historyczną loterię do usunięcia...')
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(selectOptions);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    const embed = new EmbedBuilder()
+        .setTitle('🗑️ USUWANIE HISTORYCZNEJ LOTERII')
+        .setDescription(`Wybierz historyczną loterię do usunięcia z listy poniżej.\n\n` +
+                       `📊 **Historycznych loterii:** ${history.length} (pokazano ostatnie 20)\n\n` +
+                       `⚠️ **Uwaga:** Usunięcie loterii historycznej spowoduje trwałe usunięcie wszystkich związanych z nią danych, w tym rerolls.`)
+        .setColor('#ff6b6b')
+        .setFooter({ 
+            text: `Żądanie od ${interaction.user.tag}` 
+        })
+        .setTimestamp();
+
+    await interaction.reply({
+        embeds: [embed],
+        components: [row],
+        ephemeral: true
+    });
+}
+
+/**
+ * Obsługuje wybór zaplanowanej loterii do usunięcia z Select Menu
+ */
+async function handleLotteryRemovePlannedSelect(interaction, config, lotteryService) {
     // Sprawdź uprawnienia administratora
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
@@ -517,6 +591,105 @@ async function handleLotteryRemoveSelect(interaction, config, lotteryService) {
             components: []
         });
         logger.error('❌ Błąd usuwania loterii przez Select Menu:', error);
+    }
+}
+
+/**
+ * Obsługuje wybór historycznej loterii do usunięcia z Select Menu
+ */
+async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    await interaction.deferUpdate();
+
+    try {
+        const historyIndex = parseInt(interaction.values[0]);
+        const history = await lotteryService.getLotteryHistory();
+
+        if (historyIndex >= history.length || historyIndex < 0) {
+            await interaction.editReply({
+                content: '❌ **Błąd!** Nieprawidłowy indeks loterii historycznej.',
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        const lotteryToRemove = history[historyIndex];
+        
+        // Usuń loterię historyczną
+        const result = await lotteryService.removeHistoricalLottery(historyIndex);
+
+        const { EmbedBuilder } = require('discord.js');
+        
+        const successEmbed = new EmbedBuilder()
+            .setTitle('✅ LOTERIA HISTORYCZNA USUNIĘTA')
+            .setDescription(`Loteria historyczna została pomyślnie usunięta z systemu.`)
+            .setColor('#00ff00')
+            .addFields(
+                {
+                    name: '🗑️ Usunięta loteria',
+                    value: `**${lotteryToRemove.lotteryName}**`,
+                    inline: false
+                },
+                {
+                    name: '📅 Data',
+                    value: new Date(lotteryToRemove.originalDate || lotteryToRemove.date).toLocaleDateString('pl-PL'),
+                    inline: true
+                },
+                {
+                    name: '👥 Uczestnicy',
+                    value: (lotteryToRemove.participantCount || lotteryToRemove.originalParticipantCount || 0).toString(),
+                    inline: true
+                },
+                {
+                    name: '🏆 Zwycięzców',
+                    value: (lotteryToRemove.winners || lotteryToRemove.newWinners || []).length.toString(),
+                    inline: true
+                },
+                {
+                    name: '🆔 ID Loterii',
+                    value: `\`${lotteryToRemove.lotteryId}\``,
+                    inline: false
+                }
+            )
+            .setFooter({ 
+                text: `Usunięte przez ${interaction.user.tag}` 
+            })
+            .setTimestamp();
+
+        // Dodaj informację o usuniętych rerolls jeśli to była oryginalna loteria
+        if (!lotteryToRemove.lotteryId.includes('_reroll')) {
+            successEmbed.addFields({
+                name: '🔄 Dodatkowe informacje',
+                value: 'Usunięto także wszystkie powiązane rerolls dla tej loterii.',
+                inline: false
+            });
+        }
+
+        await interaction.editReply({
+            embeds: [successEmbed],
+            components: []
+        });
+
+        logger.info(`✅ ${interaction.user.tag} usunął loterię historyczną przez Select Menu: ${lotteryToRemove.lotteryName} (${lotteryToRemove.lotteryId})`);
+
+    } catch (error) {
+        await interaction.editReply({
+            content: `❌ **Błąd podczas usuwania loterii historycznej!**\n\n` +
+                    `Szczegóły: ${error.message}\n\n` +
+                    `💡 Spróbuj ponownie lub skontaktuj się z administratorem.`,
+            embeds: [],
+            components: []
+        });
+        logger.error('❌ Błąd usuwania loterii historycznej przez Select Menu:', error);
     }
 }
 
@@ -894,7 +1067,15 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('lottery-remove')
-            .setDescription('Usuwa aktywną loterię (lista wyboru)'),
+            .setDescription('Usuwa loterię')
+            .addStringOption(option =>
+                option.setName('typ')
+                    .setDescription('Typ loterii do usunięcia')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Zaplanowana loteria', value: 'planned' },
+                        { name: 'Historyczna loteria', value: 'historical' }
+                    )),
 
         new SlashCommandBuilder()
             .setName('lottery-history')
