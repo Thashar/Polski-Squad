@@ -22,6 +22,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery-remove':
                     await handleLotteryRemoveCommand(interaction, config, lotteryService);
                     break;
+                case 'lottery-history':
+                    await handleLotteryHistoryCommand(interaction, config, lotteryService);
+                    break;
                 case 'lottery-debug':
                     await handleLotteryDebugCommand(interaction, config, lotteryService);
                     break;
@@ -45,6 +48,24 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     break;
                 default:
                     await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
+            }
+        } else if (interaction.isButton()) {
+            // Obsługa Button
+            switch (interaction.customId) {
+                case 'lottery_history_prev':
+                    await handleLotteryHistoryNavigation(interaction, config, lotteryService, 'prev');
+                    break;
+                case 'lottery_history_next':
+                    await handleLotteryHistoryNavigation(interaction, config, lotteryService, 'next');
+                    break;
+                case 'lottery_history_stats':
+                    await handleLotteryHistoryStats(interaction, config, lotteryService);
+                    break;
+                case 'lottery_history_back':
+                    await handleLotteryHistoryCommand(interaction, config, lotteryService, true);
+                    break;
+                default:
+                    await interaction.reply({ content: 'Nieznany przycisk!', ephemeral: true });
             }
         }
     } catch (error) {
@@ -875,6 +896,9 @@ async function registerSlashCommands(client, config) {
             .setName('lottery-remove')
             .setDescription('Usuwa aktywną loterię (lista wyboru)'),
 
+        new SlashCommandBuilder()
+            .setName('lottery-history')
+            .setDescription('Wyświetla historię wszystkich przeprowadzonych loterii'),
 
         new SlashCommandBuilder()
             .setName('lottery-debug')
@@ -897,6 +921,298 @@ async function registerSlashCommands(client, config) {
     } catch (error) {
         logger.error('[COMMANDS] ❌ Błąd rejestracji komend slash:', error);
     }
+}
+
+/**
+ * Obsługuje komendę lottery-history
+ */
+async function handleLotteryHistoryCommand(interaction, config, lotteryService, isUpdate = false) {
+    if (!isUpdate) {
+        await interaction.deferReply({ ephemeral: true });
+    }
+
+    try {
+        const history = await lotteryService.getLotteryHistory();
+        
+        if (history.length === 0) {
+            const content = '📋 **Brak historii loterii do wyświetlenia.**\n\n💡 Przeprowadź najpierw jakąś loterię używając `/lottery` lub `/lottery-test`.';
+            
+            if (isUpdate) {
+                await interaction.update({ content, embeds: [], components: [] });
+            } else {
+                await interaction.editReply({ content });
+            }
+            return;
+        }
+
+        // Pobierz numer strony z customId jeśli to nawigacja
+        let currentPage = 0;
+        if (interaction.customId && interaction.customId.includes('_page_')) {
+            const pageMatch = interaction.customId.match(/_page_(\d+)$/);
+            if (pageMatch) {
+                currentPage = parseInt(pageMatch[1]);
+            }
+        }
+
+        const { embed, components } = await generateHistoryEmbed(history, currentPage, config);
+        
+        if (isUpdate) {
+            await interaction.update({ embeds: [embed], components });
+        } else {
+            await interaction.editReply({ embeds: [embed], components });
+        }
+
+    } catch (error) {
+        logger.error('❌ Błąd ładowania historii:', error);
+        const errorContent = '❌ Wystąpił błąd podczas ładowania historii loterii.';
+        
+        if (isUpdate) {
+            await interaction.update({ content: errorContent, embeds: [], components: [] });
+        } else {
+            await interaction.editReply({ content: errorContent });
+        }
+    }
+}
+
+/**
+ * Obsługuje nawigację w historii loterii
+ */
+async function handleLotteryHistoryNavigation(interaction, config, lotteryService, direction) {
+    try {
+        const history = await lotteryService.getLotteryHistory();
+        
+        // Pobierz aktualną stronę z customId
+        let currentPage = 0;
+        if (interaction.message && interaction.message.embeds && interaction.message.embeds[0]) {
+            const embed = interaction.message.embeds[0];
+            const footerMatch = embed.footer?.text.match(/Strona (\d+) z (\d+)/);
+            if (footerMatch) {
+                currentPage = parseInt(footerMatch[1]) - 1;
+            }
+        }
+
+        // Oblicz nową stronę
+        const itemsPerPage = 10;
+        const totalPages = Math.ceil(history.length / itemsPerPage);
+        
+        if (direction === 'next') {
+            currentPage = Math.min(currentPage + 1, totalPages - 1);
+        } else if (direction === 'prev') {
+            currentPage = Math.max(currentPage - 1, 0);
+        }
+
+        const { embed, components } = await generateHistoryEmbed(history, currentPage, config);
+        await interaction.update({ embeds: [embed], components });
+
+    } catch (error) {
+        logger.error('❌ Błąd nawigacji historii:', error);
+        await interaction.update({ 
+            content: '❌ Wystąpił błąd podczas nawigacji.', 
+            embeds: [], 
+            components: [] 
+        });
+    }
+}
+
+/**
+ * Obsługuje wyświetlanie statystyk TOP3
+ */
+async function handleLotteryHistoryStats(interaction, config, lotteryService) {
+    try {
+        const history = await lotteryService.getLotteryHistory();
+        
+        if (history.length === 0) {
+            await interaction.update({ 
+                content: '📋 **Brak historii loterii do analizy.**', 
+                embeds: [], 
+                components: [] 
+            });
+            return;
+        }
+
+        const { embed, components } = await generateStatsEmbed(history, config);
+        await interaction.update({ embeds: [embed], components });
+
+    } catch (error) {
+        logger.error('❌ Błąd ładowania statystyk:', error);
+        await interaction.update({ 
+            content: '❌ Wystąpił błąd podczas ładowania statystyk.', 
+            embeds: [], 
+            components: [] 
+        });
+    }
+}
+
+/**
+ * Generuje embed z historią loterii
+ */
+async function generateHistoryEmbed(history, currentPage, config) {
+    const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+    
+    const itemsPerPage = 10;
+    const totalPages = Math.ceil(history.length / itemsPerPage);
+    const startIndex = currentPage * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, history.length);
+    
+    // Odwróć kolejność aby najnowsze były na górze
+    const reversedHistory = [...history].reverse();
+    const pageItems = reversedHistory.slice(startIndex, endIndex);
+
+    const embed = new EmbedBuilder()
+        .setTitle('📊 Historia Loterii')
+        .setColor('#4CAF50')
+        .setTimestamp()
+        .setFooter({ text: `Strona ${currentPage + 1} z ${totalPages}` });
+
+    if (pageItems.length === 0) {
+        embed.setDescription('Brak loterii na tej stronie.');
+    } else {
+        let description = '';
+        
+        pageItems.forEach((result, index) => {
+            const globalIndex = startIndex + index + 1;
+            const date = new Date(result.date).toLocaleDateString('pl-PL');
+            const time = new Date(result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+            
+            // Znajdź nazwę klanu
+            let clanName = 'Nieznany';
+            if (result.clanName) {
+                clanName = result.clanName;
+            } else {
+                // Fallback - szukaj po roleId
+                Object.values(config.lottery.clans).forEach(clan => {
+                    if (clan.roleId === result.clanRole) {
+                        clanName = clan.displayName;
+                    }
+                });
+            }
+            
+            // Znajdź nazwę roli docelowej
+            let roleName = 'Nieznana rola';
+            Object.values(config.lottery.targetRoles).forEach(role => {
+                if (role.roleId === result.targetRole) {
+                    roleName = role.displayName;
+                }
+            });
+
+            const winnersText = result.winners.map(w => w.displayName || w.username).join(', ');
+
+            description += `**${globalIndex}.** **${result.lotteryName}**\n`;
+            description += `📅 ${date} ${time}\n`;
+            description += `🏰 **Klan:** ${clanName}\n`;
+            description += `🎯 **Rola:** ${roleName}\n`;
+            description += `👥 **Uczestnicy:** ${result.participantCount}\n`;
+            description += `🏆 **Zwycięzcy:** ${winnersText}\n\n`;
+        });
+
+        embed.setDescription(description);
+    }
+
+    // Przyciski nawigacji
+    const prevButton = new ButtonBuilder()
+        .setCustomId('lottery_history_prev')
+        .setLabel('◀️ Poprzednia')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0);
+
+    const nextButton = new ButtonBuilder()
+        .setCustomId('lottery_history_next')
+        .setLabel('Następna ▶️')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === totalPages - 1);
+
+    const statsButton = new ButtonBuilder()
+        .setCustomId('lottery_history_stats')
+        .setLabel('📈 Statystyki TOP3')
+        .setStyle(ButtonStyle.Primary);
+
+    const components = [
+        new ActionRowBuilder().addComponents(prevButton, nextButton, statsButton)
+    ];
+
+    return { embed, components };
+}
+
+/**
+ * Generuje embed ze statystykami TOP3
+ */
+async function generateStatsEmbed(history, config) {
+    const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+    
+    // Grupuj zwycięzców według klanów
+    const clanStats = {};
+    
+    // Inicjalizuj statystyki dla każdego klanu
+    Object.entries(config.lottery.clans).forEach(([key, clan]) => {
+        clanStats[clan.roleId] = {
+            name: clan.displayName,
+            winners: {}
+        };
+    });
+
+    // Przeanalizuj historię
+    history.forEach(result => {
+        const clanId = result.clanRole;
+        
+        if (clanStats[clanId]) {
+            result.winners.forEach(winner => {
+                const playerName = winner.displayName || winner.username;
+                if (!clanStats[clanId].winners[playerName]) {
+                    clanStats[clanId].winners[playerName] = 0;
+                }
+                clanStats[clanId].winners[playerName]++;
+            });
+        }
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle('📈 Statystyki TOP3 - Najczęściej Wygrywający')
+        .setColor('#FF9800')
+        .setTimestamp();
+
+    let description = '';
+    let hasAnyWinners = false;
+
+    Object.values(clanStats).forEach(clan => {
+        if (Object.keys(clan.winners).length === 0) {
+            description += `\n**🏰 ${clan.name}**\n`;
+            description += `*Brak wygranych w historii*\n`;
+            return;
+        }
+
+        hasAnyWinners = true;
+        
+        // Sortuj zwycięzców według liczby wygranych
+        const sortedWinners = Object.entries(clan.winners)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 3); // TOP 3
+
+        description += `\n**🏰 ${clan.name}**\n`;
+        
+        sortedWinners.forEach(([playerName, wins], index) => {
+            const medals = ['🥇', '🥈', '🥉'];
+            const medal = medals[index] || '🏆';
+            description += `${medal} **${playerName}** - ${wins} ${wins === 1 ? 'wygrana' : wins < 5 ? 'wygrane' : 'wygranych'}\n`;
+        });
+    });
+
+    if (!hasAnyWinners) {
+        description = '\n*Brak danych o wygranych w historii loterii.*';
+    }
+
+    embed.setDescription(description);
+
+    // Przycisk powrotu
+    const backButton = new ButtonBuilder()
+        .setCustomId('lottery_history_back')
+        .setLabel('🔙 Powrót do historii')
+        .setStyle(ButtonStyle.Secondary);
+
+    const components = [
+        new ActionRowBuilder().addComponents(backButton)
+    ];
+
+    return { embed, components };
 }
 
 module.exports = {
