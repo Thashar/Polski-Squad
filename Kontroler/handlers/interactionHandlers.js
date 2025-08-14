@@ -28,9 +28,6 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery-debug':
                     await handleLotteryDebugCommand(interaction, config, lotteryService);
                     break;
-                case 'lottery-test':
-                    await handleLotteryTestCommand(interaction, config, lotteryService);
-                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -42,9 +39,6 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     break;
                 case 'lottery_remove_historical_select':
                     await handleLotteryRemoveHistoricalSelect(interaction, config, lotteryService);
-                    break;
-                case 'lottery_test_select':
-                    await handleLotteryTestSelect(interaction, config, lotteryService);
                     break;
                 case 'lottery_reroll_select':
                     await handleLotteryRerollSelect(interaction, config, lotteryService);
@@ -693,83 +687,6 @@ async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryS
     }
 }
 
-/**
- * Obsługuje wybór loterii do testowego uruchomienia z Select Menu
- */
-async function handleLotteryTestSelect(interaction, config, lotteryService) {
-    // Sprawdź uprawnienia administratora
-    if (!interaction.member.permissions.has('Administrator')) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
-            ephemeral: true
-        });
-        return;
-    }
-
-    if (!lotteryService) {
-        await interaction.reply({
-            content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
-        });
-        return;
-    }
-
-    const lotteryId = interaction.values[0];
-
-    await interaction.deferUpdate();
-
-    try {
-        // Sprawdź czy loteria nadal istnieje
-        const activeLotteries = lotteryService.getActiveLotteries();
-        const lottery = activeLotteries.find(l => l.id === lotteryId);
-        
-        if (!lottery) {
-            await interaction.editReply({
-                content: `❌ **Loteria nie została znaleziona!**\n\n` +
-                        `Loteria o ID \`${lotteryId}\` mogła zostać już usunięta lub nie istnieje.\n\n` +
-                        `💡 Użyj \`/lottery-debug\` aby sprawdzić aktywne loterie.`,
-                embeds: [],
-                components: []
-            });
-            return;
-        }
-
-        await interaction.editReply({
-            content: `🧪 **Testowe uruchomienie loterii:**\n\n` +
-                    `🎰 **Loteria:** ${lottery.name}\n` +
-                    `🆔 **ID:** \`${lottery.id}\`\n\n` +
-                    `⏳ Uruchamiam losowanie... Sprawdź logi i kanał wyników.`,
-            embeds: [],
-            components: []
-        });
-
-        // Uruchom loterię testowo
-        logger.info(`🧪 TESTOWE uruchomienie loterii przez ${interaction.user.tag}: ${lottery.id}`);
-        await lotteryService.executeLottery(lotteryId);
-
-        // Powiadom o zakończeniu
-        await interaction.followUp({
-            content: `✅ **Testowe losowanie zakończone!**\n\n` +
-                    `Sprawdź:\n` +
-                    `• 📺 Kanał wyników: <#${lottery.channelId}>\n` +
-                    `• 📋 Logi w konsoli\n` +
-                    `• 🐛 \`/lottery-debug\` dla szczegółów`,
-            ephemeral: true
-        });
-
-        logger.info(`✅ ${interaction.user.tag} wykonał testowe uruchomienie loterii przez Select Menu: ${lottery.name} (${lotteryId})`);
-
-    } catch (error) {
-        await interaction.editReply({
-            content: `❌ **Błąd podczas testowego uruchomienia!**\n\n` +
-                    `Szczegóły: ${error.message}\n\n` +
-                    `💡 Spróbuj ponownie lub sprawdź logi serwera.`,
-            embeds: [],
-            components: []
-        });
-        logger.error('❌ Błąd testowego uruchomienia loterii przez Select Menu:', error);
-    }
-}
 
 /**
  * Obsługuje wybór loterii do ponownego losowania z Select Menu
@@ -926,79 +843,6 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
     }
 }
 
-/**
- * Obsługuje komendę lottery-test
- */
-async function handleLotteryTestCommand(interaction, config, lotteryService) {
-    // Sprawdź uprawnienia administratora
-    if (!interaction.member.permissions.has('Administrator')) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
-        });
-        return;
-    }
-
-    if (!lotteryService) {
-        await interaction.reply({
-            content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
-        });
-        return;
-    }
-
-    const activeLotteries = lotteryService.getActiveLotteries();
-
-    if (activeLotteries.length === 0) {
-        await interaction.reply({
-            content: '📋 **Brak aktywnych loterii do testowania.**\n\n💡 Użyj `/lottery` aby utworzyć nową loterię.',
-            ephemeral: true
-        });
-        return;
-    }
-
-    // Stwórz Select Menu z aktywnymi loteriami
-    const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
-    
-    const selectOptions = activeLotteries.map(lottery => {
-        const datePart = lottery.id.split('_')[0];
-        const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
-        const clan = config.lottery.clans[lottery.clanKey];
-        
-        return {
-            label: `${lottery.name}`,
-            description: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | ${formattedDate}`,
-            value: lottery.id,
-            emoji: '🧪'
-        };
-    });
-
-    const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('lottery_test_select')
-        .setPlaceholder('🧪 Wybierz loterię do testowego uruchomienia...')
-        .setMinValues(1)
-        .setMaxValues(1)
-        .addOptions(selectOptions);
-
-    const row = new ActionRowBuilder().addComponents(selectMenu);
-
-    const embed = new EmbedBuilder()
-        .setTitle('🧪 TESTOWE URUCHOMIENIE LOTERII')
-        .setDescription(`Wybierz loterię do testowego uruchomienia.\n\n` +
-                       `📊 **Aktywnych loterii:** ${activeLotteries.length}\n\n` +
-                       `⚠️ **Uwaga:** Testowe uruchomienie wykonuje pełne losowanie z publikacją wyników w kanale. Użyj tylko do debugowania!`)
-        .setColor('#ffa500')
-        .setFooter({ 
-            text: `Żądanie od ${interaction.user.tag}` 
-        })
-        .setTimestamp();
-
-    await interaction.reply({
-        embeds: [embed],
-        components: [row],
-        ephemeral: true
-    });
-}
 
 /**
  * Rejestruje komendy slash
@@ -1090,9 +934,6 @@ async function registerSlashCommands(client, config) {
             .setName('lottery-debug')
             .setDescription('Debugowanie systemu loterii (admin only)'),
 
-        new SlashCommandBuilder()
-            .setName('lottery-test')
-            .setDescription('Testowe uruchomienie loterii (admin only)')
     ];
 
     const rest = new REST().setToken(config.token);
