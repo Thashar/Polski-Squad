@@ -1004,7 +1004,12 @@ async function handleLotteryTestCommand(interaction, config, lotteryService) {
  * Rejestruje komendy slash
  */
 async function registerSlashCommands(client, config) {
-    const clanChoices = Object.entries(config.lottery.clans).map(([key, clan]) => ({
+    // Generuj opcje klanów z "Cały serwer" na końcu
+    const clanEntries = Object.entries(config.lottery.clans);
+    const serverEntry = clanEntries.find(([key]) => key === 'server');
+    const otherEntries = clanEntries.filter(([key]) => key !== 'server');
+    
+    const clanChoices = [...otherEntries, ...(serverEntry ? [serverEntry] : [])].map(([key, clan]) => ({
         name: clan.displayName,
         value: key
     }));
@@ -1361,7 +1366,16 @@ async function generateStatsEmbed(history, config) {
     let description = '';
     let hasAnyWinners = false;
 
-    Object.values(clanStats).forEach(clan => {
+    // Wyświetl klany z "Cały serwer" na końcu
+    const clanEntries = Object.entries(config.lottery.clans);
+    const serverEntry = clanEntries.find(([key]) => key === 'server');
+    const otherEntries = clanEntries.filter(([key]) => key !== 'server');
+    
+    const orderedClanKeys = [...otherEntries, ...(serverEntry ? [serverEntry] : [])];
+    
+    orderedClanKeys.forEach(([key, clanConfig]) => {
+        const clan = clanStats[clanConfig.roleId];
+        if (!clan) return;
         if (Object.keys(clan.winners).length === 0) {
             description += `\n**🏰 ${clan.name}**\n`;
             description += `*Brak wygranych w historii*\n`;
