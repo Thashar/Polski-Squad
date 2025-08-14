@@ -526,6 +526,18 @@ class LotteryService {
                 logger.info('🌍 Rozpoczynam wyszukiwanie kwalifikowanych członków na całym serwerze...');
                 logger.info(`📊 Sprawdzam ${targetRole.members.size} członków z rolą docelową`);
                 
+                // Jeśli cache roli docelowej jest pusty, spróbuj pobrać wszystkich członków
+                if (targetRole.members.size === 0) {
+                    logger.warn(`⚠️ Cache roli docelowej jest pusty. Pobieram wszystkich członków serwera...`);
+                    try {
+                        await guild.members.fetch();
+                        logger.info(`📊 Po pobraniu wszystkich członków: ${guild.members.cache.size} w cache`);
+                        logger.info(`🎯 Rola docelowa teraz ma: ${targetRole.members.size} członków`);
+                    } catch (error) {
+                        logger.error('❌ Błąd pobierania członków:', error);
+                    }
+                }
+                
                 let checkedTargetMembers = 0;
                 
                 for (const [memberId, member] of targetRole.members) {
