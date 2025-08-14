@@ -1385,8 +1385,24 @@ async function generateHistoryEmbed(history, currentPage, config) {
                 });
             }
             
-            // Znajdź nazwę roli docelowej - używamy nazwy z wyniku lub ID
-            let roleName = result.targetRoleName || result.targetRole || 'Nieznana rola';
+            // Znajdź nazwę roli docelowej
+            let roleName = 'Nieznana rola';
+            if (result.targetRoleName) {
+                roleName = result.targetRoleName;
+            } else if (result.targetRole) {
+                // Spróbuj znaleźć rolę po ID w Guild
+                try {
+                    const guild = interaction.guild;
+                    if (guild && guild.roles.cache.has(result.targetRole)) {
+                        const role = guild.roles.cache.get(result.targetRole);
+                        roleName = role.name;
+                    } else {
+                        roleName = result.targetRole; // Fallback do ID
+                    }
+                } catch (error) {
+                    roleName = result.targetRole || 'Nieznana rola';
+                }
+            }
 
             // Pobierz zwycięzców (dla rerolls może być w newWinners)
             const winners = result.winners || result.newWinners || [];
@@ -1394,7 +1410,12 @@ async function generateHistoryEmbed(history, currentPage, config) {
 
             description += `**${globalIndex}.** **${result.lotteryName}**\n`;
             description += `📅 ${date} ${time}\n`;
-            description += `🏰 **Klan:** ${clanName}\n`;
+            
+            // Pokaż klan tylko jeśli to nie "Cały serwer"
+            if (clanName !== 'Nieznany' && !clanName.includes('Cały Serwer')) {
+                description += `🏰 **Klan:** ${clanName}\n`;
+            }
+            
             description += `🎯 **Rola:** ${roleName}\n`;
                 description += `👥 **Uczestnicy:** ${result.participantCount || result.originalParticipantCount || 0}\n`;
                 description += `🏆 **Zwycięzcy:** ${winnersText}\n\n`;
