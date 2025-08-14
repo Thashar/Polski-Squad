@@ -596,12 +596,34 @@ class LotteryService {
             logger.info('📢 Publikowanie wyników...');
             await this.publishResults(channel, lottery, eligibleMembers, winners);
 
-            // Zaplanuj następne losowanie
-            logger.info('📅 Planowanie następnego losowania...');
-            lottery.lastDraw = new Date().toISOString();
-            lottery.nextDraw = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute);
-            
-            await this.saveLotteryData();
+            // Zaplanuj następne losowanie lub usuń jeśli jednorazowe
+            if (lottery.frequency === 0) {
+                logger.info('🔚 Jednorazowa loteria - usuwanie z aktywnych...');
+                
+                // Usuń cron job
+                if (this.cronJobs.has(lotteryId)) {
+                    const job = this.cronJobs.get(lotteryId);
+                    if (job && typeof job.destroy === 'function') {
+                        job.destroy();
+                    } else if (job && typeof job.stop === 'function') {
+                        job.stop();
+                    }
+                    this.cronJobs.delete(lotteryId);
+                }
+                
+                // Usuń z aktywnych loterii
+                this.activeLotteries.delete(lotteryId);
+                
+                await this.saveLotteryData();
+                logger.info(`✅ Jednorazowa loteria zakończona: ${lottery.name}`);
+            } else {
+                logger.info('📅 Planowanie następnego losowania...');
+                lottery.lastDraw = new Date().toISOString();
+                lottery.nextDraw = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute);
+                
+                await this.saveLotteryData();
+                logger.info(`✅ Zaplanowano następne losowanie: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}`);
+            }
 
             logger.info(`✅ Zakończono losowanie: ${lottery.name} - wygrało ${winners.length} osób`);
 
@@ -705,11 +727,6 @@ class LotteryService {
                         inline: true
                     },
                     {
-                        name: '🎯 Liczba zwycięzców',
-                        value: winners.length.toString(),
-                        inline: true
-                    },
-                    {
                         name: '🏆 Zwycięzcy',
                         value: winners.length > 0 
                             ? winners.map((winner, index) => `${index + 1}. ${winner.displayName} (<@${winner.user.id}>)`).join('\n')
@@ -718,7 +735,9 @@ class LotteryService {
                     }
                 )
                 .setFooter({ 
-                    text: `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}` 
+                    text: lottery.frequency === 0 
+                        ? `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Loteria jednorazowa`
+                        : `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}`
                 })
                 .setTimestamp();
 

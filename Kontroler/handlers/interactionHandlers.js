@@ -1042,9 +1042,9 @@ async function registerSlashCommands(client, config) {
                     .addChoices(...clanChoices))
             .addIntegerOption(option =>
                 option.setName('częstotliwość')
-                    .setDescription('Co ile dni ma być powtarzana loteria (1-30)')
+                    .setDescription('Co ile dni ma być powtarzana loteria (0 = jednorazowo, 1-30 = cyklicznie)')
                     .setRequired(true)
-                    .setMinValue(1)
+                    .setMinValue(0)
                     .setMaxValue(30))
             .addStringOption(option =>
                 option.setName('dzień')
