@@ -748,13 +748,27 @@ class LotteryService {
             const rerolls = parsed.rerolls || [];
             
             const allHistory = [...results, ...rerolls].sort((a, b) => {
-                const dateA = new Date(a.originalDate || a.date);
-                const dateB = new Date(b.originalDate || b.date);
-                return dateA - dateB;
+                try {
+                    const dateA = new Date(a.originalDate || a.date);
+                    const dateB = new Date(b.originalDate || b.date);
+                    
+                    // Sprawdź czy daty są prawidłowe
+                    if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+                        // Jeśli jedna z dat jest nieprawidłowa, użyj fallback
+                        return 0;
+                    }
+                    
+                    return dateA - dateB;
+                } catch (sortError) {
+                    // Jeśli sortowanie się wysupi, użyj fallback
+                    return 0;
+                }
             });
             
             return allHistory;
         } catch (error) {
+            logger.error('❌ Błąd w getLotteryHistory():', error);
+            logger.error('❌ Szczegóły błędu:', error.message);
             return [];
         }
     }

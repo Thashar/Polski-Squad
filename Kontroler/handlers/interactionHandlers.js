@@ -1251,9 +1251,10 @@ async function generateHistoryEmbed(history, currentPage, config) {
         let description = '';
         
         pageItems.forEach((result, index) => {
-            const globalIndex = startIndex + index + 1;
-            const date = new Date(result.date).toLocaleDateString('pl-PL');
-            const time = new Date(result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+            try {
+                const globalIndex = startIndex + index + 1;
+                const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL');
+                const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
             
             // Znajdź nazwę klanu
             let clanName = 'Nieznany';
@@ -1276,14 +1277,20 @@ async function generateHistoryEmbed(history, currentPage, config) {
                 }
             });
 
-            const winnersText = result.winners.map(w => w.displayName || w.username).join(', ');
+            // Pobierz zwycięzców (dla rerolls może być w newWinners)
+            const winners = result.winners || result.newWinners || [];
+            const winnersText = winners.map(w => w.displayName || w.username).join(', ') || 'Brak zwycięzców';
 
             description += `**${globalIndex}.** **${result.lotteryName}**\n`;
             description += `📅 ${date} ${time}\n`;
             description += `🏰 **Klan:** ${clanName}\n`;
             description += `🎯 **Rola:** ${roleName}\n`;
-            description += `👥 **Uczestnicy:** ${result.participantCount}\n`;
-            description += `🏆 **Zwycięzcy:** ${winnersText}\n\n`;
+                description += `👥 **Uczestnicy:** ${result.participantCount || result.originalParticipantCount || 0}\n`;
+                description += `🏆 **Zwycięzcy:** ${winnersText}\n\n`;
+            } catch (itemError) {
+                logger.error(`❌ Błąd przetwarzania loterii ${index}:`, itemError);
+                description += `**${startIndex + index + 1}.** **[Błąd danych]**\n\n`;
+            }
         });
 
         embed.setDescription(description);
