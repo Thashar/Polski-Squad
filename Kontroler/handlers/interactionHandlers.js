@@ -48,21 +48,25 @@ async function handleInteraction(interaction, config, lotteryService = null) {
             }
         } else if (interaction.isButton()) {
             // Obsługa Button
-            switch (interaction.customId) {
-                case 'lottery_history_prev':
-                    await handleLotteryHistoryNavigation(interaction, config, lotteryService, 'prev');
-                    break;
-                case 'lottery_history_next':
-                    await handleLotteryHistoryNavigation(interaction, config, lotteryService, 'next');
-                    break;
-                case 'lottery_history_stats':
-                    await handleLotteryHistoryStats(interaction, config, lotteryService);
-                    break;
-                case 'lottery_history_back':
-                    await handleLotteryHistoryCommand(interaction, config, lotteryService, true);
-                    break;
-                default:
-                    await interaction.reply({ content: 'Nieznany przycisk!', ephemeral: true });
+            if (interaction.customId.startsWith('lottery_remove_planned_confirm_')) {
+                await handleLotteryRemovePlannedConfirm(interaction, config, lotteryService);
+            } else {
+                switch (interaction.customId) {
+                    case 'lottery_history_prev':
+                        await handleLotteryHistoryNavigation(interaction, config, lotteryService, 'prev');
+                        break;
+                    case 'lottery_history_next':
+                        await handleLotteryHistoryNavigation(interaction, config, lotteryService, 'next');
+                        break;
+                    case 'lottery_history_stats':
+                        await handleLotteryHistoryStats(interaction, config, lotteryService);
+                        break;
+                    case 'lottery_history_back':
+                        await handleLotteryHistoryCommand(interaction, config, lotteryService, true);
+                        break;
+                    default:
+                        await interaction.reply({ content: 'Nieznany przycisk!', ephemeral: true });
+                }
             }
         }
     } catch (error) {
@@ -528,53 +532,140 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
             return;
         }
 
-        // Usuń loterię
-        await lotteryService.removeLottery(lotteryId);
+        // Sprawdź czy istnieją historyczne wyniki dla tej loterii
+        const history = await lotteryService.getLotteryHistory();
+        const relatedResults = history.filter(result => 
+            result.lotteryId === lotteryId || result.lotteryId.startsWith(lotteryId + '_')
+        );
 
-        const { EmbedBuilder } = require('discord.js');
-        
-        const successEmbed = new EmbedBuilder()
-            .setTitle('✅ LOTERIA USUNIĘTA')
-            .setDescription(`Loteria została pomyślnie usunięta i wszystkie automatyczne losowania zostały zatrzymane.`)
-            .setColor('#00ff00')
-            .addFields(
-                {
-                    name: '🗑️ Usunięta loteria',
-                    value: `**${lottery.name}**`,
-                    inline: false
-                },
-                {
-                    name: '📅 Harmonogram',
-                    value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
-                    inline: true
-                },
-                {
-                    name: '🏆 Zwycięzców',
-                    value: lottery.winnersCount.toString(),
-                    inline: true
-                },
-                {
-                    name: '📺 Kanał',
-                    value: `<#${lottery.channelId}>`,
-                    inline: true
-                },
-                {
-                    name: '🆔 ID Loterii',
-                    value: `\`${lottery.id}\``,
-                    inline: false
+        if (relatedResults.length > 0) {
+            // Pytaj czy usunąć też historyczne wyniki
+            const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+            
+            // Przygotuj listę historycznych wyników z datami
+            let historyList = '';
+            relatedResults.forEach((result, index) => {
+                const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL');
+                const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+                const isReroll = result.lotteryId && result.lotteryId.includes('_reroll');
+                const type = isReroll ? '🔄 Reroll' : '🎲 Losowanie';
+                const winnersCount = (result.winners || result.newWinners || []).length;
+                
+                historyList += `${index + 1}. ${type} - ${date} ${time} (${winnersCount} zwycięzców)\n`;
+                
+                // Ogranicz do maksymalnie 8 pozycji w opisie
+                if (index >= 7 && relatedResults.length > 8) {
+                    historyList += `... i ${relatedResults.length - 8} więcej\n`;
+                    return false;
                 }
-            )
-            .setFooter({ 
-                text: `Usunięte przez ${interaction.user.tag}` 
-            })
-            .setTimestamp();
+            });
+            
+            const confirmEmbed = new EmbedBuilder()
+                .setTitle('🗑️ POTWIERDZENIE USUNIĘCIA')
+                .setDescription(`Znaleziono **${relatedResults.length}** historycznych wyników dla tej loterii.\n\n` +
+                               `**Czy chcesz również usunąć wszystkie historyczne wyniki?**\n\n` +
+                               `📋 **Zostaną usunięte:**\n` +
+                               `• Zaplanowana loteria: **${lottery.name}**\n` +
+                               `• ${relatedResults.length} historycznych wyników:\n\n` +
+                               `${historyList}`)
+                .setColor('#ff6b6b')
+                .addFields(
+                    {
+                        name: '🎰 Loteria do usunięcia',
+                        value: `**${lottery.name}**`,
+                        inline: false
+                    },
+                    {
+                        name: '📅 Harmonogram',
+                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Zwycięzców',
+                        value: lottery.winnersCount.toString(),
+                        inline: true
+                    },
+                    {
+                        name: '📺 Kanał',
+                        value: `<#${lottery.channelId}>`,
+                        inline: true
+                    }
+                )
+                .setFooter({ 
+                    text: `Żądanie od ${interaction.user.tag}` 
+                })
+                .setTimestamp();
 
-        await interaction.editReply({
-            embeds: [successEmbed],
-            components: []
-        });
+            const yesButton = new ButtonBuilder()
+                .setCustomId(`lottery_remove_planned_confirm_yes_${lotteryId}`)
+                .setLabel('🗑️ Tak, usuń wszystko')
+                .setStyle(ButtonStyle.Danger);
 
-        logger.info(`✅ ${interaction.user.tag} usunął loterię przez Select Menu: ${lottery.name} (${lotteryId})`);
+            const noButton = new ButtonBuilder()
+                .setCustomId(`lottery_remove_planned_confirm_no_${lotteryId}`)
+                .setLabel('📋 Nie, zostaw historię')
+                .setStyle(ButtonStyle.Secondary);
+
+            const row = new ActionRowBuilder().addComponents(yesButton, noButton);
+
+            await interaction.editReply({
+                embeds: [confirmEmbed],
+                components: [row]
+            });
+        } else {
+            // Brak historycznych wyników - usuń od razu
+            await lotteryService.removeLottery(lotteryId);
+
+            const { EmbedBuilder } = require('discord.js');
+            
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ LOTERIA USUNIĘTA')
+                .setDescription(`Loteria została pomyślnie usunięta i wszystkie automatyczne losowania zostały zatrzymane.`)
+                .setColor('#00ff00')
+                .addFields(
+                    {
+                        name: '🗑️ Usunięta loteria',
+                        value: `**${lottery.name}**`,
+                        inline: false
+                    },
+                    {
+                        name: '📅 Harmonogram',
+                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Zwycięzców',
+                        value: lottery.winnersCount.toString(),
+                        inline: true
+                    },
+                    {
+                        name: '📺 Kanał',
+                        value: `<#${lottery.channelId}>`,
+                        inline: true
+                    },
+                    {
+                        name: '🆔 ID Loterii',
+                        value: `\`${lottery.id}\``,
+                        inline: false
+                    }
+                )
+                .addFields({
+                    name: '📋 Dodatkowe informacje',
+                    value: 'Brak historycznych wyników do usunięcia.',
+                    inline: false
+                })
+                .setFooter({ 
+                    text: `Usunięte przez ${interaction.user.tag}` 
+                })
+                .setTimestamp();
+
+            await interaction.editReply({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            logger.info(`✅ ${interaction.user.tag} usunął loterię przez Select Menu: ${lottery.name} (${lotteryId}) - brak historii`);
+        }
 
     } catch (error) {
         await interaction.editReply({
@@ -585,6 +676,185 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
             components: []
         });
         logger.error('❌ Błąd usuwania loterii przez Select Menu:', error);
+    }
+}
+
+/**
+ * Obsługuje potwierdzenie usunięcia zaplanowanej loterii z historią
+ */
+async function handleLotteryRemovePlannedConfirm(interaction, config, lotteryService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    if (!lotteryService) {
+        await interaction.reply({
+            content: '❌ Serwis loterii nie jest dostępny.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const lotteryId = interaction.customId.split('_').pop();
+    const action = interaction.customId.includes('_yes_') ? 'yes' : 'no';
+
+    await interaction.deferUpdate();
+
+    try {
+        // Sprawdź czy loteria nadal istnieje
+        const activeLotteries = lotteryService.getActiveLotteries();
+        const lottery = activeLotteries.find(l => l.id === lotteryId);
+        
+        if (!lottery) {
+            await interaction.editReply({
+                content: `❌ **Loteria nie została znaleziona!**\n\n` +
+                        `Loteria o ID \`${lotteryId}\` mogła zostać już usunięta lub nie istnieje.\n\n` +
+                        `💡 Użyj \`/lottery-debug\` aby sprawdzić aktywne loterie.`,
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        if (action === 'yes') {
+            // Usuń loterię i historię
+            await lotteryService.removeLottery(lotteryId);
+            
+            // Usuń też historyczne wyniki
+            const history = await lotteryService.getLotteryHistory();
+            const relatedIndices = [];
+            
+            // Znajdź wszystkie indeksy związanych wyników (od końca do początku)
+            for (let i = history.length - 1; i >= 0; i--) {
+                const result = history[i];
+                if (result.lotteryId === lotteryId || result.lotteryId.startsWith(lotteryId + '_')) {
+                    relatedIndices.push(i);
+                }
+            }
+            
+            // Usuń wyniki (od największego indeksu do najmniejszego)
+            for (const index of relatedIndices) {
+                await lotteryService.removeHistoricalLottery(index);
+            }
+
+            const { EmbedBuilder } = require('discord.js');
+            
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ LOTERIA I HISTORIA USUNIĘTE')
+                .setDescription(`Loteria wraz z całą historią została pomyślnie usunięta.`)
+                .setColor('#00ff00')
+                .addFields(
+                    {
+                        name: '🗑️ Usunięta loteria',
+                        value: `**${lottery.name}**`,
+                        inline: false
+                    },
+                    {
+                        name: '📅 Harmonogram',
+                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Zwycięzców',
+                        value: lottery.winnersCount.toString(),
+                        inline: true
+                    },
+                    {
+                        name: '📺 Kanał',
+                        value: `<#${lottery.channelId}>`,
+                        inline: true
+                    },
+                    {
+                        name: '🆔 ID Loterii',
+                        value: `\`${lottery.id}\``,
+                        inline: false
+                    },
+                    {
+                        name: '📋 Dodatkowe informacje',
+                        value: `Usunięto ${relatedIndices.length} historycznych wyników (włącznie z rerolls).`,
+                        inline: false
+                    }
+                )
+                .setFooter({ 
+                    text: `Usunięte przez ${interaction.user.tag}` 
+                })
+                .setTimestamp();
+
+            await interaction.editReply({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            logger.info(`✅ ${interaction.user.tag} usunął loterię z historią: ${lottery.name} (${lotteryId}) - ${relatedIndices.length} wyników`);
+        } else {
+            // Usuń tylko zaplanowaną loterię
+            await lotteryService.removeLottery(lotteryId);
+
+            const { EmbedBuilder } = require('discord.js');
+            
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ LOTERIA USUNIĘTA')
+                .setDescription(`Loteria została pomyślnie usunięta. Historia została zachowana.`)
+                .setColor('#00ff00')
+                .addFields(
+                    {
+                        name: '🗑️ Usunięta loteria',
+                        value: `**${lottery.name}**`,
+                        inline: false
+                    },
+                    {
+                        name: '📅 Harmonogram',
+                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        inline: true
+                    },
+                    {
+                        name: '🏆 Zwycięzców',
+                        value: lottery.winnersCount.toString(),
+                        inline: true
+                    },
+                    {
+                        name: '📺 Kanał',
+                        value: `<#${lottery.channelId}>`,
+                        inline: true
+                    },
+                    {
+                        name: '🆔 ID Loterii',
+                        value: `\`${lottery.id}\``,
+                        inline: false
+                    },
+                    {
+                        name: '📋 Dodatkowe informacje',
+                        value: 'Historyczne wyniki zostały zachowane.',
+                        inline: false
+                    }
+                )
+                .setFooter({ 
+                    text: `Usunięte przez ${interaction.user.tag}` 
+                })
+                .setTimestamp();
+
+            await interaction.editReply({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            logger.info(`✅ ${interaction.user.tag} usunął tylko zaplanowaną loterię: ${lottery.name} (${lotteryId}) - historia zachowana`);
+        }
+
+    } catch (error) {
+        await interaction.editReply({
+            content: `❌ **Błąd podczas usuwania loterii!**\n\n` +
+                    `Szczegóły: ${error.message}\n\n` +
+                    `💡 Spróbuj ponownie lub skontaktuj się z administratorem.`,
+            embeds: [],
+            components: []
+        });
+        logger.error('❌ Błąd usuwania loterii z potwierdzeniem:', error);
     }
 }
 
