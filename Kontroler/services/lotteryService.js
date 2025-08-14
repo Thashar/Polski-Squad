@@ -303,6 +303,13 @@ class LotteryService {
             
             if (blockedRole) {
                 logger.info(`🚫 Rola blokująca: ${blockedRole.name} (${blockedRole.members.size} członków z blokadą)`);
+                // Pokaż kto ma rolę blokującą
+                if (blockedRole.members.size > 0 && blockedRole.members.size <= 10) {
+                    logger.info(`🚫 Członkowie z rolą blokującą:`);
+                    for (const [memberId, member] of blockedRole.members) {
+                        logger.info(`   - ${member.user.tag} (${member.id})`);
+                    }
+                }
             } else {
                 logger.warn(`⚠️ Nie znaleziono roli blokującej o ID: ${this.config.blockedRole}`);
             }
@@ -525,6 +532,21 @@ class LotteryService {
                 // TRYB CAŁY SERWER: Iteruj przez członków z ROLĄ DOCELOWĄ (bez ograniczenia do klanu)
                 logger.info('🌍 Rozpoczynam wyszukiwanie kwalifikowanych członków na całym serwerze...');
                 logger.info(`📊 Sprawdzam ${targetRole.members.size} członków z rolą docelową`);
+                
+                // Pokaż przykładowe osoby z rolą docelową
+                if (targetRole.members.size > 0) {
+                    logger.info(`🎯 Przykładowi członkowie z rolą docelową "${targetRole.name}":`);
+                    let count = 0;
+                    for (const [memberId, member] of targetRole.members) {
+                        if (count < 10) {
+                            logger.info(`   - ${member.user.tag} (${member.id}) ${member.user.bot ? '[BOT]' : ''}`);
+                            count++;
+                        } else {
+                            logger.info(`   ... i ${targetRole.members.size - 10} więcej`);
+                            break;
+                        }
+                    }
+                }
                 
                 // Jeśli cache roli docelowej jest pusty, spróbuj pobrać wszystkich członków
                 if (targetRole.members.size === 0) {
