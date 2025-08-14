@@ -700,8 +700,8 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
         return;
     }
 
-    const lotteryId = interaction.customId.split('_').pop();
     const action = interaction.customId.includes('_yes_') ? 'yes' : 'no';
+    const lotteryId = interaction.customId.replace(/^lottery_remove_planned_confirm_(yes|no)_/, '');
 
     await interaction.deferUpdate();
 
@@ -1385,13 +1385,8 @@ async function generateHistoryEmbed(history, currentPage, config) {
                 });
             }
             
-            // Znajdź nazwę roli docelowej
-            let roleName = 'Nieznana rola';
-            Object.values(config.lottery.targetRoles).forEach(role => {
-                if (role.roleId === result.targetRole) {
-                    roleName = role.displayName;
-                }
-            });
+            // Znajdź nazwę roli docelowej - używamy nazwy z wyniku lub ID
+            let roleName = result.targetRoleName || result.targetRole || 'Nieznana rola';
 
             // Pobierz zwycięzców (dla rerolls może być w newWinners)
             const winners = result.winners || result.newWinners || [];
