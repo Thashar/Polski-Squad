@@ -190,7 +190,9 @@ class OCRService {
                         requiredSimilarity = 0.7;  // Średni próg dla średnich nicków
                     }
                     
-                    if (similarity >= requiredSimilarity && similarity > bestSimilarity) {
+                    if (similarity >= requiredSimilarity && 
+                        (similarity > bestSimilarity || 
+                         (similarity === bestSimilarity && roleNick.displayName.length > (bestMatch?.displayName?.length || 0)))) {
                         bestSimilarity = similarity;
                         bestMatch = roleNick;
                     }
