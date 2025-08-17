@@ -41,6 +41,9 @@ class MessageHandler {
             member = await message.guild.members.fetch(message.author.id);
         } catch (error) {
             logger.error(`Błąd pobierania informacji o członku: ${error.message}`);
+            
+            // Wyślij informację o loterii z opóźnieniem mimo błędu
+            this.scheduleLotteryInfo(message, channelConfig);
             return;
         }
 
@@ -60,9 +63,15 @@ class MessageHandler {
                 } catch (error) {
                     logger.error(`❌ Błąd usuwania wiadomości bez zdjęcia: ${error.message}`);
                 }
+                
+                // Wyślij informację o loterii z opóźnieniem mimo usunięcia wiadomości
+                this.scheduleLotteryInfo(message, channelConfig);
                 return;
             } else {
                 logger.info(`👑 Administrator ${member.user.tag} wysłał wiadomość bez zdjęcia na kanale ${channelConfig.name} - pozostawiono`);
+                
+                // Wyślij informację o loterii z opóźnieniem mimo braku zdjęcia
+                this.scheduleLotteryInfo(message, channelConfig);
                 return;
             }
         }
@@ -73,6 +82,9 @@ class MessageHandler {
                 content: this.config.messages.fileTooBig,
                 allowedMentions: { repliedUser: false }
             });
+            
+            // Wyślij informację o loterii z opóźnieniem mimo błędu
+            this.scheduleLotteryInfo(message, channelConfig);
             return;
         }
 
@@ -82,6 +94,9 @@ class MessageHandler {
                 content: this.messageService.getBlockedUserMessage(),
                 allowedMentions: { repliedUser: false }
             });
+            
+            // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
+            this.scheduleLotteryInfo(message, channelConfig);
             return;
         }
 
@@ -119,6 +134,9 @@ class MessageHandler {
             const isAdmin = member.permissions.has('Administrator');
             if (!this.lotteryService) {
                 logger.warn('⚠️ lotteryService nie jest dostępne dla sprawdzenia okna czasowego');
+                
+                // Wyślij informację o loterii z opóźnieniem mimo błędu
+                this.scheduleLotteryInfo(message, channelConfig);
                 return;
             }
             const timeWindowCheck = this.lotteryService.checkSubmissionTimeWindow(targetRoleId, lotteryCheck.clanRoleId);
@@ -130,7 +148,7 @@ class MessageHandler {
                 hoursToWait: timeWindowCheck.hoursToWait
             });
             
-            if (!timeWindowCheck.isAllowed) {
+            if (!timeWindowCheck.isAllowed && !isAdmin) {
                 let timeWindowMessage = `⏰ **Poza oknem czasowym**\n\n`;
                 timeWindowMessage += timeWindowCheck.message;
                 
@@ -139,8 +157,7 @@ class MessageHandler {
                     allowedMentions: { repliedUser: false }
                 });
                 
-                const adminInfo = isAdmin ? ' (ADMINISTRATOR)' : '';
-                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag}${adminInfo} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
+                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
                 this.scheduleLotteryInfo(message, channelConfig);
@@ -168,6 +185,9 @@ class MessageHandler {
             });
         } catch (error) {
             logger.error(`Błąd tworzenia wiadomości odpowiedzi: ${error.message}`);
+            
+            // Wyślij informację o loterii z opóźnieniem mimo błędu
+            this.scheduleLotteryInfo(message, channelConfig);
             return;
         }
 
@@ -240,6 +260,9 @@ class MessageHandler {
             logger.error(`BŁĄD PODCZAS ANALIZY: ${error.message}`);
             await safeEditMessage(analysisMessage, this.messageService.formatAnalysisErrorMessage(error.message));
         } finally {
+            // Wyślij informację o loterii Daily lub CX z opóźnieniem zawsze na końcu
+            this.scheduleLotteryInfo(analysisMessage, channelConfig);
+            
             cleanupFiles(originalImagePath, processedImagePath);
             logger.info('Zakończono czyszczenie pamięci');
             logger.info('='.repeat(70) + '\n');
@@ -284,9 +307,6 @@ class MessageHandler {
             const message = this.messageService.formatRoleErrorMessage(result, roleResult.error);
             await safeEditMessage(analysisMessage, message);
         }
-
-        // Wyślij informację o loterii Daily lub CX z opóźnieniem
-        this.scheduleLotteryInfo(analysisMessage, channelConfig);
     }
 
     /**
@@ -299,9 +319,6 @@ class MessageHandler {
         logger.info(`Analiza nieudana: ${result.error || 'Niewystarczający wynik'}`);
         const message = this.messageService.formatResultMessage(result, null, channelConfig);
         await safeEditMessage(analysisMessage, message);
-        
-        // Wyślij informację o loterii Daily lub CX z opóźnieniem
-        this.scheduleLotteryInfo(analysisMessage, channelConfig);
     }
 
     /**
