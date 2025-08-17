@@ -227,7 +227,7 @@ class MessageHandler {
             const channel = analysisMessage.channel;
             const client = analysisMessage.client;
             const isDaily = channelConfig.name === 'Daily';
-            const lotteryTitle = isDaily ? '🎰 Loteria Glory Member za Daily' : '🎰 Loteria Glory Member za CX';
+            const lotteryTitle = isDaily ? '# 🎰 Loteria Glory Member za Daily' : '# 🎰 Loteria Glory Member za CX';
 
             // Znajdź i usuń poprzednią wiadomość embed o loterii od tego bota
             try {
@@ -235,7 +235,8 @@ class MessageHandler {
                 const previousLotteryMessage = messages.find(msg => 
                     msg.author.id === client.user.id && 
                     msg.embeds.length > 0 && 
-                    msg.embeds[0].title === lotteryTitle
+                    msg.embeds[0].description && 
+                    msg.embeds[0].description.startsWith(lotteryTitle)
                 );
 
                 if (previousLotteryMessage) {
@@ -251,30 +252,30 @@ class MessageHandler {
             
             if (isDaily) {
                 lotteryEmbed = new EmbedBuilder()
-                    .setTitle('🎰 Loteria Glory Member za Daily')
-                    .setDescription('Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:')
-                    .addFields(
-                        { name: '📊 Wymagania', value: '• uzyskać w danym tygodniu 910 pkt. daily', inline: false },
-                        { name: '📸 Przesłanie screena', value: '• przesłać screen z tego osiągnięcia na tym kanale', inline: false },
-                        { name: '⏰ Deadline', value: '• czas na przesłanie screena jest do niedzieli do 18:29', inline: false },
-                        { name: '✅ Zatwierdzenie', value: '• screen musi być zatwierdzony przez bota Kontroler', inline: false },
-                        { name: '⚠️ Ostrzeżenie', value: '• oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!', inline: false },
-                        { name: '🎲 Losowanie', value: 'Losowania będą odbywać się o godzinie 18:30 w każdą niedzielę. Powodzenia!', inline: false }
-                    )
+                    .setDescription(`# 🎰 Loteria Glory Member za Daily
+
+Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
+• uzyskać w danym tygodniu 910 pkt. daily
+• przesłać screen z tego osiągnięcia na tym kanale
+• czas na przesłanie screena jest do niedzieli do 18:29
+• screen musi być zatwierdzony przez bota Kontroler
+• **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
+
+Losowania będą odbywać się o godzinie 18:30 w każdą niedzielę. Powodzenia!`)
                     .setColor(0x00FF00) // Zielony kolor
                     .setTimestamp();
             } else {
                 lotteryEmbed = new EmbedBuilder()
-                    .setTitle('🎰 Loteria Glory Member za CX')
-                    .setDescription('Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:')
-                    .addFields(
-                        { name: '📊 Wymagania', value: '• osiągnąć w ciągu całego sezonu CX 2000 PKT', inline: false },
-                        { name: '📸 Przesłanie screena', value: '• przesłać screen z tego osiągnięcia na tym kanale', inline: false },
-                        { name: '⏰ Deadline', value: '• czas na przesłanie screena jest do 18:29 w dniu, w którym rozpoczął się nowy sezon CX', inline: false },
-                        { name: '✅ Zatwierdzenie', value: '• screen musi być zatwierdzony przez bota Kontroler', inline: false },
-                        { name: '⚠️ Ostrzeżenie', value: '• oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!', inline: false },
-                        { name: '🎲 Losowanie', value: 'Losowania będą odbywać się o godzinie 18:30 w każdy pierwszy dzień sezonu CX. Powodzenia!', inline: false }
-                    )
+                    .setDescription(`# 🎰 Loteria Glory Member za CX
+
+Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
+• osiągnąć w ciągu całego sezonu CX 2000 PKT
+• przesłać screen z tego osiągnięcia na tym kanale
+• czas na przesłanie screena jest do 18:29 w dniu, w którym rozpoczął się nowy sezon CX
+• screen musi być zatwierdzony przez bota Kontroler
+• **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
+
+Losowania będą odbywać się o godzinie 18:30 w każdy pierwszy dzień sezonu CX. Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
                     .setTimestamp();
             }
