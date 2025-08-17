@@ -242,17 +242,17 @@ class MessageHandler {
     }
 
     /**
-     * Planuje wysłanie informacji o loterii z 5-minutowym opóźnieniem używając node-cron
-     * @param {Message} analysisMessage - Wiadomość analizy
+     * Planuje wysłanie informacji o loterii z 10-sekundowym opóźnieniem używając node-cron
+     * @param {Message} message - Wiadomość analizy lub oryginalna wiadomość użytkownika
      * @param {Object} channelConfig - Konfiguracja kanału
      */
-    scheduleLotteryInfo(analysisMessage, channelConfig) {
+    scheduleLotteryInfo(message, channelConfig) {
         // Wysyłaj tylko na kanałach Daily i CX
         if (channelConfig.name !== 'Daily' && channelConfig.name !== 'CX') {
             return;
         }
 
-        const channelId = analysisMessage.channel.id;
+        const channelId = message.channel.id;
         
         // Anuluj poprzednie zadanie cron dla tego kanału jeśli istnieje
         if (this.lotterySchedules.has(channelId)) {
@@ -273,7 +273,7 @@ class MessageHandler {
         // Zaplanuj zadanie cron
         const task = cron.schedule(cronExpression, async () => {
             try {
-                await this.sendLotteryInfo(analysisMessage, channelConfig);
+                await this.sendLotteryInfo(message, channelConfig);
                 this.lotterySchedules.delete(channelId); // Usuń zadanie po wykonaniu
                 task.destroy(); // Zniszcz zadanie cron
             } catch (error) {
@@ -294,18 +294,18 @@ class MessageHandler {
 
     /**
      * Wysyła informację o loterii Daily lub CX w formie embed message
-     * @param {Message} analysisMessage - Wiadomość analizy
+     * @param {Message} message - Wiadomość analizy lub oryginalna wiadomość użytkownika
      * @param {Object} channelConfig - Konfiguracja kanału
      */
-    async sendLotteryInfo(analysisMessage, channelConfig) {
+    async sendLotteryInfo(message, channelConfig) {
         // Wysyłaj tylko na kanałach Daily i CX
         if (channelConfig.name !== 'Daily' && channelConfig.name !== 'CX') {
             return;
         }
 
         try {
-            const channel = analysisMessage.channel;
-            const client = analysisMessage.client;
+            const channel = message.channel;
+            const client = message.client;
             const isDaily = channelConfig.name === 'Daily';
             const lotteryTitle = isDaily ? '# 🎰 Loteria Glory Member za Daily' : '# 🎰 Loteria Glory Member za CX';
 
