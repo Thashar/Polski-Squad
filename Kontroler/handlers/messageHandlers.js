@@ -445,6 +445,8 @@ class MessageHandler {
             const client = message.client;
             const isDaily = channelConfig.name === 'Daily';
             const lotteryTitle = isDaily ? '# 🎰 Loteria Glory Member za Daily' : '# 🎰 Loteria Glory Member za CX';
+            
+            logger.info(`📤 Sprawdzam możliwość wysłania embeda loterii na kanał: ${channel.name} (${channel.id})`);
 
             // Sprawdź czy ostatnia wiadomość to embed o loterii od tego bota
             try {
@@ -453,6 +455,8 @@ class MessageHandler {
                 const lastMessage = messagesArray[0];
                 
                 // Sprawdź czy ostatnia wiadomość to już embed o loterii od tego bota
+                logger.info(`🔍 Ostatnia wiadomość: ${lastMessage ? `od ${lastMessage.author.tag}, typ: ${lastMessage.embeds.length > 0 ? 'embed' : 'text'}` : 'brak'}`);
+                
                 const isLastMessageLotteryEmbed = lastMessage && 
                     lastMessage.author.id === client.user.id && 
                     lastMessage.embeds.length > 0 && 
@@ -462,6 +466,8 @@ class MessageHandler {
                 if (isLastMessageLotteryEmbed) {
                     logger.info(`ℹ️ Ostatnia wiadomość to już embed o loterii ${channelConfig.name} - nie wysyłam nowego`);
                     return;
+                } else {
+                    logger.info(`✅ Ostatnia wiadomość to nie embed o loterii - wysyłam nowy embed`);
                 }
 
                 // Znajdź i usuń poprzednią wiadomość embed o loterii od tego bota (jeśli istnieje)

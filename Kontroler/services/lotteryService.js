@@ -1375,7 +1375,7 @@ class LotteryService {
                 hoursUntilDraw: Math.floor(hoursUntilDraw),
                 hoursToWait: hoursToWait,
                 nextDrawDate: nextDrawDate,
-                message: `Aktualnie nie jest możliwe zgromadzenie odpowiedniej ilości punktów by zakwalifikować się do losowania, wróć, gdy będziesz miał odpowiednią ilość punktów.`
+                message: `Aktualnie nie jest możliwe zgromadzenie odpowiedniej ilości punktów by zakwalifikować się do losowania.\nWróć, gdy będziesz miał odpowiednią ilość punktów!`
             };
         }
     }
