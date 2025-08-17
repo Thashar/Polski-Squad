@@ -328,11 +328,11 @@ class MessageHandler {
 
 🎯 osiągnąć w ciągu całego sezonu CX **2000 PKT**
 📸 przesłać screen z tego osiągnięcia na tym kanale
-⏰ czas na przesłanie screena jest do **18:29** w dniu, w którym rozpoczął się nowy sezon CX
+⏰ czas na przesłanie screena jest do **18:29** w dniu, w którym rozpoczął się nowy sezon
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-🎲 Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu CX.
+🎲 Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu.
 
 ## Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
