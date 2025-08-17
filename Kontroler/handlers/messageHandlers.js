@@ -75,8 +75,7 @@ class MessageHandler {
                 const channelTypeName = channelConfig.name === 'Daily' ? 'Daily' : 'CX';
                 let noLotteryMessage = `🚫 **Brak aktywnej loterii**\n\n`;
                 noLotteryMessage += `Dla Twojego klanu **${lotteryCheck.clanName}** nie ma obecnie aktywnej loterii **${channelTypeName}**.\n\n`;
-                noLotteryMessage += `Twoje zdjęcie nie zostanie przeanalizowane.\n\n`;
-                noLotteryMessage += `Skontaktuj się z administracją serwera w sprawie uruchomienia loterii.`;
+                noLotteryMessage += `Twoje zdjęcie nie zostanie przeanalizowane.`;
                 
                 await message.reply({
                     content: noLotteryMessage,
@@ -84,6 +83,9 @@ class MessageHandler {
                 });
                 
                 logger.info(`🚫 Zablokowano analizę OCR dla ${member.user.tag} - brak aktywnej loterii ${channelTypeName} dla klanu ${lotteryCheck.clanName}`);
+                
+                // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
+                this.scheduleLotteryInfo(message, channelConfig);
                 return;
             } else {
                 logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag} - znaleziono aktywną loterię ${channelConfig.name} dla klanu ${lotteryCheck.clanName}`);
