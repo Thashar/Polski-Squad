@@ -29,29 +29,42 @@ class MessageHandler {
 
         logger.info(`Wykryto wiadomość na monitorowanym kanale ${channelConfig.name}`);
 
-        // Sprawdź czy to obraz
-        const imageAttachment = message.attachments.find(attachment =>
-            attachment.contentType && attachment.contentType.startsWith('image/')
-        );
-
-        if (!imageAttachment) return;
-
-        // Sprawdź rozmiar pliku
-        if (imageAttachment.size > this.config.files.maxSize) {
-            await message.reply({
-                content: this.config.messages.fileTooBig,
-                allowedMentions: { repliedUser: false }
-            });
-            return;
-        }
-
+        // Pobierz członka do sprawdzeń
         let member;
         try {
             member = await message.guild.members.fetch(message.author.id);
         } catch (error) {
             logger.error(`Błąd pobierania informacji o członku: ${error.message}`);
+            return;
+        }
+
+        // USUWANIE WIADOMOŚCI BEZ ZDJĘĆ: Sprawdź czy wiadomość ma obrazy
+        const imageAttachment = message.attachments.find(attachment =>
+            attachment.contentType && attachment.contentType.startsWith('image/')
+        );
+
+        if (!imageAttachment) {
+            const isAdmin = member.permissions.has('Administrator');
+            
+            if (!isAdmin) {
+                // Usuń wiadomość bez obrazu od zwykłego użytkownika
+                try {
+                    await message.delete();
+                    logger.info(`🗑️ Usunięto wiadomość bez zdjęcia od ${message.author.tag} na kanale ${channelConfig.name}`);
+                } catch (error) {
+                    logger.error(`❌ Błąd usuwania wiadomości bez zdjęcia: ${error.message}`);
+                }
+                return;
+            } else {
+                logger.info(`👑 Administrator ${member.user.tag} wysłał wiadomość bez zdjęcia na kanale ${channelConfig.name} - pozostawiono`);
+                return;
+            }
+        }
+
+        // Sprawdź rozmiar pliku
+        if (imageAttachment.size > this.config.files.maxSize) {
             await message.reply({
-                content: this.config.messages.userInfoError,
+                content: this.config.messages.fileTooBig,
                 allowedMentions: { repliedUser: false }
             });
             return;
