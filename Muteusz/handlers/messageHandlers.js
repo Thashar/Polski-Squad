@@ -49,6 +49,25 @@ class MessageHandler {
         if (message.attachments.size > 0 && message.channel.id !== this.config.media.targetChannelId) {
             await this.mediaService.repostMedia(message, client);
         }
+        
+        // Trackuj wszystkie wiadomości dla deleted message logs (tylko z treścią, bez mediów)
+        if (this.config.deletedMessageLogs?.enabled && 
+            this.config.deletedMessageLogs?.trackMessageLinks && 
+            message.content && 
+            message.attachments.size === 0 && 
+            message.channel.id !== this.config.media.targetChannelId &&
+            message.channel.id !== this.config.deletedMessageLogs.logChannelId) {
+            
+            this.mediaService.messageLinks.set(message.id, {
+                originalChannelId: message.channel.id,
+                originalAuthorId: message.author.id,
+                originalAuthorTag: message.author.tag,
+                repostedMessageId: null,
+                repostedChannelId: null,
+                timestamp: Date.now(),
+                hasMedia: false
+            });
+        }
 
         // Auto-moderacja
         await this.handleAutoModeration(message);

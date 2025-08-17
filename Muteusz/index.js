@@ -74,6 +74,16 @@ client.on(Events.MessageCreate, async (message) => {
     await messageHandler.handleMessage(message, client);
 });
 
+// Obsługa usuniętych wiadomości
+client.on(Events.MessageDelete, async (message) => {
+    await mediaService.handleDeletedMessage(message, client);
+});
+
+// Obsługa edytowanych wiadomości
+client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
+    await mediaService.handleEditedMessage(oldMessage, newMessage, client);
+});
+
 // Obsługa zmian członków serwera
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     await memberHandler.handleGuildMemberUpdate(oldMember, newMember);

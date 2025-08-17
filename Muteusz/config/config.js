@@ -108,6 +108,14 @@ module.exports = {
         logChannelId: process.env.MUTEUSZ_LOG_CHANNEL_ID
     },
     
+    // Konfiguracja logowania usuniętych/edytowanych wiadomości
+    deletedMessageLogs: {
+        enabled: true,
+        logChannelId: '1406623452550529155',
+        trackMessageLinks: true,
+        linkRetentionDays: 30
+    },
+    
     // Konfiguracja kickowania użytkowników bez ról (współpraca z Rekruterem)
     roleKicking: {
         enabled: true,

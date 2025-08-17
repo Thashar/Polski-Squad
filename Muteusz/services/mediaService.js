@@ -13,6 +13,7 @@ class MediaService {
     constructor(config) {
         this.config = config;
         this.cacheDir = config.media.cacheDir;
+        this.messageLinks = new Map(); // originalMessageId -> repostedMessageData
     }
 
     /**
@@ -26,6 +27,11 @@ class MediaService {
         setInterval(() => this.cleanupCache(), 60 * 60 * 1000);
         
         logger.info('Serwis mediów został zainicjalizowany');
+        
+        // Ustaw cleanup starych linków co 24 godziny
+        if (this.config.deletedMessageLogs?.enabled) {
+            setInterval(() => this.cleanupOldMessageLinks(), 24 * 60 * 60 * 1000);
+        }
     }
 
     /**
@@ -250,7 +256,7 @@ class MediaService {
                         embed.setTitle(`📸 Repost Media (Duży plik: ${(attachment.size / 1024 / 1024).toFixed(1)} MB)`);
                     }
 
-                    await targetChannel.send({
+                    const repostedMessage = await targetChannel.send({
                         embeds: [embed],
                         files: [{ 
                             attachment: cachedFilePath, 
@@ -258,6 +264,19 @@ class MediaService {
                             description: `Repost od ${author.tag}`
                         }]
                     });
+
+                    // Zapisz powiązanie dla trackowania usuniętych wiadomości
+                    if (this.config.deletedMessageLogs?.trackMessageLinks && repostedMessage) {
+                        this.messageLinks.set(message.id, {
+                            originalChannelId: channel.id,
+                            originalAuthorId: author.id,
+                            originalAuthorTag: author.tag,
+                            repostedMessageId: repostedMessage.id,
+                            repostedChannelId: targetChannel.id,
+                            timestamp: Date.now(),
+                            hasMedia: true
+                        });
+                    }
                     
                     if (this.config.media.autoCleanup) {
                         await fs.unlink(cachedFilePath);
@@ -299,6 +318,159 @@ class MediaService {
         } catch (error) {
             const errorMessage = error?.message || 'Nieznany błąd';
             logger.error(`Błąd czyszczenia cache: ${errorMessage}`);
+        }
+    }
+
+    /**
+     * Obsługuje usunięte wiadomości
+     * @param {Message} deletedMessage - Usunięta wiadomość
+     * @param {Client} client - Klient Discord
+     */
+    async handleDeletedMessage(deletedMessage, client) {
+        if (!this.config.deletedMessageLogs?.enabled) return;
+        if (deletedMessage.author?.bot) return;
+
+        const logChannel = client.channels.cache.get(this.config.deletedMessageLogs.logChannelId);
+        if (!logChannel) return;
+
+        const linkData = this.messageLinks.get(deletedMessage.id);
+        
+        const embed = new EmbedBuilder()
+            .setTitle('🗑️ Usunięta wiadomość')
+            .setColor(0xFF0000) // Czerwony
+            .addFields(
+                { name: '👤 Autor', value: `${deletedMessage.author?.tag || 'Nieznany'} (${deletedMessage.author?.id || 'Nieznane ID'})`, inline: true },
+                { name: '📺 Kanał', value: `<#${deletedMessage.channel.id}>`, inline: true },
+                { name: '📅 Usunięto', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+            )
+            .setTimestamp();
+
+        // Dodaj treść wiadomości jeśli istnieje
+        if (deletedMessage.content) {
+            embed.addFields({ 
+                name: '💬 Treść', 
+                value: deletedMessage.content.length > 1024 ? 
+                    deletedMessage.content.substring(0, 1021) + '...' : 
+                    deletedMessage.content, 
+                inline: false 
+            });
+        }
+
+        // Jeśli mamy powiązanie z repostowanym media
+        if (linkData && linkData.hasMedia) {
+            try {
+                const repostedChannel = client.channels.cache.get(linkData.repostedChannelId);
+                const repostedMessage = await repostedChannel?.messages.fetch(linkData.repostedMessageId);
+                
+                if (repostedMessage) {
+                    embed.addFields({ 
+                        name: '📸 Backup mediów', 
+                        value: `[Zobacz repostowane media](${repostedMessage.url})`, 
+                        inline: false 
+                    });
+                    
+                    // Oznacz repost jako usunięty
+                    const updatedEmbed = EmbedBuilder.from(repostedMessage.embeds[0])
+                        .setTitle('🗑️ [USUNIĘTE] Repost Media')
+                        .setColor(0xFF0000);
+                    
+                    await repostedMessage.edit({ embeds: [updatedEmbed] });
+                }
+            } catch (error) {
+                logger.error(`Błąd podczas aktualizacji repostu: ${error.message}`);
+            }
+        }
+
+        // Dodaj załączniki jeśli były
+        if (deletedMessage.attachments?.size > 0) {
+            const attachmentList = deletedMessage.attachments.map(att => 
+                `• ${att.name} (${(att.size / 1024 / 1024).toFixed(2)} MB)`
+            ).join('\n');
+            
+            embed.addFields({ 
+                name: '📎 Załączniki', 
+                value: attachmentList.length > 1024 ? 
+                    attachmentList.substring(0, 1021) + '...' : 
+                    attachmentList, 
+                inline: false 
+            });
+        }
+
+        await logChannel.send({ embeds: [embed] });
+        
+        // Usuń powiązanie po przetworzeniu
+        if (linkData) {
+            this.messageLinks.delete(deletedMessage.id);
+        }
+    }
+
+    /**
+     * Obsługuje edytowane wiadomości
+     * @param {Message} oldMessage - Stara wiadomość
+     * @param {Message} newMessage - Nowa wiadomość
+     * @param {Client} client - Klient Discord
+     */
+    async handleEditedMessage(oldMessage, newMessage, client) {
+        if (!this.config.deletedMessageLogs?.enabled) return;
+        if (newMessage.author?.bot) return;
+        if (oldMessage.content === newMessage.content) return; // Tylko zmiany treści
+
+        const logChannel = client.channels.cache.get(this.config.deletedMessageLogs.logChannelId);
+        if (!logChannel) return;
+
+        const embed = new EmbedBuilder()
+            .setTitle('✏️ Edytowana wiadomość')
+            .setColor(0xFF6600) // Pomarańczowy
+            .addFields(
+                { name: '👤 Autor', value: `${newMessage.author.tag} (${newMessage.author.id})`, inline: true },
+                { name: '📺 Kanał', value: `<#${newMessage.channel.id}>`, inline: true },
+                { name: '📅 Edytowano', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false },
+                { name: '🔗 Link', value: `[Przejdź do wiadomości](${newMessage.url})`, inline: false }
+            )
+            .setTimestamp();
+
+        // Dodaj treść przed i po edycji
+        if (oldMessage.content) {
+            embed.addFields({ 
+                name: '📝 Przed', 
+                value: oldMessage.content.length > 1024 ? 
+                    oldMessage.content.substring(0, 1021) + '...' : 
+                    oldMessage.content, 
+                inline: false 
+            });
+        }
+
+        if (newMessage.content) {
+            embed.addFields({ 
+                name: '✨ Po', 
+                value: newMessage.content.length > 1024 ? 
+                    newMessage.content.substring(0, 1021) + '...' : 
+                    newMessage.content, 
+                inline: false 
+            });
+        }
+
+        await logChannel.send({ embeds: [embed] });
+    }
+
+    /**
+     * Czyści stare powiązania wiadomości
+     */
+    cleanupOldMessageLinks() {
+        if (!this.config.deletedMessageLogs?.linkRetentionDays) return;
+        
+        const cutoff = Date.now() - (this.config.deletedMessageLogs.linkRetentionDays * 24 * 60 * 60 * 1000);
+        let cleaned = 0;
+        
+        for (const [messageId, data] of this.messageLinks) {
+            if (data.timestamp < cutoff) {
+                this.messageLinks.delete(messageId);
+                cleaned++;
+            }
+        }
+        
+        if (cleaned > 0) {
+            logger.info(`Wyczyszczono ${cleaned} starych powiązań wiadomości`);
         }
     }
 }
