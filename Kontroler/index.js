@@ -46,7 +46,8 @@ async function initializeServices() {
         ocrService,
         analysisService,
         roleService,
-        messageService
+        messageService,
+        lotteryService
     );
 
     logger.success('Wszystkie serwisy zostały zainicjalizowane');

@@ -6,12 +6,13 @@ const cron = require('node-cron');
 const logger = createBotLogger('Kontroler');
 
 class MessageHandler {
-    constructor(config, ocrService, analysisService, roleService, messageService) {
+    constructor(config, ocrService, analysisService, roleService, messageService, lotteryService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.analysisService = analysisService;
         this.roleService = roleService;
         this.messageService = messageService;
+        this.lotteryService = lotteryService;
         this.lotterySchedules = new Map(); // Mapa zaplanowanych zadań cron dla każdego kanału
     }
 
@@ -63,6 +64,30 @@ class MessageHandler {
                 allowedMentions: { repliedUser: false }
             });
             return;
+        }
+
+        // SPRAWDZENIE AKTYWNEJ LOTERII: Sprawdź czy dla klanu użytkownika jest aktywna loteria
+        if (this.lotteryService && (channelConfig.name === 'Daily' || channelConfig.name === 'CX')) {
+            const targetRoleId = channelConfig.requiredRoleId;
+            const lotteryCheck = this.lotteryService.checkUserLotteryEligibility(member, targetRoleId);
+            
+            if (!lotteryCheck.isLotteryActive) {
+                const channelTypeName = channelConfig.name === 'Daily' ? 'Daily' : 'CX';
+                let noLotteryMessage = `🚫 **Brak aktywnej loterii**\n\n`;
+                noLotteryMessage += `Dla Twojego klanu **${lotteryCheck.clanName}** nie ma obecnie aktywnej loterii **${channelTypeName}**.\n\n`;
+                noLotteryMessage += `Twoje zdjęcie nie zostanie przeanalizowane.\n\n`;
+                noLotteryMessage += `Skontaktuj się z administracją serwera w sprawie uruchomienia loterii.`;
+                
+                await message.reply({
+                    content: noLotteryMessage,
+                    allowedMentions: { repliedUser: false }
+                });
+                
+                logger.info(`🚫 Zablokowano analizę OCR dla ${member.user.tag} - brak aktywnej loterii ${channelTypeName} dla klanu ${lotteryCheck.clanName}`);
+                return;
+            } else {
+                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag} - znaleziono aktywną loterię ${channelConfig.name} dla klanu ${lotteryCheck.clanName}`);
+            }
         }
 
         const displayName = member.displayName;
@@ -233,8 +258,8 @@ class MessageHandler {
             logger.info(`🔄 Anulowano poprzednie zadanie cron loterii dla kanału ${channelConfig.name}`);
         }
 
-        // Oblicz czas wykonania (5 minut od teraz)
-        const executeTime = new Date(Date.now() + 5 * 60 * 1000);
+        // Oblicz czas wykonania (10 sekund od teraz)
+        const executeTime = new Date(Date.now() + 10 * 1000);
         const minutes = executeTime.getMinutes();
         const hours = executeTime.getHours();
         const day = executeTime.getDate();
@@ -262,7 +287,7 @@ class MessageHandler {
         task.start();
         this.lotterySchedules.set(channelId, task);
         
-        logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} na ${executeTime.toLocaleString('pl-PL')} (za 5 minut)`);
+        logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} na ${executeTime.toLocaleString('pl-PL')} (za 10 sekund)`);
     }
 
     /**

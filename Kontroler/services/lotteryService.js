@@ -1003,6 +1003,64 @@ class LotteryService {
     }
 
     /**
+     * Sprawdza czy dla danego klanu i roli jest aktywna loteria
+     * @param {string} clanRoleId - ID roli klanu użytkownika
+     * @param {string} targetRoleId - ID roli docelowej (Daily/CX)
+     * @returns {boolean} Czy istnieje aktywna loteria
+     */
+    isLotteryActive(clanRoleId, targetRoleId) {
+        for (const lottery of this.activeLotteries.values()) {
+            // Sprawdź czy jest to loteria dla tej roli docelowej
+            if (lottery.targetRoleId === targetRoleId) {
+                // Sprawdź czy klan pasuje (null oznacza "cały serwer")
+                if (lottery.clanRoleId === null || lottery.clanRoleId === clanRoleId) {
+                    logger.info(`✅ Znaleziono aktywną loterię: ${lottery.name} dla klanu ${clanRoleId || 'Cały serwer'} i roli ${targetRoleId}`);
+                    return true;
+                }
+            }
+        }
+        
+        logger.info(`❌ Brak aktywnej loterii dla klanu ${clanRoleId || 'Cały serwer'} i roli ${targetRoleId}`);
+        return false;
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma jakąkolwiek rolę klanu i czy istnieje loteria dla tej kombinacji
+     * @param {GuildMember} member - Członek serwera
+     * @param {string} targetRoleId - ID roli docelowej (Daily/CX)
+     * @returns {Object} Wynik sprawdzenia z informacją o klanie i aktywności loterii
+     */
+    checkUserLotteryEligibility(member, targetRoleId) {
+        // Sprawdź wszystkie role klanów zdefiniowane w konfiguracji
+        const clans = this.config.lottery.clans;
+        
+        for (const [clanKey, clanConfig] of Object.entries(clans)) {
+            if (clanConfig.roleId && member.roles.cache.has(clanConfig.roleId)) {
+                // Użytkownik ma rolę tego klanu
+                const isActive = this.isLotteryActive(clanConfig.roleId, targetRoleId);
+                return {
+                    hasValidClan: true,
+                    clanKey: clanKey,
+                    clanName: clanConfig.displayName,
+                    clanRoleId: clanConfig.roleId,
+                    isLotteryActive: isActive
+                };
+            }
+        }
+        
+        // Sprawdź czy jest loteria dla "całego serwera" (clanRoleId = null)
+        const isServerWideLotteryActive = this.isLotteryActive(null, targetRoleId);
+        
+        return {
+            hasValidClan: false,
+            clanKey: null,
+            clanName: 'Cały serwer',
+            clanRoleId: null,
+            isLotteryActive: isServerWideLotteryActive
+        };
+    }
+
+    /**
      * Formatuje ID loterii dla wyświetlania
      */
     formatLotteryIdForDisplay(lotteryId) {
