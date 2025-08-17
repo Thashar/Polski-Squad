@@ -104,6 +104,10 @@ class MessageHandler {
             
             // SPRAWDZENIE OKNA CZASOWEGO: Sprawdź czy aktualnie można przesyłać screeny (ignoruj administratorów)
             const isAdmin = member.permissions.has('Administrator');
+            if (!this.lotteryService) {
+                logger.warn('⚠️ lotteryService nie jest dostępne dla sprawdzenia okna czasowego');
+                return;
+            }
             const timeWindowCheck = this.lotteryService.checkSubmissionTimeWindow(targetRoleId, lotteryCheck.clanRoleId);
             
             if (!timeWindowCheck.isAllowed && !isAdmin) {
@@ -291,8 +295,14 @@ class MessageHandler {
         
         // Anuluj poprzednie zadanie cron dla tego kanału jeśli istnieje
         if (this.lotterySchedules.has(channelId)) {
-            this.lotterySchedules.get(channelId).destroy();
-            logger.info(`🔄 Anulowano poprzednie zadanie cron loterii dla kanału ${channelConfig.name}`);
+            const existingTask = this.lotterySchedules.get(channelId);
+            if (existingTask && typeof existingTask.destroy === 'function') {
+                existingTask.destroy();
+                logger.info(`🔄 Anulowano poprzednie zadanie cron loterii dla kanału ${channelConfig.name}`);
+            } else {
+                logger.warn(`⚠️ Zadanie cron dla kanału ${channelConfig.name} nie ma metody destroy lub jest undefined`);
+            }
+            this.lotterySchedules.delete(channelId);
         }
 
         // Oblicz czas wykonania (10 sekund od teraz)
@@ -306,25 +316,33 @@ class MessageHandler {
         const cronExpression = `${minutes} ${hours} ${day} ${month} *`;
         
         // Zaplanuj zadanie cron
-        const task = cron.schedule(cronExpression, async () => {
-            try {
-                await this.sendLotteryInfo(message, channelConfig);
-                this.lotterySchedules.delete(channelId); // Usuń zadanie po wykonaniu
-                task.destroy(); // Zniszcz zadanie cron
-            } catch (error) {
-                logger.error(`❌ Błąd podczas wysyłania zaplanowanej wiadomości o loterii ${channelConfig.name}:`, error);
-                this.lotterySchedules.delete(channelId);
-                task.destroy();
-            }
-        }, {
-            scheduled: false // Nie uruchamiaj automatycznie
-        });
+        try {
+            const task = cron.schedule(cronExpression, async () => {
+                try {
+                    await this.sendLotteryInfo(message, channelConfig);
+                    this.lotterySchedules.delete(channelId); // Usuń zadanie po wykonaniu
+                    if (task && typeof task.destroy === 'function') {
+                        task.destroy(); // Zniszcz zadanie cron
+                    }
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas wysyłania zaplanowanej wiadomości o loterii ${channelConfig.name}:`, error);
+                    this.lotterySchedules.delete(channelId);
+                    if (task && typeof task.destroy === 'function') {
+                        task.destroy();
+                    }
+                }
+            }, {
+                scheduled: false // Nie uruchamiaj automatycznie
+            });
 
-        // Uruchom zadanie
-        task.start();
-        this.lotterySchedules.set(channelId, task);
-        
-        logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} na ${executeTime.toLocaleString('pl-PL')} (za 10 sekund)`);
+            // Uruchom zadanie
+            task.start();
+            this.lotterySchedules.set(channelId, task);
+            
+            logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} na ${executeTime.toLocaleString('pl-PL')} (za 10 sekund)`);
+        } catch (cronError) {
+            logger.error(`❌ Błąd podczas tworzenia zadania cron dla loterii ${channelConfig.name}:`, cronError);
+        }
     }
 
     /**
