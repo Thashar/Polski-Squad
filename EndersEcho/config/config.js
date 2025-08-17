@@ -62,7 +62,8 @@ module.exports = {
     images: {
         supportedExtensions: ['.png', '.jpg', '.jpeg', '.gif', '.bmp'],
         processedSuffix: '_processed.png',
-        checkSuffix: '_check.png'
+        checkSuffix: '_check.png',
+        maxSize: 25 * 1024 * 1024 // 25MB - obsługa Nitro użytkowników
     },
     
     // Konfiguracja wyników

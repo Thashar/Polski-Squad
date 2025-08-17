@@ -185,11 +185,11 @@ class OCRService {
      */
     extractScoreAfterBest(text) {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:', text);
-            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', text);
+            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:', JSON.stringify(text));
+            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', JSON.stringify(text));
         } else {
-            logger.info('Pełny tekst z OCR:', text);
-            logger.info('Analizowany tekst OCR:', text);
+            logger.info('Pełny tekst z OCR:', JSON.stringify(text));
+            logger.info('Analizowany tekst OCR:', JSON.stringify(text));
         }
         
         // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
@@ -197,9 +197,9 @@ class OCRService {
         let matches = text.match(bestScorePattern);
         
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best (wzorzec 1):', matches);
+            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best (wzorzec 1):', JSON.stringify(matches));
         } else {
-            logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
+            logger.info('Znalezione dopasowania Best (wzorzec 1):', JSON.stringify(matches));
         }
         
         if (!matches || matches.length === 0) {
@@ -220,7 +220,7 @@ class OCRService {
                 }
             }
             
-            logger.info('Znalezione dopasowania Best (wzorzec elastyczny):', matches);
+            logger.info('Znalezione dopasowania Best (wzorzec elastyczny):', JSON.stringify(matches));
             
             if (matches.length === 0) {
                 logger.info('Nie znaleziono słowa "Best" z wynikiem');
@@ -234,15 +234,23 @@ class OCRService {
         
         if (matches.length > 0) {
             let result = matches[0];
-            logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', result);
+            logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', JSON.stringify(result));
             
             // Zastosuj poprawki: TT -> 1T oraz 7 -> T
             result = this.fixScoreFormat(result);
             
-            logger.info('Wyodrębniony wynik po "Best" (po poprawce):', result);
+            logger.info('Wyodrębniony wynik po "Best" (po poprawce):', JSON.stringify(result));
+            
+            // Sprawdź czy wynik nie jest pusty po korekcjach
+            if (!result || result.trim() === '') {
+                logger.info('Wynik jest pusty po korekcjach');
+                return null;
+            }
+            
             return result;
         }
         
+        logger.info('Brak dopasowań - zwracam null');
         return null;
     }
 

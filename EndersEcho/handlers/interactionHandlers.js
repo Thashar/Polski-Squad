@@ -186,6 +186,17 @@ class InteractionHandler {
             return;
         }
         
+        // Sprawdź rozmiar pliku
+        if (attachment.size > this.config.images.maxSize) {
+            const maxSizeMB = Math.round(this.config.images.maxSize / (1024 * 1024));
+            const fileSizeMB = Math.round(attachment.size / (1024 * 1024) * 100) / 100;
+            await interaction.reply({ 
+                content: `❌ Plik jest za duży! Maksymalny rozmiar: **${maxSizeMB}MB**, twój plik: **${fileSizeMB}MB**\n💡 **Tip:** Zmniejsz jakość obrazu lub użyj kompresji.`, 
+                ephemeral: true 
+            });
+            return;
+        }
+        
         // Defer reply przed długimi operacjami OCR - prywatnie podczas przetwarzania
         await interaction.deferReply({ ephemeral: true });
         
@@ -215,12 +226,16 @@ class InteractionHandler {
             logger.info('Pełny tekst z OCR:', extractedText);
             
             let bestScore = this.ocrService.extractScoreAfterBest(extractedText);
+            logger.info('🔍 DEBUG: bestScore po extractScoreAfterBest:', JSON.stringify(bestScore));
             
-            if (!bestScore) {
+            if (!bestScore || bestScore.trim() === '') {
+                logger.info('🔍 DEBUG: Wynik jest pusty - kończę proces');
                 await fs.unlink(tempImagePath);
                 await interaction.editReply(this.config.messages.updateNoScore);
                 return;
             }
+            
+            logger.info('🔍 DEBUG: Kontynuuję z wynikiem:', JSON.stringify(bestScore));
             
             // Ekstrakcja nazwy bossa
             const bossName = this.ocrService.extractBossName(extractedText);
