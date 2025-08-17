@@ -338,11 +338,11 @@ class MessageHandler {
 
 🎯 uzyskać w danym tygodniu **910 PKT** daily
 📸 przesłać screen z tego osiągnięcia na tym kanale
-⏰ czas na przesłanie screena jest do niedzieli do **18:29**
+⏰ czas na przesłanie screena jest do niedzieli do **18:30**
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-🎲 Losowania będą odbywać się o godzinie **18:30** w każdą niedzielę.
+🎲 Losowania będą odbywać się o godzinie **19:00** w każdą niedzielę.
 
 ## Powodzenia!`)
                     .setColor(0x00FF00) // Zielony kolor
@@ -355,11 +355,11 @@ class MessageHandler {
 
 🎯 osiągnąć w ciągu całego sezonu CX **2000 PKT**
 📸 przesłać screen z tego osiągnięcia na tym kanale
-⏰ czas na przesłanie screena jest do **18:29** w dniu, w którym rozpoczął się nowy sezon
+⏰ czas na przesłanie screena jest do **18:30** w dniu, w którym rozpoczął się nowy sezon
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-🎲 Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu CX.
+🎲 Losowania będą odbywać się o godzinie **19:00** w każdy pierwszy dzień sezonu CX.
 
 ## Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
