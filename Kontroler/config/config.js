@@ -58,7 +58,7 @@ module.exports = {
         tempDir: path.join(__dirname, '../temp'),
         saveProcessedImages: true,
         processedDir: path.join(__dirname, '../../processed_ocr'),
-        maxProcessedFiles: 100,
+        maxProcessedFiles: 400,
         languages: 'pol+eng',
         charWhitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż .,:-_[](){}',
         pagesegMode: 'AUTO',

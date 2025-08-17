@@ -75,7 +75,7 @@ module.exports = {
         // Zapisywanie przetworzonych obrazów
         saveProcessedImages: true,
         processedDir: path.join(__dirname, '../../processed_ocr'),
-        maxProcessedFiles: 100,
+        maxProcessedFiles: 400,
         
         // Szczegółowe logowanie OCR
         detailedLogging: {
