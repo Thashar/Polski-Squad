@@ -11,6 +11,7 @@ class MessageHandler {
         this.analysisService = analysisService;
         this.roleService = roleService;
         this.messageService = messageService;
+        this.lotteryTimers = new Map(); // Mapa timerów dla każdego kanału
     }
 
     /**
@@ -193,8 +194,8 @@ class MessageHandler {
             await safeEditMessage(analysisMessage, message);
         }
 
-        // Wyślij informację o loterii Daily lub CX
-        await this.sendLotteryInfo(analysisMessage, channelConfig);
+        // Wyślij informację o loterii Daily lub CX z opóźnieniem
+        this.scheduleLotteryInfo(analysisMessage, channelConfig);
     }
 
     /**
@@ -208,8 +209,42 @@ class MessageHandler {
         const message = this.messageService.formatResultMessage(result, null, channelConfig);
         await safeEditMessage(analysisMessage, message);
         
-        // Wyślij informację o loterii Daily lub CX
-        await this.sendLotteryInfo(analysisMessage, channelConfig);
+        // Wyślij informację o loterii Daily lub CX z opóźnieniem
+        this.scheduleLotteryInfo(analysisMessage, channelConfig);
+    }
+
+    /**
+     * Planuje wysłanie informacji o loterii z 5-minutowym opóźnieniem
+     * @param {Message} analysisMessage - Wiadomość analizy
+     * @param {Object} channelConfig - Konfiguracja kanału
+     */
+    scheduleLotteryInfo(analysisMessage, channelConfig) {
+        // Wysyłaj tylko na kanałach Daily i CX
+        if (channelConfig.name !== 'Daily' && channelConfig.name !== 'CX') {
+            return;
+        }
+
+        const channelId = analysisMessage.channel.id;
+        
+        // Anuluj poprzedni timer dla tego kanału jeśli istnieje
+        if (this.lotteryTimers.has(channelId)) {
+            clearTimeout(this.lotteryTimers.get(channelId));
+            logger.info(`🔄 Anulowano poprzedni timer loterii dla kanału ${channelConfig.name}`);
+        }
+
+        // Ustaw nowy timer na 5 minut (300000 ms)
+        const timer = setTimeout(async () => {
+            try {
+                await this.sendLotteryInfo(analysisMessage, channelConfig);
+                this.lotteryTimers.delete(channelId); // Usuń timer po wykonaniu
+            } catch (error) {
+                logger.error(`❌ Błąd podczas wysyłania zaplanowanej wiadomości o loterii ${channelConfig.name}:`, error);
+                this.lotteryTimers.delete(channelId);
+            }
+        }, 300000); // 5 minut = 300000 ms
+
+        this.lotteryTimers.set(channelId, timer);
+        logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} za 5 minut`);
     }
 
     /**
@@ -255,13 +290,16 @@ class MessageHandler {
                     .setDescription(`# 🎰 Loteria Glory Member za Daily
 
 Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
-• uzyskać w danym tygodniu 910 pkt. daily
+
+• uzyskać w danym tygodniu **910 pkt.** daily
 • przesłać screen z tego osiągnięcia na tym kanale
-• czas na przesłanie screena jest do niedzieli do 18:29
+• czas na przesłanie screena jest do niedzieli do **18:29**
 • screen musi być zatwierdzony przez bota Kontroler
 • **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-Losowania będą odbywać się o godzinie 18:30 w każdą niedzielę. Powodzenia!`)
+Losowania będą odbywać się o godzinie **18:30** w każdą niedzielę.
+
+## Powodzenia!`)
                     .setColor(0x00FF00) // Zielony kolor
                     .setTimestamp();
             } else {
@@ -269,13 +307,16 @@ Losowania będą odbywać się o godzinie 18:30 w każdą niedzielę. Powodzenia
                     .setDescription(`# 🎰 Loteria Glory Member za CX
 
 Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
-• osiągnąć w ciągu całego sezonu CX 2000 PKT
+
+• osiągnąć w ciągu całego sezonu CX **2000 PKT**
 • przesłać screen z tego osiągnięcia na tym kanale
-• czas na przesłanie screena jest do 18:29 w dniu, w którym rozpoczął się nowy sezon CX
+• czas na przesłanie screena jest do **18:29** w dniu, w którym rozpoczął się nowy sezon CX
 • screen musi być zatwierdzony przez bota Kontroler
 • **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-Losowania będą odbywać się o godzinie 18:30 w każdy pierwszy dzień sezonu CX. Powodzenia!`)
+Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu CX.
+
+## Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
                     .setTimestamp();
             }
