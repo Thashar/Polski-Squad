@@ -109,7 +109,7 @@ class MessageHandler {
                 return;
             }
             
-            // SPRAWDZENIE OKNA CZASOWEGO: Sprawdź czy aktualnie można przesyłać screeny (ignoruj administratorów)
+            // SPRAWDZENIE OKNA CZASOWEGO: Sprawdź czy aktualnie można przesyłać screeny (TESTOWY TRYB - nie ignoruj administratorów)
             const isAdmin = member.permissions.has('Administrator');
             if (!this.lotteryService) {
                 logger.warn('⚠️ lotteryService nie jest dostępne dla sprawdzenia okna czasowego');
@@ -117,7 +117,7 @@ class MessageHandler {
             }
             const timeWindowCheck = this.lotteryService.checkSubmissionTimeWindow(targetRoleId, lotteryCheck.clanRoleId);
             
-            if (!timeWindowCheck.isAllowed && !isAdmin) {
+            if (!timeWindowCheck.isAllowed) {
                 let timeWindowMessage = `⏰ **Poza oknem czasowym**\n\n`;
                 timeWindowMessage += timeWindowCheck.message;
                 
@@ -126,15 +126,15 @@ class MessageHandler {
                     allowedMentions: { repliedUser: false }
                 });
                 
-                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
+                const adminInfo = isAdmin ? ' (ADMINISTRATOR)' : '';
+                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag}${adminInfo} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
                 this.scheduleLotteryInfo(message, channelConfig);
                 return;
-            } else if (isAdmin && !timeWindowCheck.isAllowed) {
-                logger.info(`👑 Administrator ${member.user.tag} pominął ograniczenie okna czasowego ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
             } else {
-                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag} - w oknie czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
+                const adminInfo = isAdmin ? ' (ADMINISTRATOR)' : '';
+                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag}${adminInfo} - w oknie czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
             }
         } else {
             logger.info(`⚠️ Pominięto sprawdzenie loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
