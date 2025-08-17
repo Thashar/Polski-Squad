@@ -78,25 +78,25 @@ class MessageHandler {
 
         // Sprawdź rozmiar pliku
         if (imageAttachment.size > this.config.files.maxSize) {
-            await message.reply({
+            const replyMessage = await message.reply({
                 content: this.config.messages.fileTooBig,
                 allowedMentions: { repliedUser: false }
             });
             
             // Wyślij informację o loterii z opóźnieniem mimo błędu
-            this.scheduleLotteryInfo(message, channelConfig);
+            this.scheduleLotteryInfo(replyMessage, channelConfig);
             return;
         }
 
         // NOWA FUNKCJONALNOŚĆ: Sprawdź czy użytkownik ma rolę blokującą
         if (this.roleService.isUserBlocked(member)) {
-            await message.reply({
+            const replyMessage = await message.reply({
                 content: this.messageService.getBlockedUserMessage(),
                 allowedMentions: { repliedUser: false }
             });
             
             // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
-            this.scheduleLotteryInfo(message, channelConfig);
+            this.scheduleLotteryInfo(replyMessage, channelConfig);
             return;
         }
 
@@ -118,7 +118,7 @@ class MessageHandler {
                 noLotteryMessage += `Dla Twojego klanu **${lotteryCheck.clanName}** nie ma obecnie aktywnej loterii **${channelTypeName}**.\n\n`;
                 noLotteryMessage += `Twoje zdjęcie nie zostanie przeanalizowane.`;
                 
-                await message.reply({
+                const replyMessage = await message.reply({
                     content: noLotteryMessage,
                     allowedMentions: { repliedUser: false }
                 });
@@ -126,7 +126,7 @@ class MessageHandler {
                 logger.info(`🚫 Zablokowano analizę OCR dla ${member.user.tag} - brak aktywnej loterii ${channelTypeName} dla klanu ${lotteryCheck.clanName}`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
-                this.scheduleLotteryInfo(message, channelConfig);
+                this.scheduleLotteryInfo(replyMessage, channelConfig);
                 return;
             }
             
@@ -155,15 +155,15 @@ class MessageHandler {
                 timeWindowMessage += timeWindowCheck.message;
                 timeWindowMessage += `\n\n⏱️ **Będzie można dodać screena za:** ${timeToWait}`;
                 
-                await message.reply({
+                const replyMessage = await message.reply({
                     content: timeWindowMessage,
                     allowedMentions: { repliedUser: false }
                 });
                 
                 logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania, czekać ${timeToWait})`);
                 
-                // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
-                this.scheduleLotteryInfo(message, channelConfig);
+                // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy (używamy reply message)
+                this.scheduleLotteryInfo(replyMessage, channelConfig);
                 return;
             } else {
                 const adminInfo = isAdmin ? ' (ADMINISTRATOR)' : '';
