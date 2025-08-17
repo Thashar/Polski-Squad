@@ -87,8 +87,30 @@ class MessageHandler {
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
                 this.scheduleLotteryInfo(message, channelConfig);
                 return;
+            }
+            
+            // SPRAWDZENIE OKNA CZASOWEGO: Sprawdź czy aktualnie można przesyłać screeny (ignoruj administratorów)
+            const isAdmin = member.permissions.has('Administrator');
+            const timeWindowCheck = this.lotteryService.checkSubmissionTimeWindow(targetRoleId, lotteryCheck.clanRoleId);
+            
+            if (!timeWindowCheck.isAllowed && !isAdmin) {
+                let timeWindowMessage = `⏰ **Poza oknem czasowym**\n\n`;
+                timeWindowMessage += timeWindowCheck.message;
+                
+                await message.reply({
+                    content: timeWindowMessage,
+                    allowedMentions: { repliedUser: false }
+                });
+                
+                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
+                
+                // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
+                this.scheduleLotteryInfo(message, channelConfig);
+                return;
+            } else if (isAdmin && !timeWindowCheck.isAllowed) {
+                logger.info(`👑 Administrator ${member.user.tag} pominął ograniczenie okna czasowego ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
             } else {
-                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag} - znaleziono aktywną loterię ${channelConfig.name} dla klanu ${lotteryCheck.clanName}`);
+                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag} - w oknie czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
             }
         }
 

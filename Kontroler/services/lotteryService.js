@@ -194,13 +194,29 @@ class LotteryService {
      */
     scheduleNextLottery(lotteryId, lottery) {
         try {
-            // Usuń istniejący cron job jeśli istnieje
+            // Usuń istniejące cron jobs jeśli istnieją
             if (this.cronJobs.has(lotteryId)) {
                 const oldJob = this.cronJobs.get(lotteryId);
                 if (oldJob && typeof oldJob.destroy === 'function') {
                     oldJob.destroy();
                 }
                 this.cronJobs.delete(lotteryId);
+            }
+            
+            if (this.cronJobs.has(lotteryId + '_warning')) {
+                const oldWarningJob = this.cronJobs.get(lotteryId + '_warning');
+                if (oldWarningJob && typeof oldWarningJob.destroy === 'function') {
+                    oldWarningJob.destroy();
+                }
+                this.cronJobs.delete(lotteryId + '_warning');
+            }
+            
+            if (this.cronJobs.has(lotteryId + '_final')) {
+                const oldFinalJob = this.cronJobs.get(lotteryId + '_final');
+                if (oldFinalJob && typeof oldFinalJob.destroy === 'function') {
+                    oldFinalJob.destroy();
+                }
+                this.cronJobs.delete(lotteryId + '_final');
             }
 
             const dayNum = this.config.lottery.dayMap[lottery.dayOfWeek];
@@ -209,9 +225,63 @@ class LotteryService {
                 throw new Error(`Nieprawidłowy dzień tygodnia: ${lottery.dayOfWeek}`);
             }
             
-            // Utwórz cron pattern: minute hour * * dayOfWeek
+            // Oblicz czas ostrzeżenia (30 minut wcześniej)
+            let warningHour = lottery.hour;
+            let warningMinute = lottery.minute - 30;
+            
+            if (warningMinute < 0) {
+                warningMinute += 60;
+                warningHour -= 1;
+                if (warningHour < 0) {
+                    warningHour += 24;
+                }
+            }
+            
+            // Utwórz cron pattern dla ostrzeżenia: minute hour * * dayOfWeek
+            const warningCronPattern = `${warningMinute} ${warningHour} * * ${dayNum}`;
+            logger.info(`⚠️ Tworzę cron pattern ostrzeżenia: ${warningCronPattern} dla loterii ${lotteryId}`);
+            
+            const warningJob = cron.schedule(warningCronPattern, async () => {
+                logger.info(`⚠️ Wysyłanie ostrzeżenia o zamknięciu zgłoszeń: ${lotteryId}`);
+                await this.sendClosingWarning(lotteryId);
+            }, {
+                timezone: "Europe/Warsaw"
+            });
+
+            this.cronJobs.set(lotteryId + '_warning', warningJob);
+            
+            // Oblicz czas finalnego ostrzeżenia (90 minut wcześniej)
+            let finalHour = lottery.hour;
+            let finalMinute = lottery.minute - 90;
+            
+            if (finalMinute < 0) {
+                finalMinute += 60;
+                finalHour -= 1;
+                if (finalMinute < 0) {
+                    finalMinute += 60;
+                    finalHour -= 1;
+                }
+                if (finalHour < 0) {
+                    finalHour += 24;
+                }
+            }
+            
+            // Utwórz cron pattern dla finalnego ostrzeżenia: minute hour * * dayOfWeek
+            const finalCronPattern = `${finalMinute} ${finalHour} * * ${dayNum}`;
+            logger.info(`⚠️ Tworzę cron pattern finalnego ostrzeżenia: ${finalCronPattern} dla loterii ${lotteryId}`);
+            
+            const finalJob = cron.schedule(finalCronPattern, async () => {
+                logger.info(`⚠️ Wysyłanie finalnego ostrzeżenia o ostatniej godzinie: ${lotteryId}`);
+                await this.sendFinalWarning(lotteryId);
+            }, {
+                timezone: "Europe/Warsaw"
+            });
+
+            this.cronJobs.set(lotteryId + '_final', finalJob);
+            
+            // Utwórz cron pattern dla loterii: minute hour * * dayOfWeek
             const cronPattern = `${lottery.minute} ${lottery.hour} * * ${dayNum}`;
-            logger.info(`🕐 Tworzę cron pattern: ${cronPattern} dla loterii ${lotteryId}`);
+            logger.info(`🕐 Tworzę cron pattern loterii: ${cronPattern} dla loterii ${lotteryId}`);
             
             const job = cron.schedule(cronPattern, async () => {
                 logger.info(`🎰 Wykonywanie zaplanowanej loterii: ${lotteryId}`);
@@ -223,9 +293,124 @@ class LotteryService {
             this.cronJobs.set(lotteryId, job);
             
             logger.info(`📅 Zaplanowano loterię ${lotteryId} na ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} (pattern: ${cronPattern})`);
+            logger.info(`⚠️ Zaplanowano ostrzeżenie ${lotteryId} na ${lottery.dayOfWeek} o ${warningHour}:${warningMinute.toString().padStart(2, '0')} (pattern: ${warningCronPattern})`);
+            logger.info(`⚠️ Zaplanowano finalne ostrzeżenie ${lotteryId} na ${lottery.dayOfWeek} o ${finalHour}:${finalMinute.toString().padStart(2, '0')} (pattern: ${finalCronPattern})`);
         } catch (error) {
             logger.error(`❌ Błąd planowania loterii ${lotteryId}:`, error);
             throw error;
+        }
+    }
+
+    /**
+     * Wysyła ostrzeżenie o zamknięciu zgłoszeń 30 minut przed loterią
+     */
+    async sendClosingWarning(lotteryId) {
+        try {
+            const lottery = this.activeLotteries.get(lotteryId);
+            if (!lottery) {
+                logger.error(`❌ Nie znaleziono loterii dla ostrzeżenia: ${lotteryId}`);
+                return;
+            }
+
+            logger.info(`⚠️ Wysyłanie ostrzeżenia o zamknięciu zgłoszeń: ${lottery.name}`);
+
+            const guild = this.client.guilds.cache.get(this.config.guildId);
+            if (!guild) {
+                logger.error('❌ Nie znaleziono serwera');
+                return;
+            }
+
+            const channel = guild.channels.cache.get(lottery.channelId);
+            if (!channel) {
+                logger.error(`❌ Nie znaleziono kanału: ${lottery.channelId}`);
+                return;
+            }
+
+            // Określ rolę na podstawie roli docelowej loterii
+            let roleId = lottery.targetRoleId;
+            let warningMessage = `# Zamykam zbieranie zgloszeń! <a:PepeHmm:1278016984772247645>\n<@&${roleId}> Zgłaszanie do kolejnej loterii zostanie odblokowane w stosownym czasie! Za 30 min losowanie.`;
+
+            await channel.send({
+                content: warningMessage,
+                allowedMentions: { roles: [roleId] }
+            });
+
+            logger.info(`✅ Wysłano ostrzeżenie o zamknięciu zgłoszeń dla loterii ${lottery.name} na kanał ${channel.name}`);
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas wysyłania ostrzeżenia o zamknięciu zgłoszeń ${lotteryId}:`, error);
+        }
+    }
+
+    /**
+     * Wysyła finalne ostrzeżenie o ostatniej godzinie na wrzucenie zdjęcia 90 minut przed loterią
+     */
+    async sendFinalWarning(lotteryId) {
+        try {
+            const lottery = this.activeLotteries.get(lotteryId);
+            if (!lottery) {
+                logger.error(`❌ Nie znaleziono loterii dla finalnego ostrzeżenia: ${lotteryId}`);
+                return;
+            }
+
+            logger.info(`⚠️ Wysyłanie finalnego ostrzeżenia o ostatniej godzinie: ${lottery.name}`);
+
+            const guild = this.client.guilds.cache.get(this.config.guildId);
+            if (!guild) {
+                logger.error('❌ Nie znaleziono serwera');
+                return;
+            }
+
+            const channel = guild.channels.cache.get(lottery.channelId);
+            if (!channel) {
+                logger.error(`❌ Nie znaleziono kanału: ${lottery.channelId}`);
+                return;
+            }
+
+            // Określ typ kanału na podstawie roli docelowej
+            let channelType = 'Daily/CX';
+            if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
+                channelType = 'Daily';
+            } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
+                channelType = 'CX';
+            }
+
+            // Znajdź wszystkie aktywne loterie dla tego samego kanału (tego samego targetRoleId)
+            const activeLoteriesForChannel = Array.from(this.activeLotteries.values())
+                .filter(l => l.targetRoleId === lottery.targetRoleId);
+
+            // Zbierz role klanów z aktywnych loterii
+            const clanRoles = [];
+            for (const activeLottery of activeLoteriesForChannel) {
+                if (activeLottery.clanRoleId) {
+                    // Dodaj rolę klanu jeśli nie jest już na liście
+                    if (!clanRoles.includes(activeLottery.clanRoleId)) {
+                        clanRoles.push(activeLottery.clanRoleId);
+                    }
+                } else {
+                    // Jeśli loteria jest dla "całego serwera", dodaj wszystkie role klanów
+                    for (const [clanKey, clanConfig] of Object.entries(this.config.lottery.clans)) {
+                        if (clanConfig.roleId && !clanRoles.includes(clanConfig.roleId)) {
+                            clanRoles.push(clanConfig.roleId);
+                        }
+                    }
+                }
+            }
+
+            // Utwórz pingowanie ról
+            const rolePings = clanRoles.map(roleId => `<@&${roleId}>`).join(' ');
+            
+            let finalWarningMessage = `${rolePings}\n# Ostatnia godzina na wrzucenie zdjęcia z ${channelType} <a:X_Uwaga2:1297532628395622440>`;
+
+            await channel.send({
+                content: finalWarningMessage,
+                allowedMentions: { roles: clanRoles }
+            });
+
+            logger.info(`✅ Wysłano finalne ostrzeżenie dla loterii ${lottery.name} na kanał ${channel.name} (${clanRoles.length} ról pingowanych)`);
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas wysyłania finalnego ostrzeżenia ${lotteryId}:`, error);
         }
     }
 
@@ -958,7 +1143,7 @@ class LotteryService {
      */
     async removeLottery(lotteryId) {
         try {
-            // Zatrzymaj cron job
+            // Zatrzymaj cron job loterii
             if (this.cronJobs.has(lotteryId)) {
                 const job = this.cronJobs.get(lotteryId);
                 logger.info(`🛑 Zatrzymywanie cron job dla loterii: ${lotteryId}`);
@@ -975,6 +1160,44 @@ class LotteryService {
                 logger.info(`✅ Usunięto cron job dla: ${lotteryId}`);
             } else {
                 logger.warn(`⚠️ Nie znaleziono cron job dla loterii: ${lotteryId}`);
+            }
+
+            // Zatrzymaj cron job ostrzeżenia
+            if (this.cronJobs.has(lotteryId + '_warning')) {
+                const warningJob = this.cronJobs.get(lotteryId + '_warning');
+                logger.info(`🛑 Zatrzymywanie cron job ostrzeżenia dla loterii: ${lotteryId}`);
+                
+                if (warningJob && typeof warningJob.destroy === 'function') {
+                    warningJob.destroy();
+                } else if (warningJob && typeof warningJob.stop === 'function') {
+                    warningJob.stop();
+                } else {
+                    logger.warn(`⚠️ Cron job ostrzeżenia dla ${lotteryId} nie ma metody destroy() ani stop()`);
+                }
+                
+                this.cronJobs.delete(lotteryId + '_warning');
+                logger.info(`✅ Usunięto cron job ostrzeżenia dla: ${lotteryId}`);
+            } else {
+                logger.warn(`⚠️ Nie znaleziono cron job ostrzeżenia dla loterii: ${lotteryId}`);
+            }
+
+            // Zatrzymaj cron job finalnego ostrzeżenia
+            if (this.cronJobs.has(lotteryId + '_final')) {
+                const finalJob = this.cronJobs.get(lotteryId + '_final');
+                logger.info(`🛑 Zatrzymywanie cron job finalnego ostrzeżenia dla loterii: ${lotteryId}`);
+                
+                if (finalJob && typeof finalJob.destroy === 'function') {
+                    finalJob.destroy();
+                } else if (finalJob && typeof finalJob.stop === 'function') {
+                    finalJob.stop();
+                } else {
+                    logger.warn(`⚠️ Cron job finalnego ostrzeżenia dla ${lotteryId} nie ma metody destroy() ani stop()`);
+                }
+                
+                this.cronJobs.delete(lotteryId + '_final');
+                logger.info(`✅ Usunięto cron job finalnego ostrzeżenia dla: ${lotteryId}`);
+            } else {
+                logger.warn(`⚠️ Nie znaleziono cron job finalnego ostrzeżenia dla loterii: ${lotteryId}`);
             }
 
             // Usuń z aktywnych loterii
@@ -1061,6 +1284,79 @@ class LotteryService {
     }
 
     /**
+     * Sprawdza czy aktualnie jest dozwolone okno czasowe dla przesyłania screenów
+     * @param {string} targetRoleId - ID roli docelowej (Daily/CX)
+     * @param {string} clanRoleId - ID roli klanu (może być null)
+     * @returns {Object} Informacja o dozwolonym oknie czasowym
+     */
+    checkSubmissionTimeWindow(targetRoleId, clanRoleId) {
+        // Znajdź aktywną loterię dla tego klanu i roli
+        let activeLottery = null;
+        
+        for (const lottery of this.activeLotteries.values()) {
+            if (lottery.targetRoleId === targetRoleId) {
+                if (lottery.clanRoleId === null || lottery.clanRoleId === clanRoleId) {
+                    activeLottery = lottery;
+                    break;
+                }
+            }
+        }
+        
+        if (!activeLottery) {
+            return {
+                isAllowed: false,
+                reason: 'NO_LOTTERY',
+                message: 'Brak aktywnej loterii'
+            };
+        }
+        
+        const now = new Date();
+        const nextDrawDate = new Date(activeLottery.nextDraw);
+        
+        // Oblicz różnicę w godzinach do następnego losowania
+        const hoursUntilDraw = (nextDrawDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+        
+        // Określ typ kanału na podstawie targetRoleId
+        let channelType;
+        let maxHoursBeforeDraw;
+        
+        if (targetRoleId === this.config.channels.daily.requiredRoleId) {
+            channelType = 'Daily';
+            maxHoursBeforeDraw = 25; // 25 godzin przed losowaniem
+        } else if (targetRoleId === this.config.channels.cx.requiredRoleId) {
+            channelType = 'CX';
+            maxHoursBeforeDraw = 193; // 193 godziny (około 8 dni) przed losowaniem
+        } else {
+            return {
+                isAllowed: false,
+                reason: 'UNKNOWN_ROLE',
+                message: 'Nieznana rola docelowa'
+            };
+        }
+        
+        // Sprawdź czy jesteśmy w dozwolonym oknie czasowym
+        if (hoursUntilDraw <= maxHoursBeforeDraw) {
+            return {
+                isAllowed: true,
+                channelType: channelType,
+                hoursUntilDraw: Math.floor(hoursUntilDraw),
+                nextDrawDate: nextDrawDate
+            };
+        } else {
+            const hoursToWait = Math.ceil(hoursUntilDraw - maxHoursBeforeDraw);
+            return {
+                isAllowed: false,
+                reason: 'TOO_EARLY',
+                channelType: channelType,
+                hoursUntilDraw: Math.floor(hoursUntilDraw),
+                hoursToWait: hoursToWait,
+                nextDrawDate: nextDrawDate,
+                message: `Aktualnie nie jest możliwe zgromadzenie odpowiedniej ilości punktów by zakwalifikować się do losowania, wróć, gdy będziesz miał odpowiednią ilość punktów.`
+            };
+        }
+    }
+
+    /**
      * Formatuje ID loterii dla wyświetlania
      */
     formatLotteryIdForDisplay(lotteryId) {
@@ -1079,18 +1375,18 @@ class LotteryService {
      * Zatrzymuje serwis
      */
     stop() {
-        // Zatrzymaj wszystkie cron jobs
-        for (const [lotteryId, job] of this.cronJobs.entries()) {
+        // Zatrzymaj wszystkie cron jobs (włącznie z ostrzeżeniami)
+        for (const [jobId, job] of this.cronJobs.entries()) {
             try {
                 if (job && typeof job.destroy === 'function') {
                     job.destroy();
                 } else if (job && typeof job.stop === 'function') {
                     job.stop();
                 } else {
-                    logger.warn(`⚠️ Nie można zatrzymać cron job dla loterii ${lotteryId}: brak metody destroy() lub stop()`);
+                    logger.warn(`⚠️ Nie można zatrzymać cron job ${jobId}: brak metody destroy() lub stop()`);
                 }
             } catch (error) {
-                logger.error(`❌ Błąd zatrzymywania cron job ${lotteryId}:`, error);
+                logger.error(`❌ Błąd zatrzymywania cron job ${jobId}:`, error);
             }
         }
         this.cronJobs.clear();
