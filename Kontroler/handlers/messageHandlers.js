@@ -151,7 +151,7 @@ class MessageHandler {
             if (!timeWindowCheck.isAllowed && !isAdmin) {
                 const timeToWait = this.formatHoursToTime(timeWindowCheck.hoursToWait);
                 
-                let timeWindowMessage = `⏰ **Poza oknem czasowym**\n\n`;
+                let timeWindowMessage = `⏰ **Nie można przeanalizować screena!**\n\n`;
                 timeWindowMessage += timeWindowCheck.message;
                 timeWindowMessage += `\n\n⏱️ **Będzie można dodać screena za:** ${timeToWait}`;
                 
@@ -325,20 +325,43 @@ class MessageHandler {
     }
 
     /**
-     * Formatuje liczbę godzin na format 12h54m
+     * Formatuje liczbę godzin na format 3d 12h 43m
      * @param {number} hours - Liczba godzin (może mieć część dziesiętną)
-     * @returns {string} - Sformatowany czas w formacie 12h54m
+     * @returns {string} - Sformatowany czas w formacie 3d 12h 43m
      */
     formatHoursToTime(hours) {
         if (!hours || hours <= 0) {
-            return '0h0m';
+            return '0h 0m';
         }
         
         const totalMinutes = Math.ceil(hours * 60);
-        const h = Math.floor(totalMinutes / 60);
-        const m = totalMinutes % 60;
         
-        return `${h}h${m}m`;
+        const days = Math.floor(totalMinutes / (24 * 60));
+        const remainingMinutesAfterDays = totalMinutes % (24 * 60);
+        
+        const h = Math.floor(remainingMinutesAfterDays / 60);
+        const m = remainingMinutesAfterDays % 60;
+        
+        let result = '';
+        
+        if (days > 0) {
+            result += `${days}d `;
+        }
+        
+        if (h > 0) {
+            result += `${h}h `;
+        }
+        
+        if (m > 0) {
+            result += `${m}m`;
+        }
+        
+        // Jeśli wszystko jest 0, zwróć podstawowy format
+        if (!result.trim()) {
+            result = '0h 0m';
+        }
+        
+        return result.trim();
     }
 
     /**
@@ -423,10 +446,26 @@ class MessageHandler {
             const isDaily = channelConfig.name === 'Daily';
             const lotteryTitle = isDaily ? '# 🎰 Loteria Glory Member za Daily' : '# 🎰 Loteria Glory Member za CX';
 
-            // Znajdź i usuń poprzednią wiadomość embed o loterii od tego bota
+            // Sprawdź czy ostatnia wiadomość to embed o loterii od tego bota
             try {
-                const messages = await channel.messages.fetch({ limit: 50 });
-                const previousLotteryMessage = messages.find(msg => 
+                const messages = await channel.messages.fetch({ limit: 10 });
+                const messagesArray = Array.from(messages.values()).sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+                const lastMessage = messagesArray[0];
+                
+                // Sprawdź czy ostatnia wiadomość to już embed o loterii od tego bota
+                const isLastMessageLotteryEmbed = lastMessage && 
+                    lastMessage.author.id === client.user.id && 
+                    lastMessage.embeds.length > 0 && 
+                    lastMessage.embeds[0].description && 
+                    lastMessage.embeds[0].description.startsWith(lotteryTitle);
+
+                if (isLastMessageLotteryEmbed) {
+                    logger.info(`ℹ️ Ostatnia wiadomość to już embed o loterii ${channelConfig.name} - nie wysyłam nowego`);
+                    return;
+                }
+
+                // Znajdź i usuń poprzednią wiadomość embed o loterii od tego bota (jeśli istnieje)
+                const previousLotteryMessage = messagesArray.find(msg => 
                     msg.author.id === client.user.id && 
                     msg.embeds.length > 0 && 
                     msg.embeds[0].description && 
@@ -438,7 +477,7 @@ class MessageHandler {
                     logger.info(`🗑️ Usunięto poprzednią wiadomość o loterii ${channelConfig.name}`);
                 }
             } catch (deleteError) {
-                logger.warn('⚠️ Nie udało się usunąć poprzedniej wiadomości o loterii:', deleteError.message);
+                logger.warn('⚠️ Nie udało się sprawdzić/usunąć poprzedniej wiadomości o loterii:', deleteError.message);
             }
 
             // Wyślij nową wiadomość embed o loterii
