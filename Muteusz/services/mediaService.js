@@ -363,21 +363,47 @@ class MediaService {
                 const repostedMessage = await repostedChannel?.messages.fetch(linkData.repostedMessageId);
                 
                 if (repostedMessage) {
+                    // Zmień kolor embeda na niebieski dla usuniętych plików
+                    embed.setColor(0x0099FF); // Niebieski zamiast czerwonego
+                    
                     embed.addFields({ 
                         name: '📸 Backup mediów', 
                         value: `[Zobacz repostowane media](${repostedMessage.url})`, 
                         inline: false 
                     });
                     
-                    // Oznacz repost jako usunięty
-                    const updatedEmbed = EmbedBuilder.from(repostedMessage.embeds[0])
-                        .setTitle('🗑️ [USUNIĘTE] Repost Media')
-                        .setColor(0xFF0000);
+                    // Repostuj pliki z oryginalnego repostu na kanał logów
+                    const filesToRepost = [];
+                    for (const attachment of repostedMessage.attachments.values()) {
+                        filesToRepost.push({
+                            attachment: attachment.url,
+                            name: attachment.name
+                        });
+                    }
                     
-                    await repostedMessage.edit({ embeds: [updatedEmbed] });
+                    // Wyślij embed z plikami na kanał logów
+                    if (filesToRepost.length > 0) {
+                        await logChannel.send({
+                            embeds: [embed],
+                            files: filesToRepost
+                        });
+                        
+                        // Oznacz repost jako usunięty
+                        const updatedEmbed = EmbedBuilder.from(repostedMessage.embeds[0])
+                            .setTitle('🗑️ [USUNIĘTE] Repost Media')
+                            .setColor(0xFF0000);
+                        
+                        await repostedMessage.edit({ embeds: [updatedEmbed] });
+                        
+                        // Nie wysyłaj standardowego embeda - już wysłany z plikami
+                        if (linkData) {
+                            this.messageLinks.delete(deletedMessage.id);
+                        }
+                        return;
+                    }
                 }
             } catch (error) {
-                logger.error(`Błąd podczas aktualizacji repostu: ${error.message}`);
+                logger.error(`Błąd podczas repostowania plików: ${error.message}`);
             }
         }
 
