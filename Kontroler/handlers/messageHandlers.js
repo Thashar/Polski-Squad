@@ -80,9 +80,16 @@ class MessageHandler {
         }
 
         // SPRAWDZENIE AKTYWNEJ LOTERII: Sprawdź czy dla klanu użytkownika jest aktywna loteria
+        logger.info(`🔍 Sprawdzam warunki loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
         if (this.lotteryService && (channelConfig.name === 'Daily' || channelConfig.name === 'CX')) {
+            logger.info(`🔍 Sprawdzam aktywną loterię dla kanału ${channelConfig.name} (${member.user.tag})`);
             const targetRoleId = channelConfig.requiredRoleId;
             const lotteryCheck = this.lotteryService.checkUserLotteryEligibility(member, targetRoleId);
+            logger.info(`📊 Wynik sprawdzenia loterii:`, {
+                hasValidClan: lotteryCheck.hasValidClan,
+                clanName: lotteryCheck.clanName,
+                isLotteryActive: lotteryCheck.isLotteryActive
+            });
             
             if (!lotteryCheck.isLotteryActive) {
                 const channelTypeName = channelConfig.name === 'Daily' ? 'Daily' : 'CX';
@@ -129,6 +136,8 @@ class MessageHandler {
             } else {
                 logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag} - w oknie czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
             }
+        } else {
+            logger.info(`⚠️ Pominięto sprawdzenie loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
         }
 
         const displayName = member.displayName;

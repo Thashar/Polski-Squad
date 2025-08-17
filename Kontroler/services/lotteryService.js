@@ -49,20 +49,31 @@ class LotteryService {
      */
     async loadLotteries() {
         try {
+            logger.info(`📂 Próba wczytania danych loterii z: ${this.config.lottery.dataFile}`);
             const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
             const lotteryData = JSON.parse(data);
+            
+            logger.info(`📊 Wczytane dane loterii:`, {
+                activeLotteriesCount: lotteryData.activeLotteries ? Object.keys(lotteryData.activeLotteries).length : 0,
+                lastUpdated: lotteryData.lastUpdated
+            });
             
             if (lotteryData.activeLotteries) {
                 // Przywróć aktywne loterie
                 for (const [id, lottery] of Object.entries(lotteryData.activeLotteries)) {
                     this.activeLotteries.set(id, lottery);
                     this.scheduleNextLottery(id, lottery);
+                    logger.info(`✅ Przywrócono loterię: ${lottery.name} (ID: ${id})`);
                 }
                 logger.info(`🔄 Przywrócono ${this.activeLotteries.size} aktywnych loterii`);
+            } else {
+                logger.warn(`⚠️ Brak aktywnych loterii w pliku danych`);
             }
         } catch (error) {
             if (error.code !== 'ENOENT') {
                 logger.error('❌ Błąd wczytywania danych loterii:', error);
+            } else {
+                logger.warn('⚠️ Plik danych loterii nie istnieje, tworzę nowy');
             }
             // Utwórz pusty plik
             await this.saveLotteryData();
@@ -1232,7 +1243,16 @@ class LotteryService {
      * @returns {boolean} Czy istnieje aktywna loteria
      */
     isLotteryActive(clanRoleId, targetRoleId) {
-        for (const lottery of this.activeLotteries.values()) {
+        logger.info(`🔍 Sprawdzam aktywne loterie dla klanu ${clanRoleId || 'Cały serwer'} i roli ${targetRoleId}`);
+        logger.info(`📊 Mam ${this.activeLotteries.size} aktywnych loterii w pamięci`);
+        
+        if (this.activeLotteries.size === 0) {
+            logger.warn(`⚠️ Brak aktywnych loterii w pamięci - sprawdź czy dane zostały poprawnie wczytane`);
+        }
+        
+        for (const [lotteryId, lottery] of this.activeLotteries.entries()) {
+            logger.info(`🎲 Loteria ${lotteryId}: name=${lottery.name}, clanRoleId=${lottery.clanRoleId}, targetRoleId=${lottery.targetRoleId}`);
+            
             // Sprawdź czy jest to loteria dla tej roli docelowej
             if (lottery.targetRoleId === targetRoleId) {
                 // Sprawdź czy klan pasuje (null oznacza "cały serwer")
