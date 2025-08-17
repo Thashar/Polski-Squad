@@ -60,11 +60,11 @@ class OCRService {
             const hasTotal = /total\s*:/i.test(text.trim());
             
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
-                logger.info('📝 Szczegółowy debug: Tekst z obrazu:', text.trim());
+                logger.info('📝 Szczegółowy debug: Tekst z obrazu:', `"${text.trim()}"`);
                 logger.info('🔍 Szczegółowy debug: Znaleziono "Best:":', hasBest);
                 logger.info('🔍 Szczegółowy debug: Znaleziono "Total:":', hasTotal);
             } else {
-                logger.info('Tekst z obrazu:', text.trim());
+                logger.info('Tekst z obrazu:', `"${text.trim()}"`);
                 logger.info('Znaleziono "Best:":', hasBest);
                 logger.info('Znaleziono "Total:":', hasTotal);
             }
@@ -134,7 +134,17 @@ class OCRService {
             
             await fs.unlink(processedPath).catch(() => {});
             
-            return text.trim();
+            const trimmedText = text.trim();
+            
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
+                logger.info('📝 Szczegółowy debug - wyodrębniony tekst z OCR:', `"${trimmedText}"`);
+                logger.info('📝 Szczegółowy debug - długość tekstu:', trimmedText.length);
+            } else {
+                logger.info('Wyodrębniony tekst z OCR:', `"${trimmedText}"`);
+                logger.info('Długość tekstu:', trimmedText.length);
+            }
+            
+            return trimmedText;
         } catch (error) {
             logger.error('Błąd OCR:', error);
             throw error;
@@ -185,11 +195,13 @@ class OCRService {
      */
     extractScoreAfterBest(text) {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:', JSON.stringify(text));
-            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', JSON.stringify(text));
+            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:', `"${text}"`);
+            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', `"${text}"`);
+            logger.info('📊 Szczegółowy debug: Długość tekstu:', text ? text.length : 'null');
         } else {
-            logger.info('Pełny tekst z OCR:', JSON.stringify(text));
-            logger.info('Analizowany tekst OCR:', JSON.stringify(text));
+            logger.info('Pełny tekst z OCR:', `"${text}"`);
+            logger.info('Analizowany tekst OCR:', `"${text}"`);
+            logger.info('Długość tekstu:', text ? text.length : 'null');
         }
         
         // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
@@ -197,9 +209,9 @@ class OCRService {
         let matches = text.match(bestScorePattern);
         
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best (wzorzec 1):', JSON.stringify(matches));
+            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best (wzorzec 1):', matches);
         } else {
-            logger.info('Znalezione dopasowania Best (wzorzec 1):', JSON.stringify(matches));
+            logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
         }
         
         if (!matches || matches.length === 0) {
@@ -220,7 +232,7 @@ class OCRService {
                 }
             }
             
-            logger.info('Znalezione dopasowania Best (wzorzec elastyczny):', JSON.stringify(matches));
+            logger.info('Znalezione dopasowania Best (wzorzec elastyczny):', matches);
             
             if (matches.length === 0) {
                 logger.info('Nie znaleziono słowa "Best" z wynikiem');
@@ -234,12 +246,12 @@ class OCRService {
         
         if (matches.length > 0) {
             let result = matches[0];
-            logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', JSON.stringify(result));
+            logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', `"${result}"`);
             
             // Zastosuj poprawki: TT -> 1T oraz 7 -> T
             result = this.fixScoreFormat(result);
             
-            logger.info('Wyodrębniony wynik po "Best" (po poprawce):', JSON.stringify(result));
+            logger.info('Wyodrębniony wynik po "Best" (po poprawce):', `"${result}"`);
             
             // Sprawdź czy wynik nie jest pusty po korekcjach
             if (!result || result.trim() === '') {

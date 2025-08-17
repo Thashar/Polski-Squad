@@ -223,10 +223,10 @@ class InteractionHandler {
             
             // Ekstrakcja tekstu i wyniku
             const extractedText = await this.ocrService.extractTextFromImage(tempImagePath);
-            logger.info('Pełny tekst z OCR:', extractedText);
+            logger.info('Pełny tekst z OCR z interaction handler:', `"${extractedText}"`);
             
             let bestScore = this.ocrService.extractScoreAfterBest(extractedText);
-            logger.info('🔍 DEBUG: bestScore po extractScoreAfterBest:', JSON.stringify(bestScore));
+            logger.info('🔍 DEBUG: bestScore po extractScoreAfterBest:', `"${bestScore}"`);
             
             if (!bestScore || bestScore.trim() === '') {
                 logger.info('🔍 DEBUG: Wynik jest pusty - kończę proces');
@@ -235,17 +235,24 @@ class InteractionHandler {
                 return;
             }
             
-            logger.info('🔍 DEBUG: Kontynuuję z wynikiem:', JSON.stringify(bestScore));
+            logger.info('🔍 DEBUG: Kontynuuję z wynikiem:', `"${bestScore}"`);
             
             // Ekstrakcja nazwy bossa
             const bossName = this.ocrService.extractBossName(extractedText);
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
-                logger.info('Nazwa bossa:', bossName);
+                logger.info('Nazwa bossa:', `"${bossName}"`);
                 
                 // Debug - sprawdź czy mamy wszystkie dane
                 logger.info('DEBUG - extractedText długość:', extractedText ? extractedText.length : 'null');
-                logger.info('DEBUG - bestScore:', bestScore);
-                logger.info('DEBUG - bossName:', bossName);
+                logger.info('DEBUG - bestScore:', `"${bestScore}"`);
+                logger.info('DEBUG - bossName:', `"${bossName}"`);
+            } else {
+                logger.info('Nazwa bossa:', `"${bossName}"`);
+                
+                // Debug - sprawdź czy mamy wszystkie dane
+                logger.info('DEBUG - extractedText długość:', extractedText ? extractedText.length : 'null');
+                logger.info('DEBUG - bestScore:', `"${bestScore}"`);
+                logger.info('DEBUG - bossName:', `"${bossName}"`);
             }
             
             // Aktualizacja rankingu
