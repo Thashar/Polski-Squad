@@ -149,15 +149,18 @@ class MessageHandler {
             });
             
             if (!timeWindowCheck.isAllowed && !isAdmin) {
+                const timeToWait = this.formatHoursToTime(timeWindowCheck.hoursToWait);
+                
                 let timeWindowMessage = `⏰ **Poza oknem czasowym**\n\n`;
                 timeWindowMessage += timeWindowCheck.message;
+                timeWindowMessage += `\n\n⏱️ **Będzie można dodać screena za:** ${timeToWait}`;
                 
                 await message.reply({
                     content: timeWindowMessage,
                     allowedMentions: { repliedUser: false }
                 });
                 
-                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
+                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania, czekać ${timeToWait})`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
                 this.scheduleLotteryInfo(message, channelConfig);
@@ -319,6 +322,23 @@ class MessageHandler {
         logger.info(`Analiza nieudana: ${result.error || 'Niewystarczający wynik'}`);
         const message = this.messageService.formatResultMessage(result, null, channelConfig);
         await safeEditMessage(analysisMessage, message);
+    }
+
+    /**
+     * Formatuje liczbę godzin na format 12h54m
+     * @param {number} hours - Liczba godzin (może mieć część dziesiętną)
+     * @returns {string} - Sformatowany czas w formacie 12h54m
+     */
+    formatHoursToTime(hours) {
+        if (!hours || hours <= 0) {
+            return '0h0m';
+        }
+        
+        const totalMinutes = Math.ceil(hours * 60);
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        
+        return `${h}h${m}m`;
     }
 
     /**
