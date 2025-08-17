@@ -332,7 +332,7 @@ class MessageHandler {
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-🎲 Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu.
+🎲 Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu CX.
 
 ## Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
