@@ -1,6 +1,7 @@
 const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { EmbedBuilder } = require('discord.js');
+const cron = require('node-cron');
 
 const logger = createBotLogger('Kontroler');
 
@@ -11,7 +12,7 @@ class MessageHandler {
         this.analysisService = analysisService;
         this.roleService = roleService;
         this.messageService = messageService;
-        this.lotteryTimers = new Map(); // Mapa timerów dla każdego kanału
+        this.lotterySchedules = new Map(); // Mapa zaplanowanych zadań cron dla każdego kanału
     }
 
     /**
@@ -214,7 +215,7 @@ class MessageHandler {
     }
 
     /**
-     * Planuje wysłanie informacji o loterii z 5-minutowym opóźnieniem
+     * Planuje wysłanie informacji o loterii z 5-minutowym opóźnieniem używając node-cron
      * @param {Message} analysisMessage - Wiadomość analizy
      * @param {Object} channelConfig - Konfiguracja kanału
      */
@@ -226,25 +227,42 @@ class MessageHandler {
 
         const channelId = analysisMessage.channel.id;
         
-        // Anuluj poprzedni timer dla tego kanału jeśli istnieje
-        if (this.lotteryTimers.has(channelId)) {
-            clearTimeout(this.lotteryTimers.get(channelId));
-            logger.info(`🔄 Anulowano poprzedni timer loterii dla kanału ${channelConfig.name}`);
+        // Anuluj poprzednie zadanie cron dla tego kanału jeśli istnieje
+        if (this.lotterySchedules.has(channelId)) {
+            this.lotterySchedules.get(channelId).destroy();
+            logger.info(`🔄 Anulowano poprzednie zadanie cron loterii dla kanału ${channelConfig.name}`);
         }
 
-        // Ustaw nowy timer na 5 minut (300000 ms)
-        const timer = setTimeout(async () => {
+        // Oblicz czas wykonania (5 minut od teraz)
+        const executeTime = new Date(Date.now() + 5 * 60 * 1000);
+        const minutes = executeTime.getMinutes();
+        const hours = executeTime.getHours();
+        const day = executeTime.getDate();
+        const month = executeTime.getMonth() + 1;
+        
+        // Utwórz wyrażenie cron dla dokładnego czasu wykonania
+        const cronExpression = `${minutes} ${hours} ${day} ${month} *`;
+        
+        // Zaplanuj zadanie cron
+        const task = cron.schedule(cronExpression, async () => {
             try {
                 await this.sendLotteryInfo(analysisMessage, channelConfig);
-                this.lotteryTimers.delete(channelId); // Usuń timer po wykonaniu
+                this.lotterySchedules.delete(channelId); // Usuń zadanie po wykonaniu
+                task.destroy(); // Zniszcz zadanie cron
             } catch (error) {
                 logger.error(`❌ Błąd podczas wysyłania zaplanowanej wiadomości o loterii ${channelConfig.name}:`, error);
-                this.lotteryTimers.delete(channelId);
+                this.lotterySchedules.delete(channelId);
+                task.destroy();
             }
-        }, 300000); // 5 minut = 300000 ms
+        }, {
+            scheduled: false // Nie uruchamiaj automatycznie
+        });
 
-        this.lotteryTimers.set(channelId, timer);
-        logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} za 5 minut`);
+        // Uruchom zadanie
+        task.start();
+        this.lotterySchedules.set(channelId, task);
+        
+        logger.info(`⏰ Zaplanowano wysłanie wiadomości o loterii ${channelConfig.name} na ${executeTime.toLocaleString('pl-PL')} (za 5 minut)`);
     }
 
     /**
@@ -291,13 +309,13 @@ class MessageHandler {
 
 Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
 
-• uzyskać w danym tygodniu **910 pkt.** daily
-• przesłać screen z tego osiągnięcia na tym kanale
-• czas na przesłanie screena jest do niedzieli do **18:29**
-• screen musi być zatwierdzony przez bota Kontroler
-• **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
+🎯 uzyskać w danym tygodniu **910 PKT** daily
+📸 przesłać screen z tego osiągnięcia na tym kanale
+⏰ czas na przesłanie screena jest do niedzieli do **18:29**
+✅ screen musi być zatwierdzony przez bota Kontroler
+⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-Losowania będą odbywać się o godzinie **18:30** w każdą niedzielę.
+🎲 Losowania będą odbywać się o godzinie **18:30** w każdą niedzielę.
 
 ## Powodzenia!`)
                     .setColor(0x00FF00) // Zielony kolor
@@ -308,13 +326,13 @@ Losowania będą odbywać się o godzinie **18:30** w każdą niedzielę.
 
 Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
 
-• osiągnąć w ciągu całego sezonu CX **2000 PKT**
-• przesłać screen z tego osiągnięcia na tym kanale
-• czas na przesłanie screena jest do **18:29** w dniu, w którym rozpoczął się nowy sezon CX
-• screen musi być zatwierdzony przez bota Kontroler
-• **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
+🎯 osiągnąć w ciągu całego sezonu CX **2000 PKT**
+📸 przesłać screen z tego osiągnięcia na tym kanale
+⏰ czas na przesłanie screena jest do **18:29** w dniu, w którym rozpoczął się nowy sezon CX
+✅ screen musi być zatwierdzony przez bota Kontroler
+⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu CX.
+🎲 Losowania będą odbywać się o godzinie **18:30** w każdy pierwszy dzień sezonu CX.
 
 ## Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
