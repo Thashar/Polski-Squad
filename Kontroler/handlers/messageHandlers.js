@@ -148,7 +148,7 @@ class MessageHandler {
                 hoursToWait: timeWindowCheck.hoursToWait
             });
             
-            if (!timeWindowCheck.isAllowed) {
+            if (!timeWindowCheck.isAllowed && !isAdmin) {
                 const timeToWait = this.formatHoursToTime(timeWindowCheck.hoursToWait);
                 
                 let timeWindowMessage = `⏰ **Nie można przeanalizować screena!**\n\n`;
