@@ -24,8 +24,14 @@ class MessageHandler {
         if (message.author.bot) return;
 
         // Sprawdź czy wiadomość jest z monitorowanego kanału
+        logger.info(`🔍 Sprawdzam wiadomość na kanale: ${message.channel.id} (nazwa: ${message.channel.name})`);
         const channelConfig = this.roleService.getChannelConfig(message.channel.id);
-        if (!channelConfig) return;
+        
+        if (!channelConfig) {
+            logger.info(`❌ Kanał ${message.channel.id} (${message.channel.name}) nie jest monitorowany`);
+            logger.info(`📋 Monitorowane kanały:`, Object.values(this.config.channels).map(c => `${c.name}=${c.targetChannelId}`));
+            return;
+        }
 
         logger.info(`Wykryto wiadomość na monitorowanym kanale ${channelConfig.name}`);
 
@@ -116,6 +122,13 @@ class MessageHandler {
                 return;
             }
             const timeWindowCheck = this.lotteryService.checkSubmissionTimeWindow(targetRoleId, lotteryCheck.clanRoleId);
+            logger.info(`🕰️ Wynik sprawdzenia okna czasowego:`, {
+                isAllowed: timeWindowCheck.isAllowed,
+                reason: timeWindowCheck.reason || 'ALLOWED',
+                channelType: timeWindowCheck.channelType,
+                hoursUntilDraw: timeWindowCheck.hoursUntilDraw,
+                hoursToWait: timeWindowCheck.hoursToWait
+            });
             
             if (!timeWindowCheck.isAllowed) {
                 let timeWindowMessage = `⏰ **Poza oknem czasowym**\n\n`;
@@ -138,8 +151,10 @@ class MessageHandler {
             }
         } else {
             logger.info(`⚠️ Pominięto sprawdzenie loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
+            logger.info(`🚨 UWAGA: Kontynuuję analizę OCR bez sprawdzenia loterii/okna czasowego!`);
         }
 
+        logger.info(`🎯 Kontynuuję z analizą OCR dla ${member.user.tag} na kanale ${channelConfig.name}`);
         const displayName = member.displayName;
         const username = message.author.username;
 
