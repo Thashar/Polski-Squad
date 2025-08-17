@@ -850,6 +850,10 @@ class LotteryService {
                 lottery.nextDraw = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute);
                 
                 await this.saveLotteryData();
+                
+                // Zaplanuj ponownie cron jobs dla następnego losowania
+                this.scheduleNextLottery(lotteryId, lottery);
+                
                 logger.info(`✅ Zaplanowano następne losowanie: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}`);
             }
 
