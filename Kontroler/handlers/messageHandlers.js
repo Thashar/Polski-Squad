@@ -1,5 +1,6 @@
 const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { EmbedBuilder } = require('discord.js');
 
 const logger = createBotLogger('Kontroler');
 
@@ -191,6 +192,9 @@ class MessageHandler {
             const message = this.messageService.formatRoleErrorMessage(result, roleResult.error);
             await safeEditMessage(analysisMessage, message);
         }
+
+        // Wyślij informację o loterii Daily lub CX
+        await this.sendLotteryInfo(analysisMessage, channelConfig);
     }
 
     /**
@@ -203,6 +207,83 @@ class MessageHandler {
         logger.info(`Analiza nieudana: ${result.error || 'Niewystarczający wynik'}`);
         const message = this.messageService.formatResultMessage(result, null, channelConfig);
         await safeEditMessage(analysisMessage, message);
+        
+        // Wyślij informację o loterii Daily lub CX
+        await this.sendLotteryInfo(analysisMessage, channelConfig);
+    }
+
+    /**
+     * Wysyła informację o loterii Daily lub CX w formie embed message
+     * @param {Message} analysisMessage - Wiadomość analizy
+     * @param {Object} channelConfig - Konfiguracja kanału
+     */
+    async sendLotteryInfo(analysisMessage, channelConfig) {
+        // Wysyłaj tylko na kanałach Daily i CX
+        if (channelConfig.name !== 'Daily' && channelConfig.name !== 'CX') {
+            return;
+        }
+
+        try {
+            const channel = analysisMessage.channel;
+            const client = analysisMessage.client;
+            const isDaily = channelConfig.name === 'Daily';
+            const lotteryTitle = isDaily ? '🎰 Loteria Glory Member za Daily' : '🎰 Loteria Glory Member za CX';
+
+            // Znajdź i usuń poprzednią wiadomość embed o loterii od tego bota
+            try {
+                const messages = await channel.messages.fetch({ limit: 50 });
+                const previousLotteryMessage = messages.find(msg => 
+                    msg.author.id === client.user.id && 
+                    msg.embeds.length > 0 && 
+                    msg.embeds[0].title === lotteryTitle
+                );
+
+                if (previousLotteryMessage) {
+                    await previousLotteryMessage.delete();
+                    logger.info(`🗑️ Usunięto poprzednią wiadomość o loterii ${channelConfig.name}`);
+                }
+            } catch (deleteError) {
+                logger.warn('⚠️ Nie udało się usunąć poprzedniej wiadomości o loterii:', deleteError.message);
+            }
+
+            // Wyślij nową wiadomość embed o loterii
+            let lotteryEmbed;
+            
+            if (isDaily) {
+                lotteryEmbed = new EmbedBuilder()
+                    .setTitle('🎰 Loteria Glory Member za Daily')
+                    .setDescription('Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:')
+                    .addFields(
+                        { name: '📊 Wymagania', value: '• uzyskać w danym tygodniu 910 pkt. daily', inline: false },
+                        { name: '📸 Przesłanie screena', value: '• przesłać screen z tego osiągnięcia na tym kanale', inline: false },
+                        { name: '⏰ Deadline', value: '• czas na przesłanie screena jest do niedzieli do 18:29', inline: false },
+                        { name: '✅ Zatwierdzenie', value: '• screen musi być zatwierdzony przez bota Kontroler', inline: false },
+                        { name: '⚠️ Ostrzeżenie', value: '• oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!', inline: false },
+                        { name: '🎲 Losowanie', value: 'Losowania będą odbywać się o godzinie 18:30 w każdą niedzielę. Powodzenia!', inline: false }
+                    )
+                    .setColor(0x00FF00) // Zielony kolor
+                    .setTimestamp();
+            } else {
+                lotteryEmbed = new EmbedBuilder()
+                    .setTitle('🎰 Loteria Glory Member za CX')
+                    .setDescription('Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:')
+                    .addFields(
+                        { name: '📊 Wymagania', value: '• osiągnąć w ciągu całego sezonu CX 2000 PKT', inline: false },
+                        { name: '📸 Przesłanie screena', value: '• przesłać screen z tego osiągnięcia na tym kanale', inline: false },
+                        { name: '⏰ Deadline', value: '• czas na przesłanie screena jest do 18:29 w dniu, w którym rozpoczął się nowy sezon CX', inline: false },
+                        { name: '✅ Zatwierdzenie', value: '• screen musi być zatwierdzony przez bota Kontroler', inline: false },
+                        { name: '⚠️ Ostrzeżenie', value: '• oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!', inline: false },
+                        { name: '🎲 Losowanie', value: 'Losowania będą odbywać się o godzinie 18:30 w każdy pierwszy dzień sezonu CX. Powodzenia!', inline: false }
+                    )
+                    .setColor(0xFF6600) // Pomarańczowy kolor dla CX
+                    .setTimestamp();
+            }
+
+            await channel.send({ embeds: [lotteryEmbed] });
+            logger.info(`✅ Wysłano nową informację o loterii ${channelConfig.name} na dole czatu`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas wysyłania informacji o loterii ${channelConfig.name}:`, error);
+        }
     }
 }
 
