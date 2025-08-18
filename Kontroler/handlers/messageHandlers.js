@@ -422,6 +422,21 @@ class MessageHandler {
             
             logger.info(`📤 Sprawdzam możliwość wysłania embeda loterii na kanał: ${channel.name} (${channel.id})`);
 
+            // Sprawdź czy już mamy zapisane ID embeda o loterii dla tego kanału
+            const existingMessageId = this.lotteryMessageIds.get(channel.id);
+            if (existingMessageId) {
+                try {
+                    // Sprawdź czy embed nadal istnieje
+                    await channel.messages.fetch(existingMessageId);
+                    logger.info(`ℹ️ Embed o loterii ${channelConfig.name} już istnieje (ID: ${existingMessageId}) - nie wysyłam nowego`);
+                    return;
+                } catch (fetchError) {
+                    // Embed nie istnieje (został usunięty), usuń z mapy
+                    this.lotteryMessageIds.delete(channel.id);
+                    logger.info(`🔄 Stary embed o loterii ${channelConfig.name} nie istnieje - można wysłać nowy`);
+                }
+            }
+
 
             // Wyślij nową wiadomość embed o loterii
             let lotteryEmbed;
