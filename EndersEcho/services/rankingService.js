@@ -244,7 +244,7 @@ class RankingService {
      * @returns {EmbedBuilder} - Embed wyniku
      */
     createResultEmbed(userName, bestScore, currentScore, attachmentName = null) {
-        const currentScoreValue = this.parseScoreValue(currentScore);
+        const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
         const newScoreValue = this.parseScoreValue(bestScore);
         const difference = currentScoreValue - newScoreValue;
         const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
@@ -265,7 +265,7 @@ class RankingService {
                 },
                 {
                     name: this.config.messages.resultStatus,
-                    value: formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore }) + `\n**Różnica:** ${differenceText}`,
+                    value: formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore || 'Brak poprzedniego wyniku' }) + `\n**Różnica:** ${differenceText}`,
                     inline: false
                 }
             )
