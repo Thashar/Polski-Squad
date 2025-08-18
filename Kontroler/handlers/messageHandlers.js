@@ -448,38 +448,6 @@ class MessageHandler {
             
             logger.info(`📤 Sprawdzam możliwość wysłania embeda loterii na kanał: ${channel.name} (${channel.id})`);
 
-            // Usuń wszystkie wiadomości innych użytkowników i embedy o loterii od tego bota
-            try {
-                const messages = await channel.messages.fetch({ limit: 50 });
-                const messagesToDelete = messages.filter(msg => {
-                    // Usuń wszystkie wiadomości innych użytkowników (nie botów)
-                    if (msg.author.id !== client.user.id && !msg.author.bot) {
-                        return true;
-                    }
-                    
-                    // Usuń tylko embedy o loterii od tego bota
-                    if (msg.author.id === client.user.id && 
-                        msg.embeds.length > 0 && 
-                        msg.embeds[0].description && 
-                        msg.embeds[0].description.startsWith(lotteryTitle)) {
-                        return true;
-                    }
-                    
-                    return false;
-                });
-
-                for (const msgToDelete of messagesToDelete.values()) {
-                    try {
-                        await msgToDelete.delete();
-                        const msgType = msgToDelete.author.id === client.user.id ? 'embed o loterii' : `wiadomość od ${msgToDelete.author.tag}`;
-                        logger.info(`🗑️ Usunięto ${msgType} na kanale ${channelConfig.name}`);
-                    } catch (deleteError) {
-                        logger.warn(`⚠️ Nie udało się usunąć wiadomości: ${deleteError.message}`);
-                    }
-                }
-            } catch (fetchError) {
-                logger.warn('⚠️ Nie udało się pobrać poprzednich wiadomości:', fetchError.message);
-            }
 
             // Wyślij nową wiadomość embed o loterii
             let lotteryEmbed;
@@ -522,8 +490,70 @@ class MessageHandler {
 
             await channel.send({ embeds: [lotteryEmbed] });
             logger.info(`✅ Wysłano nową informację o loterii ${channelConfig.name} na dole czatu`);
+
+            // Zaplanuj sprawdzenie pozycji embeda po 10 sekundach
+            setTimeout(async () => {
+                try {
+                    await this.checkAndRepositionLotteryEmbed(channel, lotteryTitle, channelConfig, lotteryEmbed);
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas sprawdzania pozycji embeda loterii ${channelConfig.name}:`, error);
+                }
+            }, 10000);
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania informacji o loterii ${channelConfig.name}:`, error);
+        }
+    }
+
+    /**
+     * Sprawdza czy embed o loterii jest na samym dole i jeśli nie - przenosi go tam
+     * @param {TextChannel} channel - Kanał Discord
+     * @param {string} lotteryTitle - Tytuł embeda loterii
+     * @param {Object} channelConfig - Konfiguracja kanału
+     * @param {EmbedBuilder} lotteryEmbed - Embed loterii do ponownego wysłania
+     */
+    async checkAndRepositionLotteryEmbed(channel, lotteryTitle, channelConfig, lotteryEmbed) {
+        try {
+            logger.info(`🔍 Sprawdzanie pozycji embeda loterii na kanale ${channelConfig.name} po 10 sekundach...`);
+            
+            // Pobierz ostatnie wiadomości
+            const messages = await channel.messages.fetch({ limit: 10 });
+            const messagesArray = Array.from(messages.values()).sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+            const lastMessage = messagesArray[0];
+            
+            // Sprawdź czy ostatnia wiadomość to embed o loterii od tego bota
+            const isLastMessageLotteryEmbed = lastMessage && 
+                lastMessage.author.id === channel.client.user.id && 
+                lastMessage.embeds.length > 0 && 
+                lastMessage.embeds[0].description && 
+                lastMessage.embeds[0].description.startsWith(lotteryTitle);
+            
+            if (isLastMessageLotteryEmbed) {
+                logger.info(`✅ Embed o loterii ${channelConfig.name} jest już na samym dole - nie trzeba przenosić`);
+                return;
+            }
+            
+            logger.info(`🔄 Embed o loterii ${channelConfig.name} nie jest na dole - przenoszę go tam`);
+            
+            // Znajdź embed o loterii w starszych wiadomościach
+            const lotteryMessage = messagesArray.find(msg => 
+                msg.author.id === channel.client.user.id && 
+                msg.embeds.length > 0 && 
+                msg.embeds[0].description && 
+                msg.embeds[0].description.startsWith(lotteryTitle)
+            );
+            
+            if (lotteryMessage) {
+                // Usuń stary embed
+                await lotteryMessage.delete();
+                logger.info(`🗑️ Usunięto stary embed o loterii ${channelConfig.name}`);
+            }
+            
+            // Wyślij nowy embed na dole
+            await channel.send({ embeds: [lotteryEmbed] });
+            logger.info(`✅ Przeniesiono embed o loterii ${channelConfig.name} na dół czatu`);
+            
+        } catch (error) {
+            logger.error(`❌ Błąd podczas sprawdzania/przenoszenia embeda loterii ${channelConfig.name}:`, error);
         }
     }
 }
