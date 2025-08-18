@@ -448,62 +448,31 @@ class MessageHandler {
             
             logger.info(`📤 Sprawdzam możliwość wysłania embeda loterii na kanał: ${channel.name} (${channel.id})`);
 
-            // Sprawdź czy ostatnia wiadomość to embed o loterii od tego bota
+            // Znajdź i usuń wszystkie poprzednie wiadomości o loterii od tego bota
             try {
-                const messages = await channel.messages.fetch({ limit: 10 });
-                const messagesArray = Array.from(messages.values()).sort((a, b) => b.createdTimestamp - a.createdTimestamp);
-                const lastMessage = messagesArray[0];
-                
-                // Sprawdź czy ostatnia wiadomość to już embed o loterii od tego bota
-                logger.info(`🔍 Ostatnia wiadomość: ${lastMessage ? `od ${lastMessage.author.tag}, typ: ${lastMessage.embeds.length > 0 ? 'embed' : 'text'}` : 'brak'}`);
-                
-                const isLastMessageLotteryEmbed = lastMessage && 
-                    lastMessage.author.id === client.user.id && 
-                    lastMessage.embeds.length > 0 && 
-                    lastMessage.embeds[0].description && 
-                    lastMessage.embeds[0].description.startsWith(lotteryTitle);
-
-                // Sprawdź czy ostatnia wiadomość to wiadomość o braku aktywnej loterii od tego bota
-                const isLastMessageNoLotteryText = lastMessage && 
-                    lastMessage.author.id === client.user.id && 
-                    lastMessage.content && 
-                    lastMessage.content.includes('🚫 **Brak aktywnej loterii**');
-
-                if (isLastMessageLotteryEmbed) {
-                    logger.info(`ℹ️ Ostatnia wiadomość to już embed o loterii ${channelConfig.name} - nie wysyłam nowego`);
-                    return;
-                } else if (isLastMessageNoLotteryText) {
-                    logger.info(`✅ Ostatnia wiadomość to wiadomość o braku aktywnej loterii ${channelConfig.name} - wysyłam nowy embed o loterii`);
-                } else {
-                    logger.info(`✅ Ostatnia wiadomość to nie embed o loterii ani wiadomość o braku loterii - wysyłam nowy embed`);
-                }
-
-                // Znajdź i usuń poprzednią wiadomość embed o loterii od tego bota (jeśli istnieje)
-                const previousLotteryMessage = messagesArray.find(msg => 
+                const messages = await channel.messages.fetch({ limit: 50 });
+                const messagesToDelete = messages.filter(msg => 
                     msg.author.id === client.user.id && 
-                    msg.embeds.length > 0 && 
-                    msg.embeds[0].description && 
-                    msg.embeds[0].description.startsWith(lotteryTitle)
+                    (
+                        // Embed o loterii
+                        (msg.embeds.length > 0 && 
+                         msg.embeds[0].description && 
+                         msg.embeds[0].description.startsWith(lotteryTitle)) ||
+                        // Wiadomość o braku aktywnej loterii
+                        (msg.content && msg.content.includes('🚫 **Brak aktywnej loterii**'))
+                    )
                 );
 
-                // Znajdź i usuń poprzednią wiadomość o braku aktywnej loterii od tego bota (jeśli istnieje)
-                const previousNoLotteryMessage = messagesArray.find(msg => 
-                    msg.author.id === client.user.id && 
-                    msg.content && 
-                    msg.content.includes('🚫 **Brak aktywnej loterii**')
-                );
-
-                if (previousLotteryMessage) {
-                    await previousLotteryMessage.delete();
-                    logger.info(`🗑️ Usunięto poprzednią wiadomość embed o loterii ${channelConfig.name}`);
+                for (const msgToDelete of messagesToDelete.values()) {
+                    try {
+                        await msgToDelete.delete();
+                        logger.info(`🗑️ Usunięto poprzednią wiadomość o loterii/braku loterii ${channelConfig.name}`);
+                    } catch (deleteError) {
+                        logger.warn(`⚠️ Nie udało się usunąć wiadomości: ${deleteError.message}`);
+                    }
                 }
-
-                if (previousNoLotteryMessage) {
-                    await previousNoLotteryMessage.delete();
-                    logger.info(`🗑️ Usunięto poprzednią wiadomość o braku aktywnej loterii ${channelConfig.name}`);
-                }
-            } catch (deleteError) {
-                logger.warn('⚠️ Nie udało się sprawdzić/usunąć poprzedniej wiadomości o loterii:', deleteError.message);
+            } catch (fetchError) {
+                logger.warn('⚠️ Nie udało się pobrać poprzednich wiadomości:', fetchError.message);
             }
 
             // Wyślij nową wiadomość embed o loterii
