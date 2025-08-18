@@ -507,11 +507,7 @@ class MessageHandler {
             
             logger.info(`🔄 Embed o loterii ${channelConfig.name} nie jest na dole - przenoszę go tam`);
             
-            // Sprawdź wszystkie wiadomości od tego bota z embedami
-            const botMessages = messagesArray.filter(msg => msg.author.id === channel.client.user.id);
-            logger.info(`🔍 Znaleziono ${botMessages.length} wiadomości od bota na kanale ${channelConfig.name}`);
-            
-            // Znajdź WSZYSTKIE embedy o loterii od tego bota i usuń je
+            // Najpierw znajdź WSZYSTKIE embedy o loterii od tego bota
             const lotteryMessages = messagesArray.filter(msg => {
                 if (msg.author.id !== channel.client.user.id) return false;
                 if (!msg.embeds || msg.embeds.length === 0) return false;
@@ -528,7 +524,7 @@ class MessageHandler {
             
             logger.info(`🗑️ Znaleziono ${lotteryMessages.length} embedów o loterii do usunięcia`);
             
-            // Usuń wszystkie znalezione embedy o loterii
+            // NAJPIERW usuń wszystkie znalezione embedy o loterii
             for (const lotteryMsg of lotteryMessages) {
                 try {
                     await lotteryMsg.delete();
@@ -538,7 +534,7 @@ class MessageHandler {
                 }
             }
             
-            // Wyślij nowy embed na dole
+            // DOPIERO POTEM wyślij nowy embed na dole
             await channel.send({ embeds: [lotteryEmbed] });
             logger.info(`✅ Przeniesiono embed o loterii ${channelConfig.name} na dół czatu`);
             
