@@ -448,27 +448,22 @@ class MessageHandler {
             
             logger.info(`📤 Sprawdzam możliwość wysłania embeda loterii na kanał: ${channel.name} (${channel.id})`);
 
-            // Znajdź i usuń wszystkie poprzednie wiadomości o loterii od tego bota
+            // Znajdź i usuń wszystkie poprzednie embedy o loterii od tego bota
             try {
                 const messages = await channel.messages.fetch({ limit: 50 });
                 const messagesToDelete = messages.filter(msg => 
                     msg.author.id === client.user.id && 
-                    (
-                        // Embed o loterii
-                        (msg.embeds.length > 0 && 
-                         msg.embeds[0].description && 
-                         msg.embeds[0].description.startsWith(lotteryTitle)) ||
-                        // Wiadomość o braku aktywnej loterii
-                        (msg.content && msg.content.includes('🚫 **Brak aktywnej loterii**'))
-                    )
+                    msg.embeds.length > 0 && 
+                    msg.embeds[0].description && 
+                    msg.embeds[0].description.startsWith(lotteryTitle)
                 );
 
                 for (const msgToDelete of messagesToDelete.values()) {
                     try {
                         await msgToDelete.delete();
-                        logger.info(`🗑️ Usunięto poprzednią wiadomość o loterii/braku loterii ${channelConfig.name}`);
+                        logger.info(`🗑️ Usunięto poprzedni embed o loterii ${channelConfig.name}`);
                     } catch (deleteError) {
-                        logger.warn(`⚠️ Nie udało się usunąć wiadomości: ${deleteError.message}`);
+                        logger.warn(`⚠️ Nie udało się usunąć embeda: ${deleteError.message}`);
                     }
                 }
             } catch (fetchError) {
