@@ -488,8 +488,8 @@ class MessageHandler {
         try {
             logger.info(`🔍 Sprawdzanie pozycji embeda loterii na kanale ${channelConfig.name} po 10 sekundach...`);
             
-            // Pobierz ostatnie wiadomości
-            const messages = await channel.messages.fetch({ limit: 10 });
+            // Pobierz więcej wiadomości żeby znaleźć stary embed
+            const messages = await channel.messages.fetch({ limit: 50 });
             const messagesArray = Array.from(messages.values()).sort((a, b) => b.createdTimestamp - a.createdTimestamp);
             const lastMessage = messagesArray[0];
             
@@ -507,18 +507,22 @@ class MessageHandler {
             
             logger.info(`🔄 Embed o loterii ${channelConfig.name} nie jest na dole - przenoszę go tam`);
             
-            // Znajdź embed o loterii w starszych wiadomościach
-            const lotteryMessage = messagesArray.find(msg => 
+            // Znajdź WSZYSTKIE embedy o loterii od tego bota i usuń je
+            const lotteryMessages = messagesArray.filter(msg => 
                 msg.author.id === channel.client.user.id && 
                 msg.embeds.length > 0 && 
                 msg.embeds[0].description && 
                 msg.embeds[0].description.startsWith(lotteryTitle)
             );
             
-            if (lotteryMessage) {
-                // Usuń stary embed
-                await lotteryMessage.delete();
-                logger.info(`🗑️ Usunięto stary embed o loterii ${channelConfig.name}`);
+            // Usuń wszystkie znalezione embedy o loterii
+            for (const lotteryMsg of lotteryMessages) {
+                try {
+                    await lotteryMsg.delete();
+                    logger.info(`🗑️ Usunięto stary embed o loterii ${channelConfig.name}`);
+                } catch (deleteError) {
+                    logger.warn(`⚠️ Nie udało się usunąć embeda: ${deleteError.message}`);
+                }
             }
             
             // Wyślij nowy embed na dole
