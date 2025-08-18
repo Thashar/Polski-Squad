@@ -136,6 +136,14 @@ class OCRService {
             
             const trimmedText = text.trim();
             
+            // Dodatkowe debugowanie
+            logger.info('🔍 DEBUG: text przed trim:', `"${text}"`);
+            logger.info('🔍 DEBUG: text type:', typeof text);
+            logger.info('🔍 DEBUG: text length przed trim:', text ? text.length : 'null/undefined');
+            logger.info('🔍 DEBUG: trimmedText:', `"${trimmedText}"`);
+            logger.info('🔍 DEBUG: trimmedText type:', typeof trimmedText);
+            logger.info('🔍 DEBUG: trimmedText length:', trimmedText ? trimmedText.length : 'null/undefined');
+            
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
                 logger.info('📝 Szczegółowy debug - wyodrębniony tekst z OCR:', `"${trimmedText}"`);
                 logger.info('📝 Szczegółowy debug - długość tekstu:', trimmedText.length);
@@ -247,11 +255,15 @@ class OCRService {
         if (matches.length > 0) {
             let result = matches[0];
             logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', `"${result}"`);
+            logger.info('🔍 DEBUG: result przed poprawką type:', typeof result);
+            logger.info('🔍 DEBUG: result przed poprawką length:', result ? result.length : 'null/undefined');
             
             // Zastosuj poprawki: TT -> 1T oraz 7 -> T
             result = this.fixScoreFormat(result);
             
             logger.info('Wyodrębniony wynik po "Best" (po poprawce):', `"${result}"`);
+            logger.info('🔍 DEBUG: result po poprawce type:', typeof result);
+            logger.info('🔍 DEBUG: result po poprawce length:', result ? result.length : 'null/undefined');
             
             // Sprawdź czy wynik nie jest pusty po korekcjach
             if (!result || result.trim() === '') {
@@ -301,6 +313,11 @@ class OCRService {
             
             // Oczyszczenie nazwy bossa z niepotrzebnych znaków
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
+            logger.info('🔍 DEBUG: bossLine przed czyszczeniem:', `"${bossLine}"`);
+            logger.info('🔍 DEBUG: cleanBossName po czyszczeniu:', `"${cleanBossName}"`);
+            logger.info('🔍 DEBUG: cleanBossName type:', typeof cleanBossName);
+            logger.info('🔍 DEBUG: cleanBossName length:', cleanBossName ? cleanBossName.length : 'null/undefined');
+            
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
                 logger.info('Oczyszczona nazwa bossa:', cleanBossName);
             }
