@@ -60,11 +60,11 @@ class OCRService {
             const hasTotal = /total\s*:/i.test(text.trim());
             
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
-                logger.info('📝 Szczegółowy debug: Tekst z obrazu:', `"${text.trim()}"`);
+                logger.info('📝 Szczegółowy debug: Tekst z obrazu: "' + text.trim() + '"');
                 logger.info('🔍 Szczegółowy debug: Znaleziono "Best:":', hasBest);
                 logger.info('🔍 Szczegółowy debug: Znaleziono "Total:":', hasTotal);
             } else {
-                logger.info('Tekst z obrazu:', `"${text.trim()}"`);
+                logger.info('Tekst z obrazu: "' + text.trim() + '"');
                 logger.info('Znaleziono "Best:":', hasBest);
                 logger.info('Znaleziono "Total:":', hasTotal);
             }
@@ -93,7 +93,7 @@ class OCRService {
             // Zapisz przetworzone zdjęcie na dysku jeśli włączone
             logger.info(`🔧 Debug: saveProcessedImages = ${this.config.ocr.saveProcessedImages}`);
             if (this.config.ocr.saveProcessedImages) {
-                logger.info(`🔧 Debug: Zapisuję przetworzony obraz EndersEcho z: ${outputPath}`);
+                logger.info('🔧 Debug: Zapisuję przetworzony obraz EndersEcho z: ' + outputPath);
                 await saveProcessedImage(
                     outputPath,
                     this.config.ocr.processedDir,
@@ -137,19 +137,19 @@ class OCRService {
             const trimmedText = text.trim();
             
             // Dodatkowe debugowanie
-            logger.info('🔍 DEBUG: text przed trim:', `"${text}"`);
-            logger.info('🔍 DEBUG: text type:', typeof text);
-            logger.info('🔍 DEBUG: text length przed trim:', text ? text.length : 'null/undefined');
-            logger.info('🔍 DEBUG: trimmedText:', `"${trimmedText}"`);
-            logger.info('🔍 DEBUG: trimmedText type:', typeof trimmedText);
-            logger.info('🔍 DEBUG: trimmedText length:', trimmedText ? trimmedText.length : 'null/undefined');
+            logger.info('🔍 DEBUG: text przed trim: "' + text + '"');
+            logger.info('🔍 DEBUG: text type: ' + typeof text);
+            logger.info('🔍 DEBUG: text length przed trim: ' + (text ? text.length : 'null/undefined'));
+            logger.info('🔍 DEBUG: trimmedText: "' + trimmedText + '"');
+            logger.info('🔍 DEBUG: trimmedText type: ' + typeof trimmedText);
+            logger.info('🔍 DEBUG: trimmedText length: ' + (trimmedText ? trimmedText.length : 'null/undefined'));
             
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
-                logger.info('📝 Szczegółowy debug - wyodrębniony tekst z OCR:', `"${trimmedText}"`);
-                logger.info('📝 Szczegółowy debug - długość tekstu:', trimmedText.length);
+                logger.info('📝 Szczegółowy debug - wyodrębniony tekst z OCR: "' + trimmedText + '"');
+                logger.info('📝 Szczegółowy debug - długość tekstu: ' + trimmedText.length);
             } else {
-                logger.info('Wyodrębniony tekst z OCR:', `"${trimmedText}"`);
-                logger.info('Długość tekstu:', trimmedText.length);
+                logger.info('Wyodrębniony tekst z OCR: "' + trimmedText + '"');
+                logger.info('Długość tekstu: ' + trimmedText.length);
             }
             
             return trimmedText;
@@ -203,12 +203,12 @@ class OCRService {
      */
     extractScoreAfterBest(text) {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR:', `"${text}"`);
-            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR:', `"${text}"`);
+            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR: "' + text + '"');
+            logger.info('📊 Szczegółowy debug: Analizowany tekst OCR: "' + text + '"');
             logger.info('📊 Szczegółowy debug: Długość tekstu:', text ? text.length : 'null');
         } else {
-            logger.info('Pełny tekst z OCR:', `"${text}"`);
-            logger.info('Analizowany tekst OCR:', `"${text}"`);
+            logger.info('Pełny tekst z OCR: "' + text + '"');
+            logger.info('Analizowany tekst OCR: "' + text + '"');
             logger.info('Długość tekstu:', text ? text.length : 'null');
         }
         
@@ -254,16 +254,20 @@ class OCRService {
         
         if (matches.length > 0) {
             let result = matches[0];
-            logger.info('Wyodrębniony wynik po "Best" (przed poprawką):', `"${result}"`);
-            logger.info('🔍 DEBUG: result przed poprawką type:', typeof result);
-            logger.info('🔍 DEBUG: result przed poprawką length:', result ? result.length : 'null/undefined');
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('Wyodrębniony wynik po "Best" (przed poprawką): "' + result + '"');
+                logger.info('🔍 DEBUG: result przed poprawką type: ' + typeof result);
+                logger.info('🔍 DEBUG: result przed poprawką length: ' + (result ? result.length : 'null/undefined'));
+            }
             
             // Zastosuj poprawki: TT -> 1T oraz 7 -> T
             result = this.fixScoreFormat(result);
             
-            logger.info('Wyodrębniony wynik po "Best" (po poprawce):', `"${result}"`);
-            logger.info('🔍 DEBUG: result po poprawce type:', typeof result);
-            logger.info('🔍 DEBUG: result po poprawce length:', result ? result.length : 'null/undefined');
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('Wyodrębniony wynik po "Best" (po poprawce): "' + result + '"');
+                logger.info('🔍 DEBUG: result po poprawce type: ' + typeof result);
+                logger.info('🔍 DEBUG: result po poprawce length: ' + (result ? result.length : 'null/undefined'));
+            }
             
             // Sprawdź czy wynik nie jest pusty po korekcjach
             if (!result || result.trim() === '') {
@@ -313,10 +317,13 @@ class OCRService {
             
             // Oczyszczenie nazwy bossa z niepotrzebnych znaków
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
-            logger.info('🔍 DEBUG: bossLine przed czyszczeniem:', `"${bossLine}"`);
-            logger.info('🔍 DEBUG: cleanBossName po czyszczeniu:', `"${cleanBossName}"`);
-            logger.info('🔍 DEBUG: cleanBossName type:', typeof cleanBossName);
-            logger.info('🔍 DEBUG: cleanBossName length:', cleanBossName ? cleanBossName.length : 'null/undefined');
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: bossLine przed czyszczeniem: "' + bossLine + '"');
+                logger.info('🔍 DEBUG: cleanBossName po czyszczeniu: "' + cleanBossName + '"');
+                logger.info('🔍 DEBUG: cleanBossName type: ' + typeof cleanBossName);
+                logger.info('🔍 DEBUG: cleanBossName length: ' + (cleanBossName ? cleanBossName.length : 'null/undefined'));
+            }
             
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
                 logger.info('Oczyszczona nazwa bossa:', cleanBossName);

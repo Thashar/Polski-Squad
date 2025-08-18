@@ -244,15 +244,77 @@ class RankingService {
      * @returns {EmbedBuilder} - Embed wyniku
      */
     createResultEmbed(userName, bestScore, currentScore, attachmentName = null) {
+        const logger = require('../../utils/consoleLogger').createBotLogger('EndersEcho');
+        
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: createResultEmbed - Rozpoczynam tworzenie embed');
+            logger.info('🔍 DEBUG: createResultEmbed - Parametry wejściowe:');
+            logger.info('🔍 DEBUG: - userName: "' + userName + '"');
+            logger.info('🔍 DEBUG: - bestScore: "' + bestScore + '"');
+            logger.info('🔍 DEBUG: - currentScore: "' + currentScore + '"');
+            logger.info('🔍 DEBUG: - attachmentName: "' + attachmentName + '"');
+        }
+        
+        try {
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: Sprawdzam currentScore i wywołuję parseScoreValue');
+            }
+            const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: currentScoreValue: ' + currentScoreValue);
+                logger.info('🔍 DEBUG: Parsowanie bestScore');
+            }
+            
+            const newScoreValue = this.parseScoreValue(bestScore);
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: newScoreValue: ' + newScoreValue);
+                logger.info('🔍 DEBUG: Obliczanie różnicy');
+            }
+            
+            const difference = currentScoreValue - newScoreValue;
+            const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: difference: ' + difference);
+                logger.info('🔍 DEBUG: differenceText: "' + differenceText + '"');
+            }
+        } catch (parseError) {
+            logger.error('🔍 DEBUG: Błąd podczas parsowania wartości w createResultEmbed:');
+            logger.error('🔍 DEBUG: parseError message: ' + parseError.message);
+            logger.error('🔍 DEBUG: parseError stack: ' + parseError.stack);
+            throw parseError;
+        }
+        
         const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
         const newScoreValue = this.parseScoreValue(bestScore);
         const difference = currentScoreValue - newScoreValue;
         const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
         
-        const embed = new EmbedBuilder()
-            .setColor(0xff9900)
-            .setTitle(this.config.messages.resultTitle)
-            .addFields(
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: Tworzenie EmbedBuilder');
+        }
+        
+        try {
+            const embed = new EmbedBuilder()
+                .setColor(0xff9900)
+                .setTitle(this.config.messages.resultTitle);
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: Podstawowy embed utworzony');
+                logger.info('🔍 DEBUG: Dodawanie pól do embed');
+                logger.info('🔍 DEBUG: resultPlayer field - name: "' + this.config.messages.resultPlayer + '", value: "' + userName + '"');
+                logger.info('🔍 DEBUG: resultScore field - name: "' + this.config.messages.resultScore + '", value: "' + bestScore + '"');
+            }
+            
+            const statusMessage = formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore || 'Brak poprzedniego wyniku' });
+            const fullStatusValue = statusMessage + `\n**Różnica:** ${differenceText}`;
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: statusMessage: "' + statusMessage + '"');
+                logger.info('🔍 DEBUG: fullStatusValue: "' + fullStatusValue + '"');
+            }
+            
+            embed.addFields(
                 {
                     name: this.config.messages.resultPlayer,
                     value: userName,
@@ -265,17 +327,45 @@ class RankingService {
                 },
                 {
                     name: this.config.messages.resultStatus,
-                    value: formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore || 'Brak poprzedniego wyniku' }) + `\n**Różnica:** ${differenceText}`,
+                    value: fullStatusValue,
                     inline: false
                 }
-            )
-            .setTimestamp();
-        
-        if (attachmentName) {
-            embed.setImage(`attachment://${attachmentName}`);
+            );
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: Pola dodane do embed');
+            }
+            
+            embed.setTimestamp();
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: Timestamp ustawiony');
+            }
+            
+            if (attachmentName) {
+                if (this.config.ocr.detailedLogging.enabled) {
+                    logger.info('🔍 DEBUG: Ustawianie obrazu attachment: ' + attachmentName);
+                }
+                embed.setImage(`attachment://${attachmentName}`);
+                if (this.config.ocr.detailedLogging.enabled) {
+                    logger.info('🔍 DEBUG: Obraz ustawiony');
+                }
+            } else {
+                if (this.config.ocr.detailedLogging.enabled) {
+                    logger.info('🔍 DEBUG: Brak attachmentName - pomijam obraz');
+                }
+            }
+            
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: createResultEmbed zakończone pomyślnie');
+            }
+            return embed;
+        } catch (embedError) {
+            logger.error('🔍 DEBUG: Błąd podczas tworzenia embed w createResultEmbed:');
+            logger.error('🔍 DEBUG: embedError message: ' + embedError.message);
+            logger.error('🔍 DEBUG: embedError stack: ' + embedError.stack);
+            throw embedError;
         }
-        
-        return embed;
     }
 
     /**
@@ -339,13 +429,64 @@ class RankingService {
      * @returns {Promise<{isNewRecord: boolean, ranking: Object}>} - Wynik aktualizacji
      */
     async updateUserRanking(userId, userName, bestScore, bossName = null) {
+        const logger = require('../../utils/consoleLogger').createBotLogger('EndersEcho');
+        
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: updateUserRanking - Start');
+            logger.info('🔍 DEBUG: updateUserRanking - userId: ' + userId);
+            logger.info('🔍 DEBUG: updateUserRanking - userName: "' + userName + '"');
+            logger.info('🔍 DEBUG: updateUserRanking - bestScore: "' + bestScore + '"');
+            logger.info('🔍 DEBUG: updateUserRanking - bossName: "' + bossName + '"');
+        }
+        
         const ranking = await this.loadRanking();
+        
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: updateUserRanking - Ranking załadowany');
+        }
+        
         const newScoreValue = this.parseScoreValue(bestScore);
         
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: updateUserRanking - newScoreValue: ' + newScoreValue);
+        }
+        
         const currentScore = ranking[userId];
+        
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: updateUserRanking - currentScore: ' + (currentScore ? JSON.stringify(currentScore) : 'null'));
+        }
+        
         let isNewRecord = false;
         
-        if (!currentScore || newScoreValue > this.parseScoreValue(currentScore.score)) {
+        if (!currentScore) {
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: updateUserRanking - Użytkownik nie ma poprzedniego wyniku - to będzie nowy rekord');
+            }
+            isNewRecord = true;
+        } else {
+            const currentScoreValue = this.parseScoreValue(currentScore.score);
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: updateUserRanking - currentScoreValue: ' + currentScoreValue);
+                logger.info('🔍 DEBUG: updateUserRanking - Porównanie: newScoreValue (' + newScoreValue + ') > currentScoreValue (' + currentScoreValue + ') = ' + (newScoreValue > currentScoreValue));
+            }
+            
+            if (newScoreValue > currentScoreValue) {
+                if (this.config.ocr.detailedLogging.enabled) {
+                    logger.info('🔍 DEBUG: updateUserRanking - Nowy wynik jest lepszy - to będzie nowy rekord');
+                }
+                isNewRecord = true;
+            } else {
+                if (this.config.ocr.detailedLogging.enabled) {
+                    logger.info('🔍 DEBUG: updateUserRanking - Nowy wynik NIE jest lepszy - nie ma rekordu');
+                }
+            }
+        }
+        
+        if (isNewRecord) {
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: updateUserRanking - Zapisywanie nowego rekordu');
+            }
             ranking[userId] = {
                 score: bestScore,
                 username: userName,
@@ -355,9 +496,14 @@ class RankingService {
                 bossName: bossName || 'Nieznany boss'
             };
             await this.saveRanking(ranking);
-            isNewRecord = true;
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: updateUserRanking - Nowy rekord zapisany');
+            }
         }
         
+        if (this.config.ocr.detailedLogging.enabled) {
+            logger.info('🔍 DEBUG: updateUserRanking - Zwracanie rezultatu: isNewRecord=' + isNewRecord);
+        }
         return { isNewRecord, ranking, currentScore };
     }
 
