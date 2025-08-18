@@ -507,21 +507,34 @@ class MessageHandler {
             
             logger.info(`🔄 Embed o loterii ${channelConfig.name} nie jest na dole - przenoszę go tam`);
             
+            // Sprawdź wszystkie wiadomości od tego bota z embedami
+            const botMessages = messagesArray.filter(msg => msg.author.id === channel.client.user.id);
+            logger.info(`🔍 Znaleziono ${botMessages.length} wiadomości od bota na kanale ${channelConfig.name}`);
+            
             // Znajdź WSZYSTKIE embedy o loterii od tego bota i usuń je
-            const lotteryMessages = messagesArray.filter(msg => 
-                msg.author.id === channel.client.user.id && 
-                msg.embeds.length > 0 && 
-                msg.embeds[0].description && 
-                msg.embeds[0].description.startsWith(lotteryTitle)
-            );
+            const lotteryMessages = messagesArray.filter(msg => {
+                if (msg.author.id !== channel.client.user.id) return false;
+                if (!msg.embeds || msg.embeds.length === 0) return false;
+                
+                const embed = msg.embeds[0];
+                if (!embed.description) return false;
+                
+                const hasLotteryTitle = embed.description.startsWith(lotteryTitle);
+                if (hasLotteryTitle) {
+                    logger.info(`🎯 Znaleziono embed o loterii: "${embed.description.substring(0, 50)}..."`);
+                }
+                return hasLotteryTitle;
+            });
+            
+            logger.info(`🗑️ Znaleziono ${lotteryMessages.length} embedów o loterii do usunięcia`);
             
             // Usuń wszystkie znalezione embedy o loterii
             for (const lotteryMsg of lotteryMessages) {
                 try {
                     await lotteryMsg.delete();
-                    logger.info(`🗑️ Usunięto stary embed o loterii ${channelConfig.name}`);
+                    logger.info(`✅ Usunięto stary embed o loterii ${channelConfig.name} (ID: ${lotteryMsg.id})`);
                 } catch (deleteError) {
-                    logger.warn(`⚠️ Nie udało się usunąć embeda: ${deleteError.message}`);
+                    logger.warn(`⚠️ Nie udało się usunąć embeda ${lotteryMsg.id}: ${deleteError.message}`);
                 }
             }
             
