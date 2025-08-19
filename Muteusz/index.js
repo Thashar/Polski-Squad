@@ -91,9 +91,6 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
 // Obsługa zmian członków serwera
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     await memberHandler.handleGuildMemberUpdate(oldMember, newMember);
-    
-    // Loguj zmiany ról
-    await roleChangeLogService.logRoleChange(oldMember, newMember);
 });
 
 // Dodatkowe sprawdzanie statusu premium (boost)
