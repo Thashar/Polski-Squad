@@ -146,7 +146,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `✅ Dodano rolę (${added.length} ${added.length === 1 ? 'użytkownik' : 'użytkowników'})`,
+                    name: `👤 ${added.length} ${added.length === 1 ? 'użytkownik' : 'użytkowników'}\n`,
                     value: addedList.length > 1024 ? addedList.substring(0, 1021) + '...' : addedList,
                     inline: false
                 });
@@ -159,7 +159,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `❌ Usunięto rolę (${removed.length} ${removed.length === 1 ? 'użytkownik' : 'użytkowników'})`,
+                    name: `👤 ${removed.length} ${removed.length === 1 ? 'użytkownik' : 'użytkowników'}\n`,
                     value: removedList.length > 1024 ? removedList.substring(0, 1021) + '...' : removedList,
                     inline: false
                 });
@@ -266,7 +266,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `✅ Dodano role (${added.length})`,
+                    name: `👤 ${added.length} ${added.length === 1 ? 'rola' : 'ról'}\n`,
                     value: addedList.length > 1024 ? addedList.substring(0, 1021) + '...' : addedList,
                     inline: false
                 });
@@ -279,7 +279,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `❌ Usunięto role (${removed.length})`,
+                    name: `👤 ${removed.length} ${removed.length === 1 ? 'rola' : 'ról'}\n`,
                     value: removedList.length > 1024 ? removedList.substring(0, 1021) + '...' : removedList,
                     inline: false
                 });
