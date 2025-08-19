@@ -333,6 +333,28 @@ class MediaService {
         const logChannel = client.channels.cache.get(this.config.deletedMessageLogs.logChannelId);
         if (!logChannel) return;
 
+        // Sprawdź audit logs aby znaleźć kto usunął wiadomość
+        let deletedBy = null;
+        try {
+            const auditLogs = await deletedMessage.guild.fetchAuditLogs({
+                type: 72, // MESSAGE_DELETE
+                limit: 1
+            });
+            
+            const auditEntry = auditLogs.entries.first();
+            if (auditEntry && auditEntry.target?.id === deletedMessage.author?.id) {
+                // Sprawdź czy audit log nie jest za stary (max 5 sekund różnicy)
+                const timeDiff = Date.now() - auditEntry.createdTimestamp;
+                if (timeDiff < 5000) {
+                    deletedBy = auditEntry.executor;
+                    // Ignoruj usunięcia przez boty
+                    if (deletedBy?.bot) return;
+                }
+            }
+        } catch (error) {
+            // Brak uprawnień do audit logs lub inny błąd
+        }
+
         const linkData = this.messageLinks.get(deletedMessage.id);
         
         const embed = new EmbedBuilder()
@@ -344,6 +366,20 @@ class MediaService {
                 { name: '📅 Usunięto', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
             .setTimestamp();
+
+        // Dodaj awatar autora wiadomości
+        if (deletedMessage.author?.displayAvatarURL) {
+            embed.setThumbnail(deletedMessage.author.displayAvatarURL({ dynamic: true, size: 128 }));
+        }
+
+        // Dodaj informację o tym kto usunął (jeśli znamy)
+        if (deletedBy) {
+            embed.addFields({ 
+                name: '🚮 Usunięta przez', 
+                value: `${deletedBy.tag} (${deletedBy.id})`, 
+                inline: true 
+            });
+        }
 
         // Dodaj treść wiadomości jeśli istnieje
         if (deletedMessage.content) {
@@ -454,6 +490,11 @@ class MediaService {
                 { name: '🔗 Link', value: `[Przejdź do wiadomości](${newMessage.url})`, inline: false }
             )
             .setTimestamp();
+
+        // Dodaj awatar autora wiadomości
+        if (newMessage.author?.displayAvatarURL) {
+            embed.setThumbnail(newMessage.author.displayAvatarURL({ dynamic: true, size: 128 }));
+        }
 
         // Dodaj treść przed i po edycji
         if (oldMessage.content) {
