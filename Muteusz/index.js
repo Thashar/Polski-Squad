@@ -11,7 +11,6 @@ const LogService = require('./services/logService');
 const SpecialRolesService = require('./services/specialRolesService');
 const RoleManagementService = require('./services/roleManagementService');
 const RoleKickingService = require('./services/roleKickingService');
-const RoleChangeLogService = require('./services/roleChangeLogService');
 
 // Importuj handlery
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -35,7 +34,6 @@ const roleManagementService = new RoleManagementService(config, specialRolesServ
 const mediaService = new MediaService(config);
 const logService = new LogService(config);
 const roleKickingService = new RoleKickingService(config);
-const roleChangeLogService = new RoleChangeLogService(config);
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
@@ -50,7 +48,6 @@ const sharedState = {
     roleManagementService,
     mediaService,
     logService,
-    roleChangeLogService,
     interactionHandler,
     messageHandler,
     memberHandler
@@ -65,7 +62,6 @@ client.once(Events.ClientReady, async () => {
     logService.initialize(client);
     await mediaService.initialize();
     await roleKickingService.initialize(client);
-    await roleChangeLogService.initialize(client);
     
     // Zarejestruj komendy slash
     await interactionHandler.registerSlashCommands(client);
@@ -187,11 +183,6 @@ process.on('SIGINT', async () => {
         await mediaService.cleanupAllCache();
     }
     
-    // Wyczyść oczekujące logi zmian ról
-    if (roleChangeLogService) {
-        roleChangeLogService.cleanup();
-    }
-    
     client.destroy();
     process.exit(0);
 });
@@ -206,11 +197,6 @@ process.on('SIGTERM', async () => {
     try {
         if (config.media.autoCleanup && mediaService) {
             await mediaService.cleanupAllCache();
-        }
-        
-        // Wyczyść oczekujące logi zmian ról
-        if (roleChangeLogService) {
-            roleChangeLogService.cleanup();
         }
         
         client.destroy();
