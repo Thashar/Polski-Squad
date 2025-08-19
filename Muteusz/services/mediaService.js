@@ -327,23 +327,35 @@ class MediaService {
      * @param {Client} client - Klient Discord
      */
     async handleDeletedMessage(deletedMessage, client) {
-        logger.info(`🔍 TEMP DEBUG: Usunięto wiadomość - autor: ${deletedMessage.author?.tag}, bot: ${deletedMessage.author?.bot}, discriminator: ${deletedMessage.author?.discriminator}`);
+        logger.info(`🔍 TEMP DEBUG [POCZĄTEK]: Usunięto wiadomość`);
+        logger.info(`🔍 TEMP DEBUG [AUTOR]: tag=${deletedMessage.author?.tag}, bot=${deletedMessage.author?.bot}, discriminator='${deletedMessage.author?.discriminator}', id=${deletedMessage.author?.id}`);
         
-        if (!this.config.deletedMessageLogs?.enabled) return;
+        if (!this.config.deletedMessageLogs?.enabled) {
+            logger.info(`❌ TEMP DEBUG [KONIEC]: deletedMessageLogs wyłączone`);
+            return;
+        }
         
         if (deletedMessage.author?.bot) {
-            logger.info(`🤖 TEMP DEBUG: Ignoruję - autor to bot (bot=true): ${deletedMessage.author.tag}`);
+            logger.info(`🤖 TEMP DEBUG [KONIEC]: Ignoruję - autor to bot (bot=true): ${deletedMessage.author.tag}`);
             return;
         }
         
         // Dodatkowe sprawdzenie dla botów (mają username#4cyfry)
         if (deletedMessage.author?.discriminator && deletedMessage.author.discriminator !== '0') {
-            logger.info(`🤖 TEMP DEBUG: Ignoruję wiadomość od prawdopodobnego bota (discriminator): ${deletedMessage.author.tag}`);
+            logger.info(`🤖 TEMP DEBUG [KONIEC]: Ignoruję wiadomość od prawdopodobnego bota (discriminator='${deletedMessage.author.discriminator}'): ${deletedMessage.author.tag}`);
             return;
         }
-
+        
+        logger.info(`✅ TEMP DEBUG [PRZESZEDŁ FILTRY]: Autor wiadomości przeszedł przez filtry botów`);
+        
         const logChannel = client.channels.cache.get(this.config.deletedMessageLogs.logChannelId);
-        if (!logChannel) return;
+        if (!logChannel) {
+            logger.info(`❌ TEMP DEBUG [KONIEC]: Brak kanału logów`);
+            return;
+        }
+        
+        logger.info(`✅ TEMP DEBUG [KANAŁ OK]: Znaleziono kanał logów`);
+        logger.info(`🔍 TEMP DEBUG [AUDIT START]: Rozpoczynam sprawdzanie audit logs...`);
 
         // Sprawdź audit logs aby znaleźć kto usunął wiadomość
         let deletedBy = null;
@@ -353,13 +365,13 @@ class MediaService {
                 limit: 10
             });
             
-            logger.info(`🔍 TEMP DEBUG: Znaleziono ${auditLogs.entries.size} audit logs MESSAGE_DELETE`);
+            logger.info(`🔍 TEMP DEBUG [AUDIT]: Znaleziono ${auditLogs.entries.size} audit logs MESSAGE_DELETE`);
             
             // Wypisz wszystkie audit logi dla debugowania
             let index = 0;
             for (const auditEntry of auditLogs.entries.values()) {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
-                logger.info(`🔍 TEMP DEBUG: Audit log ${index}: executor=${auditEntry.executor?.tag} (bot: ${auditEntry.executor?.bot}), target=${auditEntry.target?.tag}, czas=${timeDiff}ms`);
+                logger.info(`🔍 TEMP DEBUG [AUDIT ${index}]: executor=${auditEntry.executor?.tag} (bot=${auditEntry.executor?.bot}, discriminator='${auditEntry.executor?.discriminator}'), target=${auditEntry.target?.tag}, czas=${timeDiff}ms`);
                 index++;
             }
             
@@ -368,31 +380,35 @@ class MediaService {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
                 if (timeDiff < 30000) { // Max 30 sekund
                     deletedBy = auditEntry.executor;
-                    logger.info(`✅ TEMP DEBUG: Wybrany audit log - executor: ${deletedBy?.tag}, bot: ${deletedBy?.bot}, discriminator: ${deletedBy?.discriminator}, target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
+                    logger.info(`✅ TEMP DEBUG [SELECTED]: Wybrany audit log - executor: ${deletedBy?.tag}, bot: ${deletedBy?.bot}, discriminator: '${deletedBy?.discriminator}', target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
                     
                     // Jeśli executor to autor wiadomości, to samoukasowanie - ignoruj
                     if (deletedBy?.id === deletedMessage.author?.id) {
-                        logger.info(`❌ TEMP DEBUG: To samoukasowanie - ignoruję`);
+                        logger.info(`❌ TEMP DEBUG [SELF DELETE]: To samoukasowanie - ignoruję`);
                         deletedBy = null;
                     }
                     break;
                 }
             }
             
+            logger.info(`🔍 TEMP DEBUG [EXECUTOR CHECK]: deletedBy=${deletedBy?.tag}, bot=${deletedBy?.bot}, discriminator='${deletedBy?.discriminator}'`);
+            
             // Ignoruj usunięcia przez boty
             if (deletedBy?.bot) {
-                logger.info(`🤖 TEMP DEBUG: Executor to bot ${deletedBy.tag} - ignoruję całkowicie`);
+                logger.info(`🤖 TEMP DEBUG [BOT EXECUTOR]: Executor to bot ${deletedBy.tag} - RETURN (ignoruję całkowicie)`);
                 return;
             }
             
             // Dodatkowe sprawdzenie dla botów executorów z #cyfry
             if (deletedBy?.discriminator && deletedBy.discriminator !== '0') {
-                logger.info(`🤖 TEMP DEBUG: Executor ${deletedBy.tag} ma discriminator ${deletedBy.discriminator} - prawdopodobnie bot, ignoruję`);
+                logger.info(`🤖 TEMP DEBUG [BOT DISCRIMINATOR]: Executor ${deletedBy.tag} ma discriminator ${deletedBy.discriminator} - RETURN (prawdopodobnie bot, ignoruję)`);
                 return;
             }
             
+            logger.info(`✅ TEMP DEBUG [EXECUTOR OK]: Executor przeszedł przez filtry botów`);
+            
         } catch (error) {
-            logger.warn(`⚠️ Błąd sprawdzania audit logs: ${error.message}`);
+            logger.warn(`⚠️ TEMP DEBUG [AUDIT ERROR]: Błąd sprawdzania audit logs: ${error.message}`);
         }
 
         const linkData = this.messageLinks.get(deletedMessage.id);
@@ -501,7 +517,9 @@ class MediaService {
             });
         }
 
+        logger.info(`📤 TEMP DEBUG [SENDING EMBED]: Wysyłam embed na kanał logów`);
         await logChannel.send({ embeds: [embed] });
+        logger.info(`✅ TEMP DEBUG [EMBED SENT]: Embed wysłany pomyślnie`);
         
         // Usuń powiązanie po przetworzeniu
         if (linkData) {
