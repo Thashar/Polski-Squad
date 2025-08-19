@@ -34,7 +34,6 @@ class RoleChangeLogService {
         
         // Uruchom sprawdzanie audit logs co 5 sekund (zwiększam dla testów)
         this.auditCheckInterval = setInterval(async () => {
-            logger.info('🔄 Sprawdzam audit logs...');
             await this.checkAllGuildsForRoleChanges();
         }, 5000);
         
@@ -73,17 +72,10 @@ class RoleChangeLogService {
                     continue;
                 }
 
-                logger.info(`🆕 Nowy audit log: ${auditEntry.executor?.tag} -> ${auditEntry.target?.tag} (${auditEntry.id})`);
-                
                 // Przetwórz nowy audit log
                 await this.processRoleAuditEntry(auditEntry);
                 this.processedAuditLogs.add(auditEntry.id);
                 newCount++;
-            }
-            
-            if (newCount > 0) {
-                logger.info(`📊 Przetworzono ${newCount} nowych audit logs dla ${guild.name}`);
-            }
         } catch (error) {
             logger.error(`Błąd sprawdzania audit logs dla ${guild.name}: ${error.message}`);
         }
@@ -96,22 +88,35 @@ class RoleChangeLogService {
     async processRoleAuditEntry(auditEntry) {
         const { executor, target, changes } = auditEntry;
         
-        if (!changes || !target) return;
+        if (!changes || !target) {
+            logger.info(`❌ Brak changes (${!!changes}) lub target (${!!target})`);
+            return;
+        }
 
         try {
             const member = await auditEntry.guild.members.fetch(target.id);
-            if (!member) return;
+            if (!member) {
+                logger.info(`❌ Nie można pobrać member dla ${target.tag}`);
+                return;
+            }
 
             const addedRoles = [];
             const removedRoles = [];
 
+            logger.info(`🔍 Sprawdzam ${changes.length} zmian dla ${member.displayName}`);
+
             // Przetwórz zmiany ról
             for (const change of changes) {
+                logger.info(`📋 Change: key=${change.key}, new=${!!change.new}, old=${!!change.old}`);
+                
                 if (change.key === '$add' && change.new) {
                     for (const roleData of change.new) {
                         try {
                             const role = await auditEntry.guild.roles.fetch(roleData.id);
-                            if (role) addedRoles.push(role);
+                            if (role) {
+                                addedRoles.push(role);
+                                logger.info(`➕ Dodano rolę: ${role.name}`);
+                            }
                         } catch (error) {
                             // Ignoruj błędy pobierania ról
                         }
@@ -120,7 +125,10 @@ class RoleChangeLogService {
                     for (const roleData of change.old) {
                         try {
                             const role = await auditEntry.guild.roles.fetch(roleData.id);
-                            if (role) removedRoles.push(role);
+                            if (role) {
+                                removedRoles.push(role);
+                                logger.info(`➖ Usunięto rolę: ${role.name}`);
+                            }
                         } catch (error) {
                             // Ignoruj błędy pobierania ról
                         }
@@ -128,13 +136,18 @@ class RoleChangeLogService {
                 }
             }
 
+            logger.info(`📊 Wynik: +${addedRoles.length} -${removedRoles.length}`);
+
             // Jeśli są jakieś zmiany, wyślij embed
             if (addedRoles.length > 0 || removedRoles.length > 0) {
+                logger.info(`🚀 Wysyłam embed dla ${member.displayName}`);
                 await this.sendRoleChangeEmbed(member, addedRoles, removedRoles, executor);
+            } else {
+                logger.info(`❌ Brak zmian ról do wysłania`);
             }
 
         } catch (error) {
-            // Ignoruj błędy
+            logger.error(`❌ Błąd przetwarzania audit entry: ${error.message}`);
         }
     }
 
