@@ -427,9 +427,21 @@ class MessageHandler {
             if (existingMessageId) {
                 try {
                     // Sprawdź czy embed nadal istnieje
-                    await channel.messages.fetch(existingMessageId);
-                    logger.info(`ℹ️ Embed o loterii ${channelConfig.name} już istnieje (ID: ${existingMessageId}) - nie wysyłam nowego`);
-                    return;
+                    const existingMessage = await channel.messages.fetch(existingMessageId);
+                    
+                    // Sprawdź czy embed jest ostatnią wiadomością na kanale
+                    const lastMessages = await channel.messages.fetch({ limit: 1 });
+                    const lastMessage = lastMessages.first();
+                    
+                    if (lastMessage && lastMessage.id === existingMessageId) {
+                        logger.info(`ℹ️ Embed o loterii ${channelConfig.name} już istnieje i jest ostatni (ID: ${existingMessageId}) - nie wysyłam nowego`);
+                        return;
+                    } else {
+                        logger.info(`🔄 Embed o loterii ${channelConfig.name} istnieje ale nie jest ostatni - usuwam i wysyłam nowy`);
+                        // Usuń stary embed, bo nie jest już ostatni
+                        await existingMessage.delete();
+                        this.lotteryMessageIds.delete(channel.id);
+                    }
                 } catch (fetchError) {
                     // Embed nie istnieje (został usunięty), usuń z mapy
                     this.lotteryMessageIds.delete(channel.id);
@@ -480,70 +492,11 @@ class MessageHandler {
             const lotteryMessage = await channel.send({ embeds: [lotteryEmbed] });
             this.lotteryMessageIds.set(channel.id, lotteryMessage.id);
             logger.info(`✅ Wysłano nową informację o loterii ${channelConfig.name} na dole czatu (ID: ${lotteryMessage.id})`);
-
-            // Zaplanuj sprawdzenie pozycji embeda po 10 sekundach
-            setTimeout(async () => {
-                try {
-                    await this.checkAndRepositionLotteryEmbed(channel, lotteryTitle, channelConfig, lotteryEmbed);
-                } catch (error) {
-                    logger.error(`❌ Błąd podczas sprawdzania pozycji embeda loterii ${channelConfig.name}:`, error);
-                }
-            }, 10000);
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania informacji o loterii ${channelConfig.name}:`, error);
         }
     }
 
-    /**
-     * Sprawdza czy embed o loterii jest na samym dole i jeśli nie - przenosi go tam
-     * @param {TextChannel} channel - Kanał Discord
-     * @param {string} lotteryTitle - Tytuł embeda loterii
-     * @param {Object} channelConfig - Konfiguracja kanału
-     * @param {EmbedBuilder} lotteryEmbed - Embed loterii do ponownego wysłania
-     */
-    async checkAndRepositionLotteryEmbed(channel, lotteryTitle, channelConfig, lotteryEmbed) {
-        try {
-            logger.info(`🔍 Sprawdzanie pozycji embeda loterii na kanale ${channelConfig.name} po 10 sekundach...`);
-            
-            // Pobierz ostatnią wiadomość na kanale
-            const messages = await channel.messages.fetch({ limit: 1 });
-            const lastMessage = messages.first();
-            
-            // Sprawdź czy ostatnia wiadomość to embed o loterii od tego bota
-            const isLastMessageLotteryEmbed = lastMessage && 
-                lastMessage.author.id === channel.client.user.id && 
-                lastMessage.embeds.length > 0 && 
-                lastMessage.embeds[0].description && 
-                lastMessage.embeds[0].description.startsWith(lotteryTitle);
-            
-            if (isLastMessageLotteryEmbed) {
-                logger.info(`✅ Embed o loterii ${channelConfig.name} jest już na samym dole - nie trzeba przenosić`);
-                return;
-            }
-            
-            logger.info(`🔄 Embed o loterii ${channelConfig.name} nie jest na dole - przenoszę go tam`);
-            
-            // Znajdź stary embed po zapisanym ID (wzór z Wydarzynier)
-            const oldMessageId = this.lotteryMessageIds.get(channel.id);
-            if (oldMessageId) {
-                try {
-                    const oldMessage = await channel.messages.fetch(oldMessageId);
-                    await oldMessage.delete();
-                    logger.info(`🗑️ Usunięto stary embed o loterii ${channelConfig.name} (ID: ${oldMessageId})`);
-                } catch (deleteError) {
-                    logger.warn(`⚠️ Nie udało się usunąć starego embeda ${oldMessageId}: ${deleteError.message}`);
-                }
-            }
-            
-            // Wyślij nowy embed na dole i zapisz nowe ID
-            const newMessage = await channel.send({ embeds: [lotteryEmbed] });
-            this.lotteryMessageIds.set(channel.id, newMessage.id);
-            logger.info(`✅ Przeniesiono embed o loterii ${channelConfig.name} na dół czatu (nowe ID: ${newMessage.id})`);
-            
-        } catch (error) {
-            logger.error(`❌ Błąd podczas sprawdzania/przenoszenia embeda loterii ${channelConfig.name}:`, error);
-        }
-    }
 }
 
 module.exports = MessageHandler;
