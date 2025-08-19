@@ -393,6 +393,12 @@ class MediaService {
             
             logger.info(`🔍 TEMP DEBUG [EXECUTOR CHECK]: deletedBy=${deletedBy?.tag}, bot=${deletedBy?.bot}, discriminator='${deletedBy?.discriminator}'`);
             
+            // NOWA LOGIKA: Jeśli nie ma audit loga, prawdopodobnie bot usunął automatycznie
+            if (!deletedBy) {
+                logger.info(`🤖 TEMP DEBUG [NO AUDIT LOG]: Brak audit loga - prawdopodobnie usunięcie przez bota (automatyczne) - RETURN (ignoruję)`);
+                return;
+            }
+            
             // Ignoruj usunięcia przez boty
             if (deletedBy?.bot) {
                 logger.info(`🤖 TEMP DEBUG [BOT EXECUTOR]: Executor to bot ${deletedBy.tag} - RETURN (ignoruję całkowicie)`);
