@@ -336,42 +336,38 @@ class MediaService {
         // Sprawdź audit logs aby znaleźć kto usunął wiadomość
         let deletedBy = null;
         try {
-            logger.info(`🔍 DEBUG: Sprawdzam audit logs dla usuniętej wiadomości ${deletedMessage.id} od ${deletedMessage.author?.tag} na kanale #${deletedMessage.channel.name}`);
-            
             const auditLogs = await deletedMessage.guild.fetchAuditLogs({
                 type: 72, // MESSAGE_DELETE
                 limit: 10
             });
             
-            logger.info(`🔍 DEBUG: Znaleziono ${auditLogs.entries.size} wpisów audit logs`);
-            
-            // Wypisz wszystkie wpisy audit logs dla debugowania
-            let entryIndex = 0;
+            // Szukaj wpisu gdzie target to autor usuniętej wiadomości
             for (const auditEntry of auditLogs.entries.values()) {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
-                logger.info(`🔍 DEBUG: Audit log ${entryIndex}: executor=${auditEntry.executor?.tag}, target=${auditEntry.target?.tag}, targetId=${auditEntry.target?.id}, deletedAuthorId=${deletedMessage.author?.id}, różnica czasu=${timeDiff}ms, bot=${auditEntry.executor?.bot}`);
-                entryIndex++;
-                
-                // Sprawdź czy dotyczy tego użytkownika I czy jest świeży (max 30 sekund - zwiększam okno)
                 if (auditEntry.target?.id === deletedMessage.author?.id && timeDiff < 30000) {
                     deletedBy = auditEntry.executor;
-                    logger.info(`✅ DEBUG: Znaleziono odpowiedni audit log - usunięta przez ${deletedBy?.tag} (${deletedBy?.id}), bot=${deletedBy?.bot}, różnica czasu: ${timeDiff}ms`);
                     break;
                 }
             }
             
+            // Jeśli nie znaleziono, sprawdź audit logi gdzie executor != autor (alternatywna metoda)
             if (!deletedBy) {
-                logger.info(`❌ DEBUG: Nie znaleziono odpowiedniego audit log - prawdopodobnie użytkownik usunął własną wiadomość`);
+                for (const auditEntry of auditLogs.entries.values()) {
+                    const timeDiff = Date.now() - auditEntry.createdTimestamp;
+                    if (auditEntry.executor?.id !== deletedMessage.author?.id && timeDiff < 5000) {
+                        deletedBy = auditEntry.executor;
+                        break;
+                    }
+                }
             }
             
             // Ignoruj usunięcia przez boty
             if (deletedBy?.bot) {
-                logger.info(`🤖 DEBUG: Ignoruję usunięcie przez bota ${deletedBy.tag} - kończę bez logowania`);
                 return;
             }
             
         } catch (error) {
-            logger.warn(`⚠️ Nie udało się sprawdzić audit logs: ${error.message}`);
+            // Brak uprawnień lub inny błąd - kontynuuj bez informacji o usuniętym przez
         }
 
         const linkData = this.messageLinks.get(deletedMessage.id);
@@ -477,7 +473,6 @@ class MediaService {
             });
         }
 
-        logger.info(`📤 DEBUG: Wysyłam log usuniętej wiadomości - autor: ${deletedMessage.author?.tag}, usuniętaBy: ${deletedBy?.tag || 'nieznana/samoukasowanie'}, kanał: #${deletedMessage.channel.name}`);
         await logChannel.send({ embeds: [embed] });
         
         // Usuń powiązanie po przetworzeniu
