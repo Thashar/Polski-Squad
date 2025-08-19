@@ -338,21 +338,28 @@ class MediaService {
         try {
             const auditLogs = await deletedMessage.guild.fetchAuditLogs({
                 type: 72, // MESSAGE_DELETE
-                limit: 1
+                limit: 10  // Zwiększ limit bo może być więcej wpisów
             });
             
-            const auditEntry = auditLogs.entries.first();
-            if (auditEntry && auditEntry.target?.id === deletedMessage.author?.id) {
-                // Sprawdź czy audit log nie jest za stary (max 5 sekund różnicy)
+            // Szukaj odpowiedniego wpisu audit log
+            for (const auditEntry of auditLogs.entries.values()) {
+                // Sprawdź czy dotyczy tego użytkownika I czy jest świeży (max 10 sekund)
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
-                if (timeDiff < 5000) {
+                if (auditEntry.target?.id === deletedMessage.author?.id && timeDiff < 10000) {
                     deletedBy = auditEntry.executor;
-                    // Ignoruj usunięcia przez boty
-                    if (deletedBy?.bot) return;
+                    logger.info(`🔍 DEBUG: Znaleziono audit log - usunięta przez ${deletedBy?.tag} (${deletedBy?.id}), różnica czasu: ${timeDiff}ms`);
+                    break;
                 }
             }
+            
+            // Ignoruj usunięcia przez boty
+            if (deletedBy?.bot) {
+                logger.info(`🤖 DEBUG: Ignoruję usunięcie przez bota ${deletedBy.tag}`);
+                return;
+            }
+            
         } catch (error) {
-            // Brak uprawnień do audit logs lub inny błąd
+            logger.warn(`⚠️ Nie udało się sprawdzić audit logs: ${error.message}`);
         }
 
         const linkData = this.messageLinks.get(deletedMessage.id);
