@@ -15,22 +15,40 @@ class RoleChangeLogService {
      * Inicjalizuje serwis
      * @param {Client} client - Klient Discord
      */
-    initialize(client) {
+    async initialize(client) {
         this.client = client;
         
-        // Uruchom sprawdzanie audit logs co 2 sekundy
-        this.auditCheckInterval = setInterval(async () => {
-            await this.checkAllGuildsForRoleChanges();
-        }, 2000);
+        // Testuj dostęp do kanału logowania
+        try {
+            const logChannel = await client.channels.fetch(this.logChannelId);
+            if (logChannel) {
+                logger.info(`✅ Znaleziono kanał logowania: ${logChannel.name} (${this.logChannelId})`);
+            } else {
+                logger.error(`❌ Nie znaleziono kanału logowania: ${this.logChannelId}`);
+                return;
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd dostępu do kanału logowania: ${error.message}`);
+            return;
+        }
         
-        logger.info('Serwis logowania zmian ról został zainicjalizowany (sprawdzanie co 2s)');
+        // Uruchom sprawdzanie audit logs co 5 sekund (zwiększam dla testów)
+        this.auditCheckInterval = setInterval(async () => {
+            logger.info('🔄 Sprawdzam audit logs...');
+            await this.checkAllGuildsForRoleChanges();
+        }, 5000);
+        
+        logger.info('Serwis logowania zmian ról został zainicjalizowany (sprawdzanie co 5s)');
     }
 
     /**
      * Sprawdza wszystkie serwery dla zmian ról
      */
     async checkAllGuildsForRoleChanges() {
-        if (!this.client || !this.client.guilds) return;
+        if (!this.client || !this.client.guilds) {
+            logger.warn('Brak client lub guilds');
+            return;
+        }
 
         for (const guild of this.client.guilds.cache.values()) {
             await this.checkGuildRoleChanges(guild);
@@ -48,18 +66,26 @@ class RoleChangeLogService {
                 limit: 10
             });
 
+            let newCount = 0;
             for (const auditEntry of auditLogs.entries.values()) {
                 // Sprawdź czy już przetworzyliśmy ten audit log
                 if (this.processedAuditLogs.has(auditEntry.id)) {
                     continue;
                 }
 
+                logger.info(`🆕 Nowy audit log: ${auditEntry.executor?.tag} -> ${auditEntry.target?.tag} (${auditEntry.id})`);
+                
                 // Przetwórz nowy audit log
                 await this.processRoleAuditEntry(auditEntry);
                 this.processedAuditLogs.add(auditEntry.id);
+                newCount++;
+            }
+            
+            if (newCount > 0) {
+                logger.info(`📊 Przetworzono ${newCount} nowych audit logs dla ${guild.name}`);
             }
         } catch (error) {
-            // Ignoruj błędy (np. brak uprawnień)
+            logger.error(`Błąd sprawdzania audit logs dla ${guild.name}: ${error.message}`);
         }
     }
 

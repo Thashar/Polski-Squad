@@ -65,7 +65,7 @@ client.once(Events.ClientReady, async () => {
     logService.initialize(client);
     await mediaService.initialize();
     await roleKickingService.initialize(client);
-    roleChangeLogService.initialize(client);
+    await roleChangeLogService.initialize(client);
     
     // Zarejestruj komendy slash
     await interactionHandler.registerSlashCommands(client);
