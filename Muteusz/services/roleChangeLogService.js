@@ -29,6 +29,8 @@ class RoleChangeLogService {
     async logRoleChange(oldMember, newMember) {
         if (!this.client) return;
 
+        logger.info(`🚀 logRoleChange wywołane dla ${newMember.displayName} na serwerze ${newMember.guild.name}`);
+
         // Sprawdź audit logs aby znaleźć rzeczywiste zmiany ról
         await this.checkAuditLogsForRoleChanges(newMember.guild);
     }
@@ -39,30 +41,42 @@ class RoleChangeLogService {
      */
     async checkAuditLogsForRoleChanges(guild) {
         try {
+            logger.info(`🔍 Sprawdzam audit logs dla serwera ${guild.name}`);
+            
             const auditLogs = await guild.fetchAuditLogs({
                 type: 25, // MEMBER_ROLE_UPDATE
-                limit: 50
+                limit: 10
             });
 
+            logger.info(`📊 Znaleziono ${auditLogs.entries.size} audit logs MEMBER_ROLE_UPDATE`);
+
+            let processedCount = 0;
             for (const auditEntry of auditLogs.entries.values()) {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
                 
+                logger.info(`⏰ Audit log: executor=${auditEntry.executor?.tag}, target=${auditEntry.target?.tag}, czas=${timeDiff}ms, id=${auditEntry.id}`);
+                
                 // Sprawdź tylko ostatnie 30 sekund aby uniknąć duplikatów
-                if (timeDiff > 30000) continue;
-
-                // Sprawdź czy już przetworzyliśmy ten audit log
-                if (this.processedAuditLogs && this.processedAuditLogs.has(auditEntry.id)) {
+                if (timeDiff > 30000) {
+                    logger.info(`❌ Pominięty - za stary (${timeDiff}ms > 30000ms)`);
                     continue;
                 }
 
+                // Sprawdź czy już przetworzyliśmy ten audit log
+                if (this.processedAuditLogs && this.processedAuditLogs.has(auditEntry.id)) {
+                    logger.info(`❌ Pominięty - już przetworzony`);
+                    continue;
+                }
+
+                logger.info(`✅ Przetwarzam audit log ${auditEntry.id}`);
                 await this.processRoleAuditEntry(auditEntry);
                 
                 // Oznacz jako przetworzone
-                if (!this.processedAuditLogs) {
-                    this.processedAuditLogs = new Set();
-                }
                 this.processedAuditLogs.add(auditEntry.id);
+                processedCount++;
             }
+            
+            logger.info(`📤 Przetworzono ${processedCount} nowych audit logs`);
         } catch (error) {
             logger.error(`Błąd sprawdzania audit logs ról: ${error.message}`);
         }
@@ -75,27 +89,44 @@ class RoleChangeLogService {
     async processRoleAuditEntry(auditEntry) {
         const { executor, target, changes } = auditEntry;
         
-        if (!changes || !target) return;
+        logger.info(`🔧 processRoleAuditEntry: target=${target?.tag}, changes=${changes?.length || 0}`);
+        
+        if (!changes || !target) {
+            logger.info(`❌ Brak changes lub target`);
+            return;
+        }
 
         // Znajdź zmiany ról
         const roleChanges = changes.filter(change => change.key === '$add' || change.key === '$remove');
+        
+        logger.info(`🔍 Znalezione zmiany ról: ${roleChanges.length}`);
         
         for (const change of roleChanges) {
             const isAdded = change.key === '$add';
             const roles = change.new || change.old;
             
-            if (!roles || !Array.isArray(roles)) continue;
+            logger.info(`🎯 Zmiana: ${change.key}, roles=${roles?.length || 0}`);
+            
+            if (!roles || !Array.isArray(roles)) {
+                logger.info(`❌ Brak roles lub nie jest array`);
+                continue;
+            }
 
             for (const roleData of roles) {
                 try {
+                    logger.info(`👤 Przetwarzam rolę: ${roleData.name} (${roleData.id})`);
+                    
                     const role = await auditEntry.guild.roles.fetch(roleData.id);
                     const member = await auditEntry.guild.members.fetch(target.id);
                     
                     if (role && member) {
+                        logger.info(`✅ Wywołuję trackRoleChange: ${role.name} -> ${member.displayName} (${isAdded ? 'added' : 'removed'})`);
                         await this.trackRoleChange(role, member, isAdded ? 'added' : 'removed');
+                    } else {
+                        logger.info(`❌ Nie można pobrać role=${!!role} lub member=${!!member}`);
                     }
                 } catch (error) {
-                    // Ignoruj błędy pobierania ról/członków
+                    logger.error(`❌ Błąd przetwarzania roli: ${error.message}`);
                 }
             }
         }
