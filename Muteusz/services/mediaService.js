@@ -358,7 +358,7 @@ class MediaService {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
                 if (timeDiff < 10000) { // Max 10 sekund
                     deletedBy = auditEntry.executor;
-                    logger.info(`🔍 TEMP DEBUG: Znaleziono świeży audit log - executor: ${deletedBy?.tag}, target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
+                    logger.info(`🔍 TEMP DEBUG: Znaleziono świeży audit log - executor: ${deletedBy?.tag}, bot: ${deletedBy?.bot}, discriminator: ${deletedBy?.discriminator}, target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
                     
                     // Jeśli executor to autor wiadomości, to samoukasowanie - ignoruj
                     if (deletedBy?.id === deletedMessage.author?.id) {
