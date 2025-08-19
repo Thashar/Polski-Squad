@@ -8,6 +8,7 @@ class RoleChangeLogService {
         this.config = config;
         this.roleChanges = new Map(); // roleId -> { role, added: [], removed: [], timeout }
         this.userChanges = new Map(); // userId -> { member, added: [], removed: [], timeout }
+        this.processedAuditLogs = new Set(); // ID audit logs które już przetworzyliśmy
         this.logChannelId = '1407485227927998545';
     }
 
@@ -21,36 +22,82 @@ class RoleChangeLogService {
     }
 
     /**
-     * Loguje zmianę roli użytkownika
+     * Loguje zmianę roli użytkownika na podstawie audit logs
      * @param {GuildMember} oldMember - Stary stan członka
      * @param {GuildMember} newMember - Nowy stan członka
      */
     async logRoleChange(oldMember, newMember) {
         if (!this.client) return;
 
-        const oldRoles = oldMember.roles.cache;
-        const newRoles = newMember.roles.cache;
+        // Sprawdź audit logs aby znaleźć rzeczywiste zmiany ról
+        await this.checkAuditLogsForRoleChanges(newMember.guild);
+    }
 
-        // Znajdź dodane role
-        const addedRoles = newRoles.filter(role => !oldRoles.has(role.id));
-        // Znajdź usunięte role
-        const removedRoles = oldRoles.filter(role => !newRoles.has(role.id));
+    /**
+     * Sprawdza audit logs w poszukiwaniu zmian ról
+     * @param {Guild} guild - Serwer Discord
+     */
+    async checkAuditLogsForRoleChanges(guild) {
+        try {
+            const auditLogs = await guild.fetchAuditLogs({
+                type: 25, // MEMBER_ROLE_UPDATE
+                limit: 50
+            });
 
-        // Jeśli użytkownik ma zarówno dodane jak i usunięte role, użyj logowania per-użytkownik
-        if (addedRoles.size > 0 && removedRoles.size > 0) {
-            await this.trackUserRoleChanges(newMember, addedRoles, removedRoles);
-            return;
+            for (const auditEntry of auditLogs.entries.values()) {
+                const timeDiff = Date.now() - auditEntry.createdTimestamp;
+                
+                // Sprawdź tylko ostatnie 30 sekund aby uniknąć duplikatów
+                if (timeDiff > 30000) continue;
+
+                // Sprawdź czy już przetworzyliśmy ten audit log
+                if (this.processedAuditLogs && this.processedAuditLogs.has(auditEntry.id)) {
+                    continue;
+                }
+
+                await this.processRoleAuditEntry(auditEntry);
+                
+                // Oznacz jako przetworzone
+                if (!this.processedAuditLogs) {
+                    this.processedAuditLogs = new Set();
+                }
+                this.processedAuditLogs.add(auditEntry.id);
+            }
+        } catch (error) {
+            logger.error(`Błąd sprawdzania audit logs ról: ${error.message}`);
         }
+    }
 
-        // Inaczej użyj standardowego logowania per-rola
-        // Przetwórz dodane role
-        for (const [roleId, role] of addedRoles) {
-            await this.trackRoleChange(role, newMember, 'added');
-        }
+    /**
+     * Przetwarza pojedynczy wpis audit log dotyczący zmian ról
+     * @param {GuildAuditLogsEntry} auditEntry - Wpis z audit logs
+     */
+    async processRoleAuditEntry(auditEntry) {
+        const { executor, target, changes } = auditEntry;
+        
+        if (!changes || !target) return;
 
-        // Przetwórz usunięte role
-        for (const [roleId, role] of removedRoles) {
-            await this.trackRoleChange(role, newMember, 'removed');
+        // Znajdź zmiany ról
+        const roleChanges = changes.filter(change => change.key === '$add' || change.key === '$remove');
+        
+        for (const change of roleChanges) {
+            const isAdded = change.key === '$add';
+            const roles = change.new || change.old;
+            
+            if (!roles || !Array.isArray(roles)) continue;
+
+            for (const roleData of roles) {
+                try {
+                    const role = await auditEntry.guild.roles.fetch(roleData.id);
+                    const member = await auditEntry.guild.members.fetch(target.id);
+                    
+                    if (role && member) {
+                        await this.trackRoleChange(role, member, isAdded ? 'added' : 'removed');
+                    }
+                } catch (error) {
+                    // Ignoruj błędy pobierania ról/członków
+                }
+            }
         }
     }
 
@@ -314,6 +361,7 @@ class RoleChangeLogService {
             }
         }
         this.userChanges.clear();
+        this.processedAuditLogs.clear();
         
         logger.info('Wyczyszczono wszystkie oczekujące logi zmian ról');
     }
