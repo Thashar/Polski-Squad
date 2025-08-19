@@ -350,15 +350,25 @@ class MediaService {
         try {
             const auditLogs = await deletedMessage.guild.fetchAuditLogs({
                 type: 72, // MESSAGE_DELETE
-                limit: 5
+                limit: 10
             });
             
-            // Weź najświeższy audit log MESSAGE_DELETE (max 10 sekund od teraz)
+            logger.info(`🔍 TEMP DEBUG: Znaleziono ${auditLogs.entries.size} audit logs MESSAGE_DELETE`);
+            
+            // Wypisz wszystkie audit logi dla debugowania
+            let index = 0;
             for (const auditEntry of auditLogs.entries.values()) {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
-                if (timeDiff < 10000) { // Max 10 sekund
+                logger.info(`🔍 TEMP DEBUG: Audit log ${index}: executor=${auditEntry.executor?.tag} (bot: ${auditEntry.executor?.bot}), target=${auditEntry.target?.tag}, czas=${timeDiff}ms`);
+                index++;
+            }
+            
+            // Weź najświeższy audit log MESSAGE_DELETE (max 30 sekund - zwiększam okno)
+            for (const auditEntry of auditLogs.entries.values()) {
+                const timeDiff = Date.now() - auditEntry.createdTimestamp;
+                if (timeDiff < 30000) { // Max 30 sekund
                     deletedBy = auditEntry.executor;
-                    logger.info(`🔍 TEMP DEBUG: Znaleziono świeży audit log - executor: ${deletedBy?.tag}, bot: ${deletedBy?.bot}, discriminator: ${deletedBy?.discriminator}, target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
+                    logger.info(`✅ TEMP DEBUG: Wybrany audit log - executor: ${deletedBy?.tag}, bot: ${deletedBy?.bot}, discriminator: ${deletedBy?.discriminator}, target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
                     
                     // Jeśli executor to autor wiadomości, to samoukasowanie - ignoruj
                     if (deletedBy?.id === deletedMessage.author?.id) {
