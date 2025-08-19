@@ -389,11 +389,14 @@ class MediaService {
 
         // Dodaj informację o tym kto usunął (jeśli znamy)
         if (deletedBy) {
+            logger.info(`✅ TEMP DEBUG: Dodaję pole "Usunięta przez" - ${deletedBy.tag}`);
             embed.addFields({ 
                 name: '🚮 Usunięta przez', 
                 value: `${deletedBy.tag} (${deletedBy.id})`, 
                 inline: true 
             });
+        } else {
+            logger.info(`❌ TEMP DEBUG: Brak deletedBy - prawdopodobnie samoukasowanie`);
         }
 
         // Dodaj treść wiadomości jeśli istnieje
