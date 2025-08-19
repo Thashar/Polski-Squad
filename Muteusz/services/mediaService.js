@@ -327,12 +327,18 @@ class MediaService {
      * @param {Client} client - Klient Discord
      */
     async handleDeletedMessage(deletedMessage, client) {
+        logger.info(`🔍 TEMP DEBUG: Usunięto wiadomość - autor: ${deletedMessage.author?.tag}, bot: ${deletedMessage.author?.bot}, discriminator: ${deletedMessage.author?.discriminator}`);
+        
         if (!this.config.deletedMessageLogs?.enabled) return;
-        if (deletedMessage.author?.bot) return;
+        
+        if (deletedMessage.author?.bot) {
+            logger.info(`🤖 TEMP DEBUG: Ignoruję - autor to bot (bot=true): ${deletedMessage.author.tag}`);
+            return;
+        }
         
         // Dodatkowe sprawdzenie dla botów (mają username#4cyfry)
         if (deletedMessage.author?.discriminator && deletedMessage.author.discriminator !== '0') {
-            logger.info(`🤖 TEMP DEBUG: Ignoruję wiadomość od prawdopodobnego bota: ${deletedMessage.author.tag}`);
+            logger.info(`🤖 TEMP DEBUG: Ignoruję wiadomość od prawdopodobnego bota (discriminator): ${deletedMessage.author.tag}`);
             return;
         }
 
@@ -365,7 +371,13 @@ class MediaService {
             
             // Ignoruj usunięcia przez boty
             if (deletedBy?.bot) {
-                logger.info(`🤖 TEMP DEBUG: Executor to bot - ignoruję całkowicie`);
+                logger.info(`🤖 TEMP DEBUG: Executor to bot ${deletedBy.tag} - ignoruję całkowicie`);
+                return;
+            }
+            
+            // Dodatkowe sprawdzenie dla botów executorów z #cyfry
+            if (deletedBy?.discriminator && deletedBy.discriminator !== '0') {
+                logger.info(`🤖 TEMP DEBUG: Executor ${deletedBy.tag} ma discriminator ${deletedBy.discriminator} - prawdopodobnie bot, ignoruję`);
                 return;
             }
             
