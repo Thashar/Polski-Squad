@@ -329,6 +329,12 @@ class MediaService {
     async handleDeletedMessage(deletedMessage, client) {
         if (!this.config.deletedMessageLogs?.enabled) return;
         if (deletedMessage.author?.bot) return;
+        
+        // Dodatkowe sprawdzenie dla botów (mają username#4cyfry)
+        if (deletedMessage.author?.discriminator && deletedMessage.author.discriminator !== '0') {
+            logger.info(`🤖 TEMP DEBUG: Ignoruję wiadomość od prawdopodobnego bota: ${deletedMessage.author.tag}`);
+            return;
+        }
 
         const logChannel = client.channels.cache.get(this.config.deletedMessageLogs.logChannelId);
         if (!logChannel) return;
