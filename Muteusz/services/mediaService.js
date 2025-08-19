@@ -346,6 +346,12 @@ class MediaService {
             return;
         }
         
+        // Ignoruj wiadomości zaczynające się od ! (komendy)
+        if (deletedMessage.content && deletedMessage.content.trim().startsWith('!')) {
+            logger.info(`❌ TEMP DEBUG [KONIEC]: Ignoruję komendę zaczynającą się od ! - treść: ${deletedMessage.content.substring(0, 50)}...`);
+            return;
+        }
+        
         logger.info(`✅ TEMP DEBUG [PRZESZEDŁ FILTRY]: Autor wiadomości przeszedł przez filtry botów`);
         
         const logChannel = client.channels.cache.get(this.config.deletedMessageLogs.logChannelId);
