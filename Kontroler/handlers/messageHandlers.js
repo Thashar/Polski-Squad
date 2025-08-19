@@ -2,6 +2,8 @@ const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helper
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
+const fs = require('fs').promises;
+const path = require('path');
 
 const logger = createBotLogger('Kontroler');
 
@@ -15,6 +17,10 @@ class MessageHandler {
         this.lotteryService = lotteryService;
         this.lotterySchedules = new Map(); // Mapa zaplanowanych zadań cron dla każdego kanału
         this.lotteryMessageIds = new Map(); // Mapa ID wiadomości o loterii dla każdego kanału
+        this.lotteryMessageIdsFile = path.join(__dirname, '../data/lottery_message_ids.json');
+        
+        // Wczytaj ID wiadomości z pliku przy starcie
+        this.loadLotteryMessageIds();
     }
 
     /**
@@ -441,10 +447,12 @@ class MessageHandler {
                         // Usuń stary embed, bo nie jest już ostatni
                         await existingMessage.delete();
                         this.lotteryMessageIds.delete(channel.id);
+                        await this.saveLotteryMessageIds();
                     }
                 } catch (fetchError) {
                     // Embed nie istnieje (został usunięty), usuń z mapy
                     this.lotteryMessageIds.delete(channel.id);
+                    await this.saveLotteryMessageIds();
                     logger.info(`🔄 Stary embed o loterii ${channelConfig.name} nie istnieje - można wysłać nowy`);
                 }
             }
@@ -491,9 +499,54 @@ class MessageHandler {
 
             const lotteryMessage = await channel.send({ embeds: [lotteryEmbed] });
             this.lotteryMessageIds.set(channel.id, lotteryMessage.id);
+            await this.saveLotteryMessageIds();
             logger.info(`✅ Wysłano nową informację o loterii ${channelConfig.name} na dole czatu (ID: ${lotteryMessage.id})`);
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania informacji o loterii ${channelConfig.name}:`, error);
+        }
+    }
+
+    /**
+     * Wczytuje ID wiadomości o loterii z pliku
+     */
+    async loadLotteryMessageIds() {
+        try {
+            const data = await fs.readFile(this.lotteryMessageIdsFile, 'utf8');
+            const idsData = JSON.parse(data);
+            
+            this.lotteryMessageIds.clear();
+            for (const [channelId, messageId] of Object.entries(idsData)) {
+                this.lotteryMessageIds.set(channelId, messageId);
+            }
+            
+            logger.info(`📂 Wczytano ${Object.keys(idsData).length} ID wiadomości o loterii z pliku`);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                logger.info('📂 Brak pliku z ID wiadomości o loterii - rozpoczynanie z pustą listą');
+            } else {
+                logger.error('❌ Błąd podczas wczytywania ID wiadomości o loterii:', error);
+            }
+        }
+    }
+
+    /**
+     * Zapisuje ID wiadomości o loterii do pliku
+     */
+    async saveLotteryMessageIds() {
+        try {
+            // Upewnij się, że katalog istnieje
+            const dataDir = path.dirname(this.lotteryMessageIdsFile);
+            await fs.mkdir(dataDir, { recursive: true });
+            
+            const idsData = {};
+            for (const [channelId, messageId] of this.lotteryMessageIds.entries()) {
+                idsData[channelId] = messageId;
+            }
+            
+            await fs.writeFile(this.lotteryMessageIdsFile, JSON.stringify(idsData, null, 2));
+            logger.info(`💾 Zapisano ${Object.keys(idsData).length} ID wiadomości o loterii do pliku`);
+        } catch (error) {
+            logger.error('❌ Błąd podczas zapisywania ID wiadomości o loterii:', error);
         }
     }
 
