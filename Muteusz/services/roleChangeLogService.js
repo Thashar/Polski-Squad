@@ -87,10 +87,10 @@ class RoleChangeLogService {
             clearTimeout(roleData.timeout);
         }
 
-        // Ustaw nowy timeout na 1 minutę
+        // Ustaw nowy timeout na 10 sekund (dla testów)
         roleData.timeout = setTimeout(async () => {
             await this.sendRoleChangeEmbed(roleId);
-        }, 60000); // 1 minuta
+        }, 10000); // 10 sekund
     }
 
     /**
@@ -123,10 +123,10 @@ class RoleChangeLogService {
 
             if (added.length > 0 && removed.length === 0) {
                 color = 0x00FF00; // Zielony - tylko dodawanie
-                title = `➕ Dodano rolę: ${role.name}`;
+                title = `✅ Dodano rolę: ${role.name}`;
             } else if (removed.length > 0 && added.length === 0) {
                 color = 0xFF0000; // Czerwony - tylko usuwanie
-                title = `➖ Usunięto rolę: ${role.name}`;
+                title = `❌ Usunięto rolę: ${role.name}`;
             }
 
             const embed = new EmbedBuilder()
@@ -139,13 +139,6 @@ class RoleChangeLogService {
                 embed.setThumbnail(role.iconURL());
             }
 
-            // Dodaj informacje o roli
-            embed.addFields({
-                name: '📋 Informacje o roli',
-                value: `**Nazwa:** ${role.name}\n**ID:** ${role.id}\n**Kolor:** ${role.hexColor}\n**Pozycja:** ${role.position}`,
-                inline: false
-            });
-
             // Dodaj listę użytkowników, którym dodano rolę
             if (added.length > 0) {
                 const addedList = added
@@ -153,7 +146,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `➕ Dodano rolę (${added.length} ${added.length === 1 ? 'użytkownik' : 'użytkowników'})`,
+                    name: `✅ Dodano rolę (${added.length} ${added.length === 1 ? 'użytkownik' : 'użytkowników'})`,
                     value: addedList.length > 1024 ? addedList.substring(0, 1021) + '...' : addedList,
                     inline: false
                 });
@@ -166,7 +159,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `➖ Usunięto rolę (${removed.length} ${removed.length === 1 ? 'użytkownik' : 'użytkowników'})`,
+                    name: `❌ Usunięto rolę (${removed.length} ${removed.length === 1 ? 'użytkownik' : 'użytkowników'})`,
                     value: removedList.length > 1024 ? removedList.substring(0, 1021) + '...' : removedList,
                     inline: false
                 });
@@ -219,10 +212,10 @@ class RoleChangeLogService {
             clearTimeout(userData.timeout);
         }
 
-        // Ustaw nowy timeout na 1 minutę
+        // Ustaw nowy timeout na 10 sekund (dla testów)
         userData.timeout = setTimeout(async () => {
             await this.sendUserRoleChangeEmbed(userId);
-        }, 60000); // 1 minuta
+        }, 10000); // 10 sekund
     }
 
     /**
@@ -273,7 +266,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `➕ Dodano role (${added.length})`,
+                    name: `✅ Dodano role (${added.length})`,
                     value: addedList.length > 1024 ? addedList.substring(0, 1021) + '...' : addedList,
                     inline: false
                 });
@@ -286,7 +279,7 @@ class RoleChangeLogService {
                     .join('\n');
                 
                 embed.addFields({
-                    name: `➖ Usunięto role (${removed.length})`,
+                    name: `❌ Usunięto role (${removed.length})`,
                     value: removedList.length > 1024 ? removedList.substring(0, 1021) + '...' : removedList,
                     inline: false
                 });
