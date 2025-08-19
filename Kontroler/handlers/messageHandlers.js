@@ -31,16 +31,14 @@ class MessageHandler {
         if (message.author.bot) return;
 
         // Sprawdź czy wiadomość jest z monitorowanego kanału
-        logger.info(`🔍 Sprawdzam wiadomość na kanale: ${message.channel.id} (nazwa: ${message.channel.name})`);
         const channelConfig = this.roleService.getChannelConfig(message.channel.id);
         
         if (!channelConfig) {
-            logger.info(`❌ Kanał ${message.channel.id} (${message.channel.name}) nie jest monitorowany`);
-            logger.info(`📋 Monitorowane kanały:`, Object.values(this.config.channels).map(c => `${c.name}=${c.targetChannelId}`));
+            // Nie loguj dla niemonitorowanych kanałów - zmniejszy spam w logach
             return;
         }
-
-        logger.info(`Wykryto wiadomość na monitorowanym kanale ${channelConfig.name}`);
+        
+        logger.info(`🔍 Wykryto wiadomość na monitorowanym kanale ${channelConfig.name} (${message.channel.name})`);
 
         // Pobierz członka do sprawdzeń
         let member;
