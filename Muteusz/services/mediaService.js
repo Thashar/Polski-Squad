@@ -338,36 +338,33 @@ class MediaService {
         try {
             const auditLogs = await deletedMessage.guild.fetchAuditLogs({
                 type: 72, // MESSAGE_DELETE
-                limit: 10
+                limit: 5
             });
             
-            // Szukaj wpisu gdzie target to autor usuniętej wiadomości
+            // Weź najświeższy audit log MESSAGE_DELETE (max 10 sekund od teraz)
             for (const auditEntry of auditLogs.entries.values()) {
                 const timeDiff = Date.now() - auditEntry.createdTimestamp;
-                if (auditEntry.target?.id === deletedMessage.author?.id && timeDiff < 30000) {
+                if (timeDiff < 10000) { // Max 10 sekund
                     deletedBy = auditEntry.executor;
-                    break;
-                }
-            }
-            
-            // Jeśli nie znaleziono, sprawdź audit logi gdzie executor != autor (alternatywna metoda)
-            if (!deletedBy) {
-                for (const auditEntry of auditLogs.entries.values()) {
-                    const timeDiff = Date.now() - auditEntry.createdTimestamp;
-                    if (auditEntry.executor?.id !== deletedMessage.author?.id && timeDiff < 5000) {
-                        deletedBy = auditEntry.executor;
-                        break;
+                    logger.info(`🔍 TEMP DEBUG: Znaleziono świeży audit log - executor: ${deletedBy?.tag}, target: ${auditEntry.target?.tag}, czas: ${timeDiff}ms`);
+                    
+                    // Jeśli executor to autor wiadomości, to samoukasowanie - ignoruj
+                    if (deletedBy?.id === deletedMessage.author?.id) {
+                        logger.info(`❌ TEMP DEBUG: To samoukasowanie - ignoruję`);
+                        deletedBy = null;
                     }
+                    break;
                 }
             }
             
             // Ignoruj usunięcia przez boty
             if (deletedBy?.bot) {
+                logger.info(`🤖 TEMP DEBUG: Executor to bot - ignoruję całkowicie`);
                 return;
             }
             
         } catch (error) {
-            // Brak uprawnień lub inny błąd - kontynuuj bez informacji o usuniętym przez
+            logger.warn(`⚠️ Błąd sprawdzania audit logs: ${error.message}`);
         }
 
         const linkData = this.messageLinks.get(deletedMessage.id);
