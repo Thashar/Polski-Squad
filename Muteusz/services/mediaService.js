@@ -375,7 +375,7 @@ class MediaService {
             .setTitle('🗑️ Usunięta wiadomość')
             .setColor(0xFF0000) // Czerwony
             .addFields(
-                { name: '👤 Autor', value: `${deletedMessage.author?.tag || 'Nieznany'} (${deletedMessage.author?.id || 'Nieznane ID'})`, inline: true },
+                { name: '👤 Autor', value: `${deletedMessage.member?.displayName || deletedMessage.author?.username || 'Nieznany'} (${deletedMessage.author?.tag || 'Nieznany'})`, inline: true },
                 { name: '📺 Kanał', value: `<#${deletedMessage.channel.id}>`, inline: true },
                 { name: '📅 Usunięto', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
@@ -388,14 +388,20 @@ class MediaService {
 
         // Dodaj informację o tym kto usunął (jeśli znamy)
         if (deletedBy) {
-            logger.info(`✅ TEMP DEBUG: Dodaję pole "Usunięta przez" - ${deletedBy.tag}`);
+            // Pobierz member żeby uzyskać nick na serwerze
+            let deleterDisplayName = deletedBy.username;
+            try {
+                const deleterMember = await deletedMessage.guild.members.fetch(deletedBy.id);
+                deleterDisplayName = deleterMember.displayName;
+            } catch (error) {
+                // Użyj username jeśli nie można pobrać member
+            }
+            
             embed.addFields({ 
                 name: '🚮 Usunięta przez', 
-                value: `${deletedBy.tag} (${deletedBy.id})`, 
+                value: `${deleterDisplayName} (${deletedBy.tag})`, 
                 inline: true 
             });
-        } else {
-            logger.info(`❌ TEMP DEBUG: Brak deletedBy - prawdopodobnie samoukasowanie`);
         }
 
         // Dodaj treść wiadomości jeśli istnieje
@@ -416,8 +422,8 @@ class MediaService {
                 const repostedMessage = await repostedChannel?.messages.fetch(linkData.repostedMessageId);
                 
                 if (repostedMessage) {
-                    // Zmień kolor embeda na niebieski dla usuniętych plików
-                    embed.setColor(0x0099FF); // Niebieski zamiast czerwonego
+                    // Zachowaj czerwony kolor dla usuniętych plików
+                    embed.setColor(0xFF0000); // Czerwony dla usuniętych mediów
                     
                     embed.addFields({ 
                         name: '📸 Backup mediów', 
@@ -501,7 +507,7 @@ class MediaService {
             .setTitle('✏️ Edytowana wiadomość')
             .setColor(0xFF6600) // Pomarańczowy
             .addFields(
-                { name: '👤 Autor', value: `${newMessage.author.tag} (${newMessage.author.id})`, inline: true },
+                { name: '👤 Autor', value: `${newMessage.member?.displayName || newMessage.author?.username || 'Nieznany'} (${newMessage.author.tag})`, inline: true },
                 { name: '📺 Kanał', value: `<#${newMessage.channel.id}>`, inline: true },
                 { name: '📅 Edytowano', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false },
                 { name: '🔗 Link', value: `[Przejdź do wiadomości](${newMessage.url})`, inline: false }
