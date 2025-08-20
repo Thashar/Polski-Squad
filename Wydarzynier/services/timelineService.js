@@ -562,17 +562,20 @@ class TimelineService {
         
         sections.forEach((section, index) => {
             if (section.title && section.content) {
-                // Sprawdź czy tytuł już zawiera emoji na początku
-                const emojiRegex = /^[\u{1F300}-\u{1F9FF}][\u{2600}-\u{26FF}][\u{2700}-\u{27BF}]/u;
-                const hasEmoji = emojiRegex.test(section.title.trim());
+                // Sprawdź czy tytuł już zawiera emoji na początku (prostszy test)
+                const trimmedTitle = section.title.trim();
+                const firstChar = trimmedTitle.charAt(0);
+                
+                // Test dla popularnych emoji używanych w sekcjach
+                const hasEmoji = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u.test(firstChar);
                 
                 if (hasEmoji) {
                     // Jeśli tytuł już ma emoji, użyj go bez dodawania nowego
-                    formatted += `**${section.title}**\n`;
+                    formatted += `**${trimmedTitle}**\n`;
                 } else {
                     // Jeśli nie ma emoji, dodaj odpowiednie
-                    const sectionEmoji = this.getSectionEmoji(section.title);
-                    formatted += `${sectionEmoji} **${section.title}**\n`;
+                    const sectionEmoji = this.getSectionEmoji(trimmedTitle);
+                    formatted += `${sectionEmoji} **${trimmedTitle}**\n`;
                 }
                 formatted += `${section.content}\n\n`;
             }
@@ -936,8 +939,7 @@ class TimelineService {
                     const h6Match = sectionMatch.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/);
                     if (h6Match) {
                         const sectionTitle = h6Match[1].trim();
-                        const sectionEmoji = this.getSectionEmoji(sectionTitle);
-                        discordContent += `${sectionEmoji} **${sectionTitle}**\n`;
+                        discordContent += `**${sectionTitle}**\n`;
                     }
                     
                     // Wyciągnij wszystkie paragrafy p class="text-muted" w tej sekcji
@@ -970,8 +972,7 @@ class TimelineService {
                 if (h6Matches) {
                     h6Matches.forEach((h6, index) => {
                         const title = h6.replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
-                        const sectionEmoji = this.getSectionEmoji(title);
-                        discordContent += `${sectionEmoji} **${title}**\n`;
+                        discordContent += `**${title}**\n`;
                         
                         // Jeśli jest odpowiadający paragraf
                         if (pMatches && pMatches[index]) {
