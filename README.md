@@ -336,7 +336,7 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 - **Zaktualizowane komendy slash**: Kompletna lista wszystkich dostępnych komend dla każdego bota
 
 #### Nowe funkcje udokumentowane:
-- **Rekruter**: System 50-sekcyjnej analizy obrazów, progi kwalifikacji klanów, boost tracking
+- **Rekruter**: System 50-sekcyjnej analizy obrazów, progi kwalifikacji klanów (1000K+ główny, 800K+ klan2, 600K+ klan1), boost tracking
 - **StalkerLME**: System urlopów z interaktywnym przyciskiem, punkty karne 2+/3+, tygodniowe czyszczenie
 - **Muteusz**: Cache mediów 100MB, ekskluzywne grupy ról, zaawansowana auto-moderacja
 - **Kontroler**: Dual-channel OCR (Daily/CX), system loterii wieloklanowej, character normalization
