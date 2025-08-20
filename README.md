@@ -5,28 +5,28 @@ Kolekcja botów Discord dla serwera Polish Squad, zawierająca osiem specjalisty
 ## Boty
 
 ### 🎯 Rekruter Bot
-Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach oraz **system powiadomień o boostach** - automatyczne wiadomości dziękczynne dla osób boostujących serwer z 10 różnymi sentencjami w stylu Survivor.io.
+Zaawansowany system rekrutacji z weryfikacją kwalifikacji przez OCR. Analizuje statystyki postaci, przypisuje do odpowiednich klanów na podstawie siły ataku (100K-800K+ progów), zarządza pseudonimami oraz śledzi boosty serwera z automatycznymi podziękowaniami w stylu Survivor.io.
 
 ### 🎓 Szkolenia Bot
-Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z automatycznymi przypomnieniami dla uczestników, aby nikt nie zapomniał o ważnych sesjach treningowych.
+Zarządza wątkami treningowymi z reakcją na emoji N_SSS. Automatyczne archiwizowanie po 24h, usuwanie po 7 dniach, przypomnienia co 24h dla nieaktywnych wątków. Zawiera szczegółowe instrukcje dla: ekwipunku, Tech Partów, collectibles, petów, xeno petów, postaci, trybów gry i sum itemów.
 
 ### ⚔️ Stalker LME Bot
-System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń, automatyczne resetowanie punktów oraz **system zarządzania urlopami** z automatycznym monitorowaniem kanału i czasowymi ograniczeniami składania wniosków.
+System kar za brak uczestnictwa w boss fightach. OCR analizuje zdjęcia wyników i automatycznie karze graczy z 0 damage punktami karnymi (2+ pkt = kara, 3+ pkt = ban loterii). **System urlopów** z interaktywnym przyciskiem, 15-min timeout wniosku, 6h cooldown. Tygodniowe czyszczenie w poniedziałki.
 
 ### 🤖 Muteusz Bot
-Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń. **Losowe odpowiedzi PepeSoldier** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/250 na otrzymanie losowej odpowiedzi z emoji PepeSoldier.
+Kompleksowa moderacja z zaawansowaną detekcją spamu i polskich wulgaryzmów. **Cache mediów** do 100MB z 24h retencją, **zarządzanie rolami** z ekskluzyjnymi grupami i przywracaniem. **Auto-moderacja** z eskalacją ostrzeżeń. **Losowe PepeSoldier** (1/250) dla Virtutti Papajlari.
 
 ### 🏆 EndersEcho Bot
-Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe. **Ulepszona korekcja OCR** - automatycznie poprawia błędy odczytu (TT→1T, 7→T, 0→Q).
+System rankingowy z OCR analizą wyników boss fightów. Automatyczne przypisywanie ról TOP (1, 2-3, 4-10, 11-30) na podstawie wyników. **Ulepszone logowanie** - wyświetla konkretne wartości po "Best:" i "Total:" zamiast true/false. Paginacja rankingów, korekcja błędów OCR (TT→1T, 7→T, 0→Q).
 
 ### 🎯 Kontroler Bot
-Weryfikuje wyniki dla kanałów Daily i CX. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. Blokuje użytkowników z karami.
+Weryfikacja wyników dla kanałów Daily (910+ pkt) i CX (2000+ pkt) z różnym przetwarzaniem OCR. **System loterii** z podziałem na klany, cron-owe losowania, wykluczanie ukaranych użytkowników. Zaawansowane dopasowywanie nicków z progami podobieństwa 40%/30%.
 
 ### ⛪ Konklawe Bot
-Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki. **Losowe odpowiedzi JP2** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/100 na otrzymanie losowej odpowiedzi z emoji JP2roll. **Specjalne komendy VIP**: `/blessing` (błogosławieństwa) i `/virtue-check` (sprawdzanie cnót) z cooldownami i limitami dziennymi - dostępne globalnie tylko dla posiadaczy medalu.
+Interaktywna gra słowna z hasłem "Konklawe". **System osiągnięć** - 30+ poprawnych odpowiedzi = medal Virtutti Papajlari. **Specjalne komendy VIP**: `/blessing` (12 wariantów) i `/virtue-check` (10 cnót) z cooldownami. **Losowe JP2roll** (1/100). Automatyczne przypomnienia papieżom co 15/30/60 minut.
 
 ### 🎉 Wydarzynier Bot
-System zarządzania eventami i organizacji społeczności. **System lobby party** - tworzy prywatne wątki dla organizacji gier z systemem zaproszeń i automatycznym czyszczeniem. **Marketplace (Bazar)** - automatyczny system handlowy z cyklicznymi resetami co 2 godziny, ostrzeżeniami i systemem przypinania wiadomości. **Zarządzanie powiadomieniami** - interaktywny system zapisów na powiadomienia o eventach.
+Zarządzanie eventami z **systemem lobby party** (7 graczy max, prywatne wątki, 15-min dyskusja). **Automatyczne zarządzanie członkami** z ochroną przed griefer'ami. **Powiadomienia o eventach** z interaktywnym zapisem na role. Repository system - przesuwa ogłoszenia party na górę co 5 minut.
 
 ## System Logowania
 
@@ -59,17 +59,71 @@ Polski-Squad-Bot-Collection/
 ├── package.json               # Zależności i skrypty NPM
 ├── bot-config.json            # Konfiguracja które boty uruchamiać
 ├── CLAUDE.md                  # Instrukcje dla Claude Code
-├── processed_ocr/             # 🆕 Wspólny folder przetworzonych obrazów OCR (max 100 plików)
+├── processed_ocr/             # Wspólny folder przetworzonych obrazów OCR (max 100 plików)
 ├── utils/                     # Wspólne narzędzia
 │   ├── consoleLogger.js       # Centralny system logowania z kolorami
 │   ├── discordLogger.js       # System logowania na kanały Discord
-│   └── ocrFileUtils.js        # 🆕 Narzędzia do zarządzania plikami OCR
+│   └── ocrFileUtils.js        # Narzędzia do zarządzania plikami OCR
 ├── 
-├── EndersEcho/                # Bot rankingowy z analizą OCR
+├── Rekruter/                  # Bot rekrutacyjny z OCR i boost tracking
 │   ├── index.js
 │   ├── config/
-│   │   ├── config.js
-│   │   └── messages.js
+│   ├── handlers/
+│   │   ├── interactionHandlers.js
+│   │   └── messageHandlers.js
+│   ├── services/
+│   │   ├── nicknameService.js
+│   │   ├── ocrService.js
+│   │   ├── qualificationService.js
+│   │   └── roleService.js
+│   └── temp/
+│
+├── Szkolenia/                 # Bot szkoleń z wątkami
+│   ├── index.js
+│   ├── handlers/
+│   │   ├── interactionHandlers.js
+│   │   └── reactionHandlers.js
+│   ├── services/
+│   │   ├── reminderStorageService.js
+│   │   └── threadService.js
+│   └── data/
+│       └── reminders.json
+│
+├── StalkerLME/                # Bot kar z systemem urlopów
+│   ├── index.js
+│   ├── handlers/
+│   │   └── interactionHandlers.js
+│   ├── services/
+│   │   ├── databaseService.js
+│   │   ├── ocrService.js
+│   │   ├── punishmentService.js
+│   │   ├── reminderService.js
+│   │   └── vacationService.js
+│   ├── data/
+│   │   ├── punishments.json
+│   │   └── weekly_removal.json
+│   └── temp/
+│
+├── Muteusz/                   # Bot moderacji z cache mediów
+│   ├── index.js
+│   ├── handlers/
+│   │   ├── interactionHandlers.js
+│   │   ├── memberHandlers.js
+│   │   └── messageHandlers.js
+│   ├── services/
+│   │   ├── autoModerationService.js
+│   │   ├── logService.js
+│   │   ├── mediaService.js
+│   │   ├── roleManagementService.js
+│   │   ├── specialRolesService.js
+│   │   └── warningService.js
+│   ├── data/
+│   │   ├── removed_roles.json
+│   │   └── special_roles.json
+│   └── temp/media_cache/
+│
+├── EndersEcho/                # Bot rankingowy z OCR
+│   ├── index.js
 │   ├── handlers/
 │   │   └── interactionHandlers.js
 │   ├── services/
@@ -77,16 +131,23 @@ Polski-Squad-Bot-Collection/
 │   │   ├── ocrService.js
 │   │   ├── rankingService.js
 │   │   └── roleService.js
-│   ├── utils/
-│   │   └── helpers.js
 │   ├── data/
 │   │   └── ranking.json
 │   └── temp/
 │
-├── Konklawe/                  # Bot gry słownej
+├── Kontroler/                 # Bot weryfikacji + loteria
 │   ├── index.js
-│   ├── config/
-│   │   └── config.js
+│   ├── handlers/
+│   │   └── messageHandlers.js
+│   ├── services/
+│   │   ├── analysisService.js
+│   │   ├── messageService.js
+│   │   ├── ocrService.js
+│   │   └── roleService.js
+│   └── temp/
+│
+├── Konklawe/                  # Bot gry słownej z medalami
+│   ├── index.js
 │   ├── handlers/
 │   │   ├── interactionHandlers.js
 │   │   └── messageHandlers.js
@@ -96,122 +157,26 @@ Polski-Squad-Bot-Collection/
 │   │   ├── gameService.js
 │   │   ├── rankingService.js
 │   │   └── timerService.js
-│   ├── utils/
-│   │   └── helpers.js
 │   └── data/
 │       ├── attempts.json
 │       ├── hints.json
 │       ├── scoreboard.json
 │       └── trigger.json
 │
-├── Kontroler/                 # Bot weryfikacji wyników
-│   ├── index.js
-│   ├── config/
-│   │   ├── config.js
-│   │   └── messages.js
-│   ├── handlers/
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── analysisService.js
-│   │   ├── messageService.js
-│   │   ├── ocrService.js
-│   │   └── roleService.js
-│   ├── utils/
-│   │   └── helpers.js
-│   └── temp/
-│
-├── Muteusz/                   # Bot zarządzania mediami i rolami
-│   ├── index.js
-│   ├── config/
-│   │   ├── config.js
-│   │   └── messages.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   ├── memberHandlers.js      # Ekskluzywne grupy ról + automatyczne zarządzanie
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── autoModerationService.js
-│   │   ├── logService.js
-│   │   ├── mediaService.js
-│   │   ├── roleManagementService.js
-│   │   ├── specialRolesService.js
-│   │   └── warningService.js
-│   ├── utils/
-│   │   ├── helpers.js
-│   │   └── migration.js          # Skrypt migracji ról z ENV do JSON
-│   ├── data/
-│   │   ├── removed_roles.json    # Zapisane role do przywrócenia
-│   │   └── special_roles.json
-│   └── temp/
-│       └── media_cache/
-│
-├── Rekruter/                  # Bot rekrutacyjny z OCR
-│   ├── index.js
-│   ├── config/
-│   │   ├── config.js
-│   │   └── messages.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── nicknameService.js
-│   │   ├── ocrService.js
-│   │   ├── qualificationService.js
-│   │   └── roleService.js
-│   ├── utils/
-│   │   └── helpers.js
-│   └── temp/
-│
-├── StalkerLME/                # Bot systemu kar + urlopy
-│   ├── index.js
-│   ├── config/
-│   │   ├── config.js
-│   │   └── messages.js
-│   ├── handlers/
-│   │   └── interactionHandlers.js
-│   ├── services/
-│   │   ├── databaseService.js
-│   │   ├── ocrService.js
-│   │   ├── punishmentService.js
-│   │   ├── reminderService.js
-│   │   └── vacationService.js     # System zarządzania urlopami
-│   ├── utils/
-│   │   └── helpers.js
-│   ├── data/
-│   │   ├── punishments.json
-│   │   └── weekly_removal.json
-│   └── temp/
-│
-├── Szkolenia/                 # Bot szkoleń
-│   ├── index.js
-│   ├── config/
-│   │   └── config.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   └── reactionHandlers.js
-│   ├── services/
-│   │   └── threadService.js
-│   └── utils/
-│       └── helpers.js
-│
-└── Wydarzynier/               # Bot eventów i marketplace
+└── Wydarzynier/               # Bot eventów z lobby system
     ├── index.js
-    ├── config/
-    │   └── config.js
     ├── handlers/
     │   ├── interactionHandlers.js
     │   ├── messageHandlers.js
     │   └── reactionHandlers.js
     ├── services/
-    │   ├── bazarService.js         # System marketplace z cyklicznymi resetami
-    │   ├── lobbyService.js         # System organizacji party
-    │   └── timerService.js         # Zarządzanie timerami i przypomnieniami
-    ├── utils/
-    │   └── helpers.js
+    │   ├── bazarService.js
+    │   ├── lobbyService.js
+    │   └── timerService.js
     └── data/
-        ├── bazar.json              # Stan marketplace i timerów
-        ├── lobbies.json            # Aktywne lobby party
-        └── timers.json             # Persystentne timery
+        ├── bazar.json
+        ├── lobbies.json
+        └── timers.json
 ```
 
 ## Uruchamianie
@@ -359,3 +324,21 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 - Przetworzone obrazy są automatycznie zapisywane w `processed_ocr/` z timestampami
 - Format nazw: `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]` lub `[KONTROLER][ hh:mm:ss rrrr-mm-dd ][daily/cx]` ułatwia identyfikację problemów
 - Maksymalnie 100 plików - najstarsze automatycznie usuwane
+
+## Historia Zmian
+
+### [2025-08-20] - Kompletna aktualizacja dokumentacji
+#### Poprawione 🔧
+- **Kompletna analiza wszystkich 8 botów**: Szczegółowe przeanalizowanie funkcjonalności każdego bota
+- **Zaktualizowane opisy funkcji**: Precyzyjne opisy wszystkich zaawansowanych funkcji każdego bota
+- **Ulepszone logowanie EndersEcho**: Wyświetlanie konkretnych wartości po "Best:" i "Total:" zamiast boolean
+- **Udokumentowane systemy OCR**: Szczegółowe informacje o 4 botach z OCR i ich specjalizacjach
+- **Zaktualizowane komendy slash**: Kompletna lista wszystkich dostępnych komend dla każdego bota
+
+#### Nowe funkcje udokumentowane:
+- **Rekruter**: System 50-sekcyjnej analizy obrazów, progi kwalifikacji klanów, boost tracking
+- **StalkerLME**: System urlopów z interaktywnym przyciskiem, punkty karne 2+/3+, tygodniowe czyszczenie
+- **Muteusz**: Cache mediów 100MB, ekskluzywne grupy ról, zaawansowana auto-moderacja
+- **Kontroler**: Dual-channel OCR (Daily/CX), system loterii wieloklanowej, character normalization
+- **Konklawe**: Medale Virtutti Papajlari, specjalne komendy VIP, wielopoziomowe timery
+- **Wydarzynier**: 7-osobowe lobby, repository system, automated member control
