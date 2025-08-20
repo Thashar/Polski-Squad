@@ -501,11 +501,38 @@ class TimelineService {
         // Sformatuj wydarzenie zgodnie ze strukturą HTML
         let formattedEvent = this.formatEventFromStructure(event);
         
-        let message = `🗓️ **Data:** ${discordDate}\n`;
+        // Wygeneruj ciekawy nagłówek na podstawie treści wydarzenia
+        const eventTitle = this.generateEventTitle(event);
+        
+        let message = `# 🎮 ${eventTitle}\n\n`;
+        message += `🗓️ **Data:** ${discordDate}\n`;
         message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n`;
         message += formattedEvent;
+        message += `\n`;
         
         return message;
+    }
+
+    /**
+     * Generuje uniwersalny tytuł wydarzenia na podstawie daty
+     */
+    generateEventTitle(event) {
+        const dateParts = event.date.split(' ');
+        const day = dateParts[0];
+        const month = dateParts[1];
+        const year = dateParts[2];
+        
+        // Mapuj nazwy miesięcy na polskie
+        const monthMap = {
+            'January': 'Styczeń', 'February': 'Luty', 'March': 'Marzec',
+            'April': 'Kwiecień', 'May': 'Maj', 'June': 'Czerwiec',
+            'July': 'Lipiec', 'August': 'Sierpień', 'September': 'Wrzesień',
+            'October': 'Październik', 'November': 'Listopad', 'December': 'Grudzień'
+        };
+        
+        const polishMonth = monthMap[month] || month;
+        
+        return `${day} ${polishMonth} ${year} - Aktualizacja`;
     }
 
     /**
@@ -519,16 +546,48 @@ class TimelineService {
         
         sections.forEach((section, index) => {
             if (section.title && section.content) {
-                // Dodaj nową linię przed pierwszą sekcją
+                // Dodaj separator przed każdą sekcją (oprócz pierwszej)
                 if (index === 0) {
-                    formatted += `\n`;
+                    formatted += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                } else {
+                    formatted += `\n• • • • • • • • • • • • • • • • • • • •\n\n`;
                 }
-                formatted += `**${section.title}**\n`;
-                formatted += `${section.content}\n\n`;
+                
+                // Dodaj emoji do tytułów sekcji
+                const sectionEmoji = this.getSectionEmoji(section.title);
+                formatted += `${sectionEmoji} **${section.title}**\n`;
+                formatted += `${section.content}\n`;
             }
         });
         
         return formatted.trim();
+    }
+
+    /**
+     * Zwraca emoji dla sekcji
+     */
+    getSectionEmoji(sectionTitle) {
+        const title = sectionTitle.toLowerCase();
+        
+        if (title.includes('collections') || title.includes('collection')) {
+            return '📦';
+        } else if (title.includes('custom set')) {
+            return '⚡';
+        } else if (title.includes('universal exchange')) {
+            return '🏪';
+        } else if (title.includes('chaos fusion')) {
+            return '⚔️';
+        } else if (title.includes('diamond carnival')) {
+            return '💎';
+        } else if (title.includes('retreat privileges')) {
+            return '🎯';
+        } else if (title.includes('twinborn')) {
+            return '⚡';
+        } else if (title.includes('costumes')) {
+            return '👗';
+        } else {
+            return '🎮';
+        }
     }
 
     /**
