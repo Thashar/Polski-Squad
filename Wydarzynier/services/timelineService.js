@@ -608,7 +608,28 @@ class TimelineService {
      * Parsuje sekcje wydarzenia z tekstu - używa bezpośrednio strukturalnej ekstraktacji
      */
     parseEventSections(eventText, rawHTML = '', eventDate = '') {
-        // Użyj bezpośrednio strukturalnej ekstraktacji z nowymi parametrami
+        // Jeśli eventText już zawiera strukturę Discord markdown (z **), to go używaj bezpośrednio
+        if (eventText.includes('**') && eventText.includes('\n')) {
+            // Parsuj sekcje ze strukturalnej zawartości
+            const sections = [];
+            const sectionBlocks = eventText.split(/\*\*([^*]+)\*\*/);
+            
+            for (let i = 1; i < sectionBlocks.length; i += 2) {
+                const title = sectionBlocks[i].trim();
+                const content = sectionBlocks[i + 1] ? sectionBlocks[i + 1].trim() : '';
+                
+                if (title && content && content.length > 10) {
+                    sections.push({
+                        title: title,
+                        content: content
+                    });
+                }
+            }
+            
+            return sections;
+        }
+        
+        // Jeśli nie ma struktury, użyj ekstraktacji HTML
         const structuredContent = this.extractStructuredContent(eventText, rawHTML, eventDate);
         
         if (structuredContent) {
