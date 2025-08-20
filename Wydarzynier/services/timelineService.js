@@ -546,17 +546,15 @@ class TimelineService {
         
         sections.forEach((section, index) => {
             if (section.title && section.content) {
-                // Dodaj separator przed każdą sekcją (oprócz pierwszej)
+                // Dodaj separator tylko przed pierwszą sekcją
                 if (index === 0) {
                     formatted += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-                } else {
-                    formatted += `\n• • • • • • • • • • • • • • • • • • • •\n\n`;
                 }
                 
                 // Dodaj emoji do tytułów sekcji
                 const sectionEmoji = this.getSectionEmoji(section.title);
                 formatted += `${sectionEmoji} **${section.title}**\n`;
-                formatted += `${section.content}\n`;
+                formatted += `${section.content}\n\n`;
             }
         });
         
@@ -646,6 +644,10 @@ class TimelineService {
             .replace(/❤️/g, '') // usuń emoji serca
             .replace(/\s+/g, ' ') // znormalizuj białe znaki
             .replace(/\.\s+/g, '.\n') // nowa linia po każdej kropce
+            .replace(/;\s+/g, ';\n')   // nowa linia po średniku
+            .replace(/:\s+/g, ':\n')   // nowa linia po dwukropku
+            .replace(/Free:/g, '\nFree:')  // specjalna obsługa "Free:"
+            .replace(/\$\d+\s+Pack:/g, '\n$&')  // nowa linia przed "$XX Pack:"
             .replace(/\n\s*\n+/g, '\n') // usuń podwójne nowe linie
             .trim();
     }
@@ -798,8 +800,15 @@ class TimelineService {
                         .trim();
                     
                     if (sectionContent.length > 15) {
-                        // Dodaj nową linię po każdej kropce w opisie
-                        sectionContent = sectionContent.replace(/\.\s+/g, '.\n');
+                        // Lepsze formatowanie - zachowaj strukturę z pierwotnej strony
+                        sectionContent = sectionContent
+                            .replace(/\.\s+/g, '.\n')  // nowa linia po kropce
+                            .replace(/;\s+/g, ';\n')   // nowa linia po średniku
+                            .replace(/:\s+/g, ':\n')   // nowa linia po dwukropku
+                            .replace(/Free:/g, '\nFree:')  // specjalna obsługa "Free:"
+                            .replace(/\$\d+\s+Pack:/g, '\n$&')  // nowa linia przed "$XX Pack:"
+                            .replace(/\n\s*\n+/g, '\n')  // usuń nadmiarowe puste linie
+                            .trim();
                         
                         structured += `**${sectionPattern.title}**\n`;
                         structured += `${sectionContent}\n\n`;
