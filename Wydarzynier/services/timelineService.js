@@ -562,9 +562,18 @@ class TimelineService {
         
         sections.forEach((section, index) => {
             if (section.title && section.content) {
-                // Dodaj emoji do tytułów sekcji
-                const sectionEmoji = this.getSectionEmoji(section.title);
-                formatted += `${sectionEmoji} **${section.title}**\n`;
+                // Sprawdź czy tytuł już zawiera emoji na początku
+                const emojiRegex = /^[\u{1F300}-\u{1F9FF}][\u{2600}-\u{26FF}][\u{2700}-\u{27BF}]/u;
+                const hasEmoji = emojiRegex.test(section.title.trim());
+                
+                if (hasEmoji) {
+                    // Jeśli tytuł już ma emoji, użyj go bez dodawania nowego
+                    formatted += `**${section.title}**\n`;
+                } else {
+                    // Jeśli nie ma emoji, dodaj odpowiednie
+                    const sectionEmoji = this.getSectionEmoji(section.title);
+                    formatted += `${sectionEmoji} **${section.title}**\n`;
+                }
                 formatted += `${section.content}\n\n`;
             }
         });
