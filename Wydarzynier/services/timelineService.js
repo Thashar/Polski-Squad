@@ -565,7 +565,8 @@ class TimelineService {
                 const trimmedTitle = section.title.trim();
                 
                 // Pomiń sekcje które są tylko emoji (bez tekstu)
-                if (trimmedTitle.length <= 2 && /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u.test(trimmedTitle)) {
+                const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(trimmedTitle);
+                if (isOnlyEmoji) {
                     return; // pomiń tę sekcję
                 }
                 
