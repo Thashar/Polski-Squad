@@ -272,46 +272,77 @@ class TimelineService {
                     // Znajdź znaczące opisy wydarzeń
                     let eventDescription = '';
                     
-                    // Szukaj konkretnych słów kluczowych dla wydarzeń
-                    const keywordPatterns = [
-                        /New Collection.*?(?=\.|$)/gi,
-                        /Additional Collection.*?(?=\.|$)/gi,
-                        /Universal Exchange Shop.*?(?=\.|$)/gi,
-                        /SS Belt.*?(?=\.|$)/gi,
-                        /Amazing Diamond.*?(?=\.|$)/gi,
-                        /Advanced Retreat.*?(?=\.|$)/gi,
-                        /Twinborn Tech.*?(?=\.|$)/gi,
-                        /Released.*?(?=\.|$)/gi
+                    // Wyciągnij pełniejszy opis wydarzenia
+                    // Znajdź sekcję z opisem - szukaj większego bloku tekstu
+                    let extendedText = tableContent.substring(dateIndex + date.length, dateIndex + date.length + 1000);
+                    
+                    // Oczyść rozszerzony tekst
+                    extendedText = extendedText
+                        .replace(/<[^>]*>/g, ' ') // usuń HTML
+                        .replace(/\s+/g, ' ') // znormalizuj białe znaki
+                        .replace(time, '') // usuń czas
+                        .replace(/\(UTC\s*\d*\)/, '') // usuń (UTC 0)
+                        .replace(/✔️|❌|⏰|📅/g, '') // usuń emoji
+                        .replace(/^[-\s]*/, '') // usuń myślniki na początku
+                        .trim();
+                    
+                    // Szukaj konkretnych opisów wydarzeń - rozszerzone wzorce
+                    const eventPatterns = [
+                        // Wzorce dla różnych typów wydarzeń
+                        /New Collection.*?(?=\n|$)/gi,
+                        /Additional Collection.*?(?=\n|$)/gi,
+                        /Universal Exchange Shop.*?(?=\n|$)/gi,
+                        /SS Belt.*?Chaos Fusion.*?(?=\n|$)/gi,
+                        /Amazing Diamond Carnival.*?(?=\n|$)/gi,
+                        /Advanced Retreat Privileges.*?(?=\n|$)/gi,
+                        /Twinborn Tech.*?(?=\n|$)/gi,
+                        /Released.*?Collection.*?(?=\n|$)/gi,
+                        // Wzorce dla opisów
+                        /The new collection items.*?(?=\n|$)/gi,
+                        /This is a new.*?(?=\n|$)/gi,
+                        /.*?will be available.*?(?=\n|$)/gi,
+                        /.*?will be released.*?(?=\n|$)/gi
                     ];
                     
-                    for (const pattern of keywordPatterns) {
-                        const match = cleanText.match(pattern);
-                        if (match && match[0]) {
-                            eventDescription = match[0].trim();
-                            break;
-                        }
-                    }
+                    let bestMatch = '';
+                    let bestLength = 0;
                     
-                    // Jeśli nie znaleziono wzorca, weź pierwszą sensowną część
-                    if (!eventDescription) {
-                        const sentences = cleanText.split(/[.!?|\n]/);
-                        for (const sentence of sentences) {
-                            if (sentence.trim().length > 10 && !sentence.match(/^\d+$/) && !sentence.includes('UTC')) {
-                                eventDescription = sentence.trim();
-                                break;
+                    // Znajdź najlepszy (najdłuższy) opis
+                    for (const pattern of eventPatterns) {
+                        const matches = extendedText.match(pattern);
+                        if (matches) {
+                            for (const match of matches) {
+                                if (match.length > bestLength && match.length > 20) {
+                                    bestMatch = match.trim();
+                                    bestLength = match.length;
+                                }
                             }
                         }
                     }
                     
-                    // Jeśli nadal nie ma opisu, weź pierwsze 80 znaków
-                    if (!eventDescription && cleanText.length > 10) {
-                        eventDescription = cleanText.substring(0, 80).trim();
+                    if (bestMatch) {
+                        eventDescription = bestMatch;
+                    } else {
+                        // Fallback - weź pierwszy znaczący fragment
+                        const sentences = extendedText.split(/[.!?\n]/);
+                        let combinedDescription = '';
+                        
+                        for (const sentence of sentences) {
+                            const clean = sentence.trim();
+                            if (clean.length > 10 && !clean.match(/^\d+$/) && !clean.includes('UTC')) {
+                                combinedDescription += clean + '. ';
+                                if (combinedDescription.length > 150) break;
+                            }
+                        }
+                        
+                        eventDescription = combinedDescription.trim() || cleanText.substring(0, 100).trim();
                     }
                     
-                    // Oczyść ostateczny opis
+                    // Ostateczne czyszczenie opisu
                     eventDescription = eventDescription
                         .replace(/^[-\s]*/, '')
                         .replace(/\s+/g, ' ')
+                        .replace(/\.\s*\./g, '.') // usuń podwójne kropki
                         .trim();
                     
                     // Normalizuj format daty
@@ -496,11 +527,70 @@ class TimelineService {
         const discordTimestamp = `<t:${timestamp}:R>`; // Relative time (np. "in 2 days")
         const discordDate = `<t:${timestamp}:F>`; // Full date and time
         
-        let message = `📅 **${event.event}**\n\n`;
+        // Oczyść i sformatuj opis wydarzenia
+        let cleanDescription = this.cleanEventDescription(event.event);
+        
+        let message = `📅 **${this.extractEventTitle(event.event)}**\n\n`;
         message += `🗓️ **Data:** ${discordDate}\n`;
-        message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}`;
+        message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n\n`;
+        message += cleanDescription;
         
         return message;
+    }
+
+    /**
+     * Wyciąga tytuł wydarzenia (pierwszą część przed kropką)
+     */
+    extractEventTitle(eventText) {
+        // Znajdź pierwszy znaczący fragment
+        const firstSentence = eventText.split(/[.!]/)[0].trim();
+        if (firstSentence.length > 5 && firstSentence.length < 80) {
+            return firstSentence;
+        }
+        
+        // Jeśli za długi, weź pierwsze 60 znaków
+        return eventText.substring(0, 60).trim() + (eventText.length > 60 ? '...' : '');
+    }
+
+    /**
+     * Czyści i formatuje opis wydarzenia
+     */
+    cleanEventDescription(eventText) {
+        let description = eventText;
+        
+        // Usuń informacje o czasie z opisu
+        description = description
+            .replace(/\b\d{1,2}:\d{2}\b/g, '') // usuń czasy HH:MM
+            .replace(/\(UTC\s*\d*\)/g, '') // usuń (UTC 0)
+            .replace(/UTC\s*\d*/g, '') // usuń UTC
+            .replace(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/g, '') // usuń daty
+            .replace(/[-–—]\s*(UTC|Time)/gi, '') // usuń separatory z czasem
+            .replace(/^[-–—\s]+/, '') // usuń myślniki na początku
+            .replace(/\s+/g, ' ') // znormalizuj białe znaki
+            .trim();
+        
+        // Podziel na zdania i dodaj nowe linie
+        const sentences = description.split(/([.!?])/);
+        let formattedDescription = '';
+        
+        for (let i = 0; i < sentences.length; i += 2) {
+            const sentence = sentences[i];
+            const punctuation = sentences[i + 1] || '';
+            
+            if (sentence && sentence.trim().length > 3) {
+                formattedDescription += sentence.trim() + punctuation;
+                if (punctuation && i < sentences.length - 2) {
+                    formattedDescription += '\n';
+                }
+            }
+        }
+        
+        // Oczyść końcowy wynik
+        formattedDescription = formattedDescription
+            .replace(/\n\s*\n/g, '\n') // usuń podwójne nowe linie
+            .trim();
+            
+        return formattedDescription || 'Szczegóły wkrótce...';
     }
 
     /**
@@ -585,7 +675,7 @@ class TimelineService {
 
             // Wyślij nagłówek timeline jeśli nie ma żadnych wiadomości
             if (this.messageIds.length === 0 && this.timelineData.length > 0) {
-                const headerMessage = `🎯 **TIMELINE WYDARZEŃ** 🎯\n\n*Aktualizacje automatyczne co godzinę*\n*Last Update: <t:${Math.floor(Date.now()/1000)}:F>*`;
+                const headerMessage = `# 🎯 **TIMELINE WYDARZEŃ** 🎯\n\n*Aktualizacje automatyczne co godzinę*\n*Last Update: <t:${Math.floor(Date.now()/1000)}:F>*\n`;
                 const headerMsg = await channel.send(headerMessage);
                 this.logger.info(`Utworzono nagłówek timeline (ID: ${headerMsg.id})`);
             }
