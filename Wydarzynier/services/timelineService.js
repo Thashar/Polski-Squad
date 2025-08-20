@@ -887,7 +887,41 @@ class TimelineService {
             const cardBody = cardBodyContent;
             let discordContent = '';
             
-            // Znajdź wszystkie sekcje div class="section" (z różnymi klasami)
+            // Najpierw sprawdź czy są tabele
+            const tableMatches = cardBody.match(/<table[^>]*>(.*?)<\/table>/gs);
+            if (tableMatches && tableMatches.length > 0) {
+                this.logger.info(`Znaleziono ${tableMatches.length} tabel`);
+                
+                for (const tableMatch of tableMatches) {
+                    // Znajdź tytuł tabeli z th colspan
+                    const titleMatch = tableMatch.match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*class\s*=\s*["'][^"']*text-center[^"']*["'][^>]*>(.*?)<\/th>/);
+                    if (titleMatch) {
+                        const tableTitle = titleMatch[1].trim();
+                        const sectionEmoji = this.getSectionEmoji(tableTitle);
+                        discordContent += `${sectionEmoji} **${tableTitle}**\n`;
+                    }
+                    
+                    // Znajdź wszystkie wiersze tbody
+                    const rowMatches = tableMatch.match(/<tr[^>]*>(?!.*<th).*?<\/tr>/gs);
+                    if (rowMatches) {
+                        for (const rowMatch of rowMatches) {
+                            const cellMatches = rowMatch.match(/<td[^>]*>(.*?)<\/td>/gs);
+                            if (cellMatches && cellMatches.length >= 2) {
+                                const number = cellMatches[0].replace(/<td[^>]*>(.*?)<\/td>/, '$1').trim();
+                                const content = cellMatches[1].replace(/<td[^>]*>(.*?)<\/td>/, '$1').trim();
+                                
+                                if (number && content) {
+                                    discordContent += `${number}. ${content}\n`;
+                                }
+                            }
+                        }
+                    }
+                    
+                    discordContent += '\n';
+                }
+            }
+            
+            // Następnie sprawdź sekcje div
             const sectionMatches = cardBody.match(/<div class="section[^"]*"[^>]*>(.*?)(?=<div class="section|$)/gs);
             
             if (sectionMatches && sectionMatches.length > 0) {
@@ -919,7 +953,10 @@ class TimelineService {
                     
                     discordContent += '\n';
                 }
-            } else {
+            }
+            
+            // Jeśli nie ma ani tabel ani sekcji, spróbuj fallback
+            if ((!tableMatches || tableMatches.length === 0) && (!sectionMatches || sectionMatches.length === 0)) {
                 this.logger.warn('Nie znaleziono sekcji div, próbuję bezpośrednio H6+P');
                 
                 // Fallback - wyciągnij wszystkie h6 i p bezpośrednio
