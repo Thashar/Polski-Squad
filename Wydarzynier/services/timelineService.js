@@ -561,9 +561,15 @@ class TimelineService {
         const sections = this.parseEventSections(event.event, event.rawHTML, event.date);
         
         sections.forEach((section, index) => {
-            if (section.title && section.content) {
-                // Sprawdź czy tytuł już zawiera emoji na początku (prostszy test)
+            if (section.title && section.content && section.content.length > 10) {
                 const trimmedTitle = section.title.trim();
+                
+                // Pomiń sekcje które są tylko emoji (bez tekstu)
+                if (trimmedTitle.length <= 2 && /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u.test(trimmedTitle)) {
+                    return; // pomiń tę sekcję
+                }
+                
+                // Sprawdź czy tytuł już zawiera emoji na początku (prostszy test)
                 const firstChar = trimmedTitle.charAt(0);
                 
                 // Test dla popularnych emoji używanych w sekcjach
@@ -640,13 +646,26 @@ class TimelineService {
         const structuredContent = this.extractStructuredContent(eventText, rawHTML, eventDate);
         
         if (structuredContent) {
+            // Debug: sprawdź zawartość przed parsowaniem
+            if (this.logger && this.config?.ocr?.detailedLogging?.enabled) {
+                this.logger.info('StructuredContent przed parsowaniem:', structuredContent);
+            }
+            
             // Parsuj sekcje ze strukturalnej zawartości
             const sections = [];
             const sectionBlocks = structuredContent.split(/\*\*([^*]+)\*\*/);
             
+            if (this.logger && this.config?.ocr?.detailedLogging?.enabled) {
+                this.logger.info('SectionBlocks po split:', sectionBlocks);
+            }
+            
             for (let i = 1; i < sectionBlocks.length; i += 2) {
                 const title = sectionBlocks[i].trim();
                 const content = sectionBlocks[i + 1] ? sectionBlocks[i + 1].trim() : '';
+                
+                if (this.logger && this.config?.ocr?.detailedLogging?.enabled) {
+                    this.logger.info(`Sekcja ${i}: title="${title}", content="${content.substring(0,50)}..."`);
+                }
                 
                 if (title && content && content.length > 10) {
                     sections.push({
