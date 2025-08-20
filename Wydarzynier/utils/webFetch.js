@@ -56,6 +56,48 @@ class WebFetch {
             });
         });
     }
+
+    /**
+     * Pobiera surową zawartość HTML ze strony internetowej
+     * @param {string} url - URL do pobrania
+     * @returns {Promise<string>} - Surowy HTML strony
+     */
+    static async fetchRawHTML(url) {
+        return new Promise((resolve, reject) => {
+            const isHttps = url.startsWith('https');
+            const client = isHttps ? https : http;
+            
+            const request = client.get(url, (response) => {
+                let data = '';
+                
+                // Obsługa przekierowania
+                if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                    return WebFetch.fetchRawHTML(response.headers.location)
+                        .then(resolve)
+                        .catch(reject);
+                }
+                
+                if (response.statusCode !== 200) {
+                    reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+                    return;
+                }
+                
+                response.on('data', chunk => {
+                    data += chunk;
+                });
+                
+                response.on('end', () => {
+                    resolve(data);
+                });
+            });
+            
+            request.on('error', reject);
+            request.setTimeout(10000, () => {
+                request.destroy();
+                reject(new Error('Request timeout'));
+            });
+        });
+    }
 }
 
 module.exports = { WebFetch };

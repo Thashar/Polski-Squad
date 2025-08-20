@@ -156,9 +156,10 @@ class TimelineService {
         
         try {
             const response = await WebFetch.fetch('https://garrytools.com/timeline');
+            const rawHTML = await WebFetch.fetchRawHTML('https://garrytools.com/timeline');
             
             // Parsuj odpowiedź z HTML
-            const events = this.parseTimelineFromHTML(response);
+            const events = this.parseTimelineFromHTML(response, rawHTML);
             return events;
         } catch (error) {
             this.logger.error('Błąd pobierania timeline z sieci:', error);
@@ -170,7 +171,7 @@ class TimelineService {
     /**
      * Parsuje timeline z HTML
      */
-    parseTimelineFromHTML(htmlText) {
+    parseTimelineFromHTML(htmlText, rawHTML = '') {
         try {
             this.logger.info('Rozpoczynam parsowanie HTML timeline...');
             
@@ -299,17 +300,30 @@ class TimelineService {
                         extendedSection = tableContent.substring(eventStart, eventStart + 1500);
                     }
                     
-                    // Zachowaj oryginalną strukturę z sekcjami
+                    // Zachowaj oryginalną strukturę z sekcjami i konwertuj HTML na Discord markdown
                     let rawEventContent = extendedSection
                         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // usuń skrypty
                         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // usuń style
                         .replace(/<img[^>]*>/gi, '') // usuń obrazki
+                        // Konwertuj HTML na Discord markdown
+                        .replace(/<h[1-6][^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h[1-6]>/gi, '**$1**') // h1-h6 z klasą text-muted na pogrubienie
+                        .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, '**$1**') // wszystkie nagłówki na pogrubienie
+                        .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**') // strong na pogrubienie
+                        .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**') // b na pogrubienie
+                        .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*') // em na kursywę
+                        .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*') // i na kursywę
+                        .replace(/<br\s*\/?>/gi, '\n') // br na nową linię
+                        .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n') // kolejne paragrafy oddziel podwójną linią
+                        .replace(/<p[^>]*>/gi, '') // usuń otwierające tagi p
+                        .replace(/<\/p>/gi, '\n') // zamykające tagi p na nową linię
                         .replace(/<[^>]*>/g, ' ') // usuń pozostałe tagi HTML
                         .replace(/This website has been created to guide players.*?Soon\.\.\./gs, '') // usuń stopkę strony
                         .replace(/kaliqq47856@proton\.me/g, '') // usuń email
                         .replace(/Privacy Policy/g, '') // usuń politykę prywatności
                         .replace(/❤️/g, '') // usuń serce ze stopki
-                        .replace(/\s+/g, ' ') // znormalizuj białe znaki
+                        .replace(/[ \t]+/g, ' ') // znormalizuj spacje i taby (ale zachowaj nowe linie)
+                        .replace(/ *\n */g, '\n') // popraw formatowanie nowych linii
+                        .replace(/\n\n\n+/g, '\n\n') // maksymalnie podwójne nowe linie
                         .trim();
                     
                     // Znajdź i zachowaj strukturę sekcji
@@ -336,13 +350,17 @@ class TimelineService {
                     normalizedDate = normalizedDate.replace(/Septembertember/g, 'September');
                     
                     if (eventDescription.length > 5) {
+                        // Wyciągnij obrazki związane z tym wydarzeniem
+                        const eventImages = this.extractEventImages(rawHTML, extendedSection, eventDescription);
+                        
                         events.push({
                             date: normalizedDate,
                             time: time,
-                            event: eventDescription
+                            event: eventDescription,
+                            images: eventImages
                         });
                         
-                        this.logger.info(`Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}...`);
+                        this.logger.info(`Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}... (obrazki: ${eventImages.length})`);
                     }
                     
                 } catch (parseError) {
@@ -511,6 +529,44 @@ class TimelineService {
         message += `\n`;
         
         return message;
+    }
+
+    /**
+     * Generuje wiadomości dla wydarzenia z obrazkami (może być kilka wiadomości)
+     */
+    generateEventMessages(event) {
+        const messages = [];
+        const baseMessage = this.generateEventMessage(event);
+        
+        // Jeśli nie ma obrazków, zwróć podstawową wiadomość
+        if (!event.images || event.images.length === 0) {
+            messages.push({ content: baseMessage, files: [] });
+            return messages;
+        }
+        
+        // Podziel obrazki na grupy po 10 (limit Discord)
+        const imageGroups = [];
+        for (let i = 0; i < event.images.length; i += 10) {
+            imageGroups.push(event.images.slice(i, i + 10));
+        }
+        
+        // Utwórz wiadomości
+        imageGroups.forEach((imageGroup, index) => {
+            let messageContent = baseMessage;
+            
+            // Dla kolejnych wiadomości, dodaj oznaczenie
+            if (index > 0) {
+                messageContent = `# 🎮 ${this.generateEventTitle(event)} - Część ${index + 1}\n\n`;
+                messageContent += `🖼️ **Dodatkowe obrazki dla wydarzenia**\n\n`;
+            }
+            
+            messages.push({
+                content: messageContent,
+                files: imageGroup.map(url => ({ attachment: url }))
+            });
+        });
+        
+        return messages;
     }
 
     /**
@@ -705,6 +761,128 @@ class TimelineService {
             .trim();
             
         return formattedDescription || 'Szczegóły wkrótce...';
+    }
+
+    /**
+     * Wyciąga obrazki związane z wydarzeniem
+     */
+    extractEventImages(rawHTML, eventSection, eventDescription) {
+        try {
+            const images = [];
+            
+            // Znajdź wszystkie tagi img w sekcji wydarzenia
+            const imgRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+            let match;
+            
+            // Przeszukaj sekcję wydarzenia w raw HTML
+            while ((match = imgRegex.exec(eventSection)) !== null) {
+                let imgUrl = match[1];
+                
+                // Przekonwertuj relatywne URL na absolutne
+                if (imgUrl.startsWith('/')) {
+                    imgUrl = 'https://garrytools.com' + imgUrl;
+                } else if (imgUrl.startsWith('public/')) {
+                    imgUrl = 'https://garrytools.com/' + imgUrl;
+                }
+                
+                // Filtruj niepotrzebne obrazki (light/dark mode, ikony nawigacji)
+                if (!this.shouldSkipImage(imgUrl)) {
+                    images.push(imgUrl);
+                }
+            }
+            
+            // Jeśli nie znaleziono obrazków w sekcji, spróbuj z całego HTML
+            if (images.length === 0) {
+                // Szukaj specjalnych obrazków związanych z tekstem wydarzenia
+                const eventKeywords = this.extractImageKeywords(eventDescription);
+                
+                for (const keyword of eventKeywords) {
+                    const keywordImages = this.findImagesByKeyword(rawHTML, keyword);
+                    images.push(...keywordImages);
+                }
+            }
+            
+            // Usuń duplikaty i ogranicz do maksymalnie 30 obrazków
+            const uniqueImages = [...new Set(images)].slice(0, 30);
+            
+            this.logger.info(`Znaleziono ${uniqueImages.length} obrazków dla wydarzenia`);
+            return uniqueImages;
+            
+        } catch (error) {
+            this.logger.error('Błąd wyciągania obrazków:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Sprawdza czy obrazek powinien zostać pominięty
+     */
+    shouldSkipImage(imgUrl) {
+        const skipPatterns = [
+            'light.svg',
+            'dark.svg',
+            'favicon',
+            'logo',
+            'nav',
+            'menu'
+        ];
+        
+        return skipPatterns.some(pattern => imgUrl.toLowerCase().includes(pattern));
+    }
+
+    /**
+     * Wyciąga słowa kluczowe z opisu wydarzenia do wyszukiwania obrazków
+     */
+    extractImageKeywords(eventDescription) {
+        const keywords = [];
+        
+        // Szukaj specjalnych słów kluczowych
+        const keywordPatterns = [
+            /collection/i,
+            /diamond.*carnival/i,
+            /gems/i,
+            /pack/i,
+            /costume/i,
+            /exchange.*shop/i,
+            /chaos.*fusion/i,
+            /retreat.*privileges/i,
+            /twinborn.*tech/i
+        ];
+        
+        for (const pattern of keywordPatterns) {
+            if (pattern.test(eventDescription)) {
+                keywords.push(pattern.source.toLowerCase().replace(/[^a-z]/g, ''));
+            }
+        }
+        
+        return keywords;
+    }
+
+    /**
+     * Znajdź obrazki według słów kluczowych
+     */
+    findImagesByKeyword(rawHTML, keyword) {
+        const images = [];
+        const imgRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+        let match;
+        
+        while ((match = imgRegex.exec(rawHTML)) !== null) {
+            let imgUrl = match[1];
+            
+            // Przekonwertuj relatywne URL na absolutne
+            if (imgUrl.startsWith('/')) {
+                imgUrl = 'https://garrytools.com' + imgUrl;
+            } else if (imgUrl.startsWith('public/')) {
+                imgUrl = 'https://garrytools.com/' + imgUrl;
+            }
+            
+            // Sprawdź czy URL zawiera słowo kluczowe
+            if (imgUrl.toLowerCase().includes(keyword) && !this.shouldSkipImage(imgUrl)) {
+                images.push(imgUrl);
+            }
+        }
+        
+        return images.slice(0, 10); // Maksymalnie 10 obrazków na słowo kluczowe
     }
 
     /**
@@ -938,23 +1116,22 @@ class TimelineService {
                 return dateA - dateB;
             });
 
-            // Filtruj wydarzenia - usuń te starsze niż 7 dni
+            // Filtruj wydarzenia - usuń te które już się zakończyły (przeterminowane)
             const now = new Date();
-            const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
             
             const activeEvents = sortedEvents.filter(event => {
                 const eventDate = this.parseEventDateTime(event.date, event.time);
-                return eventDate >= sevenDaysAgo;
+                return eventDate >= now;
             });
 
             const removedCount = sortedEvents.length - activeEvents.length;
             if (removedCount > 0) {
-                this.logger.info(`Usunięto ${removedCount} przestarzałych wydarzeń (starszych niż 7 dni)`);
+                this.logger.info(`Usunięto ${removedCount} przeterminowanych wydarzeń`);
             }
 
             this.logger.info(`Posortowano ${activeEvents.length} aktywnych wydarzeń chronologicznie`);
 
-            // Usuń wiadomości dla przestarzałych wydarzeń
+            // Usuń wiadomości dla przeterminowanych wydarzeń
             const eventsToRemove = this.messageIds.length - activeEvents.length;
             if (eventsToRemove > 0) {
                 const messagesToDelete = this.messageIds.slice(activeEvents.length);
@@ -962,9 +1139,9 @@ class TimelineService {
                     try {
                         const oldMessage = await channel.messages.fetch(msgId);
                         await oldMessage.delete();
-                        this.logger.info(`Usunięto przestarzałą wiadomość wydarzenia (ID: ${msgId})`);
+                        this.logger.info(`Usunięto przeterminowaną wiadomość wydarzenia (ID: ${msgId})`);
                     } catch (error) {
-                        this.logger.warn(`Nie można usunąć przestarzałej wiadomości ${msgId}: ${error.message}`);
+                        this.logger.warn(`Nie można usunąć przeterminowanej wiadomości ${msgId}: ${error.message}`);
                     }
                 }
                 // Skróć tablicę ID wiadomości
@@ -972,31 +1149,54 @@ class TimelineService {
             }
 
             // Aktualizuj lub utwórz wiadomości dla każdego aktywnego wydarzenia
+            let messageIndex = 0;
+            
             for (let i = 0; i < activeEvents.length; i++) {
                 const event = activeEvents[i];
-                const messageContent = this.generateEventMessage(event);
+                const eventMessages = this.generateEventMessages(event);
                 
-                if (this.messageIds[i]) {
-                    // Zaktualizuj istniejącą wiadomość
-                    try {
-                        const existingMessage = await channel.messages.fetch(this.messageIds[i]);
-                        await existingMessage.edit(messageContent);
-                        this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}: ${event.event.substring(0, 30)}...`);
-                    } catch (error) {
-                        this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[i]}, tworzę nową`);
-                        const newMessage = await channel.send(messageContent);
-                        this.messageIds[i] = newMessage.id;
-                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                this.logger.info(`Wydarzenie ${i + 1} będzie miało ${eventMessages.length} wiadomości (${event.images?.length || 0} obrazków)`);
+                
+                // Przetwórz każdą wiadomość dla tego wydarzenia
+                for (let j = 0; j < eventMessages.length; j++) {
+                    const messageData = eventMessages[j];
+                    
+                    if (this.messageIds[messageIndex]) {
+                        // Zaktualizuj istniejącą wiadomość
+                        try {
+                            const existingMessage = await channel.messages.fetch(this.messageIds[messageIndex]);
+                            
+                            if (messageData.files.length > 0) {
+                                // Discord nie pozwala na edycję z plikami, usuń starą i utwórz nową
+                                await existingMessage.delete();
+                                const newMessage = await channel.send(messageData);
+                                this.messageIds[messageIndex] = newMessage.id;
+                                this.logger.info(`Zastąpiono wiadomość z obrazkami dla wydarzenia ${i + 1}, część ${j + 1}`);
+                            } else {
+                                await existingMessage.edit(messageData.content);
+                                this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}, część ${j + 1}`);
+                            }
+                        } catch (error) {
+                            this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[messageIndex]}, tworzę nową`);
+                            const newMessage = await channel.send(messageData);
+                            this.messageIds[messageIndex] = newMessage.id;
+                            this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1}, część ${j + 1} (ID: ${newMessage.id})`);
+                        }
+                    } else {
+                        // Utwórz nową wiadomość
+                        const newMessage = await channel.send(messageData);
+                        this.messageIds[messageIndex] = newMessage.id;
+                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1}, część ${j + 1} (ID: ${newMessage.id})`);
                     }
-                } else {
-                    // Utwórz nową wiadomość
-                    const newMessage = await channel.send(messageContent);
-                    this.messageIds[i] = newMessage.id;
-                    this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                    
+                    messageIndex++;
+                    
+                    // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
                 
-                // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
-                await new Promise(resolve => setTimeout(resolve, 500));
+                // Dłuższa przerwa między wydarzeniami
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
 
             // Zapisz zaktualizowane ID wiadomości
