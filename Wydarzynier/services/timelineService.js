@@ -269,81 +269,31 @@ class TimelineService {
                         .replace(/^[-\s]*/, '') // usuń myślniki na początku
                         .trim();
                     
-                    // Znajdź znaczące opisy wydarzeń
-                    let eventDescription = '';
+                    // Wyciągnij rozszerzoną sekcję wydarzenia - większy blok (2000 znaków)
+                    let extendedSection = tableContent.substring(dateIndex, dateIndex + 2000);
                     
-                    // Wyciągnij pełniejszy opis wydarzenia
-                    // Znajdź sekcję z opisem - szukaj większego bloku tekstu
-                    let extendedText = tableContent.substring(dateIndex + date.length, dateIndex + date.length + 1000);
+                    // Znajdź koniec tego wydarzenia (następna data lub koniec tekstu)
+                    const nextDateMatch = extendedSection.match(/\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}/g);
+                    if (nextDateMatch && nextDateMatch.length > 1) {
+                        // Znajdź pozycję drugiej daty
+                        const secondDateIndex = extendedSection.indexOf(nextDateMatch[1]);
+                        if (secondDateIndex > 100) {
+                            extendedSection = extendedSection.substring(0, secondDateIndex);
+                        }
+                    }
                     
-                    // Oczyść rozszerzony tekst
-                    extendedText = extendedText
-                        .replace(/<[^>]*>/g, ' ') // usuń HTML
+                    // Zachowaj oryginalną strukturę z sekcjami
+                    let rawEventContent = extendedSection
+                        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // usuń skrypty
+                        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // usuń style
+                        .replace(/<img[^>]*>/gi, '') // usuń obrazki
+                        .replace(/<[^>]*>/g, ' ') // usuń pozostałe tagi HTML
                         .replace(/\s+/g, ' ') // znormalizuj białe znaki
-                        .replace(time, '') // usuń czas
-                        .replace(/\(UTC\s*\d*\)/, '') // usuń (UTC 0)
-                        .replace(/✔️|❌|⏰|📅/g, '') // usuń emoji
-                        .replace(/^[-\s]*/, '') // usuń myślniki na początku
                         .trim();
                     
-                    // Szukaj konkretnych opisów wydarzeń - rozszerzone wzorce
-                    const eventPatterns = [
-                        // Wzorce dla różnych typów wydarzeń
-                        /New Collection.*?(?=\n|$)/gi,
-                        /Additional Collection.*?(?=\n|$)/gi,
-                        /Universal Exchange Shop.*?(?=\n|$)/gi,
-                        /SS Belt.*?Chaos Fusion.*?(?=\n|$)/gi,
-                        /Amazing Diamond Carnival.*?(?=\n|$)/gi,
-                        /Advanced Retreat Privileges.*?(?=\n|$)/gi,
-                        /Twinborn Tech.*?(?=\n|$)/gi,
-                        /Released.*?Collection.*?(?=\n|$)/gi,
-                        // Wzorce dla opisów
-                        /The new collection items.*?(?=\n|$)/gi,
-                        /This is a new.*?(?=\n|$)/gi,
-                        /.*?will be available.*?(?=\n|$)/gi,
-                        /.*?will be released.*?(?=\n|$)/gi
-                    ];
-                    
-                    let bestMatch = '';
-                    let bestLength = 0;
-                    
-                    // Znajdź najlepszy (najdłuższy) opis
-                    for (const pattern of eventPatterns) {
-                        const matches = extendedText.match(pattern);
-                        if (matches) {
-                            for (const match of matches) {
-                                if (match.length > bestLength && match.length > 20) {
-                                    bestMatch = match.trim();
-                                    bestLength = match.length;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (bestMatch) {
-                        eventDescription = bestMatch;
-                    } else {
-                        // Fallback - weź pierwszy znaczący fragment
-                        const sentences = extendedText.split(/[.!?\n]/);
-                        let combinedDescription = '';
-                        
-                        for (const sentence of sentences) {
-                            const clean = sentence.trim();
-                            if (clean.length > 10 && !clean.match(/^\d+$/) && !clean.includes('UTC')) {
-                                combinedDescription += clean + '. ';
-                                if (combinedDescription.length > 150) break;
-                            }
-                        }
-                        
-                        eventDescription = combinedDescription.trim() || cleanText.substring(0, 100).trim();
-                    }
-                    
-                    // Ostateczne czyszczenie opisu
-                    eventDescription = eventDescription
-                        .replace(/^[-\s]*/, '')
-                        .replace(/\s+/g, ' ')
-                        .replace(/\.\s*\./g, '.') // usuń podwójne kropki
-                        .trim();
+                    // Znajdź i zachowaj strukturę sekcji
+                    const structuredContent = this.extractStructuredContent(rawEventContent);
+                    let eventDescription = structuredContent || rawEventContent.substring(0, 500).trim();
                     
                     // Normalizuj format daty
                     let normalizedDate = date.trim();
@@ -527,15 +477,89 @@ class TimelineService {
         const discordTimestamp = `<t:${timestamp}:R>`; // Relative time (np. "in 2 days")
         const discordDate = `<t:${timestamp}:F>`; // Full date and time
         
-        // Oczyść i sformatuj opis wydarzenia
-        let cleanDescription = this.cleanEventDescription(event.event);
+        // Sformatuj wydarzenie zgodnie ze strukturą HTML
+        let formattedEvent = this.formatEventFromStructure(event);
         
-        let message = `📅 **${this.extractEventTitle(event.event)}**\n\n`;
+        let message = `## ${event.date} ${event.time} - (UTC 0) ✔️\n\n`;
         message += `🗓️ **Data:** ${discordDate}\n`;
         message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n\n`;
-        message += cleanDescription;
+        message += formattedEvent;
         
         return message;
+    }
+
+    /**
+     * Formatuje wydarzenie zgodnie ze strukturą HTML strony
+     */
+    formatEventFromStructure(event) {
+        let formatted = '';
+        
+        // Parsuj sekcje z opisu wydarzenia
+        const sections = this.parseEventSections(event.event);
+        
+        sections.forEach(section => {
+            if (section.title && section.content) {
+                formatted += `**${section.title}**\n`;
+                formatted += `${section.content}\n\n`;
+            }
+        });
+        
+        return formatted.trim();
+    }
+
+    /**
+     * Parsuje sekcje wydarzenia z tekstu - używa bezpośrednio strukturalnej ekstraktacji
+     */
+    parseEventSections(eventText) {
+        // Użyj bezpośrednio strukturalnej ekstraktacji
+        const structuredContent = this.extractStructuredContent(eventText);
+        
+        if (structuredContent) {
+            // Parsuj sekcje ze strukturalnej zawartości
+            const sections = [];
+            const sectionBlocks = structuredContent.split(/\*\*([^*]+)\*\*/);
+            
+            for (let i = 1; i < sectionBlocks.length; i += 2) {
+                const title = sectionBlocks[i].trim();
+                const content = sectionBlocks[i + 1] ? sectionBlocks[i + 1].trim() : '';
+                
+                if (title && content && content.length > 10) {
+                    sections.push({
+                        title: title,
+                        content: content
+                    });
+                }
+            }
+            
+            return sections;
+        }
+        
+        // Fallback - podstawowy opis
+        const cleanContent = this.cleanSectionContent(eventText);
+        if (cleanContent.length > 10) {
+            return [{
+                title: 'Informacje o wydarzeniu',
+                content: cleanContent
+            }];
+        }
+        
+        return [];
+    }
+
+    /**
+     * Czyści zawartość sekcji
+     */
+    cleanSectionContent(content) {
+        return content
+            .replace(/\b\d{1,2}:\d{2}\b/g, '') // usuń czasy
+            .replace(/\(UTC\s*\d*\)/g, '') // usuń UTC
+            .replace(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/g, '') // usuń daty
+            .replace(/[-–—]\s*(UTC|Time)/gi, '') // usuń separatory z czasem
+            .replace(/^[-–—\s]+/, '') // usuń myślniki na początku
+            .replace(/\s+/g, ' ') // znormalizuj białe znaki
+            .replace(/\.\s+/g, '.\n') // nowa linia po każdym zdaniu
+            .replace(/\n\s*\n/g, '\n') // usuń podwójne nowe linie
+            .trim();
     }
 
     /**
@@ -591,6 +615,82 @@ class TimelineService {
             .trim();
             
         return formattedDescription || 'Szczegóły wkrótce...';
+    }
+
+    /**
+     * Wyciąga strukturalną zawartość ze strony
+     */
+    extractStructuredContent(content) {
+        try {
+            let structured = '';
+            
+            // Wzorce dla sekcji zgodnych ze strukturą strony
+            const sectionPatterns = [
+                {
+                    title: 'Released Collections',
+                    pattern: /Released Collections?(.*?)(?=New Collection Sets|Collection Custom Set|Costumes|$)/is
+                },
+                {
+                    title: 'New Collection Sets',  
+                    pattern: /New Collection Sets?(.*?)(?=Collection Custom Set|Costumes|Released Collections|$)/is
+                },
+                {
+                    title: 'Collection Custom Set',
+                    pattern: /Collection Custom Set(.*?)(?=Costumes|New Collection Sets|Released Collections|$)/is
+                },
+                {
+                    title: 'Universal Exchange Shop',
+                    pattern: /Universal Exchange Shop(.*?)(?=Costumes|Collection|$)/is
+                },
+                {
+                    title: 'SS Belt Chaos Fusion',
+                    pattern: /SS Belt.*?Chaos Fusion(.*?)(?=Costumes|Collection|$)/is
+                },
+                {
+                    title: 'Amazing Diamond Carnival',
+                    pattern: /Amazing Diamond Carnival(.*?)(?=Costumes|Collection|$)/is
+                },
+                {
+                    title: 'Advanced Retreat Privileges',
+                    pattern: /Advanced Retreat Privileges(.*?)(?=Costumes|Collection|$)/is
+                },
+                {
+                    title: 'Twinborn Tech',
+                    pattern: /Twinborn Tech(.*?)(?=Costumes|Collection|$)/is
+                },
+                {
+                    title: 'Costumes',
+                    pattern: /Costumes?(.*?)$/is
+                }
+            ];
+            
+            let foundSections = 0;
+            
+            for (const sectionPattern of sectionPatterns) {
+                const match = content.match(sectionPattern.pattern);
+                if (match && match[1]) {
+                    let sectionContent = match[1]
+                        .replace(/^\s*[-–—]*\s*/, '') // usuń myślniki na początku
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    
+                    if (sectionContent.length > 15) {
+                        structured += `**${sectionPattern.title}**\n`;
+                        structured += `${sectionContent}\n\n`;
+                        foundSections++;
+                    }
+                }
+            }
+            
+            // Jeśli znaleziono co najmniej jedną sekcję, zwróć strukturę
+            if (foundSections > 0) {
+                return structured.trim();
+            }
+            
+            return null;
+        } catch (error) {
+            return null;
+        }
     }
 
     /**
