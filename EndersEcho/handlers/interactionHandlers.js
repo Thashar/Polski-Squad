@@ -253,11 +253,11 @@ class InteractionHandler {
                     const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
                     
                     // Sprawdź rozmiar pliku
-                    const fs = require('fs');
-                    const fileStats = fs.statSync(tempImagePath);
+                    const fsSync = require('fs');
+                    const fileStats = fsSync.statSync(tempImagePath);
                     const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(2);
                     
-                    logger.info(`🔍 DEBUG: Plik do załączenia - rozmiar: ${fileSizeMB}MB, ścieżka: ${tempImagePath}`);
+                    logger.info(`📁 Plik do załączenia - rozmiar: ${fileSizeMB}MB`);
                     
                     const imageAttachment = new AttachmentBuilder(tempImagePath, { 
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}` 
@@ -268,35 +268,20 @@ class InteractionHandler {
                     );
                     
                     try {
-                        // Sprawdź czy interaction nie wygasła
-                        logger.info(`🔍 DEBUG: interaction.replied: ${interaction.replied}`);
-                        logger.info(`🔍 DEBUG: interaction.deferred: ${interaction.deferred}`);
-                        logger.info(`🔍 DEBUG: Time since interaction: ${Date.now() - interaction.createdTimestamp}ms`);
-                        
-                        // Spróbuj najpierw bez pliku - może to problem z attachmentem
-                        logger.info('🔍 DEBUG: Próbuję wysłać embed BEZ pliku...');
+                        // Wyślij embed bez pliku (rozwiązuje problem z dużymi attachmentami)
                         
                         const editResult = await interaction.editReply({ 
                             embeds: [resultEmbed]
                         });
                         
-                        logger.info('✅ Wysłano embed BEZ pliku - teraz próbuję dodać plik followUp');
-                        
-                        // Następnie wyślij plik jako followUp
-                        try {
-                            await interaction.followUp({
-                                content: `📎 **Oryginalny obraz wyniku:**`,
-                                files: [imageAttachment],
-                                ephemeral: true
-                            });
-                            logger.info('✅ Wysłano plik jako followUp');
-                        } catch (followUpError) {
-                            logger.error('❌ Błąd wysyłania followUp z plikiem:', followUpError);
-                        }
+                        // Następnie wyślij plik jako osobną wiadomość
+                        await interaction.followUp({
+                            content: `📎 **Oryginalny obraz wyniku:**`,
+                            files: [imageAttachment],
+                            ephemeral: true
+                        });
                         
                         logger.info('✅ Wysłano embed z wynikiem (brak rekordu)');
-                        logger.info(`🔍 DEBUG: editReply result type: ${typeof editResult}`);
-                        logger.info(`🔍 DEBUG: editReply result id: ${editResult?.id}`);
                     } catch (editReplyError) {
                         logger.error('❌ Błąd podczas wysyłania embed (brak rekordu):', editReplyError);
                         
