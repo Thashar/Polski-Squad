@@ -561,6 +561,8 @@ class TimelineService {
         const sections = this.parseEventSections(event.event, event.rawHTML, event.date);
         
         sections.forEach((section, index) => {
+            this.logger.info(`🔍 DEBUG: Sekcja ${index}: title="${section.title}", content="${section.content ? section.content.substring(0, 50) + '...' : 'brak'}"`);
+            
             if (section.title && section.content && section.content.length > 10) {
                 const trimmedTitle = section.title.trim();
                 
@@ -927,8 +929,19 @@ class TimelineService {
                     const titleMatch = tableMatch.match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*class\s*=\s*["'][^"']*text-center[^"']*["'][^>]*>(.*?)<\/th>/);
                     if (titleMatch) {
                         const tableTitle = titleMatch[1].trim();
-                        const sectionEmoji = this.getSectionEmoji(tableTitle);
-                        discordContent += `${sectionEmoji} **${tableTitle}**\n`;
+                        this.logger.info(`🔍 DEBUG: Znaleziono tytuł tabeli: "${tableTitle}"`);
+                        
+                        // Sprawdź czy tytuł nie składa się tylko z emoji
+                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(tableTitle);
+                        this.logger.info(`🔍 DEBUG: Czy tylko emoji: ${isOnlyEmoji}`);
+                        
+                        if (!isOnlyEmoji) {
+                            const sectionEmoji = this.getSectionEmoji(tableTitle);
+                            this.logger.info(`🔍 DEBUG: Dodaję sekcję tabeli: "${sectionEmoji} **${tableTitle}**"`);
+                            discordContent += `${sectionEmoji} **${tableTitle}**\n`;
+                        } else {
+                            this.logger.info(`🔍 DEBUG: Pomijam tytuł tabeli składający się tylko z emoji`);
+                        }
                     }
                     
                     // Znajdź wszystkie wiersze tbody
@@ -962,7 +975,18 @@ class TimelineService {
                     const h6Match = sectionMatch.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/);
                     if (h6Match) {
                         const sectionTitle = h6Match[1].trim();
-                        discordContent += `**${sectionTitle}**\n`;
+                        this.logger.info(`🔍 DEBUG: Znaleziono tytuł h6: "${sectionTitle}"`);
+                        
+                        // Sprawdź czy tytuł nie składa się tylko z emoji
+                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(sectionTitle);
+                        this.logger.info(`🔍 DEBUG: Czy tylko emoji: ${isOnlyEmoji}`);
+                        
+                        if (!isOnlyEmoji) {
+                            this.logger.info(`🔍 DEBUG: Dodaję sekcję h6: "**${sectionTitle}**"`);
+                            discordContent += `**${sectionTitle}**\n`;
+                        } else {
+                            this.logger.info(`🔍 DEBUG: Pomijam tytuł h6 składający się tylko z emoji`);
+                        }
                     }
                     
                     // Wyciągnij wszystkie paragrafy p class="text-muted" w tej sekcji
@@ -995,7 +1019,19 @@ class TimelineService {
                 if (h6Matches) {
                     h6Matches.forEach((h6, index) => {
                         const title = h6.replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
-                        discordContent += `**${title}**\n`;
+                        this.logger.info(`🔍 DEBUG: Fallback h6 tytuł: "${title}"`);
+                        
+                        // Sprawdź czy tytuł nie składa się tylko z emoji
+                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(title);
+                        this.logger.info(`🔍 DEBUG: Czy tylko emoji: ${isOnlyEmoji}`);
+                        
+                        if (!isOnlyEmoji) {
+                            this.logger.info(`🔍 DEBUG: Dodaję fallback sekcję: "**${title}**"`);
+                            discordContent += `**${title}**\n`;
+                        } else {
+                            this.logger.info(`🔍 DEBUG: Pomijam fallback tytuł składający się tylko z emoji`);
+                            return; // pomiń tę sekcję całkowicie
+                        }
                         
                         // Jeśli jest odpowiadający paragraf
                         if (pMatches && pMatches[index]) {
