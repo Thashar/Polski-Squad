@@ -248,8 +248,11 @@ class InteractionHandler {
             
             if (!isNewRecord) {
                 try {
+                    // Oczyść nazwę użytkownika z nieprawidłowych znaków dla nazwy pliku
+                    const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
+                    const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
                     const imageAttachment = new AttachmentBuilder(tempImagePath, { 
-                        name: `wynik_${userName}_${Date.now()}.${attachment.name.split('.').pop()}` 
+                        name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}` 
                     });
                     
                     const resultEmbed = this.rankingService.createResultEmbed(
@@ -271,8 +274,11 @@ class InteractionHandler {
             }
             
             // Nowy rekord - przygotowanie publicznego ogłoszenia
+            // Oczyść nazwę użytkownika z nieprawidłowych znaków dla nazwy pliku
+            const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
+            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
             const imageAttachment = new AttachmentBuilder(tempImagePath, { 
-                name: `rekord_${userName}_${Date.now()}.${attachment.name.split('.').pop()}` 
+                name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}` 
             });
             
             const publicEmbed = this.rankingService.createRecordEmbed(
