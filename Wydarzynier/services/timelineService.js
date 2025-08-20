@@ -288,6 +288,10 @@ class TimelineService {
                         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // usuń style
                         .replace(/<img[^>]*>/gi, '') // usuń obrazki
                         .replace(/<[^>]*>/g, ' ') // usuń pozostałe tagi HTML
+                        .replace(/This website has been created to guide players.*?Soon\.\.\./gs, '') // usuń stopkę strony
+                        .replace(/kaliqq47856@proton\.me/g, '') // usuń email
+                        .replace(/Privacy Policy/g, '') // usuń politykę prywatności
+                        .replace(/❤️/g, '') // usuń serce ze stopki
                         .replace(/\s+/g, ' ') // znormalizuj białe znaki
                         .trim();
                     
@@ -555,6 +559,11 @@ class TimelineService {
             .replace(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/g, '') // usuń daty
             .replace(/[-–—]\s*(UTC|Time)/gi, '') // usuń separatory z czasem
             .replace(/^[-–—\s]+/, '') // usuń myślniki na początku
+            .replace(/This website has been created to guide players.*?Soon\.\.\./gs, '') // usuń stopkę strony
+            .replace(/kaliqq47856@proton\.me/g, '') // usuń email
+            .replace(/Privacy Policy/g, '') // usuń politykę prywatności
+            .replace(/If you encounter any bugs or errors.*?via email\./gs, '') // usuń informacje o błędach
+            .replace(/❤️/g, '') // usuń emoji serca
             .replace(/\s+/g, ' ') // znormalizuj białe znaki
             .replace(/\.\s+/g, '.\n') // nowa linia po każdym zdaniu
             .replace(/\n\s*\n/g, '\n') // usuń podwójne nowe linie
@@ -801,11 +810,42 @@ class TimelineService {
                 return dateA - dateB;
             });
 
-            this.logger.info(`Posortowano ${sortedEvents.length} wydarzeń chronologicznie`);
+            // Filtruj wydarzenia - usuń te starsze niż 7 dni
+            const now = new Date();
+            const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+            
+            const activeEvents = sortedEvents.filter(event => {
+                const eventDate = this.parseEventDateTime(event.date, event.time);
+                return eventDate >= sevenDaysAgo;
+            });
 
-            // Aktualizuj lub utwórz wiadomości dla każdego posortowanego wydarzenia
-            for (let i = 0; i < sortedEvents.length; i++) {
-                const event = sortedEvents[i];
+            const removedCount = sortedEvents.length - activeEvents.length;
+            if (removedCount > 0) {
+                this.logger.info(`Usunięto ${removedCount} przestarzałych wydarzeń (starszych niż 7 dni)`);
+            }
+
+            this.logger.info(`Posortowano ${activeEvents.length} aktywnych wydarzeń chronologicznie`);
+
+            // Usuń wiadomości dla przestarzałych wydarzeń
+            const eventsToRemove = this.messageIds.length - activeEvents.length;
+            if (eventsToRemove > 0) {
+                const messagesToDelete = this.messageIds.slice(activeEvents.length);
+                for (const msgId of messagesToDelete) {
+                    try {
+                        const oldMessage = await channel.messages.fetch(msgId);
+                        await oldMessage.delete();
+                        this.logger.info(`Usunięto przestarzałą wiadomość wydarzenia (ID: ${msgId})`);
+                    } catch (error) {
+                        this.logger.warn(`Nie można usunąć przestarzałej wiadomości ${msgId}: ${error.message}`);
+                    }
+                }
+                // Skróć tablicę ID wiadomości
+                this.messageIds = this.messageIds.slice(0, activeEvents.length);
+            }
+
+            // Aktualizuj lub utwórz wiadomości dla każdego aktywnego wydarzenia
+            for (let i = 0; i < activeEvents.length; i++) {
+                const event = activeEvents[i];
                 const messageContent = this.generateEventMessage(event);
                 
                 if (this.messageIds[i]) {
@@ -833,7 +873,7 @@ class TimelineService {
 
             // Zapisz zaktualizowane ID wiadomości
             await this.saveTimelineData();
-            this.logger.info(`✅ Zaktualizowano wszystkie ${this.timelineData.length} wydarzeń`);
+            this.logger.info(`✅ Zaktualizowano wszystkie ${activeEvents.length} aktywnych wydarzeń`);
             
         } catch (error) {
             this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error);
