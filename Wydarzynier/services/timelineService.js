@@ -480,8 +480,7 @@ class TimelineService {
         // Sformatuj wydarzenie zgodnie ze strukturą HTML
         let formattedEvent = this.formatEventFromStructure(event);
         
-        let message = `## ${event.date} ${event.time} - (UTC 0) ✔️\n\n`;
-        message += `🗓️ **Data:** ${discordDate}\n`;
+        let message = `🗓️ **Data:** ${discordDate}\n`;
         message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n\n`;
         message += formattedEvent;
         
@@ -795,9 +794,18 @@ class TimelineService {
                 this.messageIds = this.messageIds.slice(0, this.timelineData.length);
             }
 
-            // Aktualizuj lub utwórz wiadomości dla każdego wydarzenia
-            for (let i = 0; i < this.timelineData.length; i++) {
-                const event = this.timelineData[i];
+            // Sortuj wydarzenia od najstarszego do najnowszego
+            const sortedEvents = [...this.timelineData].sort((a, b) => {
+                const dateA = this.parseEventDateTime(a.date, a.time);
+                const dateB = this.parseEventDateTime(b.date, b.time);
+                return dateA - dateB;
+            });
+
+            this.logger.info(`Posortowano ${sortedEvents.length} wydarzeń chronologicznie`);
+
+            // Aktualizuj lub utwórz wiadomości dla każdego posortowanego wydarzenia
+            for (let i = 0; i < sortedEvents.length; i++) {
+                const event = sortedEvents[i];
                 const messageContent = this.generateEventMessage(event);
                 
                 if (this.messageIds[i]) {
