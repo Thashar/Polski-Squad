@@ -519,7 +519,7 @@ class TimelineService {
         // Wygeneruj ciekawy nagłówek na podstawie treści wydarzenia
         const eventTitle = this.generateEventTitle(event);
         
-        let message = `# ✅ ${discordDate} - Aktualizacja\n\n`;
+        let message = `# 📅 Aktualizacja - ${discordDate}\n\n`;
         message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n`;
         message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         message += formattedEvent;
