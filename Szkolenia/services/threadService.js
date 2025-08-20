@@ -32,16 +32,27 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
         const deleteThreshold = config.timing.threadDeleteDays * 24 * 60 * 60 * 1000;
         const reminderThreshold = config.timing.inactiveReminderHours * 60 * 60 * 1000;
 
-        const threads = await channel.threads.fetchActive();
-        
-        // Wyczyść nieistniejące wątki z danych przypomień
-        await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, threads.threads);
+        let allThreads;
         
         if (isInitialCheck) {
-            logger.info(`🔍 Sprawdzanie ${threads.threads.size} aktywnych wątków przy starcie bota...`);
+            // Przy starcie sprawdź wszystkie wątki (aktywne i zarchiwizowane)
+            const activeThreads = await channel.threads.fetchActive();
+            const archivedThreads = await channel.threads.fetchArchived();
+            
+            // Połącz aktywne i zarchiwizowane wątki
+            allThreads = new Map([...activeThreads.threads, ...archivedThreads.threads]);
+            
+            logger.info(`🔍 Sprawdzanie ${allThreads.size} wątków przy starcie bota (aktywne: ${activeThreads.threads.size}, zarchiwizowane: ${archivedThreads.threads.size})...`);
+        } else {
+            // Przy normalnym sprawdzaniu tylko aktywne wątki
+            const threads = await channel.threads.fetchActive();
+            allThreads = threads.threads;
         }
         
-        for (const [id, thread] of threads.threads) {
+        // Wyczyść nieistniejące wątki z danych przypomień
+        await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, allThreads);
+        
+        for (const [id, thread] of allThreads) {
             try {
                 await processThread(thread, guild, state, config, now, {
                     archiveThreshold,
