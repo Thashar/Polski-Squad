@@ -5,28 +5,28 @@ Kolekcja botów Discord dla serwera Polish Squad, zawierająca osiem specjalisty
 ## Boty
 
 ### 🎯 Rekruter Bot
-Zaawansowany system rekrutacji z weryfikacją kwalifikacji przez OCR. Analizuje statystyki postaci, przypisuje do odpowiednich klanów na podstawie siły ataku (100K-800K+ progów), zarządza pseudonimami oraz śledzi boosty serwera z automatycznymi podziękowaniami w stylu Survivor.io.
+Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach oraz **system powiadomień o boostach** - automatyczne wiadomości dziękczynne dla osób boostujących serwer.
 
 ### 🎓 Szkolenia Bot
-Zarządza wątkami treningowymi z reakcją na emoji N_SSS. Automatyczne archiwizowanie po 24h, usuwanie po 7 dniach, przypomnienia co 24h dla nieaktywnych wątków. Zawiera szczegółowe instrukcje dla: ekwipunku, Tech Partów, collectibles, petów, xeno petów, postaci, trybów gry i sum itemów.
+Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z automatycznymi przypomnieniami dla uczestników, aby nikt nie zapomniał o ważnych sesjach treningowych.
 
 ### ⚔️ Stalker LME Bot
-System kar za brak uczestnictwa w boss fightach. OCR analizuje zdjęcia wyników i automatycznie karze graczy z 0 damage punktami karnymi (2+ pkt = kara, 3+ pkt = ban loterii). **System urlopów** z interaktywnym przyciskiem, 15-min timeout wniosku, 6h cooldown. Tygodniowe czyszczenie w poniedziałki.
+System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń, automatyczne resetowanie punktów oraz **system zarządzania urlopami** z automatycznym monitorowaniem kanału i czasowymi ograniczeniami składania wniosków.
 
 ### 🤖 Muteusz Bot
-Kompleksowa moderacja z zaawansowaną detekcją spamu i polskich wulgaryzmów. **Cache mediów** do 100MB z 24h retencją, **zarządzanie rolami** z ekskluzyjnymi grupami i przywracaniem. **Auto-moderacja** z eskalacją ostrzeżeń. **Losowe PepeSoldier** (1/250) dla Virtutti Papajlari.
+Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń. **Losowe odpowiedzi PepeSoldier** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/250 na otrzymanie losowej odpowiedzi z emoji PepeSoldier.
 
 ### 🏆 EndersEcho Bot
-System rankingowy z OCR analizą wyników boss fightów. Automatyczne przypisywanie ról TOP (1, 2-3, 4-10, 11-30) na podstawie wyników. **Ulepszone logowanie** - wyświetla konkretne wartości po "Best:" i "Total:" zamiast true/false. Paginacja rankingów, korekcja błędów OCR (TT→1T, 7→T, 0→Q).
+Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe. **Ulepszona korekcja OCR** - automatycznie poprawia błędy odczytu (TT→1T, 7→T, 0→Q). **Ulepszone logowanie** - wyświetla konkretne wartości znalezione po "Best:" i "Total:" zamiast tylko true/false, zredukowane duplikaty logów dla czystszego outputu.
 
 ### 🎯 Kontroler Bot
-Weryfikacja wyników dla kanałów Daily (910+ pkt) i CX (2000+ pkt) z różnym przetwarzaniem OCR. **System loterii** z podziałem na klany, cron-owe losowania, wykluczanie ukaranych użytkowników. Zaawansowane dopasowywanie nicków z progami podobieństwa 40%/30%.
+Weryfikuje wyniki dla kanałów Daily i CX. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. Blokuje użytkowników z karami.
 
 ### ⛪ Konklawe Bot
-Interaktywna gra słowna z hasłem "Konklawe". **System osiągnięć** - 30+ poprawnych odpowiedzi = medal Virtutti Papajlari. **Specjalne komendy VIP**: `/blessing` (12 wariantów) i `/virtue-check` (10 cnót) z cooldownami. **Losowe JP2roll** (1/100). Automatyczne przypomnienia papieżom co 15/30/60 minut.
+Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki. **Losowe odpowiedzi JP2** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/100 na otrzymanie losowej odpowiedzi z emoji JP2roll. **Specjalne komendy VIP**: `/blessing` (błogosławieństwa) i `/virtue-check` (sprawdzanie cnót) z cooldownami i limitami dziennymi - dostępne globalnie tylko dla posiadaczy medalu.
 
 ### 🎉 Wydarzynier Bot
-Zarządzanie eventami z **systemem lobby party** (7 graczy max, prywatne wątki, 15-min dyskusja). **Automatyczne zarządzanie członkami** z ochroną przed griefer'ami. **Powiadomienia o eventach** z interaktywnym zapisem na role. Repository system - przesuwa ogłoszenia party na górę co 5 minut.
+System zarządzania eventami i organizacji społeczności. **System lobby party** - tworzy prywatne wątki dla organizacji gier z systemem zaproszeń i automatycznym czyszczeniem. **Marketplace (Bazar)** - automatyczny system handlowy z cyklicznymi resetami co 2 godziny, ostrzeżeniami i systemem przypinania wiadomości. **Zarządzanie powiadomieniami** - interaktywny system zapisów na powiadomienia o eventach.
 
 ## System Logowania
 
