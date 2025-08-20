@@ -854,67 +854,78 @@ class TimelineService {
             const dateIndex = rawHTML.indexOf(eventDate);
             if (dateIndex === -1) return null;
             
-            // Weź sekcję wokół daty (5000 znaków po dacie)
-            const dateSection = rawHTML.substring(dateIndex, dateIndex + 5000);
+            // Weź sekcję wokół daty (20000 znaków po dacie)
+            const dateSection = rawHTML.substring(dateIndex, dateIndex + 20000);
             
             // Znajdź card-body - prostszy pattern
             const cardBodyStart = dateSection.indexOf('<div class="card-body">');
             if (cardBodyStart === -1) return null;
             
-            // Znajdź koniec card-body - szukaj trzech zamykających divów z rzędu
-            const cardBodyContent = dateSection.substring(cardBodyStart + 23); // 23 to długość '<div class="card-body">'
-            
-            // Znajdź koniec - może być kilka poziomów zagnieżdżenia
-            let divCount = 1;
-            let endIndex = 0;
-            let inTag = false;
-            
-            for (let i = 0; i < cardBodyContent.length; i++) {
-                const char = cardBodyContent[i];
-                if (char === '<') inTag = true;
-                if (char === '>' && inTag) {
-                    inTag = false;
-                    const tag = cardBodyContent.substring(i-10, i+1);
-                    if (tag.includes('<div')) divCount++;
-                    if (tag.includes('</div')) {
-                        divCount--;
-                        if (divCount === 0) {
-                            endIndex = i - 5; // -5 żeby nie wziąć </div>
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            if (endIndex === 0) endIndex = Math.min(8000, cardBodyContent.length); // Zwiększ limit
-            const cardBody = cardBodyContent.substring(0, endIndex);
+            // Weź większy kawałek - do 15000 znaków od card-body
+            const cardBodyContent = dateSection.substring(cardBodyStart + 23, cardBodyStart + 15000);
+            const cardBody = cardBodyContent;
             let discordContent = '';
             
-            // Struktura HTML: wewnątrz card-body jest jedna sekcja z wieloma h6+p parami
-            // Wyciągnij wszystkie h6 i p bezpośrednio
-            const h6Matches = cardBody.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g);
-            const pMatches = cardBody.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
+            // Znajdź wszystkie sekcje div class="section" (z różnymi klasami)
+            const sectionMatches = cardBody.match(/<div class="section[^"]*"[^>]*>(.*?)(?=<div class="section|$)/gs);
             
-            if (h6Matches) {
-                h6Matches.forEach((h6, index) => {
-                    const title = h6.replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
-                    const sectionEmoji = this.getSectionEmoji(title);
-                    discordContent += `${sectionEmoji} **${title}**\n`;
+            if (sectionMatches && sectionMatches.length > 0) {
+                this.logger.info(`Znaleziono ${sectionMatches.length} sekcji div`);
+                
+                for (const sectionMatch of sectionMatches) {
+                    // Wyciągnij h6 (tytuł sekcji)
+                    const h6Match = sectionMatch.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/);
+                    if (h6Match) {
+                        const sectionTitle = h6Match[1].trim();
+                        const sectionEmoji = this.getSectionEmoji(sectionTitle);
+                        discordContent += `${sectionEmoji} **${sectionTitle}**\n`;
+                    }
                     
-                    // Jeśli jest odpowiadający paragraf
-                    if (pMatches && pMatches[index]) {
-                        const pContent = pMatches[index].replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
-                            .replace(/<br\s*\/?>/gi, '\n')
-                            .replace(/<[^>]*>/g, '')
-                            .trim();
-                        
-                        if (pContent.length > 0) {
-                            discordContent += `${pContent}\n`;
+                    // Wyciągnij wszystkie paragrafy p class="text-muted" w tej sekcji
+                    const pMatches = sectionMatch.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
+                    if (pMatches) {
+                        for (const pMatch of pMatches) {
+                            const pContent = pMatch.replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
+                                .replace(/<br\s*\/?>/gi, '\n')
+                                .replace(/<[^>]*>/g, '')
+                                .trim();
+                            
+                            if (pContent.length > 0) {
+                                discordContent += `${pContent}\n`;
+                            }
                         }
                     }
                     
                     discordContent += '\n';
-                });
+                }
+            } else {
+                this.logger.warn('Nie znaleziono sekcji div, próbuję bezpośrednio H6+P');
+                
+                // Fallback - wyciągnij wszystkie h6 i p bezpośrednio
+                const h6Matches = cardBody.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g);
+                const pMatches = cardBody.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
+                
+                if (h6Matches) {
+                    h6Matches.forEach((h6, index) => {
+                        const title = h6.replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
+                        const sectionEmoji = this.getSectionEmoji(title);
+                        discordContent += `${sectionEmoji} **${title}**\n`;
+                        
+                        // Jeśli jest odpowiadający paragraf
+                        if (pMatches && pMatches[index]) {
+                            const pContent = pMatches[index].replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
+                                .replace(/<br\s*\/?>/gi, '\n')
+                                .replace(/<[^>]*>/g, '')
+                                .trim();
+                            
+                            if (pContent.length > 0) {
+                                discordContent += `${pContent}\n`;
+                            }
+                        }
+                        
+                        discordContent += '\n';
+                    });
+                }
             }
             
             return discordContent.trim();
