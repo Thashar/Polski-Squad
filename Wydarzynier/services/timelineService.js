@@ -269,17 +269,34 @@ class TimelineService {
                         .replace(/^[-\s]*/, '') // usuń myślniki na początku
                         .trim();
                     
-                    // Wyciągnij rozszerzoną sekcję wydarzenia - większy blok (2000 znaków)
-                    let extendedSection = tableContent.substring(dateIndex, dateIndex + 2000);
+                    // Znajdź początek tego wydarzenia
+                    const eventStart = tableContent.indexOf(date);
                     
-                    // Znajdź koniec tego wydarzenia (następna data lub koniec tekstu)
-                    const nextDateMatch = extendedSection.match(/\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}/g);
-                    if (nextDateMatch && nextDateMatch.length > 1) {
-                        // Znajdź pozycję drugiej daty
-                        const secondDateIndex = extendedSection.indexOf(nextDateMatch[1]);
-                        if (secondDateIndex > 100) {
-                            extendedSection = extendedSection.substring(0, secondDateIndex);
+                    // Znajdź koniec tego wydarzenia - szukaj następnej pełnej daty z czasem
+                    const nextEventPattern = /\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\s+\d{1,2}:\d{2}/g;
+                    let nextEventIndex = -1;
+                    
+                    // Szukaj od pozycji po aktualnej dacie
+                    const searchText = tableContent.substring(eventStart + date.length);
+                    const nextEventMatch = searchText.match(nextEventPattern);
+                    
+                    if (nextEventMatch) {
+                        // Znajdź pozycję pierwszego następnego wydarzenia
+                        nextEventIndex = searchText.indexOf(nextEventMatch[0]);
+                        if (nextEventIndex > 50) { // Minimum 50 znaków dla wydarzenia
+                            nextEventIndex = eventStart + date.length + nextEventIndex;
+                        } else {
+                            nextEventIndex = -1;
                         }
+                    }
+                    
+                    // Wyciągnij sekcję tylko tego wydarzenia
+                    let extendedSection;
+                    if (nextEventIndex > eventStart) {
+                        extendedSection = tableContent.substring(eventStart, nextEventIndex);
+                    } else {
+                        // Jeśli to ostatnie wydarzenie, weź do końca lub maksymalnie 1500 znaków
+                        extendedSection = tableContent.substring(eventStart, eventStart + 1500);
                     }
                     
                     // Zachowaj oryginalną strukturę z sekcjami
@@ -632,54 +649,86 @@ class TimelineService {
         try {
             let structured = '';
             
-            // Wzorce dla sekcji zgodnych ze strukturą strony
+            // Wzorce dla sekcji zgodnych ze strukturą strony - ulepszony parsing
             const sectionPatterns = [
                 {
-                    title: 'Released Collections',
-                    pattern: /Released Collections?(.*?)(?=New Collection Sets|Collection Custom Set|Costumes|$)/is
+                    title: 'Collections',
+                    patterns: [
+                        /Collections?\s*(.*?)(?=New Collection Sets|Collection Custom Set|Universal Exchange Shop|SS Belt|Amazing Diamond|Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is,
+                        /Released Collections?\s*(.*?)(?=New Collection Sets|Collection Custom Set|Universal Exchange Shop|SS Belt|Amazing Diamond|Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
-                    title: 'New Collection Sets',  
-                    pattern: /New Collection Sets?(.*?)(?=Collection Custom Set|Costumes|Released Collections|$)/is
+                    title: 'New Collection Sets',
+                    patterns: [
+                        /New Collection Sets?\s*(.*?)(?=Collection Custom Set|Universal Exchange Shop|SS Belt|Amazing Diamond|Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'Collection Custom Set',
-                    pattern: /Collection Custom Set(.*?)(?=Costumes|New Collection Sets|Released Collections|$)/is
+                    patterns: [
+                        /Collection Custom Set\s*(.*?)(?=Universal Exchange Shop|SS Belt|Amazing Diamond|Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'Universal Exchange Shop',
-                    pattern: /Universal Exchange Shop(.*?)(?=Costumes|Collection|$)/is
+                    patterns: [
+                        /Universal Exchange Shop\s*(.*?)(?=SS Belt|Amazing Diamond|Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'SS Belt Chaos Fusion',
-                    pattern: /SS Belt.*?Chaos Fusion(.*?)(?=Costumes|Collection|$)/is
+                    patterns: [
+                        /SS Belt.*?Chaos Fusion\s*(.*?)(?=Amazing Diamond|Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'Amazing Diamond Carnival',
-                    pattern: /Amazing Diamond Carnival(.*?)(?=Costumes|Collection|$)/is
+                    patterns: [
+                        /Amazing Diamond Carnival\s*(.*?)(?=Advanced Retreat|Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'Advanced Retreat Privileges',
-                    pattern: /Advanced Retreat Privileges(.*?)(?=Costumes|Collection|$)/is
+                    patterns: [
+                        /Advanced Retreat Privileges\s*(.*?)(?=Twinborn Tech|Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'Twinborn Tech',
-                    pattern: /Twinborn Tech(.*?)(?=Costumes|Collection|$)/is
+                    patterns: [
+                        /Twinborn Tech[^(]*\([^)]*\)\s*(.*?)(?=Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is,
+                        /Twinborn Tech\s*(.*?)(?=Costumes|\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 },
                 {
                     title: 'Costumes',
-                    pattern: /Costumes?(.*?)$/is
+                    patterns: [
+                        /Costumes?\s*(.*?)(?=\d{1,2}\s+[A-Z][a-z]+\s+\d{4}|$)/is
+                    ]
                 }
             ];
             
             let foundSections = 0;
             
             for (const sectionPattern of sectionPatterns) {
-                const match = content.match(sectionPattern.pattern);
-                if (match && match[1]) {
-                    let sectionContent = match[1]
+                let bestMatch = null;
+                let bestContent = '';
+                
+                // Spróbuj wszystkie wzorce dla tej sekcji
+                for (const pattern of sectionPattern.patterns) {
+                    const match = content.match(pattern);
+                    if (match && match[1] && match[1].trim().length > bestContent.length) {
+                        bestMatch = match;
+                        bestContent = match[1].trim();
+                    }
+                }
+                
+                if (bestMatch && bestContent) {
+                    let sectionContent = bestContent
                         .replace(/^\s*[-–—]*\s*/, '') // usuń myślniki na początku
                         .replace(/\s+/g, ' ')
+                        .replace(/\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}.*$/g, '') // usuń następną datę i dalej
                         .trim();
                     
                     if (sectionContent.length > 15) {
