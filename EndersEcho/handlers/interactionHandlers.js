@@ -223,104 +223,38 @@ class InteractionHandler {
             
             // Ekstrakcja tekstu i wyniku
             const extractedText = await this.ocrService.extractTextFromImage(tempImagePath);
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('Pełny tekst z OCR z interaction handler: "' + extractedText + '"');
-                logger.info('🔍 DEBUG: extractedText type: ' + typeof extractedText);
-                logger.info('🔍 DEBUG: extractedText length: ' + (extractedText ? extractedText.length : 'null/undefined'));
-            }
-            
             let bestScore = this.ocrService.extractScoreAfterBest(extractedText);
             
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: bestScore po extractScoreAfterBest: "' + bestScore + '"');
-                logger.info('🔍 DEBUG: bestScore type: ' + typeof bestScore);
-                logger.info('🔍 DEBUG: bestScore length: ' + (bestScore ? bestScore.length : 'null/undefined'));
-            }
-            
             if (!bestScore || bestScore.trim() === '') {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: Wynik jest pusty - kończę proces');
-                }
                 await fs.unlink(tempImagePath);
                 await interaction.editReply(this.config.messages.updateNoScore);
                 return;
             }
             
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Kontynuuję z wynikiem: "' + bestScore + '"');
-            }
-            
             // Ekstrakcja nazwy bossa
             const bossName = this.ocrService.extractBossName(extractedText);
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('Nazwa bossa: "' + bossName + '"');
-                logger.info('🔍 DEBUG: bossName type: ' + typeof bossName);
-                logger.info('🔍 DEBUG: bossName length: ' + (bossName ? bossName.length : 'null/undefined'));
-                logger.info('DEBUG - extractedText długość: ' + (extractedText ? extractedText.length : 'null'));
-                logger.info('DEBUG - bestScore: "' + bestScore + '"');
-                logger.info('DEBUG - bossName: "' + bossName + '"');
-            }
             
             // Aktualizacja rankingu
             const userId = interaction.user.id;
             const userName = interaction.user.displayName || interaction.user.username;
             
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Rozpoczynam aktualizację rankingu dla userId: ' + userId);
-                logger.info('🔍 DEBUG: userName: "' + userName + '"');
-                logger.info('🔍 DEBUG: bestScore do aktualizacji: "' + bestScore + '"');
-                logger.info('🔍 DEBUG: bossName do aktualizacji: "' + bossName + '"');
-            }
-            
             const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                 userId, userName, bestScore, bossName
             );
             
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Wynik updateUserRanking - isNewRecord: ' + isNewRecord);
-                logger.info('🔍 DEBUG: Wynik updateUserRanking - currentScore: ' + (currentScore ? JSON.stringify(currentScore) : 'null'));
-            }
-            
             await this.logService.logScoreUpdate(userName, bestScore, isNewRecord);
             
+            logger.info(`Aktualizacja wyniku: ${userName} - ${bestScore}${isNewRecord ? ' [Nowy rekord!]' : ' [Bez rekordu]'}`);
+            
             if (!isNewRecord) {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: Obsługa przypadku BEZ nowego rekordu');
-                }
-                
                 try {
-                    // Przygotuj załącznik ze zdjęciem dla wyniku bez pobicia rekordu
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.info('🔍 DEBUG: Tworzenie załącznika dla wyniku bez rekordu');
-                        logger.info('🔍 DEBUG: tempImagePath: ' + tempImagePath);
-                        logger.info('🔍 DEBUG: attachment.name: ' + attachment.name);
-                    }
-                    
                     const imageAttachment = new AttachmentBuilder(tempImagePath, { 
                         name: `wynik_${userName}_${Date.now()}.${attachment.name.split('.').pop()}` 
                     });
                     
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.info('🔍 DEBUG: Załącznik utworzony, nazwa: ' + imageAttachment.name);
-                        logger.info('🔍 DEBUG: Tworzenie resultEmbed');
-                        logger.info('🔍 DEBUG: Parametry dla createResultEmbed:');
-                        logger.info('🔍 DEBUG: - userName: "' + userName + '"');
-                        logger.info('🔍 DEBUG: - bestScore: "' + bestScore + '"');
-                        logger.info('🔍 DEBUG: - currentScore: ' + (currentScore ? JSON.stringify(currentScore) : 'null'));
-                        logger.info('🔍 DEBUG: - currentScore.score: "' + (currentScore ? currentScore.score : 'null') + '"');
-                        logger.info('🔍 DEBUG: - imageAttachment.name: ' + imageAttachment.name);
-                    }
-                    
                     const resultEmbed = this.rankingService.createResultEmbed(
                         userName, bestScore, currentScore.score, imageAttachment.name
                     );
-                    
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.info('🔍 DEBUG: resultEmbed utworzony pomyślnie');
-                        logger.info('🔍 DEBUG: Wysyłanie odpowiedzi interaction.editReply');
-                    }
                     
                     // Aktualizuj ephemeral message z informacją o braku pobicia rekordu
                     await interaction.editReply({ 
@@ -328,25 +262,11 @@ class InteractionHandler {
                         files: [imageAttachment]
                     });
                     
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.info('🔍 DEBUG: Odpowiedź wysłana pomyślnie');
-                    }
-                    
                     // Usuń plik tymczasowy po wysłaniu
                     await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
-                    
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.info('🔍 DEBUG: Proces bez nowego rekordu zakończony pomyślnie');
-                    }
                     return;
                 } catch (noRecordError) {
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.error('🔍 DEBUG: BŁĄD w obsłudze przypadku bez nowego rekordu:');
-                        logger.error('🔍 DEBUG: Błąd message: ' + noRecordError.message);
-                        logger.error('🔍 DEBUG: Błąd stack: ' + noRecordError.stack);
-                        logger.error('🔍 DEBUG: currentScore w momencie błędu: ' + (currentScore ? JSON.stringify(currentScore) : 'null'));
-                    }
-                    throw noRecordError; // Re-throw żeby złapał główny catch
+                    throw noRecordError;
                 }
             }
             
@@ -387,17 +307,6 @@ class InteractionHandler {
             await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
             
         } catch (error) {
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.error('🔍 DEBUG: GŁÓWNY CATCH - Szczegóły błędu:');
-                logger.error('🔍 DEBUG: Error message: ' + error.message);
-                logger.error('🔍 DEBUG: Error name: ' + error.name);
-                logger.error('🔍 DEBUG: Error stack: ' + error.stack);
-                logger.error('🔍 DEBUG: Error constructor: ' + error.constructor.name);
-                logger.error('🔍 DEBUG: tempImagePath: ' + tempImagePath);
-                logger.error('🔍 DEBUG: extractedText istnieje: ' + (typeof extractedText !== 'undefined'));
-                logger.error('🔍 DEBUG: bestScore istnieje: ' + (typeof bestScore !== 'undefined'));
-                logger.error('🔍 DEBUG: bossName istnieje: ' + (typeof bossName !== 'undefined'));
-            }
             
             await this.logService.logOCRError(error, 'handleUpdateCommand');
             
@@ -406,19 +315,10 @@ class InteractionHandler {
                 await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
             }
             
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Wysyłanie komunikatu o błędzie do użytkownika');
-            }
-            
             try {
                 await interaction.editReply(this.config.messages.updateError);
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: Komunikat o błędzie wysłany pomyślnie');
-                }
             } catch (replyError) {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.error('🔍 DEBUG: Błąd podczas wysyłania komunikatu o błędzie: ' + replyError.message);
-                }
+                logger.error('Błąd podczas wysyłania komunikatu o błędzie:', replyError.message);
             }
         }
     }

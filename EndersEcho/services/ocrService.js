@@ -59,14 +59,20 @@ class OCRService {
             const hasBest = /best\s*:/i.test(text.trim());
             const hasTotal = /total\s*:/i.test(text.trim());
             
+            // Znajdź wartości po "Best:" i "Total:"
+            const bestMatch = text.trim().match(/best\s*:\s*([^\n\r]*)/i);
+            const totalMatch = text.trim().match(/total\s*:\s*([^\n\r]*)/i);
+            const bestValue = bestMatch ? bestMatch[1].trim() : '';
+            const totalValue = totalMatch ? totalMatch[1].trim() : '';
+            
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
                 logger.info('📝 Szczegółowy debug: Tekst z obrazu: "' + text.trim() + '"');
-                logger.info('🔍 Szczegółowy debug: Znaleziono "Best:":', hasBest);
-                logger.info('🔍 Szczegółowy debug: Znaleziono "Total:":', hasTotal);
+                logger.info('🔍 Szczegółowy debug: Znaleziono "Best:": ' + (bestValue || '[brak wartości]'));
+                logger.info('🔍 Szczegółowy debug: Znaleziono "Total:": ' + (totalValue || '[brak wartości]'));
             } else {
                 logger.info('Tekst z obrazu: "' + text.trim() + '"');
-                logger.info('Znaleziono "Best:":', hasBest);
-                logger.info('Znaleziono "Total:":', hasTotal);
+                logger.info('Znaleziono "Best:": ' + (bestValue || '[brak wartości]'));
+                logger.info('Znaleziono "Total:": ' + (totalValue || '[brak wartości]'));
             }
             
             return hasBest && hasTotal;
@@ -136,13 +142,15 @@ class OCRService {
             
             const trimmedText = text.trim();
             
-            // Dodatkowe debugowanie
-            logger.info('🔍 DEBUG: text przed trim: "' + text + '"');
-            logger.info('🔍 DEBUG: text type: ' + typeof text);
-            logger.info('🔍 DEBUG: text length przed trim: ' + (text ? text.length : 'null/undefined'));
-            logger.info('🔍 DEBUG: trimmedText: "' + trimmedText + '"');
-            logger.info('🔍 DEBUG: trimmedText type: ' + typeof trimmedText);
-            logger.info('🔍 DEBUG: trimmedText length: ' + (trimmedText ? trimmedText.length : 'null/undefined'));
+            // Debugowanie (tylko gdy włączone szczegółowe logowanie)
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: text przed trim: "' + text + '"');
+                logger.info('🔍 DEBUG: text type: ' + typeof text);
+                logger.info('🔍 DEBUG: text length przed trim: ' + (text ? text.length : 'null/undefined'));
+                logger.info('🔍 DEBUG: trimmedText: "' + trimmedText + '"');
+                logger.info('🔍 DEBUG: trimmedText type: ' + typeof trimmedText);
+                logger.info('🔍 DEBUG: trimmedText length: ' + (trimmedText ? trimmedText.length : 'null/undefined'));
+            }
             
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
                 logger.info('📝 Szczegółowy debug - wyodrębniony tekst z OCR: "' + trimmedText + '"');
@@ -203,11 +211,9 @@ class OCRService {
      */
     extractScoreAfterBest(text) {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('📊 Szczegółowy debug: Pełny tekst z OCR: "' + text + '"');
             logger.info('📊 Szczegółowy debug: Analizowany tekst OCR: "' + text + '"');
             logger.info('📊 Szczegółowy debug: Długość tekstu:', text ? text.length : 'null');
         } else {
-            logger.info('Pełny tekst z OCR: "' + text + '"');
             logger.info('Analizowany tekst OCR: "' + text + '"');
             logger.info('Długość tekstu:', text ? text.length : 'null');
         }
