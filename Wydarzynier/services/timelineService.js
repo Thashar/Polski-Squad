@@ -7,8 +7,10 @@ class TimelineService {
         this.logger = logger;
         this.timelineDataFile = path.join(__dirname, '../data/timeline_data.json');
         this.lastUpdateFile = path.join(__dirname, '../data/last_update.json');
-        this.messageId = null;
+        this.eventsLogFile = path.join(__dirname, '../data/events_log.json');
+        this.messageIds = []; // Tablica ID wiadomości dla każdego wydarzenia
         this.channelId = '1407666612559024339';
+        this.eventsLog = []; // Historia wszystkich wydarzeń
         this.checkInterval = null;
         this.client = null;
         this.timelineData = [];
@@ -22,12 +24,13 @@ class TimelineService {
         this.client = client;
         await this.loadTimelineData();
         await this.loadLastUpdate();
+        await this.loadEventsLog();
         
         // Rozpocznij sprawdzanie co godzinę
         this.startHourlyCheck();
         
-        // Opublikuj lub zaktualizuj wiadomość przy starcie
-        await this.publishOrUpdateMessage();
+        // Opublikuj lub zaktualizuj wiadomości przy starcie
+        await this.publishOrUpdateMessages();
         
         this.logger.info('TimelineService zainicjalizowany');
     }
@@ -40,13 +43,13 @@ class TimelineService {
             const data = await fs.readFile(this.timelineDataFile, 'utf8');
             const parsed = JSON.parse(data);
             this.timelineData = parsed.events || [];
-            this.messageId = parsed.messageId || null;
+            this.messageIds = parsed.messageIds || [];
         } catch (error) {
             if (error.code !== 'ENOENT') {
                 this.logger.error('Błąd wczytywania danych timeline:', error);
             }
             this.timelineData = [];
-            this.messageId = null;
+            this.messageIds = [];
         }
     }
 
@@ -57,13 +60,61 @@ class TimelineService {
         try {
             const data = {
                 events: this.timelineData,
-                messageId: this.messageId,
+                messageIds: this.messageIds,
                 lastSaved: new Date().toISOString()
             };
             await fs.writeFile(this.timelineDataFile, JSON.stringify(data, null, 2));
         } catch (error) {
             this.logger.error('Błąd zapisywania danych timeline:', error);
         }
+    }
+
+    /**
+     * Ładuje log wszystkich wydarzeń
+     */
+    async loadEventsLog() {
+        try {
+            const data = await fs.readFile(this.eventsLogFile, 'utf8');
+            this.eventsLog = JSON.parse(data);
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                this.logger.error('Błąd wczytywania logu wydarzeń:', error);
+            }
+            this.eventsLog = [];
+        }
+    }
+
+    /**
+     * Zapisuje log wszystkich wydarzeń
+     */
+    async saveEventsLog() {
+        try {
+            await fs.writeFile(this.eventsLogFile, JSON.stringify(this.eventsLog, null, 2));
+        } catch (error) {
+            this.logger.error('Błąd zapisywania logu wydarzeń:', error);
+        }
+    }
+
+    /**
+     * Dodaje wydarzenie do logu
+     */
+    async logEvent(event, changeType = 'update') {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            changeType: changeType, // 'new', 'update', 'delete'
+            event: { ...event },
+            source: 'garrytools.com/timeline'
+        };
+        
+        this.eventsLog.push(logEntry);
+        
+        // Zachowaj tylko ostatnie 1000 wpisów
+        if (this.eventsLog.length > 1000) {
+            this.eventsLog = this.eventsLog.slice(-1000);
+        }
+        
+        await this.saveEventsLog();
+        this.logger.info(`Zalogowano wydarzenie: ${changeType} - ${event.event?.substring(0, 50)}...`);
     }
 
     /**
@@ -349,7 +400,7 @@ class TimelineService {
                 this.timelineData = newData;
                 await this.saveTimelineData();
                 await this.saveLastUpdate();
-                await this.publishOrUpdateMessage();
+                await this.publishOrUpdateMessages();
                 return true;
             } else {
                 this.logger.info('Brak zmian w timeline');
@@ -362,50 +413,92 @@ class TimelineService {
     }
 
     /**
-     * Porównuje dwa timeline
+     * Porównuje dwa timeline i loguje zmiany
      */
-    compareTimelines(oldData, newData) {
-        if (!oldData || oldData.length !== newData.length) {
+    async compareTimelines(oldData, newData) {
+        if (!oldData || oldData.length === 0) {
+            // Pierwsza inicjalizacja - zaloguj wszystkie wydarzenia jako nowe
+            for (const event of newData) {
+                await this.logEvent(event, 'new');
+            }
             return true;
         }
 
-        for (let i = 0; i < oldData.length; i++) {
-            const oldEvent = oldData[i];
-            const newEvent = newData[i];
-            
-            if (oldEvent.date !== newEvent.date || 
-                oldEvent.time !== newEvent.time || 
-                oldEvent.event !== newEvent.event) {
-                return true;
+        let hasChanges = false;
+        const changes = [];
+
+        // Sprawdź usunięte wydarzenia
+        for (const oldEvent of oldData) {
+            const found = newData.find(newEvent => 
+                newEvent.date === oldEvent.date && 
+                newEvent.time === oldEvent.time
+            );
+            if (!found) {
+                changes.push({ type: 'deleted', event: oldEvent });
+                await this.logEvent(oldEvent, 'delete');
+                hasChanges = true;
             }
         }
-        
-        return false;
+
+        // Sprawdź nowe i zmienione wydarzenia
+        for (const newEvent of newData) {
+            const oldEvent = oldData.find(old => 
+                old.date === newEvent.date && 
+                old.time === newEvent.time
+            );
+            
+            if (!oldEvent) {
+                // Nowe wydarzenie
+                changes.push({ type: 'added', event: newEvent });
+                await this.logEvent(newEvent, 'new');
+                hasChanges = true;
+            } else if (oldEvent.event !== newEvent.event) {
+                // Zmienione wydarzenie
+                changes.push({ 
+                    type: 'modified', 
+                    oldEvent: oldEvent, 
+                    newEvent: newEvent 
+                });
+                await this.logEvent(newEvent, 'update');
+                hasChanges = true;
+            }
+        }
+
+        // Loguj podsumowanie zmian
+        if (hasChanges) {
+            this.logger.info(`Znaleziono ${changes.length} zmian w timeline:`);
+            changes.forEach((change, index) => {
+                switch(change.type) {
+                    case 'added':
+                        this.logger.info(`  ${index + 1}. ➕ DODANO: ${change.event.date} - ${change.event.event.substring(0, 50)}...`);
+                        break;
+                    case 'deleted':
+                        this.logger.info(`  ${index + 1}. ➖ USUNIĘTO: ${change.event.date} - ${change.event.event.substring(0, 50)}...`);
+                        break;
+                    case 'modified':
+                        this.logger.info(`  ${index + 1}. 🔄 ZMIENIONO: ${change.newEvent.date} - ${change.newEvent.event.substring(0, 50)}...`);
+                        break;
+                }
+            });
+        }
+
+        return hasChanges;
     }
 
     /**
-     * Generuje wiadomość timeline z odliczaniem
+     * Generuje wiadomość dla pojedynczego wydarzenia
      */
-    generateTimelineMessage() {
-        const now = new Date();
-        let message = '📅 **TIMELINE WYDARZEŃ** 📅\n\n';
+    generateEventMessage(event) {
+        const eventDateTime = this.parseEventDateTime(event.date, event.time);
+        const timestamp = Math.floor(eventDateTime.getTime() / 1000);
         
-        this.timelineData.forEach(event => {
-            const eventDateTime = this.parseEventDateTime(event.date, event.time);
-            const timeToEvent = this.formatTimeToEvent(now, eventDateTime);
-            
-            message += `**${event.date} ${event.time} UTC**\n`;
-            message += `${event.event}\n`;
-            message += `⏰ ${timeToEvent}\n\n`;
-        });
-
-        // Dodaj informację o ostatniej aktualizacji
-        const lastUpdateStr = this.lastUpdate 
-            ? this.formatDate(this.lastUpdate)
-            : this.formatDate(now);
-            
-        message += `\n─────────────────────────────\n`;
-        message += `📊 **Last Update Time:** ${lastUpdateStr}`;
+        // Discord timestamp format - automatyczne odliczanie
+        const discordTimestamp = `<t:${timestamp}:R>`; // Relative time (np. "in 2 days")
+        const discordDate = `<t:${timestamp}:F>`; // Full date and time
+        
+        let message = `📅 **${event.event}**\n\n`;
+        message += `🗓️ **Data:** ${discordDate}\n`;
+        message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}`;
         
         return message;
     }
@@ -465,9 +558,9 @@ class TimelineService {
     }
 
     /**
-     * Publikuje lub aktualizuje wiadomość na kanale
+     * Publikuje lub aktualizuje wiadomości na kanale (jedna wiadomość na wydarzenie)
      */
-    async publishOrUpdateMessage() {
+    async publishOrUpdateMessages() {
         try {
             this.logger.info(`Próbuję pobrać kanał: ${this.channelId}`);
             const channel = await this.client.channels.fetch(this.channelId);
@@ -490,32 +583,60 @@ class TimelineService {
                 }
             }
 
-            const messageContent = this.generateTimelineMessage();
-            
-            // Sprawdź długość wiadomości (limit Discord: 2000 znaków)
-            if (messageContent.length > 2000) {
-                this.logger.warn(`Wiadomość jest za długa (${messageContent.length} znaków), skracam...`);
-                const shortContent = messageContent.substring(0, 1950) + '\n\n[...]';
-                await this.createNewMessage(channel, shortContent);
-                return;
+            // Wyślij nagłówek timeline jeśli nie ma żadnych wiadomości
+            if (this.messageIds.length === 0 && this.timelineData.length > 0) {
+                const headerMessage = `🎯 **TIMELINE WYDARZEŃ** 🎯\n\n*Aktualizacje automatyczne co godzinę*\n*Last Update: <t:${Math.floor(Date.now()/1000)}:F>*`;
+                const headerMsg = await channel.send(headerMessage);
+                this.logger.info(`Utworzono nagłówek timeline (ID: ${headerMsg.id})`);
             }
 
-            if (this.messageId) {
-                // Spróbuj zaktualizować istniejącą wiadomość
-                try {
-                    const existingMessage = await channel.messages.fetch(this.messageId);
-                    await existingMessage.edit(messageContent);
-                    this.logger.info('✅ Zaktualizowano wiadomość timeline');
-                } catch (error) {
-                    // Jeśli nie można zaktualizować, utwórz nową
-                    this.logger.warn(`⚠️ Nie można zaktualizować wiadomości (${error.message}), tworzę nową`);
-                    await this.createNewMessage(channel, messageContent);
+            // Usuń stare wiadomości jeśli liczba wydarzeń się zmieniła
+            if (this.messageIds.length > this.timelineData.length) {
+                const messagesToDelete = this.messageIds.slice(this.timelineData.length);
+                for (const msgId of messagesToDelete) {
+                    try {
+                        const oldMessage = await channel.messages.fetch(msgId);
+                        await oldMessage.delete();
+                        this.logger.info(`Usunięto starą wiadomość wydarzenia (ID: ${msgId})`);
+                    } catch (error) {
+                        this.logger.warn(`Nie można usunąć starej wiadomości ${msgId}: ${error.message}`);
+                    }
                 }
-            } else {
-                // Utwórz nową wiadomość
-                this.logger.info('Tworzę nową wiadomość timeline');
-                await this.createNewMessage(channel, messageContent);
+                this.messageIds = this.messageIds.slice(0, this.timelineData.length);
             }
+
+            // Aktualizuj lub utwórz wiadomości dla każdego wydarzenia
+            for (let i = 0; i < this.timelineData.length; i++) {
+                const event = this.timelineData[i];
+                const messageContent = this.generateEventMessage(event);
+                
+                if (this.messageIds[i]) {
+                    // Zaktualizuj istniejącą wiadomość
+                    try {
+                        const existingMessage = await channel.messages.fetch(this.messageIds[i]);
+                        await existingMessage.edit(messageContent);
+                        this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}: ${event.event.substring(0, 30)}...`);
+                    } catch (error) {
+                        this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[i]}, tworzę nową`);
+                        const newMessage = await channel.send(messageContent);
+                        this.messageIds[i] = newMessage.id;
+                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                    }
+                } else {
+                    // Utwórz nową wiadomość
+                    const newMessage = await channel.send(messageContent);
+                    this.messageIds[i] = newMessage.id;
+                    this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                }
+                
+                // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            // Zapisz zaktualizowane ID wiadomości
+            await this.saveTimelineData();
+            this.logger.info(`✅ Zaktualizowano wszystkie ${this.timelineData.length} wydarzeń`);
+            
         } catch (error) {
             this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error);
             this.logger.error('Szczegóły błędu:', {
@@ -527,28 +648,6 @@ class TimelineService {
         }
     }
 
-    /**
-     * Tworzy nową wiadomość
-     */
-    async createNewMessage(channel, content) {
-        try {
-            this.logger.info(`Próbuję utworzyć wiadomość na kanale ${channel.name} (${channel.id})`);
-            this.logger.info(`Długość wiadomości: ${content.length} znaków`);
-            
-            const message = await channel.send(content);
-            this.messageId = message.id;
-            await this.saveTimelineData();
-            this.logger.info(`✅ Utworzono nową wiadomość timeline (ID: ${message.id})`);
-        } catch (error) {
-            this.logger.error('Błąd tworzenia nowej wiadomości:', error);
-            this.logger.error('Szczegóły błędu:', {
-                name: error.name,
-                message: error.message,
-                code: error.code,
-                status: error.status
-            });
-        }
-    }
 
     /**
      * Uruchamia sprawdzanie co godzinę
