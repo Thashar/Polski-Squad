@@ -244,7 +244,7 @@ class InteractionHandler {
             
             await this.logService.logScoreUpdate(userName, bestScore, isNewRecord);
             
-            logger.info(`Aktualizacja wyniku: ${userName} - ${bestScore}${isNewRecord ? ' [Nowy rekord!]' : ' [Bez rekordu]'}`);
+            logger.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
             
             if (!isNewRecord) {
                 try {
@@ -252,22 +252,13 @@ class InteractionHandler {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
                     const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
                     
-                    logger.info('🔍 DEBUG: Tworzenie AttachmentBuilder (no record)');
-                    logger.info(`🔍 DEBUG: tempImagePath: ${tempImagePath}`);
-                    logger.info(`🔍 DEBUG: safeUserName: ${safeUserName}`);
-                    logger.info(`🔍 DEBUG: fileExtension: ${fileExtension}`);
-                    
                     const imageAttachment = new AttachmentBuilder(tempImagePath, { 
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}` 
                     });
                     
-                    logger.info('🔍 DEBUG: AttachmentBuilder utworzony pomyślnie');
-                    
                     const resultEmbed = this.rankingService.createResultEmbed(
                         userName, bestScore, currentScore.score, imageAttachment.name
                     );
-                    
-                    logger.info('🔍 DEBUG: Przed wysłaniem interaction.editReply (no record)');
                     
                     try {
                         // Aktualizuj ephemeral message z informacją o braku pobicia rekordu
@@ -276,13 +267,18 @@ class InteractionHandler {
                             files: [imageAttachment]
                         });
                         
-                        logger.info('🔍 DEBUG: Po wysłaniu interaction.editReply (no record)');
+                        logger.info('✅ Wysłano embed z wynikiem (brak rekordu)');
                     } catch (editReplyError) {
-                        logger.error('🔍 DEBUG: Błąd podczas editReply (no record):', editReplyError);
-                        logger.error('🔍 DEBUG: editReplyError.name:', editReplyError.name);
-                        logger.error('🔍 DEBUG: editReplyError.message:', editReplyError.message);
-                        logger.error('🔍 DEBUG: editReplyError.code:', editReplyError.code);
-                        throw editReplyError;
+                        logger.error('❌ Błąd podczas wysyłania embed (brak rekordu):', editReplyError);
+                        
+                        // Spróbuj wysłać przynajmniej tekstową odpowiedź
+                        try {
+                            await interaction.editReply({
+                                content: `❌ Nie pobito rekordu\n**Gracz:** ${userName}\n**Wynik:** ${bestScore}\n**Obecny rekord:** ${currentScore.score}\n\n*Błąd wysyłania embed z obrazem*`
+                            });
+                        } catch (fallbackError) {
+                            logger.error('❌ Nie można wysłać nawet fallback odpowiedzi:', fallbackError);
+                        }
                     }
                     
                     // Usuń plik tymczasowy po wysłaniu
@@ -309,16 +305,34 @@ class InteractionHandler {
                 currentScore ? currentScore.score : null
             );
             
-            // Aktualizuj ephemeral message z informacją o sukcesie
-            await interaction.editReply({ 
-                content: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.' 
-            });
-            
-            // Wyślij publiczne ogłoszenie nowego rekordu jako nową wiadomość
-            await interaction.followUp({ 
-                embeds: [publicEmbed], 
-                files: [imageAttachment] 
-            });
+            try {
+                // Aktualizuj ephemeral message z informacją o sukcesie
+                await interaction.editReply({ 
+                    content: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.' 
+                });
+                
+                logger.info('✅ Wysłano potwierdzenie nowego rekordu (ephemeral)');
+                
+                // Wyślij publiczne ogłoszenie nowego rekordu jako nową wiadomość
+                await interaction.followUp({ 
+                    embeds: [publicEmbed], 
+                    files: [imageAttachment] 
+                });
+                
+                logger.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
+                
+            } catch (newRecordError) {
+                logger.error('❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie:', newRecordError);
+                
+                // Spróbuj wysłać przynajmniej prostą odpowiedź
+                try {
+                    await interaction.editReply({
+                        content: `🏆 **NOWY REKORD!**\n**Gracz:** ${userName}\n**Nowy rekord:** ${bestScore}\n**Poprzedni:** ${currentScore ? currentScore.score : 'brak'}\n\n*Błąd wysyłania pełnego embed*`
+                    });
+                } catch (fallbackError) {
+                    logger.error('❌ Nie można wysłać fallback odpowiedzi dla nowego rekordu:', fallbackError);
+                }
+            }
             
             // Aktualizacja ról TOP po nowym rekordzie
             try {
