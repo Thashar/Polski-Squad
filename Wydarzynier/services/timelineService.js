@@ -350,18 +350,14 @@ class TimelineService {
                     normalizedDate = normalizedDate.replace(/Septembertember/g, 'September');
                     
                     if (eventDescription.length > 5) {
-                        // Wyciągnij obrazki związane z tym wydarzeniem
-                        const eventImages = this.extractEventImages(rawHTML, extendedSection, eventDescription);
-                        
                         events.push({
                             date: normalizedDate,
                             time: time,
                             event: eventDescription,
-                            images: eventImages,
                             rawHTML: rawHTML // przechowaj rawHTML dla parsera
                         });
                         
-                        this.logger.info(`Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}... (obrazki: ${eventImages.length})`);
+                        this.logger.info(`Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}...`);
                     }
                     
                 } catch (parseError) {
@@ -532,43 +528,6 @@ class TimelineService {
         return message;
     }
 
-    /**
-     * Generuje wiadomości dla wydarzenia z obrazkami (może być kilka wiadomości)
-     */
-    generateEventMessages(event) {
-        const messages = [];
-        const baseMessage = this.generateEventMessage(event);
-        
-        // Jeśli nie ma obrazków, zwróć podstawową wiadomość
-        if (!event.images || event.images.length === 0) {
-            messages.push({ content: baseMessage, files: [] });
-            return messages;
-        }
-        
-        // Podziel obrazki na grupy po 10 (limit Discord)
-        const imageGroups = [];
-        for (let i = 0; i < event.images.length; i += 10) {
-            imageGroups.push(event.images.slice(i, i + 10));
-        }
-        
-        // Utwórz wiadomości
-        imageGroups.forEach((imageGroup, index) => {
-            let messageContent = baseMessage;
-            
-            // Dla kolejnych wiadomości, dodaj oznaczenie
-            if (index > 0) {
-                messageContent = `# 🎮 ${this.generateEventTitle(event)} - Część ${index + 1}\n\n`;
-                messageContent += `🖼️ **Dodatkowe obrazki dla wydarzenia**\n\n`;
-            }
-            
-            messages.push({
-                content: messageContent,
-                files: imageGroup.map(url => ({ attachment: url }))
-            });
-        });
-        
-        return messages;
-    }
 
     /**
      * Generuje uniwersalny tytuł wydarzenia na podstawie daty
@@ -1239,54 +1198,31 @@ class TimelineService {
             }
 
             // Aktualizuj lub utwórz wiadomości dla każdego aktywnego wydarzenia
-            let messageIndex = 0;
-            
             for (let i = 0; i < activeEvents.length; i++) {
                 const event = activeEvents[i];
-                const eventMessages = this.generateEventMessages(event);
+                const messageContent = this.generateEventMessage(event);
                 
-                this.logger.info(`Wydarzenie ${i + 1} będzie miało ${eventMessages.length} wiadomości (${event.images?.length || 0} obrazków)`);
-                
-                // Przetwórz każdą wiadomość dla tego wydarzenia
-                for (let j = 0; j < eventMessages.length; j++) {
-                    const messageData = eventMessages[j];
-                    
-                    if (this.messageIds[messageIndex]) {
-                        // Zaktualizuj istniejącą wiadomość
-                        try {
-                            const existingMessage = await channel.messages.fetch(this.messageIds[messageIndex]);
-                            
-                            if (messageData.files.length > 0) {
-                                // Discord nie pozwala na edycję z plikami, usuń starą i utwórz nową
-                                await existingMessage.delete();
-                                const newMessage = await channel.send(messageData);
-                                this.messageIds[messageIndex] = newMessage.id;
-                                this.logger.info(`Zastąpiono wiadomość z obrazkami dla wydarzenia ${i + 1}, część ${j + 1}`);
-                            } else {
-                                await existingMessage.edit(messageData.content);
-                                this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}, część ${j + 1}`);
-                            }
-                        } catch (error) {
-                            this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[messageIndex]}, tworzę nową`);
-                            const newMessage = await channel.send(messageData);
-                            this.messageIds[messageIndex] = newMessage.id;
-                            this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1}, część ${j + 1} (ID: ${newMessage.id})`);
-                        }
-                    } else {
-                        // Utwórz nową wiadomość
-                        const newMessage = await channel.send(messageData);
-                        this.messageIds[messageIndex] = newMessage.id;
-                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1}, część ${j + 1} (ID: ${newMessage.id})`);
+                if (this.messageIds[i]) {
+                    // Zaktualizuj istniejącą wiadomość
+                    try {
+                        const existingMessage = await channel.messages.fetch(this.messageIds[i]);
+                        await existingMessage.edit(messageContent);
+                        this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}: ${event.event.substring(0, 30)}...`);
+                    } catch (error) {
+                        this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[i]}, tworzę nową`);
+                        const newMessage = await channel.send(messageContent);
+                        this.messageIds[i] = newMessage.id;
+                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
                     }
-                    
-                    messageIndex++;
-                    
-                    // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } else {
+                    // Utwórz nową wiadomość
+                    const newMessage = await channel.send(messageContent);
+                    this.messageIds[i] = newMessage.id;
+                    this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
                 }
                 
-                // Dłuższa przerwa między wydarzeniami
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
 
             // Zapisz zaktualizowane ID wiadomości
