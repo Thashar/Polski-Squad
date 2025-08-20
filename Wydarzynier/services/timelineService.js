@@ -469,31 +469,61 @@ class TimelineService {
      */
     async publishOrUpdateMessage() {
         try {
+            this.logger.info(`Próbuję pobrać kanał: ${this.channelId}`);
             const channel = await this.client.channels.fetch(this.channelId);
+            
             if (!channel) {
-                this.logger.error(`Nie znaleziono kanału: ${this.channelId}`);
+                this.logger.error(`❌ Nie znaleziono kanału: ${this.channelId}`);
                 return;
+            }
+            
+            this.logger.info(`✅ Znaleziono kanał: ${channel.name} (${channel.type})`);
+            
+            // Sprawdź uprawnienia bota
+            if (channel.guild) {
+                const permissions = channel.permissionsFor(this.client.user);
+                this.logger.info(`Uprawnienia bota: SendMessages: ${permissions.has('SendMessages')}, ViewChannel: ${permissions.has('ViewChannel')}`);
+                
+                if (!permissions.has('SendMessages')) {
+                    this.logger.error('❌ Bot nie ma uprawnień do wysyłania wiadomości na tym kanale');
+                    return;
+                }
             }
 
             const messageContent = this.generateTimelineMessage();
+            
+            // Sprawdź długość wiadomości (limit Discord: 2000 znaków)
+            if (messageContent.length > 2000) {
+                this.logger.warn(`Wiadomość jest za długa (${messageContent.length} znaków), skracam...`);
+                const shortContent = messageContent.substring(0, 1950) + '\n\n[...]';
+                await this.createNewMessage(channel, shortContent);
+                return;
+            }
 
             if (this.messageId) {
                 // Spróbuj zaktualizować istniejącą wiadomość
                 try {
                     const existingMessage = await channel.messages.fetch(this.messageId);
                     await existingMessage.edit(messageContent);
-                    this.logger.info('Zaktualizowano wiadomość timeline');
+                    this.logger.info('✅ Zaktualizowano wiadomość timeline');
                 } catch (error) {
                     // Jeśli nie można zaktualizować, utwórz nową
-                    this.logger.warn('Nie można zaktualizować wiadomości, tworzę nową:', error.message);
+                    this.logger.warn(`⚠️ Nie można zaktualizować wiadomości (${error.message}), tworzę nową`);
                     await this.createNewMessage(channel, messageContent);
                 }
             } else {
                 // Utwórz nową wiadomość
+                this.logger.info('Tworzę nową wiadomość timeline');
                 await this.createNewMessage(channel, messageContent);
             }
         } catch (error) {
-            this.logger.error('Błąd publikowania/aktualizacji wiadomości timeline:', error);
+            this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error);
+            this.logger.error('Szczegóły błędu:', {
+                name: error.name,
+                message: error.message,
+                code: error.code,
+                status: error.status
+            });
         }
     }
 
@@ -502,12 +532,21 @@ class TimelineService {
      */
     async createNewMessage(channel, content) {
         try {
+            this.logger.info(`Próbuję utworzyć wiadomość na kanale ${channel.name} (${channel.id})`);
+            this.logger.info(`Długość wiadomości: ${content.length} znaków`);
+            
             const message = await channel.send(content);
             this.messageId = message.id;
             await this.saveTimelineData();
-            this.logger.info('Utworzono nową wiadomość timeline');
+            this.logger.info(`✅ Utworzono nową wiadomość timeline (ID: ${message.id})`);
         } catch (error) {
             this.logger.error('Błąd tworzenia nowej wiadomości:', error);
+            this.logger.error('Szczegóły błędu:', {
+                name: error.name,
+                message: error.message,
+                code: error.code,
+                status: error.status
+            });
         }
     }
 
