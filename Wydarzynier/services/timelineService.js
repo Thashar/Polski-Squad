@@ -643,12 +643,12 @@ class TimelineService {
             .replace(/enhance their gaming experience\./g, '') // usuń fragment stopki
             .replace(/❤️/g, '') // usuń emoji serca
             .replace(/\s+/g, ' ') // znormalizuj białe znaki
-            .replace(/\.\s+/g, '.\n') // nowa linia po każdej kropce
-            .replace(/;\s+/g, ';\n')   // nowa linia po średniku
-            .replace(/:\s+/g, ':\n')   // nowa linia po dwukropku
-            .replace(/Free:/g, '\nFree:')  // specjalna obsługa "Free:"
-            .replace(/\$\d+\s+Pack:/g, '\n$&')  // nowa linia przed "$XX Pack:"
-            .replace(/\n\s*\n+/g, '\n') // usuń podwójne nowe linie
+            .replace(/\.\s+(?=[A-Z])/g, '.\n\n')  // nowa linia po kropce tylko przed kolejnym zdaniem z dużą literą
+            .replace(/The package rates are as follows;\s*/g, 'The package rates are as follows:\n\n')  // specjalna obsługa dla pakietów
+            .replace(/Free:\s*([0-9.,]+\s+Gems)\s*/g, '• **Free:** $1\n')  // format listy dla Free
+            .replace(/\$(\d+)\s+Pack:\s*([0-9.,]+\s+Gems)/g, '• **$$$1 Pack:** $2\n')  // format listy dla płatnych pakietów
+            .replace(/Collections?\s*$/i, '\n**Collections**')  // osobna sekcja dla Collections
+            .replace(/\n\s*\n\s*\n+/g, '\n\n') // usuń nadmiarowe puste linie (max 2)
             .trim();
     }
 
@@ -800,14 +800,15 @@ class TimelineService {
                         .trim();
                     
                     if (sectionContent.length > 15) {
-                        // Lepsze formatowanie - zachowaj strukturę z pierwotnej strony
+                        // Inteligentne formatowanie - zachowaj logiczne grupowanie
                         sectionContent = sectionContent
-                            .replace(/\.\s+/g, '.\n')  // nowa linia po kropce
-                            .replace(/;\s+/g, ';\n')   // nowa linia po średniku
-                            .replace(/:\s+/g, ':\n')   // nowa linia po dwukropku
-                            .replace(/Free:/g, '\nFree:')  // specjalna obsługa "Free:"
-                            .replace(/\$\d+\s+Pack:/g, '\n$&')  // nowa linia przed "$XX Pack:"
-                            .replace(/\n\s*\n+/g, '\n')  // usuń nadmiarowe puste linie
+                            .replace(/\.\s+(?=[A-Z])/g, '.\n\n')  // nowa linia po kropce tylko przed kolejnym zdaniem z dużą literą
+                            .replace(/The package rates are as follows;\s*/g, 'The package rates are as follows:\n\n')  // specjalna obsługa dla pakietów
+                            .replace(/Free:\s*([0-9.,]+\s+Gems)\s*/g, '• **Free:** $1\n')  // format listy dla Free
+                            .replace(/\$(\d+)\s+Pack:\s*([0-9.,]+\s+Gems)/g, '• **$$$1 Pack:** $2\n')  // format listy dla płatnych pakietów
+                            .replace(/Collections?\s*$/i, '\n**Collections**')  // osobna sekcja dla Collections
+                            .replace(/\n\s*\n\s*\n+/g, '\n\n')  // usuń nadmiarowe puste linie (max 2)
+                            .replace(/^\s+|\s+$/g, '')  // usuń spacje na początku i końcu
                             .trim();
                         
                         structured += `**${sectionPattern.title}**\n`;
