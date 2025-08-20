@@ -18,8 +18,9 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
  * @param {Client} client - Klient Discord
  * @param {Object} state - Stan współdzielony aplikacji
  * @param {Object} config - Konfiguracja aplikacji
+ * @param {boolean} isInitialCheck - Czy to sprawdzenie przy starcie bota
  */
-async function checkThreads(client, state, config) {
+async function checkThreads(client, state, config, isInitialCheck = false) {
     try {
         const guild = client.guilds.cache.first();
         const channel = await guild.channels.fetch(config.channels.training);
@@ -36,16 +37,24 @@ async function checkThreads(client, state, config) {
         // Wyczyść nieistniejące wątki z danych przypomień
         await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, threads.threads);
         
+        if (isInitialCheck) {
+            logger.info(`🔍 Sprawdzanie ${threads.threads.size} aktywnych wątków przy starcie bota...`);
+        }
+        
         for (const [id, thread] of threads.threads) {
             try {
                 await processThread(thread, guild, state, config, now, {
                     archiveThreshold,
                     deleteThreshold,
                     reminderThreshold
-                });
+                }, isInitialCheck);
             } catch (error) {
                 logger.error(`❌ Błąd podczas przetwarzania wątku ${thread.name}:`, error);
             }
+        }
+        
+        if (isInitialCheck) {
+            logger.info('✅ Sprawdzenie wątków przy starcie zakończone');
         }
     } catch (error) {
         logger.error('❌ Błąd podczas sprawdzania wątków:', error);
@@ -60,8 +69,9 @@ async function checkThreads(client, state, config) {
  * @param {Object} config - Konfiguracja aplikacji
  * @param {number} now - Aktualny timestamp
  * @param {Object} thresholds - Progi czasowe
+ * @param {boolean} isInitialCheck - Czy to sprawdzenie przy starcie bota
  */
-async function processThread(thread, guild, state, config, now, thresholds) {
+async function processThread(thread, guild, state, config, now, thresholds, isInitialCheck = false) {
     const { archiveThreshold, deleteThreshold, reminderThreshold } = thresholds;
     
     // Pobierz ostatnią wiadomość w wątku
@@ -76,13 +86,23 @@ async function processThread(thread, guild, state, config, now, thresholds) {
 
     if (!threadOwner) return; // Pomiń wątki, które nie należą do naszego systemu
 
-    // Sprawdź czas ostatniego przypomnienia
-    const lastReminder = state.lastReminderMap.get(thread.id) || thread.createdTimestamp;
-    const timeSinceLastReminder = now - lastReminder;
+    // Przy sprawdzeniu startowym - usuń od razu wszystkie wątki starsze niż 7 dni
+    if (isInitialCheck && inactiveTime > deleteThreshold) {
+        const inactiveDays = Math.floor(inactiveTime / (24 * 60 * 60 * 1000));
+        logger.info(`🗑️ Usuwam nieaktywny wątek "${thread.name}" (${inactiveDays} dni nieaktywności)`);
+        await deleteThread(thread, state, config);
+        return;
+    }
 
-    // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu
-    if (inactiveTime > reminderThreshold && timeSinceLastReminder > reminderThreshold) {
-        await sendInactivityReminder(thread, threadOwner, state, config, now);
+    // Sprawdź czas ostatniego przypomnienia (tylko przy normalnym sprawdzaniu)
+    if (!isInitialCheck) {
+        const lastReminder = state.lastReminderMap.get(thread.id) || thread.createdTimestamp;
+        const timeSinceLastReminder = now - lastReminder;
+
+        // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu
+        if (inactiveTime > reminderThreshold && timeSinceLastReminder > reminderThreshold) {
+            await sendInactivityReminder(thread, threadOwner, state, config, now);
+        }
     }
 
     // Standardowe archiwizowanie i usuwanie (dla bardzo starych wątków)

@@ -49,6 +49,10 @@ client.once(Events.ClientReady, async () => {
     
     logger.info('Bot Szkolenia jest gotowy do pracy!');
     
+    // Sprawdź wszystkie aktywne wątki przy starcie i usuń te starsze niż 7 dni
+    logger.info('🔄 Uruchamiam sprawdzenie wątków przy starcie bota...');
+    await checkThreads(client, sharedState, config, true);
+    
     // Uruchom automatyczne sprawdzanie wątków
     const intervalMs = config.timing.checkIntervalMinutes * 60 * 1000;
     setInterval(() => {
