@@ -606,7 +606,7 @@ class TimelineService {
         } else if (title.includes('retreat privileges')) {
             return '🎯';
         } else if (title.includes('twinborn')) {
-            return ''; // nie dodawaj emoji automatycznie - użyj z oryginalnej strony
+            return '⚡';
         } else if (title.includes('costumes')) {
             return '👗';
         } else {
@@ -628,7 +628,10 @@ class TimelineService {
                 const title = sectionBlocks[i].trim();
                 const content = sectionBlocks[i + 1] ? sectionBlocks[i + 1].trim() : '';
                 
-                if (title && content && content.length > 10) {
+                // Filtruj pojedyncze emoji jako tytuły sekcji
+                const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(title);
+                
+                if (title && content && content.length > 10 && !isOnlyEmoji) {
                     sections.push({
                         title: title,
                         content: content
@@ -664,7 +667,10 @@ class TimelineService {
                     this.logger.info(`Sekcja ${i}: title="${title}", content="${content.substring(0,50)}..."`);
                 }
                 
-                if (title && content && content.length > 10) {
+                // Filtruj pojedyncze emoji jako tytuły sekcji
+                const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(title);
+                
+                if (title && content && content.length > 10 && !isOnlyEmoji) {
                     sections.push({
                         title: title,
                         content: content
