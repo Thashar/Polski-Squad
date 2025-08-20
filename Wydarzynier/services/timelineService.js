@@ -569,11 +569,8 @@ class TimelineService {
                     return; // pomiń tę sekcję
                 }
                 
-                // Sprawdź czy tytuł już zawiera emoji na początku (prostszy test)
-                const firstChar = trimmedTitle.charAt(0);
-                
-                // Test dla popularnych emoji używanych w sekcjach
-                const hasEmoji = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u.test(firstChar);
+                // Sprawdź czy tytuł już zawiera emoji na początku (rozszerzone sprawdzanie)
+                const hasEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u.test(trimmedTitle);
                 
                 if (hasEmoji) {
                     // Jeśli tytuł już ma emoji, użyj go bez dodawania nowego
@@ -583,7 +580,7 @@ class TimelineService {
                     const sectionEmoji = this.getSectionEmoji(trimmedTitle);
                     formatted += `${sectionEmoji} **${trimmedTitle}**\n`;
                 }
-                formatted += `${section.content}\n\n`;
+                formatted += `${section.content}\n`;
             }
         });
         
@@ -609,7 +606,7 @@ class TimelineService {
         } else if (title.includes('retreat privileges')) {
             return '🎯';
         } else if (title.includes('twinborn')) {
-            return '⚡';
+            return ''; // nie dodawaj emoji automatycznie - użyj z oryginalnej strony
         } else if (title.includes('costumes')) {
             return '👗';
         } else {
