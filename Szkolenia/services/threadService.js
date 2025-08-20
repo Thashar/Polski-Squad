@@ -90,20 +90,18 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
     const lastMessageTime = lastMessage ? lastMessage.createdTimestamp : thread.createdTimestamp;
     const inactiveTime = now - lastMessageTime;
 
+    // Przy sprawdzeniu startowym - usuń wszystkie wątki starsze niż 7 dni
+    if (isInitialCheck && inactiveTime > deleteThreshold) {
+        await deleteThread(thread, state, config);
+        return;
+    }
+
     // Sprawdź czy to wątek z naszego systemu (nazwa = nick użytkownika)
     const threadOwner = guild.members.cache.find(member => 
         (member.displayName === thread.name) || (member.user.username === thread.name)
     );
 
     if (!threadOwner) return; // Pomiń wątki, które nie należą do naszego systemu
-
-    // Przy sprawdzeniu startowym - usuń od razu wszystkie wątki starsze niż 7 dni
-    if (isInitialCheck && inactiveTime > deleteThreshold) {
-        const inactiveDays = Math.floor(inactiveTime / (24 * 60 * 60 * 1000));
-        logger.info(`🗑️ Usuwam nieaktywny wątek "${thread.name}" (${inactiveDays} dni nieaktywności)`);
-        await deleteThread(thread, state, config);
-        return;
-    }
 
     // Sprawdź czas ostatniego przypomnienia (tylko przy normalnym sprawdzaniu)
     if (!isInitialCheck) {
