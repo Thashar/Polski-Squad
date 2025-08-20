@@ -251,19 +251,39 @@ class InteractionHandler {
                     // Oczyść nazwę użytkownika z nieprawidłowych znaków dla nazwy pliku
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
                     const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
+                    
+                    logger.info('🔍 DEBUG: Tworzenie AttachmentBuilder (no record)');
+                    logger.info(`🔍 DEBUG: tempImagePath: ${tempImagePath}`);
+                    logger.info(`🔍 DEBUG: safeUserName: ${safeUserName}`);
+                    logger.info(`🔍 DEBUG: fileExtension: ${fileExtension}`);
+                    
                     const imageAttachment = new AttachmentBuilder(tempImagePath, { 
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}` 
                     });
+                    
+                    logger.info('🔍 DEBUG: AttachmentBuilder utworzony pomyślnie');
                     
                     const resultEmbed = this.rankingService.createResultEmbed(
                         userName, bestScore, currentScore.score, imageAttachment.name
                     );
                     
-                    // Aktualizuj ephemeral message z informacją o braku pobicia rekordu
-                    await interaction.editReply({ 
-                        embeds: [resultEmbed],
-                        files: [imageAttachment]
-                    });
+                    logger.info('🔍 DEBUG: Przed wysłaniem interaction.editReply (no record)');
+                    
+                    try {
+                        // Aktualizuj ephemeral message z informacją o braku pobicia rekordu
+                        await interaction.editReply({ 
+                            embeds: [resultEmbed],
+                            files: [imageAttachment]
+                        });
+                        
+                        logger.info('🔍 DEBUG: Po wysłaniu interaction.editReply (no record)');
+                    } catch (editReplyError) {
+                        logger.error('🔍 DEBUG: Błąd podczas editReply (no record):', editReplyError);
+                        logger.error('🔍 DEBUG: editReplyError.name:', editReplyError.name);
+                        logger.error('🔍 DEBUG: editReplyError.message:', editReplyError.message);
+                        logger.error('🔍 DEBUG: editReplyError.code:', editReplyError.code);
+                        throw editReplyError;
+                    }
                     
                     // Usuń plik tymczasowy po wysłaniu
                     await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
