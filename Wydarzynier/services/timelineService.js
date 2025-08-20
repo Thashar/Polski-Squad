@@ -326,12 +326,12 @@ class TimelineService {
                         .replace(/\n\n\n+/g, '\n\n') // maksymalnie podwójne nowe linie
                         .trim();
                     
-                    // Znajdź i zachowaj strukturę sekcji
-                    const structuredContent = this.extractStructuredContent(rawEventContent);
-                    let eventDescription = structuredContent || rawEventContent.substring(0, 500).trim();
-                    
                     // Normalizuj format daty
                     let normalizedDate = date.trim();
+                    
+                    // Znajdź i zachowaj strukturę sekcji
+                    const structuredContent = this.extractStructuredContent(rawEventContent, rawHTML, normalizedDate);
+                    let eventDescription = structuredContent || rawEventContent.substring(0, 500).trim();
                     
                     // Konwertuj krótkie nazwy miesięcy na pełne i napraw duplikaty
                     const monthMap = {
@@ -357,7 +357,8 @@ class TimelineService {
                             date: normalizedDate,
                             time: time,
                             event: eventDescription,
-                            images: eventImages
+                            images: eventImages,
+                            rawHTML: rawHTML // przechowaj rawHTML dla parsera
                         });
                         
                         this.logger.info(`Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}... (obrazki: ${eventImages.length})`);
@@ -598,7 +599,7 @@ class TimelineService {
         let formatted = '';
         
         // Parsuj sekcje z opisu wydarzenia
-        const sections = this.parseEventSections(event.event);
+        const sections = this.parseEventSections(event.event, event.rawHTML, event.date);
         
         sections.forEach((section, index) => {
             if (section.title && section.content) {
@@ -647,9 +648,9 @@ class TimelineService {
     /**
      * Parsuje sekcje wydarzenia z tekstu - używa bezpośrednio strukturalnej ekstraktacji
      */
-    parseEventSections(eventText) {
-        // Użyj bezpośrednio strukturalnej ekstraktacji
-        const structuredContent = this.extractStructuredContent(eventText);
+    parseEventSections(eventText, rawHTML = '', eventDate = '') {
+        // Użyj bezpośrednio strukturalnej ekstraktacji z nowymi parametrami
+        const structuredContent = this.extractStructuredContent(eventText, rawHTML, eventDate);
         
         if (structuredContent) {
             // Parsuj sekcje ze strukturalnej zawartości
@@ -886,9 +887,98 @@ class TimelineService {
     }
 
     /**
-     * Wyciąga strukturalną zawartość ze strony
+     * Parsuje HTML card-body na Discord markdown
      */
-    extractStructuredContent(content) {
+    parseEventCardBody(rawHTML, eventDate) {
+        try {
+            // Szukaj w kontekście daty wydarzenia
+            const dateIndex = rawHTML.indexOf(eventDate);
+            if (dateIndex === -1) return null;
+            
+            // Weź sekcję wokół daty (5000 znaków po dacie)
+            const dateSection = rawHTML.substring(dateIndex, dateIndex + 5000);
+            
+            // Znajdź card-body - prostszy pattern
+            const cardBodyStart = dateSection.indexOf('<div class="card-body">');
+            if (cardBodyStart === -1) return null;
+            
+            // Znajdź koniec card-body - szukaj trzech zamykających divów z rzędu
+            const cardBodyContent = dateSection.substring(cardBodyStart + 23); // 23 to długość '<div class="card-body">'
+            
+            // Znajdź koniec - może być kilka poziomów zagnieżdżenia
+            let divCount = 1;
+            let endIndex = 0;
+            let inTag = false;
+            
+            for (let i = 0; i < cardBodyContent.length; i++) {
+                const char = cardBodyContent[i];
+                if (char === '<') inTag = true;
+                if (char === '>' && inTag) {
+                    inTag = false;
+                    const tag = cardBodyContent.substring(i-10, i+1);
+                    if (tag.includes('<div')) divCount++;
+                    if (tag.includes('</div')) {
+                        divCount--;
+                        if (divCount === 0) {
+                            endIndex = i - 5; // -5 żeby nie wziąć </div>
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (endIndex === 0) endIndex = Math.min(8000, cardBodyContent.length); // Zwiększ limit
+            const cardBody = cardBodyContent.substring(0, endIndex);
+            let discordContent = '';
+            
+            // Struktura HTML: wewnątrz card-body jest jedna sekcja z wieloma h6+p parami
+            // Wyciągnij wszystkie h6 i p bezpośrednio
+            const h6Matches = cardBody.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g);
+            const pMatches = cardBody.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
+            
+            if (h6Matches) {
+                h6Matches.forEach((h6, index) => {
+                    const title = h6.replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
+                    const sectionEmoji = this.getSectionEmoji(title);
+                    discordContent += `${sectionEmoji} **${title}**\n`;
+                    
+                    // Jeśli jest odpowiadający paragraf
+                    if (pMatches && pMatches[index]) {
+                        const pContent = pMatches[index].replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
+                            .replace(/<br\s*\/?>/gi, '\n')
+                            .replace(/<[^>]*>/g, '')
+                            .trim();
+                        
+                        if (pContent.length > 0) {
+                            discordContent += `${pContent}\n`;
+                        }
+                    }
+                    
+                    discordContent += '\n';
+                });
+            }
+            
+            return discordContent.trim();
+            
+        } catch (error) {
+            this.logger.error('Błąd parsowania card-body:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Wyciąga strukturalną zawartość ze strony - używa nowego parsera HTML
+     */
+    extractStructuredContent(content, rawHTML = '', eventDate = '') {
+        // Najpierw spróbuj nowy parser HTML
+        if (rawHTML && eventDate) {
+            const htmlParsed = this.parseEventCardBody(rawHTML, eventDate);
+            if (htmlParsed) {
+                return htmlParsed;
+            }
+        }
+        
+        // Fallback do starego parsera
         try {
             let structured = '';
             
