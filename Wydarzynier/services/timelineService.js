@@ -519,11 +519,11 @@ class TimelineService {
         // Wygeneruj ciekawy nagłówek na podstawie treści wydarzenia
         const eventTitle = this.generateEventTitle(event);
         
-        let message = `# 🎮 ${eventTitle}\n\n`;
-        message += `🗓️ **Data:** ${discordDate}\n`;
+        let message = `# ✅ ${discordDate} - Aktualizacja\n\n`;
         message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n`;
+        message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         message += formattedEvent;
-        message += `\n`;
+        message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
         
         return message;
     }
@@ -548,7 +548,7 @@ class TimelineService {
         
         const polishMonth = monthMap[month] || month;
         
-        return `${day} ${polishMonth} ${year} - Aktualizacja`;
+        return `${day} ${polishMonth} ${year}`;
     }
 
     /**
@@ -562,11 +562,6 @@ class TimelineService {
         
         sections.forEach((section, index) => {
             if (section.title && section.content) {
-                // Dodaj separator tylko przed pierwszą sekcją
-                if (index === 0) {
-                    formatted += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-                }
-                
                 // Dodaj emoji do tytułów sekcji
                 const sectionEmoji = this.getSectionEmoji(section.title);
                 formatted += `${sectionEmoji} **${section.title}**\n`;
