@@ -502,7 +502,7 @@ class TimelineService {
         let formattedEvent = this.formatEventFromStructure(event);
         
         let message = `🗓️ **Data:** ${discordDate}\n`;
-        message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n\n`;
+        message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n`;
         message += formattedEvent;
         
         return message;
@@ -517,8 +517,12 @@ class TimelineService {
         // Parsuj sekcje z opisu wydarzenia
         const sections = this.parseEventSections(event.event);
         
-        sections.forEach(section => {
+        sections.forEach((section, index) => {
             if (section.title && section.content) {
+                // Dodaj nową linię przed pierwszą sekcją
+                if (index === 0) {
+                    formatted += `\n`;
+                }
                 formatted += `**${section.title}**\n`;
                 formatted += `${section.content}\n\n`;
             }
@@ -576,14 +580,14 @@ class TimelineService {
             .replace(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/g, '') // usuń daty
             .replace(/[-–—]\s*(UTC|Time)/gi, '') // usuń separatory z czasem
             .replace(/^[-–—\s]+/, '') // usuń myślniki na początku
-            .replace(/This website has been created to guide players.*?Soon\.\.\./gs, '') // usuń stopkę strony
+            .replace(/This website has been created to guide players.*?(?:Soon\.\.\.)?.*?(?:❤️)?.*?(?:If you encounter any bugs or errors.*?)?$/gs, '') // usuń całą stopkę
             .replace(/kaliqq47856@proton\.me/g, '') // usuń email
-            .replace(/Privacy Policy/g, '') // usuń politykę prywatności
-            .replace(/If you encounter any bugs or errors.*?via email\./gs, '') // usuń informacje o błędach
+            .replace(/Privacy Policy/g, '') // usuń politykę prywatności  
+            .replace(/enhance their gaming experience\./g, '') // usuń fragment stopki
             .replace(/❤️/g, '') // usuń emoji serca
             .replace(/\s+/g, ' ') // znormalizuj białe znaki
-            .replace(/\.\s+/g, '.\n') // nowa linia po każdym zdaniu
-            .replace(/\n\s*\n/g, '\n') // usuń podwójne nowe linie
+            .replace(/\.\s+/g, '.\n') // nowa linia po każdej kropce
+            .replace(/\n\s*\n+/g, '\n') // usuń podwójne nowe linie
             .trim();
     }
 
@@ -729,9 +733,15 @@ class TimelineService {
                         .replace(/^\s*[-–—]*\s*/, '') // usuń myślniki na początku
                         .replace(/\s+/g, ' ')
                         .replace(/\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}.*$/g, '') // usuń następną datę i dalej
+                        .replace(/This website has been created to guide players.*$/gs, '') // usuń stopkę
+                        .replace(/❤️.*$/gs, '') // usuń od emoji serca do końca
+                        .replace(/If you encounter any bugs or errors.*$/gs, '') // usuń informacje o błędach
                         .trim();
                     
                     if (sectionContent.length > 15) {
+                        // Dodaj nową linię po każdej kropce w opisie
+                        sectionContent = sectionContent.replace(/\.\s+/g, '.\n');
+                        
                         structured += `**${sectionPattern.title}**\n`;
                         structured += `${sectionContent}\n\n`;
                         foundSections++;
