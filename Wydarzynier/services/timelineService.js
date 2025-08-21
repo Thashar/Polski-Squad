@@ -350,14 +350,25 @@ class TimelineService {
                     normalizedDate = normalizedDate.replace(/Septembertember/g, 'September');
                     
                     if (eventDescription.length > 5) {
-                        events.push({
-                            date: normalizedDate,
-                            time: time,
-                            event: eventDescription,
-                            rawHTML: rawHTML // przechowaj rawHTML dla parsera
-                        });
+                        // Sprawdź czy nie ma już takiego wydarzenia (duplikat)
+                        const existingEvent = events.find(e => 
+                            e.date === normalizedDate && 
+                            e.time === time && 
+                            e.event.substring(0, 100) === eventDescription.substring(0, 100)
+                        );
                         
-                        this.logger.info(`Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}...`);
+                        if (existingEvent) {
+                            this.logger.warn(`🔍 DUPLIKAT: Pomijam duplikat wydarzenia "${normalizedDate} ${time}" - już istnieje`);
+                        } else {
+                            events.push({
+                                date: normalizedDate,
+                                time: time,
+                                event: eventDescription,
+                                rawHTML: rawHTML // przechowaj rawHTML dla parsera
+                            });
+                            
+                            this.logger.info(`✅ Dodano wydarzenie: ${normalizedDate} ${time} - ${eventDescription.substring(0, 50)}...`);
+                        }
                     }
                     
                 } catch (parseError) {
@@ -401,32 +412,59 @@ class TimelineService {
      */
     async checkForUpdates() {
         try {
-            this.logger.info('Sprawdzanie aktualizacji timeline...');
+            this.logger.info('🔍 Sprawdzanie aktualizacji timeline...');
             const newData = await this.fetchTimelineFromWeb();
             
             if (!newData) {
-                this.logger.warn('Nie udało się pobrać nowych danych timeline');
+                this.logger.warn('⚠️ Nie udało się pobrać nowych danych timeline');
                 return false;
             }
 
+            // Usuń duplikaty z nowych danych przed porównaniem
+            const uniqueNewData = this.removeDuplicateEvents(newData);
+            this.logger.info(`🔍 Po deduplikacji: ${uniqueNewData.length} unikalnych wydarzeń (było ${newData.length})`);
+
             // Porównaj z istniejącymi danymi
-            const hasChanges = this.compareTimelines(this.timelineData, newData);
+            const hasChanges = this.compareTimelines(this.timelineData, uniqueNewData);
             
             if (hasChanges) {
-                this.logger.info('Znaleziono zmiany w timeline, aktualizuję...');
-                this.timelineData = newData;
+                this.logger.info('🆕 Znaleziono zmiany w timeline, aktualizuję...');
+                this.timelineData = uniqueNewData;
                 await this.saveTimelineData();
                 await this.saveLastUpdate();
                 await this.publishOrUpdateMessages();
                 return true;
             } else {
-                this.logger.info('Brak zmian w timeline');
+                this.logger.info('✅ Brak zmian w timeline - nie aktualizuję');
                 return false;
             }
         } catch (error) {
-            this.logger.error('Błąd sprawdzania aktualizacji timeline:', error);
+            this.logger.error('❌ Błąd sprawdzania aktualizacji timeline:', error);
             return false;
         }
+    }
+
+    /**
+     * Usuwa duplikaty wydarzeń
+     */
+    removeDuplicateEvents(events) {
+        const unique = [];
+        const seen = new Set();
+        
+        for (const event of events) {
+            // Utwórz unikalny identyfikator wydarzenia
+            const key = `${event.date}|${event.time}|${event.event.substring(0, 100)}`;
+            
+            if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(event);
+                this.logger.info(`🆔 Unikalny: "${event.date} ${event.time}"`);
+            } else {
+                this.logger.warn(`🔁 Duplikat pominięty: "${event.date} ${event.time}"`);
+            }
+        }
+        
+        return unique;
     }
 
     /**
@@ -1409,15 +1447,22 @@ class TimelineService {
 
             // Filtruj wydarzenia - usuń te które już się zakończyły (przeterminowane)
             const now = new Date();
+            this.logger.info(`🕐 Aktualna data/czas: ${now.toISOString()} (${now.getTime()})`);
             
             const activeEvents = sortedEvents.filter(event => {
                 const eventDate = this.parseEventDateTime(event.date, event.time);
-                return eventDate >= now;
+                const isActive = eventDate >= now;
+                
+                this.logger.info(`📅 Wydarzenie "${event.date} ${event.time}": ${eventDate.toISOString()} (${eventDate.getTime()}) - ${isActive ? '✅ AKTYWNE' : '❌ PRZETERMINOWANE'}`);
+                
+                return isActive;
             });
 
             const removedCount = sortedEvents.length - activeEvents.length;
             if (removedCount > 0) {
-                this.logger.info(`Usunięto ${removedCount} przeterminowanych wydarzeń`);
+                this.logger.info(`🗑️ Usunięto ${removedCount} przeterminowanych wydarzeń`);
+            } else {
+                this.logger.info(`✅ Wszystkie ${activeEvents.length} wydarzeń jest aktywnych`);
             }
 
             this.logger.info(`Posortowano ${activeEvents.length} aktywnych wydarzeń chronologicznie`);
