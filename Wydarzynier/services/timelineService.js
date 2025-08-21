@@ -1,5 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
+const https = require('https');
+const http = require('http');
 
 class TimelineService {
     constructor(config, logger) {
@@ -8,6 +10,7 @@ class TimelineService {
         this.timelineDataFile = path.join(__dirname, '../data/timeline_data.json');
         this.lastUpdateFile = path.join(__dirname, '../data/last_update.json');
         this.eventsLogFile = path.join(__dirname, '../data/events_log.json');
+        this.imagesFolder = path.join(__dirname, '../temp/images');
         this.messageIds = []; // Tablica ID wiadomości dla każdego wydarzenia
         this.channelId = '1407666612559024339';
         this.eventsLog = []; // Historia wszystkich wydarzeń
@@ -588,35 +591,38 @@ class TimelineService {
     /**
      * Generuje wiadomość dla pojedynczego wydarzenia
      */
-    generateEventMessage(event) {
+    async generateEventMessage(event) {
         this.logger.info(`🔍 DEBUG: generateEventMessage dla wydarzenia: ${event.date}`);
         
         // Sprawdź czy nowy parser HTML już zwrócił kompletną wiadomość
         if (event.rawHTML && event.date) {
             this.logger.info(`🔍 DEBUG: Próbuję użyć nowego parsera HTML`);
-            const htmlParsedMessage = this.parseEventCardBody(event.rawHTML, event.date);
+            const htmlParsedResult = await this.parseEventCardBody(event.rawHTML, event.date);
             
-            if (htmlParsedMessage && htmlParsedMessage.length > 100) {
-                this.logger.info(`🔍 DEBUG: Nowy parser HTML zwrócił ${htmlParsedMessage.length} znaków - używam go`);
+            if (htmlParsedResult && htmlParsedResult.content && htmlParsedResult.content.length > 100) {
+                this.logger.info(`🔍 DEBUG: Nowy parser HTML zwrócił ${htmlParsedResult.content.length} znaków - używam go`);
                 
                 // Dodatkowa weryfikacja: sprawdź czy nie ma niechcianych HTML tagów (ale nie Discord timestamp)
                 const htmlTagsPattern = /<(?!\/?(t:|\/t:))[^>]*>/;
-                if (htmlTagsPattern.test(htmlParsedMessage)) {
-                    const match = htmlParsedMessage.match(htmlTagsPattern);
+                if (htmlTagsPattern.test(htmlParsedResult.content)) {
+                    const match = htmlParsedResult.content.match(htmlTagsPattern);
                     if (match) {
                         this.logger.warn(`🔍 DEBUG: UWAGA - wiadomość zawiera HTML! Tag: "${match[0]}"`);
-                        const context = htmlParsedMessage.substring(Math.max(0, htmlParsedMessage.indexOf(match[0]) - 20), htmlParsedMessage.indexOf(match[0]) + match[0].length + 20);
+                        const context = htmlParsedResult.content.substring(Math.max(0, htmlParsedResult.content.indexOf(match[0]) - 20), htmlParsedResult.content.indexOf(match[0]) + match[0].length + 20);
                         this.logger.warn(`🔍 DEBUG: Kontekst: "${context}"`);
                     }
                 } else {
                     this.logger.info(`✅ DEBUG: Wiadomość jest czysta (tylko Discord timestamp)`);
                 }
                 
-                return htmlParsedMessage;
+                return {
+                    content: htmlParsedResult.content,
+                    images: htmlParsedResult.images || []
+                };
             } else {
-                this.logger.warn(`🔍 DEBUG: Nowy parser HTML nie zwrócił danych lub zwrócił za mało (${htmlParsedMessage?.length || 0} znaków)`);
-                if (htmlParsedMessage) {
-                    this.logger.warn(`🔍 DEBUG: Zawartość parsera: "${htmlParsedMessage.substring(0, 200)}..."`);
+                this.logger.warn(`🔍 DEBUG: Nowy parser HTML nie zwrócił danych lub zwrócił za mało (${htmlParsedResult?.content?.length || 0} znaków)`);
+                if (htmlParsedResult?.content) {
+                    this.logger.warn(`🔍 DEBUG: Zawartość parsera: "${htmlParsedResult.content.substring(0, 200)}..."`);
                 }
             }
         } else {
@@ -641,7 +647,10 @@ class TimelineService {
         message += formattedEvent;
         message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
         
-        return message;
+        return {
+            content: message,
+            images: []
+        };
     }
 
 
@@ -1285,8 +1294,14 @@ class TimelineService {
             // Dodaj końcowy separator
             discordContent += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
             
+            // Pobierz obrazki z tego card-body
+            const images = await this.extractImagesFromCard(cardBodyContent, eventDate);
+            
             this.logger.info(`🔍 DEBUG: NOWY PARSER zakończony, wygenerowano ${discordContent.length} znaków`);
-            return discordContent;
+            return {
+                content: discordContent,
+                images: images
+            };
             
         } catch (error) {
             this.logger.error('❌ Błąd nowego parsera card-body:', error);
@@ -1574,37 +1589,58 @@ class TimelineService {
             for (let i = 0; i < activeEvents.length; i++) {
                 const event = activeEvents[i];
                 this.logger.info(`📝 DEBUG: Przetwarzam wydarzenie ${i + 1}/${activeEvents.length}: "${event.date}" - "${event.event.substring(0, 50)}..."`);
-                let messageContent = this.generateEventMessage(event);
+                const messageResult = await this.generateEventMessage(event);
                 
                 // Sprawdź czy wiadomość nie zawiera danych z innych wydarzeń
                 const eventDates = activeEvents.map(e => e.date).filter(date => date !== event.date);
-                const hasOtherDates = eventDates.some(date => messageContent.includes(date));
+                const hasOtherDates = eventDates.some(date => messageResult.content.includes(date));
                 if (hasOtherDates) {
                     this.logger.warn(`⚠️ DEBUG: Wiadomość dla "${event.date}" zawiera daty innych wydarzeń!`);
-                    this.logger.warn(`⚠️ DEBUG: Fragment wiadomości: "${messageContent.substring(0, 300)}..."`);
+                    this.logger.warn(`⚠️ DEBUG: Fragment wiadomości: "${messageResult.content.substring(0, 300)}..."`);
                 }
                 
                 // Sprawdź długość wiadomości
-                this.logger.info(`📝 DEBUG: Wiadomość ${i + 1} ma ${messageContent.length} znaków`);
+                this.logger.info(`📝 DEBUG: Wiadomość ${i + 1} ma ${messageResult.content.length} znaków i ${messageResult.images.length} obrazków`);
                 
+                let messageContent = messageResult.content;
                 if (messageContent.length > 2000) {
                     this.logger.warn(`⚠️ Wiadomość ${i + 1} przekracza limit Discord (${messageContent.length}/2000 znaków) - skracam`);
                     messageContent = messageContent.substring(0, 1900) + '\n\n...*(wiadomość skrócona)*';
                     this.logger.info(`📝 DEBUG: Skrócono do ${messageContent.length} znaków`);
                 }
                 
+                // Przygotuj opcje wiadomości z ewentualnymi załącznikami
+                const messageOptions = { content: messageContent };
+                
+                if (messageResult.images.length > 0) {
+                    const { AttachmentBuilder } = require('discord.js');
+                    messageOptions.files = [];
+                    
+                    for (const imagePath of messageResult.images) {
+                        try {
+                            if (await fs.access(imagePath).then(() => true).catch(() => false)) {
+                                const attachment = new AttachmentBuilder(imagePath);
+                                messageOptions.files.push(attachment);
+                                this.logger.info(`📎 Dodano załącznik: ${path.basename(imagePath)}`);
+                            }
+                        } catch (attachError) {
+                            this.logger.error(`❌ Błąd dodawania załącznika ${imagePath}: ${attachError.message}`);
+                        }
+                    }
+                }
+                
                 if (this.messageIds[i]) {
                     // Zaktualizuj istniejącą wiadomość
                     try {
                         const existingMessage = await channel.messages.fetch(this.messageIds[i]);
-                        await existingMessage.edit(messageContent);
+                        await existingMessage.edit(messageOptions);
                         this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}: ${event.event.substring(0, 30)}...`);
                     } catch (editError) {
                         this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[i]}, tworzę nową`);
                         this.logger.error(`❌ Błąd edycji: ${editError?.message || editError}`);
                         
                         try {
-                            const newMessage = await channel.send(messageContent);
+                            const newMessage = await channel.send(messageOptions);
                             this.messageIds[i] = newMessage.id;
                             this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
                         } catch (sendError) {
@@ -1615,7 +1651,7 @@ class TimelineService {
                 } else {
                     // Utwórz nową wiadomość
                     try {
-                        const newMessage = await channel.send(messageContent);
+                        const newMessage = await channel.send(messageOptions);
                         this.messageIds[i] = newMessage.id;
                         this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
                     } catch (sendError) {
@@ -1669,6 +1705,124 @@ class TimelineService {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
             this.logger.info('Zatrzymano sprawdzanie timeline');
+        }
+    }
+
+    /**
+     * Pobiera obrazek z URL i zapisuje na serwerze
+     */
+    async downloadImage(imageUrl, eventDate) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Utwórz folder na obrazki jeśli nie istnieje
+                await fs.mkdir(this.imagesFolder, { recursive: true });
+
+                // Określ nazwę pliku na podstawie daty wydarzenia i URL
+                const urlParts = imageUrl.split('/');
+                const originalFileName = urlParts[urlParts.length - 1] || 'image.jpg';
+                const extension = path.extname(originalFileName) || '.jpg';
+                const baseFileName = eventDate.replace(/ /g, '_').replace(/:/g, '-');
+                const fileName = `${baseFileName}_${Date.now()}${extension}`;
+                const filePath = path.join(this.imagesFolder, fileName);
+
+                // Normalizuj URL (dodaj https:// jeśli względny)
+                let fullUrl = imageUrl;
+                if (imageUrl.startsWith('/')) {
+                    fullUrl = 'https://garrytools.com' + imageUrl;
+                } else if (imageUrl.startsWith('public/')) {
+                    fullUrl = 'https://garrytools.com/' + imageUrl;
+                } else if (!imageUrl.startsWith('http')) {
+                    fullUrl = 'https://garrytools.com/' + imageUrl;
+                }
+
+                this.logger.info(`📥 Pobieranie obrazka: ${fullUrl} -> ${fileName}`);
+
+                // Wybierz odpowiedni moduł HTTP
+                const httpModule = fullUrl.startsWith('https:') ? https : http;
+
+                const request = httpModule.get(fullUrl, (response) => {
+                    if (response.statusCode !== 200) {
+                        this.logger.error(`❌ Błąd pobierania obrazka: HTTP ${response.statusCode}`);
+                        reject(new Error(`HTTP ${response.statusCode}`));
+                        return;
+                    }
+
+                    // Utwórz stream do zapisywania
+                    const writeStream = require('fs').createWriteStream(filePath);
+                    response.pipe(writeStream);
+
+                    writeStream.on('finish', () => {
+                        writeStream.close();
+                        this.logger.info(`✅ Zapisano obrazek: ${fileName}`);
+                        resolve(filePath);
+                    });
+
+                    writeStream.on('error', (err) => {
+                        this.logger.error(`❌ Błąd zapisywania obrazka: ${err.message}`);
+                        // Usuń częściowo zapisany plik
+                        require('fs').unlink(filePath, () => {});
+                        reject(err);
+                    });
+                });
+
+                request.on('error', (err) => {
+                    this.logger.error(`❌ Błąd pobierania obrazka: ${err.message}`);
+                    reject(err);
+                });
+
+                request.setTimeout(10000, () => {
+                    request.destroy();
+                    this.logger.error(`❌ Timeout pobierania obrazka: ${fullUrl}`);
+                    reject(new Error('Timeout'));
+                });
+
+            } catch (error) {
+                this.logger.error(`❌ Błąd ogólny pobierania obrazka: ${error.message}`);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Wyciąga obrazki z card-body wydarzenia
+     */
+    async extractImagesFromCard(cardBodyContent, eventDate) {
+        try {
+            const images = [];
+            
+            // Znajdź wszystkie tagi <img> w card-body
+            const imgRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+            let match;
+            
+            while ((match = imgRegex.exec(cardBodyContent)) !== null) {
+                const imageUrl = match[1];
+                
+                // Pomiń małe ikony i elementy nawigacyjne
+                if (this.shouldSkipImage(imageUrl)) {
+                    this.logger.info(`⏭️ Pomijam obrazek: ${imageUrl}`);
+                    continue;
+                }
+                
+                try {
+                    // Pobierz i zapisz obrazek
+                    const filePath = await this.downloadImage(imageUrl, eventDate);
+                    images.push(filePath);
+                    
+                    this.logger.info(`📸 Dodano obrazek do wydarzenia "${eventDate}": ${path.basename(filePath)}`);
+                } catch (downloadError) {
+                    this.logger.error(`❌ Nie udało się pobrać obrazka ${imageUrl}: ${downloadError.message}`);
+                }
+            }
+            
+            if (images.length > 0) {
+                this.logger.info(`📸 Znaleziono ${images.length} obrazków dla wydarzenia "${eventDate}"`);
+            }
+            
+            return images;
+            
+        } catch (error) {
+            this.logger.error(`❌ Błąd wyciągania obrazków z card: ${error.message}`);
+            return [];
         }
     }
 }
