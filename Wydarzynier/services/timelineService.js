@@ -357,6 +357,8 @@ class TimelineService {
                         .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**') // b na pogrubienie
                         .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*') // em na kursywę
                         .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*') // i na kursywę
+                        .replace(/<tr[^>]*>/gi, '\n') // każdy <tr> jako nowa linia
+                        .replace(/<\/tr>/gi, '') // usuń zamykające </tr>
                         .replace(/<br\s*\/?>/gi, '\n') // br na nową linię
                         .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n') // kolejne paragrafy oddziel podwójną linią
                         .replace(/<p[^>]*>/gi, '') // usuń otwierające tagi p
@@ -853,6 +855,8 @@ class TimelineService {
      */
     cleanSectionContent(content) {
         return content
+            .replace(/<tr[^>]*>/gi, '\n') // każdy <tr> jako nowa linia
+            .replace(/<\/tr>/gi, '') // usuń zamykające </tr>
             .replace(/\b\d{1,2}:\d{2}\b/g, '') // usuń czasy
             .replace(/\(UTC\s*\d*\)/g, '') // usuń UTC
             .replace(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/g, '') // usuń daty
@@ -1174,6 +1178,8 @@ class TimelineService {
                 for (let pIndex = 0; pIndex < pMatches.length; pIndex++) {
                     const pMatch = pMatches[pIndex];
                     let pContent = pMatch.replace(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/s, '$1')
+                        .replace(/<tr[^>]*>/gi, '\n') // Każdy <tr> jako nowa linia
+                        .replace(/<\/tr>/gi, '') // Usuń zamykające </tr>
                         .replace(/<br\s*\/?>/gi, '\n')
                         .replace(/<[^>]*>/g, '') // Usuń wszystkie HTML tagi
                         .replace(/&nbsp;/g, ' ') // Usuń HTML entities
