@@ -517,6 +517,9 @@ class TimelineService {
         const content = fullMessage.substring(headerEnd + 31);
         const footer = '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
         
+        // Dla kolejnych części użyj tylko pustej linii na początku
+        const continuationHeader = `\n`;
+        
         // Jeśli nagłówek + footer już przekraczają limit, mamy problem
         if (header.length + footer.length > maxLength) {
             this.logger.error('❌ Nagłówek + footer są za długie dla pojedynczej wiadomości');
@@ -532,7 +535,16 @@ class TimelineService {
             const sectionWithNewlines = section + '\n\n';
             
             // Sprawdź czy dodanie tej sekcji nie przekroczy limitu
-            const testLength = (parts.length === 0 ? header.length : 0) + 
+            let testHeaderLength;
+            if (parts.length === 0) {
+                // Pierwsza część - pełny nagłówek
+                testHeaderLength = header.length;
+            } else {
+                // Kolejne części - nagłówek kontynuacji
+                testHeaderLength = continuationHeader.length;
+            }
+            
+            const testLength = testHeaderLength + 
                               currentPart.length + 
                               sectionWithNewlines.length + 
                               footer.length;
@@ -540,11 +552,11 @@ class TimelineService {
             if (testLength > maxLength && currentPart.length > 0) {
                 // Zakończ obecną część i zacznij nową
                 if (parts.length === 0) {
-                    // Pierwsza część - z nagłówkiem
+                    // Pierwsza część - z pełnym nagłówkiem
                     parts.push(header + currentPart.trimEnd() + footer);
                 } else {
-                    // Kolejne części - bez nagłówka
-                    parts.push(currentPart.trimEnd() + footer);
+                    // Kolejne części - z nagłówkiem kontynuacji
+                    parts.push(continuationHeader + currentPart.trimEnd() + footer);
                 }
                 currentPart = sectionWithNewlines;
             } else {
@@ -556,11 +568,11 @@ class TimelineService {
         // Dodaj ostatnią część
         if (currentPart.length > 0) {
             if (parts.length === 0) {
-                // Jedyna część - z nagłówkiem
+                // Jedyna część - z pełnym nagłówkiem
                 parts.push(header + currentPart.trimEnd() + footer);
             } else {
-                // Ostatnia część - bez nagłówka
-                parts.push(currentPart.trimEnd() + footer);
+                // Ostatnia część - z nagłówkiem kontynuacji
+                parts.push(continuationHeader + currentPart.trimEnd() + footer);
             }
         }
         
@@ -569,7 +581,10 @@ class TimelineService {
             return [fullMessage];
         }
         
-        // Nie dodawaj numerów części - pozostaw czysto
+        this.logger.info(`📝 DEBUG: Podzielono wiadomość na ${parts.length} części`);
+        parts.forEach((part, index) => {
+            this.logger.info(`📝 DEBUG: Część ${index + 1}: ${part.length} znaków, ${index === 0 ? 'pełny nagłówek' : 'tylko \\n na początku'}`);
+        });
         
         return parts;
     }
