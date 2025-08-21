@@ -1341,23 +1341,44 @@ class TimelineService {
                 const event = activeEvents[i];
                 const messageContent = this.generateEventMessage(event);
                 
+                // Sprawdź długość wiadomości
+                this.logger.info(`📝 DEBUG: Wiadomość ${i + 1} ma ${messageContent.length} znaków`);
+                if (messageContent.length > 2000) {
+                    this.logger.warn(`⚠️ Wiadomość ${i + 1} przekracza limit Discord (${messageContent.length}/2000 znaków)`);
+                    // Skróć wiadomość
+                    messageContent = messageContent.substring(0, 1900) + '\n\n...*(wiadomość skrócona)*';
+                    this.logger.info(`📝 DEBUG: Skrócono do ${messageContent.length} znaków`);
+                }
+                
                 if (this.messageIds[i]) {
                     // Zaktualizuj istniejącą wiadomość
                     try {
                         const existingMessage = await channel.messages.fetch(this.messageIds[i]);
                         await existingMessage.edit(messageContent);
                         this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}: ${event.event.substring(0, 30)}...`);
-                    } catch (error) {
+                    } catch (editError) {
                         this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[i]}, tworzę nową`);
-                        const newMessage = await channel.send(messageContent);
-                        this.messageIds[i] = newMessage.id;
-                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                        this.logger.error(`❌ Błąd edycji: ${editError?.message || editError}`);
+                        
+                        try {
+                            const newMessage = await channel.send(messageContent);
+                            this.messageIds[i] = newMessage.id;
+                            this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                        } catch (sendError) {
+                            this.logger.error(`❌ Błąd tworzenia nowej wiadomości: ${sendError?.message || sendError}`);
+                            throw sendError;
+                        }
                     }
                 } else {
                     // Utwórz nową wiadomość
-                    const newMessage = await channel.send(messageContent);
-                    this.messageIds[i] = newMessage.id;
-                    this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                    try {
+                        const newMessage = await channel.send(messageContent);
+                        this.messageIds[i] = newMessage.id;
+                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                    } catch (sendError) {
+                        this.logger.error(`❌ Błąd tworzenia wiadomości: ${sendError?.message || sendError}`);
+                        throw sendError;
+                    }
                 }
                 
                 // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
@@ -1369,14 +1390,17 @@ class TimelineService {
             this.logger.info(`✅ Zaktualizowano wszystkie ${activeEvents.length} aktywnych wydarzeń`);
             
         } catch (error) {
-            this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error.message);
-            this.logger.error('❌ Stack trace:', error.stack);
+            this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error?.message || 'Brak opisu błędu');
+            this.logger.error('❌ Error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+            if (error.stack) {
+                this.logger.error('❌ Stack trace:', error.stack);
+            }
             this.logger.error('❌ Szczegóły błędu:', {
-                name: error.name,
-                message: error.message,
-                code: error.code,
-                status: error.status,
-                requestData: error.requestData
+                name: error?.name || 'Unknown',
+                message: error?.message || 'Brak wiadomości',
+                code: error?.code || 'Brak kodu',
+                status: error?.status || 'Brak statusu',
+                toString: error?.toString() || 'Nie można przekonwertować'
             });
         }
     }
