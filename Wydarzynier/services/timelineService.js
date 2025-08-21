@@ -992,6 +992,13 @@ class TimelineService {
             'menu'
         ];
         
+        // Nie pomijaj obrazków z survivor containers lub garrytools assets
+        if (imgUrl.includes('CollectionIcon') || 
+            imgUrl.includes('survivor') || 
+            imgUrl.includes('garrytools.com/public/assets')) {
+            return false;
+        }
+        
         return skipPatterns.some(pattern => imgUrl.toLowerCase().includes(pattern));
     }
 
@@ -1725,9 +1732,15 @@ class TimelineService {
                 const fileName = `${baseFileName}_${Date.now()}${extension}`;
                 const filePath = path.join(this.imagesFolder, fileName);
 
-                // Normalizuj URL (dodaj https:// jeśli względny)
+                // Normalizuj URL (dodaj https:// jeśli względny lub obsłuż wsrv.nl proxy)
                 let fullUrl = imageUrl;
-                if (imageUrl.startsWith('/')) {
+                
+                // Sprawdź czy to URL przez wsrv.nl proxy
+                if (imageUrl.includes('wsrv.nl')) {
+                    // URL już jest pełny, użyj go bezpośrednio
+                    fullUrl = imageUrl;
+                    this.logger.info(`🔗 Używam wsrv.nl proxy URL: ${fullUrl}`);
+                } else if (imageUrl.startsWith('/')) {
                     fullUrl = 'https://garrytools.com' + imageUrl;
                 } else if (imageUrl.startsWith('public/')) {
                     fullUrl = 'https://garrytools.com/' + imageUrl;
@@ -1790,27 +1803,47 @@ class TimelineService {
         try {
             const images = [];
             
-            // Znajdź wszystkie tagi <img> w card-body
-            const imgRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
-            let match;
+            // Znajdź wszystkie tagi <img> w card-body - zarówno zwykłe jak i w span.survivor-single-item-container
+            const imgPatterns = [
+                // Zwykłe obrazki
+                /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi,
+                // Obrazki w survivor containers
+                /<span[^>]*class\s*=\s*["'][^"']*survivor-single-item-container[^"']*["'][^>]*>[\s\S]*?<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>[\s\S]*?<\/span>/gi
+            ];
             
-            while ((match = imgRegex.exec(cardBodyContent)) !== null) {
-                const imageUrl = match[1];
-                
-                // Pomiń małe ikony i elementy nawigacyjne
-                if (this.shouldSkipImage(imageUrl)) {
-                    this.logger.info(`⏭️ Pomijam obrazek: ${imageUrl}`);
-                    continue;
-                }
-                
-                try {
-                    // Pobierz i zapisz obrazek
-                    const filePath = await this.downloadImage(imageUrl, eventDate);
-                    images.push(filePath);
+            for (const imgRegex of imgPatterns) {
+                let match;
+                while ((match = imgRegex.exec(cardBodyContent)) !== null) {
+                    // Dla survivor containers URL jest w grupie 2, dla zwykłych w grupie 1
+                    let imageUrl = match[2] || match[1];
                     
-                    this.logger.info(`📸 Dodano obrazek do wydarzenia "${eventDate}": ${path.basename(filePath)}`);
-                } catch (downloadError) {
-                    this.logger.error(`❌ Nie udało się pobrać obrazka ${imageUrl}: ${downloadError.message}`);
+                    if (!imageUrl) continue;
+                    
+                    // Dekoduj HTML entities
+                    imageUrl = imageUrl
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#39;/g, "'");
+                    
+                    this.logger.info(`🔍 Znaleziono obrazek: ${imageUrl}`);
+                    
+                    // Pomiń małe ikony i elementy nawigacyjne
+                    if (this.shouldSkipImage(imageUrl)) {
+                        this.logger.info(`⏭️ Pomijam obrazek: ${imageUrl}`);
+                        continue;
+                    }
+                    
+                    try {
+                        // Pobierz i zapisz obrazek
+                        const filePath = await this.downloadImage(imageUrl, eventDate);
+                        images.push(filePath);
+                        
+                        this.logger.info(`📸 Dodano obrazek do wydarzenia "${eventDate}": ${path.basename(filePath)}`);
+                    } catch (downloadError) {
+                        this.logger.error(`❌ Nie udało się pobrać obrazka ${imageUrl}: ${downloadError.message}`);
+                    }
                 }
             }
             
