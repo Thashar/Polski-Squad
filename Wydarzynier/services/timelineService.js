@@ -1231,8 +1231,8 @@ class TimelineService {
                         }
                     }
                     
-                    // Wyciągnij wiersze tbody
-                    const rowMatches = tableMatch[1].match(/<tr[^>]*>(?![\s\S]*<th[^>]*colspan)[\s\S]*?<\/tr>/g);
+                    // Wyciągnij wiersze tbody (tylko te z <td>, pomijamy <th colspan>)
+                    const rowMatches = tableMatch[1].match(/<tr[^>]*>[\s\S]*?<td[\s\S]*?<\/tr>/g);
                     if (rowMatches) {
                         for (const rowMatch of rowMatches) {
                             const cellMatches = rowMatch.match(/<td[^>]*>(.*?)<\/td>/gs);
