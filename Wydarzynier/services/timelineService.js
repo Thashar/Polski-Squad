@@ -689,9 +689,27 @@ class TimelineService {
         let formatted = '';
         
         // Parsuj sekcje z opisu wydarzenia
+        this.logger.info(`🔍 DEBUG: formatEventFromStructure - parsuję sekcje dla wydarzenia: ${event.date}`);
         const sections = this.parseEventSections(event.event, event.rawHTML, event.date);
+        this.logger.info(`🔍 DEBUG: Otrzymano ${sections.length} sekcji z parseEventSections`);
         
-        sections.forEach((section, index) => {
+        // Deduplikuj sekcje o tych samych tytułach
+        const uniqueSections = [];
+        const seenTitles = new Set();
+        
+        for (const section of sections) {
+            if (section.title && !seenTitles.has(section.title.trim())) {
+                uniqueSections.push(section);
+                seenTitles.add(section.title.trim());
+                this.logger.info(`🔍 DEBUG: Dodano unikatną sekcję: "${section.title}"`);
+            } else {
+                this.logger.warn(`🔍 DEBUG: Pomijam duplikat sekcji: "${section.title}"`);
+            }
+        }
+        
+        this.logger.info(`🔍 DEBUG: Po deduplikacji: ${uniqueSections.length} unikalnych sekcji`);
+        
+        uniqueSections.forEach((section, index) => {
             this.logger.info(`🔍 DEBUG: Sekcja ${index}: title="${section.title}", content="${section.content ? section.content.substring(0, 50) + '...' : 'brak'}"`);
             
             if (section.title && section.content && section.content.length > 10) {
@@ -700,6 +718,7 @@ class TimelineService {
                 // Pomiń sekcje które są tylko emoji (bez tekstu)
                 const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(trimmedTitle);
                 if (isOnlyEmoji) {
+                    this.logger.info(`🔍 DEBUG: Pomijam sekcję z samym emoji: "${trimmedTitle}"`);
                     return; // pomiń tę sekcję
                 }
                 
@@ -709,10 +728,12 @@ class TimelineService {
                 if (hasEmoji) {
                     // Jeśli tytuł już ma emoji, użyj go bez dodawania nowego
                     formatted += `**${trimmedTitle}**\n`;
+                    this.logger.info(`🔍 DEBUG: Użyto istniejącego emoji: "${trimmedTitle}"`);
                 } else {
                     // Jeśli nie ma emoji, dodaj odpowiednie
                     const sectionEmoji = this.getSectionEmoji(trimmedTitle);
                     formatted += `${sectionEmoji} **${trimmedTitle}**\n`;
+                    this.logger.info(`🔍 DEBUG: Dodano emoji "${sectionEmoji}" do "${trimmedTitle}"`);
                 }
                 formatted += `${section.content}\n`;
             }
@@ -1201,10 +1222,16 @@ class TimelineService {
     extractStructuredContent(content, rawHTML = '', eventDate = '') {
         // Najpierw spróbuj nowy parser HTML
         if (rawHTML && eventDate) {
+            this.logger.info(`🔍 DEBUG: extractStructuredContent - próbuję nowy parser HTML`);
             const htmlParsed = this.parseEventCardBody(rawHTML, eventDate);
             if (htmlParsed) {
+                this.logger.info(`🔍 DEBUG: Nowy parser HTML zwrócił ${htmlParsed.length} znaków`);
                 return htmlParsed;
+            } else {
+                this.logger.warn(`🔍 DEBUG: Nowy parser HTML nie zwrócił danych, fallback do starego parsera`);
             }
+        } else {
+            this.logger.warn(`🔍 DEBUG: Brak rawHTML lub eventDate, używam starego parsera`);
         }
         
         // Fallback do starego parsera
