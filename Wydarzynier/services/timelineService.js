@@ -1066,67 +1066,145 @@ class TimelineService {
     }
 
     /**
-     * Parsuje HTML card-body na Discord markdown
+     * Konwertuje datę na Discord timestamp
+     */
+    convertToDiscordTimestamp(dateStr) {
+        try {
+            // Format: "11 September 2025 16:00 - (UTC 0)"
+            const cleanDate = dateStr.replace(' - (UTC 0)', '').trim();
+            const eventDate = new Date(cleanDate);
+            return Math.floor(eventDate.getTime() / 1000);
+        } catch (error) {
+            this.logger.error('❌ Błąd konwersji daty na timestamp:', error);
+            return Math.floor(Date.now() / 1000); // fallback na obecny czas
+        }
+    }
+
+    /**
+     * Parsuje HTML card-body na Discord markdown - NOWY PARSER
      */
     parseEventCardBody(rawHTML, eventDate) {
         try {
-            this.logger.info(`🔍 DEBUG: parseEventCardBody - szukam daty: "${eventDate}"`);
-            // Szukaj w kontekście daty wydarzenia
-            const dateIndex = rawHTML.indexOf(eventDate);
-            if (dateIndex === -1) {
-                this.logger.warn(`🔍 DEBUG: Nie znaleziono daty w rawHTML`);
+            this.logger.info(`🔍 DEBUG: NOWY PARSER - szukam struktury card dla daty: "${eventDate}"`);
+            
+            // Znajdź card z tą datą - szukaj card-header z datą
+            const cardHeaderPattern = new RegExp(`<div class="card-header[^>]*>[\\s\\S]*?${eventDate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?</div>`);
+            const headerMatch = rawHTML.match(cardHeaderPattern);
+            
+            if (!headerMatch) {
+                this.logger.warn(`🔍 DEBUG: Nie znaleziono card-header z datą "${eventDate}"`);
                 return null;
             }
             
-            // Weź sekcję wokół daty (20000 znaków po dacie)
-            const dateSection = rawHTML.substring(dateIndex, dateIndex + 20000);
+            this.logger.info(`🔍 DEBUG: Znaleziono card-header z datą`);
             
-            // Znajdź card-body - prostszy pattern
-            const cardBodyStart = dateSection.indexOf('<div class="card-body">');
-            if (cardBodyStart === -1) {
-                this.logger.warn(`🔍 DEBUG: Nie znaleziono <div class="card-body"> w sekcji daty`);
+            // Znajdź pozycję tego card-header w HTML
+            const headerIndex = rawHTML.indexOf(headerMatch[0]);
+            if (headerIndex === -1) {
                 return null;
             }
-            this.logger.info(`🔍 DEBUG: Znaleziono card-body na pozycji ${cardBodyStart}`);
             
-            // Weź większy kawałek - do 15000 znaków od card-body
-            const cardBodyContent = dateSection.substring(cardBodyStart + 23, cardBodyStart + 15000);
-            const cardBody = cardBodyContent;
+            // Znajdź card-body po tym header
+            const afterHeader = rawHTML.substring(headerIndex);
+            const cardBodyMatch = afterHeader.match(/<div class="card-body">[\s\S]*?<div class="section[\s\S]*?<\/div>[\s\S]*?<\/div>/);
+            
+            if (!cardBodyMatch) {
+                this.logger.warn(`🔍 DEBUG: Nie znaleziono card-body po header`);
+                return null;
+            }
+            
+            const cardBodyContent = cardBodyMatch[0];
+            this.logger.info(`🔍 DEBUG: Znaleziono card-body, długość: ${cardBodyContent.length}`);
+            
+            // Wyciągnij datę z nagłówka i przekonwertuj na timestamp
+            const dateHeaderMatch = headerMatch[0].match(/([^<]+\d{4}\s+\d{1,2}:\d{2}\s*-\s*\(UTC\s*\d*\))/);
+            let discordTimestamp = Math.floor(Date.now() / 1000); // fallback
+            
+            if (dateHeaderMatch) {
+                const fullDateString = dateHeaderMatch[1].trim();
+                discordTimestamp = this.convertToDiscordTimestamp(fullDateString);
+                this.logger.info(`🔍 DEBUG: Przekonwertowano datę "${fullDateString}" na timestamp: ${discordTimestamp}`);
+            }
+            
             let discordContent = '';
             
-            // Najpierw sprawdź czy są tabele
-            const tableMatches = cardBody.match(/<table[^>]*>(.*?)<\/table>/gs);
-            if (tableMatches && tableMatches.length > 0) {
-                this.logger.info(`Znaleziono ${tableMatches.length} tabel`);
+            // Generuj nagłówek wydarzenia
+            discordContent += `# 📅 Aktualizacja - <t:${discordTimestamp}:F>\n\n`;
+            discordContent += `⏰ **Czas do wydarzenia:** <t:${discordTimestamp}:R>\n`;
+            discordContent += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            
+            // Parsuj zawartość sekcji
+            this.logger.info(`🔍 DEBUG: Rozpoczynam parsowanie zawartości sekcji`);
+            
+            // Znajdź wszystkie h6 (tytuły sekcji)
+            const h6Matches = cardBodyContent.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g) || [];
+            this.logger.info(`🔍 DEBUG: Znaleziono ${h6Matches.length} tytułów h6`);
+            
+            for (let i = 0; i < h6Matches.length; i++) {
+                const h6Title = h6Matches[i].replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
+                this.logger.info(`🔍 DEBUG: Przetwarzam h6[${i}]: "${h6Title}"`);
                 
-                for (const tableMatch of tableMatches) {
-                    // Znajdź tytuł tabeli z th colspan
-                    const titleMatch = tableMatch.match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*class\s*=\s*["'][^"']*text-center[^"']*["'][^>]*>(.*?)<\/th>/);
-                    if (titleMatch) {
-                        const tableTitle = titleMatch[1].trim();
-                        this.logger.info(`🔍 DEBUG: Znaleziono tytuł tabeli: "${tableTitle}"`);
-                        
-                        // Sprawdź czy tytuł nie składa się tylko z emoji
-                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(tableTitle);
-                        this.logger.info(`🔍 DEBUG: Czy tylko emoji: ${isOnlyEmoji}`);
-                        
-                        if (!isOnlyEmoji) {
-                            const sectionEmoji = this.getSectionEmoji(tableTitle);
-                            this.logger.info(`🔍 DEBUG: Dodaję sekcję tabeli: "${sectionEmoji} **${tableTitle}**"`);
-                            discordContent += `${sectionEmoji} **${tableTitle}**\n`;
-                        } else {
-                            this.logger.info(`🔍 DEBUG: Pomijam tytuł tabeli składający się tylko z emoji`);
+                // Pomiń tytuły składające się tylko z emoji
+                const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(h6Title);
+                if (isOnlyEmoji) {
+                    this.logger.info(`🔍 DEBUG: Pomijam tytuł z samymi emoji: "${h6Title}"`);
+                    continue;
+                }
+                
+                // Dodaj emoji i tytuł sekcji
+                const sectionEmoji = this.getSectionEmoji(h6Title);
+                discordContent += `${sectionEmoji} **${h6Title}**\n`;
+                
+                // Znajdź odpowiadający paragraf po tym h6
+                const h6Index = cardBodyContent.indexOf(h6Matches[i]);
+                const nextH6Index = i + 1 < h6Matches.length ? 
+                    cardBodyContent.indexOf(h6Matches[i + 1], h6Index) : 
+                    cardBodyContent.length;
+                    
+                const sectionContent = cardBodyContent.substring(h6Index, nextH6Index);
+                
+                // Znajdź paragraf p w tej sekcji
+                const pMatch = sectionContent.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/s);
+                if (pMatch) {
+                    const pContent = pMatch[1]
+                        .replace(/<br\s*\/?>/gi, '\n')
+                        .replace(/<[^>]*>/g, '')
+                        .trim();
+                    
+                    if (pContent.length > 0) {
+                        discordContent += `${pContent}\n`;
+                    }
+                }
+                
+                // Sprawdź czy w tej sekcji jest tabela
+                const tableMatch = sectionContent.match(/<table[^>]*>([\s\S]*?)<\/table>/);
+                if (tableMatch) {
+                    this.logger.info(`🔍 DEBUG: Znaleziono tabelę w sekcji "${h6Title}"`);
+                    
+                    // Wyciągnij tytuł tabeli (th colspan)
+                    const tableTitleMatch = tableMatch[1].match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*[^>]*>(.*?)<\/th>/);
+                    if (tableTitleMatch) {
+                        const tableTitle = tableTitleMatch[1].trim();
+                        if (tableTitle !== h6Title) { // Tylko jeśli tytuł tabeli różni się od h6
+                            discordContent += `\n${tableTitle}\n`;
                         }
                     }
                     
-                    // Znajdź wszystkie wiersze tbody
-                    const rowMatches = tableMatch.match(/<tr[^>]*>(?!.*<th).*?<\/tr>/gs);
+                    // Wyciągnij nagłówki kolumn (zwykłe th)
+                    const headerMatches = tableMatch[1].match(/<th[^>]*>(?!.*colspan)(.*?)<\/th>/g);
+                    if (headerMatches && headerMatches.length > 0) {
+                        const headers = headerMatches.map(h => h.replace(/<th[^>]*>(.*?)<\/th>/, '$1').trim());
+                        discordContent += `${headers.join('  ')}\n`;
+                    }
+                    
+                    // Wyciągnij wiersze tbody
+                    const rowMatches = tableMatch[1].match(/<tr[^>]*>(?![\s\S]*<th[^>]*colspan)[\s\S]*?<\/tr>/g);
                     if (rowMatches) {
                         for (const rowMatch of rowMatches) {
                             const cellMatches = rowMatch.match(/<td[^>]*>(.*?)<\/td>/gs);
                             if (cellMatches && cellMatches.length >= 2) {
-                                const number = cellMatches[0].replace(/<td[^>]*>(.*?)<\/td>/, '$1').trim();
-                                const content = cellMatches[1].replace(/<td[^>]*>(.*?)<\/td>/, '$1').trim();
+                                const number = cellMatches[0].replace(/<td[^>]*>(.*?)<\/td>/, '$1').replace(/<[^>]*>/g, '').trim();
+                                const content = cellMatches[1].replace(/<td[^>]*>(.*?)<\/td>/, '$1').replace(/<[^>]*>/g, '').trim();
                                 
                                 if (number && content) {
                                     discordContent += `${number}. ${content}\n`;
@@ -1134,99 +1212,19 @@ class TimelineService {
                             }
                         }
                     }
-                    
-                    discordContent += '\n';
                 }
+                
+                discordContent += '\n'; // Przerwa między sekcjami
             }
             
-            // Następnie sprawdź sekcje div - uproszczony parser
-            const sectionStart = cardBody.indexOf('<div class="section');
-            this.logger.info(`🔍 DEBUG: Szukam <div class="section"> - znaleziono na pozycji: ${sectionStart}`);
-            if (sectionStart !== -1) {
-                // Wyciągnij całą sekcję div
-                const sectionEnd = cardBody.indexOf('</div>', sectionStart);
-                const sectionContent = cardBody.substring(sectionStart, sectionEnd);
-                
-                this.logger.info(`🔍 DEBUG: Znaleziono sekcję, parsuję h6+p pary`);
-                
-                // Znajdź wszystkie h6 i odpowiadające im p
-                const h6Matches = sectionContent.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g);
-                const pMatches = sectionContent.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
-                
-                if (h6Matches && pMatches) {
-                    this.logger.info(`🔍 DEBUG: Znaleziono ${h6Matches.length} h6 i ${pMatches.length} p`);
-                    
-                    for (let i = 0; i < h6Matches.length; i++) {
-                        const h6Title = h6Matches[i].replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
-                        const pContent = pMatches[i] ? pMatches[i].replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
-                            .replace(/<br\s*\/?>/gi, '\n')
-                            .replace(/<[^>]*>/g, '')
-                            .trim() : '';
-                        
-                        this.logger.info(`🔍 DEBUG: Para ${i}: h6="${h6Title}", p="${pContent.substring(0, 50)}..."`);
-                        
-                        // Sprawdź czy tytuł nie składa się tylko z emoji
-                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(h6Title);
-                        
-                        if (!isOnlyEmoji && pContent.length > 0) {
-                            // Dodaj emoji na podstawie tytułu
-                            const sectionEmoji = this.getSectionEmoji(h6Title);
-                            this.logger.info(`🔍 DEBUG: Dodaję sekcję: "${sectionEmoji} **${h6Title}**"`);
-                            discordContent += `${sectionEmoji} **${h6Title}**\n`;
-                            discordContent += `${pContent}\n\n`;
-                        } else if (isOnlyEmoji) {
-                            this.logger.info(`🔍 DEBUG: Pomijam h6 składający się tylko z emoji: "${h6Title}"`);
-                        }
-                    }
-                }
-            }
+            // Dodaj końcowy separator
+            discordContent += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
             
-            // Jeśli nie ma ani tabel ani sekcji, spróbuj fallback
-            if ((!tableMatches || tableMatches.length === 0) && sectionStart === -1) {
-                this.logger.warn('Nie znaleziono sekcji div, próbuję bezpośrednio H6+P');
-                
-                // Fallback - wyciągnij wszystkie h6 i p bezpośrednio
-                const h6Matches = cardBody.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g);
-                const pMatches = cardBody.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
-                
-                if (h6Matches) {
-                    h6Matches.forEach((h6, index) => {
-                        const title = h6.replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
-                        this.logger.info(`🔍 DEBUG: Fallback h6 tytuł: "${title}"`);
-                        
-                        // Sprawdź czy tytuł nie składa się tylko z emoji
-                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(title);
-                        this.logger.info(`🔍 DEBUG: Czy tylko emoji: ${isOnlyEmoji}`);
-                        
-                        if (!isOnlyEmoji) {
-                            this.logger.info(`🔍 DEBUG: Dodaję fallback sekcję: "**${title}**"`);
-                            discordContent += `**${title}**\n`;
-                        } else {
-                            this.logger.info(`🔍 DEBUG: Pomijam fallback tytuł składający się tylko z emoji`);
-                            return; // pomiń tę sekcję całkowicie
-                        }
-                        
-                        // Jeśli jest odpowiadający paragraf
-                        if (pMatches && pMatches[index]) {
-                            const pContent = pMatches[index].replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
-                                .replace(/<br\s*\/?>/gi, '\n')
-                                .replace(/<[^>]*>/g, '')
-                                .trim();
-                            
-                            if (pContent.length > 0) {
-                                discordContent += `${pContent}\n`;
-                            }
-                        }
-                        
-                        discordContent += '\n';
-                    });
-                }
-            }
-            
-            return discordContent.trim();
+            this.logger.info(`🔍 DEBUG: NOWY PARSER zakończony, wygenerowano ${discordContent.length} znaków`);
+            return discordContent;
             
         } catch (error) {
-            this.logger.error('Błąd parsowania card-body:', error);
+            this.logger.error('❌ Błąd nowego parsera card-body:', error);
             return null;
         }
     }
