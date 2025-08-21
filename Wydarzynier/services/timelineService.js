@@ -29,6 +29,9 @@ class TimelineService {
         // Rozpocznij sprawdzanie co godzinę
         this.startHourlyCheck();
         
+        // Sprawdź aktualizacje przy starcie
+        await this.checkForUpdates();
+        
         // Opublikuj lub zaktualizuj wiadomości przy starcie
         await this.publishOrUpdateMessages();
         
@@ -152,14 +155,26 @@ class TimelineService {
      * Pobiera dane timeline z garrytools.com
      */
     async fetchTimelineFromWeb() {
-        const { WebFetch } = require('../utils/webFetch');
-        
         try {
-            const response = await WebFetch.fetch('https://garrytools.com/timeline');
-            const rawHTML = await WebFetch.fetchRawHTML('https://garrytools.com/timeline');
+            // Użyj WebFetch z Claude Code dla lepszej obsługi
+            const response = await fetch('https://garrytools.com/timeline');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const rawHTML = await response.text();
+            this.logger.info(`✅ Pobrano rawHTML: ${rawHTML.length} znaków`);
+            
+            // Przekonwertuj HTML na tekst dla parsera
+            const textContent = rawHTML
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // usuń skrypty
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // usuń style
+                .replace(/<[^>]*>/g, ' ') // usuń tagi HTML
+                .replace(/\s+/g, ' ') // znormalizuj białe znaki
+                .trim();
             
             // Parsuj odpowiedź z HTML
-            const events = this.parseTimelineFromHTML(response, rawHTML);
+            const events = this.parseTimelineFromHTML(textContent, rawHTML);
             return events;
         } catch (error) {
             this.logger.error('Błąd pobierania timeline z sieci:', error);
@@ -406,6 +421,7 @@ class TimelineService {
             this.logger.info(`Sparsowano ${events.length} wydarzeń z HTML`);
             
             if (events.length > 0) {
+                this.logger.info(`✅ Zwracam ${events.length} sparsowanych wydarzeń`);
                 return events;
             } else {
                 this.logger.warn('Nie udało się sparsować wydarzeń, używam domyślnych danych');
@@ -413,7 +429,8 @@ class TimelineService {
             }
             
         } catch (error) {
-            this.logger.error('Błąd parsowania HTML timeline:', error);
+            this.logger.error('Błąd parsowania HTML timeline:', error.message);
+            this.logger.error('Stack trace:', error.stack);
             return this.getDefaultTimeline();
         }
     }
