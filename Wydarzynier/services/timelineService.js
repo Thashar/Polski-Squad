@@ -516,9 +516,26 @@ class TimelineService {
             
             if (htmlParsedMessage && htmlParsedMessage.length > 100) {
                 this.logger.info(`🔍 DEBUG: Nowy parser HTML zwrócił ${htmlParsedMessage.length} znaków - używam go`);
+                
+                // Dodatkowa weryfikacja: sprawdź czy nie ma niechcianych HTML tagów (ale nie Discord timestamp)
+                const htmlTagsPattern = /<(?!\/?(t:|\/t:))[^>]*>/;
+                if (htmlTagsPattern.test(htmlParsedMessage)) {
+                    const match = htmlParsedMessage.match(htmlTagsPattern);
+                    if (match) {
+                        this.logger.warn(`🔍 DEBUG: UWAGA - wiadomość zawiera HTML! Tag: "${match[0]}"`);
+                        const context = htmlParsedMessage.substring(Math.max(0, htmlParsedMessage.indexOf(match[0]) - 20), htmlParsedMessage.indexOf(match[0]) + match[0].length + 20);
+                        this.logger.warn(`🔍 DEBUG: Kontekst: "${context}"`);
+                    }
+                } else {
+                    this.logger.info(`✅ DEBUG: Wiadomość jest czysta (tylko Discord timestamp)`);
+                }
+                
                 return htmlParsedMessage;
             } else {
                 this.logger.warn(`🔍 DEBUG: Nowy parser HTML nie zwrócił danych lub zwrócił za mało (${htmlParsedMessage?.length || 0} znaków)`);
+                if (htmlParsedMessage) {
+                    this.logger.warn(`🔍 DEBUG: Zawartość parsera: "${htmlParsedMessage.substring(0, 200)}..."`);
+                }
             }
         } else {
             this.logger.warn(`🔍 DEBUG: Brak rawHTML lub date - używam starego parsera`);
@@ -659,8 +676,11 @@ class TimelineService {
      * Parsuje sekcje wydarzenia z tekstu - używa bezpośrednio strukturalnej ekstraktacji
      */
     parseEventSections(eventText, rawHTML = '', eventDate = '') {
+        this.logger.info(`🔍 DEBUG: parseEventSections - długość eventText: ${eventText.length}, ma rawHTML: ${!!rawHTML}, eventDate: "${eventDate}"`);
+        
         // Jeśli eventText już zawiera strukturę Discord markdown (z **), to go używaj bezpośrednio
         if (eventText.includes('**') && eventText.includes('\n')) {
+            this.logger.info(`🔍 DEBUG: EventText ma strukturę markdown - parsuję bezpośrednio`);
             // Parsuj sekcje ze strukturalnej zawartości
             const sections = [];
             const sectionBlocks = eventText.split(/\*\*([^*]+)\*\*/);
@@ -680,13 +700,16 @@ class TimelineService {
                 }
             }
             
+            this.logger.info(`🔍 DEBUG: Zwracam ${sections.length} sekcji z markdown`);
             return sections;
         }
         
         // Jeśli nie ma struktury, użyj ekstraktacji HTML
+        this.logger.info(`🔍 DEBUG: EventText nie ma struktury markdown - używam extractStructuredContent`);
         const structuredContent = this.extractStructuredContent(eventText, rawHTML, eventDate);
         
         if (structuredContent) {
+            this.logger.info(`🔍 DEBUG: extractStructuredContent zwrócił ${structuredContent.length} znaków`);
             // Debug: sprawdź zawartość przed parsowaniem
             if (this.logger && this.config?.ocr?.detailedLogging?.enabled) {
                 this.logger.info('StructuredContent przed parsowaniem:', structuredContent);
@@ -1037,14 +1060,27 @@ class TimelineService {
                 // Znajdź paragraf p w tej sekcji
                 const pMatch = sectionContent.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/s);
                 if (pMatch) {
-                    const pContent = pMatch[1]
+                    let pContent = pMatch[1]
                         .replace(/<br\s*\/?>/gi, '\n')
-                        .replace(/<[^>]*>/g, '')
+                        .replace(/<[^>]*>/g, '') // Usuń wszystkie HTML tagi
+                        .replace(/&nbsp;/g, ' ') // Usuń HTML entities
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#39;/g, "'")
+                        .replace(/\s+/g, ' ') // Znormalizuj białe znaki
                         .trim();
+                    
+                    this.logger.info(`🔍 DEBUG: Paragraf p po oczyszczeniu: "${pContent.substring(0, 100)}..."`);
                     
                     if (pContent.length > 0) {
                         discordContent += `${pContent}\n`;
+                    } else {
+                        this.logger.warn(`🔍 DEBUG: Paragraf p jest pusty po oczyszczeniu`);
                     }
+                } else {
+                    this.logger.warn(`🔍 DEBUG: Nie znaleziono paragrafu p w sekcji "${h6Title}"`);
                 }
                 
                 // Sprawdź czy w tej sekcji jest tabela
@@ -1055,8 +1091,16 @@ class TimelineService {
                     // Wyciągnij tytuł tabeli (th colspan)
                     const tableTitleMatch = tableMatch[1].match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*[^>]*>(.*?)<\/th>/);
                     if (tableTitleMatch) {
-                        const tableTitle = tableTitleMatch[1].trim();
-                        if (tableTitle !== h6Title) { // Tylko jeśli tytuł tabeli różni się od h6
+                        const tableTitle = tableTitleMatch[1]
+                            .replace(/<[^>]*>/g, '') // Usuń HTML tagi
+                            .replace(/&nbsp;/g, ' ') // Usuń HTML entities
+                            .replace(/&amp;/g, '&')
+                            .replace(/&lt;/g, '<')
+                            .replace(/&gt;/g, '>')
+                            .replace(/&quot;/g, '"')
+                            .replace(/&#39;/g, "'")
+                            .trim();
+                        if (tableTitle && tableTitle !== h6Title) { // Tylko jeśli tytuł tabeli różni się od h6
                             discordContent += `\n${tableTitle}\n`;
                         }
                     }
@@ -1064,8 +1108,18 @@ class TimelineService {
                     // Wyciągnij nagłówki kolumn (zwykłe th)
                     const headerMatches = tableMatch[1].match(/<th[^>]*>(?!.*colspan)(.*?)<\/th>/g);
                     if (headerMatches && headerMatches.length > 0) {
-                        const headers = headerMatches.map(h => h.replace(/<th[^>]*>(.*?)<\/th>/, '$1').trim());
-                        discordContent += `${headers.join('  ')}\n`;
+                        const headers = headerMatches.map(h => h.replace(/<th[^>]*>(.*?)<\/th>/, '$1')
+                            .replace(/<[^>]*>/g, '') // Usuń HTML tagi
+                            .replace(/&nbsp;/g, ' ') // Usuń HTML entities
+                            .replace(/&amp;/g, '&')
+                            .replace(/&lt;/g, '<')
+                            .replace(/&gt;/g, '>')
+                            .replace(/&quot;/g, '"')
+                            .replace(/&#39;/g, "'")
+                            .trim());
+                        if (headers.some(h => h.length > 0)) {
+                            discordContent += `${headers.join('  ')}\n`;
+                        }
                     }
                     
                     // Wyciągnij wiersze tbody
@@ -1074,8 +1128,24 @@ class TimelineService {
                         for (const rowMatch of rowMatches) {
                             const cellMatches = rowMatch.match(/<td[^>]*>(.*?)<\/td>/gs);
                             if (cellMatches && cellMatches.length >= 2) {
-                                const number = cellMatches[0].replace(/<td[^>]*>(.*?)<\/td>/, '$1').replace(/<[^>]*>/g, '').trim();
-                                const content = cellMatches[1].replace(/<td[^>]*>(.*?)<\/td>/, '$1').replace(/<[^>]*>/g, '').trim();
+                                const number = cellMatches[0].replace(/<td[^>]*>(.*?)<\/td>/, '$1')
+                                    .replace(/<[^>]*>/g, '') // Usuń HTML tagi
+                                    .replace(/&nbsp;/g, ' ') // Usuń HTML entities
+                                    .replace(/&amp;/g, '&')
+                                    .replace(/&lt;/g, '<')
+                                    .replace(/&gt;/g, '>')
+                                    .replace(/&quot;/g, '"')
+                                    .replace(/&#39;/g, "'")
+                                    .trim();
+                                const content = cellMatches[1].replace(/<td[^>]*>(.*?)<\/td>/, '$1')
+                                    .replace(/<[^>]*>/g, '') // Usuń HTML tagi
+                                    .replace(/&nbsp;/g, ' ') // Usuń HTML entities
+                                    .replace(/&amp;/g, '&')
+                                    .replace(/&lt;/g, '<')
+                                    .replace(/&gt;/g, '>')
+                                    .replace(/&quot;/g, '"')
+                                    .replace(/&#39;/g, "'")
+                                    .trim();
                                 
                                 if (number && content) {
                                     discordContent += `${number}. ${content}\n`;
@@ -1372,7 +1442,16 @@ class TimelineService {
             // Aktualizuj lub utwórz wiadomości dla każdego aktywnego wydarzenia
             for (let i = 0; i < activeEvents.length; i++) {
                 const event = activeEvents[i];
+                this.logger.info(`📝 DEBUG: Przetwarzam wydarzenie ${i + 1}/${activeEvents.length}: "${event.date}" - "${event.event.substring(0, 50)}..."`);
                 let messageContent = this.generateEventMessage(event);
+                
+                // Sprawdź czy wiadomość nie zawiera danych z innych wydarzeń
+                const eventDates = activeEvents.map(e => e.date).filter(date => date !== event.date);
+                const hasOtherDates = eventDates.some(date => messageContent.includes(date));
+                if (hasOtherDates) {
+                    this.logger.warn(`⚠️ DEBUG: Wiadomość dla "${event.date}" zawiera daty innych wydarzeń!`);
+                    this.logger.warn(`⚠️ DEBUG: Fragment wiadomości: "${messageContent.substring(0, 300)}..."`);
+                }
                 
                 // Sprawdź długość wiadomości
                 this.logger.info(`📝 DEBUG: Wiadomość ${i + 1} ma ${messageContent.length} znaków`);
