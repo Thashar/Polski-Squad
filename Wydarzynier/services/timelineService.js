@@ -903,16 +903,24 @@ class TimelineService {
      */
     parseEventCardBody(rawHTML, eventDate) {
         try {
+            this.logger.info(`🔍 DEBUG: parseEventCardBody - szukam daty: "${eventDate}"`);
             // Szukaj w kontekście daty wydarzenia
             const dateIndex = rawHTML.indexOf(eventDate);
-            if (dateIndex === -1) return null;
+            if (dateIndex === -1) {
+                this.logger.warn(`🔍 DEBUG: Nie znaleziono daty w rawHTML`);
+                return null;
+            }
             
             // Weź sekcję wokół daty (20000 znaków po dacie)
             const dateSection = rawHTML.substring(dateIndex, dateIndex + 20000);
             
             // Znajdź card-body - prostszy pattern
             const cardBodyStart = dateSection.indexOf('<div class="card-body">');
-            if (cardBodyStart === -1) return null;
+            if (cardBodyStart === -1) {
+                this.logger.warn(`🔍 DEBUG: Nie znaleziono <div class="card-body"> w sekcji daty`);
+                return null;
+            }
+            this.logger.info(`🔍 DEBUG: Znaleziono card-body na pozycji ${cardBodyStart}`);
             
             // Weź większy kawałek - do 15000 znaków od card-body
             const cardBodyContent = dateSection.substring(cardBodyStart + 23, cardBodyStart + 15000);
@@ -966,6 +974,7 @@ class TimelineService {
             
             // Następnie sprawdź sekcje div - uproszczony parser
             const sectionStart = cardBody.indexOf('<div class="section');
+            this.logger.info(`🔍 DEBUG: Szukam <div class="section"> - znaleziono na pozycji: ${sectionStart}`);
             if (sectionStart !== -1) {
                 // Wyciągnij całą sekcję div
                 const sectionEnd = cardBody.indexOf('</div>', sectionStart);
@@ -1360,12 +1369,14 @@ class TimelineService {
             this.logger.info(`✅ Zaktualizowano wszystkie ${activeEvents.length} aktywnych wydarzeń`);
             
         } catch (error) {
-            this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error);
-            this.logger.error('Szczegóły błędu:', {
+            this.logger.error('❌ Błąd publikowania/aktualizacji wiadomości timeline:', error.message);
+            this.logger.error('❌ Stack trace:', error.stack);
+            this.logger.error('❌ Szczegóły błędu:', {
                 name: error.name,
                 message: error.message,
                 code: error.code,
-                status: error.status
+                status: error.status,
+                requestData: error.requestData
             });
         }
     }
