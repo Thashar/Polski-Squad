@@ -1061,45 +1061,76 @@ class TimelineService {
      */
     parseEventCardBody(rawHTML, eventDate) {
         try {
-            this.logger.info(`🔍 DEBUG: NOWY PARSER - szukam struktury card dla daty: "${eventDate}"`);
+            this.logger.info(`🔍 DEBUG: NOWY PARSER - szukam card dla konkretnej daty: "${eventDate}"`);
             
-            // Znajdź card z tą datą - szukaj card-header z datą
-            const cardHeaderPattern = new RegExp(`<div class="card-header[^>]*>[\\s\\S]*?${eventDate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?</div>`);
-            const headerMatch = rawHTML.match(cardHeaderPattern);
+            // Znajdź wszystkie card struktury w HTML
+            const cardPattern = /<div class="card"[^>]*>([\s\S]*?)<\/div>\s*(?=<div class="card"|<\/div>\s*$|$)/g;
+            const cards = [];
+            let cardMatch;
             
-            if (!headerMatch) {
-                this.logger.warn(`🔍 DEBUG: Nie znaleziono card-header z datą "${eventDate}"`);
+            while ((cardMatch = cardPattern.exec(rawHTML)) !== null) {
+                cards.push({
+                    fullCard: cardMatch[0],
+                    cardContent: cardMatch[1],
+                    index: cardMatch.index
+                });
+            }
+            
+            this.logger.info(`🔍 DEBUG: Znaleziono ${cards.length} card w HTML`);
+            
+            // Znajdź card który zawiera naszą konkretną datę
+            let targetCard = null;
+            let targetIndex = -1;
+            
+            for (let i = 0; i < cards.length; i++) {
+                const card = cards[i];
+                
+                // Sprawdź czy card-header zawiera naszą datę
+                const headerMatch = card.cardContent.match(/<div class="card-header[^>]*>([\s\S]*?)<\/div>/);
+                if (headerMatch) {
+                    const headerContent = headerMatch[1];
+                    
+                    // Sprawdź czy header zawiera dokładnie naszą datę
+                    if (headerContent.includes(eventDate)) {
+                        targetCard = card;
+                        targetIndex = i;
+                        this.logger.info(`🔍 DEBUG: Znaleziono card ${i} z datą "${eventDate}"`);
+                        break;
+                    }
+                }
+            }
+            
+            if (!targetCard) {
+                this.logger.warn(`🔍 DEBUG: Nie znaleziono card z datą "${eventDate}"`);
                 return null;
             }
             
-            this.logger.info(`🔍 DEBUG: Znaleziono card-header z datą`);
-            
-            // Znajdź pozycję tego card-header w HTML
-            const headerIndex = rawHTML.indexOf(headerMatch[0]);
-            if (headerIndex === -1) {
-                return null;
-            }
-            
-            // Znajdź card-body po tym header
-            const afterHeader = rawHTML.substring(headerIndex);
-            const cardBodyMatch = afterHeader.match(/<div class="card-body">[\s\S]*?<div class="section[\s\S]*?<\/div>[\s\S]*?<\/div>/);
+            // Znajdź card-body w tym konkretnym card
+            const cardBodyMatch = targetCard.cardContent.match(/<div class="card-body">([\s\S]*?)<\/div>$/);
             
             if (!cardBodyMatch) {
-                this.logger.warn(`🔍 DEBUG: Nie znaleziono card-body po header`);
+                this.logger.warn(`🔍 DEBUG: Nie znaleziono card-body w card ${targetIndex}`);
                 return null;
             }
             
-            const cardBodyContent = cardBodyMatch[0];
-            this.logger.info(`🔍 DEBUG: Znaleziono card-body, długość: ${cardBodyContent.length}`);
+            const cardBodyContent = cardBodyMatch[1];
+            this.logger.info(`🔍 DEBUG: Znaleziono card-body dla "${eventDate}", długość: ${cardBodyContent.length}`);
             
-            // Wyciągnij datę z nagłówka i przekonwertuj na timestamp
-            const dateHeaderMatch = headerMatch[0].match(/([^<]+\d{4}\s+\d{1,2}:\d{2}\s*-\s*\(UTC\s*\d*\))/);
+            // Wyciągnij datę z nagłówka tego konkretnego card i przekonwertuj na timestamp
+            const headerMatch = targetCard.cardContent.match(/<div class="card-header[^>]*>([\s\S]*?)<\/div>/);
             let discordTimestamp = Math.floor(Date.now() / 1000); // fallback
             
-            if (dateHeaderMatch) {
-                const fullDateString = dateHeaderMatch[1].trim();
-                discordTimestamp = this.convertToDiscordTimestamp(fullDateString);
-                this.logger.info(`🔍 DEBUG: Przekonwertowano datę "${fullDateString}" na timestamp: ${discordTimestamp}`);
+            if (headerMatch) {
+                const headerContent = headerMatch[1];
+                const dateHeaderMatch = headerContent.match(/([^<]+\d{4}\s+\d{1,2}:\d{2}\s*-\s*\(UTC\s*\d*\))/);
+                
+                if (dateHeaderMatch) {
+                    const fullDateString = dateHeaderMatch[1].trim();
+                    discordTimestamp = this.convertToDiscordTimestamp(fullDateString);
+                    this.logger.info(`🔍 DEBUG: Przekonwertowano datę "${fullDateString}" na timestamp: ${discordTimestamp}`);
+                } else {
+                    this.logger.warn(`🔍 DEBUG: Nie znaleziono formatu daty w header "${headerContent.substring(0, 100)}..."`);
+                }
             }
             
             let discordContent = '';
