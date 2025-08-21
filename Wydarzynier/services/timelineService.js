@@ -964,52 +964,49 @@ class TimelineService {
                 }
             }
             
-            // Następnie sprawdź sekcje div
-            const sectionMatches = cardBody.match(/<div class="section[^"]*"[^>]*>(.*?)(?=<div class="section|$)/gs);
-            
-            if (sectionMatches && sectionMatches.length > 0) {
-                this.logger.info(`Znaleziono ${sectionMatches.length} sekcji div`);
+            // Następnie sprawdź sekcje div - uproszczony parser
+            const sectionStart = cardBody.indexOf('<div class="section');
+            if (sectionStart !== -1) {
+                // Wyciągnij całą sekcję div
+                const sectionEnd = cardBody.indexOf('</div>', sectionStart);
+                const sectionContent = cardBody.substring(sectionStart, sectionEnd);
                 
-                for (const sectionMatch of sectionMatches) {
-                    // Wyciągnij h6 (tytuł sekcji)
-                    const h6Match = sectionMatch.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/);
-                    if (h6Match) {
-                        const sectionTitle = h6Match[1].trim();
-                        this.logger.info(`🔍 DEBUG: Znaleziono tytuł h6: "${sectionTitle}"`);
+                this.logger.info(`🔍 DEBUG: Znaleziono sekcję, parsuję h6+p pary`);
+                
+                // Znajdź wszystkie h6 i odpowiadające im p
+                const h6Matches = sectionContent.match(/<h6[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/h6>/g);
+                const pMatches = sectionContent.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
+                
+                if (h6Matches && pMatches) {
+                    this.logger.info(`🔍 DEBUG: Znaleziono ${h6Matches.length} h6 i ${pMatches.length} p`);
+                    
+                    for (let i = 0; i < h6Matches.length; i++) {
+                        const h6Title = h6Matches[i].replace(/<h6[^>]*>(.*?)<\/h6>/, '$1').trim();
+                        const pContent = pMatches[i] ? pMatches[i].replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
+                            .replace(/<br\s*\/?>/gi, '\n')
+                            .replace(/<[^>]*>/g, '')
+                            .trim() : '';
+                        
+                        this.logger.info(`🔍 DEBUG: Para ${i}: h6="${h6Title}", p="${pContent.substring(0, 50)}..."`);
                         
                         // Sprawdź czy tytuł nie składa się tylko z emoji
-                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(sectionTitle);
-                        this.logger.info(`🔍 DEBUG: Czy tylko emoji: ${isOnlyEmoji}`);
+                        const isOnlyEmoji = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\s]*$/u.test(h6Title);
                         
-                        if (!isOnlyEmoji) {
-                            this.logger.info(`🔍 DEBUG: Dodaję sekcję h6: "**${sectionTitle}**"`);
-                            discordContent += `**${sectionTitle}**\n`;
-                        } else {
-                            this.logger.info(`🔍 DEBUG: Pomijam tytuł h6 składający się tylko z emoji`);
+                        if (!isOnlyEmoji && pContent.length > 0) {
+                            // Dodaj emoji na podstawie tytułu
+                            const sectionEmoji = this.getSectionEmoji(h6Title);
+                            this.logger.info(`🔍 DEBUG: Dodaję sekcję: "${sectionEmoji} **${h6Title}**"`);
+                            discordContent += `${sectionEmoji} **${h6Title}**\n`;
+                            discordContent += `${pContent}\n\n`;
+                        } else if (isOnlyEmoji) {
+                            this.logger.info(`🔍 DEBUG: Pomijam h6 składający się tylko z emoji: "${h6Title}"`);
                         }
                     }
-                    
-                    // Wyciągnij wszystkie paragrafy p class="text-muted" w tej sekcji
-                    const pMatches = sectionMatch.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs);
-                    if (pMatches) {
-                        for (const pMatch of pMatches) {
-                            const pContent = pMatch.replace(/<p[^>]*>(.*?)<\/p>/s, '$1')
-                                .replace(/<br\s*\/?>/gi, '\n')
-                                .replace(/<[^>]*>/g, '')
-                                .trim();
-                            
-                            if (pContent.length > 0) {
-                                discordContent += `${pContent}\n`;
-                            }
-                        }
-                    }
-                    
-                    discordContent += '\n';
                 }
             }
             
             // Jeśli nie ma ani tabel ani sekcji, spróbuj fallback
-            if ((!tableMatches || tableMatches.length === 0) && (!sectionMatches || sectionMatches.length === 0)) {
+            if ((!tableMatches || tableMatches.length === 0) && sectionStart === -1) {
                 this.logger.warn('Nie znaleziono sekcji div, próbuję bezpośrednio H6+P');
                 
                 // Fallback - wyciągnij wszystkie h6 i p bezpośrednio
