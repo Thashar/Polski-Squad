@@ -854,7 +854,7 @@ class TimelineService {
             .replace(/Privacy Policy/g, '') // usuń politykę prywatności  
             .replace(/enhance their gaming experience\./g, '') // usuń fragment stopki
             .replace(/❤️/g, '') // usuń emoji serca
-            .replace(/\s+/g, ' ') // znormalizuj białe znaki
+            .replace(/[ \t]+/g, ' ') // znormalizuj spacje i taby (ale zachowaj \n)
             .replace(/\.\s+(?=[A-Z])/g, '.\n\n')  // nowa linia po kropce tylko przed kolejnym zdaniem z dużą literą
             .replace(/The package rates are as follows;\s*/g, 'The package rates are as follows:\n\n')  // specjalna obsługa dla pakietów
             .replace(/Free:\s*([0-9.,]+\s+Gems)\s*/g, '• **Free:** $1\n')  // format listy dla Free
@@ -1227,12 +1227,14 @@ class TimelineService {
                             .replace(/&#39;/g, "'")
                             .trim());
                         if (headers.some(h => h.length > 0)) {
-                            discordContent += `${headers.join('  ')}\n`;
+                            discordContent += `\n${headers.join('  ')}\n`;
                         }
                     }
                     
                     // Wyciągnij wiersze tbody (tylko te z <td>, pomijamy <th colspan>)
                     const rowMatches = tableMatch[1].match(/<tr[^>]*>[\s\S]*?<td[\s\S]*?<\/tr>/g);
+                    this.logger.info(`🔍 DEBUG: Znaleziono ${rowMatches ? rowMatches.length : 0} wierszy w tabeli`);
+                    
                     if (rowMatches) {
                         for (const rowMatch of rowMatches) {
                             const cellMatches = rowMatch.match(/<td[^>]*>(.*?)<\/td>/gs);
@@ -1257,10 +1259,12 @@ class TimelineService {
                                     .trim();
                                 
                                 if (number && content) {
+                                    this.logger.info(`🔍 DEBUG: Dodaję wiersz tabeli: "${number}. ${content}"`);
                                     discordContent += `${number}. ${content}\n`;
                                 }
                             }
                         }
+                        discordContent += '\n'; // Dodatkowa linia po tabeli
                     }
                 }
                 
