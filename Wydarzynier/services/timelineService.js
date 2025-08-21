@@ -237,8 +237,35 @@ class TimelineService {
             
             this.logger.info(`Łącznie znaleziono dat: ${foundDates.length}`);
             
-            // Parsuj każdą znalezioną datę
-            foundDates.forEach((date, index) => {
+            // Najpierw znajdź card-header z aktywnych wydarzeń (nie "Released")
+            const cardHeaders = rawHTML.match(/<div class="card-header[^>]*>[\s\S]*?<\/div>/g) || [];
+            const activeDates = [];
+            
+            for (const header of cardHeaders) {
+                const dateMatch = header.match(/(\d{1,2}\s+[A-Za-z]+\s+\d{4})/);
+                const isReleased = header.includes('✔️ Released');
+                
+                if (dateMatch && !isReleased) {
+                    activeDates.push(dateMatch[1]);
+                    this.logger.info(`📅 Aktywne wydarzenie ze strony: "${dateMatch[1]}"`);
+                } else if (dateMatch && isReleased) {
+                    this.logger.info(`⏭️ Pominięto zakończone wydarzenie: "${dateMatch[1]}"`);
+                }
+            }
+            
+            // Filtruj tylko daty które są w aktywnych card-header
+            const validDates = foundDates.filter(date => {
+                const isInActiveHeaders = activeDates.some(activeDate => activeDate.includes(date) || date.includes(activeDate));
+                if (!isInActiveHeaders) {
+                    this.logger.warn(`🚫 Pomijam datę "${date}" - nie ma aktywnego card-header`);
+                }
+                return isInActiveHeaders;
+            });
+            
+            this.logger.info(`🔍 Filtrowanie: ${foundDates.length} znalezionych dat → ${validDates.length} ważnych dat`);
+            
+            // Parsuj każdą ważną datę
+            validDates.forEach((date, index) => {
                 try {
                     // Znajdź pozycję daty w tekście
                     const dateIndex = tableContent.indexOf(date);
@@ -1095,10 +1122,16 @@ class TimelineService {
                     
                 const sectionContent = cardBodyContent.substring(h6Index, nextH6Index);
                 
-                // Znajdź paragraf p w tej sekcji
-                const pMatch = sectionContent.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/s);
-                if (pMatch) {
-                    let pContent = pMatch[1]
+                // Znajdź WSZYSTKIE paragrafy p w tej sekcji (może być kilka + w div mb-3)
+                const pMatches = sectionContent.match(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/gs) || [];
+                
+                this.logger.info(`🔍 DEBUG: Znaleziono ${pMatches.length} paragrafów w sekcji "${h6Title}"`);
+                
+                let combinedContent = '';
+                
+                for (let pIndex = 0; pIndex < pMatches.length; pIndex++) {
+                    const pMatch = pMatches[pIndex];
+                    let pContent = pMatch.replace(/<p[^>]*class\s*=\s*["'][^"']*text-muted[^"']*["'][^>]*>(.*?)<\/p>/s, '$1')
                         .replace(/<br\s*\/?>/gi, '\n')
                         .replace(/<[^>]*>/g, '') // Usuń wszystkie HTML tagi
                         .replace(/&nbsp;/g, ' ') // Usuń HTML entities
@@ -1110,15 +1143,20 @@ class TimelineService {
                         .replace(/\s+/g, ' ') // Znormalizuj białe znaki
                         .trim();
                     
-                    this.logger.info(`🔍 DEBUG: Paragraf p po oczyszczeniu: "${pContent.substring(0, 100)}..."`);
+                    this.logger.info(`🔍 DEBUG: Paragraf p[${pIndex}] po oczyszczeniu: "${pContent.substring(0, 100)}..."`);
                     
                     if (pContent.length > 0) {
-                        discordContent += `${pContent}\n`;
-                    } else {
-                        this.logger.warn(`🔍 DEBUG: Paragraf p jest pusty po oczyszczeniu`);
+                        if (combinedContent.length > 0) {
+                            combinedContent += ' '; // Dodaj spację między paragrafami
+                        }
+                        combinedContent += pContent;
                     }
+                }
+                
+                if (combinedContent.length > 0) {
+                    discordContent += `${combinedContent}\n`;
                 } else {
-                    this.logger.warn(`🔍 DEBUG: Nie znaleziono paragrafu p w sekcji "${h6Title}"`);
+                    this.logger.warn(`🔍 DEBUG: Wszystkie paragrafy są puste w sekcji "${h6Title}"`);
                 }
                 
                 // Sprawdź czy w tej sekcji jest tabela
