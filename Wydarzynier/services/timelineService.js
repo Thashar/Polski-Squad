@@ -1068,7 +1068,7 @@ class TimelineService {
     /**
      * Parsuje HTML card-body na Discord markdown - NOWY PARSER
      */
-    parseEventCardBody(rawHTML, eventDate) {
+    async parseEventCardBody(rawHTML, eventDate) {
         try {
             this.logger.info(`🔍 DEBUG: NOWY PARSER - szukam card dla konkretnej daty: "${eventDate}"`);
             
