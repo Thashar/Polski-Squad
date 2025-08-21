@@ -507,6 +507,25 @@ class TimelineService {
      * Generuje wiadomość dla pojedynczego wydarzenia
      */
     generateEventMessage(event) {
+        this.logger.info(`🔍 DEBUG: generateEventMessage dla wydarzenia: ${event.date}`);
+        
+        // Sprawdź czy nowy parser HTML już zwrócił kompletną wiadomość
+        if (event.rawHTML && event.date) {
+            this.logger.info(`🔍 DEBUG: Próbuję użyć nowego parsera HTML`);
+            const htmlParsedMessage = this.parseEventCardBody(event.rawHTML, event.date);
+            
+            if (htmlParsedMessage && htmlParsedMessage.length > 100) {
+                this.logger.info(`🔍 DEBUG: Nowy parser HTML zwrócił ${htmlParsedMessage.length} znaków - używam go`);
+                return htmlParsedMessage;
+            } else {
+                this.logger.warn(`🔍 DEBUG: Nowy parser HTML nie zwrócił danych lub zwrócił za mało (${htmlParsedMessage?.length || 0} znaków)`);
+            }
+        } else {
+            this.logger.warn(`🔍 DEBUG: Brak rawHTML lub date - używam starego parsera`);
+        }
+        
+        // Fallback do starego parsera
+        this.logger.info(`🔍 DEBUG: Używam starego parsera jako fallback`);
         const eventDateTime = this.parseEventDateTime(event.date, event.time);
         const timestamp = Math.floor(eventDateTime.getTime() / 1000);
         
@@ -516,9 +535,6 @@ class TimelineService {
         
         // Sformatuj wydarzenie zgodnie ze strukturą HTML
         let formattedEvent = this.formatEventFromStructure(event);
-        
-        // Wygeneruj ciekawy nagłówek na podstawie treści wydarzenia
-        const eventTitle = this.generateEventTitle(event);
         
         let message = `# 📅 Aktualizacja - ${discordDate}\n\n`;
         message += `⏰ **Czas do wydarzenia:** ${discordTimestamp}\n`;
@@ -1088,19 +1104,10 @@ class TimelineService {
      * Wyciąga strukturalną zawartość ze strony - używa nowego parsera HTML
      */
     extractStructuredContent(content, rawHTML = '', eventDate = '') {
-        // Najpierw spróbuj nowy parser HTML
-        if (rawHTML && eventDate) {
-            this.logger.info(`🔍 DEBUG: extractStructuredContent - próbuję nowy parser HTML`);
-            const htmlParsed = this.parseEventCardBody(rawHTML, eventDate);
-            if (htmlParsed) {
-                this.logger.info(`🔍 DEBUG: Nowy parser HTML zwrócił ${htmlParsed.length} znaków`);
-                return htmlParsed;
-            } else {
-                this.logger.warn(`🔍 DEBUG: Nowy parser HTML nie zwrócił danych, fallback do starego parsera`);
-            }
-        } else {
-            this.logger.warn(`🔍 DEBUG: Brak rawHTML lub eventDate, używam starego parsera`);
-        }
+        // WYŁĄCZONE - nowy parser jest wywoływany bezpośrednio w generateEventMessage
+        this.logger.info(`🔍 DEBUG: extractStructuredContent WYŁĄCZONE - używam starego fallback parsera`);
+        
+        // Tylko stary parser dla kompatybilności
         
         // Fallback do starego parsera
         try {
