@@ -503,6 +503,137 @@ class TimelineService {
     }
 
     /**
+     * Dzieli długą wiadomość na części o maksymalnej długości
+     */
+    splitLongMessage(fullMessage, maxLength = 1950) {
+        // Wyciągnij nagłówek (do pierwszego separatora)
+        const headerEnd = fullMessage.indexOf('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        if (headerEnd === -1) {
+            // Jeśli nie ma separatora, zwróć całą wiadomość jako pojedynczą część
+            return [fullMessage];
+        }
+        
+        const header = fullMessage.substring(0, headerEnd + 31); // +31 dla separatora z \n
+        const content = fullMessage.substring(headerEnd + 31);
+        const footer = '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+        
+        // Jeśli nagłówek + footer już przekraczają limit, mamy problem
+        if (header.length + footer.length > maxLength) {
+            this.logger.error('❌ Nagłówek + footer są za długie dla pojedynczej wiadomości');
+            return [fullMessage.substring(0, maxLength)];
+        }
+        
+        // Podziel zawartość na sekcje (po podwójnych nowych liniach)
+        const sections = content.split(/\n\n/);
+        const parts = [];
+        let currentPart = '';
+        
+        for (const section of sections) {
+            const sectionWithNewlines = section + '\n\n';
+            
+            // Sprawdź czy dodanie tej sekcji nie przekroczy limitu
+            const testLength = (parts.length === 0 ? header.length : 0) + 
+                              currentPart.length + 
+                              sectionWithNewlines.length + 
+                              footer.length;
+            
+            if (testLength > maxLength && currentPart.length > 0) {
+                // Zakończ obecną część i zacznij nową
+                if (parts.length === 0) {
+                    // Pierwsza część - z nagłówkiem
+                    parts.push(header + currentPart.trimEnd() + footer);
+                } else {
+                    // Kolejne części - bez nagłówka
+                    parts.push(currentPart.trimEnd() + footer);
+                }
+                currentPart = sectionWithNewlines;
+            } else {
+                // Dodaj sekcję do obecnej części
+                currentPart += sectionWithNewlines;
+            }
+        }
+        
+        // Dodaj ostatnią część
+        if (currentPart.length > 0) {
+            if (parts.length === 0) {
+                // Jedyna część - z nagłówkiem
+                parts.push(header + currentPart.trimEnd() + footer);
+            } else {
+                // Ostatnia część - bez nagłówka
+                parts.push(currentPart.trimEnd() + footer);
+            }
+        }
+        
+        // Jeśli nie ma części, zwróć oryginalną wiadomość
+        if (parts.length === 0) {
+            return [fullMessage];
+        }
+        
+        // Nie dodawaj numerów części - pozostaw czysto
+        
+        return parts;
+    }
+
+    /**
+     * Pobiera ID wiadomości dla konkretnej części wydarzenia
+     */
+    getMessageIdForPart(eventIndex, partIndex) {
+        // Przekształć płaską tablicę messageIds na strukturę obsługującą części
+        // messageIds[0] = część 0 wydarzenia 0
+        // messageIds[1] = część 1 wydarzenia 0  
+        // messageIds[2] = część 0 wydarzenia 1
+        // itp.
+        
+        if (!this.messageIds || !Array.isArray(this.messageIds)) {
+            return null;
+        }
+        
+        // Znajdź indeks w płaskiej tablicy dla tego wydarzenia i części
+        let flatIndex = 0;
+        for (let i = 0; i < eventIndex; i++) {
+            // Policz ile części ma poprzednie wydarzenie (domyślnie 1)
+            const eventParts = this.getEventPartsCount(i);
+            flatIndex += eventParts;
+        }
+        flatIndex += partIndex;
+        
+        return this.messageIds[flatIndex] || null;
+    }
+
+    /**
+     * Ustawia ID wiadomości dla konkretnej części wydarzenia
+     */
+    setMessageIdForPart(eventIndex, partIndex, messageId) {
+        if (!this.messageIds) {
+            this.messageIds = [];
+        }
+        
+        // Znajdź indeks w płaskiej tablicy dla tego wydarzenia i części
+        let flatIndex = 0;
+        for (let i = 0; i < eventIndex; i++) {
+            const eventParts = this.getEventPartsCount(i);
+            flatIndex += eventParts;
+        }
+        flatIndex += partIndex;
+        
+        // Rozszerz tablicę jeśli potrzeba
+        while (this.messageIds.length <= flatIndex) {
+            this.messageIds.push(null);
+        }
+        
+        this.messageIds[flatIndex] = messageId;
+    }
+
+    /**
+     * Zwraca liczbę części dla danego wydarzenia
+     */
+    getEventPartsCount(eventIndex) {
+        // Dla uproszczenia zakładamy 1 część, chyba że znajdziemy więcej
+        // W przyszłości można to zapisywać w osobnej strukturze
+        return 1;
+    }
+
+    /**
      * Generuje wiadomość dla pojedynczego wydarzenia
      */
     generateEventMessage(event) {
@@ -1341,44 +1472,59 @@ class TimelineService {
                 const event = activeEvents[i];
                 const messageContent = this.generateEventMessage(event);
                 
-                // Sprawdź długość wiadomości
+                // Sprawdź długość wiadomości i podziel jeśli trzeba
                 this.logger.info(`📝 DEBUG: Wiadomość ${i + 1} ma ${messageContent.length} znaków`);
+                let messageParts = [messageContent];
+                
                 if (messageContent.length > 2000) {
-                    this.logger.warn(`⚠️ Wiadomość ${i + 1} przekracza limit Discord (${messageContent.length}/2000 znaków)`);
-                    // Skróć wiadomość
-                    messageContent = messageContent.substring(0, 1900) + '\n\n...*(wiadomość skrócona)*';
-                    this.logger.info(`📝 DEBUG: Skrócono do ${messageContent.length} znaków`);
+                    this.logger.warn(`⚠️ Wiadomość ${i + 1} przekracza limit Discord (${messageContent.length}/2000 znaków) - dzielę na części`);
+                    messageParts = this.splitLongMessage(messageContent);
+                    this.logger.info(`📝 DEBUG: Podzielono na ${messageParts.length} części`);
+                    
+                    // Pokaż długość każdej części
+                    messageParts.forEach((part, partIndex) => {
+                        this.logger.info(`📝 DEBUG: Część ${partIndex + 1}: ${part.length} znaków`);
+                    });
                 }
                 
-                if (this.messageIds[i]) {
-                    // Zaktualizuj istniejącą wiadomość
-                    try {
-                        const existingMessage = await channel.messages.fetch(this.messageIds[i]);
-                        await existingMessage.edit(messageContent);
-                        this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}: ${event.event.substring(0, 30)}...`);
-                    } catch (editError) {
-                        this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${this.messageIds[i]}, tworzę nową`);
-                        this.logger.error(`❌ Błąd edycji: ${editError?.message || editError}`);
-                        
+                // Wyślij każdą część jako osobną wiadomość
+                for (let partIndex = 0; partIndex < messageParts.length; partIndex++) {
+                    const messageId = this.getMessageIdForPart(i, partIndex);
+                    const messagePart = messageParts[partIndex];
+                    
+                    if (messageId) {
+                        // Zaktualizuj istniejącą wiadomość
                         try {
-                            const newMessage = await channel.send(messageContent);
-                            this.messageIds[i] = newMessage.id;
-                            this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
+                            const existingMessage = await channel.messages.fetch(messageId);
+                            await existingMessage.edit(messagePart);
+                            this.logger.info(`✅ Zaktualizowano wydarzenie ${i + 1}, część ${partIndex + 1}`);
+                        } catch (editError) {
+                            this.logger.warn(`⚠️ Nie można zaktualizować wiadomości ${messageId}, tworzę nową`);
+                            this.logger.error(`❌ Błąd edycji: ${editError?.message || editError}`);
+                            
+                            try {
+                                const newMessage = await channel.send(messagePart);
+                                this.setMessageIdForPart(i, partIndex, newMessage.id);
+                                this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1}, część ${partIndex + 1} (ID: ${newMessage.id})`);
+                            } catch (sendError) {
+                                this.logger.error(`❌ Błąd tworzenia nowej wiadomości: ${sendError?.message || sendError}`);
+                                throw sendError;
+                            }
+                        }
+                    } else {
+                        // Utwórz nową wiadomość
+                        try {
+                            const newMessage = await channel.send(messagePart);
+                            this.setMessageIdForPart(i, partIndex, newMessage.id);
+                            this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1}, część ${partIndex + 1} (ID: ${newMessage.id})`);
                         } catch (sendError) {
-                            this.logger.error(`❌ Błąd tworzenia nowej wiadomości: ${sendError?.message || sendError}`);
+                            this.logger.error(`❌ Błąd tworzenia wiadomości: ${sendError?.message || sendError}`);
                             throw sendError;
                         }
                     }
-                } else {
-                    // Utwórz nową wiadomość
-                    try {
-                        const newMessage = await channel.send(messageContent);
-                        this.messageIds[i] = newMessage.id;
-                        this.logger.info(`Utworzono nową wiadomość dla wydarzenia ${i + 1} (ID: ${newMessage.id})`);
-                    } catch (sendError) {
-                        this.logger.error(`❌ Błąd tworzenia wiadomości: ${sendError?.message || sendError}`);
-                        throw sendError;
-                    }
+                    
+                    // Krótka przerwa między częściami
+                    await new Promise(resolve => setTimeout(resolve, 300));
                 }
                 
                 // Krótka przerwa między wysyłaniem wiadomości (rate limiting)
