@@ -979,28 +979,6 @@ class TimelineService {
         }
     }
 
-    /**
-     * Sprawdza czy obrazek powinien zostać pominięty
-     */
-    shouldSkipImage(imgUrl) {
-        const skipPatterns = [
-            'light.svg',
-            'dark.svg',
-            'favicon',
-            'logo',
-            'nav',
-            'menu'
-        ];
-        
-        // Nie pomijaj obrazków z survivor containers lub garrytools assets
-        if (imgUrl.includes('CollectionIcon') || 
-            imgUrl.includes('survivor') || 
-            imgUrl.includes('garrytools.com/public/assets')) {
-            return false;
-        }
-        
-        return skipPatterns.some(pattern => imgUrl.toLowerCase().includes(pattern));
-    }
 
     /**
      * Wyciąga słowa kluczowe z opisu wydarzenia do wyszukiwania obrazków
@@ -1718,18 +1696,18 @@ class TimelineService {
     /**
      * Pobiera obrazek z URL i zapisuje na serwerze
      */
-    async downloadImage(imageUrl, eventDate) {
+    async downloadImage(imageUrl, eventDate, category = 'other') {
         return new Promise(async (resolve, reject) => {
             try {
                 // Utwórz folder na obrazki jeśli nie istnieje
                 await fs.mkdir(this.imagesFolder, { recursive: true });
 
-                // Określ nazwę pliku na podstawie daty wydarzenia i URL
+                // Określ nazwę pliku na podstawie daty wydarzenia, kategorii i URL
                 const urlParts = imageUrl.split('/');
                 const originalFileName = urlParts[urlParts.length - 1] || 'image.jpg';
-                const extension = path.extname(originalFileName) || '.jpg';
+                const extension = path.extname(originalFileName.split('?')[0]) || '.jpg'; // usuń parametry query
                 const baseFileName = eventDate.replace(/ /g, '_').replace(/:/g, '-');
-                const fileName = `${baseFileName}_${Date.now()}${extension}`;
+                const fileName = `${baseFileName}_${category}_${Date.now()}${extension}`;
                 const filePath = path.join(this.imagesFolder, fileName);
 
                 // Normalizuj URL (dodaj https:// jeśli względny lub obsłuż wsrv.nl proxy)
@@ -1797,58 +1775,55 @@ class TimelineService {
     }
 
     /**
-     * Wyciąga obrazki z card-body wydarzenia
+     * Wyciąga obrazki z card-body wydarzenia - ulepszona strategia
      */
     async extractImagesFromCard(cardBodyContent, eventDate) {
         try {
             const images = [];
+            const seenUrls = new Set(); // Zapobiega duplikatom
             
-            // Znajdź wszystkie tagi <img> w card-body - zarówno zwykłe jak i w span.survivor-single-item-container
-            const imgPatterns = [
-                // Zwykłe obrazki
-                /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi,
-                // Obrazki w survivor containers
-                /<span[^>]*class\s*=\s*["'][^"']*survivor-single-item-container[^"']*["'][^>]*>[\s\S]*?<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>[\s\S]*?<\/span>/gi
-            ];
+            this.logger.info(`🔍 Rozpoczynam wyciąganie obrazków dla wydarzenia: ${eventDate}`);
             
-            for (const imgRegex of imgPatterns) {
-                let match;
-                while ((match = imgRegex.exec(cardBodyContent)) !== null) {
-                    // Dla survivor containers URL jest w grupie 2, dla zwykłych w grupie 1
-                    let imageUrl = match[2] || match[1];
+            // Strategia 1: Znajdź wszystkie obrazki bezpośrednio w card-body
+            const allImageRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+            let match;
+            
+            while ((match = allImageRegex.exec(cardBodyContent)) !== null) {
+                let imageUrl = match[1];
+                
+                if (!imageUrl) continue;
+                
+                // Dekoduj HTML entities
+                imageUrl = this.decodeHtmlEntities(imageUrl);
+                
+                // Pomiń jeśli już mamy ten URL
+                if (seenUrls.has(imageUrl)) continue;
+                seenUrls.add(imageUrl);
+                
+                this.logger.info(`🔍 Znaleziono obrazek: ${imageUrl}`);
+                
+                // Kategoryzuj obrazki i filtruj
+                const imageCategory = this.categorizeImage(imageUrl);
+                if (imageCategory === 'skip') {
+                    this.logger.info(`⏭️ Pomijam ${imageUrl} (kategoria: skip)`);
+                    continue;
+                }
+                
+                try {
+                    // Pobierz i zapisz obrazek
+                    const filePath = await this.downloadImage(imageUrl, eventDate, imageCategory);
+                    images.push(filePath);
                     
-                    if (!imageUrl) continue;
-                    
-                    // Dekoduj HTML entities
-                    imageUrl = imageUrl
-                        .replace(/&amp;/g, '&')
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#39;/g, "'");
-                    
-                    this.logger.info(`🔍 Znaleziono obrazek: ${imageUrl}`);
-                    
-                    // Pomiń małe ikony i elementy nawigacyjne
-                    if (this.shouldSkipImage(imageUrl)) {
-                        this.logger.info(`⏭️ Pomijam obrazek: ${imageUrl}`);
-                        continue;
-                    }
-                    
-                    try {
-                        // Pobierz i zapisz obrazek
-                        const filePath = await this.downloadImage(imageUrl, eventDate);
-                        images.push(filePath);
-                        
-                        this.logger.info(`📸 Dodano obrazek do wydarzenia "${eventDate}": ${path.basename(filePath)}`);
-                    } catch (downloadError) {
-                        this.logger.error(`❌ Nie udało się pobrać obrazka ${imageUrl}: ${downloadError.message}`);
-                    }
+                    this.logger.info(`📸 Dodano obrazek (${imageCategory}): ${path.basename(filePath)}`);
+                } catch (downloadError) {
+                    this.logger.error(`❌ Nie udało się pobrać obrazka ${imageUrl}: ${downloadError.message}`);
                 }
             }
             
             if (images.length > 0) {
-                this.logger.info(`📸 Znaleziono ${images.length} obrazków dla wydarzenia "${eventDate}"`);
+                this.logger.info(`📸 Łącznie znaleziono ${images.length} obrazków dla wydarzenia "${eventDate}"`);
+            } else {
+                this.logger.warn(`📸 Nie znaleziono żadnych obrazków dla wydarzenia "${eventDate}"`);
             }
             
             return images;
@@ -1857,6 +1832,62 @@ class TimelineService {
             this.logger.error(`❌ Błąd wyciągania obrazków z card: ${error.message}`);
             return [];
         }
+    }
+
+    /**
+     * Dekoduje HTML entities
+     */
+    decodeHtmlEntities(text) {
+        return text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+    }
+
+    /**
+     * Kategoryzuje obrazek na podstawie URL
+     */
+    categorizeImage(imageUrl) {
+        const url = imageUrl.toLowerCase();
+        
+        // Pomijaj ikony nawigacyjne i UI
+        if (url.includes('light.svg') || 
+            url.includes('dark.svg') || 
+            url.includes('favicon') || 
+            url.includes('logo') || 
+            url.includes('nav') || 
+            url.includes('menu')) {
+            return 'skip';
+        }
+        
+        // Collectibles i ikony przedmiotów
+        if (url.includes('collectionicon') || url.includes('collection')) {
+            return 'collection';
+        }
+        
+        // Kostiumy i akcesoria
+        if (url.includes('attachmentui') || url.includes('costume')) {
+            return 'costume';
+        }
+        
+        // Banery wydarzeń
+        if (url.includes('carnival') || 
+            url.includes('event') || 
+            url.includes('banner') ||
+            url.includes('diamond_carnival') ||
+            url.includes('retreat_privileges')) {
+            return 'event_banner';
+        }
+        
+        // Obrazki związane z gameplanem
+        if (url.includes('survivor') || url.includes('uitexture')) {
+            return 'game_asset';
+        }
+        
+        // Domyślnie zachowaj
+        return 'other';
     }
 }
 
