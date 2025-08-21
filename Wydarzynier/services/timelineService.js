@@ -1192,13 +1192,13 @@ class TimelineService {
                     this.logger.warn(`🔍 DEBUG: Wszystkie paragrafy są puste w sekcji "${h6Title}"`);
                 }
                 
-                // Sprawdź czy w tej sekcji jest tabela
-                const tableMatch = sectionContent.match(/<table[^>]*>([\s\S]*?)<\/table>/);
+                // Sprawdź czy w tej sekcji jest tabela z klasą
+                const tableMatch = sectionContent.match(/<table[^>]*class\s*=\s*["'][^"']*table[^"']*["'][^>]*>([\s\S]*?)<\/table>/);
                 if (tableMatch) {
-                    this.logger.info(`🔍 DEBUG: Znaleziono tabelę w sekcji "${h6Title}"`);
+                    this.logger.info(`🔍 DEBUG: Znaleziono tabelę z klasą 'table' w sekcji "${h6Title}"`);
                     
-                    // Wyciągnij tytuł tabeli (th colspan)
-                    const tableTitleMatch = tableMatch[1].match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*[^>]*>(.*?)<\/th>/);
+                    // 1. Wyciągnij tytuł tabeli (th colspan) i pogrub go
+                    const tableTitleMatch = tableMatch[1].match(/<th\s+colspan\s*=\s*["']\d+["'][^>]*>(.*?)<\/th>/);
                     if (tableTitleMatch) {
                         const tableTitle = tableTitleMatch[1]
                             .replace(/<[^>]*>/g, '') // Usuń HTML tagi
@@ -1210,11 +1210,11 @@ class TimelineService {
                             .replace(/&#39;/g, "'")
                             .trim();
                         if (tableTitle && tableTitle !== h6Title) { // Tylko jeśli tytuł tabeli różni się od h6
-                            discordContent += `\n${tableTitle}\n`;
+                            discordContent += `**${tableTitle}**\n`;
                         }
                     }
                     
-                    // Wyciągnij nagłówki kolumn (zwykłe th)
+                    // 2. Wyciągnij nagłówki kolumn (zwykłe th) bez pogrubienia
                     const headerMatches = tableMatch[1].match(/<th[^>]*>(?!.*colspan)(.*?)<\/th>/g);
                     if (headerMatches && headerMatches.length > 0) {
                         const headers = headerMatches.map(h => h.replace(/<th[^>]*>(.*?)<\/th>/, '$1')
@@ -1227,11 +1227,11 @@ class TimelineService {
                             .replace(/&#39;/g, "'")
                             .trim());
                         if (headers.some(h => h.length > 0)) {
-                            discordContent += `\n${headers.join('  ')}\n`;
+                            discordContent += `${headers.join(' | ')}\n`;
                         }
                     }
                     
-                    // Wyciągnij wiersze tbody (tylko te z <td>, pomijamy <th colspan>)
+                    // 3. Wyciągnij wiersze zawartości (tylko te z <td>)
                     const rowMatches = tableMatch[1].match(/<tr[^>]*>[\s\S]*?<td[\s\S]*?<\/tr>/g);
                     this.logger.info(`🔍 DEBUG: Znaleziono ${rowMatches ? rowMatches.length : 0} wierszy w tabeli`);
                     
@@ -1264,7 +1264,6 @@ class TimelineService {
                                 }
                             }
                         }
-                        discordContent += '\n'; // Dodatkowa linia po tabeli
                     }
                 }
                 
