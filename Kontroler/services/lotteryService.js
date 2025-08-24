@@ -331,9 +331,21 @@ class LotteryService {
                 return;
             }
 
-            const channel = guild.channels.cache.get(lottery.channelId);
+            // Określ docelowy kanał do wysłania ostrzeżenia na podstawie roli docelowej
+            let targetWarningChannelId = lottery.channelId; // domyślnie kanał loterii
+            let channelType = 'Daily/CX';
+            
+            if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
+                channelType = 'Daily';
+                targetWarningChannelId = this.config.channels.daily.targetChannelId; // kanał do wrzucania zdjęć Daily
+            } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
+                channelType = 'CX';
+                targetWarningChannelId = this.config.channels.cx.targetChannelId; // kanał do wrzucania zdjęć CX
+            }
+
+            const channel = guild.channels.cache.get(targetWarningChannelId);
             if (!channel) {
-                logger.error(`❌ Nie znaleziono kanału: ${lottery.channelId}`);
+                logger.error(`❌ Nie znaleziono kanału ostrzeżeń: ${targetWarningChannelId}`);
                 return;
             }
 
@@ -346,7 +358,7 @@ class LotteryService {
                 allowedMentions: { roles: [roleId] }
             });
 
-            logger.info(`✅ Wysłano ostrzeżenie o zamknięciu zgłoszeń dla loterii ${lottery.name} na kanał ${channel.name}`);
+            logger.info(`✅ Wysłano ostrzeżenie o zamknięciu zgłoszeń dla loterii ${lottery.name} (${channelType}) na kanał ${channel.name}`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania ostrzeżenia o zamknięciu zgłoszeń ${lotteryId}:`, error);
