@@ -39,72 +39,91 @@ class MemberHandler {
             // Grupa 2: Role pomocnicze (może mieć tylko jedną)
             const secondaryRoles = ['1194249987677229186', '1196805078162616480', '1210265548584132648', '1262793135860355254'];
 
-            const oldRoleIds = oldMember.roles.cache.map(role => role.id);
-            const newRoleIds = newMember.roles.cache.map(role => role.id);
-            const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
+            logger.info(`🔍 Sprawdzenie ról ekskluzywnych dla ${newMember.displayName}`);
 
-            logger.info(`🔍 Sprawdzenie ról ekskluzywnych dla ${newMember.displayName}: dodano ${addedRoles.length} ról`);
-
-            if (addedRoles.length === 0) return;
-
-            for (const addedRoleId of addedRoles) {
-                logger.info(`➕ Dodano rolę ${addedRoleId} dla ${newMember.displayName}`);
+            // Pobierz świeże dane użytkownika aby mieć aktualne role
+            const freshMember = await newMember.guild.members.fetch(newMember.id);
+            const currentRoleIds = freshMember.roles.cache.map(role => role.id);
+            
+            logger.info(`📋 Wszystkie aktualne role użytkownika: ${currentRoleIds.join(', ')}`);
+            logger.info(`📋 Role główne w systemie: ${mainRoles.join(', ')}`);
+            
+            // Sprawdź ile ról głównych użytkownik ma aktualnie
+            const userMainRoles = mainRoles.filter(roleId => currentRoleIds.includes(roleId));
+            logger.info(`🔍 Użytkownik ma ${userMainRoles.length} ról głównych: ${userMainRoles.join(', ')}`);
+            
+            // Jeśli użytkownik ma więcej niż jedną rolę główną - usuń wszystkie oprócz najnowszej
+            if (userMainRoles.length > 1) {
+                logger.info(`⚠️ KONFLIKT: Użytkownik ma ${userMainRoles.length} ról głównych, powinien mieć tylko 1`);
                 
-                // Jeśli przyznano główną rolę - sprawdź i usuń wszystkie inne główne role
-                if (mainRoles.includes(addedRoleId)) {
-                    logger.info(`🔄 Rola ${addedRoleId} jest główną rolą - sprawdzam obecne role użytkownika`);
-                    
-                    // Pobierz świeże dane użytkownika aby mieć aktualne role
-                    const freshMember = await newMember.guild.members.fetch(newMember.id);
-                    const currentRoleIds = freshMember.roles.cache.map(role => role.id);
-                    
-                    // Znajdź wszystkie pozostałe główne role które użytkownik aktualnie ma
-                    const conflictingRoles = mainRoles.filter(roleId => 
-                        roleId !== addedRoleId && currentRoleIds.includes(roleId)
-                    );
-                    
-                    logger.info(`🔍 Użytkownik ma ${conflictingRoles.length} konfliktowych ról głównych: ${conflictingRoles.join(', ')}`);
-                    
-                    // Usuń wszystkie konfliktowe role główne
-                    for (const roleId of conflictingRoles) {
-                        try {
-                            await freshMember.roles.remove(roleId);
-                            logger.info(`🔄 Usunięto konfliktową główną rolę ${roleId} dla ${freshMember.displayName} (pozostawiono ${addedRoleId})`);
-                        } catch (error) {
-                            logger.error(`❌ Błąd usuwania konfliktowej głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
-                        }
-                    }
-                    
-                    // Usuń role pomocnicze gdy przyznano główną
-                    const rolesToRemove = secondaryRoles.filter(id => currentRoleIds.includes(id));
-                    for (const roleId of rolesToRemove) {
-                        try {
-                            await freshMember.roles.remove(roleId);
-                            logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${freshMember.displayName} (przyznano główną ${addedRoleId})`);
-                        } catch (error) {
-                            logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
-                        }
-                    }
+                // Sprawdź która rola została ostatnio dodana (porównaj z oldMember)
+                const oldRoleIds = oldMember.roles.cache.map(role => role.id);
+                const addedMainRoles = userMainRoles.filter(roleId => !oldRoleIds.includes(roleId));
+                
+                let roleToKeep;
+                if (addedMainRoles.length > 0) {
+                    // Jeśli któraś z głównych ról została dodana, zostaw najnowszą
+                    roleToKeep = addedMainRoles[addedMainRoles.length - 1];
+                    logger.info(`✅ Zostawiam najnowszą dodaną rolę główną: ${roleToKeep}`);
+                } else {
+                    // Jeśli żadna główna rola nie została dodana, zostaw pierwszą z listy
+                    roleToKeep = userMainRoles[0];
+                    logger.info(`✅ Zostawiam pierwszą rolę główną: ${roleToKeep}`);
                 }
                 
-                // Jeśli przyznano rolę pomocniczą
-                if (secondaryRoles.includes(addedRoleId)) {
-                    // Pobierz świeże dane użytkownika
-                    const freshMember = await newMember.guild.members.fetch(newMember.id);
-                    const currentRoleIds = freshMember.roles.cache.map(role => role.id);
-                    
-                    // Usuń inne role pomocnicze
-                    const otherSecondaryRoles = secondaryRoles.filter(id => id !== addedRoleId && currentRoleIds.includes(id));
-                    for (const roleId of otherSecondaryRoles) {
-                        try {
-                            await freshMember.roles.remove(roleId);
-                            logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${freshMember.displayName} (przyznano ${addedRoleId})`);
-                        } catch (error) {
-                            logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
-                        }
+                // Usuń wszystkie inne role główne
+                const rolesToRemove = userMainRoles.filter(roleId => roleId !== roleToKeep);
+                logger.info(`🗑️ Rozpoczynam usuwanie ${rolesToRemove.length} konfliktowych ról głównych: ${rolesToRemove.join(', ')}`);
+                
+                for (const roleId of rolesToRemove) {
+                    try {
+                        logger.info(`🔄 Próba usunięcia roli ${roleId}...`);
+                        await freshMember.roles.remove(roleId);
+                        logger.info(`✅ Usunięto konfliktową główną rolę ${roleId} (pozostawiono ${roleToKeep})`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd usuwania konfliktowej głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
                     }
                 }
+                logger.info(`🏁 Zakończono rozwiązywanie konfliktu ról głównych`);
+            } else if (userMainRoles.length === 1) {
+                logger.info(`✅ Użytkownik ma dokładnie 1 rolę główną - brak konfliktów`);
+            } else {
+                logger.info(`ℹ️ Użytkownik nie ma żadnej roli głównej`);
             }
+
+            // Sprawdź role pomocnicze
+            const userSecondaryRoles = secondaryRoles.filter(roleId => currentRoleIds.includes(roleId));
+            logger.info(`🔍 Użytkownik ma ${userSecondaryRoles.length} ról pomocniczych: ${userSecondaryRoles.join(', ')}`);
+            
+            if (userSecondaryRoles.length > 1) {
+                logger.info(`⚠️ KONFLIKT: Użytkownik ma ${userSecondaryRoles.length} ról pomocniczych, powinien mieć maksymalnie 1`);
+                
+                // Sprawdź która rola pomocnicza została ostatnio dodana
+                const oldRoleIds = oldMember.roles.cache.map(role => role.id);
+                const addedSecondaryRoles = userSecondaryRoles.filter(roleId => !oldRoleIds.includes(roleId));
+                
+                let roleToKeep;
+                if (addedSecondaryRoles.length > 0) {
+                    roleToKeep = addedSecondaryRoles[addedSecondaryRoles.length - 1];
+                    logger.info(`✅ Zostawiam najnowszą dodaną rolę pomocniczą: ${roleToKeep}`);
+                } else {
+                    roleToKeep = userSecondaryRoles[0];
+                    logger.info(`✅ Zostawiam pierwszą rolę pomocniczą: ${roleToKeep}`);
+                }
+                
+                const rolesToRemove = userSecondaryRoles.filter(roleId => roleId !== roleToKeep);
+                for (const roleId of rolesToRemove) {
+                    try {
+                        await freshMember.roles.remove(roleId);
+                        logger.info(`✅ Usunięto konfliktową rolę pomocniczą ${roleId} (pozostawiono ${roleToKeep})`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd usuwania konfliktowej roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
+                    }
+                }
+            } else if (userSecondaryRoles.length === 1) {
+                logger.info(`✅ Użytkownik ma dokładnie 1 rolę pomocniczą - brak konfliktów`);
+            }
+
         } catch (error) {
             logger.error('❌ Błąd obsługi grup ekskluzywnych ról:', error?.message || 'Nieznany błąd');
         }
