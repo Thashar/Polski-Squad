@@ -311,12 +311,13 @@ class InteractionHandler {
                 name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}` 
             });
             
-            const publicEmbed = this.rankingService.createRecordEmbed(
+            const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName, 
                 bestScore, 
                 interaction.user.displayAvatarURL(),
                 imageAttachment.name,
-                currentScore ? currentScore.score : null
+                currentScore ? currentScore.score : null,
+                userId
             );
             
             try {

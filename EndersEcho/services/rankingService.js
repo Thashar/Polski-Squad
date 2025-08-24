@@ -375,9 +375,10 @@ class RankingService {
      * @param {string} userAvatarUrl - URL awatara użytkownika
      * @param {string} attachmentName - Nazwa załącznika
      * @param {string} previousScore - Poprzedni wynik (opcjonalny)
+     * @param {string} userId - ID użytkownika (opcjonalny)
      * @returns {EmbedBuilder} - Embed rekordu
      */
-    createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null) {
         let newScoreText = `**${bestScore}**`;
         
         if (previousScore) {
@@ -391,29 +392,81 @@ class RankingService {
             
             newScoreText = `${bestScore} (progres ${improvementText})`;
         }
+
+        // Pobierz pozycję w rankingu jeśli userId jest podany
+        let rankingText = '';
+        if (userId) {
+            try {
+                const sortedPlayers = await this.getSortedPlayers();
+                const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
+                
+                if (userIndex !== -1) {
+                    const currentPosition = userIndex + 1;
+                    
+                    // Sprawdź poprzednią pozycję jeśli był poprzedni wynik
+                    if (previousScore) {
+                        // Stwórz tymczasowy ranking z poprzednim wynikiem
+                        const tempPlayers = [...sortedPlayers];
+                        const userPlayer = tempPlayers.find(p => p.userId === userId);
+                        if (userPlayer) {
+                            userPlayer.scoreValue = this.parseScoreValue(previousScore);
+                            tempPlayers.sort((a, b) => b.scoreValue - a.scoreValue);
+                            const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
+                            const previousPosition = previousIndex + 1;
+                            const positionChange = previousPosition - currentPosition;
+                            
+                            if (positionChange > 0) {
+                                rankingText = `Miejsce w rankingu: ${currentPosition} (+${positionChange})`;
+                            } else {
+                                rankingText = `Miejsce w rankingu: ${currentPosition}`;
+                            }
+                        } else {
+                            rankingText = `Miejsce w rankingu: ${currentPosition}`;
+                        }
+                    } else {
+                        // Pierwszy wynik - brak poprzedniej pozycji do porównania
+                        rankingText = `Miejsce w rankingu: ${currentPosition} (nowy w rankingu)`;
+                    }
+                }
+            } catch (error) {
+                logger.error('Błąd pobierania pozycji w rankingu:', error);
+            }
+        }
+        
+        const embedFields = [
+            {
+                name: '🏆 Nowy wynik',
+                value: newScoreText,
+                inline: true
+            },
+            {
+                name: this.config.messages.recordDate,
+                value: new Date().toLocaleDateString('pl-PL'),
+                inline: true
+            }
+        ];
+
+        // Dodaj pole z pozycją w rankingu jeśli jest dostępne
+        if (rankingText) {
+            embedFields.push({
+                name: '🏆 Ranking',
+                value: rankingText,
+                inline: false
+            });
+        }
+
+        embedFields.push({
+            name: this.config.messages.recordStatus,
+            value: this.config.messages.recordSaved,
+            inline: false
+        });
         
         const embed = new EmbedBuilder()
             .setColor(0x00ff00)
             .setTitle(this.config.messages.recordTitle)
             .setDescription(formatMessage(this.config.messages.recordDescription, { username: userName }))
             .setThumbnail(userAvatarUrl)
-            .addFields(
-                {
-                    name: '🏆 Nowy wynik',
-                    value: newScoreText,
-                    inline: true
-                },
-                {
-                    name: this.config.messages.recordDate,
-                    value: new Date().toLocaleDateString('pl-PL'),
-                    inline: true
-                },
-                {
-                    name: this.config.messages.recordStatus,
-                    value: this.config.messages.recordSaved,
-                    inline: false
-                }
-            )
+            .addFields(embedFields)
             .setTimestamp()
             .setImage(`attachment://${attachmentName}`);
         
