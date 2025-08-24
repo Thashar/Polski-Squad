@@ -7,7 +7,6 @@ const { handleMessageUpdate, handleMessageCreate } = require('./handlers/message
 const LobbyService = require('./services/lobbyService');
 const TimerService = require('./services/timerService');
 const BazarService = require('./services/bazarService');
-const TimelineService = require('./services/timelineService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -31,14 +30,12 @@ const client = new Client({
 const lobbyService = new LobbyService(config);
 const timerService = new TimerService(config);
 const bazarService = new BazarService(config);
-const timelineService = new TimelineService(config, logger);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
     lobbyService,
     timerService,
     bazarService,
-    timelineService,
     client,
     config
 };
@@ -55,7 +52,6 @@ client.once(Events.ClientReady, async () => {
     await lobbyService.loadLobbies();
     await timerService.restoreTimers(sharedState);
     await bazarService.initialize(client);
-    await timelineService.initialize(client);
     
     // Zarejestruj komendy slash
     const { InteractionHandler } = require('./handlers/interactionHandlers');
