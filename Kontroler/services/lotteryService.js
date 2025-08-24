@@ -372,18 +372,22 @@ class LotteryService {
                 return;
             }
 
-            const channel = guild.channels.cache.get(lottery.channelId);
-            if (!channel) {
-                logger.error(`❌ Nie znaleziono kanału: ${lottery.channelId}`);
-                return;
-            }
-
-            // Określ typ kanału na podstawie roli docelowej
+            // Określ typ kanału i docelowy kanał do wysłania ostrzeżenia na podstawie roli docelowej
             let channelType = 'Daily/CX';
+            let targetWarningChannelId = lottery.channelId; // domyślnie kanał loterii
+            
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
+                targetWarningChannelId = this.config.channels.daily.targetChannelId; // kanał do wrzucania zdjęć Daily
             } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
+                targetWarningChannelId = this.config.channels.cx.targetChannelId; // kanał do wrzucania zdjęć CX
+            }
+
+            const channel = guild.channels.cache.get(targetWarningChannelId);
+            if (!channel) {
+                logger.error(`❌ Nie znaleziono kanału ostrzeżeń: ${targetWarningChannelId}`);
+                return;
             }
 
             // Znajdź wszystkie aktywne loterie dla tego samego kanału (tego samego targetRoleId)
