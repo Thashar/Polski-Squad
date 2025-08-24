@@ -789,13 +789,23 @@ async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, i
                 const messages = await vacationChannel.messages.fetch({ limit: 100 });
                 const userMessages = messages.filter(msg => 
                     msg.author.id === member.user.id && 
-                    msg.createdAt >= oneMonthAgo &&
-                    msg.reactions && msg.reactions.cache && msg.reactions.cache.size > 0 // Ma reakcje
+                    msg.createdAt >= oneMonthAgo
                 );
                 
-                if (userMessages.size > 0) {
+                // Sprawdź czy któraś z wiadomości ma obecnie reakcje (sprawdzenie w czasie rzeczywistym)
+                let hasActiveVacation = false;
+                for (const userMsg of userMessages.values()) {
+                    if (userMsg.reactions && userMsg.reactions.cache && userMsg.reactions.cache.size > 0) {
+                        hasActiveVacation = true;
+                        break;
+                    }
+                }
+                
+                if (hasActiveVacation) {
                     playersWithVacation.push(playerNick);
-                    logger.info(`🏖️ ${playerNick} zgłaszał urlop w ostatnim miesiącu`);
+                    logger.info(`🏖️ ${playerNick} ma aktywny urlop (z reakcjami)`);
+                } else if (userMessages.size > 0) {
+                    logger.info(`🏖️ ${playerNick} miał urlop, ale bez reakcji - będzie uwzględniony w karach`);
                 }
             }
         }
