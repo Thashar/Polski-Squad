@@ -32,52 +32,29 @@ class MemberHandler {
      */
     async handleExclusiveRoleGroups(oldMember, newMember) {
         try {
-            // Grupa 1: Role główne (może mieć tylko jedną)
-            const mainRoles = ['1170331604846120980', '1193124672070484050', '1200053198472359987', '1262785926984237066'];
+            // Grupa 1: Role główne (może mieć tylko jedną) - wszystkie 5 ról są wzajemnie wykluczające
+            const mainRoles = ['1170331604846120980', '1193124672070484050', '1200053198472359987', '1262785926984237066', '1173760134527324270'];
             
             // Grupa 2: Role pomocnicze (może mieć tylko jedną)
             const secondaryRoles = ['1194249987677229186', '1196805078162616480', '1210265548584132648', '1262793135860355254'];
-            
-            // Role usuwane (usuwane gdy przyznana główna rola)
-            const rolesToRemoveOnMain = ['1173760134527324270', '1194249987677229186', '1196805078162616480', '1210265548584132648', '1262793135860355254'];
 
             const oldRoleIds = oldMember.roles.cache.map(role => role.id);
             const newRoleIds = newMember.roles.cache.map(role => role.id);
             const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
-            const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
 
-            // Sprawdź czy usunięto główną rolę - jeśli tak, poczekaj 5s i sprawdź ponownie
-            const removedMainRoles = removedRoles.filter(id => mainRoles.includes(id));
-            if (removedMainRoles.length > 0) {
-                // Poczekaj 5 sekund przed sprawdzeniem
-                setTimeout(async () => {
-                    try {
-                        // Pobierz świeże dane użytkownika
-                        const freshMember = await newMember.guild.members.fetch(newMember.id);
-                        const currentRoleIds = freshMember.roles.cache.map(role => role.id);
-                        
-                        // Sprawdź czy użytkownik nadal nie ma żadnej głównej roli
-                        const hasMainRole = mainRoles.some(roleId => currentRoleIds.includes(roleId));
-                        
-                        if (!hasMainRole && !currentRoleIds.includes('1173760134527324270')) {
-                            await freshMember.roles.add('1173760134527324270');
-                            logger.info(`🔄 Nadano rolę 1173760134527324270 dla ${freshMember.displayName} (brak głównych ról po 5s, usunięto: ${removedMainRoles.join(', ')})`);
-                        } else if (hasMainRole) {
-                            logger.info(`ℹ️ Nie nadano roli 1173760134527324270 dla ${freshMember.displayName} (posiada główną rolę)`);
-                        }
-                    } catch (error) {
-                        logger.error(`❌ Błąd nadawania roli 1173760134527324270 po 5s:`, error?.message || 'Nieznany błąd');
-                    }
-                }, 5000);
-            }
+            logger.info(`🔍 Sprawdzenie ról ekskluzywnych dla ${newMember.displayName}: dodano ${addedRoles.length} ról`);
 
             if (addedRoles.length === 0) return;
 
             for (const addedRoleId of addedRoles) {
-                // Jeśli przyznano główną rolę
+                logger.info(`➕ Dodano rolę ${addedRoleId} dla ${newMember.displayName}`);
+                
+                // Jeśli przyznano główną rolę - usuń wszystkie inne główne role
                 if (mainRoles.includes(addedRoleId)) {
-                    // Usuń inne główne role
+                    logger.info(`🔄 Rola ${addedRoleId} jest główną rolą - sprawdzam konflikty`);
                     const otherMainRoles = mainRoles.filter(id => id !== addedRoleId && newRoleIds.includes(id));
+                    logger.info(`🔍 Znaleziono ${otherMainRoles.length} konfliktowych ról głównych: ${otherMainRoles.join(', ')}`);
+                    
                     for (const roleId of otherMainRoles) {
                         try {
                             await newMember.roles.remove(roleId);
@@ -87,8 +64,8 @@ class MemberHandler {
                         }
                     }
                     
-                    // Usuń wszystkie role z listy rolesToRemoveOnMain
-                    const rolesToRemove = rolesToRemoveOnMain.filter(id => newRoleIds.includes(id));
+                    // Usuń role pomocnicze gdy przyznano główną
+                    const rolesToRemove = secondaryRoles.filter(id => newRoleIds.includes(id));
                     for (const roleId of rolesToRemove) {
                         try {
                             await newMember.roles.remove(roleId);
@@ -109,19 +86,6 @@ class MemberHandler {
                             logger.info(`🔄 Usunięto rolę pomocniczą ${roleId} dla ${newMember.displayName} (przyznano ${addedRoleId})`);
                         } catch (error) {
                             logger.error(`❌ Błąd usuwania roli pomocniczej ${roleId}:`, error?.message || 'Nieznany błąd');
-                        }
-                    }
-                }
-                
-                // Jeśli przyznano rolę 1173760134527324270 - usuń wszystkie główne role
-                if (addedRoleId === '1173760134527324270') {
-                    const mainRolesToRemove = mainRoles.filter(id => newRoleIds.includes(id));
-                    for (const roleId of mainRolesToRemove) {
-                        try {
-                            await newMember.roles.remove(roleId);
-                            logger.info(`🔄 Usunięto główną rolę ${roleId} dla ${newMember.displayName} (przyznano specjalną rolę ${addedRoleId})`);
-                        } catch (error) {
-                            logger.error(`❌ Błąd usuwania głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
                         }
                     }
                 }

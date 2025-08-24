@@ -86,11 +86,9 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
 
 // Obsługa zmian członków serwera
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+    // Obsługa ról ekskluzywnych
     await memberHandler.handleGuildMemberUpdate(oldMember, newMember);
-});
-
-// Dodatkowe sprawdzanie statusu premium (boost)
-client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+    
     // Sprawdź zmianę statusu premium (boost)
     const oldPremium = oldMember.premiumSince;
     const newPremium = newMember.premiumSince;
@@ -98,7 +96,6 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     // Jeśli użytkownik stracił boost
     if (oldPremium && !newPremium) {
         logger.info(`🔻 ${newMember.user.tag} stracił boost serwera`);
-        // Symuluj utratę roli - wywołaj handler ponownie
         await memberHandler.handleBoostLoss(newMember);
     }
     
