@@ -19,10 +19,76 @@ class MemberHandler {
         // Debug logging
         logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
         
-        // Sprawdź zmiany ról do obsługi grup ekskluzywnych
-        await this.handleExclusiveRoleGroups(oldMember, newMember);
+        // Sprawdź zmiany ról używając audit log
+        await this.handleExclusiveRoleGroupsWithAuditLog(newMember);
         
         // Usunięto system zarządzania rolami TOP - EndersEcho już to obsługuje
+    }
+
+    /**
+     * Obsługuje grupy ekskluzywnych ról używając audit log
+     * @param {GuildMember} member - Członek serwera
+     */
+    async handleExclusiveRoleGroupsWithAuditLog(member) {
+        try {
+            // Grupa ról głównych (wzajemnie wykluczających się)
+            const mainRoles = ['1170331604846120980', '1193124672070484050', '1200053198472359987', '1262785926984237066', '1173760134527324270'];
+            
+            // Pobierz ostatnie wpisy z audit log dotyczące zmian ról
+            const auditLogs = await member.guild.fetchAuditLogs({
+                type: 25, // MEMBER_ROLE_UPDATE
+                limit: 5
+            });
+
+            logger.info(`📋 Sprawdzam ${auditLogs.entries.size} ostatnich wpisów audit log dla zmian ról`);
+
+            for (const entry of auditLogs.entries.values()) {
+                // Sprawdź czy wpis dotyczy tego użytkownika i czy jest świeży (ostatnie 10 sekund)
+                if (entry.target.id === member.id && (Date.now() - entry.createdTimestamp) < 10000) {
+                    logger.info(`🔍 Znaleziono świeży wpis audit log dla ${member.displayName} (${Date.now() - entry.createdTimestamp}ms temu)`);
+                    
+                    // Sprawdź jakie role zostały dodane
+                    if (entry.changes && entry.changes.length > 0) {
+                        for (const change of entry.changes) {
+                            if (change.key === '$add' && change.new) {
+                                for (const addedRole of change.new) {
+                                    const addedRoleId = addedRole.id;
+                                    logger.info(`➕ Z audit log: dodano rolę ${addedRoleId} dla ${member.displayName}`);
+                                    
+                                    // Jeśli dodana rola jest główną rolą
+                                    if (mainRoles.includes(addedRoleId)) {
+                                        logger.info(`🔄 Rola ${addedRoleId} jest główną rolą - sprawdzam konflikty`);
+                                        
+                                        // Pobierz aktualne role użytkownika
+                                        const freshMember = await member.guild.members.fetch(member.id);
+                                        const currentRoleIds = freshMember.roles.cache.map(role => role.id);
+                                        
+                                        // Znajdź konfliktowe role główne
+                                        const conflictingRoles = mainRoles.filter(roleId => 
+                                            roleId !== addedRoleId && currentRoleIds.includes(roleId)
+                                        );
+                                        
+                                        logger.info(`🔍 Użytkownik ma ${conflictingRoles.length} konfliktowych ról głównych: ${conflictingRoles.join(', ')}`);
+                                        
+                                        // Usuń wszystkie konfliktowe role główne
+                                        for (const roleId of conflictingRoles) {
+                                            try {
+                                                await freshMember.roles.remove(roleId);
+                                                logger.info(`🔄 Usunięto konfliktową główną rolę ${roleId} dla ${freshMember.displayName} (pozostawiono ${addedRoleId})`);
+                                            } catch (error) {
+                                                logger.error(`❌ Błąd usuwania konfliktowej głównej roli ${roleId}:`, error?.message || 'Nieznany błąd');
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('❌ Błąd obsługi grup ekskluzywnych ról z audit log:', error?.message || 'Nieznany błąd');
+        }
     }
 
     /**
