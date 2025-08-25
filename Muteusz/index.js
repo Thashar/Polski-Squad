@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Partials } = require('discord.js');
 
 const config = require('./config/config');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -26,6 +26,11 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
+    ],
+    partials: [
+        Partials.Message,
+        Partials.Channel,
+        Partials.Reaction
     ]
 });
 
@@ -136,11 +141,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // Obsługa reakcji
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
-    await reactionRoleService.handleReactionAdd(reaction, user);
+    try {
+        // Discord może wymagać fetchowania partial reactions
+        if (reaction.partial) {
+            try {
+                await reaction.fetch();
+            } catch (error) {
+                logger.error('❌ Nie można pobrać partial reaction:', error);
+                return;
+            }
+        }
+        
+        logger.info(`🔄 Event MessageReactionAdd - emoji: ${reaction.emoji.name || reaction.emoji.id}, user: ${user.tag}`);
+        await reactionRoleService.handleReactionAdd(reaction, user);
+    } catch (error) {
+        logger.error('❌ Błąd w obsłudze reakcji (add):', error);
+    }
 });
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
-    await reactionRoleService.handleReactionRemove(reaction, user);
+    try {
+        // Discord może wymagać fetchowania partial reactions
+        if (reaction.partial) {
+            try {
+                await reaction.fetch();
+            } catch (error) {
+                logger.error('❌ Nie można pobrać partial reaction:', error);
+                return;
+            }
+        }
+        
+        logger.info(`🔄 Event MessageReactionRemove - emoji: ${reaction.emoji.name || reaction.emoji.id}, user: ${user.tag}`);
+        await reactionRoleService.handleReactionRemove(reaction, user);
+    } catch (error) {
+        logger.error('❌ Błąd w obsłudze reakcji (remove):', error);
+    }
 });
 
 // ==================== OBSŁUGA BŁĘDÓW ====================

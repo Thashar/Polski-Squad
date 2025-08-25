@@ -15,7 +15,9 @@ class ReactionRoleService {
         
         // Konfiguracja reakcji -> rola
         this.reactionRoleConfig = {
-            'flag_ua': '1409530749937254470' // ID roli dla flagi ukrainy
+            'flag_ua': '1409530749937254470', // ID roli dla flagi ukrainy (:flag_ua:)
+            '🇺🇦': '1409530749937254470', // ID roli dla flagi ukrainy (Unicode)
+            'ua': '1409530749937254470' // ID roli dla flagi ukrainy (możliwe skrócenie)
         };
         
         // Czas trzymania roli w milisekundach (5 minut)
@@ -173,8 +175,13 @@ class ReactionRoleService {
      */
     async handleReactionAdd(reaction, user) {
         try {
+            this.logger.info(`🚀 handleReactionAdd wywołane! Bot: ${user.bot}, User: ${user.tag}`);
+            
             // Ignoruj boty
-            if (user.bot) return;
+            if (user.bot) {
+                this.logger.info(`🤖 Ignorowanie bota: ${user.tag}`);
+                return;
+            }
 
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
@@ -309,7 +316,9 @@ class ReactionRoleService {
      * Pobiera identyfikator emoji (name lub id dla custom emoji)
      */
     getEmojiIdentifier(emoji) {
-        return emoji.name || emoji.id;
+        const identifier = emoji.name || emoji.id;
+        this.logger.info(`🔍 Debug emoji - name: "${emoji.name}", id: "${emoji.id}", identifier: "${identifier}"`);
+        return identifier;
     }
 
     /**
