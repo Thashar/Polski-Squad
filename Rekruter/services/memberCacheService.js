@@ -181,8 +181,10 @@ class MemberCacheService {
             // Aktualizuj cache
             await this.updateMemberBoostStatus(userId, currentPremiumSince);
             
-            // Loguj zmiany boost
-            this.logger.info(`[BOOST] Sprawdzanie ${newMember.user.tag} - był booster: ${changes.wasBooster}, jest booster: ${changes.isBooster}`);
+            // Loguj tylko faktyczne zmiany boost
+            if (changes.changed) {
+                this.logger.info(`[BOOST] ${newMember.user.tag} - był booster: ${changes.wasBooster}, jest booster: ${changes.isBooster}`);
+            }
             
             return {
                 changed: changes.changed,
