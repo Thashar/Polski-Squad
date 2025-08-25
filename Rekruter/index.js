@@ -8,6 +8,7 @@ const { handleInteraction, registerSlashCommands } = require('./handlers/interac
 const { handleMessage } = require('./handlers/messageHandlers');
 const RoleMonitoringService = require('./services/roleMonitoringService');
 const MemberNotificationService = require('./services/memberNotificationService');
+const MemberCacheService = require('./services/memberCacheService');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -16,6 +17,7 @@ const logger = createBotLogger('Rekruter');
 // Inicjalizacja serwisów
 const roleMonitoringService = new RoleMonitoringService(config);
 const memberNotificationService = new MemberNotificationService(config);
+const memberCacheService = new MemberCacheService(config);
 
 const client = new Client({
     intents: [
@@ -61,6 +63,7 @@ client.once('ready', async () => {
     // Inicjalizacja serwisów
     await roleMonitoringService.initialize(client);
     memberNotificationService.initialize(client);
+    await memberCacheService.initialize(client);
     await initializeOCR(config);
     
     // Inicjalizacja folderu temp
@@ -163,20 +166,19 @@ client.on('guildMemberRemove', async member => {
 // Obsługa boost events
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
-        // Sprawdź czy członek zaczął boostować
-        const wasBooster = oldMember.premiumSince;
-        const isBooster = newMember.premiumSince;
+        // NOWY SYSTEM: Użyj MemberCacheService do prawidłowego wykrywania zmian boost
+        const cacheResult = await memberCacheService.handleMemberUpdate(oldMember, newMember);
         
-        logger.info(`[BOOST] Sprawdzanie ${newMember.user.tag} - był booster: ${!!wasBooster}, jest booster: ${!!isBooster}`);
-        
-        if (!wasBooster && isBooster) {
-            // Nowy boost!
-            logger.info(`[BOOST] 🎉 Nowy boost od ${newMember.user.tag} (${newMember.id})`);
-            await handleNewBoost(newMember);
-        } else if (wasBooster && !isBooster) {
-            // Utrata boosta!
-            logger.info(`[BOOST] 💔 Utrata boost od ${newMember.user.tag} (${newMember.id})`);
-            await handleLostBoost(newMember);
+        if (cacheResult.changed) {
+            if (cacheResult.changeType === 'gained') {
+                // Nowy boost!
+                logger.info(`[BOOST] 🎉 Nowy boost od ${newMember.user.tag} (${newMember.id})`);
+                await handleNewBoost(cacheResult.member);
+            } else if (cacheResult.changeType === 'lost') {
+                // Utrata boosta!
+                logger.info(`[BOOST] 💔 Utrata boost od ${newMember.user.tag} (${newMember.id})`);
+                await handleLostBoost(cacheResult.member);
+            }
         }
     } catch (error) {
         logger.error(`[BOOST] ❌ Błąd podczas obsługi boost event dla ${newMember?.user?.tag || 'nieznany'}:`, error);
@@ -338,5 +340,31 @@ async function handleLostBoost(member) {
         logger.error(`[BOOST] ❌ Stack trace (lost boost general):`, error.stack);
     }
 }
+
+// ==================== GRACEFUL SHUTDOWN ====================
+
+process.on('SIGINT', async () => {
+    logger.info('Zamykanie bota Rekruter...');
+    
+    await memberCacheService.cleanup();
+    
+    client.destroy();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    logger.info('Otrzymano sygnał SIGTERM, zamykam bota Rekruter...');
+    
+    try {
+        await memberCacheService.cleanup();
+        
+        client.destroy();
+        logger.info('Bot Rekruter został pomyślnie zamknięty');
+        process.exit(0);
+    } catch (error) {
+        logger.error(`Błąd podczas zamykania bota Rekruter: ${error.message}`);
+        process.exit(1);
+    }
+});
 
 client.login(config.token);
