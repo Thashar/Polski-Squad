@@ -178,7 +178,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
             }
         }
         
-        logger.info(`🔄 Event MessageReactionAdd - emoji: ${reaction.emoji.name || reaction.emoji.id}, user: ${user.tag}`);
+        // Usuń główne logowanie eventów reakcji - loguje tylko ReactionRoleService dla ważnych reakcji
         await reactionRoleService.handleReactionAdd(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (add):', error);
@@ -197,7 +197,7 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
             }
         }
         
-        logger.info(`🔄 Event MessageReactionRemove - emoji: ${reaction.emoji.name || reaction.emoji.id}, user: ${user.tag}`);
+        // Usuń główne logowanie eventów reakcji - loguje tylko ReactionRoleService dla ważnych reakcji
         await reactionRoleService.handleReactionRemove(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (remove):', error);

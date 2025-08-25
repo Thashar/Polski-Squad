@@ -166,15 +166,14 @@ class MemberCacheService {
             // Aktualizuj cache
             await this.updateMemberRoles(userId, currentRoleIds);
             
-            // Loguj szczegóły
-            this.logger.info(`📊 CACHE Role PRZED: [${previousRoleIds.length}] ${previousRoleIds.join(', ')}`);
-            this.logger.info(`📊 FRESH Role PO: [${currentRoleIds.length}] ${currentRoleIds.join(', ')}`);
-            
-            if (changes.added.length > 0) {
-                this.logger.info(`➕ Dodane role: ${changes.added.join(', ')}`);
-            }
-            if (changes.removed.length > 0) {
-                this.logger.info(`➖ Usunięte role: ${changes.removed.join(', ')}`);
+            // Loguj tylko jeśli są zmiany - bez szczegółów wszystkich ról
+            if (changes.changed) {
+                if (changes.added.length > 0) {
+                    this.logger.info(`➕ Dodane role: ${changes.added.join(', ')}`);
+                }
+                if (changes.removed.length > 0) {
+                    this.logger.info(`➖ Usunięte role: ${changes.removed.join(', ')}`);
+                }
             }
             
             return {

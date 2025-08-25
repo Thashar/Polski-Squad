@@ -98,8 +98,6 @@ class RoleConflictService {
      */
     async handleRoleChange(userId, guildId, oldRoles, newRoles) {
         try {
-            this.logger.info(`🔄 Zmiana ról dla użytkownika ${userId} - ustawiam timer sprawdzania konfliktów`);
-            
             // Sprawdź które grupy mogą być dotknięte
             const affectedGroups = [];
             
@@ -113,13 +111,10 @@ class RoleConflictService {
             }
             
             if (affectedGroups.length === 0) {
-                this.logger.info(`ℹ️ Zmiana ról nie dotyczy grup ekskluzywnych`);
-                return;
+                return; // Cichy return dla grup nie-ekskluzywnych
             }
             
-            this.logger.info(`🎯 Dotknięte grupy ekskluzywne: ${affectedGroups.join(', ')}`);
-            
-            // Ustaw timer sprawdzania konfliktów
+            // Ustaw timer sprawdzania konfliktów (bez logowania)
             await this.setConflictCheckTimer(userId, guildId, affectedGroups, oldRoles);
             
         } catch (error) {
@@ -163,7 +158,7 @@ class RoleConflictService {
         }, this.conflictCheckDelay);
 
         this.conflictCheckTimers.set(timerKey, timer);
-        this.logger.info(`⏱️ Ustawiono timer sprawdzania konfliktów dla użytkownika ${userId} (${this.conflictCheckDelay/1000}s)`);
+        // Usuń logowanie timerów - za dużo noise
     }
 
     /**
@@ -189,11 +184,8 @@ class RoleConflictService {
             }
 
             const currentRoleIds = member.roles.cache.map(role => role.id);
-            const reason = expired ? 'po restarcie bota' : 'po zmianie ról';
-            this.logger.info(`🔍 Sprawdzanie konfliktów ról ${reason} dla ${member.user.tag}`);
-            this.logger.info(`📋 Aktualne role: ${currentRoleIds.join(', ')}`);
 
-            // Sprawdź każdą grupę ekskluzywną
+            // Sprawdź każdą grupę ekskluzywną - LOGUJ TYLKO KONFLIKTY
             for (const groupName of groups) {
                 const groupRoles = this.exclusiveRoleGroups[groupName];
                 if (!groupRoles) continue;
@@ -201,7 +193,7 @@ class RoleConflictService {
                 const userGroupRoles = groupRoles.filter(roleId => currentRoleIds.includes(roleId));
                 
                 if (userGroupRoles.length > 1) {
-                    this.logger.info(`⚠️ KONFLIKT w grupie ${groupName}: ${userGroupRoles.length} ról (${userGroupRoles.join(', ')})`);
+                    // KONFLIKT WYKRYTY - loguj szczegółowo
                     
                     let roleToKeep;
                     
@@ -212,37 +204,36 @@ class RoleConflictService {
                         if (addedGroupRoles.length > 0) {
                             // Zostaw najnowszą dodaną rolę z grupy
                             roleToKeep = addedGroupRoles[addedGroupRoles.length - 1];
-                            this.logger.info(`✅ Zostawiam najnowszą dodaną rolę z grupy ${groupName}: ${roleToKeep}`);
                         } else {
                             // Jeśli żadna rola nie została dodana, zostaw pierwszą z listy
                             roleToKeep = userGroupRoles[0];
-                            this.logger.info(`✅ Żadna rola nie została dodana, zostawiam pierwszą: ${roleToKeep}`);
                         }
                     } else {
                         // Fallback - zostaw pierwszą rolę z listy
                         roleToKeep = userGroupRoles[0];
-                        this.logger.info(`✅ Brak informacji o starych rolach, zostawiam pierwszą: ${roleToKeep}`);
                     }
                     
                     // Usuń wszystkie inne role z grupy
                     const rolesToRemove = userGroupRoles.filter(roleId => roleId !== roleToKeep);
-                    this.logger.info(`🗑️ Usuwam ${rolesToRemove.length} konfliktowych ról z grupy ${groupName}: ${rolesToRemove.join(', ')}`);
+                    
+                    // Pobierz nazwy ról dla czytelnego loga
+                    const keptRoleName = guild.roles.cache.get(roleToKeep)?.name || `ID:${roleToKeep}`;
+                    const removedRoleNames = rolesToRemove.map(roleId => {
+                        return guild.roles.cache.get(roleId)?.name || `ID:${roleId}`;
+                    });
+                    
+                    // GŁÓWNY LOG KONFLIKTU
+                    this.logger.info(`⚔️ KONFLIKT ról ${groupName} dla ${member.user.tag}: zachowano "${keptRoleName}", usunięto ${removedRoleNames.join(', ')}`);
                     
                     for (const roleId of rolesToRemove) {
                         try {
                             await member.roles.remove(roleId);
-                            const role = guild.roles.cache.get(roleId);
-                            const roleName = role ? role.name : `ID:${roleId}`;
-                            this.logger.info(`✅ Usunięto konfliktową rolę ${roleName} z grupy ${groupName} (pozostawiono ${roleToKeep})`);
                         } catch (error) {
                             this.logger.error(`❌ Błąd usuwania roli ${roleId}:`, error);
                         }
                     }
-                } else if (userGroupRoles.length === 1) {
-                    this.logger.info(`✅ Grupa ${groupName} - brak konfliktów (1 rola)`);
-                } else {
-                    this.logger.info(`ℹ️ Grupa ${groupName} - brak ról`);
                 }
+                // Nie loguj braku konfliktów - za dużo noise
             }
 
         } catch (error) {

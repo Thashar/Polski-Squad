@@ -175,26 +175,18 @@ class ReactionRoleService {
      */
     async handleReactionAdd(reaction, user) {
         try {
-            this.logger.info(`🚀 handleReactionAdd wywołane! Bot: ${user.bot}, User: ${user.tag}`);
-            
             // Ignoruj boty
-            if (user.bot) {
-                this.logger.info(`🤖 Ignorowanie bota: ${user.tag}`);
-                return;
-            }
+            if (user.bot) return;
 
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
-            // Loguj wykrytą reakcję
-            this.logger.info(`👀 Wykryto reakcję: ${emojiName} od ${user.tag}`);
-            
-            // Sprawdź czy emoji jest skonfigurowane
+            // Sprawdź czy emoji jest skonfigurowane - loguj tylko jeśli TAK
             if (!this.reactionRoleConfig[emojiName]) {
-                this.logger.info(`❌ Reakcja ${emojiName} nie jest skonfigurowana`);
-                return;
+                return; // Cichy return dla nieskonfigurowanych reakcji
             }
             
-            this.logger.info(`🎯 Reakcja ${emojiName} jest skonfigurowana - przetwarzam...`);
+            // LOGUJ tylko dla skonfigurowanych reakcji (flaga ukrainy)
+            this.logger.info(`🇺🇦 Wykryto reakcję flagi ukrainy od ${user.tag}`);
 
             const roleId = this.reactionRoleConfig[emojiName];
             const guild = reaction.message.guild;
@@ -208,13 +200,12 @@ class ReactionRoleService {
 
             // Sprawdź czy użytkownik już ma rolę
             if (member.roles.cache.has(roleId)) {
-                this.logger.info(`👤 ${user.tag} już posiada rolę ${role.name}`);
-                return;
+                return; // Cichy return jeśli już ma rolę
             }
 
             // Dodaj rolę
             await member.roles.add(role);
-            this.logger.info(`✅ Dodano rolę ${role.name} dla ${user.tag} na 5 minut`);
+            this.logger.info(`🇺🇦 Nadano rolę ukraińską dla ${user.tag} na 5 minut`);
 
             // Ustaw timer usunięcia roli
             await this.setRoleRemovalTimer(member, role, user);
@@ -234,16 +225,13 @@ class ReactionRoleService {
 
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
-            // Loguj usunięcie reakcji
-            this.logger.info(`🗑️ Usunięto reakcję: ${emojiName} przez ${user.tag}`);
-            
-            // Sprawdź czy emoji jest skonfigurowane
+            // Sprawdź czy emoji jest skonfigurowane - loguj tylko jeśli TAK
             if (!this.reactionRoleConfig[emojiName]) {
-                this.logger.info(`❌ Reakcja ${emojiName} nie jest skonfigurowana dla usuwania`);
-                return;
+                return; // Cichy return dla nieskonfigurowanych reakcji
             }
             
-            this.logger.info(`🎯 Anulowanie timera dla reakcji ${emojiName}...`);
+            // LOGUJ tylko dla skonfigurowanych reakcji (flaga ukrainy)
+            this.logger.info(`🇺🇦 Usunięto reakcję flagi ukrainy przez ${user.tag} - anulowanie timera`);
 
             const roleId = this.reactionRoleConfig[emojiName];
             const timerKey = `${user.id}-${roleId}`;
@@ -263,7 +251,7 @@ class ReactionRoleService {
 
                 if (role && member.roles.cache.has(roleId)) {
                     await member.roles.remove(role);
-                    this.logger.info(`🗑️ Usunięto rolę ${role.name} dla ${user.tag} (anulowano timer)`);
+                    this.logger.info(`🇺🇦 Natychmiast usunięto rolę ukraińską dla ${user.tag}`);
                 }
             }
 
@@ -295,7 +283,7 @@ class ReactionRoleService {
                 
                 if (freshMember && freshMember.roles.cache.has(role.id)) {
                     await freshMember.roles.remove(role);
-                    this.logger.info(`⏰ Automatycznie usunięto rolę ${role.name} dla ${user.tag} po 5 minutach`);
+                    this.logger.info(`🇺🇦 ⏰ Automatycznie usunięto rolę ukraińską dla ${user.tag} po 5 minutach`);
                 }
                 
                 // Usuń timer z mapy i persystencji
@@ -316,9 +304,8 @@ class ReactionRoleService {
      * Pobiera identyfikator emoji (name lub id dla custom emoji)
      */
     getEmojiIdentifier(emoji) {
-        const identifier = emoji.name || emoji.id;
-        this.logger.info(`🔍 Debug emoji - name: "${emoji.name}", id: "${emoji.id}", identifier: "${identifier}"`);
-        return identifier;
+        return emoji.name || emoji.id;
+        // Usuń debug emoji logging
     }
 
     /**

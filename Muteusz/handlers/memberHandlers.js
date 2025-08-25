@@ -19,16 +19,11 @@ class MemberHandler {
      */
     async handleGuildMemberUpdate(oldMember, newMember) {
         try {
-            // Debug logging
-            logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
-            
             // NOWY SYSTEM: Użyj MemberCacheService do prawidłowego wykrywania zmian
             if (this.memberCacheService) {
                 const cacheResult = await this.memberCacheService.handleMemberUpdate(oldMember, newMember);
                 
                 if (cacheResult.changed) {
-                    logger.info(`🎯 Wykryto zmianę ról - uruchamiam system konfliktów`);
-                    
                     // Użyj RoleConflictService z prawidłowymi danymi z cache
                     if (this.roleConflictService) {
                         await this.roleConflictService.handleRoleChange(
@@ -40,9 +35,8 @@ class MemberHandler {
                     } else {
                         logger.warn(`⚠️ RoleConflictService niedostępny`);
                     }
-                } else {
-                    logger.info(`ℹ️ Brak zmian w rolach (z cache)`);
                 }
+                // Usuń logi o braku zmian - za dużo noise
             } else {
                 // FALLBACK: Stary system (jeśli cache service niedostępny)
                 logger.warn(`⚠️ MemberCacheService niedostępny - używam starego systemu`);
