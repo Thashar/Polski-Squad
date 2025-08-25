@@ -13,6 +13,7 @@ const RoleManagementService = require('./services/roleManagementService');
 const RoleKickingService = require('./services/roleKickingService');
 const ReactionRoleService = require('./services/reactionRoleService');
 const RoleConflictService = require('./services/roleConflictService');
+const MemberCacheService = require('./services/memberCacheService');
 
 // Importuj handlery
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -45,11 +46,12 @@ const logService = new LogService(config);
 const roleKickingService = new RoleKickingService(config);
 const reactionRoleService = new ReactionRoleService(config);
 const roleConflictService = new RoleConflictService(config);
+const memberCacheService = new MemberCacheService(config);
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
 const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService);
-const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService);
+const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
@@ -61,6 +63,7 @@ const sharedState = {
     logService,
     reactionRoleService,
     roleConflictService,
+    memberCacheService,
     interactionHandler,
     messageHandler,
     memberHandler
@@ -93,6 +96,7 @@ client.once(Events.ClientReady, async () => {
     await roleKickingService.initialize(client);
     await reactionRoleService.initialize(client);
     await roleConflictService.initialize(client);
+    await memberCacheService.initialize(client);
     
     // Zarejestruj komendy slash
     await interactionHandler.registerSlashCommands(client);
@@ -253,6 +257,7 @@ process.on('SIGINT', async () => {
     // Wyczyść timery reaction roles i role conflicts
     reactionRoleService.cleanup();
     roleConflictService.cleanup();
+    await memberCacheService.cleanup();
     
     client.destroy();
     process.exit(0);
@@ -273,6 +278,7 @@ process.on('SIGTERM', async () => {
         // Wyczyść timery reaction roles i role conflicts
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
+        await memberCacheService.cleanup();
         
         client.destroy();
         logger.info('Bot został pomyślnie zamknięty');
@@ -322,6 +328,7 @@ async function stopBot() {
         // Wyczyść timery reaction roles i role conflicts
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
+        await memberCacheService.cleanup();
         
         await client.destroy();
         logger.info('Bot został zatrzymany');
