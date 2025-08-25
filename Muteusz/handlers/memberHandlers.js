@@ -3,11 +3,12 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 
 class MemberHandler {
-    constructor(config, logService, specialRolesService = null, roleManagementService = null) {
+    constructor(config, logService, specialRolesService = null, roleManagementService = null, roleConflictService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.roleManagementService = roleManagementService;
+        this.roleConflictService = roleConflictService;
     }
 
     /**
@@ -19,19 +20,44 @@ class MemberHandler {
         // Debug logging
         logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
         
-        // Sprawdź zmiany ról do obsługi grup ekskluzywnych
-        await this.handleExclusiveRoleGroups(oldMember, newMember);
+        // Pobierz role przed i po zmianie
+        const oldRoleIds = oldMember.roles.cache.map(role => role.id);
+        const newRoleIds = newMember.roles.cache.map(role => role.id);
+        
+        // Sprawdź czy nastąpiła zmiana ról
+        const rolesChanged = oldRoleIds.length !== newRoleIds.length || 
+                           !oldRoleIds.every(id => newRoleIds.includes(id)) ||
+                           !newRoleIds.every(id => oldRoleIds.includes(id));
+        
+        if (rolesChanged) {
+            // Użyj nowego systemu conflict service
+            if (this.roleConflictService) {
+                await this.roleConflictService.handleRoleChange(
+                    newMember.user.id,
+                    newMember.guild.id,
+                    oldRoleIds,
+                    newRoleIds
+                );
+            } else {
+                // Fallback do starego systemu
+                await this.handleExclusiveRoleGroups(oldMember, newMember);
+            }
+        }
         
         // Usunięto system zarządzania rolami TOP - EndersEcho już to obsługuje
     }
 
 
     /**
-     * Obsługuje grupy ekskluzywnych ról
+     * Obsługuje grupy ekskluzywnych ról - STARY SYSTEM (ZAKOMENTOWANY)
      * @param {GuildMember} oldMember - Stary członek
      * @param {GuildMember} newMember - Nowy członek
      */
     async handleExclusiveRoleGroups(oldMember, newMember) {
+        // ===== STARY SYSTEM OBSŁUGI KOLIZJI RÓL - ZAKOMENTOWANY =====
+        // Zastąpiony przez RoleConflictService z persistent storage i timer-based approach
+        
+        /* 
         try {
             // Grupa 1: Role główne (może mieć tylko jedną) - wszystkie 5 ról są wzajemnie wykluczające
             const mainRoles = ['1170331604846120980', '1193124672070484050', '1200053198472359987', '1262785926984237066', '1173760134527324270'];
@@ -127,6 +153,9 @@ class MemberHandler {
         } catch (error) {
             logger.error('❌ Błąd obsługi grup ekskluzywnych ról:', error?.message || 'Nieznany błąd');
         }
+        */
+
+        logger.info(`📝 STARY SYSTEM: handleExclusiveRoleGroups zostało zakomentowane - używa się RoleConflictService`);
     }
 
     /**
