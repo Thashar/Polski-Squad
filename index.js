@@ -115,8 +115,7 @@ async function startAllBots() {
     const isLocal = process.argv.includes('--local');
     const environment = isLocal ? 'development' : 'production';
     
-    logger.info(`🚀 Uruchamianie botów w trybie: ${environment}`);
-    logger.info(`📋 Wybrane boty: ${enabledBotNames.join(', ')}`);
+    logger.info(`🚀 ${environment}: ${enabledBotNames.join(', ')}`);
     
     const botsToStart = botConfigs.filter(bot => 
         enabledBotNames.includes(bot.loggerName.toLowerCase())
@@ -130,8 +129,6 @@ async function startAllBots() {
     for (const botConfig of botsToStart) {
         await startBot(botConfig);
     }
-    
-    logger.info(`✅ Uruchomiono ${botsToStart.length} botów`);
 }
 
 /**

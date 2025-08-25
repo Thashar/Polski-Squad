@@ -74,20 +74,15 @@ const sharedState = {
 client.once(Events.ClientReady, async () => {
     await logService.logMessage('success', `Bot ${client.user.tag} jest online!`);
     
-    // FIX: Pre-cache members aby poprawić wykrywanie zmian ról po restarcie
+    // Załaduj członków do cache
     try {
-        logger.info('🔄 Pre-caching członków serwera...');
         let totalMembers = 0;
-        
         for (const guild of client.guilds.cache.values()) {
             const members = await guild.members.fetch({ limit: 1000 });
             totalMembers += members.size;
-            logger.info(`✅ Załadowano ${members.size} członków z serwera ${guild.name}`);
         }
-        
-        logger.info(`🎯 Łącznie załadowano ${totalMembers} członków do cache`);
     } catch (cacheError) {
-        logger.warn('⚠️ Nie udało się pre-cache wszystkich członków:', cacheError.message);
+        logger.warn('⚠️ Nie udało się załadować członków:', cacheError.message);
     }
     
     // Inicjalizuj serwisy
@@ -97,11 +92,9 @@ client.once(Events.ClientReady, async () => {
     await reactionRoleService.initialize(client);
     await roleConflictService.initialize(client);
     await memberCacheService.initialize(client);
-    
-    // Zarejestruj komendy slash
     await interactionHandler.registerSlashCommands(client);
     
-    await logService.logMessage('info', 'Bot gotowy do pracy - obsługuje pliki do 100 MB, automatyczne zarządzanie rolami z przywracaniem i pre-cached members!');
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami');
 });
 
 // Obsługa wiadomości

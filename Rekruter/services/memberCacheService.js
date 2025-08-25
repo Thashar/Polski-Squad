@@ -42,7 +42,6 @@ class MemberCacheService {
                 this.memberBoostCache.set(userId, boostData);
             }
             
-            this.logger.info(`🔄 Załadowano cache boost dla ${this.memberBoostCache.size} członków z pliku`);
             
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -220,7 +219,6 @@ class MemberCacheService {
      * Czyści cache (przy wyłączaniu bota)
      */
     async cleanup() {
-        this.logger.info(`🧹 Zapisywanie cache boost ${this.memberBoostCache.size} członków do pliku...`);
         await this.saveCacheToFile();
         this.memberBoostCache.clear();
     }

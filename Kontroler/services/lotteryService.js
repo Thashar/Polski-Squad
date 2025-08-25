@@ -49,31 +49,22 @@ class LotteryService {
      */
     async loadLotteries() {
         try {
-            logger.info(`📂 Próba wczytania danych loterii z: ${this.config.lottery.dataFile}`);
             const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
             const lotteryData = JSON.parse(data);
-            
-            logger.info(`📊 Wczytane dane loterii:`, {
-                activeLotteriesCount: lotteryData.activeLotteries ? Object.keys(lotteryData.activeLotteries).length : 0,
-                lastUpdated: lotteryData.lastUpdated
-            });
             
             if (lotteryData.activeLotteries) {
                 // Przywróć aktywne loterie
                 for (const [id, lottery] of Object.entries(lotteryData.activeLotteries)) {
                     this.activeLotteries.set(id, lottery);
                     this.scheduleNextLottery(id, lottery);
-                    logger.info(`✅ Przywrócono loterię: ${lottery.name} (ID: ${id})`);
                 }
-                logger.info(`🔄 Przywrócono ${this.activeLotteries.size} aktywnych loterii`);
-            } else {
-                logger.warn(`⚠️ Brak aktywnych loterii w pliku danych`);
+                if (this.activeLotteries.size > 0) {
+                    logger.info(`🔄 Przywrócono ${this.activeLotteries.size} aktywnych loterii`);
+                }
             }
         } catch (error) {
             if (error.code !== 'ENOENT') {
                 logger.error('❌ Błąd wczytywania danych loterii:', error);
-            } else {
-                logger.warn('⚠️ Plik danych loterii nie istnieje, tworzę nowy');
             }
             // Utwórz pusty plik
             await this.saveLotteryData();
@@ -101,9 +92,7 @@ class LotteryService {
                 lastUpdated: new Date().toISOString()
             };
             
-            logger.info(`💾 Zapisywanie ${this.activeLotteries.size} aktywnych loterii do pliku`);
             await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(dataToSave, null, 2));
-            logger.info('✅ Dane loterii zostały zapisane pomyślnie');
         } catch (error) {
             logger.error('❌ Błąd zapisu danych loterii:', error);
             throw error;
@@ -140,7 +129,6 @@ class LotteryService {
         
         const lotteryId = `${formattedDate}_${roleShort}_${clanShort}_${randomSuffix}`;
         
-        logger.info(`🆔 Generowanie ID loterii: ${lotteryId} (data: ${formattedDate}, rola: ${roleShort}, klan: ${clanShort})`);
 
         const lottery = {
             id: lotteryId,
@@ -169,7 +157,7 @@ class LotteryService {
         // Zaplanuj pierwsze losowanie
         this.scheduleNextLottery(lotteryId, lottery);
 
-        logger.info(`🎰 Utworzono nową loterię: ${lottery.name} (ID: ${lotteryId})`);
+        logger.info(`🎰 Utworzono loterię: ${lottery.name}`);
         
         return {
             success: true,
@@ -269,10 +257,7 @@ class LotteryService {
             
             // Utwórz cron pattern dla ostrzeżenia: minute hour * * dayOfWeek
             const warningCronPattern = `${warningMinute} ${warningHour} * * ${dayNum}`;
-            logger.info(`⚠️ Tworzę cron pattern ostrzeżenia: ${warningCronPattern} dla loterii ${lotteryId}`);
-            
             const warningJob = cron.schedule(warningCronPattern, async () => {
-                logger.info(`⚠️ Wysyłanie ostrzeżenia o zamknięciu zgłoszeń: ${lotteryId}`);
                 await this.sendClosingWarning(lotteryId);
             }, {
                 timezone: "Europe/Warsaw"
@@ -298,10 +283,7 @@ class LotteryService {
             
             // Utwórz cron pattern dla finalnego ostrzeżenia: minute hour * * dayOfWeek
             const finalCronPattern = `${finalMinute} ${finalHour} * * ${dayNum}`;
-            logger.info(`⚠️ Tworzę cron pattern finalnego ostrzeżenia: ${finalCronPattern} dla loterii ${lotteryId}`);
-            
             const finalJob = cron.schedule(finalCronPattern, async () => {
-                logger.info(`⚠️ Wysyłanie finalnego ostrzeżenia o ostatniej godzinie: ${lotteryId}`);
                 await this.sendFinalWarning(lotteryId);
             }, {
                 timezone: "Europe/Warsaw"
@@ -311,10 +293,7 @@ class LotteryService {
             
             // Utwórz cron pattern dla loterii: minute hour * * dayOfWeek
             const cronPattern = `${lottery.minute} ${lottery.hour} * * ${dayNum}`;
-            logger.info(`🕐 Tworzę cron pattern loterii: ${cronPattern} dla loterii ${lotteryId}`);
-            
             const job = cron.schedule(cronPattern, async () => {
-                logger.info(`🎰 Wykonywanie zaplanowanej loterii: ${lotteryId}`);
                 await this.executeLottery(lotteryId);
             }, {
                 timezone: "Europe/Warsaw"
@@ -322,9 +301,7 @@ class LotteryService {
 
             this.cronJobs.set(lotteryId, job);
             
-            logger.info(`📅 Zaplanowano loterię ${lotteryId} na ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} (pattern: ${cronPattern})`);
-            logger.info(`⚠️ Zaplanowano ostrzeżenie ${lotteryId} na ${lottery.dayOfWeek} o ${warningHour}:${warningMinute.toString().padStart(2, '0')} (pattern: ${warningCronPattern})`);
-            logger.info(`⚠️ Zaplanowano finalne ostrzeżenie ${lotteryId} na ${lottery.dayOfWeek} o ${finalHour}:${finalMinute.toString().padStart(2, '0')} (pattern: ${finalCronPattern})`);
+            logger.info(`📅 Zaplanowano loterię na ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`);
         } catch (error) {
             logger.error(`❌ Błąd planowania loterii ${lotteryId}:`, error);
             throw error;
@@ -342,8 +319,7 @@ class LotteryService {
                 return;
             }
 
-            logger.info(`⚠️ Wysyłanie ostrzeżenia o zamknięciu zgłoszeń: ${lottery.name}`);
-
+    
             const guild = this.client.guilds.cache.get(this.config.guildId);
             if (!guild) {
                 logger.error('❌ Nie znaleziono serwera');
@@ -395,8 +371,7 @@ class LotteryService {
                 return;
             }
 
-            logger.info(`⚠️ Wysyłanie finalnego ostrzeżenia o ostatniej godzinie: ${lottery.name}`);
-
+    
             const guild = this.client.guilds.cache.get(this.config.guildId);
             if (!guild) {
                 logger.error('❌ Nie znaleziono serwera');
@@ -472,11 +447,6 @@ class LotteryService {
             }
 
             logger.info(`🎰 Rozpoczynam losowanie: ${lottery.name}`);
-            logger.info(`📋 Szczegóły loterii:`);
-            logger.info(`   - Rola docelowa: ${lottery.targetRoleId}`);
-            logger.info(`   - Rola klanu: ${lottery.clanRoleId}`);
-            logger.info(`   - Kanał: ${lottery.channelId}`);
-            logger.info(`   - Zwycięzców: ${lottery.winnersCount}`);
 
             const guild = this.client.guilds.cache.get(this.config.guildId);
             if (!guild) {
@@ -694,7 +664,6 @@ class LotteryService {
             if (blockedRole && blockedRole.members.size > 0) {
                 logger.info(`🚫 Członkowie z rolą blokującą "${blockedRole.name}" (${blockedRole.members.size}):`);
                 for (const [memberId, member] of blockedRole.members) {
-                    logger.info(`   🚫 ${member.user.tag} (${member.id}) - zablokowany w loterii`);
                 }
             } else if (blockedRole) {
                 logger.info(`✅ Brak członków z rolą blokującą "${blockedRole.name}"`);
@@ -841,7 +810,7 @@ class LotteryService {
                 return;
             }
 
-            logger.info(`🎲 Przeprowadzam losowanie spośród ${eligibleMembers.size} uczestników na ${lottery.winnersCount} zwycięzców`);
+            logger.info(`🎲 Losowanie dla ${eligibleMembers.size} uczestników (${lottery.winnersCount} zwycięzców)`);
 
             // Przeprowadź losowanie
             const winners = this.drawWinners(eligibleMembers, lottery.winnersCount);
@@ -852,11 +821,9 @@ class LotteryService {
             });
 
             // Zapisz wyniki
-            logger.info('💾 Zapisywanie wyników loterii...');
             await this.saveLotteryResult(lottery, eligibleMembers, winners);
 
             // Opublikuj wyniki
-            logger.info('📢 Publikowanie wyników...');
             await this.publishResults(channel, lottery, eligibleMembers, winners);
 
             // Zaplanuj następne losowanie lub usuń jeśli jednorazowe
@@ -878,9 +845,7 @@ class LotteryService {
                 this.activeLotteries.delete(lotteryId);
                 
                 await this.saveLotteryData();
-                logger.info(`✅ Jednorazowa loteria zakończona: ${lottery.name}`);
             } else {
-                logger.info('📅 Planowanie następnego losowania...');
                 lottery.lastDraw = new Date().toISOString();
                 lottery.nextDraw = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute, true, lottery.frequency);
                 
@@ -889,7 +854,6 @@ class LotteryService {
                 // Zaplanuj ponownie cron jobs dla następnego losowania
                 this.scheduleNextLottery(lotteryId, lottery);
                 
-                logger.info(`✅ Zaplanowano następne losowanie: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}`);
             }
 
             logger.info(`✅ Zakończono losowanie: ${lottery.name} - wygrało ${winners.length} osób`);
@@ -968,7 +932,6 @@ class LotteryService {
 
             await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(data, null, 2));
             
-            logger.info(`💾 Zapisano wynik loterii: ${lottery.name}`);
             
         } catch (error) {
             logger.error('❌ Błąd zapisu wyniku loterii:', error);
@@ -1196,39 +1159,23 @@ class LotteryService {
             // Zatrzymaj cron job loterii
             if (this.cronJobs.has(lotteryId)) {
                 const job = this.cronJobs.get(lotteryId);
-                logger.info(`🛑 Zatrzymywanie cron job dla loterii: ${lotteryId}`);
-                
                 if (job && typeof job.destroy === 'function') {
                     job.destroy();
                 } else if (job && typeof job.stop === 'function') {
                     job.stop();
-                } else {
-                    logger.warn(`⚠️ Cron job dla ${lotteryId} nie ma metody destroy() ani stop()`);
                 }
-                
                 this.cronJobs.delete(lotteryId);
-                logger.info(`✅ Usunięto cron job dla: ${lotteryId}`);
-            } else {
-                logger.warn(`⚠️ Nie znaleziono cron job dla loterii: ${lotteryId}`);
             }
 
             // Zatrzymaj cron job ostrzeżenia
             if (this.cronJobs.has(lotteryId + '_warning')) {
                 const warningJob = this.cronJobs.get(lotteryId + '_warning');
-                logger.info(`🛑 Zatrzymywanie cron job ostrzeżenia dla loterii: ${lotteryId}`);
-                
                 if (warningJob && typeof warningJob.destroy === 'function') {
                     warningJob.destroy();
                 } else if (warningJob && typeof warningJob.stop === 'function') {
                     warningJob.stop();
-                } else {
-                    logger.warn(`⚠️ Cron job ostrzeżenia dla ${lotteryId} nie ma metody destroy() ani stop()`);
                 }
-                
                 this.cronJobs.delete(lotteryId + '_warning');
-                logger.info(`✅ Usunięto cron job ostrzeżenia dla: ${lotteryId}`);
-            } else {
-                logger.warn(`⚠️ Nie znaleziono cron job ostrzeżenia dla loterii: ${lotteryId}`);
             }
 
             // Zatrzymaj cron job finalnego ostrzeżenia

@@ -54,8 +54,7 @@ const sharedState = {
 };
 
 client.once('ready', async () => {
-    logger.info(`[BOT] ✅ Bot zalogowany jako ${client.user.tag}`);
-    logger.info(`[BOT] Data uruchomienia: ${new Date().toLocaleString('pl-PL')}`);
+    logger.success('✅ Rekruter gotowy - rekrutacja z OCR, boost tracking');
     
     // Rejestracja komend slash
     await registerSlashCommands(client, config);
@@ -69,15 +68,13 @@ client.once('ready', async () => {
     // Inicjalizacja folderu temp
     try {
         await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
-        logger.info(`[BOT] ✅ Utworzono folder temp`);
     } catch (error) {
-        logger.info(`[BOT] Folder temp już istnieje`);
+        // Folder exists
     }
     
     // Czyszczenie starych wiadomości i wysyłanie nowej
     const channel = client.channels.cache.get(MONITORED_CHANNEL_ID);
     if (channel) {
-        logger.info(`[BOT] Znaleziono kanał rekrutacji: ${channel.name}`);
         
         try {
             const messages = await channel.messages.fetch({ limit: 50 });
@@ -191,13 +188,12 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
  * @param {GuildMember} member - Członek który zboostował
  */
 async function handleNewBoost(member) {
-    logger.info(`[BOOST] 🎉 Rozpoczynam obsługę nowego boost dla ${member.user.tag} (${member.id})`);
+    logger.info(`[BOOST] 🎉 Nowy boost od ${member.user.tag}`);
     
     try {
         const guild = member.guild;
         const memberCount = guild.memberCount;
         
-        logger.info(`[BOOST] Serwer: ${guild.name}, liczba członków: ${memberCount}`);
         
         // 10 sentencji boost
         const boostMessages = [
@@ -216,11 +212,9 @@ async function handleNewBoost(member) {
         // Wybierz losową sentencję
         const randomIndex = Math.floor(Math.random() * boostMessages.length);
         const randomMessage = boostMessages[randomIndex];
-        logger.info(`[BOOST] Wylosowano wiadomość ${randomIndex + 1}/${boostMessages.length}`);
         
         // Wyślij na kanał główny
         const mainChannelId = '1170323972173340744';
-        logger.info(`[BOOST] Próba wysłania na kanał główny (${mainChannelId})`);
         
         try {
             const mainChannel = client.channels.cache.get(mainChannelId);
@@ -231,13 +225,11 @@ async function handleNewBoost(member) {
                 const fetchedMainChannel = await client.channels.fetch(mainChannelId);
                 if (fetchedMainChannel) {
                     await fetchedMainChannel.send(randomMessage);
-                    logger.info(`[BOOST] ✅ Wysłano wiadomość boost na kanał główny (fetch) dla ${member.user.tag}`);
                 } else {
                     logger.error(`[BOOST] ❌ Nie udało się pobrać kanału głównego z API`);
                 }
             } else {
                 await mainChannel.send(randomMessage);
-                logger.info(`[BOOST] ✅ Wysłano wiadomość boost na kanał główny (cache) dla ${member.user.tag}`);
             }
         } catch (mainChannelError) {
             logger.error(`[BOOST] ❌ Błąd wysyłania na kanał główny:`, mainChannelError);
@@ -246,7 +238,6 @@ async function handleNewBoost(member) {
         
         // Wyślij na kanał bonusowy
         const bonusChannelId = '1384597663378440363';
-        logger.info(`[BOOST] Próba wysłania na kanał bonusowy (${bonusChannelId})`);
         
         try {
             const bonusChannel = client.channels.cache.get(bonusChannelId);
@@ -259,20 +250,18 @@ async function handleNewBoost(member) {
                 const fetchedBonusChannel = await client.channels.fetch(bonusChannelId);
                 if (fetchedBonusChannel) {
                     await fetchedBonusChannel.send(bonusMessage);
-                    logger.info(`[BOOST] ✅ Wysłano wiadomość bonusową (fetch) dla ${member.user.tag}`);
                 } else {
                     logger.error(`[BOOST] ❌ Nie udało się pobrać kanału bonusowego z API`);
                 }
             } else {
                 await bonusChannel.send(bonusMessage);
-                logger.info(`[BOOST] ✅ Wysłano wiadomość bonusową (cache) dla ${member.user.tag}`);
             }
         } catch (bonusChannelError) {
             logger.error(`[BOOST] ❌ Błąd wysyłania na kanał bonusowy:`, bonusChannelError);
             logger.error(`[BOOST] ❌ Stack trace (bonus channel):`, bonusChannelError.stack);
         }
         
-        logger.info(`[BOOST] ✅ Zakończono obsługę nowego boost dla ${member.user.tag}`);
+        logger.info(`[BOOST] ✅ Wysłano wiadomości boost dla ${member.user.tag}`);
         
     } catch (error) {
         logger.error(`[BOOST] ❌ Ogólny błąd podczas obsługi nowego boost dla ${member.user.tag}:`, error);
@@ -285,7 +274,7 @@ async function handleNewBoost(member) {
  * @param {GuildMember} member - Członek który stracił boost
  */
 async function handleLostBoost(member) {
-    logger.info(`[BOOST] 💔 Rozpoczynam obsługę utraty boost dla ${member.user.tag} (${member.id})`);
+    logger.info(`[BOOST] 💔 Utrata boost od ${member.user.tag}`);
     
     try {
         // 10 smutnych sentencji dla utraty boosta
@@ -305,35 +294,28 @@ async function handleLostBoost(member) {
         // Wybierz losową smutną sentencję
         const randomIndex = Math.floor(Math.random() * lostBoostMessages.length);
         const randomMessage = lostBoostMessages[randomIndex];
-        logger.info(`[BOOST] Wylosowano smutną wiadomość ${randomIndex + 1}/${lostBoostMessages.length}`);
         
         // Wyślij na kanał główny (ten sam co dla nowych boostów)
         const mainChannelId = '1170323972173340744';
-        logger.info(`[BOOST] Próba wysłania smutnej wiadomości na kanał główny (${mainChannelId})`);
         
         try {
             const mainChannel = client.channels.cache.get(mainChannelId);
             if (!mainChannel) {
-                logger.error(`[BOOST] ❌ Nie znaleziono kanału głównego (${mainChannelId}) w cache dla utraty boost`);
-                
-                // Spróbuj pobrać kanał z API
                 const fetchedMainChannel = await client.channels.fetch(mainChannelId);
                 if (fetchedMainChannel) {
                     await fetchedMainChannel.send(randomMessage);
-                    logger.info(`[BOOST] ✅ Wysłano wiadomość o utracie boost (fetch) dla ${member.user.tag}`);
                 } else {
-                    logger.error(`[BOOST] ❌ Nie udało się pobrać kanału głównego z API dla utraty boost`);
+                    logger.error(`[BOOST] ❌ Nie udało się pobrać kanału głównego`);
                 }
             } else {
                 await mainChannel.send(randomMessage);
-                logger.info(`[BOOST] ✅ Wysłano wiadomość o utracie boost (cache) dla ${member.user.tag}`);
             }
         } catch (mainChannelError) {
             logger.error(`[BOOST] ❌ Błąd wysyłania smutnej wiadomości na kanał główny:`, mainChannelError);
             logger.error(`[BOOST] ❌ Stack trace (lost boost main channel):`, mainChannelError.stack);
         }
         
-        logger.info(`[BOOST] ✅ Zakończono obsługę utraty boost dla ${member.user.tag}`);
+        logger.info(`[BOOST] ✅ Wysłano wiadomość o utracie boost dla ${member.user.tag}`);
         
     } catch (error) {
         logger.error(`[BOOST] ❌ Ogólny błąd podczas obsługi utraty boost dla ${member.user.tag}:`, error);

@@ -42,15 +42,11 @@ client.once(Events.ClientReady, async () => {
     try {
         lastReminderMap = await reminderStorage.loadReminders();
         sharedState.lastReminderMap = lastReminderMap;
-        logger.info('✅ Dane przypomień zostały pomyślnie załadowane');
     } catch (error) {
         logger.error('❌ Błąd ładowania danych przypomień:', error.message);
     }
     
-    logger.info('Bot Szkolenia jest gotowy do pracy!');
-    
-    // Sprawdź wszystkie aktywne wątki przy starcie i usuń te starsze niż 7 dni
-    logger.info('🔄 Uruchamiam sprawdzenie wątków przy starcie bota...');
+    logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
     await checkThreads(client, sharedState, config, true);
     
     // Uruchom automatyczne sprawdzanie wątków

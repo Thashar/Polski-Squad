@@ -57,7 +57,7 @@ function initializeServices() {
  * Obsługuje zdarzenie ready
  */
 async function onReady() {
-    logger.info(`🚀 Zalogowano jako ${client.user.tag}`);
+    logger.success('✅ Konklawe gotowy - gra w hasła, błogosławienia JP2');
     await commandService.registerSlashCommands();
 
     try {
@@ -65,7 +65,6 @@ async function onReady() {
         if (triggerChannel && triggerChannel.isTextBased()) {
             const messages = await triggerChannel.messages.fetch({ limit: 100 });
             await triggerChannel.bulkDelete(messages, true);
-            logger.info('🧹 Wyczyszczono kanał przed startem bota.');
         }
     } catch (error) {
         logger.error(`❌ Błąd podczas czyszczenia kanału ${config.channels.trigger}:`, error);
@@ -90,7 +89,6 @@ async function onReady() {
                     logger.error('❌ Błąd podczas usuwania ról papieskich:', error);
                 }
 
-                logger.info(`✅ Automatycznie przywrócono hasło "${config.messages.defaultPassword}" przy starcie bota`);
             }
         }
 

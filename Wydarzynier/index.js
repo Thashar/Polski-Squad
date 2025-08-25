@@ -41,12 +41,7 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logger.info(`Bot zalogowany jako ${client.user.tag}`);
-    logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
-    
-    client.guilds.cache.forEach(guild => {
-        logger.info(`- ${guild.name} (${guild.id})`);
-    });
+    logger.success('✅ Wydarzynier gotowy - lobby partii, bazar');
     
     // Wczytaj lobby i timery z plików
     await lobbyService.loadLobbies();

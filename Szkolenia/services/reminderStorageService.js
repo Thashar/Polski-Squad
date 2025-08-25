@@ -24,11 +24,9 @@ class ReminderStorageService {
                 reminderMap.set(threadId, timestamp);
             }
             
-            logger.info(`📂 Załadowano ${reminderMap.size} wpisów przypomień z pliku`);
             return reminderMap;
         } catch (error) {
             if (error.code === 'ENOENT') {
-                logger.info('📄 Plik przypomień nie istnieje - tworzę nową mapę');
                 return new Map();
             }
             
@@ -54,7 +52,6 @@ class ReminderStorageService {
             }
             
             await fs.writeFile(this.dataPath, JSON.stringify(reminderData, null, 2), 'utf8');
-            logger.info(`💾 Zapisano ${reminderMap.size} wpisów przypomień do pliku`);
         } catch (error) {
             logger.error('❌ Błąd zapisu danych przypomień:', error.message);
         }

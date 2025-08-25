@@ -42,12 +42,7 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logger.info(`Bot zalogowany jako ${client.user.tag}`);
-    logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
-    
-    client.guilds.cache.forEach(guild => {
-        logger.info(`- ${guild.name} (${guild.id})`);
-    });
+    logger.success('✅ StalkerLME gotowy - kary za bossów (OCR), urlopy');
     
     // Inicjalizacja serwisów
     await databaseService.initializeDatabase();
@@ -60,7 +55,6 @@ client.once(Events.ClientReady, async () => {
     for (const guild of client.guilds.cache.values()) {
         try {
             await vacationService.ensureVacationMessageIsLast(guild);
-            logger.info(`✅ Sprawdzono wiadomość o urlopach dla serwera: ${guild.name}`);
         } catch (error) {
             logger.error(`❌ Błąd sprawdzania wiadomości o urlopach dla serwera ${guild.name}: ${error.message}`);
         }

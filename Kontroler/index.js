@@ -57,48 +57,9 @@ async function initializeServices() {
  * Handler dla zdarzenia ready
  */
 function onReady() {
-    logger.info('BOT KONTROLER JEST GOTOWY!');
-    logger.info(`📋 Zalogowany jako: ${client.user.tag}`);
-    logger.info(`🌐 Serwery: ${client.guilds.cache.size}`);
-    logger.info(`👥 Użytkownicy: ${client.users.cache.size}`);
-    logger.info('📡 MONITOROWANE KANAŁY:');
-
-    Object.entries(config.channels).forEach(([key, channelConfig], index) => {
-        logger.info(`${index + 1}. Kanał ${channelConfig.name}: ${channelConfig.targetChannelId}`);
-        logger.info(`   🏆 Rola: ${channelConfig.requiredRoleId}`);
-        logger.info(`   📊 Min wynik: ${channelConfig.minimumScore}`);
-        logger.info(`   📈 Zakres: ${channelConfig.scoreRange[0]}-${channelConfig.scoreRange[1]} (krok: ${channelConfig.scoreStep})`);
-        logger.info(`   🔍 Drugie wystąpienie: ${channelConfig.requireSecondOccurrence ? 'TAK' : 'NIE'}`);
-        logger.info(`   🖼️ Preprocessing: ${channelConfig.name === 'Daily' ? 'BIAŁY TEKST NA SZARYM TLE' : 'BIAŁO-CZARNY'}`);
-        logger.info(`   ⚠️ Pomija pierwsze ${channelConfig.skipLines} linii`);
-        if (channelConfig.name === 'Daily') {
-            logger.info(`   🎯 DAILY: Wyjątek "sg" -> "9"`);
-        }
-    });
-
-    logger.info('─'.repeat(50));
-    logger.info('🚫 BLOKOWANIE UŻYTKOWNIKÓW:');
-    logger.info(`   ID roli blokującej: ${config.blockedRole}`);
-    logger.info(`   Blokowane kanały: Daily (${config.channels.daily.targetChannelId}) i CX (${config.channels.cx.targetChannelId})`);
-    logger.info('─'.repeat(50));
-    logger.info('✅ Bot jest gotowy do analizy obrazów!');
-    logger.info('📷 Wrzuć obraz na monitorowany kanał aby rozpocząć analizę');
-    logger.info('🔄 Różne metody preprocessingu dla różnych kanałów');
-    logger.info('🎯 Optymalizacja: podobieństwo nicku z wielopoziomowym progiem');
-    logger.info('🔤 Normalizacja s/S: testowane warianty 5 i 8');
-    logger.info('🎯 NOWY: Wyjątek "sg" -> "9" dla kanału Daily');
-    logger.info('⚠️ INTELIGENTNE WYKLUCZENIE: CX pomija 1 linię, Daily pomija 3 linie');
-    logger.info('🔢 POPRAWKA: Wyciąganie tylko cyfr z rozpoznanego tekstu');
-    logger.info('🚫 NOWA FUNKCJA: Blokowanie użytkowników z rolą karną');
-    logger.info('─'.repeat(50));
-    logger.info('🎰 SYSTEM LOTERII:');
-    logger.info(`   Dostępne klany: ${Object.keys(config.lottery.clans).length}`);
-    Object.entries(config.lottery.clans).forEach(([key, clan]) => {
-        logger.info(`   ${key}: ${clan.displayName} (${clan.roleId})`);
-    });
-    logger.info('   Komendy: /lottery, /lottery-remove, /lottery-reroll');
-    logger.info('   Automatyczne losowania z harmonogramem cron');
-    logger.info('─'.repeat(50) + '\n');
+    const channelCount = Object.keys(config.channels).length;
+    const clanCount = Object.keys(config.lottery.clans).length;
+    logger.success(`✅ Kontroler gotowy - OCR (${channelCount} kanały), Loterie (${clanCount} klany)`);
 }
 
 /**

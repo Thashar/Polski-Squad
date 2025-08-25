@@ -266,11 +266,8 @@ class LobbyService {
                 this.activeLobbyies.set(lobbyId, lobby);
             }
             
-            logger.info(`📂 Wczytano ${Object.keys(lobbiesData).length} lobby z pliku`);
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                logger.info('📂 Brak pliku lobby - rozpoczynanie z pustą listą');
-            } else {
+            if (error.code !== 'ENOENT') {
                 logger.error('❌ Błąd podczas wczytywania lobby:', error);
             }
         }

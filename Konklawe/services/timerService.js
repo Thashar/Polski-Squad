@@ -29,7 +29,6 @@ class TimerService {
         this.clearFirstHintReminderTimer();
         this.clearSecondHintReminderTimer();
         this.clearRecurringReminderTimer();
-        logger.info('🔴 Wyczyszczono wszystkie timery');
     }
 
     /**
@@ -39,7 +38,6 @@ class TimerService {
         if (this.gameService.autoResetTimer) {
             clearTimeout(this.gameService.autoResetTimer);
             this.gameService.autoResetTimer = null;
-            logger.info('🔴 Wyczyszczono autoResetTimer');
         }
     }
 
@@ -50,7 +48,6 @@ class TimerService {
         if (this.gameService.reminderTimer) {
             clearTimeout(this.gameService.reminderTimer);
             this.gameService.reminderTimer = null;
-            logger.info('🔴 Wyczyszczono reminderTimer');
         }
     }
 
@@ -61,7 +58,6 @@ class TimerService {
         if (this.gameService.hintReminderTimer) {
             clearTimeout(this.gameService.hintReminderTimer);
             this.gameService.hintReminderTimer = null;
-            logger.info('🔴 Wyczyszczono hintReminderTimer');
         }
     }
 
@@ -72,7 +68,6 @@ class TimerService {
         if (this.gameService.papalRoleRemovalTimer) {
             clearTimeout(this.gameService.papalRoleRemovalTimer);
             this.gameService.papalRoleRemovalTimer = null;
-            logger.info('🔴 Wyczyszczono papalRoleRemovalTimer');
         }
     }
 
@@ -83,7 +78,6 @@ class TimerService {
         if (this.gameService.firstHintReminderTimer) {
             clearTimeout(this.gameService.firstHintReminderTimer);
             this.gameService.firstHintReminderTimer = null;
-            logger.info('🔴 Wyczyszczono firstHintReminderTimer');
         }
     }
 
@@ -94,7 +88,6 @@ class TimerService {
         if (this.gameService.secondHintReminderTimer) {
             clearTimeout(this.gameService.secondHintReminderTimer);
             this.gameService.secondHintReminderTimer = null;
-            logger.info('🔴 Wyczyszczono secondHintReminderTimer');
         }
     }
 
@@ -105,7 +98,6 @@ class TimerService {
         if (this.gameService.recurringReminderTimer) {
             clearTimeout(this.gameService.recurringReminderTimer);
             this.gameService.recurringReminderTimer = null;
-            logger.info('🔴 Wyczyszczono recurringReminderTimer');
         }
     }
 
@@ -115,10 +107,10 @@ class TimerService {
     async setAutoResetTimer() {
         this.clearAutoResetTimer();
         if (this.gameService.trigger === null) {
-            logger.info(`🕐 Ustawiono timer na automatyczne ustawienie hasła "${this.config.messages.defaultPassword}" za ${this.config.timers.autoResetMinutes} minut`);
+            logger.info(`⏰ Ustawiono auto-reset na ${this.config.timers.autoResetMinutes} minut`);
             this.gameService.autoResetTimer = setTimeout(async () => {
                 if (this.gameService.trigger === null) {
-                    logger.info(`⏰ Automatycznie ustawiam hasło "${this.config.messages.defaultPassword}" po ${this.config.timers.autoResetMinutes} minutach bezczynności`);
+                    logger.info(`⏰ Auto-reset hasła po ${this.config.timers.autoResetMinutes} min bezczynności`);
                     this.gameService.resetToDefaultPassword();
 
                     try {
@@ -160,7 +152,6 @@ class TimerService {
      */
     async setReminderTimer(userId) {
         this.clearReminderTimer();
-        logger.info(`🔔 Ustawiono przypomnienie dla użytkownika ${userId} za ${this.config.timers.reminderMinutes} minut`);
         this.gameService.reminderTimer = setTimeout(async () => {
             if (this.gameService.trigger === null) {
                 try {
@@ -182,7 +173,6 @@ class TimerService {
     async setFirstHintReminder() {
         this.clearFirstHintReminderTimer();
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
-            logger.info(`🟡 Ustawiono pierwszy timer przypomnienia o podpowiedzi na 15 minut`);
             this.gameService.firstHintReminderTimer = setTimeout(async () => {
                 if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                     try {
@@ -212,7 +202,6 @@ class TimerService {
      */
     async setSecondHintReminder() {
         this.clearSecondHintReminderTimer();
-        logger.info(`🟠 Ustawiono drugi timer przypomnienia o podpowiedzi na kolejne 15 minut`);
         this.gameService.secondHintReminderTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -272,7 +261,6 @@ class TimerService {
      */
     async setPapalRoleRemovalForNoHints(userId) {
         this.clearPapalRoleRemovalTimer();
-        logger.info(`🔴 Ustawiono timer na usunięcie roli papieskiej za brak podpowiedzi użytkownikowi ${userId} za 30 minut`);
         this.gameService.papalRoleRemovalTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -299,7 +287,6 @@ class TimerService {
     async setHintReminderTimer() {
         this.clearHintReminderTimer();
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
-            logger.info(`🟢 Ustawiono timer przypomnienia o kolejnej podpowiedzi na 6 godzin`);
             this.gameService.hintReminderTimer = setTimeout(async () => {
                 if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
                     try {

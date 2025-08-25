@@ -39,7 +39,6 @@ class MemberCacheService {
                 this.memberRolesCache.set(userId, roleIds);
             }
             
-            this.logger.info(`🔄 Załadowano cache ról dla ${this.memberRolesCache.size} członków z pliku`);
             
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -213,7 +212,6 @@ class MemberCacheService {
      * Czyści cache (przy wyłączaniu bota)
      */
     async cleanup() {
-        this.logger.info(`🧹 Zapisywanie cache ${this.memberRolesCache.size} członków do pliku...`);
         await this.saveCacheToFile();
         this.memberRolesCache.clear();
     }

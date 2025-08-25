@@ -30,19 +30,13 @@ const interactionHandler = new InteractionHandler(config, ocrService, rankingSer
  */
 async function initializeBot() {
     try {
-        logger.info(`Bot zalogowany jako ${client.user.tag}!`);
+        logger.success('✅ EndersEcho gotowy - ranking z OCR, TOP role');
         
         // Inicjalizuj OCR service
         await ocrService.initialize();
         
         // Rejestracja slash commands
         await interactionHandler.registerSlashCommands(client);
-        
-        logger.info('Dostępne komendy:');
-        logger.info('- /update - aktualizuje wynik na podstawie załączonego obrazu');
-        logger.info('- /ranking - pokazuje prywatny ranking graczy z paginacją');
-        logger.info('- /remove - usuwa gracza z rankingu (tylko administratorzy)');
-        logger.info(`Dozwolony kanał: ${config.allowedChannelId}`);
         
     } catch (error) {
         logger.error('Błąd podczas inicjalizacji bota EndersEcho:', error);
