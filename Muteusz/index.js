@@ -11,6 +11,7 @@ const LogService = require('./services/logService');
 const SpecialRolesService = require('./services/specialRolesService');
 const RoleManagementService = require('./services/roleManagementService');
 const RoleKickingService = require('./services/roleKickingService');
+const ReactionRoleService = require('./services/reactionRoleService');
 
 // Importuj handlery
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -34,6 +35,7 @@ const roleManagementService = new RoleManagementService(config, specialRolesServ
 const mediaService = new MediaService(config);
 const logService = new LogService(config);
 const roleKickingService = new RoleKickingService(config);
+const reactionRoleService = new ReactionRoleService(config);
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
@@ -48,6 +50,7 @@ const sharedState = {
     roleManagementService,
     mediaService,
     logService,
+    reactionRoleService,
     interactionHandler,
     messageHandler,
     memberHandler
@@ -62,6 +65,7 @@ client.once(Events.ClientReady, async () => {
     logService.initialize(client);
     await mediaService.initialize();
     await roleKickingService.initialize(client);
+    await reactionRoleService.initialize(client);
     
     // Zarejestruj komendy slash
     await interactionHandler.registerSlashCommands(client);
@@ -130,6 +134,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
+// Obsługa reakcji
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    await reactionRoleService.handleReactionAdd(reaction, user);
+});
+
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+    await reactionRoleService.handleReactionRemove(reaction, user);
+});
+
 // ==================== OBSŁUGA BŁĘDÓW ====================
 
 // Obsługa błędów klienta
@@ -180,6 +193,9 @@ process.on('SIGINT', async () => {
         await mediaService.cleanupAllCache();
     }
     
+    // Wyczyść timery reaction roles
+    reactionRoleService.cleanup();
+    
     client.destroy();
     process.exit(0);
 });
@@ -195,6 +211,9 @@ process.on('SIGTERM', async () => {
         if (config.media.autoCleanup && mediaService) {
             await mediaService.cleanupAllCache();
         }
+        
+        // Wyczyść timery reaction roles
+        reactionRoleService.cleanup();
         
         client.destroy();
         logger.info('Bot został pomyślnie zamknięty');
@@ -240,6 +259,9 @@ async function stopBot() {
         if (roleChangeLogService) {
             roleChangeLogService.cleanup();
         }
+        
+        // Wyczyść timery reaction roles
+        reactionRoleService.cleanup();
         
         await client.destroy();
         logger.info('Bot został zatrzymany');
