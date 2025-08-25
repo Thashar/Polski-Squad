@@ -15,7 +15,7 @@ class ReactionRoleService {
         
         // Konfiguracja reakcji -> rola
         this.reactionRoleConfig = {
-            '🇺🇦': '1409530749937254470' // ID roli dla flagi ukrainy
+            'flag_ua': '1409530749937254470' // ID roli dla flagi ukrainy
         };
         
         // Czas trzymania roli w milisekundach (5 minut)
