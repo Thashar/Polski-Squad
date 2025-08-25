@@ -178,8 +178,16 @@ class ReactionRoleService {
 
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
+            // Loguj wykrytą reakcję
+            this.logger.info(`👀 Wykryto reakcję: ${emojiName} od ${user.tag}`);
+            
             // Sprawdź czy emoji jest skonfigurowane
-            if (!this.reactionRoleConfig[emojiName]) return;
+            if (!this.reactionRoleConfig[emojiName]) {
+                this.logger.info(`❌ Reakcja ${emojiName} nie jest skonfigurowana`);
+                return;
+            }
+            
+            this.logger.info(`🎯 Reakcja ${emojiName} jest skonfigurowana - przetwarzam...`);
 
             const roleId = this.reactionRoleConfig[emojiName];
             const guild = reaction.message.guild;
@@ -219,8 +227,16 @@ class ReactionRoleService {
 
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
+            // Loguj usunięcie reakcji
+            this.logger.info(`🗑️ Usunięto reakcję: ${emojiName} przez ${user.tag}`);
+            
             // Sprawdź czy emoji jest skonfigurowane
-            if (!this.reactionRoleConfig[emojiName]) return;
+            if (!this.reactionRoleConfig[emojiName]) {
+                this.logger.info(`❌ Reakcja ${emojiName} nie jest skonfigurowana dla usuwania`);
+                return;
+            }
+            
+            this.logger.info(`🎯 Anulowanie timera dla reakcji ${emojiName}...`);
 
             const roleId = this.reactionRoleConfig[emojiName];
             const timerKey = `${user.id}-${roleId}`;
