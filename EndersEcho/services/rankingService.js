@@ -416,7 +416,7 @@ class RankingService {
                             const positionChange = previousPosition - currentPosition;
                             
                             if (positionChange > 0) {
-                                rankingText = `Miejsce w rankingu: ${currentPosition} (+${positionChange})`;
+                                rankingText = `Miejsce w rankingu: ${currentPosition} (Awans o +${positionChange})`;
                             } else {
                                 rankingText = `Miejsce w rankingu: ${currentPosition}`;
                             }
@@ -446,10 +446,10 @@ class RankingService {
             }
         ];
 
-        // Dodaj pole z pozycją w rankingu jeśli jest dostępne
+        // Dodaj pole z pozycją w rankingu jeśli jest dostępne - przeniesione wyżej
         if (rankingText) {
             embedFields.push({
-                name: '🏆 Ranking',
+                name: '📊 Ranking',
                 value: rankingText,
                 inline: false
             });
