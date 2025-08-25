@@ -17,34 +17,70 @@ class MemberHandler {
      * @param {GuildMember} newMember - Nowy członek
      */
     async handleGuildMemberUpdate(oldMember, newMember) {
-        // Debug logging
-        logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
-        
-        // Pobierz role przed i po zmianie
-        const oldRoleIds = oldMember.roles.cache.map(role => role.id);
-        const newRoleIds = newMember.roles.cache.map(role => role.id);
-        
-        // Sprawdź czy nastąpiła zmiana ról
-        const rolesChanged = oldRoleIds.length !== newRoleIds.length || 
-                           !oldRoleIds.every(id => newRoleIds.includes(id)) ||
-                           !newRoleIds.every(id => oldRoleIds.includes(id));
-        
-        if (rolesChanged) {
-            // Użyj nowego systemu conflict service
-            if (this.roleConflictService) {
-                await this.roleConflictService.handleRoleChange(
-                    newMember.user.id,
-                    newMember.guild.id,
-                    oldRoleIds,
-                    newRoleIds
-                );
-            } else {
-                // Fallback do starego systemu
-                await this.handleExclusiveRoleGroups(oldMember, newMember);
+        try {
+            // Debug logging
+            logger.info(`🔄 Zmiana ról dla ${newMember.user.tag}`);
+            
+            // FIX: Po restarcie bota cache może być pusty - fetchuj świeże dane
+            let freshOldMember, freshNewMember;
+            
+            try {
+                // Fetch aktualnych danych członków
+                freshOldMember = await oldMember.guild.members.fetch(oldMember.id);
+                freshNewMember = await newMember.guild.members.fetch(newMember.id);
+                logger.info(`✅ Pobrano świeże dane członków z API Discord`);
+            } catch (fetchError) {
+                logger.warn(`⚠️ Nie można pobrać świeżych danych członków, używam cache: ${fetchError.message}`);
+                freshOldMember = oldMember;
+                freshNewMember = newMember;
             }
+            
+            // Pobierz role przed i po zmianie (używaj fresh data jeśli dostępne)
+            const oldRoleIds = freshOldMember.roles.cache.map(role => role.id);
+            const newRoleIds = freshNewMember.roles.cache.map(role => role.id);
+            
+            logger.info(`📊 Role PRZED: [${oldRoleIds.length}] ${oldRoleIds.join(', ')}`);
+            logger.info(`📊 Role PO: [${newRoleIds.length}] ${newRoleIds.join(', ')}`);
+            
+            // Sprawdź różnice w rolach
+            const addedRoles = newRoleIds.filter(id => !oldRoleIds.includes(id));
+            const removedRoles = oldRoleIds.filter(id => !newRoleIds.includes(id));
+            
+            if (addedRoles.length > 0) {
+                logger.info(`➕ Dodane role: ${addedRoles.join(', ')}`);
+            }
+            if (removedRoles.length > 0) {
+                logger.info(`➖ Usunięte role: ${removedRoles.join(', ')}`);
+            }
+            
+            // Sprawdź czy nastąpiła zmiana ról
+            const rolesChanged = addedRoles.length > 0 || removedRoles.length > 0;
+            
+            if (rolesChanged) {
+                logger.info(`🎯 Wykryto zmianę ról - uruchamiam system konfliktów`);
+                
+                // Użyj nowego systemu conflict service
+                if (this.roleConflictService) {
+                    await this.roleConflictService.handleRoleChange(
+                        freshNewMember.user.id,
+                        freshNewMember.guild.id,
+                        oldRoleIds,
+                        newRoleIds
+                    );
+                } else {
+                    logger.warn(`⚠️ RoleConflictService niedostępny - fallback do starego systemu`);
+                    // Fallback do starego systemu (ale jest zakomentowany)
+                    await this.handleExclusiveRoleGroups(freshOldMember, freshNewMember);
+                }
+            } else {
+                logger.info(`ℹ️ Brak zmian w rolach`);
+            }
+            
+            // Usunięto system zarządzania rolami TOP - EndersEcho już to obsługuje
+            
+        } catch (error) {
+            logger.error(`❌ Błąd w handleGuildMemberUpdate dla ${newMember.user.tag}:`, error);
         }
-        
-        // Usunięto system zarządzania rolami TOP - EndersEcho już to obsługuje
     }
 
 
