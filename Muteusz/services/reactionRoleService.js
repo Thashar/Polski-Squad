@@ -149,10 +149,8 @@ class ReactionRoleService {
                 
                 // Przywróć oryginalny nick tylko jeśli to jedna z ról flag
                 const isFlagRole = Object.values(this.reactionRoleConfig).includes(roleId);
-                this.logger.info(`🔄 removeRoleFromUser: roleId=${roleId}, isFlagRole=${isFlagRole}`);
                 
                 if (isFlagRole) {
-                    this.logger.info(`🔄 Wywołuję restoreOriginalNickname dla ${member.user.tag}`);
                     await this.restoreOriginalNickname(member);
                 }
                 
@@ -390,11 +388,9 @@ class ReactionRoleService {
     async restoreOriginalNickname(member) {
         try {
             const userId = member.user.id;
-            this.logger.info(`🔄 restoreOriginalNickname: userId=${userId}, hasNickname=${this.originalNicknames.has(userId)}`);
             
             if (this.originalNicknames.has(userId)) {
                 const originalNick = this.originalNicknames.get(userId);
-                this.logger.info(`🔄 Przywracanie z "${member.displayName}" na "${originalNick}"`);
                 await member.setNickname(originalNick);
                 this.logger.info(`✅ Przywrócono oryginalny nick ${member.user.tag}: "${originalNick}"`);
                 
@@ -609,6 +605,16 @@ class ReactionRoleService {
         // Dodaj do persystencji
         await this.addTimerToPersistence(user.id, role.id, member.guild.id, expiresAt);
 
+        // Określ typ flagi na podstawie roleId
+        const roleId = role.id;
+        let flagType = '';
+        if (roleId === '1409530749937254470') flagType = '🇺🇦';
+        else if (roleId === '1409793972980678656') flagType = '🇵🇱';
+        else if (roleId === '1409796409707728967') flagType = '🇮🇱';
+        else if (roleId === '1409798492217544805') flagType = '🇺🇸';
+        else if (roleId === '1409799488385581077') flagType = '🇩🇪';
+        else if (roleId === '1409808370122227796') flagType = '🇷🇺';
+
         // Ustaw nowy timer
         const timer = setTimeout(async () => {
             try {
@@ -617,7 +623,27 @@ class ReactionRoleService {
                 
                 if (freshMember && freshMember.roles.cache.has(role.id)) {
                     await freshMember.roles.remove(role);
-                    this.logger.info(`🇺🇦 ⏰ Automatycznie usunięto rolę ukraińską dla ${user.tag} po 5 minutach`);
+                    
+                    // Przywróć oryginalny nick
+                    const isFlagRole = Object.values(this.reactionRoleConfig).includes(roleId);
+                    if (isFlagRole) {
+                        await this.restoreOriginalNickname(freshMember);
+                    }
+                    
+                    // Logowanie z odpowiednią flagą
+                    if (roleId === '1409530749937254470') {
+                        this.logger.info(`🇺🇦 ⏰ Automatycznie usunięto rolę ukraińską dla ${user.tag} po 5 minutach`);
+                    } else if (roleId === '1409793972980678656') {
+                        this.logger.info(`🇵🇱 ⏰ Automatycznie usunięto rolę polską dla ${user.tag} po 5 minutach`);
+                    } else if (roleId === '1409796409707728967') {
+                        this.logger.info(`🇮🇱 ⏰ Automatycznie usunięto rolę izraelską dla ${user.tag} po 5 minutach`);
+                    } else if (roleId === '1409798492217544805') {
+                        this.logger.info(`🇺🇸 ⏰ Automatycznie usunięto rolę USA dla ${user.tag} po 5 minutach`);
+                    } else if (roleId === '1409799488385581077') {
+                        this.logger.info(`🇩🇪 ⏰ Automatycznie usunięto rolę niemiecką dla ${user.tag} po 5 minutach`);
+                    } else if (roleId === '1409808370122227796') {
+                        this.logger.info(`🇷🇺 ⏰ Automatycznie usunięto rolę rosyjską dla ${user.tag} po 5 minutach`);
+                    }
                 }
                 
                 // Usuń timer z mapy i persystencji
