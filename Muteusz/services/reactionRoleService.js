@@ -25,6 +25,11 @@ class ReactionRoleService {
         
         // Ścieżka do pliku z aktywnymi timerami
         this.timersFilePath = path.join(__dirname, '../data/reaction_role_timers.json');
+        // Ścieżka do pliku z oryginalnymi nickami
+        this.nicknamesFilePath = path.join(__dirname, '../data/original_nicknames.json');
+        
+        // Storage dla oryginalnych nicków
+        this.originalNicknames = new Map(); // userId -> originalNickname
         
         // Klien Discord (zostanie ustawiony w initialize)
         this.client = null;
@@ -36,6 +41,7 @@ class ReactionRoleService {
     async initialize(client) {
         this.client = client;
         await this.restoreTimersFromFile();
+        await this.restoreNicknamesFromFile();
     }
 
     /**
@@ -125,6 +131,8 @@ class ReactionRoleService {
 
             if (member.roles.cache.has(roleId)) {
                 await member.roles.remove(role);
+                // Przywróć oryginalny nick
+                await this.restoreOriginalNickname(member);
                 const reason = expired ? 'po 5 minutach' : '(anulowano timer)';
                 this.logger.info(`🗑️ ${expired ? '⏰ Automatycznie u' : 'U'}sunięto rolę ${role.name} dla ${member.user.tag} ${reason}`);
             }
@@ -141,6 +149,45 @@ class ReactionRoleService {
             await fs.writeFile(this.timersFilePath, JSON.stringify(this.persistentTimers, null, 2));
         } catch (error) {
             this.logger.error('❌ Błąd podczas zapisywania timerów:', error);
+        }
+    }
+
+    /**
+     * Przywraca oryginalne nicki z pliku
+     */
+    async restoreNicknamesFromFile() {
+        try {
+            const data = await fs.readFile(this.nicknamesFilePath, 'utf8');
+            const nicknameData = JSON.parse(data);
+            
+            this.originalNicknames.clear();
+            for (const [userId, nickname] of Object.entries(nicknameData)) {
+                this.originalNicknames.set(userId, nickname);
+            }
+            
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                this.logger.info('📁 Plik nicków nie istnieje - będzie utworzony przy pierwszym użyciu');
+                this.originalNicknames = new Map();
+            } else {
+                this.logger.error('❌ Błąd podczas ładowania nicków:', error);
+                this.originalNicknames = new Map();
+            }
+        }
+    }
+
+    /**
+     * Zapisuje oryginalne nicki do pliku
+     */
+    async saveNicknamesToFile() {
+        try {
+            const nicknameObject = {};
+            for (const [userId, nickname] of this.originalNicknames.entries()) {
+                nicknameObject[userId] = nickname;
+            }
+            await fs.writeFile(this.nicknamesFilePath, JSON.stringify(nicknameObject, null, 2));
+        } catch (error) {
+            this.logger.error('❌ Błąd podczas zapisywania nicków:', error);
         }
     }
 
@@ -168,6 +215,52 @@ class ReactionRoleService {
             timer => !(timer.userId === userId && timer.roleId === roleId)
         );
         await this.saveTimersToFile();
+    }
+
+    /**
+     * Zmienia nick użytkownika na ukraiński i zapisuje oryginalny
+     */
+    async setUkrainianNickname(member) {
+        try {
+            const userId = member.user.id;
+            const currentNickname = member.displayName;
+            const ukrainianNick = "Слава Україні!";
+
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy
+            if (!this.originalNicknames.has(userId)) {
+                this.originalNicknames.set(userId, currentNickname);
+                await this.saveNicknamesToFile();
+            }
+
+            // Zmień nick na ukraiński
+            await member.setNickname(ukrainianNick);
+            this.logger.info(`🇺🇦 Zmieniono nick ${member.user.tag} na "${ukrainianNick}"`);
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd podczas zmiany nicku na ukraiński:`, error);
+        }
+    }
+
+    /**
+     * Przywraca oryginalny nick użytkownika
+     */
+    async restoreOriginalNickname(member) {
+        try {
+            const userId = member.user.id;
+            
+            if (this.originalNicknames.has(userId)) {
+                const originalNick = this.originalNicknames.get(userId);
+                await member.setNickname(originalNick);
+                this.logger.info(`🇺🇦 Przywrócono oryginalny nick ${member.user.tag}: "${originalNick}"`);
+                
+                // Usuń z storage
+                this.originalNicknames.delete(userId);
+                await this.saveNicknamesToFile();
+            }
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd podczas przywracania oryginalnego nicku:`, error);
+        }
     }
 
     /**
@@ -206,6 +299,9 @@ class ReactionRoleService {
             // Dodaj rolę
             await member.roles.add(role);
             this.logger.info(`🇺🇦 Nadano rolę ukraińską dla ${user.tag} na 5 minut`);
+
+            // Zmień nick na ukraiński
+            await this.setUkrainianNickname(member);
 
             // Ustaw timer usunięcia roli
             await this.setRoleRemovalTimer(member, role, user);
@@ -251,6 +347,8 @@ class ReactionRoleService {
 
                 if (role && member.roles.cache.has(roleId)) {
                     await member.roles.remove(role);
+                    // Przywróć oryginalny nick
+                    await this.restoreOriginalNickname(member);
                     this.logger.info(`🇺🇦 Natychmiast usunięto rolę ukraińską dla ${user.tag}`);
                 }
             }
@@ -319,6 +417,13 @@ class ReactionRoleService {
         }
         
         this.roleRemovalTimers.clear();
+        
+        // Zapisz nicki przed wyłączeniem
+        if (this.originalNicknames.size > 0) {
+            this.saveNicknamesToFile().catch(error => {
+                this.logger.error('❌ Błąd zapisywania nicków przy cleanup:', error);
+            });
+        }
     }
 
     /**
