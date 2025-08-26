@@ -63,7 +63,8 @@ async function handleReactionAdd(reaction, user, state, config) {
             );
 
             // Inicjalizuj czas utworzenia wątku w mapie
-            await reminderStorage.setReminder(state.lastReminderMap, thread.id, Date.now());
+            const now = Date.now();
+            await reminderStorage.setReminder(state.lastReminderMap, thread.id, now, now);
         }
 
     } catch (error) {

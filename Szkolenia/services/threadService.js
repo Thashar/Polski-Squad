@@ -110,12 +110,34 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
 
     // Sprawdź czas ostatniego przypomnienia (tylko przy normalnym sprawdzaniu)
     if (!isInitialCheck) {
-        const lastReminder = state.lastReminderMap.get(thread.id) || thread.createdTimestamp;
+        const threadData = state.lastReminderMap.get(thread.id);
+        let lastReminder;
+        let threadCreatedTime;
+        
+        if (threadData) {
+            lastReminder = threadData.lastReminder;
+            threadCreatedTime = threadData.threadCreated;
+        }
+        
+        // Fallback - jeśli nie mamy zapisanych danych, użyj timestamp z Discord
+        if (!threadCreatedTime) {
+            threadCreatedTime = thread.createdTimestamp;
+            logger.warn(`⚠️ Brak zapisanej daty utworzenia dla wątku ${thread.name}, używam Discord timestamp`);
+        }
+        
+        if (!lastReminder) {
+            lastReminder = threadCreatedTime;
+        }
+        
         const timeSinceLastReminder = now - lastReminder;
+        const threadAge = now - threadCreatedTime;
 
         // Debug informacje
-        logger.info(`🔍 Wątek ${thread.name}: nieaktywny ${Math.round(inactiveTime / (1000 * 60 * 60))}h, od przypomnienia ${Math.round(timeSinceLastReminder / (1000 * 60 * 60))}h`);
-        logger.info(`🔍 Próg przypomnienia: ${Math.round(reminderThreshold / (1000 * 60 * 60))}h`);
+        logger.info(`🔍 Wątek ${thread.name}:`);
+        logger.info(`   📅 Wiek wątku: ${Math.round(threadAge / (1000 * 60 * 60))}h`);
+        logger.info(`   💤 Nieaktywny od: ${Math.round(inactiveTime / (1000 * 60 * 60))}h`);
+        logger.info(`   🔔 Od ostatniego przypomnienia: ${Math.round(timeSinceLastReminder / (1000 * 60 * 60))}h`);
+        logger.info(`   🚨 Próg przypomnienia: ${Math.round(reminderThreshold / (1000 * 60 * 60))}h`);
 
         // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu
         if (inactiveTime > reminderThreshold && timeSinceLastReminder > reminderThreshold) {
@@ -167,7 +189,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
             components: [row]
         });
 
-        // Zaktualizuj czas ostatniego przypomnienia
+        // Zaktualizuj czas ostatniego przypomnienia (nie zmieniaj daty utworzenia)
         await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
         logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
         

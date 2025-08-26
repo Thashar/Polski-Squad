@@ -20,8 +20,18 @@ class ReminderStorageService {
             
             // Konwertuj obiekt z powrotem na Map
             const reminderMap = new Map();
-            for (const [threadId, timestamp] of Object.entries(reminderData)) {
-                reminderMap.set(threadId, timestamp);
+            for (const [threadId, threadData] of Object.entries(reminderData)) {
+                // Wsparcie dla starego formatu (tylko timestamp) i nowego (obiekt z danymi)
+                if (typeof threadData === 'number') {
+                    // Stary format - tylko timestamp przypomnienia
+                    reminderMap.set(threadId, {
+                        lastReminder: threadData,
+                        threadCreated: null // Nie znamy daty utworzenia
+                    });
+                } else {
+                    // Nowy format - obiekt z pełnymi danymi
+                    reminderMap.set(threadId, threadData);
+                }
             }
             
             return reminderMap;
@@ -47,8 +57,8 @@ class ReminderStorageService {
             
             // Konwertuj Map na obiekt do serializacji JSON
             const reminderData = {};
-            for (const [threadId, timestamp] of reminderMap.entries()) {
-                reminderData[threadId] = timestamp;
+            for (const [threadId, threadData] of reminderMap.entries()) {
+                reminderData[threadId] = threadData;
             }
             
             await fs.writeFile(this.dataPath, JSON.stringify(reminderData, null, 2), 'utf8');
@@ -75,9 +85,17 @@ class ReminderStorageService {
      * @param {Map} reminderMap - Mapa z danymi przypomień
      * @param {string} threadId - ID wątku
      * @param {number} timestamp - Timestamp przypomnienia
+     * @param {number|null} threadCreated - Timestamp utworzenia wątku (opcjonalny)
      */
-    async setReminder(reminderMap, threadId, timestamp) {
-        reminderMap.set(threadId, timestamp);
+    async setReminder(reminderMap, threadId, timestamp, threadCreated = null) {
+        const existingData = reminderMap.get(threadId);
+        
+        const threadData = {
+            lastReminder: timestamp,
+            threadCreated: threadCreated || (existingData ? existingData.threadCreated : null)
+        };
+        
+        reminderMap.set(threadId, threadData);
         await this.saveReminders(reminderMap);
         logger.info(`📅 Zaktualizowano przypomnienie dla wątku: ${threadId}`);
     }
