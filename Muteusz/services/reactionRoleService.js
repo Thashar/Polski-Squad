@@ -29,7 +29,10 @@ class ReactionRoleService {
             'us': '1409798492217544805', // ID roli dla flagi USA (możliwe skrócenie)
             'flag_de': '1409799488385581077', // ID roli dla flagi niemiec (:flag_de:)
             '🇩🇪': '1409799488385581077', // ID roli dla flagi niemiec (Unicode)
-            'de': '1409799488385581077' // ID roli dla flagi niemiec (możliwe skrócenie)
+            'de': '1409799488385581077', // ID roli dla flagi niemiec (możliwe skrócenie)
+            'flag_ru': '1409808370122227796', // ID roli dla flagi rosji (:flag_ru:)
+            '🇷🇺': '1409808370122227796', // ID roli dla flagi rosji (Unicode)
+            'ru': '1409808370122227796' // ID roli dla flagi rosji (możliwe skrócenie)
         };
         
         // Czas trzymania roli w milisekundach (5 minut)
@@ -355,6 +358,30 @@ class ReactionRoleService {
     }
 
     /**
+     * Zmienia nick użytkownika na rosyjski i zapisuje oryginalny
+     */
+    async setRussianNickname(member) {
+        try {
+            const userId = member.user.id;
+            const currentNickname = member.displayName;
+            const russianNick = "Cyka blyat!";
+
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy
+            if (!this.originalNicknames.has(userId)) {
+                this.originalNicknames.set(userId, currentNickname);
+                await this.saveNicknamesToFile();
+            }
+
+            // Zmień nick na rosyjski
+            await member.setNickname(russianNick);
+            this.logger.info(`🇷🇺 Zmieniono nick ${member.user.tag} na "${russianNick}"`);
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd podczas zmiany nicku na rosyjski:`, error);
+        }
+    }
+
+    /**
      * Przywraca oryginalny nick użytkownika
      */
     async restoreOriginalNickname(member) {
@@ -397,6 +424,7 @@ class ReactionRoleService {
             const isIsraeli = ['flag_il', '🇮🇱', 'il'].includes(emojiName);
             const isAmerican = ['flag_us', '🇺🇸', 'us'].includes(emojiName);
             const isGerman = ['flag_de', '🇩🇪', 'de'].includes(emojiName);
+            const isRussian = ['flag_ru', '🇷🇺', 'ru'].includes(emojiName);
             
             if (isUkrainian) {
                 this.logger.info(`🇺🇦 Wykryto reakcję flagi ukrainy od ${user.tag}`);
@@ -408,6 +436,8 @@ class ReactionRoleService {
                 this.logger.info(`🇺🇸 Wykryto reakcję flagi USA od ${user.tag}`);
             } else if (isGerman) {
                 this.logger.info(`🇩🇪 Wykryto reakcję flagi niemiec od ${user.tag}`);
+            } else if (isRussian) {
+                this.logger.info(`🇷🇺 Wykryto reakcję flagi rosji od ${user.tag}`);
             }
 
             const roleId = this.reactionRoleConfig[emojiName];
@@ -448,6 +478,10 @@ class ReactionRoleService {
                 this.logger.info(`🇩🇪 Nadano rolę niemiecką dla ${user.tag} na 5 minut`);
                 // Zmień nick na niemiecki
                 await this.setGermanNickname(member);
+            } else if (isRussian) {
+                this.logger.info(`🇷🇺 Nadano rolę rosyjską dla ${user.tag} na 5 minut`);
+                // Zmień nick na rosyjski
+                await this.setRussianNickname(member);
             }
 
             // Ustaw timer usunięcia roli
@@ -479,6 +513,7 @@ class ReactionRoleService {
             const isIsraeli = ['flag_il', '🇮🇱', 'il'].includes(emojiName);
             const isAmerican = ['flag_us', '🇺🇸', 'us'].includes(emojiName);
             const isGerman = ['flag_de', '🇩🇪', 'de'].includes(emojiName);
+            const isRussian = ['flag_ru', '🇷🇺', 'ru'].includes(emojiName);
             
             if (isUkrainian) {
                 this.logger.info(`🇺🇦 Usunięto reakcję flagi ukrainy przez ${user.tag} - anulowanie timera`);
@@ -490,6 +525,8 @@ class ReactionRoleService {
                 this.logger.info(`🇺🇸 Usunięto reakcję flagi USA przez ${user.tag} - anulowanie timera`);
             } else if (isGerman) {
                 this.logger.info(`🇩🇪 Usunięto reakcję flagi niemiec przez ${user.tag} - anulowanie timera`);
+            } else if (isRussian) {
+                this.logger.info(`🇷🇺 Usunięto reakcję flagi rosji przez ${user.tag} - anulowanie timera`);
             }
 
             const roleId = this.reactionRoleConfig[emojiName];
@@ -523,6 +560,8 @@ class ReactionRoleService {
                         this.logger.info(`🇺🇸 Natychmiast usunięto rolę amerykańską dla ${user.tag}`);
                     } else if (isGerman) {
                         this.logger.info(`🇩🇪 Natychmiast usunięto rolę niemiecką dla ${user.tag}`);
+                    } else if (isRussian) {
+                        this.logger.info(`🇷🇺 Natychmiast usunięto rolę rosyjską dla ${user.tag}`);
                     }
                 }
             }
