@@ -468,12 +468,6 @@ class ReactionRoleService {
                 return; // Cichy return jeśli już ma inną flagę
             }
 
-            // Sprawdź czy użytkownik już ma zapisany nick (oznacza aktywną flagę)
-            if (this.originalNicknames.has(user.id)) {
-                this.logger.info(`⚠️ ${user.tag} ma już zapisany oryginalny nick - ignoruję nową reakcję`);
-                return; // Cichy return jeśli już ma zapisany nick
-            }
-
             // Dodaj rolę
             await member.roles.add(role);
             
