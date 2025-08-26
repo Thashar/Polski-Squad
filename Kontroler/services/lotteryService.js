@@ -823,7 +823,14 @@ class LotteryService {
             // Zapisz wyniki
             await this.saveLotteryResult(lottery, eligibleMembers, winners);
 
-            // Opublikuj wyniki
+            // Oblicz następną datę losowania PRZED publikacją wyników
+            let nextDrawDate = null;
+            if (lottery.frequency !== 0) {
+                nextDrawDate = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute, true, lottery.frequency);
+                lottery.nextDraw = nextDrawDate;
+            }
+
+            // Opublikuj wyniki (z już obliczoną datą następnej loterii)
             await this.publishResults(channel, lottery, eligibleMembers, winners);
 
             // Zaplanuj następne losowanie lub usuń jeśli jednorazowe
@@ -847,7 +854,7 @@ class LotteryService {
                 await this.saveLotteryData();
             } else {
                 lottery.lastDraw = new Date().toISOString();
-                lottery.nextDraw = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute, true, lottery.frequency);
+                // nextDraw już obliczone wcześniej przed publikacją wyników
                 
                 await this.saveLotteryData();
                 
