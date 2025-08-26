@@ -149,7 +149,10 @@ class ReactionRoleService {
                 
                 // Przywróć oryginalny nick tylko jeśli to jedna z ról flag
                 const isFlagRole = Object.values(this.reactionRoleConfig).includes(roleId);
+                this.logger.info(`🔄 removeRoleFromUser: roleId=${roleId}, isFlagRole=${isFlagRole}`);
+                
                 if (isFlagRole) {
+                    this.logger.info(`🔄 Wywołuję restoreOriginalNickname dla ${member.user.tag}`);
                     await this.restoreOriginalNickname(member);
                 }
                 
@@ -387,15 +390,19 @@ class ReactionRoleService {
     async restoreOriginalNickname(member) {
         try {
             const userId = member.user.id;
+            this.logger.info(`🔄 restoreOriginalNickname: userId=${userId}, hasNickname=${this.originalNicknames.has(userId)}`);
             
             if (this.originalNicknames.has(userId)) {
                 const originalNick = this.originalNicknames.get(userId);
+                this.logger.info(`🔄 Przywracanie z "${member.displayName}" na "${originalNick}"`);
                 await member.setNickname(originalNick);
                 this.logger.info(`✅ Przywrócono oryginalny nick ${member.user.tag}: "${originalNick}"`);
                 
                 // Usuń z storage
                 this.originalNicknames.delete(userId);
                 await this.saveNicknamesToFile();
+            } else {
+                this.logger.warn(`⚠️ Brak zapisanego nicku dla ${member.user.tag}`);
             }
 
         } catch (error) {
