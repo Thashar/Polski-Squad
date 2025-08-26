@@ -146,9 +146,13 @@ class ReactionRoleService {
                 
                 // Przywróć oryginalny nick tylko jeśli to jedna z ról flag
                 const isFlagRole = Object.values(this.reactionRoleConfig).includes(roleId);
+                this.logger.info(`🔍 DEBUG: roleId=${roleId}, isFlagRole=${isFlagRole}, configuredRoles=${JSON.stringify(Object.values(this.reactionRoleConfig))}`);
+                
                 if (isFlagRole) {
                     this.logger.info(`🔄 Przywracanie nicku dla ${member.user.tag} po usunięciu roli flagi`);
                     await this.restoreOriginalNickname(member);
+                } else {
+                    this.logger.info(`ℹ️ Rola ${roleId} nie jest rolą flagi - pomijam przywracanie nicku`);
                 }
                 
                 const reason = expired ? 'po 5 minutach' : '(anulowano timer)';
@@ -361,15 +365,19 @@ class ReactionRoleService {
     async restoreOriginalNickname(member) {
         try {
             const userId = member.user.id;
+            this.logger.info(`🔍 DEBUG RESTORE: userId=${userId}, hasNickname=${this.originalNicknames.has(userId)}, allNicknames=${JSON.stringify(Object.fromEntries(this.originalNicknames))}`);
             
             if (this.originalNicknames.has(userId)) {
                 const originalNick = this.originalNicknames.get(userId);
+                this.logger.info(`🔄 Przywracanie nicku z "${member.displayName}" na "${originalNick}"`);
                 await member.setNickname(originalNick);
-                this.logger.info(`🇺🇦 Przywrócono oryginalny nick ${member.user.tag}: "${originalNick}"`);
+                this.logger.info(`✅ Przywrócono oryginalny nick ${member.user.tag}: "${originalNick}"`);
                 
                 // Usuń z storage
                 this.originalNicknames.delete(userId);
                 await this.saveNicknamesToFile();
+            } else {
+                this.logger.warn(`⚠️ Brak zapisanego oryginalnego nicku dla ${member.user.tag} (userId: ${userId})`);
             }
 
         } catch (error) {
