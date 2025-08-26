@@ -47,6 +47,7 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
             // Przy normalnym sprawdzaniu tylko aktywne wątki
             const threads = await channel.threads.fetchActive();
             allThreads = threads.threads;
+            logger.info(`🔄 Sprawdzanie ${allThreads.size} aktywnych wątków...`);
         }
         
         // Wyczyść nieistniejące wątki z danych przypomień
@@ -108,9 +109,16 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         const lastReminder = state.lastReminderMap.get(thread.id) || thread.createdTimestamp;
         const timeSinceLastReminder = now - lastReminder;
 
+        // Debug informacje
+        logger.info(`🔍 Wątek ${thread.name}: nieaktywny ${Math.round(inactiveTime / (1000 * 60 * 60))}h, od przypomnienia ${Math.round(timeSinceLastReminder / (1000 * 60 * 60))}h`);
+        logger.info(`🔍 Próg przypomnienia: ${Math.round(reminderThreshold / (1000 * 60 * 60))}h`);
+
         // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu
         if (inactiveTime > reminderThreshold && timeSinceLastReminder > reminderThreshold) {
+            logger.info(`✅ Wysyłanie przypomnienia dla wątku ${thread.name}`);
             await sendInactivityReminder(thread, threadOwner, state, config, now);
+        } else {
+            logger.info(`❌ Przypomnienie nie wysłane - warunki nie spełnione`);
         }
     }
 
