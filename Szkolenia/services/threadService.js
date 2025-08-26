@@ -44,10 +44,14 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
             
             logger.info(`🔍 Sprawdzanie ${allThreads.size} wątków przy starcie bota (aktywne: ${activeThreads.threads.size}, zarchiwizowane: ${archivedThreads.threads.size})...`);
         } else {
-            // Przy normalnym sprawdzaniu tylko aktywne wątki
-            const threads = await channel.threads.fetchActive();
-            allThreads = threads.threads;
-            logger.info(`🔄 Sprawdzanie ${allThreads.size} aktywnych wątków...`);
+            // Przy normalnym sprawdzaniu TAKŻE zarchiwizowane wątki (dla przypomnień)
+            const activeThreads = await channel.threads.fetchActive();
+            const archivedThreads = await channel.threads.fetchArchived();
+            
+            // Połącz aktywne i zarchiwizowane wątki
+            allThreads = new Map([...activeThreads.threads, ...archivedThreads.threads]);
+            
+            logger.info(`🔄 Sprawdzanie ${allThreads.size} wątków (aktywne: ${activeThreads.threads.size}, zarchiwizowane: ${archivedThreads.threads.size})...`);
         }
         
         // Wyczyść nieistniejące wątki z danych przypomień
@@ -139,26 +143,37 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
  * @param {number} now - Aktualny timestamp
  */
 async function sendInactivityReminder(thread, threadOwner, state, config, now) {
-    const row = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('lock_thread')
-                .setLabel('Zamknij wątek')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('keep_open')
-                .setLabel('Jeszcze nie zamykaj')
-                .setStyle(ButtonStyle.Secondary)
-        );
+    try {
+        // Jeśli wątek jest zarchiwizowany, odarchiwizuj go aby móc wysłać wiadomość
+        if (thread.archived) {
+            await thread.setArchived(false, 'Odarchiwizowanie w celu wysłania przypomnienia');
+            logger.info(`📂 Odarchiwizowano wątek ${thread.name} w celu wysłania przypomnienia`);
+        }
 
-    await thread.send({
-        content: config.messages.inactiveReminder(threadOwner.id),
-        components: [row]
-    });
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('lock_thread')
+                    .setLabel('Zamknij wątek')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('keep_open')
+                    .setLabel('Jeszcze nie zamykaj')
+                    .setStyle(ButtonStyle.Secondary)
+            );
 
-    // Zaktualizuj czas ostatniego przypomnienia
-    await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
-    logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
+        await thread.send({
+            content: config.messages.inactiveReminder(threadOwner.id),
+            components: [row]
+        });
+
+        // Zaktualizuj czas ostatniego przypomnienia
+        await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
+        logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
+        
+    } catch (error) {
+        logger.error(`❌ Błąd podczas wysyłania przypomnienia do wątku ${thread.name}:`, error);
+    }
 }
 
 /**
