@@ -143,8 +143,14 @@ class ReactionRoleService {
 
             if (member.roles.cache.has(roleId)) {
                 await member.roles.remove(role);
-                // Przywróć oryginalny nick
-                await this.restoreOriginalNickname(member);
+                
+                // Przywróć oryginalny nick tylko jeśli to jedna z ról flag
+                const isFlagRole = Object.values(this.reactionRoleConfig).includes(roleId);
+                if (isFlagRole) {
+                    this.logger.info(`🔄 Przywracanie nicku dla ${member.user.tag} po usunięciu roli flagi`);
+                    await this.restoreOriginalNickname(member);
+                }
+                
                 const reason = expired ? 'po 5 minutach' : '(anulowano timer)';
                 this.logger.info(`🗑️ ${expired ? '⏰ Automatycznie u' : 'U'}sunięto rolę ${role.name} dla ${member.user.tag} ${reason}`);
             }
