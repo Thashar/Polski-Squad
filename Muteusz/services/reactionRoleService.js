@@ -462,6 +462,22 @@ class ReactionRoleService {
                 return; // Cichy return jeśli już ma rolę
             }
 
+            // Sprawdź czy użytkownik już ma jakąkolwiek rolę flagi
+            const userRoles = member.roles.cache.map(role => role.id);
+            const flagRoleIds = Object.values(this.reactionRoleConfig);
+            const hasAnyFlagRole = userRoles.some(roleId => flagRoleIds.includes(roleId));
+            
+            if (hasAnyFlagRole) {
+                this.logger.info(`⚠️ ${user.tag} już ma aktywną rolę flagi - ignoruję nową reakcję`);
+                return; // Cichy return jeśli już ma inną flagę
+            }
+
+            // Sprawdź czy użytkownik już ma zapisany nick (oznacza aktywną flagę)
+            if (this.originalNicknames.has(user.id)) {
+                this.logger.info(`⚠️ ${user.tag} ma już zapisany oryginalny nick - ignoruję nową reakcję`);
+                return; // Cichy return jeśli już ma zapisany nick
+            }
+
             // Dodaj rolę
             await member.roles.add(role);
             
