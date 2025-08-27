@@ -103,8 +103,8 @@ module.exports = {
             "🗑️ Auto-delete - przez 5 minut losowo usuwa wiadomości z szansą 30%",
             "📢 Random ping - bot pinguje go losowo przez następne 5 minut",
             "😀 Emoji spam - przez 5 minut losowo reaguje emoji z szansą 30%",
-            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 5 minut z szansą 30%",
-            "💤 Random timeout - przez 5 minut losowo wysyła na przerwę i przywraca",
+            "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 5 minut z szansą 100%",
+            "💤 Random timeout - przez 5 minut wysyła na timeout przez 30% czasu całkowicie",
             "🎭 Special role - nakłada specjalną rolę na 5 minut"
         ],
         forcedNickname: "Przeklęty",

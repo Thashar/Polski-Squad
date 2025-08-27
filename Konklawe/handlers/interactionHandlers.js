@@ -856,10 +856,10 @@ class InteractionHandler {
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Forced caps')) {
-            // Forced caps przez 5 minut z szansą 30%
+            // Forced caps przez 5 minut z szansą 100%
             this.activeCurses.set(userId, {
                 type: 'forcedCaps',
-                data: { chance: 30 },
+                data: { chance: 100 },
                 endTime: now + (5 * 60 * 1000)
             });
             this.saveActiveCurses();
@@ -926,10 +926,9 @@ class InteractionHandler {
                 return;
             }
 
-            // Losowa akcja co 30-90 sekund
-            const randomDelay = (Math.random() * 60 + 30) * 1000; // 30-90 sekund
-            
-            setTimeout(async () => {
+            // Co 10 sekund losowanie 30% szansy na akcję timeout
+            const chance = Math.random() * 100;
+            if (chance < 30) {
                 try {
                     const member = await targetMember.guild.members.fetch(userId);
                     const currentCurse = this.activeCurses.get(userId);
@@ -942,19 +941,27 @@ class InteractionHandler {
                         this.saveActiveCurses();
                         logger.info(`💤 Przywrócono użytkownika ${member.user.tag} (klątwa)`);
                     } else {
-                        // Wyślij na timeout (1-3 minuty)
-                        const timeoutDuration = (Math.random() * 2 + 1) * 60 * 1000; // 1-3 minuty
+                        // Wyślij na timeout (maksymalnie 10 sekund)
+                        const timeoutDuration = 10 * 1000; // 10 sekund
                         await member.timeout(timeoutDuration, 'Klątwa - random timeout');
                         currentCurse.data.isTimedOut = true;
                         this.saveActiveCurses();
-                        logger.info(`💤 Wysłano na timeout użytkownika ${member.user.tag} (klątwa)`);
+                        logger.info(`💤 Wysłano na timeout użytkownika ${member.user.tag} na 10 sek (klątwa)`);
+                        
+                        // Automatycznie przywróć po 10 sekundach i oznacz jako nie-timeout
+                        setTimeout(() => {
+                            if (currentCurse.data.isTimedOut) {
+                                currentCurse.data.isTimedOut = false;
+                                this.saveActiveCurses();
+                            }
+                        }, timeoutDuration);
                     }
                 } catch (error) {
                     logger.error(`❌ Błąd random timeout: ${error.message}`);
                 }
-            }, randomDelay);
+            }
 
-        }, 45000); // Sprawdzaj co 45 sekund
+        }, 10000); // Sprawdzaj co 10 sekund
     }
 
     /**
@@ -1053,9 +1060,9 @@ class InteractionHandler {
                 break;
                 
             case 'forcedCaps':
-                // Losowa szansa 30% na forced caps
+                // Szansa na forced caps zgodnie z ustawieniem klątwy
                 const capsChance = Math.random() * 100;
-                if (capsChance < 30 && !message.content.match(/^[A-Z\s\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/)) {
+                if (capsChance < curse.data.chance && !message.content.match(/^[A-Z\s\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/)) {
                     try {
                         const capsMessage = await message.channel.send(`${message.content.toUpperCase()}`);
                     } catch (error) {
