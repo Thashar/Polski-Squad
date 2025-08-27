@@ -394,13 +394,14 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
     const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     
     const selectOptions = activeLotteries.map(lottery => {
-        const datePart = lottery.id.split('_')[0];
-        const formattedDate = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`;
+        // Użyj nextDraw zamiast daty z ID loterii
+        const nextDrawDate = lottery.nextDraw ? new Date(lottery.nextDraw) : null;
+        const formattedDate = nextDrawDate ? nextDrawDate.toLocaleDateString('pl-PL') : 'Jednorazowa - wykonana';
         const clan = config.lottery.clans[lottery.clanKey];
         
         return {
             label: `${lottery.name}`,
-            description: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | ${formattedDate}`,
+            description: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | Następna: ${formattedDate}`,
             value: lottery.id,
             emoji: '🎰'
         };
