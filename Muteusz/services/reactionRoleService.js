@@ -13,6 +13,16 @@ class ReactionRoleService {
         // Przechowuje dane o timerach dla persystencji
         this.persistentTimers = [];
         
+        // Lista nicków flag do walidacji
+        this.flagNicknames = [
+            "Slava Ukrainu!",
+            "POLSKA GUROM!",
+            "Shalom!",
+            "American Dream",
+            "Hände hoch!",
+            "Cyka blyat!"
+        ];
+        
         // Konfiguracja reakcji -> rola
         this.reactionRoleConfig = {
             'flag_ua': '1409530749937254470', // ID roli dla flagi ukrainy (:flag_ua:)
@@ -293,7 +303,7 @@ class ReactionRoleService {
         try {
             const userId = member.user.id;
             const currentNickname = member.displayName;
-            const israeliNick = "Szalom! Daj pieniążka";
+            const israeliNick = "Shalom!";
 
             // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
             if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
@@ -380,6 +390,13 @@ class ReactionRoleService {
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na rosyjski:`, error);
         }
+    }
+
+    /**
+     * Sprawdza czy podany nick to nick flagi
+     */
+    isFlagNickname(nickname) {
+        return this.flagNicknames.includes(nickname);
     }
 
     /**
