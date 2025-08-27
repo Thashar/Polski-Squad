@@ -192,9 +192,9 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
 
-    if (frequency < 1 || frequency > 30) {
+    if (frequency < 0 || frequency > 30) {
         await interaction.reply({
-            content: '❌ Częstotliwość musi być między 1 a 30 dni.',
+            content: '❌ Częstotliwość musi być między 0 a 30 dni. (0 = jednorazowa loteria)',
             ephemeral: true
         });
         return;
