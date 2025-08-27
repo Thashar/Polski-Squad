@@ -15,6 +15,7 @@ class LotteryService {
         this.client = null;
         this.activeLotteries = new Map(); // ID -> lottery data
         this.cronJobs = new Map(); // ID -> cron job
+        this.sentWarnings = new Map(); // Śledzenie wysłanych ostrzeżeń: "channelType_date_hour" -> timestamp
     }
 
     /**
@@ -28,6 +29,11 @@ class LotteryService {
         
         // Wczytaj istniejące loterie
         await this.loadLotteries();
+        
+        // Ustaw czyszczenie starych ostrzeżeń co godzinę
+        setInterval(() => {
+            this.cleanupOldWarnings();
+        }, 60 * 60 * 1000); // co godzinę
         
         logger.info('✅ Serwis loterii został zainicjalizowany');
     }
@@ -319,23 +325,31 @@ class LotteryService {
                 return;
             }
 
-    
             const guild = this.client.guilds.cache.get(this.config.guildId);
             if (!guild) {
                 logger.error('❌ Nie znaleziono serwera');
                 return;
             }
 
-            // Określ docelowy kanał do wysłania ostrzeżenia na podstawie roli docelowej
-            let targetWarningChannelId = lottery.channelId; // domyślnie kanał loterii
+            // Określ typ kanału i docelowy kanał
             let channelType = 'Daily/CX';
+            let targetWarningChannelId = lottery.channelId;
             
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
-                targetWarningChannelId = this.config.channels.daily.targetChannelId; // kanał do wrzucania zdjęć Daily
+                targetWarningChannelId = this.config.channels.daily.targetChannelId;
             } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
-                targetWarningChannelId = this.config.channels.cx.targetChannelId; // kanał do wrzucania zdjęć CX
+                targetWarningChannelId = this.config.channels.cx.targetChannelId;
+            }
+
+            // Sprawdź czy ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie
+            const now = new Date();
+            const warningKey = `closing_${channelType}_${now.getDate()}_${now.getMonth()}_${now.getHours()}_${now.getMinutes()}`;
+            
+            if (this.sentWarnings.has(warningKey)) {
+                logger.info(`📋 Ostrzeżenie zamknięcia już wysłane dla ${channelType} w tym czasie - pomijanie`);
+                return;
             }
 
             const channel = guild.channels.cache.get(targetWarningChannelId);
@@ -353,7 +367,9 @@ class LotteryService {
                 allowedMentions: { roles: [roleId] }
             });
 
-            logger.info(`✅ Wysłano ostrzeżenie o zamknięciu zgłoszeń dla loterii ${lottery.name} (${channelType}) na kanał ${channel.name}`);
+            // Zaznacz że ostrzeżenie zostało wysłane
+            this.sentWarnings.set(warningKey, now.getTime());
+            logger.info(`✅ Wysłano ostrzeżenie o zamknięciu zgłoszeń dla ${channelType} na kanał ${channel.name}`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania ostrzeżenia o zamknięciu zgłoszeń ${lotteryId}:`, error);
@@ -371,23 +387,31 @@ class LotteryService {
                 return;
             }
 
-    
             const guild = this.client.guilds.cache.get(this.config.guildId);
             if (!guild) {
                 logger.error('❌ Nie znaleziono serwera');
                 return;
             }
 
-            // Określ typ kanału i docelowy kanał do wysłania ostrzeżenia na podstawie roli docelowej
+            // Określ typ kanału i docelowy kanał
             let channelType = 'Daily/CX';
-            let targetWarningChannelId = lottery.channelId; // domyślnie kanał loterii
+            let targetWarningChannelId = lottery.channelId;
             
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
-                targetWarningChannelId = this.config.channels.daily.targetChannelId; // kanał do wrzucania zdjęć Daily
+                targetWarningChannelId = this.config.channels.daily.targetChannelId;
             } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
-                targetWarningChannelId = this.config.channels.cx.targetChannelId; // kanał do wrzucania zdjęć CX
+                targetWarningChannelId = this.config.channels.cx.targetChannelId;
+            }
+
+            // Sprawdź czy finalne ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie
+            const now = new Date();
+            const warningKey = `final_${channelType}_${now.getDate()}_${now.getMonth()}_${now.getHours()}_${now.getMinutes()}`;
+            
+            if (this.sentWarnings.has(warningKey)) {
+                logger.info(`📋 Finalne ostrzeżenie już wysłane dla ${channelType} w tym czasie - pomijanie`);
+                return;
             }
 
             const channel = guild.channels.cache.get(targetWarningChannelId);
@@ -428,7 +452,9 @@ class LotteryService {
                 allowedMentions: { roles: clanRoles }
             });
 
-            logger.info(`✅ Wysłano finalne ostrzeżenie dla loterii ${lottery.name} na kanał ${channel.name} (${clanRoles.length} ról pingowanych)`);
+            // Zaznacz że finalne ostrzeżenie zostało wysłane
+            this.sentWarnings.set(warningKey, now.getTime());
+            logger.info(`✅ Wysłano finalne ostrzeżenie dla ${channelType} na kanał ${channel.name} (${clanRoles.length} ról pingowanych)`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania finalnego ostrzeżenia ${lotteryId}:`, error);
@@ -1330,6 +1356,23 @@ class LotteryService {
         this.cronJobs.clear();
         
         logger.info('🛑 Serwis loterii został zatrzymany');
+        
+        // Wyczyść mapę wysłanych ostrzeżeń
+        this.sentWarnings.clear();
+    }
+    
+    /**
+     * Czyści stare ostrzeżenia z mapy (starsze niż 24 godziny)
+     */
+    cleanupOldWarnings() {
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        
+        for (const [key, timestamp] of this.sentWarnings.entries()) {
+            if (now - timestamp > oneDayMs) {
+                this.sentWarnings.delete(key);
+            }
+        }
     }
 
     /**
