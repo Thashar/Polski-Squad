@@ -1076,10 +1076,12 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
             debugInfo += `🎯 **Aktywne loterie:**\n`;
             for (const lottery of activeLotteries) {
                 const hasCronJob = lotteryService.cronJobs && lotteryService.cronJobs.has(lottery.id);
-                const nextDraw = new Date(lottery.nextDraw).toLocaleString('pl-PL');
+                const nextDraw = lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleString('pl-PL') : 'Jednorazowa - już wykonana';
+                const frequency = lottery.frequency === 0 ? 'Jednorazowa' : `Co ${lottery.frequency} dni`;
                 debugInfo += `• **${lottery.id}**\n`;
                 debugInfo += `  └ Nazwa: ${lottery.name}\n`;
                 debugInfo += `  └ Następne losowanie: ${nextDraw}\n`;
+                debugInfo += `  └ Częstotliwość: ${frequency}\n`;
                 debugInfo += `  └ Cron job: ${hasCronJob ? '✅ Aktywny' : '❌ Brak'}\n`;
                 debugInfo += `  └ Pattern: ${lottery.minute} ${lottery.hour} * * ${config.lottery.dayMap[lottery.dayOfWeek]}\n\n`;
             }

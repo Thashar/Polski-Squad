@@ -184,7 +184,19 @@ class LotteryService {
         let nextDraw = new Date();
         nextDraw.setHours(hour, minute, 0, 0);
         
-        if (frequency === 7) {
+        if (frequency === 0) {
+            // Jednorazowa loteria - jeśli wykonujemy, to NULL (brak następnego losowania)
+            if (isExecuting) {
+                return null;
+            }
+            
+            // Jeśli to dziś i godzina już minęła, ustaw na jutro
+            if (now >= nextDraw) {
+                nextDraw.setDate(now.getDate() + 1);
+            }
+            // W przeciwnym razie zostaw dzisiejszą datę z podaną godziną
+            
+        } else if (frequency === 7) {
             // Tryb tygodniowy - używa dayOfWeek
             const dayNum = this.config.lottery.dayMap[dayOfWeek];
             let daysToAdd = (dayNum - now.getDay() + 7) % 7;
@@ -241,6 +253,48 @@ class LotteryService {
                     oldFinalJob.destroy();
                 }
                 this.cronJobs.delete(lotteryId + '_final');
+            }
+
+            // Dla jednorazowych loterii (frequency = 0) użyj prostego timeoutu zamiast cron
+            if (lottery.frequency === 0) {
+                const nextDrawTime = new Date(lottery.nextDraw);
+                const now = new Date();
+                const timeToWait = nextDrawTime.getTime() - now.getTime();
+                
+                if (timeToWait <= 0) {
+                    logger.warn(`⚠️ Jednorazowa loteria ${lotteryId} ma datę w przeszłości - wykonuję natychmiast`);
+                    setTimeout(() => this.executeLottery(lotteryId), 1000);
+                } else {
+                    logger.info(`📅 Zaplanowano jednorazową loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut`);
+                    
+                    // Ustaw timeout dla głównego losowania
+                    const mainTimeout = setTimeout(() => {
+                        this.executeLottery(lotteryId);
+                    }, timeToWait);
+                    
+                    this.cronJobs.set(lotteryId, { destroy: () => clearTimeout(mainTimeout) });
+                    
+                    // Ustaw ostrzeżenie 30 minut wcześniej (jeśli jest wystarczająco czasu)
+                    const warningTime = timeToWait - (30 * 60 * 1000); // 30 minut wcześniej
+                    if (warningTime > 0) {
+                        const warningTimeout = setTimeout(() => {
+                            this.sendClosingWarning(lotteryId);
+                        }, warningTime);
+                        
+                        this.cronJobs.set(lotteryId + '_warning', { destroy: () => clearTimeout(warningTimeout) });
+                    }
+                    
+                    // Ustaw finalne ostrzeżenie 90 minut wcześniej (jeśli jest wystarczająco czasu)
+                    const finalTime = timeToWait - (90 * 60 * 1000); // 90 minut wcześniej
+                    if (finalTime > 0) {
+                        const finalTimeout = setTimeout(() => {
+                            this.sendFinalWarning(lotteryId);
+                        }, finalTime);
+                        
+                        this.cronJobs.set(lotteryId + '_final', { destroy: () => clearTimeout(finalTimeout) });
+                    }
+                }
+                return;
             }
 
             const dayNum = this.config.lottery.dayMap[lottery.dayOfWeek];
