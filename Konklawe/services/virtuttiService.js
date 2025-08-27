@@ -62,8 +62,9 @@ class VirtuttiService {
      * Rejestruje użycie komendy
      * @param {string} userId - ID użytkownika
      * @param {string} commandType - 'blessing', 'virtueCheck' lub 'curse'
+     * @param {string} userTag - Tag użytkownika (username#0000) - opcjonalny
      */
-    registerUsage(userId, commandType) {
+    registerUsage(userId, commandType, userTag = null) {
         const now = Date.now();
         const today = new Date().toDateString();
 
@@ -84,7 +85,8 @@ class VirtuttiService {
         }
         this.dailyUsage.get(userId)[commandType]++;
 
-        logger.info(`📊 Użytkownik ${userId} użył komendy ${commandType}. Dzienny użyty: ${this.dailyUsage.get(userId)[commandType]}/${this.config.virtuttiPapajlari.dailyLimit}`);
+        const displayName = userTag || `ID:${userId}`;
+        logger.info(`📊 Użytkownik ${displayName} użył komendy ${commandType}. Dzienny użyty: ${this.dailyUsage.get(userId)[commandType]}/${this.config.virtuttiPapajlari.dailyLimit}`);
         
         // Zapisz dane do pliku po każdym użyciu
         this.saveData();

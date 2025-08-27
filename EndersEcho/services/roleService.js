@@ -91,7 +91,7 @@ class RoleService {
                             // Przyznano rolę (bez logowania)
                         }
                     } catch (error) {
-                        logger.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userId}:`, error.message);
+                        logger.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userName || `ID:${player.userId}`}:`, error.message);
                     }
                 }
             }

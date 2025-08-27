@@ -160,7 +160,7 @@ class RankingService {
                 displayName = member.displayName;
             } catch (error) {
                 // Jeśli nie można pobrać membera, używamy zapisanego username
-                logger.info(`Nie można pobrać membera ${player.userId}, używam zapisanego username`);
+                logger.info(`Nie można pobrać membera ${player.userName || `ID:${player.userId}`}, używam zapisanego username`);
             }
             
             const bossName = player.bossName || 'Nieznany';

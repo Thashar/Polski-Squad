@@ -132,7 +132,7 @@ class InteractionHandler {
                 if (existingLobby) {
                     // Usuń stare lobby
                     await this.deleteLobby(existingLobby, sharedState);
-                    logger.info(`🗑️ Usunięto poprzednie lobby użytkownika ${user.id} przed utworzeniem nowego`);
+                    logger.info(`🗑️ Usunięto poprzednie lobby użytkownika ${user.tag} przed utworzeniem nowego`);
                 }
             }
 

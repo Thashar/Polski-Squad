@@ -619,7 +619,7 @@ class InteractionHandler {
         }
 
         // Zarejestruj użycie
-        this.virtuttiService.registerUsage(userId, 'blessing');
+        this.virtuttiService.registerUsage(userId, 'blessing', interaction.user.tag);
 
         // Pobierz losowe błogosławieństwo
         const blessing = this.virtuttiService.getRandomBlessing();
@@ -663,7 +663,7 @@ class InteractionHandler {
         }
 
         // Zarejestruj użycie
-        this.virtuttiService.registerUsage(userId, 'virtueCheck');
+        this.virtuttiService.registerUsage(userId, 'virtueCheck', interaction.user.tag);
 
         // Pobierz losowe cnoty i radę
         const virtues = this.virtuttiService.getRandomVirtues();
@@ -751,7 +751,7 @@ class InteractionHandler {
         }
 
         // Zarejestruj użycie
-        this.virtuttiService.registerUsage(userId, 'curse');
+        this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
 
         // Pobierz losową klątwę
         const curse = this.virtuttiService.getRandomCurse();
