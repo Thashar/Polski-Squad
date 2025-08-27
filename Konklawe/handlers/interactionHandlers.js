@@ -769,16 +769,16 @@ class InteractionHandler {
             try {
                 await targetMember.setNickname(cursedNickname);
                 
-                // Przywróć nickname po określonym czasie
+                // Resetuj nickname po określonym czasie do ustawienia użytkownika
                 setTimeout(async () => {
                     try {
                         const memberToRestore = await interaction.guild.members.fetch(targetUser.id);
                         if (memberToRestore && memberToRestore.nickname === cursedNickname) {
-                            await memberToRestore.setNickname(originalNickname);
-                            logger.info(`🔄 Przywrócono nickname dla ${targetUser.tag}: ${originalNickname} (po ${nicknameDuration} min)`);
+                            await memberToRestore.setNickname(null);
+                            logger.info(`🔄 Zresetowano nickname dla ${targetUser.tag} do ustawienia użytkownika (po ${nicknameDuration} min)`);
                         }
                     } catch (error) {
-                        logger.error(`❌ Błąd przywracania nickname: ${error.message}`);
+                        logger.error(`❌ Błąd resetowania nickname: ${error.message}`);
                     }
                 }, nicknameDuration * 60 * 1000);
                 

@@ -247,8 +247,8 @@ class ReactionRoleService {
             const currentNickname = member.displayName;
             const ukrainianNick = "Slava Ukrainu!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy
-            if (!this.originalNicknames.has(userId)) {
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
+            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
                 this.originalNicknames.set(userId, currentNickname);
                 await this.saveNicknamesToFile();
             }
@@ -271,8 +271,8 @@ class ReactionRoleService {
             const currentNickname = member.displayName;
             const polishNick = "POLSKA GUROM!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy
-            if (!this.originalNicknames.has(userId)) {
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
+            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
                 this.originalNicknames.set(userId, currentNickname);
                 await this.saveNicknamesToFile();
             }
@@ -295,8 +295,8 @@ class ReactionRoleService {
             const currentNickname = member.displayName;
             const israeliNick = "Szalom! Daj pieniążka";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy
-            if (!this.originalNicknames.has(userId)) {
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
+            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
                 this.originalNicknames.set(userId, currentNickname);
                 await this.saveNicknamesToFile();
             }
@@ -319,8 +319,8 @@ class ReactionRoleService {
             const currentNickname = member.displayName;
             const americanNick = "American Dream";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy
-            if (!this.originalNicknames.has(userId)) {
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
+            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
                 this.originalNicknames.set(userId, currentNickname);
                 await this.saveNicknamesToFile();
             }
@@ -343,8 +343,8 @@ class ReactionRoleService {
             const currentNickname = member.displayName;
             const germanNick = "Hände hoch!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy
-            if (!this.originalNicknames.has(userId)) {
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
+            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
                 this.originalNicknames.set(userId, currentNickname);
                 await this.saveNicknamesToFile();
             }
@@ -367,8 +367,8 @@ class ReactionRoleService {
             const currentNickname = member.displayName;
             const russianNick = "Cyka blyat!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy
-            if (!this.originalNicknames.has(userId)) {
+            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
+            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
                 this.originalNicknames.set(userId, currentNickname);
                 await this.saveNicknamesToFile();
             }
@@ -383,26 +383,24 @@ class ReactionRoleService {
     }
 
     /**
-     * Przywraca oryginalny nick użytkownika
+     * Przywraca oryginalny nick użytkownika (resetuje do ustawienia użytkownika)
      */
     async restoreOriginalNickname(member) {
         try {
             const userId = member.user.id;
             
+            // Zresetuj nick do ustawienia użytkownika
+            await member.setNickname(null);
+            this.logger.info(`✅ Zresetowano nick ${member.user.tag} do ustawienia użytkownika`);
+            
+            // Usuń z storage jeśli istnieje
             if (this.originalNicknames.has(userId)) {
-                const originalNick = this.originalNicknames.get(userId);
-                await member.setNickname(originalNick);
-                this.logger.info(`✅ Przywrócono oryginalny nick ${member.user.tag}: "${originalNick}"`);
-                
-                // Usuń z storage
                 this.originalNicknames.delete(userId);
                 await this.saveNicknamesToFile();
-            } else {
-                this.logger.warn(`⚠️ Brak zapisanego nicku dla ${member.user.tag}`);
             }
 
         } catch (error) {
-            this.logger.error(`❌ Błąd podczas przywracania oryginalnego nicku:`, error);
+            this.logger.error(`❌ Błąd podczas resetowania nicku:`, error);
         }
     }
 
