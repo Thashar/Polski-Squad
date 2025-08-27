@@ -1057,7 +1057,7 @@ class InteractionHandler {
                 const capsChance = Math.random() * 100;
                 if (capsChance < 30 && !message.content.match(/^[A-Z\s\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/)) {
                     try {
-                        const capsMessage = await message.channel.send(`${message.author.username}: ${message.content.toUpperCase()}`);
+                        const capsMessage = await message.channel.send(`${message.content.toUpperCase()}`);
                     } catch (error) {
                         logger.error(`❌ Błąd forced caps: ${error.message}`);
                     }
