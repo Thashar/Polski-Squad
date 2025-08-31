@@ -63,7 +63,11 @@ Polski-Squad-Bot-Collection/
 ├── utils/                     # Wspólne narzędzia
 │   ├── consoleLogger.js       # Centralny system logowania z kolorami
 │   ├── discordLogger.js       # System logowania na kanały Discord
+│   ├── nicknameManagerService.js # Centralny system zarządzania nickami
 │   └── ocrFileUtils.js        # Narzędzia do zarządzania plikami OCR
+├── shared_data/               # Wspólne dane między botami
+│   ├── nickname_manager_config.json    # Konfiguracja systemu nicków
+│   └── active_nickname_effects.json    # Aktywne efekty nicków
 ├── 
 ├── Rekruter/                  # Bot rekrutacyjny z OCR i boost tracking
 │   ├── index.js
@@ -234,6 +238,41 @@ Plik `bot-config.json` określa które boty uruchamiać:
 - **Timeout handling** - odporna obsługa Discord API timeouts
 - **Error recovery** - graceful error handling dla wszystkich interakcji
 
+### 🏷️ Centralny System Zarządzania Nickami
+
+**Problem**: Boty Konklawe (klątwy) i Muteusz (flagi) zmieniały nicki użytkowników, ale przywracały do głównego nicku zamiast oryginalnego serwerowego nicku, i mogły się konfliktować między sobą.
+
+**Rozwiązanie**: Scentralizowany system zarządzania nickami w `utils/nicknameManagerService.js`
+
+#### Kluczowe funkcjonalności:
+- **🚫 Zapobieganie konfliktom**: Koordynacja między botami - blokuje nakładanie tego samego typu efektu
+- **🔄 Nakładanie efektów**: Pozwala na nakładanie różnych typów (klątwa + flaga) z zachowaniem oryginalnego nicku
+- **💾 Zachowanie oryginalnych nicków**: Przywraca dokładnie to co użytkownik miał (nick serwerowy vs nick główny)
+- **⏰ Automatyczne czyszczenie**: Usuwa wygasłe efekty i utrzymuje spójność danych
+- **📊 Monitorowanie**: Śledzenie aktywnych efektów i statystyki systemu
+
+#### Typy efektów:
+- **CURSE** (Konklawe): Dodaje prefiks "Przeklęty " do nicków z konfigurowalnymi czasami
+- **FLAG** (Muteusz): Zmienia nick na flagi krajów (🇺🇦, 🇵🇱, 🇮🇱, 🇺🇸, 🇩🇪, 🇷🇺) na 5 minut
+
+#### Przykład działania:
+```
+1. Użytkownik "Janusz" (nick serwerowy) dostaje klątwę
+   → Nick: "Przeklęty Janusz" (zapisany oryginalny: "Janusz")
+
+2. Janusz dostaje flagę ukraińską  
+   → Nick: "Slava Ukrainu!" (oryginalny nadal: "Janusz")
+
+3. Efekt zostaje usunięty
+   → Nick: "Janusz" (przywrócony oryginalny, nie "Przeklęty Janusz")
+```
+
+#### Pliki konfiguracyjne:
+- **Konfiguracja**: `shared_data/nickname_manager_config.json`  
+- **Aktywne efekty**: `shared_data/active_nickname_effects.json`
+- **Automatyczna inicjalizacja**: Zintegrowane z sekwencjami startowymi botów
+- **Logowanie debug**: Szczegółowe logi aplikacji i przywracania efektów
+
 ## System OCR i Debugowanie
 
 ### 🔍 Zaawansowane funkcje OCR
@@ -326,6 +365,20 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 - Maksymalnie 100 plików - najstarsze automatycznie usuwane
 
 ## Historia Zmian
+
+### [2025-08-31] - Centralny System Zarządzania Nickami  
+#### Nowe funkcje ✨
+- **Scentralizowany system nicków**: Nowy `NicknameManagerService` zapobiega konfliktom między botami Konklawe i Muteusz
+- **Inteligentne nakładanie efektów**: Pozwala na kombinacje klątwa+flaga z zachowaniem oryginalnego nicku
+- **Prawidłowe przywracanie nicków**: System rozróżnia nicki serwerowe vs główne i przywraca właściwe
+- **Automatyczne czyszczenie**: Wygasłe efekty są automatycznie usuwane z systemu
+- **Kompleksowa walidacja**: Zapobiega duplikacji tego samego typu efektu, pozwala na różne typy
+
+#### Poprawione 🔧
+- **Problem konfliktów nicków**: Rozwiązano sytuacje gdzie boty przywracały nick główny zamiast serwerowego
+- **Nakładające się efekty**: Efekty różnych typów mogą się teraz nakładać bez utraty oryginalnego nicku
+- **Czyszczenie starych funkcji**: Usunięto zduplikowane systemy zarządzania nickami z poszczególnych botów
+- **Centralizacja logiki**: Wszystkie operacje na nickach przeszły przez jeden wspólny system
 
 ### [2025-08-20] - Kompletna aktualizacja dokumentacji
 #### Poprawione 🔧
