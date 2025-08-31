@@ -1,16 +1,18 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const NicknameManager = require('../../utils/nicknameManagerService');
 const VirtuttiService = require('../services/virtuttiService');
 const fs = require('fs').promises;
 const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
+        this.nicknameManager = nicknameManager;
         this.virtuttiService = new VirtuttiService(config);
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
         
@@ -759,31 +761,18 @@ class InteractionHandler {
         try {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
             
-            // Zawsze dodaj "Przeklęty" do obecnego nicku
-            const originalNickname = targetMember.nickname || targetUser.username;
-            const cursedNickname = `${this.config.virtuttiPapajlari.forcedNickname} ${originalNickname}`;
-            
-            // Czas trwania zmiany nicku - zawsze 5 minut
-            const nicknameDuration = curse.duration;
-            
+            // Aplikuj klątwę na nick przy użyciu centralnego systemu
             try {
-                await targetMember.setNickname(cursedNickname);
-                
-                // Resetuj nickname po określonym czasie do ustawienia użytkownika
-                setTimeout(async () => {
-                    try {
-                        const memberToRestore = await interaction.guild.members.fetch(targetUser.id);
-                        if (memberToRestore && memberToRestore.nickname === cursedNickname) {
-                            await memberToRestore.setNickname(null);
-                            logger.info(`🔄 Zresetowano nickname dla ${targetUser.tag} do ustawienia użytkownika (po ${nicknameDuration} min)`);
-                        }
-                    } catch (error) {
-                        logger.error(`❌ Błąd resetowania nickname: ${error.message}`);
-                    }
-                }, nicknameDuration * 60 * 1000);
-                
+                await this.applyNicknameCurse(targetMember, interaction, curse.duration);
             } catch (error) {
-                logger.warn(`⚠️ Nie udało się zmienić nickname dla ${targetUser.tag}: ${error.message}`);
+                // Jeśli klątwa na nick nie może być aplikowana, kontynuuj z pozostałymi efektami
+                logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
+                
+                // Wyślij informację o błędzie jako ephemeral message
+                await interaction.followUp({
+                    content: `⚠️ ${error.message}`,
+                    ephemeral: true
+                });
             }
 
             // Wyślij klątwę
@@ -1138,6 +1127,47 @@ class InteractionHandler {
             await fs.writeFile(this.cursesFile, JSON.stringify(cursesToSave, null, 2));
         } catch (error) {
             logger.error(`❌ Błąd zapisywania aktywnych klątw: ${error.message}`);
+        }
+    }
+
+    /**
+     * Aplikuje klątwę na nick przy użyciu centralnego systemu zarządzania nickami
+     */
+    async applyNicknameCurse(targetMember, interaction, durationMinutes) {
+        const userId = targetMember.id;
+        const durationMs = durationMinutes * 60 * 1000;
+        
+        try {
+            // Zapisz oryginalny nick w centralnym systemie
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.CURSE,
+                targetMember,
+                durationMs
+            );
+            
+            // Aplikuj klątwę
+            const originalDisplayName = targetMember.displayName;
+            const cursedNickname = `${this.config.virtuttiPapajlari.forcedNickname} ${originalDisplayName}`;
+            
+            await targetMember.setNickname(cursedNickname);
+            logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${cursedNickname}"`);
+            
+            // Timer do automatycznego przywrócenia
+            setTimeout(async () => {
+                try {
+                    const restored = await this.nicknameManager.restoreOriginalNickname(userId, interaction.guild);
+                    if (restored) {
+                        logger.info(`✅ Automatycznie przywrócono nick po klątwie dla ${targetMember.user.tag}`);
+                    }
+                } catch (error) {
+                    logger.error(`❌ Błąd automatycznego przywracania nicku: ${error.message}`);
+                }
+            }, durationMs);
+            
+        } catch (error) {
+            // Rzuć błąd dalej - zostanie obsłużony w funkcji wywołującej
+            throw error;
         }
     }
 

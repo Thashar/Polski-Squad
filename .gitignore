@@ -32,6 +32,9 @@ Thumbs.db
 .claude
 Claude.md
 
+# Tests
+tests/
+
 #TrainedData
 pol.TrainedData
 eng.TrainedData

@@ -1,11 +1,13 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const NicknameManager = require('../../utils/nicknameManagerService');
 const fs = require('fs').promises;
 const path = require('path');
 
 class ReactionRoleService {
-    constructor(config) {
+    constructor(config, nicknameManager) {
         this.config = config;
         this.logger = createBotLogger('Muteusz');
+        this.nicknameManager = nicknameManager;
         
         // Mapa aktywnych timerów usuwania ról
         this.roleRemovalTimers = new Map();
@@ -50,11 +52,8 @@ class ReactionRoleService {
         
         // Ścieżka do pliku z aktywnymi timerami
         this.timersFilePath = path.join(__dirname, '../data/reaction_role_timers.json');
-        // Ścieżka do pliku z oryginalnymi nickami
-        this.nicknamesFilePath = path.join(__dirname, '../data/original_nicknames.json');
-        
-        // Storage dla oryginalnych nicków
-        this.originalNicknames = new Map(); // userId -> originalNickname
+        // USUNIĘTO: Stary system nicków zastąpiony centralnym NicknameManager
+        // Zachowano dla kompatybilności wstecznej - stare pliki będą ignorowane
         
         // Klien Discord (zostanie ustawiony w initialize)
         this.client = null;
@@ -66,7 +65,7 @@ class ReactionRoleService {
     async initialize(client) {
         this.client = client;
         await this.restoreTimersFromFile();
-        await this.restoreNicknamesFromFile();
+        // USUNIĘTO: restoreNicknamesFromFile() - zastąpione centralnym NicknameManager
     }
 
     /**
@@ -183,44 +182,8 @@ class ReactionRoleService {
         }
     }
 
-    /**
-     * Przywraca oryginalne nicki z pliku
-     */
-    async restoreNicknamesFromFile() {
-        try {
-            const data = await fs.readFile(this.nicknamesFilePath, 'utf8');
-            const nicknameData = JSON.parse(data);
-            
-            this.originalNicknames.clear();
-            for (const [userId, nickname] of Object.entries(nicknameData)) {
-                this.originalNicknames.set(userId, nickname);
-            }
-            
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                this.logger.info('📁 Plik nicków nie istnieje - będzie utworzony przy pierwszym użyciu');
-                this.originalNicknames = new Map();
-            } else {
-                this.logger.error('❌ Błąd podczas ładowania nicków:', error);
-                this.originalNicknames = new Map();
-            }
-        }
-    }
-
-    /**
-     * Zapisuje oryginalne nicki do pliku
-     */
-    async saveNicknamesToFile() {
-        try {
-            const nicknameObject = {};
-            for (const [userId, nickname] of this.originalNicknames.entries()) {
-                nicknameObject[userId] = nickname;
-            }
-            await fs.writeFile(this.nicknamesFilePath, JSON.stringify(nicknameObject, null, 2));
-        } catch (error) {
-            this.logger.error('❌ Błąd podczas zapisywania nicków:', error);
-        }
-    }
+    // USUNIĘTO: Stare metody zarządzania nickami
+    // restoreNicknamesFromFile() i saveNicknamesToFile() zastąpione centralnym NicknameManager
 
     /**
      * Dodaje timer do persystencji
@@ -249,50 +212,75 @@ class ReactionRoleService {
     }
 
     /**
-     * Zmienia nick użytkownika na ukraiński i zapisuje oryginalny
+     * Zmienia nick użytkownika na ukraiński przy użyciu centralnego systemu
      */
     async setUkrainianNickname(member) {
         try {
             const userId = member.user.id;
-            const currentNickname = member.displayName;
             const ukrainianNick = "Slava Ukrainu!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
-            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
-                this.originalNicknames.set(userId, currentNickname);
-                await this.saveNicknamesToFile();
+            // Walidacja przez centralny system
+            const validation = await this.nicknameManager.validateEffectApplication(
+                member,
+                NicknameManager.EFFECTS.FLAG
+            );
+
+            if (!validation.canApply) {
+                this.logger.warn(`❌ Nie można zmienić nicku na ukraiński: ${validation.reason}`);
+                return false;
             }
+
+            // Zapisz oryginalny nick w centralnym systemie (flagi nie wygasają automatycznie)
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.FLAG,
+                member,
+                Infinity
+            );
 
             // Zmień nick na ukraiński
             await member.setNickname(ukrainianNick);
             this.logger.info(`🇺🇦 Zmieniono nick ${member.user.tag} na "${ukrainianNick}"`);
+            return true;
 
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na ukraiński:`, error);
+            return false;
         }
     }
 
     /**
-     * Zmienia nick użytkownika na polski i zapisuje oryginalny
+     * Zmienia nick użytkownika na polski przy użyciu centralnego systemu
      */
     async setPolishNickname(member) {
         try {
             const userId = member.user.id;
-            const currentNickname = member.displayName;
             const polishNick = "POLSKA GUROM!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
-            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
-                this.originalNicknames.set(userId, currentNickname);
-                await this.saveNicknamesToFile();
+            const validation = await this.nicknameManager.validateEffectApplication(
+                member,
+                NicknameManager.EFFECTS.FLAG
+            );
+
+            if (!validation.canApply) {
+                this.logger.warn(`❌ Nie można zmienić nicku na polski: ${validation.reason}`);
+                return false;
             }
 
-            // Zmień nick na polski
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.FLAG,
+                member,
+                Infinity
+            );
+
             await member.setNickname(polishNick);
             this.logger.info(`🇵🇱 Zmieniono nick ${member.user.tag} na "${polishNick}"`);
+            return true;
 
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na polski:`, error);
+            return false;
         }
     }
 
@@ -302,21 +290,35 @@ class ReactionRoleService {
     async setIsraeliNickname(member) {
         try {
             const userId = member.user.id;
-            const currentNickname = member.displayName;
-            const israeliNick = "Shalom!";
+            const israeliNick = "עם ישראל חי!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
-            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
-                this.originalNicknames.set(userId, currentNickname);
-                await this.saveNicknamesToFile();
+            // Walidacja z centralnym systemem
+            const validation = await this.nicknameManager.validateEffectApplication(
+                member,
+                NicknameManager.EFFECTS.FLAG
+            );
+
+            if (!validation.canApply) {
+                this.logger.warn(`❌ Nie można zmienić nicku na izraelski: ${validation.reason}`);
+                return false;
             }
+
+            // Zapisz oryginalny nick w centralnym systemie
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.FLAG,
+                member,
+                Infinity
+            );
 
             // Zmień nick na izraelski
             await member.setNickname(israeliNick);
             this.logger.info(`🇮🇱 Zmieniono nick ${member.user.tag} na "${israeliNick}"`);
+            return true;
 
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na izraelski:`, error);
+            return false;
         }
     }
 
@@ -326,21 +328,35 @@ class ReactionRoleService {
     async setAmericanNickname(member) {
         try {
             const userId = member.user.id;
-            const currentNickname = member.displayName;
             const americanNick = "American Dream";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
-            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
-                this.originalNicknames.set(userId, currentNickname);
-                await this.saveNicknamesToFile();
+            // Walidacja z centralnym systemem
+            const validation = await this.nicknameManager.validateEffectApplication(
+                member,
+                NicknameManager.EFFECTS.FLAG
+            );
+
+            if (!validation.canApply) {
+                this.logger.warn(`❌ Nie można zmienić nicku na amerykański: ${validation.reason}`);
+                return false;
             }
+
+            // Zapisz oryginalny nick w centralnym systemie
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.FLAG,
+                member,
+                Infinity
+            );
 
             // Zmień nick na amerykański
             await member.setNickname(americanNick);
             this.logger.info(`🇺🇸 Zmieniono nick ${member.user.tag} na "${americanNick}"`);
+            return true;
 
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na amerykański:`, error);
+            return false;
         }
     }
 
@@ -350,21 +366,35 @@ class ReactionRoleService {
     async setGermanNickname(member) {
         try {
             const userId = member.user.id;
-            const currentNickname = member.displayName;
             const germanNick = "Hände hoch!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
-            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
-                this.originalNicknames.set(userId, currentNickname);
-                await this.saveNicknamesToFile();
+            // Walidacja z centralnym systemem
+            const validation = await this.nicknameManager.validateEffectApplication(
+                member,
+                NicknameManager.EFFECTS.FLAG
+            );
+
+            if (!validation.canApply) {
+                this.logger.warn(`❌ Nie można zmienić nicku na niemiecki: ${validation.reason}`);
+                return false;
             }
+
+            // Zapisz oryginalny nick w centralnym systemie
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.FLAG,
+                member,
+                Infinity
+            );
 
             // Zmień nick na niemiecki
             await member.setNickname(germanNick);
             this.logger.info(`🇩🇪 Zmieniono nick ${member.user.tag} na "${germanNick}"`);
+            return true;
 
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na niemiecki:`, error);
+            return false;
         }
     }
 
@@ -374,21 +404,35 @@ class ReactionRoleService {
     async setRussianNickname(member) {
         try {
             const userId = member.user.id;
-            const currentNickname = member.displayName;
             const russianNick = "Cyka blyat!";
 
-            // Zapisz oryginalny nick jeśli jeszcze nie mamy i aktualny nick nie jest nickiem flagi
-            if (!this.originalNicknames.has(userId) && !this.isFlagNickname(currentNickname)) {
-                this.originalNicknames.set(userId, currentNickname);
-                await this.saveNicknamesToFile();
+            // Walidacja z centralnym systemem
+            const validation = await this.nicknameManager.validateEffectApplication(
+                member,
+                NicknameManager.EFFECTS.FLAG
+            );
+
+            if (!validation.canApply) {
+                this.logger.warn(`❌ Nie można zmienić nicku na rosyjski: ${validation.reason}`);
+                return false;
             }
+
+            // Zapisz oryginalny nick w centralnym systemie
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.FLAG,
+                member,
+                Infinity
+            );
 
             // Zmień nick na rosyjski
             await member.setNickname(russianNick);
             this.logger.info(`🇷🇺 Zmieniono nick ${member.user.tag} na "${russianNick}"`);
+            return true;
 
         } catch (error) {
             this.logger.error(`❌ Błąd podczas zmiany nicku na rosyjski:`, error);
+            return false;
         }
     }
 
@@ -400,24 +444,25 @@ class ReactionRoleService {
     }
 
     /**
-     * Przywraca oryginalny nick użytkownika (resetuje do ustawienia użytkownika)
+     * Przywraca oryginalny nick użytkownika przy użyciu centralnego systemu
      */
     async restoreOriginalNickname(member) {
         try {
             const userId = member.user.id;
             
-            // Zresetuj nick do ustawienia użytkownika
-            await member.setNickname(null);
-            this.logger.info(`✅ Zresetowano nick ${member.user.tag} do ustawienia użytkownika`);
-            
-            // Usuń z storage jeśli istnieje
-            if (this.originalNicknames.has(userId)) {
-                this.originalNicknames.delete(userId);
-                await this.saveNicknamesToFile();
+            // Użyj centralnego systemu do przywrócenia oryginalnego nicku
+            const restored = await this.nicknameManager.restoreOriginalNickname(userId, member.guild);
+            if (restored) {
+                this.logger.info(`✅ Przywrócono oryginalny nick dla ${member.user.tag}`);
+                return true;
+            } else {
+                this.logger.warn(`⚠️ Brak zapisanego oryginalnego nicku dla ${member.user.tag}`);
+                return false;
             }
 
         } catch (error) {
-            this.logger.error(`❌ Błąd podczas resetowania nicku:`, error);
+            this.logger.error(`❌ Błąd podczas przywracania nicku:`, error);
+            return false;
         }
     }
 
@@ -689,12 +734,7 @@ class ReactionRoleService {
         
         this.roleRemovalTimers.clear();
         
-        // Zapisz nicki przed wyłączeniem
-        if (this.originalNicknames.size > 0) {
-            this.saveNicknamesToFile().catch(error => {
-                this.logger.error('❌ Błąd zapisywania nicków przy cleanup:', error);
-            });
-        }
+        // USUNIĘTO: Zapis nicków przy cleanup - centralny system obsługuje to automatycznie
     }
 
     /**

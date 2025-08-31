@@ -1,0 +1,7 @@
+{
+  "buildInitialDatabase": false,
+  "enableSnapshotting": false,
+  "monitorNicknameChanges": false,
+  "cleanupInterval": 86400000,
+  "maxEffectDuration": 2592000000
+}

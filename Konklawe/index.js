@@ -14,6 +14,7 @@ const CommandService = require('./services/commandService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
+const NicknameManager = require('../utils/nicknameManagerService');
 
 const logger = createBotLogger('Konklawe');
 
@@ -29,24 +30,28 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let dataService, gameService, timerService, rankingService, commandService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager;
 let interactionHandler, messageHandler;
 
 /**
  * Inicjalizuje wszystkie serwisy
  */
-function initializeServices() {
+async function initializeServices() {
     dataService = new DataService();
     gameService = new GameService(config, dataService);
     timerService = new TimerService(config, gameService);
     rankingService = new RankingService(config, gameService);
     commandService = new CommandService(config);
     
+    // Inicjalizacja centralnego systemu zarządzania nickami
+    nicknameManager = new NicknameManager();
+    await nicknameManager.initialize();
+    
     // Ustawienie klienta w timerService
     timerService.setClient(client);
     
-    // Inicjalizacja handlerów
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService);
+    // Inicjalizacja handlerów z nickname manager
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager);
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService);
     
     // Inicjalizacja danych gry
@@ -192,7 +197,7 @@ function setupEventHandlers() {
  */
 async function start() {
     try {
-        initializeServices();
+        await initializeServices();
         setupEventHandlers();
         await client.login(config.token);
     } catch (error) {

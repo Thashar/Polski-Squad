@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Events, Partials } = require('discord.js');
 
 const config = require('./config/config');
 const { createBotLogger } = require('../utils/consoleLogger');
+const NicknameManager = require('../utils/nicknameManagerService');
 
 const logger = createBotLogger('Muteusz');
 
@@ -38,15 +39,18 @@ const client = new Client({
     ]
 });
 
-// Inicjalizacja serwisów
+// Inicjalizacja serwisów - najpierw te bez zależności
 const specialRolesService = new SpecialRolesService(config);
 const roleManagementService = new RoleManagementService(config, specialRolesService);
 const mediaService = new MediaService(config);
 const logService = new LogService(config);
 const roleKickingService = new RoleKickingService(config);
-const reactionRoleService = new ReactionRoleService(config);
 const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
+
+// NicknameManager i reactionRoleService będą zainicjalizowane w funkcji async
+let nicknameManager;
+let reactionRoleService;
 
 // Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService);
@@ -85,7 +89,14 @@ client.once(Events.ClientReady, async () => {
         logger.warn('⚠️ Nie udało się załadować członków:', cacheError.message);
     }
     
-    // Inicjalizuj serwisy
+    // Inicjalizuj centralny system zarządzania nickami
+    nicknameManager = new NicknameManager();
+    await nicknameManager.initialize();
+    
+    // Inicjalizuj reactionRoleService z nickname manager
+    reactionRoleService = new ReactionRoleService(config, nicknameManager);
+    
+    // Inicjalizuj pozostałe serwisy
     logService.initialize(client);
     await mediaService.initialize();
     await roleKickingService.initialize(client);
