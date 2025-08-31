@@ -189,7 +189,7 @@ class OCRService {
         
         // Zamień 0 na końcu na Q (jeśli nie ma już jednostki M/B/T/Q/Qi)
         // Sprawdź czy wynik kończy się cyfrą 0 i nie ma jednostki M/B/T/Q/Qi
-        if (/0$/.test(fixedScore) && !/[MBTQ]i?$/i.test(fixedScore)) {
+        if (/0$/.test(fixedScore) && !/(?:Qi|[MBTQ])$/i.test(fixedScore)) {
             fixedScore = fixedScore.replace(/0$/, 'Q');
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
                 logger.info('Zastąpiono końcową cyfrę 0 na literę Q');
@@ -218,8 +218,8 @@ class OCRService {
             logger.info('Długość tekstu:', text ? text.length : 'null');
         }
         
-        // Rozszerzony wzorzec który uwzględnia również cyfry końcowe (mogące być błędnie odczytanymi literami)
-        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?[KMBTQSi70]*)/gi;
+        // Wzorzec wymaga obecności litery po cyfrze - nie akceptuje samych cyfr
+        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
         let matches = text.match(bestScorePattern);
         
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
@@ -229,18 +229,17 @@ class OCRService {
         }
         
         if (!matches || matches.length === 0) {
-            // Elastyczny wzorzec też uwzględnia cyfry końcowe
-            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?[KMBTQSi70]*)/gi;
+            // Elastyczny wzorzec wymaga obecności litery po cyfrze
+            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
             matches = [];
             let match;
             
             while ((match = flexiblePattern.exec(text)) !== null) {
                 const score = match[1];
                 const upperScore = score.toUpperCase();
-                const hasUnit = /[KMBTQSi70]$/i.test(upperScore);
-                const isBigNumber = /^\d{4,}$/.test(score);
+                const hasUnit = /(?:Qi|[KMBTQ])$/i.test(upperScore);
                 
-                if (hasUnit || isBigNumber) {
+                if (hasUnit) {
                     matches.push(score);
                     break;
                 }
@@ -253,8 +252,8 @@ class OCRService {
                 return null;
             }
         } else {
-            // Zaktualizowany wzorzec dla wyciągania wyniku
-            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?[KMBTQSi70]*)/i);
+            // Wzorzec dla wyciągania wyniku wymaga obecności litery
+            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
             matches = scoreMatch ? [scoreMatch[1]] : [];
         }
         
