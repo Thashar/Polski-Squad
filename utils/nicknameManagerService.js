@@ -11,6 +11,11 @@ const logger = createBotLogger('NicknameManager');
  */
 class NicknameManagerService {
     constructor() {
+        // Singleton pattern - zapobiega wielokrotnym instancjom
+        if (NicknameManagerService.instance) {
+            return NicknameManagerService.instance;
+        }
+        
         this.dataPath = path.join(__dirname, '../shared_data');
         this.activeEffectsFile = path.join(this.dataPath, 'active_nickname_effects.json');
         this.configFile = path.join(this.dataPath, 'nickname_manager_config.json');
@@ -26,6 +31,9 @@ class NicknameManagerService {
             cleanupInterval: 24 * 60 * 60 * 1000, // 24h
             maxEffectDuration: 30 * 24 * 60 * 60 * 1000 // 30 dni
         };
+        
+        // Ustaw singleton instance
+        NicknameManagerService.instance = this;
     }
     
     // Stałe typów efektów
@@ -33,6 +41,16 @@ class NicknameManagerService {
         CURSE: 'curse',        // Klątwa z Konklawe
         FLAG: 'flag'           // Flaga z Muteusz
     };
+    
+    /**
+     * Pobiera singleton instancję
+     */
+    static getInstance() {
+        if (!NicknameManagerService.instance) {
+            new NicknameManagerService();
+        }
+        return NicknameManagerService.instance;
+    }
     
     /**
      * Inicjalizuje serwis - tworzy katalogi i ładuje dane
@@ -196,6 +214,9 @@ class NicknameManagerService {
     async validateEffectApplication(member, effectType) {
         const userId = member.user.id;
         
+        // KRYTYCZNE: Przeładuj dane z pliku przed walidacją (synchronizacja między procesami)
+        await this.loadActiveEffects();
+        
         // 1. Sprawdź czy to nie jest próba podwójnego efektu tego samego typu
         const currentNickname = member.displayName;
         const existingEffect = this.activeEffects.get(userId);
@@ -226,12 +247,14 @@ class NicknameManagerService {
      * NOWA LOGIKA: Przy nakładaniu efektów zachowuje oryginalny nick z pierwszego
      */
     async saveOriginalNickname(userId, effectType, member, durationMs) {
-        // Walidacja
+        // Walidacja (już zawiera loadActiveEffects())
         const validation = await this.validateEffectApplication(member, effectType);
         if (!validation.canApply) {
             throw new Error(validation.reason);
         }
         
+        // Ponownie przeładuj dane na wypadek zmiany między walidacją a zapisem
+        await this.loadActiveEffects();
         const existingEffect = this.activeEffects.get(userId);
         let originalNickname, wasUsingMainNick;
         
