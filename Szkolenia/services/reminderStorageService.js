@@ -26,7 +26,8 @@ class ReminderStorageService {
                     // Stary format - tylko timestamp przypomnienia
                     reminderMap.set(threadId, {
                         lastReminder: threadData,
-                        threadCreated: null // Nie znamy daty utworzenia
+                        threadCreated: null, // Nie znamy daty utworzenia
+                        reminderSent: false // Nowe pole dla śledzenia przypomnienia
                     });
                 } else {
                     // Nowy format - obiekt z pełnymi danymi
@@ -92,12 +93,44 @@ class ReminderStorageService {
         
         const threadData = {
             lastReminder: timestamp,
-            threadCreated: threadCreated || (existingData ? existingData.threadCreated : null)
+            threadCreated: threadCreated || (existingData ? existingData.threadCreated : null),
+            reminderSent: existingData ? existingData.reminderSent : false
         };
         
         reminderMap.set(threadId, threadData);
         await this.saveReminders(reminderMap);
         logger.info(`📅 Zaktualizowano przypomnienie dla wątku: ${threadId}`);
+    }
+
+    /**
+     * Oznacza że przypomnienie zostało wysłane dla wątku
+     * @param {Map} reminderMap - Mapa z danymi przypomień
+     * @param {string} threadId - ID wątku
+     */
+    async markReminderSent(reminderMap, threadId) {
+        const existingData = reminderMap.get(threadId);
+        if (existingData) {
+            existingData.reminderSent = true;
+            reminderMap.set(threadId, existingData);
+            await this.saveReminders(reminderMap);
+            logger.info(`📨 Oznaczono przypomnienie jako wysłane dla wątku: ${threadId}`);
+        }
+    }
+
+    /**
+     * Resetuje status przypomnienia dla wątku (gdy użytkownik wybierze "jeszcze nie zamykaj")
+     * @param {Map} reminderMap - Mapa z danymi przypomień
+     * @param {string} threadId - ID wątku
+     */
+    async resetReminderStatus(reminderMap, threadId) {
+        const existingData = reminderMap.get(threadId);
+        if (existingData) {
+            existingData.reminderSent = false;
+            existingData.lastReminder = Date.now();
+            reminderMap.set(threadId, existingData);
+            await this.saveReminders(reminderMap);
+            logger.info(`🔄 Zresetowano status przypomnienia dla wątku: ${threadId}`);
+        }
     }
 
     /**

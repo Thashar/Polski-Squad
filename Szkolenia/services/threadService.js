@@ -95,9 +95,9 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
     const lastMessageTime = lastMessage ? lastMessage.createdTimestamp : thread.createdTimestamp;
     const inactiveTime = now - lastMessageTime;
 
-    // Przy sprawdzeniu startowym - usuń wszystkie wątki starsze niż 7 dni
+    // Przy sprawdzeniu startowym - zamknij wszystkie wątki starsze niż 7 dni zamiast usuwać
     if (isInitialCheck && inactiveTime > deleteThreshold) {
-        await deleteThread(thread, state, config);
+        await lockThread(thread, state, config);
         return;
     }
 
@@ -139,21 +139,26 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         logger.info(`   🔔 Od ostatniego przypomnienia: ${Math.round(timeSinceLastReminder / (1000 * 60 * 60))}h`);
         logger.info(`   🚨 Próg przypomnienia: ${Math.round(reminderThreshold / (1000 * 60 * 60))}h`);
 
-        // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu
-        if (inactiveTime > reminderThreshold && timeSinceLastReminder > reminderThreshold) {
+        // Sprawdź czy przypomnienie już zostało wysłane
+        const reminderAlreadySent = threadData && threadData.reminderSent;
+        
+        // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu i jeszcze nie wysłano
+        if (inactiveTime > reminderThreshold && !reminderAlreadySent && timeSinceLastReminder > reminderThreshold) {
             logger.info(`✅ Wysyłanie przypomnienia dla wątku ${thread.name}`);
             await sendInactivityReminder(thread, threadOwner, state, config, now);
+        } else if (reminderAlreadySent) {
+            logger.info(`⏳ Przypomnienie już wysłane dla wątku ${thread.name}, czekam na decyzję użytkownika`);
         } else {
             logger.info(`❌ Przypomnienie nie wysłane - warunki nie spełnione`);
         }
     }
 
-    // Standardowe archiwizowanie i usuwanie (dla bardzo starych wątków)
-    if (inactiveTime > deleteThreshold) {
-        await deleteThread(thread, state, config);
-    } else if (inactiveTime > archiveThreshold && !thread.archived) {
-        await archiveThread(thread, config);
+    // Po 7 dniach zamknij wątek zamiast usuwać (tylko jeśli przypomnienie zostało wysłane)
+    const threadData = state.lastReminderMap.get(thread.id);
+    if (inactiveTime > deleteThreshold && threadData && threadData.reminderSent) {
+        await lockThread(thread, state, config);
     }
+    // Usuń auto-archiwizację po 24h - wątki pozostają otwarte
 }
 
 /**
@@ -189,8 +194,9 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
             components: [row]
         });
 
-        // Zaktualizuj czas ostatniego przypomnienia (nie zmieniaj daty utworzenia)
+        // Zaktualizuj czas ostatniego przypomnienia i oznacz jako wysłane
         await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
+        await reminderStorage.markReminderSent(state.lastReminderMap, thread.id);
         logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
         
     } catch (error) {
@@ -199,15 +205,28 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
 }
 
 /**
- * Usunięcie wątku
- * @param {ThreadChannel} thread - Wątek do usunięcia
+ * Zamknięcie wątku (zamiast usunięcia)
+ * @param {ThreadChannel} thread - Wątek do zamknięcia
  * @param {Object} state - Stan współdzielony aplikacji
  * @param {Object} config - Konfiguracja aplikacji
  */
-async function deleteThread(thread, state, config) {
-    await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
-    await thread.delete(`Wątek nieaktywny przez ${config.timing.threadDeleteDays} dni`);
-    logger.info(`🗑️ Usunięto wątek: ${thread.name}`);
+async function lockThread(thread, state, config) {
+    try {
+        // Jeśli wątek jest zarchiwizowany, odarchiwizuj go aby móc wysłać wiadomość i zamknąć
+        if (thread.archived) {
+            await thread.setArchived(false, 'Odarchiwizowanie w celu zamknięcia wątku');
+        }
+        
+        await thread.send(config.messages.threadLocked);
+        await thread.setLocked(true, `Wątek nieaktywny przez ${config.timing.threadDeleteDays} dni - automatycznie zamknięty`);
+        await thread.setArchived(true, 'Zamknięcie wątku po okresie nieaktywności');
+        
+        // Usuń dane przypomnienia po zamknięciu
+        await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
+        logger.info(`🔒 Zamknięto wątek: ${thread.name}`);
+    } catch (error) {
+        logger.error(`❌ Błąd podczas zamykania wątku ${thread.name}:`, error);
+    }
 }
 
 /**

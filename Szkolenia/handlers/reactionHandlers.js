@@ -42,15 +42,46 @@ async function handleReactionAdd(reaction, user, state, config) {
         const targetMember = await guild.members.fetch(targetUser.id);
         const threadName = targetMember.displayName || targetUser.username;
 
-        // Sprawdź czy wątek już istnieje
-        const existingThread = channel.threads.cache.find(thread => 
+        // Sprawdź czy wątek już istnieje (szukaj także w zarchiwizowanych)
+        let existingThread = channel.threads.cache.find(thread => 
             thread.name === threadName
         );
+        
+        // Jeśli nie znaleziono w aktywnych, sprawdź zarchiwizowane
+        if (!existingThread) {
+            const archivedThreads = await channel.threads.fetchArchived();
+            existingThread = archivedThreads.threads.find(thread => 
+                thread.name === threadName
+            );
+        }
 
         if (existingThread) {
+            // Jeśli wątek jest zamknięty, odblokować go i odarchiwizować
+            if (existingThread.locked) {
+                try {
+                    await existingThread.setLocked(false, 'Odblokowanie wątek na prośbę użytkownika');
+                    logger.info(`🔓 Odblokowano wątek: ${existingThread.name}`);
+                } catch (error) {
+                    logger.error(`❌ Nie można odblokować wątku ${existingThread.name}:`, error);
+                }
+            }
+            
+            // Jeśli wątek jest zarchiwizowany, odarchiwizować
+            if (existingThread.archived) {
+                try {
+                    await existingThread.setArchived(false, 'Ponowne otwarcie wątku');
+                    logger.info(`📂 Odarchiwizowano wątek: ${existingThread.name}`);
+                } catch (error) {
+                    logger.error(`❌ Nie można odarchiwizować wątku ${existingThread.name}:`, error);
+                }
+            }
+            
             await existingThread.send(
                 config.messages.threadExists(targetUser.id, user.id, config.roles.ping)
             );
+            
+            // Zresetuj status przypomnienia dla ponownie otwartego wątku
+            await reminderStorage.resetReminderStatus(state.lastReminderMap, existingThread.id);
         } else {
             // Utwórz nowy wątek
             const thread = await channel.threads.create({
