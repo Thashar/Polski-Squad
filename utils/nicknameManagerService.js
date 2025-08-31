@@ -191,29 +191,23 @@ class NicknameManagerService {
     
     /**
      * Waliduje czy można aplikować efekt
+     * NOWA LOGIKA: Pozwala na nakładanie efektów, zachowując oryginalny nick
      */
     async validateEffectApplication(member, effectType) {
         const userId = member.user.id;
         
-        // 1. Sprawdź aktywne efekty w systemie
-        if (this.hasActiveEffect(userId)) {
-            const activeType = this.getActiveEffectType(userId);
-            return {
-                canApply: false,
-                reason: `Użytkownik ma już aktywny efekt: ${activeType}`
-            };
-        }
-        
-        // 2. Sprawdź czy obecny nick nie jest nickiem innego efektu
-        if (this.isEffectNickname(member.displayName)) {
-            return {
-                canApply: false,
-                reason: `Użytkownik ma już nick efektu: "${member.displayName}"`
-            };
-        }
-        
-        // 3. Sprawdź czy to nie jest próba podwójnego efektu tego samego typu
+        // 1. Sprawdź czy to nie jest próba podwójnego efektu tego samego typu
         const currentNickname = member.displayName;
+        const existingEffect = this.activeEffects.get(userId);
+        
+        if (existingEffect && existingEffect.effectType === effectType) {
+            return {
+                canApply: false,
+                reason: `Użytkownik ma już aktywny efekt tego typu: ${effectType}`
+            };
+        }
+        
+        // 2. Sprawdź specyficzne przypadki duplikacji
         if (effectType === NicknameManagerService.EFFECTS.CURSE && currentNickname.startsWith('Przeklęty ')) {
             return {
                 canApply: false,
@@ -221,11 +215,15 @@ class NicknameManagerService {
             };
         }
         
+        // 3. NOWE: Efekty różnych typów mogą się nakładać
+        // System zachowa oryginalny nick z pierwszego efektu
+        
         return { canApply: true };
     }
     
     /**
      * Zapisuje oryginalny nick przed aplikowaniem efektu
+     * NOWA LOGIKA: Przy nakładaniu efektów zachowuje oryginalny nick z pierwszego
      */
     async saveOriginalNickname(userId, effectType, member, durationMs) {
         // Walidacja
@@ -234,22 +232,34 @@ class NicknameManagerService {
             throw new Error(validation.reason);
         }
         
-        const currentNickname = this.getCurrentServerNickname(member);
+        const existingEffect = this.activeEffects.get(userId);
+        let originalNickname, wasUsingMainNick;
+        
+        if (existingEffect) {
+            // NAKŁADANIE: Zachowaj oryginalny nick z pierwszego efektu
+            originalNickname = existingEffect.originalNickname;
+            wasUsingMainNick = existingEffect.wasUsingMainNick;
+            logger.info(`🔄 Nakładanie efektu ${effectType} na ${existingEffect.effectType} - zachowuję oryginalny nick: "${originalNickname || '[nick główny]'}"}`);
+        } else {
+            // PIERWSZY EFEKT: Zapisz aktualny nick jako oryginalny
+            originalNickname = this.getCurrentServerNickname(member);
+            wasUsingMainNick = originalNickname === null;
+            logger.info(`💾 Zapisano oryginalny nick dla ${member.user.tag}: "${originalNickname || '[nick główny]'}" (pierwszy efekt: ${effectType})`);
+        }
         
         const effectData = {
             effectType,
-            originalNickname: currentNickname,
-            wasUsingMainNick: currentNickname === null,
+            originalNickname,
+            wasUsingMainNick,
             appliedAt: Date.now(),
             expiresAt: durationMs === Infinity ? null : Date.now() + durationMs,
             guildId: member.guild.id,
-            username: member.user.username // dla logowania
+            username: member.user.username,
+            previousEffect: existingEffect ? existingEffect.effectType : null // Śledzenie historii
         };
         
         this.activeEffects.set(userId, effectData);
         await this.persistActiveEffects();
-        
-        logger.info(`💾 Zapisano oryginalny nick dla ${member.user.tag}: "${currentNickname || '[nick główny]'}" (efekt: ${effectType})`);
         
         return effectData;
     }
