@@ -114,8 +114,8 @@ class RankingService {
 
         const unitImprovement = improvement / unitValue;
         const formattedValue = unitImprovement % 1 === 0 ? 
-            unitImprovement.toString() : 
-            unitImprovement.toFixed(2);
+            Math.floor(unitImprovement).toString() : 
+            parseFloat(unitImprovement.toFixed(2)).toString();
         
         return `+${formattedValue}${targetUnit}`;
     }
