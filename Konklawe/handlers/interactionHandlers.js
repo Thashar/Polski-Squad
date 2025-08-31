@@ -1134,7 +1134,7 @@ class InteractionHandler {
      * Aplikuje klątwę na nick przy użyciu centralnego systemu zarządzania nickami
      */
     async applyNicknameCurse(targetMember, interaction, durationMinutes) {
-        const userId = targetMember.id;
+        const userId = targetMember.user.id; // POPRAWKA: używaj user.id jak w innych botach
         const durationMs = durationMinutes * 60 * 1000;
         
         try {
