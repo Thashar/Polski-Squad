@@ -187,7 +187,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
     
-    // Sprawdź czy data nie jest w przeszłości
+    // Sprawdź czy data nie jest w przeszłości i nie przekracza limitu 24 dni
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     drawDate.setHours(0, 0, 0, 0);
@@ -195,6 +195,18 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (drawDate < now) {
         await interaction.reply({
             content: '❌ Data następnego losowania nie może być w przeszłości.',
+            ephemeral: true
+        });
+        return;
+    }
+    
+    // Sprawdź czy data nie przekracza limitu JavaScript setTimeout (~24 dni)
+    const maxDate = new Date(now);
+    maxDate.setDate(now.getDate() + 24);
+    
+    if (drawDate > maxDate) {
+        await interaction.reply({
+            content: '❌ Data następnego losowania nie może być dalej niż 24 dni w przyszłości (ograniczenie JavaScript).',
             ephemeral: true
         });
         return;
@@ -221,9 +233,9 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
 
-    if (frequency < 0 || frequency > 30) {
+    if (frequency < 0 || frequency > 365) {
         await interaction.reply({
-            content: '❌ Częstotliwość musi być między 0 a 30 dni. (0 = jednorazowa loteria)',
+            content: '❌ Częstotliwość musi być między 0 a 365 dni. (0 = jednorazowa loteria)',
             ephemeral: true
         });
         return;
@@ -1184,10 +1196,10 @@ async function registerSlashCommands(client, config) {
                     .addChoices(...clanChoices))
             .addIntegerOption(option =>
                 option.setName('częstotliwość')
-                    .setDescription('Co ile dni ma być powtarzana loteria (0 = jednorazowo, 1-30 = cyklicznie)')
+                    .setDescription('Co ile dni ma być powtarzana loteria (0 = jednorazowo, 1-365 = cyklicznie)')
                     .setRequired(true)
                     .setMinValue(0)
-                    .setMaxValue(30))
+                    .setMaxValue(365))
             .addStringOption(option =>
                 option.setName('data')
                     .setDescription('Data pierwszego losowania (format: dd.mm.rrrr)')

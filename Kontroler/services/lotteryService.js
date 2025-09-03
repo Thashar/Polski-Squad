@@ -61,8 +61,21 @@ class LotteryService {
             if (lotteryData.activeLotteries) {
                 // Przywróć aktywne loterie
                 for (const [id, lottery] of Object.entries(lotteryData.activeLotteries)) {
+                    // Migracja starych loterii - usuń te ze starą strukturą
+                    if (lottery.dayOfWeek && !lottery.firstDrawDate) {
+                        logger.warn(`⚠️ Usuwam starą loterię o przestarzałej strukturze: ${id}`);
+                        continue; // Pomiń starą loterię
+                    }
+                    
                     this.activeLotteries.set(id, lottery);
-                    this.scheduleNextLottery(id, lottery);
+                    
+                    try {
+                        this.scheduleNextLottery(id, lottery);
+                    } catch (error) {
+                        logger.error(`❌ Błąd planowania loterii ${id}: ${error.message}`);
+                        // Usuń problematyczną loterię
+                        this.activeLotteries.delete(id);
+                    }
                 }
                 if (this.activeLotteries.size > 0) {
                     logger.info(`🔄 Przywrócono ${this.activeLotteries.size} aktywnych loterii`);
@@ -235,9 +248,15 @@ class LotteryService {
                 const now = new Date();
                 const timeToWait = nextDrawTime.getTime() - now.getTime();
                 
+                // Maksymalny bezpieczny timeout w JavaScript (~24 dni)
+                const MAX_TIMEOUT = 2147483647;
+                
                 if (timeToWait <= 0) {
                     logger.warn(`⚠️ Jednorazowa loteria ${lotteryId} ma datę w przeszłości - wykonuję natychmiast`);
                     setTimeout(() => this.executeLottery(lotteryId), 1000);
+                } else if (timeToWait > MAX_TIMEOUT) {
+                    logger.error(`❌ Jednorazowa loteria ${lotteryId} ma datę zbyt daleko w przyszłości (${Math.round(timeToWait / (24*60*60*1000))} dni). Maksymalnie 24 dni.`);
+                    return;
                 } else {
                     logger.info(`📅 Zaplanowano jednorazową loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut`);
                     
@@ -250,7 +269,7 @@ class LotteryService {
                     
                     // Ustaw ostrzeżenie 30 minut wcześniej (jeśli jest wystarczająco czasu)
                     const warningTime = timeToWait - (30 * 60 * 1000); // 30 minut wcześniej
-                    if (warningTime > 0) {
+                    if (warningTime > 0 && warningTime <= MAX_TIMEOUT) {
                         const warningTimeout = setTimeout(() => {
                             this.sendClosingWarning(lotteryId);
                         }, warningTime);
@@ -260,7 +279,7 @@ class LotteryService {
                     
                     // Ustaw finalne ostrzeżenie 90 minut wcześniej (jeśli jest wystarczająco czasu)
                     const finalTime = timeToWait - (90 * 60 * 1000); // 90 minut wcześniej
-                    if (finalTime > 0) {
+                    if (finalTime > 0 && finalTime <= MAX_TIMEOUT) {
                         const finalTimeout = setTimeout(() => {
                             this.sendFinalWarning(lotteryId);
                         }, finalTime);
@@ -276,9 +295,15 @@ class LotteryService {
             const now = new Date();
             const timeToWait = nextDrawTime.getTime() - now.getTime();
             
+            // Maksymalny bezpieczny timeout w JavaScript (~24 dni)
+            const MAX_TIMEOUT = 2147483647;
+            
             if (timeToWait <= 0) {
                 logger.warn(`⚠️ Cykliczna loteria ${lotteryId} ma datę w przeszłości - wykonuję natychmiast`);
                 setTimeout(() => this.executeLottery(lotteryId), 1000);
+            } else if (timeToWait > MAX_TIMEOUT) {
+                logger.error(`❌ Cykliczna loteria ${lotteryId} ma datę zbyt daleko w przyszłości (${Math.round(timeToWait / (24*60*60*1000))} dni). Maksymalnie 24 dni.`);
+                return;
             } else {
                 logger.info(`📅 Zaplanowano cykliczną loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut (${nextDrawTime.toLocaleString('pl-PL')})`);
                 
@@ -291,7 +316,7 @@ class LotteryService {
                 
                 // Ustaw ostrzeżenie 30 minut wcześniej (jeśli jest wystarczająco czasu)
                 const warningTime = timeToWait - (30 * 60 * 1000); // 30 minut wcześniej
-                if (warningTime > 0) {
+                if (warningTime > 0 && warningTime <= MAX_TIMEOUT) {
                     const warningTimeout = setTimeout(() => {
                         this.sendClosingWarning(lotteryId);
                     }, warningTime);
@@ -301,7 +326,7 @@ class LotteryService {
                 
                 // Ustaw finalne ostrzeżenie 90 minut wcześniej (jeśli jest wystarczająco czasu)
                 const finalTime = timeToWait - (90 * 60 * 1000); // 90 minut wcześniej
-                if (finalTime > 0) {
+                if (finalTime > 0 && finalTime <= MAX_TIMEOUT) {
                     const finalTimeout = setTimeout(() => {
                         this.sendFinalWarning(lotteryId);
                     }, finalTime);
@@ -811,7 +836,12 @@ class LotteryService {
                 await this.saveLotteryData();
                 
                 // Zaplanuj ponownie cron jobs dla następnego losowania
-                this.scheduleNextLottery(lotteryId, lottery);
+                try {
+                    this.scheduleNextLottery(lotteryId, lottery);
+                } catch (error) {
+                    logger.error(`❌ Nie można zaplanować następnego losowania dla ${lotteryId}: ${error.message}`);
+                    logger.warn(`⚠️ Loteria ${lottery.name} zostanie ponownie zaplanowana przy następnym restarcie bota`);
+                }
                 
             }
 
