@@ -77,7 +77,7 @@ async function handleReactionAdd(reaction, user, state, config) {
             }
             
             await existingThread.send(
-                config.messages.threadExists(targetUser.id, user.id, config.roles.ping)
+                config.messages.threadCreated(user.id, config.roles.ping, targetUser.id)
             );
             
             // Zresetuj status przypomnienia dla ponownie otwartego wątku
