@@ -1023,7 +1023,7 @@ class LotteryService {
                 .setFooter({ 
                     text: lottery.frequency === 0 
                         ? `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Loteria jednorazowa`
-                        : `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${new Date(lottery.nextDraw).toLocaleString('pl-PL')}`
+                        : `Loteria ID: ${this.formatLotteryIdForDisplay(lottery.id)} | Następna: ${this.convertUTCToPolishTime(new Date(lottery.nextDraw))}`
                 })
                 .setTimestamp();
 

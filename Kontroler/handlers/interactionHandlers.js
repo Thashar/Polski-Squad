@@ -275,7 +275,9 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
 
         if (result.success) {
             const clan = config.lottery.clans[clanKey];
-            const nextDraw = new Date(result.lottery.nextDraw).toLocaleString('pl-PL');
+            // nextDraw jest już w UTC, więc konwertujemy na polski czas poprawnie
+            const nextDrawUTC = new Date(result.lottery.nextDraw);
+            const nextDraw = lotteryService.convertUTCToPolishTime(nextDrawUTC);
 
             await interaction.editReply({
                 content: `✅ **Loteria została utworzona pomyślnie!**\n\n` +
@@ -1038,7 +1040,7 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
                 .addFields(
                     {
                         name: '📅 Oryginalna loteria',
-                        value: new Date(result.originalResult.date).toLocaleString('pl-PL'),
+                        value: lotteryService.convertUTCToPolishTime(new Date(result.originalResult.date)),
                         inline: true
                     },
                     {
@@ -1118,7 +1120,7 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
             debugInfo += `🎯 **Aktywne loterie:**\n`;
             for (const lottery of activeLotteries) {
                 const hasCronJob = lotteryService.cronJobs && lotteryService.cronJobs.has(lottery.id);
-                const nextDraw = lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleString('pl-PL') : 'Jednorazowa - już wykonana';
+                const nextDraw = lottery.nextDraw ? lotteryService.convertUTCToPolishTime(new Date(lottery.nextDraw)) : 'Jednorazowa - już wykonana';
                 const frequency = lottery.frequency === 0 ? 'Jednorazowa' : `Co ${lottery.frequency} dni`;
                 debugInfo += `• **${lottery.id}**\n`;
                 debugInfo += `  └ Nazwa: ${lottery.name}\n`;
