@@ -424,9 +424,9 @@ class LotteryService {
                 return;
             }
 
-            // Określ typ kanału i docelowy kanał
-            let channelType = 'Daily/CX';
-            let targetWarningChannelId = lottery.channelId;
+            // Określ typ kanału i docelowy kanał - tylko dla Daily/CX
+            let channelType = '';
+            let targetWarningChannelId = '';
             
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
@@ -434,6 +434,10 @@ class LotteryService {
             } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
                 targetWarningChannelId = this.config.channels.cx.targetChannelId;
+            } else {
+                // Dla innych ról nie wysyłamy ostrzeżeń zamknięcia
+                logger.info(`📋 Pomijam ostrzeżenie zamknięcia - loteria ${lotteryId} nie jest Daily ani CX`);
+                return;
             }
 
             // Sprawdź czy ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie
@@ -486,9 +490,9 @@ class LotteryService {
                 return;
             }
 
-            // Określ typ kanału i docelowy kanał
-            let channelType = 'Daily/CX';
-            let targetWarningChannelId = lottery.channelId;
+            // Określ typ kanału i docelowy kanał - tylko dla Daily/CX
+            let channelType = '';
+            let targetWarningChannelId = '';
             
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
@@ -496,6 +500,10 @@ class LotteryService {
             } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
                 targetWarningChannelId = this.config.channels.cx.targetChannelId;
+            } else {
+                // Dla innych ról nie wysyłamy finalnych ostrzeżeń
+                logger.info(`📋 Pomijam finalne ostrzeżenie - loteria ${lotteryId} nie jest Daily ani CX`);
+                return;
             }
 
             // Sprawdź czy finalne ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie
@@ -513,24 +521,17 @@ class LotteryService {
                 return;
             }
 
-            // Znajdź wszystkie aktywne loterie dla tego samego kanału (tego samego targetRoleId)
-            const activeLoteriesForChannel = Array.from(this.activeLotteries.values())
-                .filter(l => l.targetRoleId === lottery.targetRoleId);
-
-            // Zbierz role klanów z aktywnych loterii
+            // Zbierz role klanów tylko z tej konkretnej loterii (nie wszystkich aktywnych)
             const clanRoles = [];
-            for (const activeLottery of activeLoteriesForChannel) {
-                if (activeLottery.clanRoleId) {
-                    // Dodaj rolę klanu jeśli nie jest już na liście
-                    if (!clanRoles.includes(activeLottery.clanRoleId)) {
-                        clanRoles.push(activeLottery.clanRoleId);
-                    }
-                } else {
-                    // Jeśli loteria jest dla "całego serwera", dodaj wszystkie role klanów
-                    for (const [clanKey, clanConfig] of Object.entries(this.config.lottery.clans)) {
-                        if (clanConfig.roleId && !clanRoles.includes(clanConfig.roleId)) {
-                            clanRoles.push(clanConfig.roleId);
-                        }
+            
+            if (lottery.clanRoleId) {
+                // Jeśli loteria ma określony klan, pinguj tylko ten klan
+                clanRoles.push(lottery.clanRoleId);
+            } else {
+                // Jeśli loteria jest dla "całego serwera", pinguj wszystkie klany
+                for (const [clanKey, clanConfig] of Object.entries(this.config.lottery.clans)) {
+                    if (clanConfig.roleId) {
+                        clanRoles.push(clanConfig.roleId);
                     }
                 }
             }
