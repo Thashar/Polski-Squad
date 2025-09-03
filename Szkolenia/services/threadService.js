@@ -61,7 +61,7 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
             try {
                 await processThread(thread, guild, state, config, now, {
                     archiveThreshold,
-                    deleteThreshold,
+                    lockThreshold, // Poprawka: deleteThreshold -> lockThreshold
                     reminderThreshold
                 }, isInitialCheck);
             } catch (error) {
@@ -88,15 +88,15 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
  * @param {boolean} isInitialCheck - Czy to sprawdzenie przy starcie bota
  */
 async function processThread(thread, guild, state, config, now, thresholds, isInitialCheck = false) {
-    const { archiveThreshold, deleteThreshold, reminderThreshold } = thresholds;
+    const { archiveThreshold, lockThreshold, reminderThreshold } = thresholds; // Poprawka: deleteThreshold -> lockThreshold
     
     // Pobierz ostatnią wiadomość w wątku
     const lastMessage = await thread.messages.fetch({ limit: 1 }).then(msgs => msgs.first());
     const lastMessageTime = lastMessage ? lastMessage.createdTimestamp : thread.createdTimestamp;
     const inactiveTime = now - lastMessageTime;
 
-    // Przy sprawdzeniu startowym - zamknij wszystkie wątki starsze niż 7 dni zamiast usuwać
-    if (isInitialCheck && inactiveTime > deleteThreshold) {
+    // Przy sprawdzeniu startowym - zamknij wszystkie wątki starsze niż 7 dni
+    if (isInitialCheck && inactiveTime > lockThreshold) {
         await lockThread(thread, state, config);
         return;
     }
