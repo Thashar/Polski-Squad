@@ -48,7 +48,7 @@ module.exports = {
     // Ustawienia czasowe (w dniach/godzinach)
     timing: {
         threadArchiveDays: 1,
-        threadDeleteDays: 7,
+        threadLockDays: 7, // Zmieniono: threadDeleteDays -> threadLockDays (wątki są zamykane, nie usuwane)
         inactiveReminderHours: 24,
         checkIntervalMinutes: 60
     },

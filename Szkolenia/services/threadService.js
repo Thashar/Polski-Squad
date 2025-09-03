@@ -29,7 +29,7 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
 
         const now = Date.now();
         const archiveThreshold = config.timing.threadArchiveDays * 24 * 60 * 60 * 1000;
-        const deleteThreshold = config.timing.threadDeleteDays * 24 * 60 * 60 * 1000;
+        const lockThreshold = config.timing.threadLockDays * 24 * 60 * 60 * 1000; // Zmieniono: deleteThreshold -> lockThreshold
         const reminderThreshold = config.timing.inactiveReminderHours * 60 * 60 * 1000;
 
         let allThreads;
@@ -142,6 +142,20 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         // Sprawdź czy przypomnienie już zostało wysłane
         const reminderAlreadySent = threadData && threadData.reminderSent;
         
+        // KRYTYCZNE: Nie wysyłaj przypomnienia jeśli wątek jest zamknięty
+        if (thread.locked) {
+            logger.info(`🔒 Wątek ${thread.name} jest zamknięty - pomijam przypomnienie`);
+            // Usuń dane przypomnienia dla zamkniętego wątku
+            await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
+            return;
+        }
+        
+        // DODATKOWO: Nie wysyłaj przypomnienia jeśli wątek już przekroczył próg zamykania
+        if (inactiveTime > lockThreshold) {
+            logger.info(`⏰ Wątek ${thread.name} przekroczył próg zamykania (${Math.round(lockThreshold / (1000 * 60 * 60))}h) - pomijam przypomnienie`);
+            return;
+        }
+        
         // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu i jeszcze nie wysłano
         if (inactiveTime > reminderThreshold && !reminderAlreadySent && timeSinceLastReminder > reminderThreshold) {
             logger.info(`✅ Wysyłanie przypomnienia dla wątku ${thread.name}`);
@@ -153,9 +167,9 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         }
     }
 
-    // Po 7 dniach zamknij wątek zamiast usuwać (tylko jeśli przypomnienie zostało wysłane)
+    // Po 7 dniach zamknij wątek (tylko jeśli przypomnienie zostało wysłane)
     const threadData = state.lastReminderMap.get(thread.id);
-    if (inactiveTime > deleteThreshold && threadData && threadData.reminderSent) {
+    if (inactiveTime > lockThreshold && threadData && threadData.reminderSent) {
         await lockThread(thread, state, config);
     }
     // Usuń auto-archiwizację po 24h - wątki pozostają otwarte
@@ -218,7 +232,7 @@ async function lockThread(thread, state, config) {
         }
         
         await thread.send(config.messages.threadLocked);
-        await thread.setLocked(true, `Wątek nieaktywny przez ${config.timing.threadDeleteDays} dni - automatycznie zamknięty`);
+        await thread.setLocked(true, `Wątek nieaktywny przez ${config.timing.threadLockDays} dni - automatycznie zamknięty`);
         await thread.setArchived(true, 'Zamknięcie wątku po okresie nieaktywności');
         
         // Usuń dane przypomnienia po zamknięciu
@@ -237,6 +251,51 @@ async function lockThread(thread, state, config) {
 async function archiveThread(thread, config) {
     await thread.setArchived(true, `Wątek nieaktywny przez ${config.timing.threadArchiveDays} dni`);
     logger.info(`📦 Zarchiwizowano wątek: ${thread.name}`);
+}
+
+/**
+ * Wysyła przypomnienie o nieaktywności wątku
+ * @param {ThreadChannel} thread - Wątek do którego wysłać przypomnienie
+ * @param {GuildMember} threadOwner - Właściciel wątku
+ * @param {Object} state - Stan współdzielony aplikacji
+ * @param {Object} config - Konfiguracja aplikacji
+ * @param {number} now - Obecny timestamp
+ */
+async function sendInactivityReminder(thread, threadOwner, state, config, now) {
+    try {
+        // Jeśli wątek jest zarchiwizowany, odarchiwizuj go przed wysłaniem przypomnienia
+        if (thread.archived) {
+            await thread.setArchived(false, 'Odarchiwizowanie w celu wysłania przypomnienia');
+        }
+        
+        // Utwórz przyciski akcji
+        const actionRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('thread_close')
+                    .setLabel('🗑️ Zamknij wątek')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('thread_keep_open')
+                    .setLabel('⏰ Kontynuuj szkolenie')
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+        // Wyślij wiadomość z przypomnieniem
+        const reminderMessage = `${threadOwner} ${config.messages.threadInactivityReminder}`;
+        
+        await thread.send({
+            content: reminderMessage,
+            components: [actionRow]
+        });
+
+        // Zapisz że przypomnienie zostało wysłane
+        await reminderStorage.markReminderSent(state.lastReminderMap, thread.id, now);
+        
+        logger.info(`🔔 Wysłano przypomnienie o nieaktywności dla wątku: ${thread.name}`);
+    } catch (error) {
+        logger.error(`❌ Błąd podczas wysyłania przypomnienia dla wątku ${thread.name}:`, error);
+    }
 }
 
 module.exports = {
