@@ -113,7 +113,7 @@ class LotteryService {
             targetRole,
             clanKey,
             frequency,
-            dayOfWeek,
+            drawDate,
             hour,
             minute,
             winnersCount,
@@ -125,10 +125,11 @@ class LotteryService {
             throw new Error(`Nieprawidłowy klucz klanu: ${clanKey}`);
         }
 
-        // Generuj czytelny ID z datą, rolą i klanem
-        const nextDrawDate = this.calculateNextDraw(dayOfWeek, hour, minute, false, frequency);
-        const nextDrawTimestamp = new Date(nextDrawDate).getTime();
-        const formattedDate = new Date(nextDrawTimestamp).toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+        // Ustaw dokładną datę i czas pierwszego losowania
+        const nextDrawDate = new Date(drawDate);
+        nextDrawDate.setHours(hour, minute, 0, 0);
+        const nextDrawTimestamp = nextDrawDate.getTime();
+        const formattedDate = nextDrawDate.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
         const roleShort = targetRole.name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
         const clanShort = clanKey.toLowerCase();
         const randomSuffix = Math.random().toString(36).substr(2, 4);
@@ -145,7 +146,7 @@ class LotteryService {
             clanName: clan.name,
             clanDisplayName: clan.displayName,
             frequency: frequency,
-            dayOfWeek: dayOfWeek,
+            firstDrawDate: drawDate.toISOString().split('T')[0], // Zapisz oryginalną datę w formacie YYYY-MM-DD
             hour: hour,
             minute: minute,
             winnersCount: winnersCount,
@@ -153,7 +154,7 @@ class LotteryService {
             createdBy: interaction.user.id,
             createdAt: new Date().toISOString(),
             lastDraw: null,
-            nextDraw: nextDrawDate
+            nextDraw: nextDrawDate.toISOString()
         };
 
         // Zapisz loterię
@@ -172,57 +173,30 @@ class LotteryService {
     }
 
     /**
-     * Oblicza następny termin losowania
-     * @param {string} dayOfWeek - dzień tygodnia (używany tylko gdy frequency = 7)
+     * Oblicza następny termin losowania na podstawie bieżącej daty loterii
+     * @param {string} currentDrawDate - aktualna data losowania w formacie ISO
      * @param {number} hour - godzina
      * @param {number} minute - minuta
      * @param {boolean} isExecuting - czy funkcja jest wywoływana podczas wykonywania loterii
-     * @param {number} frequency - częstotliwość w dniach (domyślnie 7)
+     * @param {number} frequency - częstotliwość w dniach
      */
-    calculateNextDraw(dayOfWeek, hour, minute, isExecuting = false, frequency = 7) {
-        const now = new Date();
-        let nextDraw = new Date();
-        nextDraw.setHours(hour, minute, 0, 0);
-        
+    calculateNextDraw(currentDrawDate, hour, minute, isExecuting = false, frequency = 7) {
         if (frequency === 0) {
             // Jednorazowa loteria - jeśli wykonujemy, to NULL (brak następnego losowania)
             if (isExecuting) {
                 return null;
             }
-            
-            // Jeśli to dziś i godzina już minęła, ustaw na jutro
-            if (now >= nextDraw) {
-                nextDraw.setDate(now.getDate() + 1);
-            }
-            // W przeciwnym razie zostaw dzisiejszą datę z podaną godziną
-            
-        } else if (frequency === 7) {
-            // Tryb tygodniowy - używa dayOfWeek
-            const dayNum = this.config.lottery.dayMap[dayOfWeek];
-            let daysToAdd = (dayNum - now.getDay() + 7) % 7;
-            
-            // Jeśli to dziś, ale godzina już minęła, to następny taki dzień
-            // Podczas wykonywania loterii zawsze planuj na następny tydzień
-            if (daysToAdd === 0 && (now >= nextDraw || isExecuting)) {
-                daysToAdd = 7;
-            }
-            
-            nextDraw.setDate(now.getDate() + daysToAdd);
-        } else {
-            // Tryb niestandardowej częstotliwości - ignoruje dayOfWeek
-            let daysToAdd = frequency;
-            
-            // Jeśli to dziś i godzina już minęła lub wykonujemy loterię, dodaj pełną częstotliwość
-            if (now >= nextDraw || isExecuting) {
-                nextDraw.setDate(now.getDate() + daysToAdd);
-            } else {
-                // Jeśli to dziś ale godzina jeszcze nie minęła, użyj dzisiejszej daty
-                // (ale to powinno się zdarzyć tylko przy pierwszym tworzeniu loterii)
-                nextDraw.setDate(now.getDate());
-            }
+            // Jeśli nie wykonujemy, zwróć aktualną datę
+            return currentDrawDate;
         }
         
-        return nextDraw.toISOString();
+        // Dla cyklicznych loterii - dodaj frequency dni do aktualnej daty
+        const currentDate = new Date(currentDrawDate);
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(currentDate.getDate() + frequency);
+        nextDate.setHours(hour, minute, 0, 0);
+        
+        return nextDate.toISOString();
     }
 
     /**
@@ -297,71 +271,44 @@ class LotteryService {
                 return;
             }
 
-            const dayNum = this.config.lottery.dayMap[lottery.dayOfWeek];
+            // Dla cyklicznych loterii używamy timeoutów na konkretne daty
+            const nextDrawTime = new Date(lottery.nextDraw);
+            const now = new Date();
+            const timeToWait = nextDrawTime.getTime() - now.getTime();
             
-            if (dayNum === undefined) {
-                throw new Error(`Nieprawidłowy dzień tygodnia: ${lottery.dayOfWeek}`);
-            }
-            
-            // Oblicz czas ostrzeżenia (30 minut wcześniej)
-            let warningHour = lottery.hour;
-            let warningMinute = lottery.minute - 30;
-            
-            if (warningMinute < 0) {
-                warningMinute += 60;
-                warningHour -= 1;
-                if (warningHour < 0) {
-                    warningHour += 24;
+            if (timeToWait <= 0) {
+                logger.warn(`⚠️ Cykliczna loteria ${lotteryId} ma datę w przeszłości - wykonuję natychmiast`);
+                setTimeout(() => this.executeLottery(lotteryId), 1000);
+            } else {
+                logger.info(`📅 Zaplanowano cykliczną loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut (${nextDrawTime.toLocaleString('pl-PL')})`);
+                
+                // Ustaw timeout dla głównego losowania
+                const mainTimeout = setTimeout(() => {
+                    this.executeLottery(lotteryId);
+                }, timeToWait);
+                
+                this.cronJobs.set(lotteryId, { destroy: () => clearTimeout(mainTimeout) });
+                
+                // Ustaw ostrzeżenie 30 minut wcześniej (jeśli jest wystarczająco czasu)
+                const warningTime = timeToWait - (30 * 60 * 1000); // 30 minut wcześniej
+                if (warningTime > 0) {
+                    const warningTimeout = setTimeout(() => {
+                        this.sendClosingWarning(lotteryId);
+                    }, warningTime);
+                    
+                    this.cronJobs.set(lotteryId + '_warning', { destroy: () => clearTimeout(warningTimeout) });
+                }
+                
+                // Ustaw finalne ostrzeżenie 90 minut wcześniej (jeśli jest wystarczająco czasu)
+                const finalTime = timeToWait - (90 * 60 * 1000); // 90 minut wcześniej
+                if (finalTime > 0) {
+                    const finalTimeout = setTimeout(() => {
+                        this.sendFinalWarning(lotteryId);
+                    }, finalTime);
+                    
+                    this.cronJobs.set(lotteryId + '_final', { destroy: () => clearTimeout(finalTimeout) });
                 }
             }
-            
-            // Utwórz cron pattern dla ostrzeżenia: minute hour * * dayOfWeek
-            const warningCronPattern = `${warningMinute} ${warningHour} * * ${dayNum}`;
-            const warningJob = cron.schedule(warningCronPattern, async () => {
-                await this.sendClosingWarning(lotteryId);
-            }, {
-                timezone: "Europe/Warsaw"
-            });
-
-            this.cronJobs.set(lotteryId + '_warning', warningJob);
-            
-            // Oblicz czas finalnego ostrzeżenia (90 minut wcześniej)
-            let finalHour = lottery.hour;
-            let finalMinute = lottery.minute - 90;
-            
-            if (finalMinute < 0) {
-                finalMinute += 60;
-                finalHour -= 1;
-                if (finalMinute < 0) {
-                    finalMinute += 60;
-                    finalHour -= 1;
-                }
-                if (finalHour < 0) {
-                    finalHour += 24;
-                }
-            }
-            
-            // Utwórz cron pattern dla finalnego ostrzeżenia: minute hour * * dayOfWeek
-            const finalCronPattern = `${finalMinute} ${finalHour} * * ${dayNum}`;
-            const finalJob = cron.schedule(finalCronPattern, async () => {
-                await this.sendFinalWarning(lotteryId);
-            }, {
-                timezone: "Europe/Warsaw"
-            });
-
-            this.cronJobs.set(lotteryId + '_final', finalJob);
-            
-            // Utwórz cron pattern dla loterii: minute hour * * dayOfWeek
-            const cronPattern = `${lottery.minute} ${lottery.hour} * * ${dayNum}`;
-            const job = cron.schedule(cronPattern, async () => {
-                await this.executeLottery(lotteryId);
-            }, {
-                timezone: "Europe/Warsaw"
-            });
-
-            this.cronJobs.set(lotteryId, job);
-            
-            logger.info(`📅 Zaplanowano loterię na ${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`);
         } catch (error) {
             logger.error(`❌ Błąd planowania loterii ${lotteryId}:`, error);
             throw error;
@@ -831,7 +778,7 @@ class LotteryService {
             // Oblicz następną datę losowania PRZED publikacją wyników
             let nextDrawDate = null;
             if (lottery.frequency !== 0) {
-                nextDrawDate = this.calculateNextDraw(lottery.dayOfWeek, lottery.hour, lottery.minute, true, lottery.frequency);
+                nextDrawDate = this.calculateNextDraw(lottery.nextDraw, lottery.hour, lottery.minute, true, lottery.frequency);
                 lottery.nextDraw = nextDrawDate;
             }
 

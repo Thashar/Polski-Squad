@@ -145,7 +145,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     const targetRole = interaction.options.getRole('rola');
     const clanKey = interaction.options.getString('klan');
     const frequency = interaction.options.getInteger('częstotliwość');
-    const dayOfWeek = interaction.options.getString('dzień');
+    const dateString = interaction.options.getString('data');
     const timeString = interaction.options.getString('godzina');
     const winnersCount = interaction.options.getInteger('ilość');
     const channelId = interaction.options.getString('kanał');
@@ -163,9 +163,38 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
 
-    if (!config.lottery.allowedDays.includes(dayOfWeek)) {
+    // Walidacja daty
+    const dateMatch = dateString.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!dateMatch) {
         await interaction.reply({
-            content: `❌ Nieprawidłowy dzień tygodnia. Dostępne dni: ${config.lottery.allowedDays.join(', ')}`,
+            content: '❌ Nieprawidłowy format daty. Użyj formatu dd.mm.rrrr (np. 15.03.2025)',
+            ephemeral: true
+        });
+        return;
+    }
+    
+    const day = parseInt(dateMatch[1]);
+    const month = parseInt(dateMatch[2]);
+    const year = parseInt(dateMatch[3]);
+    
+    // Sprawdź czy data jest prawidłowa
+    const drawDate = new Date(year, month - 1, day);
+    if (drawDate.getDate() !== day || drawDate.getMonth() !== month - 1 || drawDate.getFullYear() !== year) {
+        await interaction.reply({
+            content: '❌ Nieprawidłowa data. Sprawdź czy podana data istnieje.',
+            ephemeral: true
+        });
+        return;
+    }
+    
+    // Sprawdź czy data nie jest w przeszłości
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    drawDate.setHours(0, 0, 0, 0);
+    
+    if (drawDate < now) {
+        await interaction.reply({
+            content: '❌ Data następnego losowania nie może być w przeszłości.',
             ephemeral: true
         });
         return;
@@ -225,7 +254,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
             targetRole,
             clanKey,
             frequency,
-            dayOfWeek,
+            drawDate,
             hour,
             minute,
             winnersCount,
@@ -241,8 +270,8 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
                         `🎰 **Nazwa:** ${result.lottery.name}\n` +
                         `🎯 **Rola docelowa:** ${targetRole.name}\n` +
                         `🏰 **Klan:** ${clan.displayName}\n` +
-                        `📅 **Częstotliwość:** Co ${frequency} dni\n` +
-                        `⏰ **Termin:** ${dayOfWeek} o ${timeString}\n` +
+                        `📅 **Częstotliwość:** ${frequency === 0 ? 'Jednorazowa' : `Co ${frequency} dni`}\n` +
+                        `⏰ **Pierwsza data:** ${dateString} o ${timeString}\n` +
                         `🏆 **Liczba zwycięzców:** ${winnersCount}\n` +
                         `📺 **Kanał wyników:** <#${channelId}>\n` +
                         `⏭️ **Następne losowanie:** ${nextDraw}\n\n` +
@@ -401,7 +430,7 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
         
         return {
             label: `${lottery.name}`,
-            description: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | Następna: ${formattedDate}`,
+            description: `Data: ${formattedDate} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')} | Częst: ${lottery.frequency === 0 ? 'Jednorazowa' : `Co ${lottery.frequency}d`}`,
             value: lottery.id,
             emoji: '🎰'
         };
@@ -578,7 +607,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -631,7 +660,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -757,7 +786,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -810,7 +839,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.dayOfWeek} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -1084,7 +1113,7 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
                 debugInfo += `  └ Następne losowanie: ${nextDraw}\n`;
                 debugInfo += `  └ Częstotliwość: ${frequency}\n`;
                 debugInfo += `  └ Cron job: ${hasCronJob ? '✅ Aktywny' : '❌ Brak'}\n`;
-                debugInfo += `  └ Pattern: ${lottery.minute} ${lottery.hour} * * ${config.lottery.dayMap[lottery.dayOfWeek]}\n\n`;
+                debugInfo += `  └ Data losowania: ${lottery.firstDrawDate || 'Brak'}\n\n`;
             }
         } else {
             debugInfo += `📋 **Brak aktywnych loterii**\n\n`;
@@ -1131,10 +1160,6 @@ async function registerSlashCommands(client, config) {
         value: key
     }));
 
-    const dayChoices = config.lottery.allowedDays.map(day => ({
-        name: day.charAt(0).toUpperCase() + day.slice(1),
-        value: day
-    }));
 
     const commands = [
         new SlashCommandBuilder()
@@ -1164,10 +1189,9 @@ async function registerSlashCommands(client, config) {
                     .setMinValue(0)
                     .setMaxValue(30))
             .addStringOption(option =>
-                option.setName('dzień')
-                    .setDescription('Dzień tygodnia')
-                    .setRequired(true)
-                    .addChoices(...dayChoices))
+                option.setName('data')
+                    .setDescription('Data pierwszego losowania (format: dd.mm.rrrr)')
+                    .setRequired(true))
             .addStringOption(option =>
                 option.setName('godzina')
                     .setDescription('Godzina losowania (format HH:MM, np. 19:00)')
