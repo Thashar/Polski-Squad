@@ -138,9 +138,27 @@ class LotteryService {
             throw new Error(`Nieprawidłowy klucz klanu: ${clanKey}`);
         }
 
-        // Ustaw dokładną datę i czas pierwszego losowania
-        const nextDrawDate = new Date(drawDate);
-        nextDrawDate.setHours(hour, minute, 0, 0);
+        // Ustaw dokładną datę i czas pierwszego losowania w polskiej strefie czasowej
+        // Tworzymy datę w formacie YYYY-MM-DD HH:MM w strefie Europe/Warsaw
+        const year = drawDate.getFullYear();
+        const month = String(drawDate.getMonth() + 1).padStart(2, '0');
+        const day = String(drawDate.getDate()).padStart(2, '0');
+        const hourStr = String(hour).padStart(2, '0');
+        const minuteStr = String(minute).padStart(2, '0');
+        
+        // Tworzymy datę w polskiej strefie czasowej
+        const dateTimeString = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00`;
+        
+        // Konwertujemy na UTC uwzględniając polską strefę czasową
+        const nextDrawDate = new Date(dateTimeString);
+        
+        // Sprawdź czy to czas letni (marzec-październik) czy zimowy
+        const isWinterTime = this.isWinterTime(nextDrawDate);
+        const offsetHours = isWinterTime ? -1 : -2; // Polska to UTC+1 (zimą) lub UTC+2 (latem)
+        
+        // Skoryguj o różnicę czasową (konwertuj z polskiego czasu na UTC)
+        nextDrawDate.setHours(nextDrawDate.getHours() + offsetHours);
+        
         const nextDrawTimestamp = nextDrawDate.getTime();
         const formattedDate = nextDrawDate.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
         const roleShort = targetRole.name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
@@ -186,6 +204,39 @@ class LotteryService {
     }
 
     /**
+     * Sprawdza czy podana data jest w czasie zimowym (UTC+1) czy letnim (UTC+2) w Polsce
+     * @param {Date} date - Data do sprawdzenia
+     * @returns {boolean} - true jeśli czas zimowy, false jeśli letni
+     */
+    isWinterTime(date) {
+        const year = date.getFullYear();
+        
+        // Ostatnia niedziela marca (początek czasu letniego)
+        const lastSundayMarch = new Date(year, 2, 31);
+        lastSundayMarch.setDate(31 - lastSundayMarch.getDay());
+        
+        // Ostatnia niedziela października (powrót do czasu zimowego)
+        const lastSundayOctober = new Date(year, 9, 31);
+        lastSundayOctober.setDate(31 - lastSundayOctober.getDay());
+        
+        // Jeśli data jest przed ostatnią niedzielą marca lub po ostatniej niedzieli października
+        return date < lastSundayMarch || date > lastSundayOctober;
+    }
+
+    /**
+     * Konwertuje czas UTC na polski czas lokalny dla wyświetlania
+     * @param {Date} utcDate - Data w UTC
+     * @returns {string} - Sformatowana data w polskim czasie
+     */
+    convertUTCToPolishTime(utcDate) {
+        const isWinter = this.isWinterTime(utcDate);
+        const offsetHours = isWinter ? 1 : 2; // Dodajemy offset dla konwersji UTC -> Polski czas
+        
+        const polishTime = new Date(utcDate.getTime() + offsetHours * 60 * 60 * 1000);
+        return polishTime.toLocaleString('pl-PL');
+    }
+
+    /**
      * Oblicza następny termin losowania na podstawie bieżącej daty loterii
      * @param {string} currentDrawDate - aktualna data losowania w formacie ISO
      * @param {number} hour - godzina
@@ -207,9 +258,23 @@ class LotteryService {
         const currentDate = new Date(currentDrawDate);
         const nextDate = new Date(currentDate);
         nextDate.setDate(currentDate.getDate() + frequency);
-        nextDate.setHours(hour, minute, 0, 0);
         
-        return nextDate.toISOString();
+        // Ustaw czas w polskiej strefie czasowej
+        const year = nextDate.getFullYear();
+        const month = String(nextDate.getMonth() + 1).padStart(2, '0');
+        const day = String(nextDate.getDate()).padStart(2, '0');
+        const hourStr = String(hour).padStart(2, '0');
+        const minuteStr = String(minute).padStart(2, '0');
+        
+        const dateTimeString = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00`;
+        const polishTime = new Date(dateTimeString);
+        
+        // Sprawdź czy to czas letni czy zimowy i skoryguj
+        const isWinter = this.isWinterTime(polishTime);
+        const offsetHours = isWinter ? -1 : -2;
+        polishTime.setHours(polishTime.getHours() + offsetHours);
+        
+        return polishTime.toISOString();
     }
 
     /**
@@ -258,7 +323,8 @@ class LotteryService {
                     logger.error(`❌ Jednorazowa loteria ${lotteryId} ma datę zbyt daleko w przyszłości (${Math.round(timeToWait / (24*60*60*1000))} dni). Maksymalnie 24 dni.`);
                     return;
                 } else {
-                    logger.info(`📅 Zaplanowano jednorazową loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut`);
+                    const polishTime = this.convertUTCToPolishTime(nextDrawTime);
+                logger.info(`📅 Zaplanowano jednorazową loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut (${polishTime})`);
                     
                     // Ustaw timeout dla głównego losowania
                     const mainTimeout = setTimeout(() => {
@@ -305,7 +371,8 @@ class LotteryService {
                 logger.error(`❌ Cykliczna loteria ${lotteryId} ma datę zbyt daleko w przyszłości (${Math.round(timeToWait / (24*60*60*1000))} dni). Maksymalnie 24 dni.`);
                 return;
             } else {
-                logger.info(`📅 Zaplanowano cykliczną loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut (${nextDrawTime.toLocaleString('pl-PL')})`);
+                const polishTime = this.convertUTCToPolishTime(nextDrawTime);
+                logger.info(`📅 Zaplanowano cykliczną loterię ${lottery.name} za ${Math.round(timeToWait / 60000)} minut (${polishTime})`);
                 
                 // Ustaw timeout dla głównego losowania
                 const mainTimeout = setTimeout(() => {
