@@ -20,7 +20,7 @@ Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami
 Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe. **Ulepszona korekcja OCR** - automatycznie poprawia błędy odczytu (TT→1T, 7→T, 0→Q). **Ulepszone logowanie** - wyświetla konkretne wartości znalezione po "Best:" i "Total:" zamiast tylko true/false, zredukowane duplikaty logów dla czystszego outputu.
 
 ### 🎯 Kontroler Bot
-Weryfikuje wyniki dla kanałów Daily i CX. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. Blokuje użytkowników z karami.
+Weryfikuje wyniki dla kanałów Daily i CX oraz zarządza zaawansowanym systemem loterii. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. **Nowy system loterii** z dokładnym planowaniem dat (dd.mm.yyyy), automatyczną obsługą strefy czasowej polskiej z DST, inteligentnym systemem ostrzeżeń i zabezpieczeniami przed limitami JavaScript. Obsługuje loterie jednorazowe i cykliczne (1-365 dni) z automatyczną migracją starych struktur danych.
 
 ### ⛪ Konklawe Bot
 Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki. **Losowe odpowiedzi JP2** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/100 na otrzymanie losowej odpowiedzi z emoji JP2roll. **Specjalne komendy VIP**: `/blessing` (błogosławieństwa) i `/virtue-check` (sprawdzanie cnót) z cooldownami i limitami dziennymi - dostępne globalnie tylko dla posiadaczy medalu.
@@ -139,15 +139,19 @@ Polski-Squad-Bot-Collection/
 │   │   └── ranking.json
 │   └── temp/
 │
-├── Kontroler/                 # Bot weryfikacji + loteria
+├── Kontroler/                 # Bot weryfikacji + zaawansowana loteria
 │   ├── index.js
 │   ├── handlers/
+│   │   ├── interactionHandlers.js
 │   │   └── messageHandlers.js
 │   ├── services/
 │   │   ├── analysisService.js
+│   │   ├── lotteryService.js
 │   │   ├── messageService.js
 │   │   ├── ocrService.js
 │   │   └── roleService.js
+│   ├── data/
+│   │   └── lottery_history.json
 │   └── temp/
 │
 ├── Konklawe/                  # Bot gry słownej z medalami
@@ -365,6 +369,27 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 - Maksymalnie 100 plików - najstarsze automatycznie usuwane
 
 ## Historia Zmian
+
+### [2025-09-03] - Kontroler Bot: Rewolucja Systemu Loterii 🎰
+#### Nowe funkcje ✨
+- **System planowania oparty na datach**: Kompletna przepisanie z dni tygodnia na dokładne daty (dd.mm.yyyy)
+- **Polska strefa czasowa z DST**: Automatyczna detekcja czasu letniego/zimowego i konwersja UTC ↔ Polski czas
+- **Zabezpieczenie setTimeout**: Ochrona przed limitami JavaScript (max 24 dni) z walidacją i error handling
+- **Elastyczna częstotliwość**: Rozszerzenie z 30 do 365 dni dla loterii cyklicznych
+- **Inteligentny system ostrzeżeń**: Ostrzeżenia tylko dla Daily/CX, brak spamu dla innych loterii
+- **Migracja legacy**: Automatyczne czyszczenie starych struktur danych przy starcie bota
+
+#### Poprawione 🔧  
+- **Problem czasów**: Naprawiono błędną konwersję stref czasowych (loterie wykonywały się w złych godzinach)
+- **Podwójne pingi**: Rozwiązano problem dublowania pingów z różnych loterii tego samego typu
+- **Ostrzeżenia dla testów**: Loterie testowe (inne role) nie wysyłają już niepotrzebnych ostrzeżeń
+- **Wyświetlanie dat**: Wszystkie daty w UI pokazują prawidłowy polski czas lokalny
+
+#### Techniczne szczegóły 🛠️
+- **Nowe parametry komendy `/lottery`**: Data zamiast dzień, walidacja formatu dd.mm.yyyy
+- **Funkcje pomocnicze**: `isWinterTime()`, `convertUTCToPolishTime()` dla obsługi stref czasowych  
+- **Timeout management**: Bezpieczne planowanie z limitami i error recovery
+- **Legacy cleanup**: Automatyczne usuwanie niekompatybilnych starych loterii
 
 ### [2025-08-31] - Centralny System Zarządzania Nickami  
 #### Nowe funkcje ✨
