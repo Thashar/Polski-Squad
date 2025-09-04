@@ -424,19 +424,23 @@ class LotteryService {
                 return;
             }
 
-            // Określ typ kanału i docelowy kanał - tylko dla Daily/CX
+            // POPRAWIONA LOGIKA: Ostrzeżenia na kanały OCR gdy loteria dotyczy roli Daily/CX
             let channelType = '';
             let targetWarningChannelId = '';
             
+            // Sprawdź czy to loteria dla roli Daily
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
-                targetWarningChannelId = this.config.channels.daily.targetChannelId;
-            } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
+                targetWarningChannelId = this.config.channels.daily.targetChannelId; // Wyślij na kanał Daily OCR
+            } 
+            // Sprawdź czy to loteria dla roli CX
+            else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
-                targetWarningChannelId = this.config.channels.cx.targetChannelId;
-            } else {
-                // Dla innych ról nie wysyłamy ostrzeżeń zamknięcia
-                logger.info(`📋 Pomijam ostrzeżenie zamknięcia - loteria ${lotteryId} nie jest Daily ani CX`);
+                targetWarningChannelId = this.config.channels.cx.targetChannelId; // Wyślij na kanał CX OCR
+            } 
+            // Inne role = brak ostrzeżeń
+            else {
+                logger.info(`📋 Pomijam ostrzeżenie zamknięcia - loteria ${lotteryId} nie dotyczy roli Daily ani CX`);
                 return;
             }
 
@@ -490,19 +494,23 @@ class LotteryService {
                 return;
             }
 
-            // Określ typ kanału i docelowy kanał - tylko dla Daily/CX
+            // POPRAWIONA LOGIKA: Ostrzeżenia na kanały OCR gdy loteria dotyczy roli Daily/CX
             let channelType = '';
             let targetWarningChannelId = '';
             
+            // Sprawdź czy to loteria dla roli Daily
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
-                targetWarningChannelId = this.config.channels.daily.targetChannelId;
-            } else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
+                targetWarningChannelId = this.config.channels.daily.targetChannelId; // Wyślij na kanał Daily OCR
+            } 
+            // Sprawdź czy to loteria dla roli CX
+            else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
                 channelType = 'CX';
-                targetWarningChannelId = this.config.channels.cx.targetChannelId;
-            } else {
-                // Dla innych ról nie wysyłamy finalnych ostrzeżeń
-                logger.info(`📋 Pomijam finalne ostrzeżenie - loteria ${lotteryId} nie jest Daily ani CX`);
+                targetWarningChannelId = this.config.channels.cx.targetChannelId; // Wyślij na kanał CX OCR
+            } 
+            // Inne role = brak ostrzeżeń
+            else {
+                logger.info(`📋 Pomijam finalne ostrzeżenie - loteria ${lotteryId} nie dotyczy roli Daily ani CX`);
                 return;
             }
 
