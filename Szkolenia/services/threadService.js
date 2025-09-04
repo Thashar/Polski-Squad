@@ -195,7 +195,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('lock_thread')
-                    .setLabel('Zamknij wątek')
+                    .setLabel('Zamknij szkolenie')
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('keep_open')
@@ -253,50 +253,6 @@ async function archiveThread(thread, config) {
     logger.info(`📦 Zarchiwizowano wątek: ${thread.name}`);
 }
 
-/**
- * Wysyła przypomnienie o nieaktywności wątku
- * @param {ThreadChannel} thread - Wątek do którego wysłać przypomnienie
- * @param {GuildMember} threadOwner - Właściciel wątku
- * @param {Object} state - Stan współdzielony aplikacji
- * @param {Object} config - Konfiguracja aplikacji
- * @param {number} now - Obecny timestamp
- */
-async function sendInactivityReminder(thread, threadOwner, state, config, now) {
-    try {
-        // Jeśli wątek jest zarchiwizowany, odarchiwizuj go przed wysłaniem przypomnienia
-        if (thread.archived) {
-            await thread.setArchived(false, 'Odarchiwizowanie w celu wysłania przypomnienia');
-        }
-        
-        // Utwórz przyciski akcji
-        const actionRow = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('thread_close')
-                    .setLabel('🗑️ Zamknij wątek')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId('thread_keep_open')
-                    .setLabel('⏰ Kontynuuj szkolenie')
-                    .setStyle(ButtonStyle.Primary)
-            );
-
-        // Wyślij wiadomość z przypomnieniem
-        const reminderMessage = `${threadOwner} ${config.messages.threadInactivityReminder}`;
-        
-        await thread.send({
-            content: reminderMessage,
-            components: [actionRow]
-        });
-
-        // Zapisz że przypomnienie zostało wysłane
-        await reminderStorage.markReminderSent(state.lastReminderMap, thread.id, now);
-        
-        logger.info(`🔔 Wysłano przypomnienie o nieaktywności dla wątku: ${thread.name}`);
-    } catch (error) {
-        logger.error(`❌ Błąd podczas wysyłania przypomnienia dla wątku ${thread.name}:`, error);
-    }
-}
 
 module.exports = {
     checkThreads,

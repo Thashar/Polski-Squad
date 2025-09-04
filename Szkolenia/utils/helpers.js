@@ -102,16 +102,7 @@ function getThreadOwner(thread, guild) {
     );
 }
 
-/**
- * Logowanie z timestamp
- * @param {string} message - Wiadomość do zalogowania
- * @param {string} type - Typ logu (info, error, warn)
- */
-function logWithTimestamp(message, type = 'info') {
-    const timestamp = formatTime(Date.now());
-    const prefix = type === 'error' ? '❌' : type === 'warn' ? '⚠️' : 'ℹ️';
-    console.log(`[${timestamp}] ${prefix} ${message}`);
-}
+// Funkcja logWithTimestamp usunięta - używaj createBotLogger z utils/consoleLogger.js
 
 module.exports = {
     delay,
