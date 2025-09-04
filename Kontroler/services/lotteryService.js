@@ -170,7 +170,7 @@ class LotteryService {
 
         const lottery = {
             id: lotteryId,
-            name: `Loteria ${targetRole.name} - ${clan.displayName}`,
+            name: `Loteria ${targetRole.name} dla ${clan.displayName}`,
             targetRoleId: targetRole.id,
             clanRoleId: clan.roleId, // może być null dla opcji "cały serwer"
             clanKey: clanKey,
