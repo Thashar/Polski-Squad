@@ -458,17 +458,11 @@ class MessageHandler {
                 const warningMessage = `🚫 **${message.author}**, wrzucanie zdjęć na tym kanale jest obecnie zablokowane!`;
 
                 try {
-                    const warningMsg = await message.channel.send(warningMessage);
-                    // Usuń powiadomienie po 10 sekundach
-                    setTimeout(async () => {
-                        try {
-                            await warningMsg.delete();
-                        } catch (error) {
-                            // Ignoruj błędy usuwania (może już być usunięte)
-                        }
-                    }, 10000);
-                } catch (error) {
-                    logger.error(`❌ Nie można wysłać powiadomienia o blokadzie: ${error.message}`);
+                    // Wyślij TYLKO wiadomość prywatną - absolutnie nic publicznie
+                    await message.author.send(warningMessage.replace(`**${message.author}**`, 'Ty'));
+                } catch (dmError) {
+                    // Jeśli DM nie działa - MILCZ. Nie wysyłaj niczego publicznego.
+                    logger.info(`ℹ️ Nie można wysłać DM do ${message.author.tag} o blokadzie obrazów - pomijam powiadomienie`);
                 }
 
                 // Loguj blokadę
@@ -513,7 +507,7 @@ class MessageHandler {
                     const { word, blockInfo } = blockedWordInfo;
                     
                     // Wyślij powiadomienie użytkownikowi
-                    let warningMessage = `🚫 **${message.author}**, użycie słowa **"${word}"** jest zablokowane!\n`;
+                    let warningMessage = `🚫 **${message.author}**, użycie zablokowanego słowa jest niedozwolone!\n`;
 
                     // Zastosuj timeout jeśli jest skonfigurowany
                     if (blockInfo.shouldTimeout && blockInfo.timeoutDurationMinutes) {
@@ -534,17 +528,11 @@ class MessageHandler {
                     }
 
                     try {
-                        const warningMsg = await message.channel.send(warningMessage);
-                        // Usuń powiadomienie po 15 sekundach
-                        setTimeout(async () => {
-                            try {
-                                await warningMsg.delete();
-                            } catch (error) {
-                                // Ignoruj błędy usuwania (może już być usunięte)
-                            }
-                        }, 15000);
-                    } catch (error) {
-                        logger.error(`❌ Nie można wysłać powiadomienia o zablokowanym słowie: ${error.message}`);
+                        // Wyślij TYLKO wiadomość prywatną - absolutnie nic publicznie
+                        await message.author.send(warningMessage.replace(`**${message.author}**`, 'Ty'));
+                    } catch (dmError) {
+                        // Jeśli DM nie działa - MILCZ. Nie wysyłaj niczego publicznego.
+                        logger.info(`ℹ️ Nie można wysłać DM do ${message.author.tag} o zablokowanym słowie - pomijam powiadomienie`);
                     }
 
                     // Loguj blokadę
