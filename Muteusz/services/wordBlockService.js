@@ -45,20 +45,35 @@ class WordBlockService {
             const data = await fs.readFile(this.dataFile, 'utf8');
             const blocksData = JSON.parse(data);
             
-            // Konwertuj na Map z datami
+            // Konwertuj na Map z datami i filtruj wygasłe
             this.wordBlocks.clear();
+            let totalLoaded = 0;
+            let expiredCount = 0;
+            const now = new Date();
+            
             for (const [word, blockInfo] of Object.entries(blocksData)) {
-                // Sprawdź czy blokada nie wygasła
+                totalLoaded++;
                 const endTime = new Date(blockInfo.endTime);
-                if (endTime > new Date()) {
+                
+                if (endTime > now) {
+                    // Blokada aktywna - dodaj do mapy
                     this.wordBlocks.set(word.toLowerCase(), {
                         ...blockInfo,
                         endTime: endTime
                     });
+                } else {
+                    // Blokada wygasła - zlicz do statystyk
+                    expiredCount++;
                 }
             }
 
-            logger.info(`📥 Załadowano ${this.wordBlocks.size} aktywnych blokad słów`);
+            // Jeśli były wygasłe blokady, zapisz oczyszczoną listę
+            if (expiredCount > 0) {
+                await this.saveWordBlocks();
+                logger.info(`🧹 Usunięto ${expiredCount} wygasłych blokad słów podczas uruchamiania`);
+            }
+
+            logger.info(`📥 Załadowano ${this.wordBlocks.size} aktywnych blokad słów (łącznie przetworzono: ${totalLoaded})`);
         } catch (error) {
             logger.error(`❌ Błąd ładowania blokad słów: ${error.message}`);
             throw error;
