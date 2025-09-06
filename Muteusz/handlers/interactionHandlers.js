@@ -200,6 +200,20 @@ class InteractionHandler {
                     option.setName('produkcyjny')
                         .setDescription('Czy uruchomić w trybie produkcyjnym (rzeczywiste kickowanie)')
                         .setRequired(false)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('block-ss')
+                .setDescription('Blokuje wrzucanie zdjęć na danym kanale na określony czas')
+                .addStringOption(option =>
+                    option.setName('czas')
+                        .setDescription('Format: hh.mm dd.mm.rrrr (np. 23.59 31.12.2024)')
+                        .setRequired(true)
+                )
+                .addChannelOption(option =>
+                    option.setName('kanał')
+                        .setDescription('Kanał do zablokowania')
+                        .setRequired(true)
                 )
         ];
         
@@ -268,6 +282,9 @@ class InteractionHandler {
                     break;
                 case 'test-kick':
                     await this.handleTestKickCommand(interaction);
+                    break;
+                case 'block-ss':
+                    await this.handleBlockSsCommand(interaction);
                     break;
             }
         } else if (interaction.isButton()) {
@@ -2184,6 +2201,142 @@ class InteractionHandler {
             await interaction.editReply({ content: `❌ Błąd podczas testu kickowania: ${error.message}` });
             await this.logService.logMessage('error', `Błąd podczas testu kickowania: ${error.message}`, interaction);
         }
+    }
+
+    /**
+     * Obsługuje komendę blokowania zdjęć
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleBlockSsCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /block-ss`, interaction);
+        
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy!',
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /block-ss bez uprawnień administratora`, interaction);
+            return;
+        }
+
+        const timeString = interaction.options.getString('czas');
+        const channel = interaction.options.getChannel('kanał');
+
+        if (!channel || !channel.isTextBased()) {
+            await interaction.reply({
+                content: '❌ Podany kanał musi być kanałem tekstowym!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Parse time format hh.mm dd.mm.yyyy
+        const parsedTime = this.parseBlockTime(timeString);
+        if (parsedTime.error) {
+            await interaction.reply({
+                content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 23.59 31.12.2024`,
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Inicjalizuj serwis blokowania obrazów jeśli nie istnieje
+            if (!this.imageBlockService) {
+                const ImageBlockService = require('../services/imageBlockService');
+                this.imageBlockService = new ImageBlockService(this.config, this.logService);
+                await this.imageBlockService.initialize();
+            }
+
+            // Dodaj blokadę
+            const result = await this.imageBlockService.addBlock(channel.id, parsedTime.endTime, interaction.user.id);
+            
+            if (result.success) {
+                const successMessage = `✅ Zablokowano wrzucanie zdjęć na kanale **${channel.name}**\n` +
+                    `🕒 Blokada będzie aktywna do: **${parsedTime.formatted}**\n` +
+                    `👮 Zablokowane przez: **${interaction.user.tag}**`;
+                
+                await interaction.editReply({ content: successMessage });
+                
+                // Publiczne powiadomienie
+                await interaction.followUp({ 
+                    content: `🚫 **Uwaga!** Wrzucanie zdjęć na kanale ${channel} zostało zablokowane do **${parsedTime.formatted}**`,
+                    ephemeral: false 
+                });
+                
+                await this.logService.logMessage('success', 
+                    `Zablokowano wrzucanie zdjęć na kanale ${channel.name} do ${parsedTime.formatted} przez ${interaction.user.tag}`, 
+                    interaction
+                );
+            } else {
+                await interaction.editReply({ content: `❌ ${result.message}` });
+            }
+
+        } catch (error) {
+            await interaction.editReply({ content: `❌ Wystąpił błąd podczas blokowania kanału: ${error.message}` });
+            await this.logService.logMessage('error', `Błąd podczas blokowania kanału: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Parsuje format czasu dla blokady zdjęć (hh.mm dd.mm.yyyy)
+     * @param {string} timeString - String z czasem do sparsowania
+     * @returns {Object} - {endTime: Date, error: string|null, formatted: string}
+     */
+    parseBlockTime(timeString) {
+        if (!timeString || typeof timeString !== 'string') {
+            return { error: 'Nie podano czasu' };
+        }
+
+        const timeString_clean = timeString.trim();
+        
+        // Regex dla formatu hh.mm dd.mm.yyyy
+        const timeMatch = timeString_clean.match(/^(\d{1,2})\.(\d{1,2})\s+(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+        
+        if (!timeMatch) {
+            return { error: 'Format musi być: hh.mm dd.mm.rrrr (np. 23.59 31.12.2024)' };
+        }
+        
+        const hours = parseInt(timeMatch[1]);
+        const minutes = parseInt(timeMatch[2]);
+        const day = parseInt(timeMatch[3]);
+        const month = parseInt(timeMatch[4]);
+        const year = parseInt(timeMatch[5]);
+        
+        // Walidacja
+        if (hours < 0 || hours > 23) {
+            return { error: 'Godziny muszą być między 00 a 23' };
+        }
+        
+        if (minutes < 0 || minutes > 59) {
+            return { error: 'Minuty muszą być między 00 a 59' };
+        }
+        
+        if (month < 1 || month > 12) {
+            return { error: 'Miesiąc musi być między 01 a 12' };
+        }
+        
+        if (day < 1 || day > 31) {
+            return { error: 'Dzień musi być między 01 a 31' };
+        }
+        
+        // Utworz datę
+        const endTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        
+        // Sprawdź czy data jest w przyszłości
+        if (endTime <= new Date()) {
+            return { error: 'Data musi być w przyszłości' };
+        }
+        
+        const formatted = endTime.toLocaleString('pl-PL');
+        
+        return {
+            endTime: endTime,
+            error: null,
+            formatted: formatted
+        };
     }
 }
 

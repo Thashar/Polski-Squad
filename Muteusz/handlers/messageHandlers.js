@@ -14,11 +14,23 @@ class MessageHandler {
         this.warningService = new WarningService(config, logger);
         this.autoModerationService = new AutoModerationService(config, logger, this.warningService);
         this.spamDetectionService = new SpamDetectionService(config, logger);
+        this.imageBlockService = null;
         
         // Uruchom czyszczenie co 5 minut
         setInterval(() => {
             this.autoModerationService.cleanup();
         }, 5 * 60 * 1000);
+    }
+
+    /**
+     * Inicjalizuje serwis blokowania obrazów
+     */
+    async initializeImageBlockService() {
+        if (!this.imageBlockService) {
+            const ImageBlockService = require('../services/imageBlockService');
+            this.imageBlockService = new ImageBlockService(this.config, this.logService);
+            await this.imageBlockService.initialize();
+        }
     }
 
     /**
@@ -30,6 +42,22 @@ class MessageHandler {
         // Ignoruj wiadomości botów
         if (message.author.bot || !message.guild) {
             return;
+        }
+
+        // Sprawdź czy kanał ma zablokowane obrazy
+        if (message.attachments.size > 0) {
+            const hasImages = message.attachments.some(attachment => {
+                const extension = attachment.name ? attachment.name.toLowerCase() : '';
+                return extension.endsWith('.jpg') || extension.endsWith('.jpeg') || 
+                       extension.endsWith('.png') || extension.endsWith('.gif') || 
+                       extension.endsWith('.webp') || extension.endsWith('.bmp') || 
+                       extension.endsWith('.svg');
+            });
+            
+            if (hasImages) {
+                await this.handleImageBlock(message);
+                return; // Zatrzymaj dalsze przetwarzanie jeśli obrazy zostały zablokowane
+            }
         }
         
         // Losowa odpowiedź dla użytkowników z rolą Virtutti Papajlari
@@ -382,6 +410,61 @@ class MessageHandler {
      */
     getAutoModerationService() {
         return this.autoModerationService;
+    }
+
+    /**
+     * Obsługuje blokadę obrazów na kanale
+     * @param {Message} message - Wiadomość z obrazami
+     */
+    async handleImageBlock(message) {
+        try {
+            // Inicjalizuj serwis jeśli nie istnieje
+            if (!this.imageBlockService) {
+                await this.initializeImageBlockService();
+            }
+
+            // Sprawdź czy kanał jest zablokowany
+            if (this.imageBlockService.isChannelBlocked(message.channel.id)) {
+                const blockInfo = this.imageBlockService.getBlockInfo(message.channel.id);
+                
+                // Usuń wiadomość
+                try {
+                    await message.delete();
+                } catch (error) {
+                    logger.error(`❌ Nie można usunąć wiadomości z obrazami: ${error.message}`);
+                }
+
+                // Wyślij powiadomienie użytkownikowi
+                const endTime = blockInfo.endTime.toLocaleString('pl-PL');
+                const warningMessage = `🚫 **${message.author}**, wrzucanie zdjęć na tym kanale jest obecnie zablokowane!\n` +
+                    `⏰ Blokada będzie aktywna do: **${endTime}**`;
+
+                try {
+                    const warningMsg = await message.channel.send(warningMessage);
+                    // Usuń powiadomienie po 10 sekundach
+                    setTimeout(async () => {
+                        try {
+                            await warningMsg.delete();
+                        } catch (error) {
+                            // Ignoruj błędy usuwania (może już być usunięte)
+                        }
+                    }, 10000);
+                } catch (error) {
+                    logger.error(`❌ Nie można wysłać powiadomienia o blokadzie: ${error.message}`);
+                }
+
+                // Loguj blokadę
+                logger.info(`🚫 Zablokowano obraz od ${message.author.tag} na kanale #${message.channel.name} (blokada do ${endTime})`);
+                await this.logService.logMessage('info', 
+                    `Zablokowano obraz od ${message.author.tag} na kanale #${message.channel.name}`, 
+                    message
+                );
+
+                return; // Zatrzymaj dalsze przetwarzanie
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd obsługi blokady obrazów: ${error.message}`);
+        }
     }
 
     /**

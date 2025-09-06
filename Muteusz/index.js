@@ -105,7 +105,10 @@ client.once(Events.ClientReady, async () => {
     await memberCacheService.initialize(client);
     await interactionHandler.registerSlashCommands(client);
     
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami');
+    // Inicjalizuj serwis blokowania obrazów w messageHandlerze
+    await messageHandler.initializeImageBlockService();
+    
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów');
 });
 
 // Obsługa wiadomości
@@ -263,6 +266,11 @@ process.on('SIGINT', async () => {
     roleConflictService.cleanup();
     await memberCacheService.cleanup();
     
+    // Wyczyść ImageBlockService
+    if (messageHandler.imageBlockService) {
+        await messageHandler.imageBlockService.shutdown();
+    }
+    
     client.destroy();
     process.exit(0);
 });
@@ -283,6 +291,11 @@ process.on('SIGTERM', async () => {
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
         await memberCacheService.cleanup();
+        
+        // Wyczyść ImageBlockService
+        if (messageHandler.imageBlockService) {
+            await messageHandler.imageBlockService.shutdown();
+        }
         
         client.destroy();
         logger.info('Bot został pomyślnie zamknięty');
@@ -333,6 +346,11 @@ async function stopBot() {
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
         await memberCacheService.cleanup();
+        
+        // Wyczyść ImageBlockService
+        if (messageHandler.imageBlockService) {
+            await messageHandler.imageBlockService.shutdown();
+        }
         
         await client.destroy();
         logger.info('Bot został zatrzymany');
