@@ -50,14 +50,14 @@ class WordBlockService {
             let totalLoaded = 0;
             let expiredCount = 0;
             
-            // Pobierz aktualny czas w strefie polskiej jako UTC
-            const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+            // Używaj bezpośrednio UTC - jest prostsze i bardziej niezawodne
+            const now = new Date();
             
             for (const [word, blockInfo] of Object.entries(blocksData)) {
                 totalLoaded++;
                 const endTime = new Date(blockInfo.endTime);
                 
-                if (endTime > nowPolandUTC) {
+                if (endTime > now) {
                     // Blokada aktywna - dodaj do mapy
                     this.wordBlocks.set(word.toLowerCase(), {
                         ...blockInfo,
@@ -135,9 +135,9 @@ class WordBlockService {
             // Sprawdź czy słowo już jest zablokowane i czy nie wygasło
             if (this.wordBlocks.has(wordKey)) {
                 const existingBlock = this.wordBlocks.get(wordKey);
-                const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+                const now = new Date();
                 
-                if (existingBlock.endTime <= nowPolandUTC) {
+                if (existingBlock.endTime <= now) {
                     // Blokada wygasła - usuń ją i pozwól na dodanie nowej
                     this.wordBlocks.delete(wordKey);
                     await this.saveWordBlocks();
@@ -227,8 +227,8 @@ class WordBlockService {
         
         for (const [wordKey, blockInfo] of this.wordBlocks.entries()) {
             // Sprawdź czy blokada nie wygasła
-            const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
-            if (blockInfo.endTime <= nowPolandUTC) {
+            const now = new Date();
+            if (blockInfo.endTime <= now) {
                 // Usuń wygasłą blokadę
                 this.wordBlocks.delete(wordKey);
                 this.saveWordBlocks().catch(error => {
