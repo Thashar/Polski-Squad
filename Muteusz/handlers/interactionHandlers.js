@@ -2348,12 +2348,16 @@ class InteractionHandler {
             return { error: 'Dzień musi być między 01 a 31' };
         }
         
-        // Utworz datę w strefie czasowej Polski
-        const endTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        // Interpretuj czas jako czas polski i zapisz jako UTC
+        // Użyj Date.UTC() ale odejmij offset Polski (2 godziny w lecie, 1 w zimie)
+        const isDST = this.isDaylightSavingTime(new Date(year, month - 1, day));
+        const polandOffset = isDST ? 2 : 1; // UTC+2 w lecie, UTC+1 w zimie
         
-        // Sprawdź czy data jest w przyszłości (porównaj w czasie polskim)
-        const nowInPoland = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
-        if (endTime <= nowInPoland) {
+        // Utwórz datę UTC ale przesuń o offset Polski w tył, żeby reprezentowała czas polski
+        const endTime = new Date(Date.UTC(year, month - 1, day, hours - polandOffset, minutes, 0, 0));
+        
+        // Sprawdź czy data jest w przyszłości
+        if (endTime <= new Date()) {
             return { error: 'Data musi być w przyszłości (czas polski)' };
         }
         
@@ -2364,6 +2368,26 @@ class InteractionHandler {
             error: null,
             formatted: formatted
         };
+    }
+
+    /**
+     * Sprawdza czy data jest w czasie letnim (DST) w Polsce
+     * @param {Date} date - Data do sprawdzenia
+     * @returns {boolean} - Czy jest czas letni
+     */
+    isDaylightSavingTime(date) {
+        const year = date.getFullYear();
+        // Czas letni w Europie: ostatnia niedziela marca - ostatnia niedziela października
+        const march = new Date(year, 2, 31);
+        const october = new Date(year, 9, 31);
+        
+        // Znajdź ostatnią niedzielę marca
+        const lastSundayMarch = new Date(march.getTime() - (march.getDay() * 24 * 60 * 60 * 1000));
+        
+        // Znajdź ostatnią niedzielę października  
+        const lastSundayOctober = new Date(october.getTime() - (october.getDay() * 24 * 60 * 60 * 1000));
+        
+        return date >= lastSundayMarch && date < lastSundayOctober;
     }
 
     /**
@@ -2511,12 +2535,16 @@ class InteractionHandler {
             return { error: 'Dzień musi być między 01 a 31' };
         }
         
-        // Utworz datę w strefie czasowej Polski
-        const endTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        // Interpretuj czas jako czas polski i zapisz jako UTC
+        // Użyj Date.UTC() ale odejmij offset Polski (2 godziny w lecie, 1 w zimie)
+        const isDST = this.isDaylightSavingTime(new Date(year, month - 1, day));
+        const polandOffset = isDST ? 2 : 1; // UTC+2 w lecie, UTC+1 w zimie
         
-        // Sprawdź czy data jest w przyszłości (porównaj w czasie polskim)
-        const nowInPoland = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
-        if (endTime <= nowInPoland) {
+        // Utwórz datę UTC ale przesuń o offset Polski w tył, żeby reprezentowała czas polski
+        const endTime = new Date(Date.UTC(year, month - 1, day, hours - polandOffset, minutes, 0, 0));
+        
+        // Sprawdź czy data jest w przyszłości
+        if (endTime <= new Date()) {
             return { error: 'Data musi być w przyszłości (czas polski)' };
         }
         
