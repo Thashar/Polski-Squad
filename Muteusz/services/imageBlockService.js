@@ -49,13 +49,15 @@ class ImageBlockService {
             this.blocks.clear();
             let totalLoaded = 0;
             let expiredCount = 0;
-            const now = new Date();
+            
+            // Pobierz aktualny czas w strefie polskiej jako UTC
+            const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
             
             for (const [channelId, blockInfo] of Object.entries(blocksData)) {
                 totalLoaded++;
                 const endTime = new Date(blockInfo.endTime);
                 
-                if (endTime > now) {
+                if (endTime > nowPolandUTC) {
                     // Blokada aktywna - dodaj do mapy
                     this.blocks.set(channelId, {
                         ...blockInfo,
@@ -128,9 +130,9 @@ class ImageBlockService {
             // Sprawdź czy blokada już istnieje i czy nie wygasła
             if (this.blocks.has(channelId)) {
                 const existingBlock = this.blocks.get(channelId);
-                const now = new Date();
+                const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
                 
-                if (existingBlock.endTime <= now) {
+                if (existingBlock.endTime <= nowPolandUTC) {
                     // Blokada wygasła - usuń ją i pozwól na dodanie nowej
                     this.blocks.delete(channelId);
                     await this.saveBlocks();
@@ -213,8 +215,8 @@ class ImageBlockService {
         }
 
         // Sprawdź czy blokada nie wygasła
-        const now = new Date();
-        if (block.endTime <= now) {
+        const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+        if (block.endTime <= nowPolandUTC) {
             // Usuń wygasłą blokadę
             this.blocks.delete(channelId);
             this.saveBlocks().catch(error => {

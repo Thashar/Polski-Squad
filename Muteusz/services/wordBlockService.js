@@ -49,13 +49,15 @@ class WordBlockService {
             this.wordBlocks.clear();
             let totalLoaded = 0;
             let expiredCount = 0;
-            const now = new Date();
+            
+            // Pobierz aktualny czas w strefie polskiej jako UTC
+            const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
             
             for (const [word, blockInfo] of Object.entries(blocksData)) {
                 totalLoaded++;
                 const endTime = new Date(blockInfo.endTime);
                 
-                if (endTime > now) {
+                if (endTime > nowPolandUTC) {
                     // Blokada aktywna - dodaj do mapy
                     this.wordBlocks.set(word.toLowerCase(), {
                         ...blockInfo,
@@ -133,9 +135,9 @@ class WordBlockService {
             // Sprawdź czy słowo już jest zablokowane i czy nie wygasło
             if (this.wordBlocks.has(wordKey)) {
                 const existingBlock = this.wordBlocks.get(wordKey);
-                const now = new Date();
+                const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
                 
-                if (existingBlock.endTime <= now) {
+                if (existingBlock.endTime <= nowPolandUTC) {
                     // Blokada wygasła - usuń ją i pozwól na dodanie nowej
                     this.wordBlocks.delete(wordKey);
                     await this.saveWordBlocks();
@@ -225,8 +227,8 @@ class WordBlockService {
         
         for (const [wordKey, blockInfo] of this.wordBlocks.entries()) {
             // Sprawdź czy blokada nie wygasła
-            const now = new Date();
-            if (blockInfo.endTime <= now) {
+            const nowPolandUTC = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+            if (blockInfo.endTime <= nowPolandUTC) {
                 // Usuń wygasłą blokadę
                 this.wordBlocks.delete(wordKey);
                 this.saveWordBlocks().catch(error => {
