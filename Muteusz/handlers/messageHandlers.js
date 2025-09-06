@@ -15,6 +15,7 @@ class MessageHandler {
         this.autoModerationService = new AutoModerationService(config, logger, this.warningService);
         this.spamDetectionService = new SpamDetectionService(config, logger);
         this.imageBlockService = null;
+        this.wordBlockService = null;
         
         // Uruchom czyszczenie co 5 minut
         setInterval(() => {
@@ -30,6 +31,17 @@ class MessageHandler {
             const ImageBlockService = require('../services/imageBlockService');
             this.imageBlockService = new ImageBlockService(this.config, this.logService);
             await this.imageBlockService.initialize();
+        }
+    }
+
+    /**
+     * Inicjalizuje serwis blokowania słów
+     */
+    async initializeWordBlockService() {
+        if (!this.wordBlockService) {
+            const WordBlockService = require('../services/wordBlockService');
+            this.wordBlockService = new WordBlockService(this.config, this.logService);
+            await this.wordBlockService.initialize();
         }
     }
 
@@ -57,6 +69,14 @@ class MessageHandler {
             if (hasImages) {
                 await this.handleImageBlock(message);
                 return; // Zatrzymaj dalsze przetwarzanie jeśli obrazy zostały zablokowane
+            }
+        }
+
+        // Sprawdź czy wiadomość zawiera zablokowane słowa
+        if (message.content) {
+            const blockedWords = await this.handleWordBlock(message);
+            if (blockedWords && blockedWords.length > 0) {
+                return; // Zatrzymaj dalsze przetwarzanie jeśli słowa zostały zablokowane
             }
         }
         
@@ -465,6 +485,104 @@ class MessageHandler {
         } catch (error) {
             logger.error(`❌ Błąd obsługi blokady obrazów: ${error.message}`);
         }
+    }
+
+    /**
+     * Obsługuje blokadę słów w wiadomościach
+     * @param {Message} message - Wiadomość do sprawdzenia
+     * @returns {Array} - Lista znalezionych zablokowanych słów
+     */
+    async handleWordBlock(message) {
+        try {
+            // Inicjalizuj serwis jeśli nie istnieje
+            if (!this.wordBlockService) {
+                await this.initializeWordBlockService();
+            }
+
+            // Sprawdź czy wiadomość zawiera zablokowane słowa
+            const blockedWords = this.wordBlockService.checkForBlockedWords(message.content);
+            
+            if (blockedWords.length > 0) {
+                // Usuń wiadomość
+                try {
+                    await message.delete();
+                } catch (error) {
+                    logger.error(`❌ Nie można usunąć wiadomości z zablokowanymi słowami: ${error.message}`);
+                }
+
+                // Przetwórz każde zablokowane słowo
+                for (const blockedWordInfo of blockedWords) {
+                    const { word, blockInfo } = blockedWordInfo;
+                    
+                    // Wyślij powiadomienie użytkownikowi
+                    const endTime = blockInfo.endTime.toLocaleString('pl-PL');
+                    let warningMessage = `🚫 **${message.author}**, użycie słowa **"${word}"** jest zablokowane!\n` +
+                        `⏰ Blokada będzie aktywna do: **${endTime}**\n`;
+
+                    // Zastosuj timeout jeśli jest skonfigurowany
+                    if (blockInfo.shouldTimeout && blockInfo.timeoutDurationMinutes) {
+                        try {
+                            const timeoutDuration = blockInfo.timeoutDurationMinutes * 60 * 1000;
+                            await message.member.timeout(timeoutDuration, `Użycie zablokowanego słowa: "${word}"`);
+                            
+                            const timeoutFormatted = this.formatTimeDisplay(blockInfo.timeoutDurationMinutes);
+                            warningMessage += `⏱️ Otrzymujesz timeout na: **${timeoutFormatted}**`;
+                            
+                            logger.info(`⏱️ Nadano timeout ${timeoutFormatted} użytkownikowi ${message.author.tag} za słowo "${word}"`);
+                        } catch (timeoutError) {
+                            logger.error(`❌ Nie można nadać timeout użytkownikowi ${message.author.tag}: ${timeoutError.message}`);
+                            warningMessage += `❌ Nie udało się nadać timeout`;
+                        }
+                    } else {
+                        warningMessage += `ℹ️ Tylko usuwanie wiadomości - bez timeout`;
+                    }
+
+                    try {
+                        const warningMsg = await message.channel.send(warningMessage);
+                        // Usuń powiadomienie po 15 sekundach
+                        setTimeout(async () => {
+                            try {
+                                await warningMsg.delete();
+                            } catch (error) {
+                                // Ignoruj błędy usuwania (może już być usunięte)
+                            }
+                        }, 15000);
+                    } catch (error) {
+                        logger.error(`❌ Nie można wysłać powiadomienia o zablokowanym słowie: ${error.message}`);
+                    }
+
+                    // Loguj blokadę
+                    logger.info(`🚫 Zablokowano słowo "${word}" od ${message.author.tag} na kanale #${message.channel.name}`);
+                    await this.logService.logMessage('info', 
+                        `Zablokowano słowo "${word}" od ${message.author.tag} na kanale #${message.channel.name}`, 
+                        message
+                    );
+                }
+
+                return blockedWords;
+            }
+
+            return [];
+        } catch (error) {
+            logger.error(`❌ Błąd obsługi blokady słów: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * Formatuje minuty na czytelny format czasu
+     * @param {number} totalMinutes - Łączna liczba minut
+     * @returns {string} - Sformatowany czas (np. "1h 30m")
+     */
+    formatTimeDisplay(totalMinutes) {
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        
+        let parts = [];
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        
+        return parts.join(' ');
     }
 
     /**

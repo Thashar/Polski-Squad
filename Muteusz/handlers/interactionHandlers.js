@@ -214,6 +214,35 @@ class InteractionHandler {
                     option.setName('kanał')
                         .setDescription('Kanał do zablokowania')
                         .setRequired(true)
+                ),
+            
+            new SlashCommandBuilder()
+                .setName('block-word')
+                .setDescription('Blokuje określone słowo i nakłada karę za jego użycie')
+                .addStringOption(option =>
+                    option.setName('słowo')
+                        .setDescription('Słowo do zablokowania')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('czas')
+                        .setDescription('Format: gg:mm dd:mm:rrrr (np. 23:59 31.12.2024)')
+                        .setRequired(true)
+                )
+                .addBooleanOption(option =>
+                    option.setName('timeout')
+                        .setDescription('Czy nakładać timeout na użytkownika')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('na_ile')
+                        .setDescription('Na ile czasu timeout (np. 1h30m). Wymagane tylko gdy timeout=true')
+                        .setRequired(false)
+                )
+                .addBooleanOption(option =>
+                    option.setName('inside')
+                        .setDescription('Czy blokować słowo także jako część innych słów (true) czy tylko samo słowo (false)')
+                        .setRequired(true)
                 )
         ];
         
@@ -285,6 +314,9 @@ class InteractionHandler {
                     break;
                 case 'block-ss':
                     await this.handleBlockSsCommand(interaction);
+                    break;
+                case 'block-word':
+                    await this.handleBlockWordCommand(interaction);
                     break;
             }
         } else if (interaction.isButton()) {
@@ -2297,6 +2329,174 @@ class InteractionHandler {
         
         if (!timeMatch) {
             return { error: 'Format musi być: hh.mm dd.mm.rrrr (np. 23.59 31.12.2024)' };
+        }
+        
+        const hours = parseInt(timeMatch[1]);
+        const minutes = parseInt(timeMatch[2]);
+        const day = parseInt(timeMatch[3]);
+        const month = parseInt(timeMatch[4]);
+        const year = parseInt(timeMatch[5]);
+        
+        // Walidacja
+        if (hours < 0 || hours > 23) {
+            return { error: 'Godziny muszą być między 00 a 23' };
+        }
+        
+        if (minutes < 0 || minutes > 59) {
+            return { error: 'Minuty muszą być między 00 a 59' };
+        }
+        
+        if (month < 1 || month > 12) {
+            return { error: 'Miesiąc musi być między 01 a 12' };
+        }
+        
+        if (day < 1 || day > 31) {
+            return { error: 'Dzień musi być między 01 a 31' };
+        }
+        
+        // Utworz datę
+        const endTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        
+        // Sprawdź czy data jest w przyszłości
+        if (endTime <= new Date()) {
+            return { error: 'Data musi być w przyszłości' };
+        }
+        
+        const formatted = endTime.toLocaleString('pl-PL');
+        
+        return {
+            endTime: endTime,
+            error: null,
+            formatted: formatted
+        };
+    }
+
+    /**
+     * Obsługuje komendę blokowania słów
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleBlockWordCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /block-word`, interaction);
+        
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy!',
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /block-word bez uprawnień administratora`, interaction);
+            return;
+        }
+
+        const word = interaction.options.getString('słowo');
+        const timeString = interaction.options.getString('czas');
+        const shouldTimeout = interaction.options.getBoolean('timeout');
+        const timeoutDuration = interaction.options.getString('na_ile');
+        const inside = interaction.options.getBoolean('inside');
+
+        // Walidacja: jeśli timeout=true, na_ile musi być podane
+        if (shouldTimeout && !timeoutDuration) {
+            await interaction.reply({
+                content: '❌ Gdy timeout jest ustawione na true, musisz podać parametr "na_ile"!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Parse time format gg:mm dd:mm:rrrr
+        const parsedTime = this.parseWordBlockTime(timeString);
+        if (parsedTime.error) {
+            await interaction.reply({
+                content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 23:59 31.12.2024`,
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Parse timeout duration if provided
+        let parsedTimeoutDuration = null;
+        if (shouldTimeout && timeoutDuration) {
+            parsedTimeoutDuration = this.parseTimeFormat(timeoutDuration);
+            if (parsedTimeoutDuration.error) {
+                await interaction.reply({
+                    content: `❌ Nieprawidłowy format czasu timeout: ${parsedTimeoutDuration.error}\nPrzykład poprawnego formatu: 1h30m (1 godzina, 30 minut)`,
+                    ephemeral: true
+                });
+                return;
+            }
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Inicjalizuj serwis blokowania słów jeśli nie istnieje
+            if (!this.wordBlockService) {
+                const WordBlockService = require('../services/wordBlockService');
+                this.wordBlockService = new WordBlockService(this.config, this.logService);
+                await this.wordBlockService.initialize();
+            }
+
+            // Dodaj blokadę słowa
+            const result = await this.wordBlockService.addWordBlock(
+                word,
+                parsedTime.endTime,
+                shouldTimeout,
+                parsedTimeoutDuration ? parsedTimeoutDuration.minutes : null,
+                inside,
+                interaction.user.id
+            );
+            
+            if (result.success) {
+                let successMessage = `✅ Zablokowano słowo **"${word}"**\n` +
+                    `🕒 Blokada będzie aktywna do: **${parsedTime.formatted}**\n`;
+                
+                if (shouldTimeout && parsedTimeoutDuration) {
+                    successMessage += `⏰ Timeout za użycie: **${parsedTimeoutDuration.formatted}**\n`;
+                } else {
+                    successMessage += `⏰ Bez timeout - tylko usuwanie wiadomości\n`;
+                }
+                
+                successMessage += `🔍 Tryb blokady: **${inside ? 'Również jako część innych słów' : 'Tylko jako całe słowo'}**\n`;
+                successMessage += `👮 Zablokowane przez: **${interaction.user.tag}**`;
+                
+                await interaction.editReply({ content: successMessage });
+                
+                // Publiczne powiadomienie
+                await interaction.followUp({ 
+                    content: `🚫 **Uwaga!** Słowo **"${word}"** zostało zablokowane do **${parsedTime.formatted}**`,
+                    ephemeral: false 
+                });
+                
+                await this.logService.logMessage('success', 
+                    `Zablokowano słowo "${word}" do ${parsedTime.formatted} przez ${interaction.user.tag}`, 
+                    interaction
+                );
+            } else {
+                await interaction.editReply({ content: `❌ ${result.message}` });
+            }
+
+        } catch (error) {
+            await interaction.editReply({ content: `❌ Wystąpił błąd podczas blokowania słowa: ${error.message}` });
+            await this.logService.logMessage('error', `Błąd podczas blokowania słowa: ${error.message}`, interaction);
+        }
+    }
+
+    /**
+     * Parsuje format czasu dla blokady słów (gg:mm dd:mm:rrrr)
+     * @param {string} timeString - String z czasem do sparsowania
+     * @returns {Object} - {endTime: Date, error: string|null, formatted: string}
+     */
+    parseWordBlockTime(timeString) {
+        if (!timeString || typeof timeString !== 'string') {
+            return { error: 'Nie podano czasu' };
+        }
+
+        const timeString_clean = timeString.trim();
+        
+        // Regex dla formatu gg:mm dd.mm.rrrr
+        const timeMatch = timeString_clean.match(/^(\d{1,2}):(\d{1,2})\s+(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+        
+        if (!timeMatch) {
+            return { error: 'Format musi być: gg:mm dd.mm.rrrr (np. 23:59 31.12.2024)' };
         }
         
         const hours = parseInt(timeMatch[1]);
