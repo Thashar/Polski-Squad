@@ -130,13 +130,23 @@ class WordBlockService {
         try {
             const wordKey = word.toLowerCase();
             
-            // Sprawdź czy słowo już jest zablokowane
+            // Sprawdź czy słowo już jest zablokowane i czy nie wygasło
             if (this.wordBlocks.has(wordKey)) {
                 const existingBlock = this.wordBlocks.get(wordKey);
-                return {
-                    success: false,
-                    message: `Słowo "${word}" jest już zablokowane do ${existingBlock.endTime.toLocaleString('pl-PL')}`
-                };
+                const now = new Date();
+                
+                if (existingBlock.endTime <= now) {
+                    // Blokada wygasła - usuń ją i pozwól na dodanie nowej
+                    this.wordBlocks.delete(wordKey);
+                    await this.saveWordBlocks();
+                    logger.info(`🧹 Usunięto wygasłą blokadę słowa "${word}"`);
+                } else {
+                    // Blokada wciąż aktywna
+                    return {
+                        success: false,
+                        message: `Słowo "${word}" jest już zablokowane do ${existingBlock.endTime.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`
+                    };
+                }
             }
 
             // Dodaj nową blokadę
@@ -215,7 +225,13 @@ class WordBlockService {
         
         for (const [wordKey, blockInfo] of this.wordBlocks.entries()) {
             // Sprawdź czy blokada nie wygasła
-            if (blockInfo.endTime <= new Date()) {
+            const now = new Date();
+            if (blockInfo.endTime <= now) {
+                // Usuń wygasłą blokadę
+                this.wordBlocks.delete(wordKey);
+                this.saveWordBlocks().catch(error => {
+                    logger.error(`❌ Błąd usuwania wygasłej blokady słowa: ${error.message}`);
+                });
                 continue;
             }
 

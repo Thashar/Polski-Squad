@@ -2348,15 +2348,16 @@ class InteractionHandler {
             return { error: 'Dzień musi być między 01 a 31' };
         }
         
-        // Utworz datę
+        // Utworz datę w strefie czasowej Polski
         const endTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
         
-        // Sprawdź czy data jest w przyszłości
-        if (endTime <= new Date()) {
-            return { error: 'Data musi być w przyszłości' };
+        // Sprawdź czy data jest w przyszłości (porównaj w czasie polskim)
+        const nowInPoland = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+        if (endTime <= nowInPoland) {
+            return { error: 'Data musi być w przyszłości (czas polski)' };
         }
         
-        const formatted = endTime.toLocaleString('pl-PL');
+        const formatted = endTime.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
         
         return {
             endTime: endTime,
@@ -2510,15 +2511,16 @@ class InteractionHandler {
             return { error: 'Dzień musi być między 01 a 31' };
         }
         
-        // Utworz datę
+        // Utworz datę w strefie czasowej Polski
         const endTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
         
-        // Sprawdź czy data jest w przyszłości
-        if (endTime <= new Date()) {
-            return { error: 'Data musi być w przyszłości' };
+        // Sprawdź czy data jest w przyszłości (porównaj w czasie polskim)
+        const nowInPoland = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+        if (endTime <= nowInPoland) {
+            return { error: 'Data musi być w przyszłości (czas polski)' };
         }
         
-        const formatted = endTime.toLocaleString('pl-PL');
+        const formatted = endTime.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
         
         return {
             endTime: endTime,

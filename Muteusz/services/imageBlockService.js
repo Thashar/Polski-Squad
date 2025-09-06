@@ -125,13 +125,23 @@ class ImageBlockService {
      */
     async addBlock(channelId, endTime, moderatorId) {
         try {
-            // Sprawdź czy blokada już istnieje
+            // Sprawdź czy blokada już istnieje i czy nie wygasła
             if (this.blocks.has(channelId)) {
                 const existingBlock = this.blocks.get(channelId);
-                return {
-                    success: false,
-                    message: `Kanał jest już zablokowany do ${existingBlock.endTime.toLocaleString('pl-PL')}`
-                };
+                const now = new Date();
+                
+                if (existingBlock.endTime <= now) {
+                    // Blokada wygasła - usuń ją i pozwól na dodanie nowej
+                    this.blocks.delete(channelId);
+                    await this.saveBlocks();
+                    logger.info(`🧹 Usunięto wygasłą blokadę kanału ${channelId}`);
+                } else {
+                    // Blokada wciąż aktywna
+                    return {
+                        success: false,
+                        message: `Kanał jest już zablokowany do ${existingBlock.endTime.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`
+                    };
+                }
             }
 
             // Dodaj nową blokadę
@@ -203,7 +213,8 @@ class ImageBlockService {
         }
 
         // Sprawdź czy blokada nie wygasła
-        if (block.endTime <= new Date()) {
+        const now = new Date();
+        if (block.endTime <= now) {
             // Usuń wygasłą blokadę
             this.blocks.delete(channelId);
             this.saveBlocks().catch(error => {
