@@ -455,9 +455,7 @@ class MessageHandler {
                 }
 
                 // Wyślij powiadomienie użytkownikowi
-                const endTime = blockInfo.endTime.toLocaleString('pl-PL');
-                const warningMessage = `🚫 **${message.author}**, wrzucanie zdjęć na tym kanale jest obecnie zablokowane!\n` +
-                    `⏰ Blokada będzie aktywna do: **${endTime}**`;
+                const warningMessage = `🚫 **${message.author}**, wrzucanie zdjęć na tym kanale jest obecnie zablokowane!`;
 
                 try {
                     const warningMsg = await message.channel.send(warningMessage);
@@ -515,9 +513,7 @@ class MessageHandler {
                     const { word, blockInfo } = blockedWordInfo;
                     
                     // Wyślij powiadomienie użytkownikowi
-                    const endTime = blockInfo.endTime.toLocaleString('pl-PL');
-                    let warningMessage = `🚫 **${message.author}**, użycie słowa **"${word}"** jest zablokowane!\n` +
-                        `⏰ Blokada będzie aktywna do: **${endTime}**\n`;
+                    let warningMessage = `🚫 **${message.author}**, użycie słowa **"${word}"** jest zablokowane!\n`;
 
                     // Zastosuj timeout jeśli jest skonfigurowany
                     if (blockInfo.shouldTimeout && blockInfo.timeoutDurationMinutes) {
