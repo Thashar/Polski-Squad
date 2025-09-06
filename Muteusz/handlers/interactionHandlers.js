@@ -226,7 +226,7 @@ class InteractionHandler {
                 )
                 .addStringOption(option =>
                     option.setName('czas')
-                        .setDescription('Format: gg:mm dd:mm:rrrr (np. 23:59 31.12.2024)')
+                        .setDescription('Format: gg:mm dd.mm.rrrr (np. 23:59 31.12.2024)')
                         .setRequired(true)
                 )
                 .addBooleanOption(option =>
@@ -234,15 +234,15 @@ class InteractionHandler {
                         .setDescription('Czy nakładać timeout na użytkownika')
                         .setRequired(true)
                 )
-                .addStringOption(option =>
-                    option.setName('na_ile')
-                        .setDescription('Na ile czasu timeout (np. 1h30m). Wymagane tylko gdy timeout=true')
-                        .setRequired(false)
-                )
                 .addBooleanOption(option =>
                     option.setName('inside')
                         .setDescription('Czy blokować słowo także jako część innych słów (true) czy tylko samo słowo (false)')
                         .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('na_ile')
+                        .setDescription('Na ile czasu timeout (np. 1h30m). Wymagane tylko gdy timeout=true')
+                        .setRequired(false)
                 )
         ];
         
