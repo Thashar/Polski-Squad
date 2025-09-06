@@ -103,11 +103,12 @@ client.once(Events.ClientReady, async () => {
     await reactionRoleService.initialize(client);
     await roleConflictService.initialize(client);
     await memberCacheService.initialize(client);
-    await interactionHandler.registerSlashCommands(client);
-    
     // Inicjalizuj serwisy blokowania w messageHandlerze
     await messageHandler.initializeImageBlockService();
     await messageHandler.initializeWordBlockService();
+    
+    // Rejestruj komendy na końcu (może blokować startup)
+    await interactionHandler.registerSlashCommands(client);
     
     logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów');
 });

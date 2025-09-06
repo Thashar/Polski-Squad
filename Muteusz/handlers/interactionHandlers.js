@@ -2292,12 +2292,6 @@ class InteractionHandler {
                 
                 await interaction.editReply({ content: successMessage });
                 
-                // Publiczne powiadomienie
-                await interaction.followUp({ 
-                    content: `🚫 **Uwaga!** Wrzucanie zdjęć na kanale ${channel} zostało zablokowane do **${parsedTime.formatted}**`,
-                    ephemeral: false 
-                });
-                
                 await this.logService.logMessage('success', 
                     `Zablokowano wrzucanie zdjęć na kanale ${channel.name} do ${parsedTime.formatted} przez ${interaction.user.tag}`, 
                     interaction
@@ -2459,12 +2453,6 @@ class InteractionHandler {
                 successMessage += `👮 Zablokowane przez: **${interaction.user.tag}**`;
                 
                 await interaction.editReply({ content: successMessage });
-                
-                // Publiczne powiadomienie
-                await interaction.followUp({ 
-                    content: `🚫 **Uwaga!** Słowo **"${word}"** zostało zablokowane do **${parsedTime.formatted}**`,
-                    ephemeral: false 
-                });
                 
                 await this.logService.logMessage('success', 
                     `Zablokowano słowo "${word}" do ${parsedTime.formatted} przez ${interaction.user.tag}`, 
