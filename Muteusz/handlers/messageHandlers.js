@@ -507,7 +507,7 @@ class MessageHandler {
                     const { word, blockInfo } = blockedWordInfo;
                     
                     // Wyślij powiadomienie użytkownikowi
-                    let warningMessage = `🚫 **${message.author}**, użycie zablokowanego słowa jest niedozwolone!\n`;
+                    let warningMessage = `🚫 **${message.author}**, użyłeś zabronionego wyrażenia!\n`;
 
                     // Zastosuj timeout jeśli jest skonfigurowany
                     if (blockInfo.shouldTimeout && blockInfo.timeoutDurationMinutes) {
