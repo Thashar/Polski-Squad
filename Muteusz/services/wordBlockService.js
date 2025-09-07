@@ -241,17 +241,25 @@ class WordBlockService {
             const cleanMessage = this.removePunctuation(messageContent.toLowerCase());
             const cleanWord = this.removePunctuation(wordKey);
             
-            // Sprawdź czy słowo występuje w wiadomości
-            let wordRegex;
+            // Sprawdź czy słowo występuje w wiadomości - zwykłe dopasowanie
+            let foundMatch = false;
+            
             if (blockInfo.inside) {
                 // Tryb inside: słowo może być częścią innych słów
-                wordRegex = new RegExp(this.escapeRegex(cleanWord), 'i');
+                const wordRegex = new RegExp(this.escapeRegex(cleanWord), 'i');
+                foundMatch = wordRegex.test(cleanMessage);
             } else {
                 // Tryb standardowy: tylko całe słowa (z granicami słów)
-                wordRegex = new RegExp(`\\b${this.escapeRegex(cleanWord)}\\b`, 'i');
+                const wordRegex = new RegExp(`\\b${this.escapeRegex(cleanWord)}\\b`, 'i');
+                foundMatch = wordRegex.test(cleanMessage);
             }
             
-            if (wordRegex.test(cleanMessage)) {
+            // Jeśli nie znaleziono zwykłego dopasowania, sprawdź rozdzielone znaki
+            if (!foundMatch) {
+                foundMatch = this.checkSeparatedWord(messageContent.toLowerCase(), wordKey, blockInfo.inside);
+            }
+            
+            if (foundMatch) {
                 foundBlocks.push({
                     word: blockInfo.originalWord,
                     blockInfo: blockInfo
@@ -260,6 +268,32 @@ class WordBlockService {
         }
 
         return foundBlocks;
+    }
+
+    /**
+     * Sprawdza czy słowo występuje w tekście jako rozdzielone znaki
+     * np. "1901" w "19:01", "1 9 0 1", "19........01"
+     * @param {string} messageContent - Treść wiadomości
+     * @param {string} targetWord - Szukane słowo
+     * @param {boolean} inside - Czy szukać jako część innych słów
+     * @returns {boolean} - Czy znaleziono dopasowanie
+     */
+    checkSeparatedWord(messageContent, targetWord, inside) {
+        // Stwórz regex który dopasowuje każdy znak słowa z opcjonalnymi separatorami
+        const wordChars = targetWord.toLowerCase().split('');
+        
+        // Każdy znak może być oddzielony znakami niebędącymi literami/cyframi
+        let regexPattern = wordChars
+            .map(char => this.escapeRegex(char))
+            .join('[^\\p{L}\\p{N}]*');
+        
+        if (!inside) {
+            // Tylko całe słowa - dodaj granice słów
+            regexPattern = `\\b${regexPattern}\\b`;
+        }
+        
+        const separatedRegex = new RegExp(regexPattern, 'giu');
+        return separatedRegex.test(messageContent);
     }
 
     /**
