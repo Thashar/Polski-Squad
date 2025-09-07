@@ -268,8 +268,8 @@ class WordBlockService {
      * @returns {string} - Oczyszczony tekst
      */
     removePunctuation(text) {
-        // Usuń wszystkie znaki poza literami i cyframi (włącznie ze spacjami)
-        return text.replace(/[^\p{L}\p{N}]/gu, '');
+        // Zastąp znaki przestankowe spacjami, zachowując spacje
+        return text.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
     }
 
     /**

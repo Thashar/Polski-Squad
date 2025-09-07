@@ -2275,15 +2275,13 @@ class InteractionHandler {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            // Inicjalizuj serwis blokowania obrazów jeśli nie istnieje
-            if (!this.imageBlockService) {
-                const ImageBlockService = require('../services/imageBlockService');
-                this.imageBlockService = new ImageBlockService(this.config, this.logService);
-                await this.imageBlockService.initialize();
+            // Użyj serwisu z messageHandler (współdzielony)
+            if (!this.messageHandler.imageBlockService) {
+                await this.messageHandler.initializeImageBlockService();
             }
 
             // Dodaj blokadę
-            const result = await this.imageBlockService.addBlock(channel.id, parsedTime.endTime, interaction.user.id);
+            const result = await this.messageHandler.imageBlockService.addBlock(channel.id, parsedTime.endTime, interaction.user.id);
             
             if (result.success) {
                 const successMessage = `✅ Zablokowano wrzucanie zdjęć na kanale **${channel.name}**\n` +
@@ -2447,15 +2445,13 @@ class InteractionHandler {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            // Inicjalizuj serwis blokowania słów jeśli nie istnieje
-            if (!this.wordBlockService) {
-                const WordBlockService = require('../services/wordBlockService');
-                this.wordBlockService = new WordBlockService(this.config, this.logService);
-                await this.wordBlockService.initialize();
+            // Użyj serwisu z messageHandler (współdzielony)
+            if (!this.messageHandler.wordBlockService) {
+                await this.messageHandler.initializeWordBlockService();
             }
 
             // Dodaj blokadę słowa
-            const result = await this.wordBlockService.addWordBlock(
+            const result = await this.messageHandler.wordBlockService.addWordBlock(
                 word,
                 parsedTime.endTime,
                 shouldTimeout,
