@@ -507,7 +507,7 @@ class MessageHandler {
                     const { word, blockInfo } = blockedWordInfo;
                     
                     // Wyślij powiadomienie użytkownikowi
-                    let warningMessage = `🚫 **${message.author}**, użyłeś zabronionego wyrażenia!\n`;
+                    let warningMessage = `🚫 Użyłeś zabronionego wyrażenia!\n`;
 
                     // Zastosuj timeout jeśli jest skonfigurowany
                     if (blockInfo.shouldTimeout && blockInfo.timeoutDurationMinutes) {
@@ -529,7 +529,7 @@ class MessageHandler {
 
                     try {
                         // Wyślij TYLKO wiadomość prywatną - absolutnie nic publicznie
-                        await message.author.send(warningMessage.replace(`**${message.author}**`, 'Ty'));
+                        await message.author.send(warningMessage);
                     } catch (dmError) {
                         // Jeśli DM nie działa - MILCZ. Nie wysyłaj niczego publicznego.
                         logger.info(`ℹ️ Nie można wysłać DM do ${message.author.tag} o zablokowanym słowie - pomijam powiadomienie`);
