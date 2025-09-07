@@ -2262,11 +2262,11 @@ class InteractionHandler {
             return;
         }
 
-        // Parse time format hh.mm dd.mm.yyyy
+        // Parse time format hh:mm dd.mm.yyyy
         const parsedTime = this.parseBlockTime(timeString);
         if (parsedTime.error) {
             await interaction.reply({
-                content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 23.59 31.12.2024`,
+                content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 23:59 31.12.2024`,
                 ephemeral: true
             });
             return;
@@ -2284,14 +2284,14 @@ class InteractionHandler {
             const result = await this.messageHandler.imageBlockService.addBlock(channel.id, parsedTime.endTime, interaction.user.id);
             
             if (result.success) {
-                const successMessage = `✅ Zablokowano wrzucanie zdjęć na kanale **${channel.name}**\n` +
+                const successMessage = `✅ Zablokowano wrzucanie zdjęć na kanale **${channel.id}**\n` +
                     `🕒 Blokada będzie aktywna do: **${parsedTime.formatted}**\n` +
                     `👮 Zablokowane przez: **${interaction.user.tag}**`;
                 
                 await interaction.editReply({ content: successMessage });
                 
                 await this.logService.logMessage('success', 
-                    `Zablokowano wrzucanie zdjęć na kanale ${channel.name} do ${parsedTime.formatted} przez ${interaction.user.tag}`, 
+                    `Zablokowano wrzucanie zdjęć na kanale ${channel.id} do ${parsedTime.formatted} przez ${interaction.user.tag}`, 
                     interaction
                 );
             } else {
@@ -2305,7 +2305,7 @@ class InteractionHandler {
     }
 
     /**
-     * Parsuje format czasu dla blokady zdjęć (hh.mm dd.mm.yyyy)
+     * Parsuje format czasu dla blokady zdjęć (hh:mm dd.mm.yyyy)
      * @param {string} timeString - String z czasem do sparsowania
      * @returns {Object} - {endTime: Date, error: string|null, formatted: string}
      */
@@ -2316,11 +2316,11 @@ class InteractionHandler {
 
         const timeString_clean = timeString.trim();
         
-        // Regex dla formatu hh.mm dd.mm.yyyy
-        const timeMatch = timeString_clean.match(/^(\d{1,2})\.(\d{1,2})\s+(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+        // Regex dla formatu hh:mm dd.mm.yyyy
+        const timeMatch = timeString_clean.match(/^(\d{1,2}):(\d{1,2})\s+(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
         
         if (!timeMatch) {
-            return { error: 'Format musi być: hh.mm dd.mm.rrrr (np. 23.59 31.12.2024)' };
+            return { error: 'Format musi być: hh:mm dd.mm.yyyy (np. 23:59 31.12.2024)' };
         }
         
         const hours = parseInt(timeMatch[1]);
