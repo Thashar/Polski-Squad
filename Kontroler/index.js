@@ -39,8 +39,8 @@ async function initializeServices() {
     await ocrService.ensureDirectories();
     analysisService = new AnalysisService(config, ocrService);
     roleService = new RoleService(config);
-    messageService = new MessageService(config);
     lotteryService = new LotteryService(config);
+    messageService = new MessageService(config, lotteryService);
     messageHandler = new MessageHandler(
         config,
         ocrService,

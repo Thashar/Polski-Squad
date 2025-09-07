@@ -1,8 +1,9 @@
 const { formatMessage } = require('../utils/helpers');
 
 class MessageService {
-    constructor(config) {
+    constructor(config, lotteryService = null) {
         this.config = config;
+        this.lotteryService = lotteryService;
     }
 
     /**
@@ -47,7 +48,13 @@ class MessageService {
 
             // Sprawdzenie czy przyznana rola to "Daily"
             if (roleResult.role.name === 'Daily') {
-                baseMessage += this.config.messages.dailyLottery;
+                const lotteryInfo = this.lotteryService 
+                    ? this.lotteryService.formatActiveLotteriesInfo(roleResult.role.id)
+                    : '';
+                const lotteryMessage = lotteryInfo 
+                    ? `\n🎰 **Aktywne loterie:** ${lotteryInfo}`
+                    : '';
+                baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: lotteryMessage });
             }
         } else {
             baseMessage = formatMessage(this.config.messages.analysisAlreadyHasRole, {
@@ -56,7 +63,13 @@ class MessageService {
 
             // Sprawdzenie czy to kanał Daily
             if (channelConfig && channelConfig.name === 'Daily') {
-                baseMessage += this.config.messages.dailyLottery;
+                const lotteryInfo = this.lotteryService 
+                    ? this.lotteryService.formatActiveLotteriesInfo(channelConfig.requiredRoleId)
+                    : '';
+                const lotteryMessage = lotteryInfo 
+                    ? `\n🎰 **Aktywne loterie:** ${lotteryInfo}`
+                    : '';
+                baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: lotteryMessage });
             }
         }
 
@@ -67,7 +80,13 @@ class MessageService {
 
         // Dodaj informację o loterii CX
         if (channelConfig && channelConfig.name === 'CX') {
-            baseMessage += this.config.messages.cxLottery;
+            const lotteryInfo = this.lotteryService 
+                ? this.lotteryService.formatActiveLotteriesInfo(channelConfig.requiredRoleId)
+                : '';
+            const lotteryMessage = lotteryInfo 
+                ? `\n🎰 **Aktywne loterie:** ${lotteryInfo}`
+                : '';
+            baseMessage += formatMessage(this.config.messages.cxLottery, { lotteryInfo: lotteryMessage });
         }
 
         return baseMessage;

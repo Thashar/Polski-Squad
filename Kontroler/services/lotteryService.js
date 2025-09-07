@@ -1288,6 +1288,61 @@ class LotteryService {
     }
 
     /**
+     * Pobiera aktywne loterie dla określonej roli docelowej
+     * @param {string} targetRoleId - ID roli docelowej (Daily/CX)
+     * @returns {Array} Lista aktywnych loterii dla tej roli
+     */
+    getActiveLotteriesForRole(targetRoleId) {
+        const lotteriesForRole = [];
+        
+        for (const [lotteryId, lottery] of this.activeLotteries.entries()) {
+            if (lottery.targetRoleId === targetRoleId) {
+                lotteriesForRole.push({
+                    id: lotteryId,
+                    name: lottery.name,
+                    frequency: lottery.frequency,
+                    nextDraw: lottery.nextDraw,
+                    winners: lottery.winners,
+                    clanType: lottery.clanType
+                });
+            }
+        }
+        
+        return lotteriesForRole;
+    }
+
+    /**
+     * Formatuje informację o aktywnych loteriach dla określonej roli
+     * @param {string} targetRoleId - ID roli docelowej (Daily/CX)
+     * @returns {string} Sformatowana informacja o loteriach
+     */
+    formatActiveLotteriesInfo(targetRoleId) {
+        const lotteries = this.getActiveLotteriesForRole(targetRoleId);
+        
+        if (lotteries.length === 0) {
+            return '';
+        }
+
+        const lotteryInfos = [];
+        
+        for (const lottery of lotteries) {
+            const nextDrawText = lottery.frequency === 0 
+                ? 'Jednorazowa' 
+                : this.convertUTCToPolishTime(new Date(lottery.nextDraw));
+            
+            const clanText = lottery.clanType === 'server' ? 'Cały serwer' : 
+                           lottery.clanType === 'main' ? 'Main Squad' : 
+                           `Squad ${lottery.clanType}`;
+            
+            const winnersText = lottery.winners === 1 ? '1 zwycięzca' : `${lottery.winners} zwycięzców`;
+            
+            lotteryInfos.push(`${clanText} - ${winnersText} - ${nextDrawText}`);
+        }
+        
+        return lotteryInfos.join(' | ');
+    }
+
+    /**
      * Sprawdza czy dla danego klanu i roli jest aktywna loteria
      * @param {string} clanRoleId - ID roli klanu użytkownika
      * @param {string} targetRoleId - ID roli docelowej (Daily/CX)

@@ -473,6 +473,8 @@ class MessageHandler {
 
 🎲 Losowania będą odbywać się o godzinie **19:00** w każdą niedzielę.
 
+${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
+
 ## Powodzenia!`)
                     .setColor(0x00FF00) // Zielony kolor
                     .setTimestamp();
@@ -490,6 +492,8 @@ class MessageHandler {
 
 🎲 Losowania będą odbywać się o godzinie **19:00** w każdy pierwszy dzień sezonu CX.
 
+${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
+
 ## Powodzenia!`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
                     .setTimestamp();
@@ -502,6 +506,24 @@ class MessageHandler {
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania informacji o loterii ${channelConfig.name}:`, error);
         }
+    }
+
+    /**
+     * Pobiera informację o aktywnych loteriach dla embeda
+     * @param {string} targetRoleId - ID roli docelowej
+     * @returns {string} - Informacje o loteriach lub pusty string
+     */
+    getLotteryInfoForEmbed(targetRoleId) {
+        if (!this.lotteryService) {
+            return '';
+        }
+
+        const lotteryInfo = this.lotteryService.formatActiveLotteriesInfo(targetRoleId);
+        if (!lotteryInfo) {
+            return '';
+        }
+
+        return `🎰 **Aktywne loterie:** ${lotteryInfo}`;
     }
 
     /**
