@@ -298,10 +298,18 @@ class AnalysisService {
             afterNick = afterNick.replace(/^[^a-zA-Z0-9]*/, '').trim();
             logger.info(`Tekst po nicku: "${afterNick}"`);
 
+            // Próbuj znaleźć wynik na końcu linii, ignorując znaki specjalne przed liczbą
             const potentialScoreMatch = afterNick.match(/(\S+)\s*$/);
             if (potentialScoreMatch) {
-                const rawScore = potentialScoreMatch[1];
+                let rawScore = potentialScoreMatch[1];
                 logger.info(`Potencjalny wynik: "${rawScore}"`);
+
+                // Jeśli wynik zaczyna się od + lub innych znaków specjalnych, usuń je
+                const cleanedScore = rawScore.replace(/^[+\-*"'`~!@#$%^&*()[\]{}\\|;:,.<>?/]+/, '');
+                if (cleanedScore !== rawScore) {
+                    logger.info(`Wynik po usunięciu znaków specjalnych: "${cleanedScore}"`);
+                    rawScore = cleanedScore;
+                }
 
                 const normalizedResult = this.ocrService.normalizeScore(rawScore, channelConfig);
                 const validation = this.validateScore(normalizedResult, channelConfig);
