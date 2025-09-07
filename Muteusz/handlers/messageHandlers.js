@@ -455,11 +455,11 @@ class MessageHandler {
                 }
 
                 // Wyślij powiadomienie użytkownikowi
-                const warningMessage = `🚫 **${message.author}**, wrzucanie zdjęć na tym kanale jest obecnie zablokowane!`;
+                const warningMessage = `🚫 Wrzucanie zdjęć na tym kanale jest obecnie zablokowane!`;
 
                 try {
                     // Wyślij TYLKO wiadomość prywatną - absolutnie nic publicznie
-                    await message.author.send(warningMessage.replace(`**${message.author}**`, 'Ty'));
+                    await message.author.send(warningMessage);
                 } catch (dmError) {
                     // Jeśli DM nie działa - MILCZ. Nie wysyłaj niczego publicznego.
                     logger.info(`ℹ️ Nie można wysłać DM do ${message.author.tag} o blokadzie obrazów - pomijam powiadomienie`);
