@@ -130,9 +130,13 @@ class RankingService {
      * @returns {EmbedBuilder} - Embed rankingu
      */
     async createRankingEmbed(players, page, totalPages, userId, guild) {
+        logger.info(`🔍 createRankingEmbed: players.length=${players.length}, page=${page}, totalPages=${totalPages}, userId=${userId}`);
+        
         const startIndex = page * this.config.ranking.playersPerPage;
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
+        
+        logger.info(`📊 Aktualna strona: startIndex=${startIndex}, endIndex=${endIndex}, currentPagePlayers.length=${currentPagePlayers.length}`);
         
         // Tworzymy ranking w prostym formacie
         const medals = this.config.scoring.medals;
@@ -140,42 +144,63 @@ class RankingService {
         let rankingText = '';
         
         for (const [index, player] of currentPagePlayers.entries()) {
-            const actualPosition = startIndex + index + 1;
-            let position;
-            if (actualPosition <= 3) {
-                const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
-                position = medalMap[actualPosition];
-            } else {
-                position = `${actualPosition}.`;
-            }
-            
-            // Skrócona data - tylko dzień i miesiąc
-            const date = new Date(player.timestamp);
-            const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-            
-            // Pobierz nick na serwerze
-            let displayName = player.username;
             try {
-                const member = await guild.members.fetch(player.userId);
-                displayName = member.displayName;
+                const actualPosition = startIndex + index + 1;
+                let position;
+                if (actualPosition <= 3) {
+                    const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
+                    position = medalMap[actualPosition];
+                } else {
+                    position = `${actualPosition}.`;
+                }
+                
+                // Skrócona data - tylko dzień i miesiąc
+                const date = new Date(player.timestamp);
+                const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                
+                // Pobierz nick na serwerze
+                let displayName = player.username || `ID:${player.userId}`;
+                try {
+                    if (guild) {
+                        const member = await guild.members.fetch(player.userId);
+                        displayName = member.displayName;
+                    }
+                } catch (error) {
+                    // Jeśli nie można pobrać membera, używamy zapisanego username
+                    logger.info(`Nie można pobrać membera ${player.username || `ID:${player.userId}`}, używam zapisanego username`);
+                }
+                
+                const bossName = player.bossName || 'Nieznany';
+                
+                // Wyróżnij tylko osobę, która wywołuje ranking
+                const isCurrentUser = player.userId === userId;
+                const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
+                
+                // Prosty format: pozycja nick • wynik (data) • boss
+                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
+                logger.info(`📝 Dodaję linię ${actualPosition}: "${lineText.trim()}"`);
+                rankingText += lineText;
+                
+                // Sprawdź limity Discord
+                if (rankingText.length > 1800) {
+                    logger.warn(`⚠️ Osiągnięto limit 1800 znaków, przerywam na pozycji ${actualPosition}`);
+                    break;
+                }
             } catch (error) {
-                // Jeśli nie można pobrać membera, używamy zapisanego username
-                logger.info(`Nie można pobrać membera ${player.userName || `ID:${player.userId}`}, używam zapisanego username`);
+                logger.error(`❌ Błąd podczas przetwarzania gracza ${index}: ${error.message}`);
+                logger.error('Player data:', player);
+                // Kontynuuj z następnym graczem zamiast przerywać całą pętlę
+                continue;
             }
-            
-            const bossName = player.bossName || 'Nieznany';
-            
-            // Wyróżnij tylko osobę, która wywołuje ranking
-            const isCurrentUser = player.userId === userId;
-            const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
-            
-            // Prosty format: pozycja nick • wynik (data) • boss
-            rankingText += `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
-            
-            // Sprawdź limity Discord
-            if (rankingText.length > 1800) {
-                break;
-            }
+        }
+        
+        logger.info(`✅ Finalizowanie embeda: rankingText.length=${rankingText.length}`);
+        logger.info(`📋 Końcowy ranking tekst:\n${rankingText}`);
+        
+        // Sprawdź czy rankingText nie jest pusty
+        if (!rankingText.trim()) {
+            logger.error('❌ BŁĄD: rankingText jest pusty!');
+            rankingText = '⚠️ Brak danych do wyświetlenia na tej stronie';
         }
         
         const embed = new EmbedBuilder()
@@ -186,7 +211,7 @@ class RankingService {
                 {
                     name: this.config.messages.rankingStats,
                     value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) + 
-                           '\n' + formatMessage(this.config.messages.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }),
+                           (players.length > 0 ? '\n' + formatMessage(this.config.messages.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
                     inline: false
                 }
             )
