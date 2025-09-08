@@ -52,7 +52,7 @@ class MessageService {
                     ? this.lotteryService.formatActiveLotteriesInfo(roleResult.role.id)
                     : '';
                 const lotteryMessage = lotteryInfo 
-                    ? `\n🎰 **Aktywne loterie:** ${lotteryInfo}`
+                    ? `\n🎰 **Aktywne loterie:**\n${lotteryInfo}`
                     : '';
                 baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: lotteryMessage });
             }
@@ -67,7 +67,7 @@ class MessageService {
                     ? this.lotteryService.formatActiveLotteriesInfo(channelConfig.requiredRoleId)
                     : '';
                 const lotteryMessage = lotteryInfo 
-                    ? `\n🎰 **Aktywne loterie:** ${lotteryInfo}`
+                    ? `\n🎰 **Aktywne loterie:**\n${lotteryInfo}`
                     : '';
                 baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: lotteryMessage });
             }

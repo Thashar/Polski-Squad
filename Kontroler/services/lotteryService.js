@@ -1376,7 +1376,7 @@ class LotteryService {
             }
         }
         
-        return lotteryInfos.join(' | ');
+        return lotteryInfos.join('\n');
     }
 
     /**

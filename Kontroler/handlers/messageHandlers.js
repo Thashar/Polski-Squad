@@ -523,7 +523,7 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
             return '';
         }
 
-        return `🎰 **Aktywne loterie:** ${lotteryInfo}`;
+        return `🎰 **Aktywne loterie:**\n${lotteryInfo}`;
     }
 
     /**
