@@ -507,12 +507,12 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
      */
     getLotteryInfoForEmbed(targetRoleId) {
         if (!this.lotteryService) {
-            return '';
+            return '## Brak aktywnych loterii!';
         }
 
         const lotteryInfo = this.lotteryService.formatActiveLotteriesInfo(targetRoleId);
         if (!lotteryInfo) {
-            return '';
+            return '## Brak aktywnych loterii!';
         }
 
         return `🎰 **Aktywne loterie:**\n${lotteryInfo}`;
