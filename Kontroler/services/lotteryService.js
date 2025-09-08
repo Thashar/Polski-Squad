@@ -174,6 +174,7 @@ class LotteryService {
             targetRoleId: targetRole.id,
             clanRoleId: clan.roleId, // może być null dla opcji "cały serwer"
             clanKey: clanKey,
+            clanType: clanKey, // Dodaj clanType jako alias do clanKey dla kompatybilności
             clanName: clan.name,
             clanDisplayName: clan.displayName,
             frequency: frequency,
@@ -181,6 +182,7 @@ class LotteryService {
             hour: hour,
             minute: minute,
             winnersCount: winnersCount,
+            winners: winnersCount, // Dodaj alias dla kompatybilności
             channelId: channelId,
             createdBy: interaction.user.id,
             createdAt: new Date().toISOString(),
@@ -1297,18 +1299,49 @@ class LotteryService {
         
         for (const [lotteryId, lottery] of this.activeLotteries.entries()) {
             if (lottery.targetRoleId === targetRoleId) {
+                const clanType = lottery.clanType || lottery.clanKey; // Kompatybilność ze starymi loteriami
+                logger.info(`🔍 Znaleziono loterię dla roli ${targetRoleId}: ID=${lotteryId}, nazwa=${lottery.name}, winners=${lottery.winnersCount || lottery.winners}, clanType=${clanType}`);
+                
+                // Sprawdź czy to stara loteria bez wymaganych pól
+                if (!lottery.name || (lottery.winners === undefined && lottery.winnersCount === undefined) || (!lottery.clanType && !lottery.clanKey)) {
+                    logger.warn(`⚠️ Pomijam starą loterię ${lotteryId} z niepełnymi danymi`);
+                    continue;
+                }
+                
                 lotteriesForRole.push({
                     id: lotteryId,
                     name: lottery.name,
                     frequency: lottery.frequency,
                     nextDraw: lottery.nextDraw,
-                    winners: lottery.winners,
-                    clanType: lottery.clanType
+                    winners: lottery.winnersCount || lottery.winners,
+                    clanType: clanType
                 });
             }
         }
         
         return lotteriesForRole;
+    }
+
+    /**
+     * Pobiera pełną nazwę klanu na podstawie clanType
+     * @param {string} clanType - Typ klanu (server, main, 0, 1, 2)
+     * @returns {string} Pełna nazwa klanu
+     */
+    getClanDisplayName(clanType) {
+        const clanConfig = this.config.lottery.clans[clanType];
+        if (clanConfig) {
+            return clanConfig.name; // Używaj `name` zamiast `displayName` bo displayName ma emoji
+        }
+        
+        // Fallback dla nieznanych typów
+        switch (clanType) {
+            case 'server': return 'Cały serwer';
+            case 'main': return 'Polski Squad';
+            case '0': return 'PolskiSquad⁰';
+            case '1': return 'PolskiSquad¹';
+            case '2': return 'PolskiSquad²';
+            default: return `Squad ${clanType || 'nieznany'}`;
+        }
     }
 
     /**
@@ -1326,17 +1359,21 @@ class LotteryService {
         const lotteryInfos = [];
         
         for (const lottery of lotteries) {
-            const nextDrawText = lottery.frequency === 0 
-                ? 'Jednorazowa' 
-                : this.convertUTCToPolishTime(new Date(lottery.nextDraw));
-            
-            const clanText = lottery.clanType === 'server' ? 'Cały serwer' : 
-                           lottery.clanType === 'main' ? 'Main Squad' : 
-                           `Squad ${lottery.clanType}`;
-            
-            const winnersText = lottery.winners === 1 ? '1 zwycięzca' : `${lottery.winners} zwycięzców`;
-            
-            lotteryInfos.push(`${clanText} - ${winnersText} - ${nextDrawText}`);
+            try {
+                const nextDrawText = lottery.frequency === 0 
+                    ? 'Jednorazowa' 
+                    : this.convertUTCToPolishTime(new Date(lottery.nextDraw));
+                
+                const clanText = this.getClanDisplayName(lottery.clanType);
+                
+                const winnersCount = lottery.winners || 1;
+                const winnersText = winnersCount === 1 ? '1 zwycięzca' : `${winnersCount} zwycięzców`;
+                
+                lotteryInfos.push(`${clanText} - ${winnersText} - ${nextDrawText}`);
+            } catch (error) {
+                logger.error(`❌ Błąd formatowania loterii ${lottery.id}:`, error);
+                logger.error(`Dane loterii:`, lottery);
+            }
         }
         
         return lotteryInfos.join(' | ');
