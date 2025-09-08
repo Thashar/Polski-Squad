@@ -471,8 +471,6 @@ class MessageHandler {
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-🎲 Losowania będą odbywać się o godzinie **19:00** w każdą niedzielę.
-
 ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
 
 ## Powodzenia!`)
@@ -489,8 +487,6 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
 ⏰ czas na przesłanie screena jest do **18:30** w dniu, w którym rozpoczął się nowy sezon
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
-
-🎲 Losowania będą odbywać się o godzinie **19:00** w każdy pierwszy dzień sezonu CX.
 
 ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
 
