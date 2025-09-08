@@ -231,6 +231,7 @@ class OCRService {
         
         if (!matches || matches.length === 0) {
             logger.info('Nie znaleziono Best z jednostką, sprawdzam linijkę przed Best:...');
+            matches = []; // Inicjalizuj pustą tablicę
             
             // Znajdź linię z "Best:"
             const lines = text.split('\n').map(line => line.trim());
