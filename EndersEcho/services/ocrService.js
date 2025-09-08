@@ -218,8 +218,9 @@ class OCRService {
             logger.info('Długość tekstu:', text ? text.length : 'null');
         }
         
-        // Wzorzec wymaga obecności litery po cyfrze - nie akceptuje samych cyfr
-        const bestScorePattern = /best\s*:?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
+        // Wzorzec z jednostkami (preferowany)
+        // Uwzględnia znak © który może pojawić się przed liczbą
+        const bestScorePattern = /best\s*:?\s*©?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
         let matches = text.match(bestScorePattern);
         
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
@@ -229,26 +230,48 @@ class OCRService {
         }
         
         if (!matches || matches.length === 0) {
-            // Elastyczny wzorzec wymaga obecności litery po cyfrze
-            const flexiblePattern = /best[\s\S]*?(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
-            matches = [];
-            let match;
+            logger.info('Nie znaleziono Best z jednostką, sprawdzam linijkę przed Best:...');
             
-            while ((match = flexiblePattern.exec(text)) !== null) {
-                const score = match[1];
-                const upperScore = score.toUpperCase();
-                const hasUnit = /(?:Qi|[KMBTQ])$/i.test(upperScore);
-                
-                if (hasUnit) {
-                    matches.push(score);
+            // Znajdź linię z "Best:"
+            const lines = text.split('\n').map(line => line.trim());
+            let bestLineIndex = -1;
+            
+            for (let i = 0; i < lines.length; i++) {
+                if (/best\s*:/i.test(lines[i])) {
+                    bestLineIndex = i;
                     break;
                 }
             }
             
-            logger.info('Znalezione dopasowania Best (wzorzec elastyczny):', matches);
+            if (bestLineIndex !== -1 && bestLineIndex > 0) {
+                const lineAbove = lines[bestLineIndex - 1];
+                logger.info(`Sprawdzam linijkę przed Best (${bestLineIndex - 1}): "${lineAbove}"`);
+                
+                // Sprawdź czy w linijce wyżej jest wynik z jednostką
+                const aboveMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
+                if (aboveMatch) {
+                    const score = aboveMatch[1];
+                    logger.info(`Znaleziono wynik z jednostką w linijce przed Best: "${score}"`);
+                    matches.push(score);
+                } else {
+                    // Sprawdź czy jest liczba bez jednostki
+                    const noUnitMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?)\s*$/);
+                    if (noUnitMatch) {
+                        let score = noUnitMatch[1];
+                        logger.info(`Znaleziono wynik bez jednostki w linijce przed Best: "${score}"`);
+                        
+                        // Jeśli kończy się na 0, zamień na Q
+                        if (score.endsWith('0')) {
+                            score = score.slice(0, -1) + 'Q';
+                            logger.info(`Zamieniono końcowe 0 na Q: "${score}"`);
+                        }
+                        matches.push(score);
+                    }
+                }
+            }
             
             if (matches.length === 0) {
-                logger.info('Nie znaleziono słowa "Best" z wynikiem');
+                logger.info('Nie znaleziono wyniku w linijce przed Best');
                 return null;
             }
         } else {
