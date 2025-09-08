@@ -84,7 +84,7 @@ class InteractionHandler {
             if (!this.isAllowedChannel(interaction.channel.id)) {
                 await interaction.reply({ 
                     content: this.config.messages.channelNotAllowed, 
-                    ephemeral: true 
+                    flags: ['Ephemeral'] 
                 });
                 return;
             }
@@ -117,7 +117,7 @@ class InteractionHandler {
 
         try {
             // Defer reply aby uniknąć timeoutu przy długich operacjach
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: ['Ephemeral'] });
             
             const players = await this.rankingService.getSortedPlayers();
             
@@ -155,7 +155,7 @@ class InteractionHandler {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ 
                     content: this.config.messages.rankingError, 
-                    ephemeral: true 
+                    flags: ['Ephemeral'] 
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({ 
@@ -181,7 +181,7 @@ class InteractionHandler {
         if (!isImage) {
             await interaction.reply({ 
                 content: this.config.messages.updateNotImage, 
-                ephemeral: true 
+                flags: ['Ephemeral'] 
             });
             return;
         }
@@ -192,13 +192,13 @@ class InteractionHandler {
             const fileSizeMB = Math.round(attachment.size / (1024 * 1024) * 100) / 100;
             await interaction.reply({ 
                 content: `❌ Plik jest za duży! Maksymalny rozmiar: **${maxSizeMB}MB**, twój plik: **${fileSizeMB}MB**\n💡 **Tip:** Zmniejsz jakość obrazu lub użyj kompresji.`, 
-                ephemeral: true 
+                flags: ['Ephemeral'] 
             });
             return;
         }
         
         // Defer reply przed długimi operacjami OCR - prywatnie podczas przetwarzania
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: ['Ephemeral'] });
         
         // Informuj użytkownika że rozpoczęto przetwarzanie
         await interaction.editReply({ content: this.config.messages.updateProcessing });
@@ -278,7 +278,7 @@ class InteractionHandler {
                         await interaction.followUp({
                             content: `📎 **Oryginalny obraz wyniku:**`,
                             files: [imageAttachment],
-                            ephemeral: true
+                            flags: ['Ephemeral']
                         });
                         
                         logger.info('✅ Wysłano embed z wynikiem (brak rekordu)');
@@ -389,14 +389,14 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({ 
                 content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**', 
-                ephemeral: true 
+                flags: ['Ephemeral'] 
             });
             return;
         }
 
         const targetUser = interaction.options.getUser('user');
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: ['Ephemeral'] });
 
         try {
             // Usuń gracza z rankingu
@@ -448,7 +448,7 @@ class InteractionHandler {
             if (interaction.user.id !== rankingData.userId) {
                 await interaction.followUp({ 
                     content: this.config.messages.rankingWrongUser, 
-                    ephemeral: true 
+                    flags: ['Ephemeral'] 
                 });
                 return;
             }
@@ -491,7 +491,7 @@ class InteractionHandler {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ 
                     content: this.config.messages.rankingError, 
-                    ephemeral: true 
+                    flags: ['Ephemeral'] 
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({ 
@@ -512,7 +512,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-                ephemeral: true
+                flags: ['Ephemeral']
             });
             return;
         }
@@ -524,7 +524,7 @@ class InteractionHandler {
             const currentState = this.config.ocr.detailedLogging.enabled;
             await interaction.reply({
                 content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
-                ephemeral: true
+                flags: ['Ephemeral']
             });
             return;
         }
@@ -539,7 +539,7 @@ class InteractionHandler {
         
         await interaction.reply({
             content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
-            ephemeral: true
+            flags: ['Ephemeral']
         });
     }
 }

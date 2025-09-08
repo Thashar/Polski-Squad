@@ -56,7 +56,7 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ 
                     content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                    flags: ['Ephemeral'] 
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({ 
