@@ -236,7 +236,7 @@ class InteractionHandler {
             
             // Aktualizacja rankingu
             const userId = interaction.user.id;
-            const userName = interaction.user.displayName || interaction.user.username;
+            const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
             
             const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                 userId, userName, bestScore, bossName

@@ -154,16 +154,16 @@ class RankingService {
                 const date = new Date(player.timestamp);
                 const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
                 
-                // Pobierz nick na serwerze
+                // Pobierz nick na serwerze (displayName to nickname użytkownika na serwerze)
                 let displayName = player.username || `ID:${player.userId}`;
                 try {
                     if (guild) {
                         const member = await guild.members.fetch(player.userId);
-                        displayName = member.displayName;
+                        displayName = member.displayName; // displayName to server nickname
                     }
                 } catch (error) {
-                    // Jeśli nie można pobrać membera, używamy zapisanego username
-                    logger.info(`Nie można pobrać membera ${player.username || `ID:${player.userId}`}, używam zapisanego username`);
+                    // Jeśli nie można pobrać membera, używamy zapisanego username jako fallback
+                    // displayName zostaje jako player.username lub ID
                 }
                 
                 const bossName = player.bossName || 'Nieznany';
