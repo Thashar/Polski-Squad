@@ -471,9 +471,7 @@ class MessageHandler {
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
-
-## Powodzenia!`)
+${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
                     .setColor(0x00FF00) // Zielony kolor
                     .setTimestamp();
             } else {
@@ -488,9 +486,7 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
 ✅ screen musi być zatwierdzony przez bota Kontroler
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
-${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}
-
-## Powodzenia!`)
+${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
                     .setColor(0xFF6600) // Pomarańczowy kolor dla CX
                     .setTimestamp();
             }
