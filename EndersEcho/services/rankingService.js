@@ -130,13 +130,9 @@ class RankingService {
      * @returns {EmbedBuilder} - Embed rankingu
      */
     async createRankingEmbed(players, page, totalPages, userId, guild) {
-        logger.info(`🔍 createRankingEmbed: players.length=${players.length}, page=${page}, totalPages=${totalPages}, userId=${userId}`);
-        
         const startIndex = page * this.config.ranking.playersPerPage;
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
-        
-        logger.info(`📊 Aktualna strona: startIndex=${startIndex}, endIndex=${endIndex}, currentPagePlayers.length=${currentPagePlayers.length}`);
         
         // Tworzymy ranking w prostym formacie
         const medals = this.config.scoring.medals;
@@ -178,7 +174,6 @@ class RankingService {
                 
                 // Prosty format: pozycja nick • wynik (data) • boss
                 const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
-                logger.info(`📝 Dodaję linię ${actualPosition}: "${lineText.trim()}"`);
                 rankingText += lineText;
                 
                 // Sprawdź limity Discord
@@ -194,8 +189,6 @@ class RankingService {
             }
         }
         
-        logger.info(`✅ Finalizowanie embeda: rankingText.length=${rankingText.length}`);
-        logger.info(`📋 Końcowy ranking tekst:\n${rankingText}`);
         
         // Sprawdź czy rankingText nie jest pusty
         if (!rankingText.trim()) {
