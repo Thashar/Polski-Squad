@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 class ClanService {
     constructor(config, logger) {
@@ -24,17 +25,43 @@ class ClanService {
             
             const response = await this.axiosInstance.get('https://garrytools.com/rank/clans');
             
-            if (response.data && Array.isArray(response.data)) {
-                this.clanData = response.data.map(clan => ({
-                    id: clan.id || 0,
-                    name: clan.name || 'Unknown',
-                    level: clan.level || 1,
-                    members: clan.members || 0,
-                    points: clan.points || 0,
-                    rank: clan.rank || 0,
-                    cleanName: this.cleanGuildName(clan.name || '')
-                }));
+            if (response.data && typeof response.data === 'string') {
+                // Parse HTML response with cheerio
+                const $ = cheerio.load(response.data);
+                const clans = [];
                 
+                // Find the ranking table and extract data
+                $('table tr').each((index, row) => {
+                    if (index === 0) return; // Skip header row
+                    
+                    const cells = $(row).find('td');
+                    if (cells.length >= 6) {
+                        const rank = parseInt($(cells[0]).text().trim()) || 0;
+                        const guildId = parseInt($(cells[1]).text().trim()) || 0;
+                        const name = $(cells[2]).text().trim();
+                        const level = parseInt($(cells[3]).text().trim()) || 1;
+                        const members = parseInt($(cells[4]).text().trim()) || 0;
+                        const leader = $(cells[5]).text().trim();
+                        const grade = cells.length > 6 ? $(cells[6]).text().trim() : '';
+                        const points = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 0 : 0;
+                        
+                        if (name && guildId > 0) {
+                            clans.push({
+                                id: guildId,
+                                name: name,
+                                level: level,
+                                members: members,
+                                leader: leader,
+                                grade: grade,
+                                points: points,
+                                rank: rank,
+                                cleanName: this.cleanGuildName(name)
+                            });
+                        }
+                    }
+                });
+                
+                this.clanData = clans;
                 this.lastFetchTime = new Date();
                 this.logger.info(`✅ Successfully loaded ${this.clanData.length} clans from ranking`);
                 return this.clanData;
