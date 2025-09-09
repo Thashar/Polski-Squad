@@ -103,15 +103,6 @@ class InteractionHandler {
             return await this.handleButtonInteraction(interaction);
         }
 
-        // Check permissions
-        if (!hasPermission(interaction, this.config.authorizedRoles)) {
-            await interaction.reply({ 
-                content: '❌ You do not have permission to use this command!', 
-                ephemeral: true 
-            });
-            return;
-        }
-
         // Check allowed channel
         if (!isAllowedChannel(interaction, this.config.allowedChannelIds)) {
             await interaction.reply({ 
@@ -122,6 +113,16 @@ class InteractionHandler {
         }
 
         const { commandName } = interaction;
+        
+        // Check permissions for admin-only commands
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse'];
+        if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
+            await interaction.reply({ 
+                content: '❌ You do not have permission to use this command!', 
+                ephemeral: true 
+            });
+            return;
+        }
         
         try {
             await this.logService.logCommand(interaction, commandName);
