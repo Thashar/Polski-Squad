@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const ProxyService = require('./proxyService');
 
 class ClanService {
     constructor(config, logger) {
@@ -7,23 +8,14 @@ class ClanService {
         this.logger = logger;
         this.clanData = [];
         this.lastFetchTime = null;
-        this.axiosInstance = axios.create({
-            timeout: config.lunarMineSettings?.connectionTimeout || 20000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive'
-            }
-        });
+        this.proxyService = new ProxyService(config, logger);
     }
 
     async fetchClanData() {
         try {
             this.logger.info('📊 Fetching clan ranking data from API...');
             
-            const response = await this.axiosInstance.get('https://garrytools.com/rank/clans');
+            const response = await this.proxyService.makeRequest('https://garrytools.com/rank/clans');
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio

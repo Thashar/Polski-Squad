@@ -1,13 +1,13 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-// const ProxyService = require('./proxyService'); // Temporarily disabled
+const ProxyService = require('./proxyService');
 
 class GarrytoolsService {
     constructor(config, logger) {
         this.config = config;
         this.logger = logger;
         this.baseUrl = 'https://garrytools.com/lunar/';
-        // this.proxyService = new ProxyService(config, logger); // Temporarily disabled
+        this.proxyService = new ProxyService(config, logger);
         
         // Create default axios instance (fallback)
         this.axiosInstance = axios.create({
@@ -65,7 +65,7 @@ class GarrytoolsService {
         
         try {
             // Use proxy service for requests
-            const mainPageResponse = await this.axiosInstance.get(this.baseUrl);
+            const mainPageResponse = await this.proxyService.makeRequest(this.baseUrl);
             const $ = cheerio.load(mainPageResponse.data);
             
             const forms = $('form');
@@ -104,7 +104,7 @@ class GarrytoolsService {
                 formData.append('_token', csrfToken);
             }
             
-            const response = await this.axiosInstance.post(this.baseUrl, formData, {
+            const response = await this.proxyService.makePostRequest(this.baseUrl, formData, {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Referer': this.baseUrl,
@@ -183,7 +183,7 @@ class GarrytoolsService {
 
     async getBaseData(url) {
         try {
-            const response = await this.axiosInstance.get(url);
+            const response = await this.proxyService.makeRequest(url);
             const $ = cheerio.load(response.data);
             const tables = $('table');
             const clansData = [];
@@ -267,7 +267,7 @@ class GarrytoolsService {
 
     async getCoreData(url) {
         try {
-            const response = await this.axiosInstance.get(url);
+            const response = await this.proxyService.makeRequest(url);
             const $ = cheerio.load(response.data);
             const tables = $('table');
             const clansData = [];
