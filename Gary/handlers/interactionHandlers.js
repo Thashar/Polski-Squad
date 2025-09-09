@@ -3,10 +3,11 @@ const axios = require('axios');
 const { hasPermission, formatNumber, generatePaginationId, isAllowedChannel } = require('../utils/helpers');
 
 class InteractionHandler {
-    constructor(config, garrytoolsService, clanService, logService, logger) {
+    constructor(config, garrytoolsService, clanService, playerService, logService, logger) {
         this.config = config;
         this.garrytoolsService = garrytoolsService;
         this.clanService = clanService;
+        this.playerService = playerService;
         this.logService = logService;
         this.logger = logger;
         
@@ -64,6 +65,16 @@ class InteractionHandler {
                 .addStringOption(option =>
                     option.setName('name')
                         .setDescription('Guild name to search for (minimum 3 characters)')
+                        .setRequired(true)
+                        .setMinLength(3)
+                        .setMaxLength(50)),
+                        
+            new SlashCommandBuilder()
+                .setName('player')
+                .setDescription('Search for players by name from cached ranking data (public)')
+                .addStringOption(option =>
+                    option.setName('name')
+                        .setDescription('Player name to search for (minimum 3 characters)')
                         .setRequired(true)
                         .setMinLength(3)
                         .setMaxLength(50)),
@@ -142,6 +153,10 @@ class InteractionHandler {
                     
                 case 'search':
                     await this.handleSearchCommand(interaction);
+                    break;
+                    
+                case 'player':
+                    await this.handlePlayerCommand(interaction);
                     break;
                     
                 case 'proxy-test':
@@ -356,8 +371,17 @@ class InteractionHandler {
 
     async handleRefreshCommand(interaction) {
         await interaction.deferReply();
+        
+        this.logger.info('📊 Refreshing guild data...');
         await this.clanService.fetchClanData();
-        await interaction.editReply(`✅ Data refreshed. Database contains: ${this.clanService.getClanData().length} guilds.`);
+        const guildCount = this.clanService.getClanData().length;
+        
+        this.logger.info('👥 Refreshing player data...');
+        await interaction.editReply('⏳ Refreshing guild and player data...');
+        await this.playerService.fetchPlayerData();
+        const playerCount = this.playerService.getPlayerData().length;
+        
+        await interaction.editReply(`✅ Data refreshed. Database contains: ${guildCount} guilds and ${playerCount} players.`);
     }
 
 
@@ -682,14 +706,84 @@ class InteractionHandler {
         }
     }
 
+    async handlePlayerCommand(interaction) {
+        const playerName = interaction.options.getString('name');
+        await interaction.deferReply();
+
+        try {
+            this.logger.info(`👥 Searching for player: "${playerName}"`);
+            
+            let playerData = this.playerService.getPlayerData();
+            
+            // If no player data, try to fetch it first
+            if (playerData.length === 0) {
+                this.logger.info('No player data in cache, fetching from API...');
+                await interaction.editReply('⏳ No player data in cache, fetching from API...');
+                playerData = await this.playerService.fetchPlayerData();
+            }
+            
+            if (playerData.length === 0) {
+                await interaction.editReply('❌ No player data available. Please try again later or contact an administrator to refresh player data.');
+                return;
+            }
+
+            // Search for players by name using multiple matching strategies
+            const matches = this.playerService.findPlayerByName(playerName, 0.8);
+
+            if (matches.length === 0) {
+                await interaction.editReply(`❌ No players found matching "${playerName}". Try using different search terms.`);
+                return;
+            }
+
+            // Sort by rank (lowest rank number = highest position)
+            matches.sort((a, b) => a.player.rank - b.player.rank);
+
+            // Limit to top 10 matches
+            const topMatches = matches.slice(0, 10);
+
+            const embed = new EmbedBuilder()
+                .setTitle('👥 Player Search Results')
+                .setColor(0x9B59B6)
+                .setDescription(`Found ${matches.length} player${matches.length === 1 ? '' : 's'} matching "${playerName}"`)
+                .setTimestamp();
+
+            // Add each player as separate field for better formatting
+            topMatches.forEach((match, index) => {
+                const { player, similarity, matchType } = match;
+                const matchPercent = Math.round(similarity * 100);
+                const matchIcon = this.getMatchTypeIcon(matchType);
+                
+                const fieldName = `${index + 1}. ${player.name} (#${player.rank}) ${matchIcon} Match: ${matchPercent}%`;
+                const fieldValue = `🆔 ${player.id} 📊 Level ${player.level} 🏰 ${player.guildName || 'No Guild'}\n` +
+                                 `⚔️  ${player.attack} ❤️  ${player.health} <:II_RC:1385139885924421653> ${player.relicCores} (AVG)`;
+                
+                embed.addFields({
+                    name: fieldName,
+                    value: fieldValue,
+                    inline: false
+                });
+            });
+
+            if (matches.length > 10) {
+                embed.setFooter({ text: `Showing top 10 of ${matches.length} total matches` });
+            }
+
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            this.logger.error('Player search error:', error);
+            await interaction.editReply('❌ Error occurred during player search.');
+        }
+    }
+
     getMatchTypeIcon(matchType) {
         switch (matchType) {
-            case 'exact': return '🎯';
+            case 'exact': return '🔸';
             case 'starts_with': return '🔸';
-            case 'contains': return '🔍';
-            case 'reverse_contains': return '🔄';
-            case 'fuzzy': return '📝';
-            default: return '🎯';
+            case 'contains': return '🔸';
+            case 'reverse_contains': return '🔸';
+            case 'fuzzy': return '🔸';
+            default: return '🔸';
         }
     }
 }

@@ -1,0 +1,273 @@
+const axios = require('axios');
+const cheerio = require('cheerio');
+const ProxyService = require('./proxyService');
+
+class PlayerService {
+    constructor(config, logger) {
+        this.config = config;
+        this.logger = logger;
+        this.playerData = [];
+        this.lastFetchTime = null;
+        this.proxyService = new ProxyService(config, logger);
+    }
+
+    async fetchPlayerData() {
+        try {
+            this.logger.info('👥 Fetching player ranking data from API...');
+            
+            const response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
+            
+            if (response.data && typeof response.data === 'string') {
+                // Parse HTML response with cheerio
+                const $ = cheerio.load(response.data);
+                const players = [];
+                
+                // Find the ranking table and extract data
+                $('table tr').each((index, row) => {
+                    if (index === 0) return; // Skip header row
+                    
+                    const cells = $(row).find('td');
+                    if (cells.length >= 7) {
+                        const rank = parseInt($(cells[0]).text().trim()) || 0;
+                        const playerId = parseInt($(cells[1]).text().trim()) || 0;
+                        const name = $(cells[2]).text().trim();
+                        const guildName = $(cells[3]).text().trim();
+                        const relicCores = $(cells[4]).text().trim(); // Keep as string (e.g., "123.45")
+                        const attack = $(cells[5]).text().trim();
+                        const health = $(cells[6]).text().trim();
+                        const level = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 1 : 1;
+                        
+                        if (name && playerId > 0) {
+                            players.push({
+                                id: playerId,
+                                name: name,
+                                guildName: guildName,
+                                relicCores: relicCores,
+                                attack: attack,
+                                health: health,
+                                level: level,
+                                rank: rank,
+                                cleanName: this.cleanPlayerName(name)
+                            });
+                        }
+                    }
+                });
+                
+                this.playerData = players;
+                this.lastFetchTime = new Date();
+                this.logger.info(`✅ Successfully loaded ${this.playerData.length} players from ranking`);
+                return this.playerData;
+            } else {
+                this.logger.warn('⚠️ Invalid API response format for player data');
+                return [];
+            }
+        } catch (error) {
+            this.logger.error('❌ Error fetching player ranking data:', error.message);
+            
+            // Fallback: return cached data if available
+            if (this.playerData.length > 0) {
+                this.logger.info(`📋 Using cached player data (${this.playerData.length} players)`);
+                return this.playerData;
+            }
+            
+            return [];
+        }
+    }
+
+    getPlayerData() {
+        return this.playerData;
+    }
+
+    getDataAge() {
+        if (!this.lastFetchTime) return null;
+        const now = new Date();
+        const ageMs = now - this.lastFetchTime;
+        const ageMinutes = Math.floor(ageMs / (1000 * 60));
+        return ageMinutes;
+    }
+
+    findPlayerByName(playerName, threshold = 0.6) {
+        if (!playerName || this.playerData.length === 0) {
+            return null;
+        }
+
+        const cleanInput = this.cleanPlayerName(playerName);
+        this.logger.info(`🔍 Searching for player: "${playerName}" (cleaned: "${cleanInput}")`);
+
+        // Search for players by name using multiple matching strategies
+        const matches = [];
+        
+        for (const player of this.playerData) {
+            const cleanPlayerName = player.cleanName.toLowerCase();
+            let similarity = 0;
+            let matchType = '';
+            
+            // 1. Exact match (highest priority)
+            if (cleanPlayerName === cleanInput) {
+                similarity = 1.0;
+                matchType = 'exact';
+            } 
+            // 2. Starts with search term
+            else if (cleanPlayerName.startsWith(cleanInput)) {
+                similarity = 0.9;
+                matchType = 'starts_with';
+            }
+            // 3. Contains search term
+            else if (cleanPlayerName.includes(cleanInput)) {
+                similarity = 0.8;
+                matchType = 'contains';
+            }
+            // 4. Search term contains player name (for short player names)
+            else if (cleanInput.includes(cleanPlayerName) && cleanPlayerName.length >= 3) {
+                similarity = 0.7;
+                matchType = 'reverse_contains';
+            }
+            // 5. Levenshtein similarity (for typos)
+            else {
+                const levenshteinSim = this.calculateSimilarity(cleanInput, cleanPlayerName);
+                if (levenshteinSim >= threshold) {
+                    similarity = levenshteinSim * 0.6; // Reduce weight
+                    matchType = 'fuzzy';
+                }
+            }
+            
+            if (similarity >= 0.8) { // Only show matches 80% and above
+                matches.push({
+                    player: player,
+                    similarity: similarity,
+                    matchType: matchType
+                });
+            }
+        }
+
+        return matches;
+    }
+
+    findPlayerById(playerId) {
+        if (!playerId || this.playerData.length === 0) {
+            return null;
+        }
+
+        const player = this.playerData.find(p => p.id === parseInt(playerId));
+        if (player) {
+            this.logger.info(`✅ Found player by ID: ${player.name} (ID: ${player.id})`);
+            return player;
+        }
+
+        this.logger.info(`❌ No player found with ID: ${playerId}`);
+        return null;
+    }
+
+    getAllPlayers() {
+        return this.playerData.map(player => ({
+            id: player.id,
+            name: player.name,
+            guildName: player.guildName,
+            relicCores: player.relicCores,
+            attack: player.attack,
+            health: player.health,
+            level: player.level,
+            rank: player.rank
+        }));
+    }
+
+    getTopPlayers(limit = 10) {
+        return this.playerData
+            .sort((a, b) => a.rank - b.rank) // Sort by rank (lower number = higher rank)
+            .slice(0, limit)
+            .map(player => ({
+                id: player.id,
+                name: player.name,
+                guildName: player.guildName,
+                relicCores: player.relicCores,
+                attack: player.attack,
+                health: player.health,
+                level: player.level,
+                rank: player.rank
+            }));
+    }
+
+    cleanPlayerName(name) {
+        if (!name) return '';
+        
+        return name
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7AF\u0100-\u017F\u0180-\u024F]/g, '')
+            .toLowerCase();
+    }
+
+    calculateSimilarity(str1, str2) {
+        if (!str1 || !str2) return 0;
+        if (str1 === str2) return 1.0;
+        
+        // Długość podobieństwa
+        const distance = this.levenshteinDistance(str1, str2);
+        const maxLen = Math.max(str1.length, str2.length);
+        
+        if (maxLen === 0) return 1.0;
+        
+        const similarity = Math.max(0, 1 - (distance / maxLen));
+        
+        // Bonus za zawieranie podciągu
+        if (str1.includes(str2) || str2.includes(str1)) {
+            const minLen = Math.min(str1.length, str2.length);
+            const lengthBonus = minLen / maxLen * 0.2; // max 20% bonus
+            return Math.min(1.0, similarity + lengthBonus);
+        }
+        
+        return similarity;
+    }
+
+    levenshteinDistance(str1, str2) {
+        const matrix = [];
+        
+        // Initialize matrix
+        for (let i = 0; i <= str2.length; i++) {
+            matrix[i] = [i];
+        }
+        
+        for (let j = 0; j <= str1.length; j++) {
+            matrix[0][j] = j;
+        }
+        
+        // Calculate distances
+        for (let i = 1; i <= str2.length; i++) {
+            for (let j = 1; j <= str1.length; j++) {
+                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1, // substitution
+                        matrix[i][j - 1] + 1,     // insertion
+                        matrix[i - 1][j] + 1      // deletion
+                    );
+                }
+            }
+        }
+        
+        return matrix[str2.length][str1.length];
+    }
+
+    getStats() {
+        if (this.playerData.length === 0) {
+            return {
+                totalPlayers: 0,
+                lastUpdate: null,
+                dataAge: null
+            };
+        }
+
+        const totalLevels = this.playerData.reduce((sum, player) => sum + (player.level || 0), 0);
+        const averageLevel = totalLevels / this.playerData.length;
+
+        return {
+            totalPlayers: this.playerData.length,
+            averageLevel: Math.round(averageLevel * 10) / 10,
+            lastUpdate: this.lastFetchTime,
+            dataAge: this.getDataAge()
+        };
+    }
+}
+
+module.exports = PlayerService;

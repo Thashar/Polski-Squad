@@ -3,6 +3,7 @@ const cron = require('node-cron');
 const config = require('./config/config');
 const GarrytoolsService = require('./services/garrytoolsService');
 const ClanService = require('./services/clanService');
+const PlayerService = require('./services/playerService');
 const LogService = require('./services/logService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -19,7 +20,7 @@ const client = new Client({
 });
 
 // Services will be initialized in startBot function
-let garrytoolsService, clanService, logService, interactionHandler;
+let garrytoolsService, clanService, playerService, logService, interactionHandler;
 
 /**
  * Initialize the Gary bot
@@ -38,14 +39,16 @@ async function initializeBot() {
         // Register slash commands
         await interactionHandler.registerSlashCommands(client);
         
-        // Initial clan data fetch
+        // Initial data fetch
         await clanService.fetchClanData();
+        await playerService.fetchPlayerData();
         
         logger.info('Available commands:');
-        logger.info('- /lunarmine - analyzes 4 guilds during Lunar Mine Expedition');
-        logger.info('- /analyse - analyzes single guild with fixed guild substitution');
-        logger.info('- /search - searches for guilds by name from cached data');
-        logger.info('- /refresh - refreshes guild ranking data');
+        logger.info('- /lunarmine - analyzes 4 guilds during Lunar Mine Expedition (Admin only)');
+        logger.info('- /analyse - analyzes single guild with fixed guild substitution (Admin only)');
+        logger.info('- /search - searches for guilds by name from cached data (Public)');
+        logger.info('- /player - searches for players by name from cached data (Public)');
+        logger.info('- /refresh - refreshes guild ranking data (Admin only)');
         logger.info('- /proxy-test - tests configured proxies (Admin only)');
         logger.info('- /proxy-stats - shows proxy statistics (Admin only)');
         logger.info(`Allowed channels: ${config.allowedChannelIds.join(', ')}`);
@@ -123,11 +126,13 @@ async function startBot() {
         clanService = new ClanService(config, logger);
         logger.info('✅ ClanService initialized');
         
+        playerService = new PlayerService(config, logger);
+        logger.info('✅ PlayerService initialized');
         
         logService = new LogService(config, logger);
         logger.info('✅ LogService initialized');
         
-        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, logService, logger);
+        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, logService, logger);
         logger.info('✅ InteractionHandler initialized');
         
         logger.info('🎉 All Gary services initialized successfully');
