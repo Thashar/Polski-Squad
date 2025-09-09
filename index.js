@@ -55,6 +55,12 @@ const botConfigs = [
         loggerName: 'Wydarzynier',
         emoji: '🎉',
         path: './Wydarzynier/index'
+    },
+    {
+        name: 'Gary Bot',
+        loggerName: 'Gary',
+        emoji: '🎮',
+        path: './Gary/index'
     }
 ];
 
@@ -101,7 +107,7 @@ function loadBotConfig() {
     } catch (error) {
         logger.error('❌ Błąd wczytywania konfiguracji botów:', error.message);
         logger.info('🔄 Używam domyślnej konfiguracji (wszystkie boty)');
-        return ['rekruter', 'szkolenia', 'stalker', 'muteusz', 'endersecho', 'kontroler', 'konklawe', 'wydarzynier'];
+        return ['rekruter', 'szkolenia', 'stalker', 'muteusz', 'endersecho', 'kontroler', 'konklawe', 'wydarzynier', 'gary'];
     }
 }
 
@@ -127,7 +133,9 @@ async function startAllBots() {
     }
     
     for (const botConfig of botsToStart) {
+        logger.info(`🔄 Starting ${botConfig.name}...`);
         await startBot(botConfig);
+        logger.info(`✅ ${botConfig.name} started successfully`);
     }
 }
 
