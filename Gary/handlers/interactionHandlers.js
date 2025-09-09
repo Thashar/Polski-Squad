@@ -588,20 +588,49 @@ class InteractionHandler {
                 return;
             }
 
-            // Search for guilds by name using similarity matching
+            // Search for guilds by name using multiple matching strategies
             const matches = [];
-            const searchThreshold = 0.3; // Lower threshold for broader search
+            const cleanSearch = this.clanService.cleanGuildName(guildName).toLowerCase();
             
             for (const clan of clanData) {
-                const similarity = this.clanService.calculateSimilarity(
-                    this.clanService.cleanGuildName(guildName),
-                    clan.cleanName
-                );
+                const cleanClanName = clan.cleanName.toLowerCase();
+                let similarity = 0;
+                let matchType = '';
                 
-                if (similarity >= searchThreshold) {
+                // 1. Exact match (highest priority)
+                if (cleanClanName === cleanSearch) {
+                    similarity = 1.0;
+                    matchType = 'exact';
+                } 
+                // 2. Starts with search term
+                else if (cleanClanName.startsWith(cleanSearch)) {
+                    similarity = 0.9;
+                    matchType = 'starts_with';
+                }
+                // 3. Contains search term
+                else if (cleanClanName.includes(cleanSearch)) {
+                    similarity = 0.8;
+                    matchType = 'contains';
+                }
+                // 4. Search term contains clan name (for short clan names)
+                else if (cleanSearch.includes(cleanClanName) && cleanClanName.length >= 3) {
+                    similarity = 0.7;
+                    matchType = 'reverse_contains';
+                }
+                // 5. Levenshtein similarity (for typos)
+                else {
+                    const levenshteinSim = this.clanService.calculateSimilarity(cleanSearch, cleanClanName);
+                    if (levenshteinSim >= 0.6) { // Higher threshold for fuzzy matching
+                        similarity = levenshteinSim * 0.6; // Reduce weight
+                        matchType = 'fuzzy';
+                    }
+                }
+                
+                if (similarity > 0) {
                     matches.push({
                         clan: clan,
-                        similarity: similarity
+                        similarity: similarity,
+                        matchType: matchType
                     });
                 }
             }
@@ -623,19 +652,21 @@ class InteractionHandler {
                 .setDescription(`Found ${matches.length} guild${matches.length === 1 ? '' : 's'} matching "${guildName}"`)
                 .setTimestamp();
 
-            // Add guild matches
-            const resultText = topMatches.map((match, index) => {
-                const { clan, similarity } = match;
+            // Add each guild as separate field for better formatting
+            topMatches.forEach((match, index) => {
+                const { clan, similarity, matchType } = match;
                 const matchPercent = Math.round(similarity * 100);
-                return `${index + 1}. **${clan.name}** (#${clan.rank})\\n` +
-                       `   📊 Level ${clan.level} | 👥 ${clan.members} members | 🆔 ${clan.id}\\n` +
-                       `   🎯 Match: ${matchPercent}%${clan.leader ? ` | 👑 ${clan.leader}` : ''}`;
-            }).join('\\n\\n');
-
-            embed.addFields({
-                name: `📋 Top ${Math.min(topMatches.length, 10)} Results`,
-                value: resultText || 'No matches found',
-                inline: false
+                const matchIcon = this.getMatchTypeIcon(matchType);
+                
+                const fieldName = `${index + 1}. ${clan.name} (#${clan.rank}) ${matchIcon} Match: ${matchPercent}%`;
+                const fieldValue = `  👑 ${clan.leader || 'Unknown'} 👥 ${clan.members || '0'}  🆔 ${clan.id}\n` +
+                                 `  📊 Level ${clan.level} 🏆 ${clan.grade || 'N/A'} 🎯 ${clan.score || 0} pts`;
+                
+                embed.addFields({
+                    name: fieldName,
+                    value: fieldValue,
+                    inline: false
+                });
             });
 
             if (matches.length > 10) {
@@ -647,6 +678,17 @@ class InteractionHandler {
         } catch (error) {
             this.logger.error('Guild search error:', error);
             await interaction.editReply('❌ Error occurred during guild search.');
+        }
+    }
+
+    getMatchTypeIcon(matchType) {
+        switch (matchType) {
+            case 'exact': return '🎯';
+            case 'starts_with': return '🔸';
+            case 'contains': return '🔍';
+            case 'reverse_contains': return '🔄';
+            case 'fuzzy': return '📝';
+            default: return '🎯';
         }
     }
 }

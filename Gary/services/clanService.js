@@ -40,10 +40,10 @@ class ClanService {
                         const guildId = parseInt($(cells[1]).text().trim()) || 0;
                         const name = $(cells[2]).text().trim();
                         const level = parseInt($(cells[3]).text().trim()) || 1;
-                        const members = parseInt($(cells[4]).text().trim()) || 0;
+                        const members = $(cells[4]).text().trim(); // Keep as string (e.g., "38/40")
                         const leader = $(cells[5]).text().trim();
                         const grade = cells.length > 6 ? $(cells[6]).text().trim() : '';
-                        const points = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 0 : 0;
+                        const score = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 0 : 0;
                         
                         if (name && guildId > 0) {
                             clans.push({
@@ -53,7 +53,7 @@ class ClanService {
                                 members: members,
                                 leader: leader,
                                 grade: grade,
-                                points: points,
+                                score: score,
                                 rank: rank,
                                 cleanName: this.cleanGuildName(name)
                             });
@@ -153,21 +153,21 @@ class ClanService {
             name: clan.name,
             level: clan.level,
             members: clan.members,
-            points: clan.points,
+            score: clan.score,
             rank: clan.rank
         }));
     }
 
     getTopGuilds(limit = 10) {
         return this.clanData
-            .sort((a, b) => (b.points || 0) - (a.points || 0))
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
             .slice(0, limit)
             .map(clan => ({
                 id: clan.id,
                 name: clan.name,
                 level: clan.level,
                 members: clan.members,
-                points: clan.points,
+                score: clan.score,
                 rank: clan.rank
             }));
     }
@@ -244,13 +244,13 @@ class ClanService {
         }
 
         const totalMembers = this.clanData.reduce((sum, clan) => sum + (clan.members || 0), 0);
-        const totalPoints = this.clanData.reduce((sum, clan) => sum + (clan.points || 0), 0);
+        const totalScore = this.clanData.reduce((sum, clan) => sum + (clan.score || 0), 0);
         const averageLevel = this.clanData.reduce((sum, clan) => sum + (clan.level || 0), 0) / this.clanData.length;
 
         return {
             totalGuilds: this.clanData.length,
             totalMembers: totalMembers,
-            totalPoints: totalPoints,
+            totalScore: totalScore,
             averageLevel: Math.round(averageLevel * 10) / 10,
             lastUpdate: this.lastFetchTime,
             dataAge: this.getDataAge()
