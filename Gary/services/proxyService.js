@@ -58,13 +58,26 @@ class ProxyService {
                 'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'same-origin',
                 'Cache-Control': 'max-age=0'
+            },
+            // Ignore SSL certificate errors for proxy connections
+            httpsAgent: new (require('https')).Agent({
+                rejectUnauthorized: false
+            }),
+            // Validate status codes more permissively
+            validateStatus: function (status) {
+                return status >= 200 && status < 500; // Accept 2xx, 3xx, 4xx
             }
         };
 
         if (proxyUrl && this.enabled) {
             try {
-                baseConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
-                baseConfig.httpAgent = new HttpsProxyAgent(proxyUrl);
+                const proxyAgent = new HttpsProxyAgent(proxyUrl, {
+                    rejectUnauthorized: false, // Ignore SSL cert issues
+                    timeout: 10000 // Shorter timeout for proxy connection
+                });
+                
+                baseConfig.httpsAgent = proxyAgent;
+                baseConfig.httpAgent = proxyAgent;
                 this.logger.info(`🌐 Using proxy: ${this.maskProxy(proxyUrl)}`);
             } catch (error) {
                 this.logger.warn(`⚠️ Invalid proxy URL: ${proxyUrl}, using direct connection`);
@@ -120,6 +133,23 @@ class ProxyService {
             }
         }
         
+        // If all proxy attempts failed, try direct connection as fallback
+        if (this.enabled && this.proxyList.length > 0) {
+            this.logger.warn(`⚠️ All proxy attempts failed, trying direct connection as fallback...`);
+            
+            try {
+                const axiosInstance = this.createProxyAxios(null); // No proxy
+                const response = await axiosInstance.get(url, options);
+                
+                this.logger.info(`✅ Fallback request successful via direct connection`);
+                return response;
+                
+            } catch (directError) {
+                this.logger.error(`❌ Direct connection fallback also failed: ${directError.message}`);
+                throw lastError; // Throw original proxy error, not direct connection error
+            }
+        }
+        
         // If all attempts failed, throw the last error
         throw lastError;
     }
@@ -169,6 +199,23 @@ class ProxyService {
             }
         }
         
+        // If all proxy attempts failed, try direct connection as fallback
+        if (this.enabled && this.proxyList.length > 0) {
+            this.logger.warn(`⚠️ All proxy POST attempts failed, trying direct connection as fallback...`);
+            
+            try {
+                const axiosInstance = this.createProxyAxios(null); // No proxy
+                const response = await axiosInstance.post(url, data, options);
+                
+                this.logger.info(`✅ Fallback POST request successful via direct connection`);
+                return response;
+                
+            } catch (directError) {
+                this.logger.error(`❌ Direct connection POST fallback also failed: ${directError.message}`);
+                throw lastError; // Throw original proxy error, not direct connection error
+            }
+        }
+        
         throw lastError;
     }
 
@@ -201,12 +248,17 @@ class ProxyService {
 
         this.logger.info(`🧪 Testing ${this.proxyList.length} proxies...`);
         const workingProxies = [];
-        const testUrl = 'https://httpbin.org/ip';
+        const testUrl = 'http://httpbin.org/ip'; // Use HTTP instead of HTTPS for testing
 
         for (const proxy of this.proxyList) {
             try {
                 const axiosInstance = this.createProxyAxios(proxy);
-                const response = await axiosInstance.get(testUrl, { timeout: 10000 });
+                const response = await axiosInstance.get(testUrl, { 
+                    timeout: 8000,
+                    httpsAgent: new (require('https')).Agent({
+                        rejectUnauthorized: false
+                    })
+                });
                 
                 if (response.status === 200) {
                     workingProxies.push(proxy);
