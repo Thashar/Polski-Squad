@@ -4,6 +4,7 @@ const config = require('./config/config');
 const GarrytoolsService = require('./services/garrytoolsService');
 const ClanService = require('./services/clanService');
 const PlayerService = require('./services/playerService');
+const EndersEchoService = require('./services/endersEchoService');
 const LogService = require('./services/logService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -20,7 +21,7 @@ const client = new Client({
 });
 
 // Services will be initialized in startBot function
-let garrytoolsService, clanService, playerService, logService, interactionHandler;
+let garrytoolsService, clanService, playerService, endersEchoService, logService, interactionHandler;
 
 /**
  * Initialize the Gary bot
@@ -42,12 +43,14 @@ async function initializeBot() {
         // Initial data fetch
         await clanService.fetchClanData();
         await playerService.fetchPlayerData();
+        await endersEchoService.fetchEndersEchoData();
         
         logger.info('Available commands:');
         logger.info('- /lunarmine - analyzes 4 guilds during Lunar Mine Expedition (Admin only)');
         logger.info('- /analyse - analyzes single guild with fixed guild substitution (Admin only)');
         logger.info('- /search - searches for guilds by name from cached data (Public)');
         logger.info('- /player - searches for players by name from cached data (Public)');
+        logger.info('- /ee - searches for EndersEcho players by name from cached data (Public)');
         logger.info('- /refresh - refreshes guild ranking data (Admin only)');
         logger.info('- /proxy-test - tests configured proxies (Admin only)');
         logger.info('- /proxy-stats - shows proxy statistics (Admin only)');
@@ -129,10 +132,13 @@ async function startBot() {
         playerService = new PlayerService(config, logger);
         logger.info('✅ PlayerService initialized');
         
+        endersEchoService = new EndersEchoService(config, logger);
+        logger.info('✅ EndersEchoService initialized');
+        
         logService = new LogService(config, logger);
         logger.info('✅ LogService initialized');
         
-        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, logService, logger);
+        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, logger);
         logger.info('✅ InteractionHandler initialized');
         
         logger.info('🎉 All Gary services initialized successfully');

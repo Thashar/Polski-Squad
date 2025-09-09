@@ -761,18 +761,21 @@ class InteractionHandler {
         try {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
             
+            // POPRAWKA: Najpierw defer, żeby zabezpieczyć interakcję
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.deferReply({ ephemeral: false });
+            }
+            
+            let nicknameError = null;
+            
             // Aplikuj klątwę na nick przy użyciu centralnego systemu
             try {
                 await this.applyNicknameCurse(targetMember, interaction, curse.duration);
+                logger.info(`😈 Aplikowano klątwę na nick ${targetUser.tag}: "${this.config.virtuttiPapajlari.forcedNickname} ${targetMember.displayName}"`);
             } catch (error) {
                 // Jeśli klątwa na nick nie może być aplikowana, kontynuuj z pozostałymi efektami
                 logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
-                
-                // Wyślij informację o błędzie jako ephemeral message
-                await interaction.followUp({
-                    content: `⚠️ ${error.message}`,
-                    ephemeral: true
-                });
+                nicknameError = error.message;
             }
 
             // Wyślij klątwę
@@ -782,18 +785,30 @@ class InteractionHandler {
             // Wykonaj dodatkową klątwę
             await this.executeCurse(interaction, targetMember, curse.additional);
 
-            await interaction.reply({
-                content: `💀 **${targetUser.toString()} zostałeś przeklęty!**`,
-                ephemeral: false
+            // POPRAWKA: Użyj editReply zamiast reply po defer
+            let responseContent = `💀 **${targetUser.toString()} zostałeś przeklęty!**`;
+            if (nicknameError) {
+                responseContent += `\n\n⚠️ *Uwaga: ${nicknameError}*`;
+            }
+
+            await interaction.editReply({
+                content: responseContent
             });
 
             logger.info(`💀 ${interaction.user.tag} przeklął ${targetUser.tag}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas rzucania klątwy: ${error.message}`);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas rzucania klątwy.',
-                ephemeral: true
-            });
+            
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas rzucania klątwy.',
+                    ephemeral: true
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas rzucania klątwy.'
+                });
+            }
         }
     }
 
