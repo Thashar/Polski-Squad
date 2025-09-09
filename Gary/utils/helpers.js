@@ -99,26 +99,6 @@ function truncateString(str, length = 1024) {
     return str.substring(0, length - 3) + '...';
 }
 
-/**
- * Clean and validate attachment
- * @param {Object} attachment - Discord attachment object
- * @returns {Object}
- */
-function validateImageAttachment(attachment) {
-    if (!attachment) {
-        return { valid: false, error: 'No attachment provided' };
-    }
-    
-    if (!attachment.contentType?.startsWith('image/')) {
-        return { valid: false, error: 'Attachment is not an image' };
-    }
-    
-    if (attachment.size > 8 * 1024 * 1024) { // 8MB limit
-        return { valid: false, error: 'Image file too large (max 8MB)' };
-    }
-    
-    return { valid: true, attachment };
-}
 
 module.exports = {
     hasPermission,
@@ -126,6 +106,5 @@ module.exports = {
     generatePaginationId,
     isAllowedChannel,
     delay,
-    truncateString,
-    validateImageAttachment
+    truncateString
 };

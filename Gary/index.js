@@ -3,7 +3,6 @@ const cron = require('node-cron');
 const config = require('./config/config');
 const GarrytoolsService = require('./services/garrytoolsService');
 const ClanService = require('./services/clanService');
-const OCRService = require('./services/ocrService');
 const LogService = require('./services/logService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -20,7 +19,7 @@ const client = new Client({
 });
 
 // Services will be initialized in startBot function
-let garrytoolsService, clanService, ocrService, logService, interactionHandler;
+let garrytoolsService, clanService, logService, interactionHandler;
 
 /**
  * Initialize the Gary bot
@@ -46,7 +45,8 @@ async function initializeBot() {
         logger.info('- /lunarmine - analyzes 4 guilds during Lunar Mine Expedition');
         logger.info('- /search - analyzes single guild with fixed guild substitution');
         logger.info('- /refresh - refreshes guild ranking data');
-        logger.info('- /analyze - OCR analysis of game screenshots');
+        logger.info('- /proxy-test - tests configured proxies (Admin only)');
+        logger.info('- /proxy-stats - shows proxy statistics (Admin only)');
         logger.info(`Allowed channel: ${config.allowedChannelId}`);
         logger.info(`Log channel: ${config.logChannelId}`);
         
@@ -122,13 +122,11 @@ async function startBot() {
         clanService = new ClanService(config, logger);
         logger.info('✅ ClanService initialized');
         
-        ocrService = new OCRService(config, logger);
-        logger.info('✅ OCRService initialized');
         
         logService = new LogService(config, logger);
         logger.info('✅ LogService initialized');
         
-        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, ocrService, logService, logger);
+        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, logService, logger);
         logger.info('✅ InteractionHandler initialized');
         
         logger.info('🎉 All Gary services initialized successfully');

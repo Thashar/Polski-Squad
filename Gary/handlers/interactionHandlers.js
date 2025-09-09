@@ -1,13 +1,12 @@
 const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
 const axios = require('axios');
-const { hasPermission, formatNumber, generatePaginationId, isAllowedChannel, validateImageAttachment } = require('../utils/helpers');
+const { hasPermission, formatNumber, generatePaginationId, isAllowedChannel } = require('../utils/helpers');
 
 class InteractionHandler {
-    constructor(config, garrytoolsService, clanService, ocrService, logService, logger) {
+    constructor(config, garrytoolsService, clanService, logService, logger) {
         this.config = config;
         this.garrytoolsService = garrytoolsService;
         this.clanService = clanService;
-        this.ocrService = ocrService;
         this.logService = logService;
         this.logger = logger;
         
@@ -58,14 +57,6 @@ class InteractionHandler {
                         .setRequired(true)
                         .setMinValue(1)
                         .setMaxValue(999999)),
-                        
-            new SlashCommandBuilder()
-                .setName('analyze')
-                .setDescription('Analyzes uploaded image from Survivor.io game')
-                .addAttachmentOption(option =>
-                    option.setName('image')
-                        .setDescription('Screenshot from Survivor.io game')
-                        .setRequired(true)),
                         
             new SlashCommandBuilder()
                 .setName('proxy-test')
@@ -136,10 +127,6 @@ class InteractionHandler {
                     
                 case 'search':
                     await this.handleSearchCommand(interaction);
-                    break;
-                    
-                case 'analyze':
-                    await this.handleAnalyzeCommand(interaction);
                     break;
                     
                 case 'proxy-test':
@@ -358,85 +345,6 @@ class InteractionHandler {
         await interaction.editReply(`✅ Data refreshed. Database contains: ${this.clanService.getClanData().length} guilds.`);
     }
 
-    async handleAnalyzeCommand(interaction) {
-        const attachment = interaction.options.getAttachment('image');
-        
-        const validation = validateImageAttachment(attachment);
-        if (!validation.valid) {
-            await interaction.reply({ 
-                content: `❌ ${validation.error}`, 
-                ephemeral: true 
-            });
-            return;
-        }
-        
-        await interaction.deferReply();
-        
-        try {
-            await interaction.editReply('🔄 Analyzing image...');
-            
-            const response = await axios.get(attachment.url, { 
-                responseType: 'arraybuffer',
-                timeout: 30000
-            });
-            const imageBuffer = Buffer.from(response.data);
-            
-            const ocrResults = await this.ocrService.performRobustOCR(imageBuffer);
-            
-            if (!ocrResults || ocrResults.length === 0) {
-                await interaction.editReply('❌ Failed to recognize text.');
-                return;
-            }
-            
-            await interaction.editReply('🔎 Searching for guilds...');
-            
-            const potentialNames = ocrResults[0].text.split(/[\n\r]+/)
-                .map(line => line.trim())
-                .filter(line => line.length > 2 && line.length < 30);
-            
-            const allMatches = [];
-            const clanData = this.clanService.getClanData();
-            
-            for (const name of potentialNames) {
-                const matches = this.ocrService.findSimilarClans(name, clanData, this.config.ocrSettings?.minSimilarity || 0.49);
-                if (matches.length > 0) {
-                    allMatches.push({
-                        searchTerm: name,
-                        matches: matches.slice(0, 3)
-                    });
-                }
-            }
-            
-            const embed = new EmbedBuilder()
-                .setTitle('🎯 Image Analysis - Found Guilds')
-                .setColor(allMatches.length > 0 ? 0x00ff00 : 0xff0000)
-                .setTimestamp();
-            
-            if (allMatches.length === 0) {
-                embed.setDescription('❌ No guilds found in the image.');
-            } else {
-                embed.setDescription(`✅ Found ${allMatches.length} guild groups:`);
-                
-                allMatches.forEach((group, index) => {
-                    if (index < (this.config.ocrSettings?.maxFields || 5)) {
-                        embed.addFields({
-                            name: `🔍 "${group.searchTerm}"`,
-                            value: group.matches.map(match => 
-                                `• **${match.clan.name}** (#${match.clan.rank}) - ${Math.round(match.similarity * 100)}%`
-                            ).join('\n'),
-                            inline: false
-                        });
-                    }
-                });
-            }
-            
-            await interaction.editReply({ embeds: [embed] });
-            
-        } catch (error) {
-            this.logger.error('Image analysis error:', error);
-            await interaction.editReply('❌ Error during image analysis.');
-        }
-    }
 
     async sendGuildMembersList(interaction, guild) {
         if (!guild.members || guild.members.length === 0) return;
