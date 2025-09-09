@@ -37,12 +37,8 @@ class EndersEchoService {
                     }
                 });
                 
-                // Sort date columns in reverse chronological order (newest first)
-                this.dateColumns.sort((a, b) => {
-                    const dateA = new Date(a.split('.').reverse().join('-'));
-                    const dateB = new Date(b.split('.').reverse().join('-'));
-                    return dateB - dateA; // Reversed - newest first
-                });
+                // Keep date columns in the order they appear in the table
+                // No sorting - first column = Day 1, second = Day 2, etc.
                 
                 this.logger.info(`📅 Found ${this.dateColumns.length} date columns: ${this.dateColumns.join(', ')}`);
                 
@@ -56,17 +52,20 @@ class EndersEchoService {
                         const playerId = parseInt($(cells[1]).text().trim()) || 0;
                         const name = $(cells[2]).text().trim();
                         const guildName = $(cells[3]).text().trim();
-                        const bestScore = $(cells[4]).text().trim();
                         
-                        // Extract date columns and reverse their order (newest first as Day 1)
-                        const dateScores = [];
-                        for (let i = 5; i < cells.length; i++) {
+                        // Extract all scores (from index 4 onwards)
+                        const allScores = [];
+                        for (let i = 4; i < cells.length; i++) {
                             const score = $(cells[i]).text().trim();
-                            dateScores.push(score || '-');
+                            allScores.push(score || '-');
                         }
                         
-                        // Reverse the order so newest date becomes Day 1
-                        dateScores.reverse();
+                        // Last column is Best Score (All Time)
+                        const bestScore = allScores[allScores.length - 1] || '-';
+                        
+                        // Middle columns are date scores (in order: Day 1, Day 2, Day 3...)
+                        const dateScores = allScores.slice(0, -1); // All except last
+                        // Don't reverse - keep natural order: first date column = Day 1
                         
                         // Ensure we have the right number of date scores
                         while (dateScores.length < this.dateColumns.length) {
