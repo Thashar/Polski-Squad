@@ -636,8 +636,8 @@ class InteractionHandler {
                 }
             }
 
-            // Sort by similarity (highest first)
-            matches.sort((a, b) => b.similarity - a.similarity);
+            // Sort by rank (lowest rank number = highest position)
+            matches.sort((a, b) => a.clan.rank - b.clan.rank);
 
             if (matches.length === 0) {
                 await interaction.editReply(`❌ No guilds found matching "${guildName}". Try using different search terms.`);
