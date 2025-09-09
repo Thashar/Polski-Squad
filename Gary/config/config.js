@@ -25,7 +25,9 @@ module.exports = {
     token: process.env.GARY_TOKEN,
     clientId: process.env.GARY_CLIENT_ID,
     guildId: process.env.GARY_GUILD_ID,
-    allowedChannelId: process.env.GARY_ALLOWED_CHANNEL_ID,
+    allowedChannelIds: process.env.GARY_ALLOWED_CHANNEL_ID ? 
+        process.env.GARY_ALLOWED_CHANNEL_ID.split(',').map(id => id.trim()) : 
+        [],
     logChannelId: process.env.GARY_LOG_CHANNEL_ID,
     
     // Lunar Mine Settings

@@ -72,11 +72,20 @@ function generatePaginationId() {
 /**
  * Validate if channel is allowed
  * @param {Object} interaction - Discord interaction object
- * @param {string} allowedChannelId - ID of allowed channel
+ * @param {string|Array} allowedChannelIds - ID(s) of allowed channel(s)
  * @returns {boolean}
  */
-function isAllowedChannel(interaction, allowedChannelId) {
-    return interaction.channelId === allowedChannelId;
+function isAllowedChannel(interaction, allowedChannelIds) {
+    // Support both single string and array of channel IDs
+    if (typeof allowedChannelIds === 'string') {
+        return interaction.channelId === allowedChannelIds;
+    }
+    
+    if (Array.isArray(allowedChannelIds)) {
+        return allowedChannelIds.includes(interaction.channelId);
+    }
+    
+    return false;
 }
 
 /**

@@ -48,7 +48,7 @@ async function initializeBot() {
         logger.info('- /refresh - refreshes guild ranking data');
         logger.info('- /proxy-test - tests configured proxies (Admin only)');
         logger.info('- /proxy-stats - shows proxy statistics (Admin only)');
-        logger.info(`Allowed channel: ${config.allowedChannelId}`);
+        logger.info(`Allowed channels: ${config.allowedChannelIds.join(', ')}`);
         logger.info(`Log channel: ${config.logChannelId}`);
         
         // Log successful initialization

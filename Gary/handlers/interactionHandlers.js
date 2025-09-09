@@ -113,7 +113,7 @@ class InteractionHandler {
         }
 
         // Check allowed channel
-        if (!isAllowedChannel(interaction, this.config.allowedChannelId)) {
+        if (!isAllowedChannel(interaction, this.config.allowedChannelIds)) {
             await interaction.reply({ 
                 content: '❌ This command can only be used in the designated channel!', 
                 ephemeral: true 
