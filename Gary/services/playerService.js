@@ -91,39 +91,43 @@ class PlayerService {
             return null;
         }
 
-        const cleanInput = this.cleanPlayerName(playerName);
-        this.logger.info(`🔍 Searching for player: "${playerName}" (cleaned: "${cleanInput}")`);
+        // Use original name with minimal cleaning (only trim and lowercase)
+        const searchInput = playerName.trim().toLowerCase();
+        this.logger.info(`🔍 Searching for player: "${playerName}"`);
 
         // Search for players by name using multiple matching strategies
         const matches = [];
         
         for (const player of this.playerData) {
-            const cleanPlayerName = player.cleanName.toLowerCase();
+            // Compare with original player name (minimal cleaning)
+            const playerNameLower = player.name.toLowerCase();
             let similarity = 0;
             let matchType = '';
             
             // 1. Exact match (highest priority)
-            if (cleanPlayerName === cleanInput) {
+            if (playerNameLower === searchInput) {
                 similarity = 1.0;
                 matchType = 'exact';
             } 
             // 2. Starts with search term
-            else if (cleanPlayerName.startsWith(cleanInput)) {
+            else if (playerNameLower.startsWith(searchInput)) {
                 similarity = 0.9;
                 matchType = 'starts_with';
             }
             // 3. Contains search term
-            else if (cleanPlayerName.includes(cleanInput)) {
+            else if (playerNameLower.includes(searchInput)) {
                 similarity = 0.8;
                 matchType = 'contains';
             }
             // 4. Search term contains player name (for short player names)
-            else if (cleanInput.includes(cleanPlayerName) && cleanPlayerName.length >= 3) {
+            else if (searchInput.includes(playerNameLower) && playerNameLower.length >= 3) {
                 similarity = 0.7;
                 matchType = 'reverse_contains';
             }
-            // 5. Levenshtein similarity (for typos)
+            // 5. Levenshtein similarity (for typos) - use cleaned names for fuzzy matching only
             else {
+                const cleanInput = this.cleanPlayerName(playerName);
+                const cleanPlayerName = player.cleanName.toLowerCase();
                 const levenshteinSim = this.calculateSimilarity(cleanInput, cleanPlayerName);
                 if (levenshteinSim >= threshold) {
                     similarity = levenshteinSim * 0.6; // Reduce weight

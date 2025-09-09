@@ -68,7 +68,15 @@ class InteractionHandler {
                         .setDescription('Guild name to search for (minimum 3 characters)')
                         .setRequired(true)
                         .setMinLength(3)
-                        .setMaxLength(50)),
+                        .setMaxLength(50))
+                .addStringOption(option =>
+                    option.setName('searching')
+                        .setDescription('Search mode: TOP500 (cached data) or GLOBAL (live search)')
+                        .setRequired(false)
+                        .addChoices(
+                            { name: 'TOP500', value: 'top500' },
+                            { name: 'GLOBAL', value: 'global' }
+                        )),
                         
             new SlashCommandBuilder()
                 .setName('player')
@@ -620,11 +628,18 @@ class InteractionHandler {
 
     async handleSearchCommand(interaction) {
         const guildName = interaction.options.getString('name');
+        const searchMode = interaction.options.getString('searching') || 'top500';
         await interaction.deferReply();
 
         try {
-            this.logger.info(`🔍 Searching for guild: "${guildName}"`);
+            this.logger.info(`🔍 Searching for guild: "${guildName}" (mode: ${searchMode.toUpperCase()})`);
             
+            if (searchMode === 'global') {
+                await this.handleGlobalSearch(interaction, guildName);
+                return;
+            }
+            
+            // TOP500 search - existing logic
             const clanData = this.clanService.getClanData();
             
             if (clanData.length === 0) {
@@ -691,9 +706,9 @@ class InteractionHandler {
             const topMatches = matches.slice(0, 10);
 
             const embed = new EmbedBuilder()
-                .setTitle('🔍 Guild Search Results')
+                .setTitle('🔍 Guild Search Results (TOP500)')
                 .setColor(0x3498DB)
-                .setDescription(`Found ${matches.length} guild${matches.length === 1 ? '' : 's'} matching "${guildName}"`)
+                .setDescription(`Found ${matches.length} guild${matches.length === 1 ? '' : 's'} matching "${guildName}" (TOP500 Cached Data)`)
                 .setTimestamp();
 
             // Add each guild as separate field for better formatting
@@ -888,6 +903,97 @@ class InteractionHandler {
             case 'reverse_contains': return '🔸';
             case 'fuzzy': return '🔸';
             default: return '🔸';
+        }
+    }
+
+    async handleGlobalSearch(interaction, guildName) {
+        try {
+            this.logger.info(`🌐 Performing global search for guild: "${guildName}"`);
+            
+            // Create session with cookies to maintain state
+            const axios = require('axios');
+            const cheerio = require('cheerio');
+            
+            // First, get the main page to establish session
+            const mainPageResponse = await axios.get('https://garrytools.com/lunar', {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+
+            // Extract any necessary tokens or cookies
+            const $ = cheerio.load(mainPageResponse.data);
+            
+            // Perform the search request
+            const searchResponse = await axios.post('https://garrytools.com/lunar/search-guild', {
+                name: guildName
+            }, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Referer': 'https://garrytools.com/lunar'
+                }
+            });
+
+            let searchResults = [];
+            
+            if (searchResponse.data && Array.isArray(searchResponse.data)) {
+                searchResults = searchResponse.data;
+            } else if (searchResponse.data && typeof searchResponse.data === 'string') {
+                // Parse HTML response if returned as HTML
+                const searchHtml = cheerio.load(searchResponse.data);
+                searchHtml('tbody tr').each((index, row) => {
+                    const cells = searchHtml(row).find('td');
+                    if (cells.length >= 3) {
+                        const rank = searchHtml(cells[0]).text().trim();
+                        const guildId = searchHtml(cells[1]).text().trim();
+                        const name = searchHtml(cells[2]).text().trim();
+                        
+                        if (rank && guildId && name) {
+                            searchResults.push({
+                                rank: parseInt(rank) || 0,
+                                id: parseInt(guildId) || 0,
+                                name: name
+                            });
+                        }
+                    }
+                });
+            }
+
+            if (searchResults.length === 0) {
+                await interaction.editReply(`❌ No guilds found matching "${guildName}" in global search.`);
+                return;
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('🌐 Global Guild Search Results')
+                .setColor(0x9B59B6)
+                .setDescription(`Found ${searchResults.length} guild${searchResults.length === 1 ? '' : 's'} matching "${guildName}" (Global Search)`)
+                .setTimestamp();
+
+            // Add each guild as separate field
+            searchResults.slice(0, 10).forEach((guild, index) => {
+                const fieldName = `${index + 1}. ${guild.name} (#${guild.rank})`;
+                const fieldValue = `  🆔 Guild ID: ${guild.id}`;
+                
+                embed.addFields({
+                    name: fieldName,
+                    value: fieldValue,
+                    inline: false
+                });
+            });
+
+            if (searchResults.length > 10) {
+                embed.setFooter({ text: `Showing top 10 of ${searchResults.length} total matches` });
+            }
+
+            await interaction.editReply({ embeds: [embed] });
+            
+        } catch (error) {
+            this.logger.error('❌ Error during global guild search:', error.message);
+            await interaction.editReply(`❌ Error performing global search: ${error.message}`);
         }
     }
 }
