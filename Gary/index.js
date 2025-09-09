@@ -43,7 +43,8 @@ async function initializeBot() {
         
         logger.info('Available commands:');
         logger.info('- /lunarmine - analyzes 4 guilds during Lunar Mine Expedition');
-        logger.info('- /search - analyzes single guild with fixed guild substitution');
+        logger.info('- /analyse - analyzes single guild with fixed guild substitution');
+        logger.info('- /search - searches for guilds by name from cached data');
         logger.info('- /refresh - refreshes guild ranking data');
         logger.info('- /proxy-test - tests configured proxies (Admin only)');
         logger.info('- /proxy-stats - shows proxy statistics (Admin only)');

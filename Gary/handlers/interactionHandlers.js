@@ -49,7 +49,7 @@ class InteractionHandler {
                 .setDescription('Refreshes guild data from ranking table'),
                 
             new SlashCommandBuilder()
-                .setName('search')
+                .setName('analyse')
                 .setDescription('Analyzes a single guild during Lunar Expedition (+ 3 fixed guilds)')
                 .addIntegerOption(option =>
                     option.setName('guildid')
@@ -57,6 +57,16 @@ class InteractionHandler {
                         .setRequired(true)
                         .setMinValue(1)
                         .setMaxValue(999999)),
+                        
+            new SlashCommandBuilder()
+                .setName('search')
+                .setDescription('Search for guilds by name from cached ranking data')
+                .addStringOption(option =>
+                    option.setName('name')
+                        .setDescription('Guild name to search for (minimum 3 characters)')
+                        .setRequired(true)
+                        .setMinLength(3)
+                        .setMaxLength(50)),
                         
             new SlashCommandBuilder()
                 .setName('proxy-test')
@@ -123,6 +133,10 @@ class InteractionHandler {
                     
                 case 'refresh':
                     await this.handleRefreshCommand(interaction);
+                    break;
+                    
+                case 'analyse':
+                    await this.handleAnalyseCommand(interaction);
                     break;
                     
                 case 'search':
@@ -284,7 +298,7 @@ class InteractionHandler {
         }
     }
 
-    async handleSearchCommand(interaction) {
+    async handleAnalyseCommand(interaction) {
         const userGuildId = interaction.options.getInteger('guildid');
         await interaction.deferReply();
 
@@ -558,6 +572,82 @@ class InteractionHandler {
         }
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    async handleSearchCommand(interaction) {
+        const guildName = interaction.options.getString('name');
+        await interaction.deferReply();
+
+        try {
+            this.logger.info(`🔍 Searching for guild: "${guildName}"`);
+            
+            const clanData = this.clanService.getClanData();
+            
+            if (clanData.length === 0) {
+                await interaction.editReply('❌ No guild data available. Please use `/refresh` to load guild data first.');
+                return;
+            }
+
+            // Search for guilds by name using similarity matching
+            const matches = [];
+            const searchThreshold = 0.3; // Lower threshold for broader search
+            
+            for (const clan of clanData) {
+                const similarity = this.clanService.calculateSimilarity(
+                    this.clanService.cleanGuildName(guildName),
+                    clan.cleanName
+                );
+                
+                if (similarity >= searchThreshold) {
+                    matches.push({
+                        clan: clan,
+                        similarity: similarity
+                    });
+                }
+            }
+
+            // Sort by similarity (highest first)
+            matches.sort((a, b) => b.similarity - a.similarity);
+
+            if (matches.length === 0) {
+                await interaction.editReply(`❌ No guilds found matching "${guildName}". Try using different search terms.`);
+                return;
+            }
+
+            // Limit to top 10 matches
+            const topMatches = matches.slice(0, 10);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🔍 Guild Search Results')
+                .setColor(0x3498DB)
+                .setDescription(`Found ${matches.length} guild${matches.length === 1 ? '' : 's'} matching "${guildName}"`)
+                .setTimestamp();
+
+            // Add guild matches
+            const resultText = topMatches.map((match, index) => {
+                const { clan, similarity } = match;
+                const matchPercent = Math.round(similarity * 100);
+                return `${index + 1}. **${clan.name}** (#${clan.rank})\\n` +
+                       `   📊 Level ${clan.level} | 👥 ${clan.members} members | 🆔 ${clan.id}\\n` +
+                       `   🎯 Match: ${matchPercent}%${clan.leader ? ` | 👑 ${clan.leader}` : ''}`;
+            }).join('\\n\\n');
+
+            embed.addFields({
+                name: `📋 Top ${Math.min(topMatches.length, 10)} Results`,
+                value: resultText || 'No matches found',
+                inline: false
+            });
+
+            if (matches.length > 10) {
+                embed.setFooter({ text: `Showing top 10 of ${matches.length} total matches` });
+            }
+
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            this.logger.error('Guild search error:', error);
+            await interaction.editReply('❌ Error occurred during guild search.');
+        }
     }
 }
 
