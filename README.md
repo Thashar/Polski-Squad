@@ -5,7 +5,7 @@ Kolekcja botów Discord dla serwera Polish Squad, zawierająca dziewięć specja
 ## Boty
 
 ### 🎯 Gary Bot - **NOWY!**
-Analizuje dane z gry Survivor.io przy użyciu API Garrytools. Umożliwia wyszukiwanie gildii, graczy i danych EndersEcho. Obsługuje analizę Lunar Mine Expedition oraz rozpoznawanie gildii z zdjęć OCR. Wspiera wiele serwerów i system proxy dla bardziej zaawansowanych operacji.
+Analizuje dane z gry Survivor.io przy użyciu API Garrytools. Umożliwia wyszukiwanie gildii, graczy i danych EndersEcho. Obsługuje analizę Lunar Mine Expedition. Wspiera wiele serwerów i system proxy dla bardziej zaawansowanych operacji.
 
 ### 🎯 Rekruter Bot
 Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach oraz **system powiadomień o boostach** - automatyczne wiadomości dziękczynne dla osób boostujących serwer.
