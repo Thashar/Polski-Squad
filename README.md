@@ -1,8 +1,11 @@
 # Polski Squad Discord Bot Collection
 
-Kolekcja botów Discord dla serwera Polish Squad, zawierająca osiem specjalistycznych botów z centralnym systemem logowania i zarządzania.
+Kolekcja botów Discord dla serwera Polish Squad, zawierająca dziewięć specjalistycznych botów z centralnym systemem logowania i zarządzania.
 
 ## Boty
+
+### 🎯 Gary Bot - **NOWY!**
+Analizuje dane z gry Survivor.io przy użyciu API Garrytools. Umożliwia wyszukiwanie gildii, graczy i danych EndersEcho. Obsługuje analizę Lunar Mine Expedition oraz rozpoznawanie gildii z zdjęć OCR. Wspiera wiele serwerów i system proxy dla bardziej zaawansowanych operacji.
 
 ### 🎯 Rekruter Bot
 Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach oraz **system powiadomień o boostach** - automatyczne wiadomości dziękczynne dla osób boostujących serwer.
@@ -51,142 +54,6 @@ logWithTimestamp('wiadomość', 'info');
 
 **Wszystkie logi muszą być prefixowane nazwą bota dla poprawnej identyfikacji w środowisku multi-bot.**
 
-## Architektura Projektu
-
-```
-Polski-Squad-Bot-Collection/
-├── index.js                    # Główny launcher wszystkich botów
-├── package.json               # Zależności i skrypty NPM
-├── bot-config.json            # Konfiguracja które boty uruchamiać
-├── CLAUDE.md                  # Instrukcje dla Claude Code
-├── processed_ocr/             # Wspólny folder przetworzonych obrazów OCR (max 100 plików)
-├── utils/                     # Wspólne narzędzia
-│   ├── consoleLogger.js       # Centralny system logowania z kolorami
-│   ├── discordLogger.js       # System logowania na kanały Discord
-│   ├── nicknameManagerService.js # Centralny system zarządzania nickami
-│   └── ocrFileUtils.js        # Narzędzia do zarządzania plikami OCR
-├── shared_data/               # Wspólne dane między botami
-│   ├── nickname_manager_config.json    # Konfiguracja systemu nicków
-│   └── active_nickname_effects.json    # Aktywne efekty nicków
-├── 
-├── Rekruter/                  # Bot rekrutacyjny z OCR i boost tracking
-│   ├── index.js
-│   ├── config/
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── nicknameService.js
-│   │   ├── ocrService.js
-│   │   ├── qualificationService.js
-│   │   └── roleService.js
-│   └── temp/
-│
-├── Szkolenia/                 # Bot szkoleń z wątkami
-│   ├── index.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   └── reactionHandlers.js
-│   ├── services/
-│   │   ├── reminderStorageService.js
-│   │   └── threadService.js
-│   └── data/
-│       └── reminders.json
-│
-├── StalkerLME/                # Bot kar z systemem urlopów
-│   ├── index.js
-│   ├── handlers/
-│   │   └── interactionHandlers.js
-│   ├── services/
-│   │   ├── databaseService.js
-│   │   ├── ocrService.js
-│   │   ├── punishmentService.js
-│   │   ├── reminderService.js
-│   │   └── vacationService.js
-│   ├── data/
-│   │   ├── punishments.json
-│   │   └── weekly_removal.json
-│   └── temp/
-│
-├── Muteusz/                   # Bot moderacji z cache mediów
-│   ├── index.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   ├── memberHandlers.js
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── autoModerationService.js
-│   │   ├── logService.js
-│   │   ├── mediaService.js
-│   │   ├── roleManagementService.js
-│   │   ├── specialRolesService.js
-│   │   └── warningService.js
-│   ├── data/
-│   │   ├── removed_roles.json
-│   │   └── special_roles.json
-│   └── temp/media_cache/
-│
-├── EndersEcho/                # Bot rankingowy z OCR
-│   ├── index.js
-│   ├── handlers/
-│   │   └── interactionHandlers.js
-│   ├── services/
-│   │   ├── logService.js
-│   │   ├── ocrService.js
-│   │   ├── rankingService.js
-│   │   └── roleService.js
-│   ├── data/
-│   │   └── ranking.json
-│   └── temp/
-│
-├── Kontroler/                 # Bot weryfikacji + zaawansowana loteria
-│   ├── index.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── analysisService.js
-│   │   ├── lotteryService.js
-│   │   ├── messageService.js
-│   │   ├── ocrService.js
-│   │   └── roleService.js
-│   ├── data/
-│   │   └── lottery_history.json
-│   └── temp/
-│
-├── Konklawe/                  # Bot gry słownej z medalami
-│   ├── index.js
-│   ├── handlers/
-│   │   ├── interactionHandlers.js
-│   │   └── messageHandlers.js
-│   ├── services/
-│   │   ├── commandService.js
-│   │   ├── dataService.js
-│   │   ├── gameService.js
-│   │   ├── rankingService.js
-│   │   └── timerService.js
-│   └── data/
-│       ├── attempts.json
-│       ├── hints.json
-│       ├── scoreboard.json
-│       └── trigger.json
-│
-└── Wydarzynier/               # Bot eventów z lobby system
-    ├── index.js
-    ├── handlers/
-    │   ├── interactionHandlers.js
-    │   ├── messageHandlers.js
-    │   └── reactionHandlers.js
-    ├── services/
-    │   ├── bazarService.js
-    │   ├── lobbyService.js
-    │   └── timerService.js
-    └── data/
-        ├── bazar.json
-        ├── lobbies.json
-        └── timers.json
-```
-
 ## Uruchamianie
 
 ### Główne komendy:
@@ -208,14 +75,15 @@ npm run endersecho
 npm run kontroler
 npm run konklawe
 npm run wydarzynier
+npm run gary        # Nowy bot Gary
 ```
 
 ### Konfiguracja botów:
 Plik `bot-config.json` określa które boty uruchamiać:
 ```json
 {
-  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe", "wydarzynier"],
-  "development": ["stalkerlme"]
+  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe", "wydarzynier", "gary"],
+  "development": ["gary"]
 }
 ```
 
@@ -280,10 +148,10 @@ Plik `bot-config.json` określa które boty uruchamiać:
 ## System OCR i Debugowanie
 
 ### 🔍 Zaawansowane funkcje OCR
-- **Cztery boty z OCR**: Rekruter, StalkerLME, EndersEcho, Kontroler
+- **Pięć botów z OCR**: Rekruter, StalkerLME, EndersEcho, Kontroler, **Gary** (nowy!)
 - **Wspólny folder przetworzonych obrazów**: `processed_ocr/` w katalogu głównym  
 - **Format nazw plików**: `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]` lub `[KONTROLER][ hh:mm:ss rrrr-mm-dd ][daily/cx]`
-- **Automatyczna rotacja**: maksymalnie 100 plików dla wszystkich botów razem
+- **Automatyczna rotacja**: maksymalnie 400 plików dla wszystkich botów razem
 - **Szczegółowe logowanie**: przełączalne tryb debug za pomocą `/ocr-debug`
 
 ### 🛠️ Komendy debugowania OCR
@@ -301,22 +169,7 @@ Plik `bot-config.json` określa które boty uruchamiać:
 [STALKER][ 14:24:12 2025-08-02 ][].png         # System kar Stalker
 [ENDERSECHO][ 14:25:30 2025-08-02 ][].png      # Analiza wyników rankingu
 [REKRUTER][ 14:26:15 2025-08-02 ][].png        # Weryfikacja kwalifikacji
-```
-
-### 🔧 Konfiguracja OCR (jednolita dla wszystkich botów)
-```javascript
-ocr: {
-    saveProcessedImages: true,
-    processedDir: path.join(__dirname, '../../processed_ocr'),
-    maxProcessedFiles: 100,
-    detailedLogging: {
-        enabled: false,  // Przełączane przez /ocr-debug
-        logImageProcessing: true,
-        logTextExtraction: true,
-        logScoreAnalysis: true,
-        // Specyficzne opcje dla każdego bota...
-    }
-}
+[GARY][ 14:27:30 2025-08-02 ][].png            # Rozpoznawanie gildii
 ```
 
 ## Technologie
@@ -336,6 +189,12 @@ Każdy bot wymaga własnego pliku `.env` z konfiguracją:
 REKRUTER_TOKEN=your_discord_bot_token
 REKRUTER_CHANNEL_ID=channel_id
 REKRUTER_ROLE_ID=role_id
+
+# Przykład - Gary/.env
+GARY_TOKEN=your_discord_bot_token
+GARY_CLIENT_ID=your_client_id
+GARY_ALLOWED_CHANNEL_ID=channel_id_1,channel_id_2
+GARY_ADMIN_ROLES=role_id_1,role_id_2
 ```
 
 ### Wymagane zmienne środowiskowe:
@@ -347,6 +206,10 @@ REKRUTER_ROLE_ID=role_id
 - `KONTROLER_TOKEN` - Token Discord dla bota Kontroler
 - `KONKLAWE_TOKEN` - Token Discord dla bota Konklawe
 - `WYDARZYNIER_TOKEN` - Token Discord dla bota Wydarzynier
+- `GARY_TOKEN` - Token Discord dla bota Gary (**nowy!**)
+- `GARY_CLIENT_ID` - Client ID dla bota Gary
+- `GARY_ALLOWED_CHANNEL_ID` - Kanały gdzie Gary może działać (obsługuje wiele serwerów)
+- `GARY_ADMIN_ROLES` - Role z dostępem do komend administracyjnych (opcjonalne)
 
 ## Development
 
@@ -366,57 +229,4 @@ Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code,
 - Użyj `/ocr-debug true` aby włączyć szczegółowe logowanie OCR (tylko administratorzy)
 - Przetworzone obrazy są automatycznie zapisywane w `processed_ocr/` z timestampami
 - Format nazw: `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]` lub `[KONTROLER][ hh:mm:ss rrrr-mm-dd ][daily/cx]` ułatwia identyfikację problemów
-- Maksymalnie 100 plików - najstarsze automatycznie usuwane
-
-## Historia Zmian
-
-### [2025-09-03] - Kontroler Bot: Rewolucja Systemu Loterii 🎰
-#### Nowe funkcje ✨
-- **System planowania oparty na datach**: Kompletna przepisanie z dni tygodnia na dokładne daty (dd.mm.yyyy)
-- **Polska strefa czasowa z DST**: Automatyczna detekcja czasu letniego/zimowego i konwersja UTC ↔ Polski czas
-- **Zabezpieczenie setTimeout**: Ochrona przed limitami JavaScript (max 24 dni) z walidacją i error handling
-- **Elastyczna częstotliwość**: Rozszerzenie z 30 do 365 dni dla loterii cyklicznych
-- **Inteligentny system ostrzeżeń**: Ostrzeżenia tylko dla Daily/CX, brak spamu dla innych loterii
-- **Migracja legacy**: Automatyczne czyszczenie starych struktur danych przy starcie bota
-
-#### Poprawione 🔧  
-- **Problem czasów**: Naprawiono błędną konwersję stref czasowych (loterie wykonywały się w złych godzinach)
-- **Podwójne pingi**: Rozwiązano problem dublowania pingów z różnych loterii tego samego typu
-- **Ostrzeżenia dla testów**: Loterie testowe (inne role) nie wysyłają już niepotrzebnych ostrzeżeń
-- **Wyświetlanie dat**: Wszystkie daty w UI pokazują prawidłowy polski czas lokalny
-
-#### Techniczne szczegóły 🛠️
-- **Nowe parametry komendy `/lottery`**: Data zamiast dzień, walidacja formatu dd.mm.yyyy
-- **Funkcje pomocnicze**: `isWinterTime()`, `convertUTCToPolishTime()` dla obsługi stref czasowych  
-- **Timeout management**: Bezpieczne planowanie z limitami i error recovery
-- **Legacy cleanup**: Automatyczne usuwanie niekompatybilnych starych loterii
-
-### [2025-08-31] - Centralny System Zarządzania Nickami  
-#### Nowe funkcje ✨
-- **Scentralizowany system nicków**: Nowy `NicknameManagerService` zapobiega konfliktom między botami Konklawe i Muteusz
-- **Inteligentne nakładanie efektów**: Pozwala na kombinacje klątwa+flaga z zachowaniem oryginalnego nicku
-- **Prawidłowe przywracanie nicków**: System rozróżnia nicki serwerowe vs główne i przywraca właściwe
-- **Automatyczne czyszczenie**: Wygasłe efekty są automatycznie usuwane z systemu
-- **Kompleksowa walidacja**: Zapobiega duplikacji tego samego typu efektu, pozwala na różne typy
-
-#### Poprawione 🔧
-- **Problem konfliktów nicków**: Rozwiązano sytuacje gdzie boty przywracały nick główny zamiast serwerowego
-- **Nakładające się efekty**: Efekty różnych typów mogą się teraz nakładać bez utraty oryginalnego nicku
-- **Czyszczenie starych funkcji**: Usunięto zduplikowane systemy zarządzania nickami z poszczególnych botów
-- **Centralizacja logiki**: Wszystkie operacje na nickach przeszły przez jeden wspólny system
-
-### [2025-08-20] - Kompletna aktualizacja dokumentacji
-#### Poprawione 🔧
-- **Kompletna analiza wszystkich 8 botów**: Szczegółowe przeanalizowanie funkcjonalności każdego bota
-- **Zaktualizowane opisy funkcji**: Precyzyjne opisy wszystkich zaawansowanych funkcji każdego bota
-- **Ulepszone logowanie EndersEcho**: Wyświetlanie konkretnych wartości po "Best:" i "Total:" zamiast boolean
-- **Udokumentowane systemy OCR**: Szczegółowe informacje o 4 botach z OCR i ich specjalizacjach
-- **Zaktualizowane komendy slash**: Kompletna lista wszystkich dostępnych komend dla każdego bota
-
-#### Nowe funkcje udokumentowane:
-- **Rekruter**: System 50-sekcyjnej analizy obrazów, progi kwalifikacji klanów (1000K+ główny, 800K+ klan2, 600K+ klan1), boost tracking
-- **StalkerLME**: System urlopów z interaktywnym przyciskiem, punkty karne 2+/3+, tygodniowe czyszczenie
-- **Muteusz**: Cache mediów 100MB, ekskluzywne grupy ról, zaawansowana auto-moderacja
-- **Kontroler**: Dual-channel OCR (Daily/CX), system loterii wieloklanowej, character normalization
-- **Konklawe**: Medale Virtutti Papajlari, specjalne komendy VIP, wielopoziomowe timery
-- **Wydarzynier**: 7-osobowe lobby, repository system, automated member control
+- Maksymalnie 400 plików - najstarsze automatycznie usuwane
