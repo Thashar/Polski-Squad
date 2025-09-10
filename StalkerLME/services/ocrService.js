@@ -281,15 +281,9 @@ class OCRService {
                             uncertain: hasUncertainty
                         });
                         
-                        const zeroMessage = endResult.confidence ? 
-                            `POTWIERDZONE ZERO! (${endResult.confidence})` : 
-                            'POTWIERDZONE ZERO!';
-                        logger.info(`   ✅ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) ${zeroMessage}`);
+                        logger.info(`   ✅ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) POTWIERDZONE ZERO!`);
                     } else if (endResult.type === 'negative') {
-                        const negativeMessage = endResult.confidence ? 
-                            `Wynik negatywny: ${endResult.value} (${endResult.confidence}${endResult.original ? `, z "${endResult.original}"` : ''})` :
-                            `Wynik negatywny: ${endResult.value}`;
-                        logger.info(`   ❌ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) ${negativeMessage}`);
+                        logger.info(`   ❌ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) Wynik negatywny: ${endResult.value}`);
                     }
                 } else {
                     // Nie loguj jeśli brak dopasowania - za dużo szumu
@@ -825,18 +819,7 @@ class OCRService {
             return { type: 'zero', value: lastWord };
         }
         
-        // NOWA LOGIKA: Inteligentne łączenie liczb dla błędów OCR
-        const combinedNumber = this.analyzeAndCombineNumbers(searchText);
-        if (combinedNumber.found) {
-            return { 
-                type: combinedNumber.value === '0' ? 'zero' : 'negative', 
-                value: combinedNumber.value,
-                confidence: combinedNumber.confidence,
-                original: combinedNumber.original
-            };
-        }
-        
-        // Fallback: sprawdź czy w tekście za nickiem są liczby 2+ cyfrowe (stara logika)
+        // Sprawdź czy w tekście za nickiem są liczby 2+ cyfrowe
         const numberMatches = searchText.match(/\d{2,}/g);
         if (numberMatches && numberMatches.length > 0) {
             // Znajdź ostatnią liczbę 2+ cyfrową za nickiem
@@ -852,142 +835,6 @@ class OCRService {
         }
         
         return { type: 'unknown', value: lastWord };
-    }
-
-    /**
-     * Analizuje i łączy liczby w tekście, wykrywając błędy OCR
-     * Przykłady: "48 1" → "481", "50 0" → "500", "P 48 1" → "481"
-     */
-    analyzeAndCombineNumbers(text) {
-        // Znajdź wszystkie liczby w tekście
-        const allNumbers = text.match(/\d+/g);
-        if (!allNumbers || allNumbers.length < 2) {
-            return { found: false };
-        }
-
-        // Wzorce dla różnych formatów
-        const patterns = [
-            // Format: "LITERA DUŻA_LICZBA MAŁA_LICZBA" (np. "P 48 1")
-            {
-                regex: /([A-Z])\s+(\d{2,})\s+([01])\s*$/,
-                handler: (match) => {
-                    const letter = match[1];
-                    const mainNumber = match[2];
-                    const lastDigit = match[3];
-                    
-                    // Heurystyka: jeśli główna liczba kończy się na 0-4, prawdopodobnie brakuje ostatniej cyfry
-                    const lastMainDigit = mainNumber[mainNumber.length - 1];
-                    if (['0', '1', '2', '3', '4'].includes(lastMainDigit)) {
-                        const combined = mainNumber + lastDigit;
-                        return {
-                            found: true,
-                            value: combined,
-                            confidence: 'high',
-                            original: `${mainNumber} ${lastDigit}`,
-                            reason: `format_${letter}_number_digit`
-                        };
-                    }
-                    
-                    return { found: false };
-                }
-            },
-            
-            // Format: "DUŻA_LICZBA MAŁA_LICZBA" bez litery (np. "48 1", "50 0")
-            {
-                regex: /(\d{2,})\s+([01])\s*$/,
-                handler: (match) => {
-                    const mainNumber = match[1];
-                    const lastDigit = match[2];
-                    
-                    // Sprawdź wzorce wskazujące na błąd OCR:
-                    const mainNum = parseInt(mainNumber);
-                    const digit = parseInt(lastDigit);
-                    
-                    // 1. Liczby kończące się na 0-4 + cyfra 0/1
-                    const lastMainDigit = parseInt(mainNumber[mainNumber.length - 1]);
-                    if (lastMainDigit <= 4) {
-                        const combined = mainNumber + lastDigit;
-                        return {
-                            found: true,
-                            value: combined,
-                            confidence: 'high',
-                            original: `${mainNumber} ${lastDigit}`,
-                            reason: 'low_ending_digit'
-                        };
-                    }
-                    
-                    // 2. Wzorce okrągłych liczb (50, 100, 150, etc.) + 0
-                    if (digit === 0 && (mainNum % 50 === 0 || mainNum % 25 === 0)) {
-                        const combined = mainNumber + lastDigit;
-                        return {
-                            found: true,
-                            value: combined,
-                            confidence: 'medium',
-                            original: `${mainNumber} ${lastDigit}`,
-                            reason: 'round_number_pattern'
-                        };
-                    }
-                    
-                    // 3. Wzorce liczb z 40-49 + 1 (np. "48 1" → "481")
-                    if (digit === 1 && mainNum >= 40 && mainNum <= 49) {
-                        const combined = mainNumber + lastDigit;
-                        return {
-                            found: true,
-                            value: combined,
-                            confidence: 'medium',
-                            original: `${mainNumber} ${lastDigit}`,
-                            reason: 'forty_range_pattern'
-                        };
-                    }
-                    
-                    return { found: false };
-                }
-            },
-            
-            // Format: "LICZBA_1 LICZBA_2 LICZBA_3" - sprawdź ostatnie dwie
-            {
-                regex: /(\d+)\s+(\d{2,})\s+([01])\s*$/,
-                handler: (match) => {
-                    const firstNumber = match[1];
-                    const secondNumber = match[2];
-                    const thirdNumber = match[3];
-                    
-                    // Sprawdź czy druga i trzecia liczba tworzą sensowny wynik
-                    const secondNum = parseInt(secondNumber);
-                    const thirdNum = parseInt(thirdNumber);
-                    
-                    if (secondNum >= 40 && secondNum <= 60 && thirdNum <= 1) {
-                        const combined = secondNumber + thirdNumber;
-                        return {
-                            found: true,
-                            value: combined,
-                            confidence: 'medium',
-                            original: `${secondNumber} ${thirdNumber}`,
-                            reason: 'three_number_pattern'
-                        };
-                    }
-                    
-                    return { found: false };
-                }
-            }
-        ];
-
-        // Przetestuj każdy wzorzec
-        for (const pattern of patterns) {
-            const match = text.match(pattern.regex);
-            if (match) {
-                const result = pattern.handler(match);
-                if (result.found) {
-                    // Dodaj debug info jeśli włączone
-                    if (this.config.ocr.detailedLogging.enabled) {
-                        logger.info(`      🔗 Wykryto błąd OCR: "${result.original}" → "${result.value}" (${result.reason}, confidence: ${result.confidence})`);
-                    }
-                    return result;
-                }
-            }
-        }
-
-        return { found: false };
     }
 
     isZeroPattern(word) {
