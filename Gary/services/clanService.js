@@ -9,13 +9,21 @@ class ClanService {
         this.clanData = [];
         this.lastFetchTime = null;
         this.proxyService = new ProxyService(config, logger);
+        
+        // Create direct axios instance for basic operations (no proxy)
+        this.axios = axios.create({
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
     }
 
     async fetchClanData() {
         try {
             this.logger.info('📊 Fetching clan ranking data from API...');
             
-            const response = await this.proxyService.makeRequest('https://garrytools.com/rank/clans');
+            const response = await this.axios.get('https://garrytools.com/rank/clans');
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
@@ -55,7 +63,6 @@ class ClanService {
                 
                 this.clanData = clans;
                 this.lastFetchTime = new Date();
-                this.logger.info(`✅ Successfully loaded ${this.clanData.length} clans from ranking`);
                 return this.clanData;
             } else {
                 this.logger.warn('⚠️ Invalid API response format for clan data');
@@ -97,7 +104,6 @@ class ClanService {
         // Exact match first
         for (const clan of this.clanData) {
             if (clan.cleanName === cleanInput) {
-                this.logger.info(`✅ Exact match found: ${clan.name} (ID: ${clan.id})`);
                 return clan;
             }
         }
@@ -116,7 +122,6 @@ class ClanService {
         }
 
         if (bestMatch) {
-            this.logger.info(`🎯 Best match found: ${bestMatch.name} (ID: ${bestMatch.id}, similarity: ${(bestSimilarity * 100).toFixed(1)}%)`);
             return bestMatch;
         }
 
@@ -131,7 +136,6 @@ class ClanService {
 
         const clan = this.clanData.find(c => c.id === parseInt(guildId));
         if (clan) {
-            this.logger.info(`✅ Found guild by ID: ${clan.name} (ID: ${clan.id})`);
             return clan;
         }
 

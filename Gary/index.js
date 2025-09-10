@@ -45,17 +45,6 @@ async function initializeBot() {
         await playerService.fetchPlayerData();
         await endersEchoService.fetchEndersEchoData();
         
-        logger.info('Available commands:');
-        logger.info('- /lunarmine - analyzes 4 guilds during Lunar Mine Expedition (Admin only)');
-        logger.info('- /analyse - analyzes single guild with fixed guild substitution (Admin only)');
-        logger.info('- /search - searches for guilds by name from cached data (Public)');
-        logger.info('- /player - searches for players by name from cached data (Public)');
-        logger.info('- /ee - searches for EndersEcho players by name from cached data (Public)');
-        logger.info('- /refresh - refreshes guild ranking data (Admin only)');
-        logger.info('- /proxy-test - tests configured proxies (Admin only)');
-        logger.info('- /proxy-stats - shows proxy statistics (Admin only)');
-        logger.info(`Allowed channels: ${config.allowedChannelIds.join(', ')}`);
-        logger.info(`Log channel: ${config.logChannelId}`);
         
         // Log successful initialization
         await logService.logInfo('🚀 Gary Bot initialized successfully');
@@ -120,30 +109,13 @@ cron.schedule('*/10 * * * *', () => {
  */
 async function startBot() {
     try {
-        logger.info('📦 Initializing Gary services...');
-        
         // Initialize services
         garrytoolsService = new GarrytoolsService(config, logger);
-        logger.info('✅ GarrytoolsService initialized');
-        
         clanService = new ClanService(config, logger);
-        logger.info('✅ ClanService initialized');
-        
         playerService = new PlayerService(config, logger);
-        logger.info('✅ PlayerService initialized');
-        
         endersEchoService = new EndersEchoService(config, logger);
-        logger.info('✅ EndersEchoService initialized');
-        
         logService = new LogService(config, logger);
-        logger.info('✅ LogService initialized');
-        
         interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, logger);
-        logger.info('✅ InteractionHandler initialized');
-        
-        logger.info('🎉 All Gary services initialized successfully');
-        
-        logger.info('🔑 Attempting to login with Discord token...');
         
         // Add timeout to prevent hanging
         const loginPromise = client.login(config.token);
@@ -152,7 +124,6 @@ async function startBot() {
         );
         
         await Promise.race([loginPromise, timeoutPromise]);
-        logger.info('✅ Successfully logged in to Discord');
         return client;
     } catch (error) {
         logger.error('Error during Gary bot startup:', error);

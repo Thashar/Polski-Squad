@@ -9,13 +9,21 @@ class PlayerService {
         this.playerData = [];
         this.lastFetchTime = null;
         this.proxyService = new ProxyService(config, logger);
+        
+        // Create direct axios instance for basic operations (no proxy)
+        this.axios = axios.create({
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
     }
 
     async fetchPlayerData() {
         try {
             this.logger.info('👥 Fetching player ranking data from API...');
             
-            const response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
+            const response = await this.axios.get('https://garrytools.com/rank/players');
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
@@ -55,7 +63,6 @@ class PlayerService {
                 
                 this.playerData = players;
                 this.lastFetchTime = new Date();
-                this.logger.info(`✅ Successfully loaded ${this.playerData.length} players from ranking`);
                 return this.playerData;
             } else {
                 this.logger.warn('⚠️ Invalid API response format for player data');
@@ -154,7 +161,6 @@ class PlayerService {
 
         const player = this.playerData.find(p => p.id === parseInt(playerId));
         if (player) {
-            this.logger.info(`✅ Found player by ID: ${player.name} (ID: ${player.id})`);
             return player;
         }
 

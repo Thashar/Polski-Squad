@@ -10,13 +10,21 @@ class EndersEchoService {
         this.lastFetchTime = null;
         this.proxyService = new ProxyService(config, logger);
         this.dateColumns = []; // Store dynamic date column names
+        
+        // Create direct axios instance for basic operations (no proxy)
+        this.axios = axios.create({
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
     }
 
     async fetchEndersEchoData() {
         try {
             this.logger.info('🏆 Fetching EndersEcho ranking data from API...');
             
-            const response = await this.proxyService.makeRequest('https://garrytools.com/rank/enderecho');
+            const response = await this.axios.get('https://garrytools.com/rank/enderecho');
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
@@ -88,7 +96,6 @@ class EndersEchoService {
                 
                 this.endersEchoData = players;
                 this.lastFetchTime = new Date();
-                this.logger.info(`✅ Successfully loaded ${this.endersEchoData.length} EndersEcho players from ranking`);
                 return this.endersEchoData;
             } else {
                 this.logger.warn('⚠️ Invalid API response format for EndersEcho data');
@@ -191,7 +198,6 @@ class EndersEchoService {
 
         const player = this.endersEchoData.find(p => p.id === parseInt(playerId));
         if (player) {
-            this.logger.info(`✅ Found EndersEcho player by ID: ${player.name} (ID: ${player.id})`);
             return player;
         }
 

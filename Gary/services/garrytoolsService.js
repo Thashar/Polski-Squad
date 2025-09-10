@@ -46,12 +46,10 @@ class GarrytoolsService {
                 }
             }
             
-            this.logger.info(`✅ Modified Guild ID: ${newGuilds.join(', ')}`);
             return newGuilds;
         } else {
             // If userGuildId is not in fixedGuilds, use standard logic
             const result = [userGuildId, ...fixedGuilds];
-            this.logger.info(`✅ Standard Guild ID logic: ${result.join(', ')}`);
             return result;
         }
     }
@@ -499,7 +497,6 @@ class GarrytoolsService {
             this.logger.info(`🔍 Processing Guild IDs: ${guildIds.join(', ')}`);
             
             const groupId = await this.getGroupId(guildIds);
-            this.logger.info(`✅ Group ID generated: ${groupId}`);
             
             const result = await this.fetchGroupDetails(groupId);
             this.logger.info(`📊 Found ${result.guilds.length} guilds`);
@@ -520,7 +517,6 @@ class GarrytoolsService {
             const modifiedGuilds = this.modifyGuildIds(userGuildId, fixedGuilds);
             
             const groupId = await this.getGroupId(modifiedGuilds);
-            this.logger.info(`✅ Group ID generated: ${groupId}`);
             
             const result = await this.fetchGroupDetails(groupId);
             this.logger.info(`📊 Found ${result.guilds.length} guilds`);

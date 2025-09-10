@@ -915,7 +915,6 @@ class InteractionHandler {
             // 2. AJAX call that populates search-guild-output tbody
             // 3. Parse the populated results
             
-            this.logger.info('🔍 Step 1: Establishing session...');
             const sessionResponse = await this.garrytoolsService.proxyService.makeRequest('https://garrytools.com/lunar', {
                 method: 'GET',
                 headers: {
@@ -929,17 +928,7 @@ class InteractionHandler {
             const $ = require('cheerio').load(sessionResponse.data);
             const csrfToken = $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val();
             
-            this.logger.info(`Session established. Cookies: ${cookies ? 'Yes' : 'No'}, CSRF: ${csrfToken ? 'Yes' : 'No'}`);
-            
-            // Step 2: Kliknij przycisk "Find Guild ID" (otwiera modal)
-            this.logger.info('🔍 Step 2: Klikanie przycisku "Find Guild ID"...');
-            // Ten przycisk tylko otwiera modal client-side, więc nie wymaga HTTP requestu
-            
-            // Step 3: Wpisz "Polski" do pola search-guild-input i kliknij "Search Guild"
-            this.logger.info('🔍 Step 3: Wpisywanie "Polski" i klikanie "Search Guild"...');
-            
-            // Na podstawie Twojego HTML, przycisk "Search Guild" (id="search-guild-btn") 
-            // robi AJAX request z wartością z pola "search-guild-input"
+            // Extract session data for AJAX request
             
             let guilds = [];
             
@@ -950,7 +939,6 @@ class InteractionHandler {
                 ajaxData.append('type', 'SearchClan');
                 ajaxData.append('name', guildName);
                 
-                this.logger.info(`Sending payload: ${ajaxData.toString()}`);
                 
                 const ajaxResponse = await this.garrytoolsService.proxyService.makePostRequest('https://garrytools.com/ajax', ajaxData, {
                     headers: {
@@ -963,13 +951,11 @@ class InteractionHandler {
                     }
                 });
                 
-                this.logger.info(`AJAX response: ${JSON.stringify(ajaxResponse.data)}`);
                 
                 // Response format: {"IsError": false, "Data": "HTML table rows"}
                 if (ajaxResponse.data && typeof ajaxResponse.data === 'object' && 
                     ajaxResponse.data.IsError === false && ajaxResponse.data.Data) {
                     
-                    this.logger.info('✅ Got valid JSON response with Data field');
                     const htmlData = ajaxResponse.data.Data;
                     
                     // Parse HTML using regex since cheerio has issues with table fragments
@@ -994,7 +980,6 @@ class InteractionHandler {
                             
                             if (name && guildId > 0) {
                                 guilds.push({ id: guildId, name: name, rank: rank });
-                                this.logger.info(`✅ Znaleziona gildia: ${name} (ID: ${guildId}, Rank: ${rank})`);
                             }
                         }
                         
@@ -1043,7 +1028,6 @@ class InteractionHandler {
             }
             
             await interaction.editReply({ embeds: [embed] });
-            this.logger.info(`✅ GLOBAL search completed successfully with ${guilds.length} results`);
             
         } catch (error) {
             this.logger.error('Error in GLOBAL search:', error);
