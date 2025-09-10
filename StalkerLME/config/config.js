@@ -96,9 +96,9 @@ module.exports = {
             contrast: 2.0,
             brightness: 20,
             gamma: 3.0,
-            median: 5,
+            median: 10,
             blur: 0.8,
-            upscale: 2.0
+            upscale: 3.0
         },
         
         // Konfiguracja zapisywania przetworzonych obrazów
