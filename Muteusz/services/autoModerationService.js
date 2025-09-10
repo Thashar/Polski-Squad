@@ -6,6 +6,11 @@ class AutoModerationService {
         this.config = config;
         this.logger = logger;
         this.warningService = warningService;
+        
+        // Walidacja wymaganych zależności
+        if (!this.warningService) {
+            throw new Error('WarningService nie został przekazany do AutoModerationService');
+        }
         this.violationCounts = new Map(); // userId -> { count, firstViolation, violations: [] }
         this.userWarnings = new Map(); // userId -> { warnings: [], firstWarning }
         this.badWordsFile = path.join(__dirname, '../data/badwords.json');
@@ -446,6 +451,11 @@ class AutoModerationService {
             // Nie resetuj licznika - pozwól na kolejne warny
             
             // Dodaj automatyczny warn
+            if (!this.warningService || typeof this.warningService.addWarning !== 'function') {
+                this.logger.error('❌ WarningService nie jest dostępny lub nie ma metody addWarning');
+                return { action: 'ignore' };
+            }
+            
             const warnResult = this.warningService.addWarning(
                 userId,
                 message.client.user.id,
@@ -493,6 +503,11 @@ class AutoModerationService {
      * @returns {number} Liczba warnów
      */
     getUserWarningsInHour(userId, guildId) {
+        if (!this.warningService || typeof this.warningService.getUserWarnings !== 'function') {
+            this.logger.error('❌ WarningService nie jest dostępny lub nie ma metody getUserWarnings');
+            return 0;
+        }
+        
         const warnings = this.warningService.getUserWarnings(userId, guildId);
         const hourAgo = Date.now() - (60 * 60 * 1000); // 1 godzina temu
         
