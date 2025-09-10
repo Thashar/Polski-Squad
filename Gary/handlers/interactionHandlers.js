@@ -71,7 +71,7 @@ class InteractionHandler {
                         .setMaxLength(50))
                 .addStringOption(option =>
                     option.setName('searching')
-                        .setDescription('Search mode: TOP500 (cached data) or GLOBAL (live search)')
+                        .setDescription('Search mode: TOP500 (cached top 500 guilds) or GLOBAL (live search via garrytools.com)')
                         .setRequired(false)
                         .addChoices(
                             { name: 'TOP500', value: 'top500' },
@@ -908,92 +908,148 @@ class InteractionHandler {
 
     async handleGlobalSearch(interaction, guildName) {
         try {
-            this.logger.info(`🌐 Performing global search for guild: "${guildName}"`);
+            this.logger.info(`🌍 Performing GLOBAL search for: "${guildName}"`);
             
-            // Create session with cookies to maintain state
-            const axios = require('axios');
-            const cheerio = require('cheerio');
+            // Based on the HTML analysis, the search works in these steps:
+            // 1. Load main page (establishes session)
+            // 2. AJAX call that populates search-guild-output tbody
+            // 3. Parse the populated results
             
-            // First, get the main page to establish session
-            const mainPageResponse = await axios.get('https://garrytools.com/lunar', {
+            this.logger.info('🔍 Step 1: Establishing session...');
+            const sessionResponse = await this.garrytoolsService.proxyService.makeRequest('https://garrytools.com/lunar', {
+                method: 'GET',
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
             });
-
-            // Extract any necessary tokens or cookies
-            const $ = cheerio.load(mainPageResponse.data);
             
-            // Perform the search request
-            const searchResponse = await axios.post('https://garrytools.com/lunar/search-guild', {
-                name: guildName
-            }, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Referer': 'https://garrytools.com/lunar'
-                }
-            });
-
-            let searchResults = [];
+            // Extract cookies and tokens
+            const cookies = sessionResponse.headers?.['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || '';
+            const $ = require('cheerio').load(sessionResponse.data);
+            const csrfToken = $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val();
             
-            if (searchResponse.data && Array.isArray(searchResponse.data)) {
-                searchResults = searchResponse.data;
-            } else if (searchResponse.data && typeof searchResponse.data === 'string') {
-                // Parse HTML response if returned as HTML
-                const searchHtml = cheerio.load(searchResponse.data);
-                searchHtml('tbody tr').each((index, row) => {
-                    const cells = searchHtml(row).find('td');
-                    if (cells.length >= 3) {
-                        const rank = searchHtml(cells[0]).text().trim();
-                        const guildId = searchHtml(cells[1]).text().trim();
-                        const name = searchHtml(cells[2]).text().trim();
-                        
-                        if (rank && guildId && name) {
-                            searchResults.push({
-                                rank: parseInt(rank) || 0,
-                                id: parseInt(guildId) || 0,
-                                name: name
-                            });
-                        }
+            this.logger.info(`Session established. Cookies: ${cookies ? 'Yes' : 'No'}, CSRF: ${csrfToken ? 'Yes' : 'No'}`);
+            
+            // Step 2: Kliknij przycisk "Find Guild ID" (otwiera modal)
+            this.logger.info('🔍 Step 2: Klikanie przycisku "Find Guild ID"...');
+            // Ten przycisk tylko otwiera modal client-side, więc nie wymaga HTTP requestu
+            
+            // Step 3: Wpisz "Polski" do pola search-guild-input i kliknij "Search Guild"
+            this.logger.info('🔍 Step 3: Wpisywanie "Polski" i klikanie "Search Guild"...');
+            
+            // Na podstawie Twojego HTML, przycisk "Search Guild" (id="search-guild-btn") 
+            // robi AJAX request z wartością z pola "search-guild-input"
+            
+            let guilds = [];
+            
+            try {
+                // Dokładnie tak jak przycisk "Search Guild" - AJAX call
+                // Exact payload: type=SearchClan&name=Polski
+                const ajaxData = new URLSearchParams();
+                ajaxData.append('type', 'SearchClan');
+                ajaxData.append('name', guildName);
+                
+                this.logger.info(`Sending payload: ${ajaxData.toString()}`);
+                
+                const ajaxResponse = await this.garrytoolsService.proxyService.makePostRequest('https://garrytools.com/ajax', ajaxData, {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'text/html, */*; q=0.01',
+                        'Referer': 'https://garrytools.com/lunar',
+                        'Cookie': cookies,
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                     }
                 });
+                
+                this.logger.info(`AJAX response: ${JSON.stringify(ajaxResponse.data)}`);
+                
+                // Response format: {"IsError": false, "Data": "HTML table rows"}
+                if (ajaxResponse.data && typeof ajaxResponse.data === 'object' && 
+                    ajaxResponse.data.IsError === false && ajaxResponse.data.Data) {
+                    
+                    this.logger.info('✅ Got valid JSON response with Data field');
+                    const htmlData = ajaxResponse.data.Data;
+                    
+                    // Parse HTML using regex since cheerio has issues with table fragments
+                    const trRegex = /<tr[^>]*>(.*?)<\/tr>/gs;
+                    const tdRegex = /<td[^>]*>(.*?)<\/td>/g;
+                    
+                    let match;
+                    
+                    while ((match = trRegex.exec(htmlData)) !== null) {
+                        const rowHtml = match[1];
+                        const cells = [];
+                        let tdMatch;
+                        
+                        while ((tdMatch = tdRegex.exec(rowHtml)) !== null) {
+                            cells.push(tdMatch[1].trim());
+                        }
+                        
+                        if (cells.length >= 3) {
+                            const rank = parseInt(cells[0]) || 0;
+                            const guildId = parseInt(cells[1]) || 0;
+                            const name = cells[2].trim();
+                            
+                            if (name && guildId > 0) {
+                                guilds.push({ id: guildId, name: name, rank: rank });
+                                this.logger.info(`✅ Znaleziona gildia: ${name} (ID: ${guildId}, Rank: ${rank})`);
+                            }
+                        }
+                        
+                        // Reset regex for next iteration
+                        tdRegex.lastIndex = 0;
+                    }
+                    
+                } else if (ajaxResponse.data && typeof ajaxResponse.data === 'object' && ajaxResponse.data.error) {
+                    this.logger.warn(`❌ AJAX returned error: ${ajaxResponse.data.msg || 'Unknown error'}`);
+                }
+                
+            } catch (ajaxError) {
+                this.logger.warn(`AJAX search failed: ${ajaxError.message}`);
             }
-
-            if (searchResults.length === 0) {
-                await interaction.editReply(`❌ No guilds found matching "${guildName}" in global search.`);
+            
+            // If still no results, inform user that global search is not available
+            if (guilds.length === 0) {
+                await interaction.editReply({
+                    content: `❌ **Global search is not available**\n\n` +
+                             `The garrytools.com search requires JavaScript execution that cannot be simulated by the bot. ` +
+                             `This is a technical limitation of web scraping.\n\n` +
+                             `**Alternative**: Use \`searching: TOP500\` to search through cached guild ranking data (top 500 guilds).`,
+                    ephemeral: false
+                });
                 return;
             }
-
+            
+            // Create and send embed with results
+            const { EmbedBuilder } = require('discord.js');
             const embed = new EmbedBuilder()
-                .setTitle('🌐 Global Guild Search Results')
-                .setColor(0x9B59B6)
-                .setDescription(`Found ${searchResults.length} guild${searchResults.length === 1 ? '' : 's'} matching "${guildName}" (Global Search)`)
+                .setTitle('🌍 Global Guild Search Results')
+                .setColor(0x00AE86)
+                .setDescription(`Found ${guilds.length} guild${guilds.length === 1 ? '' : 's'} matching "${guildName}"`)
                 .setTimestamp();
-
-            // Add each guild as separate field
-            searchResults.slice(0, 10).forEach((guild, index) => {
-                const fieldName = `${index + 1}. ${guild.name} (#${guild.rank})`;
-                const fieldValue = `  🆔 Guild ID: ${guild.id}`;
-                
+            
+            guilds.slice(0, 10).forEach((guild, index) => {
                 embed.addFields({
-                    name: fieldName,
-                    value: fieldValue,
+                    name: `${index + 1}. ${guild.name} (#${guild.rank})`,
+                    value: `🆔 ID: ${guild.id} 🏆 Rank: #${guild.rank}`,
                     inline: false
                 });
             });
-
-            if (searchResults.length > 10) {
-                embed.setFooter({ text: `Showing top 10 of ${searchResults.length} total matches` });
+            
+            if (guilds.length > 10) {
+                embed.setFooter({ text: `Showing first 10 of ${guilds.length} results` });
             }
-
+            
             await interaction.editReply({ embeds: [embed] });
+            this.logger.info(`✅ GLOBAL search completed successfully with ${guilds.length} results`);
             
         } catch (error) {
-            this.logger.error('❌ Error during global guild search:', error.message);
-            await interaction.editReply(`❌ Error performing global search: ${error.message}`);
+            this.logger.error('Error in GLOBAL search:', error);
+            this.logger.error('Error stack:', error.stack);
+            this.logger.error('Error message:', error.message);
+            await interaction.editReply(`❌ Error occurred during global search: ${error.message}`);
         }
     }
 }
