@@ -96,7 +96,7 @@ module.exports = {
             contrast: 2.0,
             brightness: 20,
             gamma: 3.0,
-            median: 10,
+            median: 2,
             blur: 0.8,
             upscale: 3.0
         },
