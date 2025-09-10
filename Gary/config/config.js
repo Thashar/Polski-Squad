@@ -8,9 +8,7 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const requiredEnvVars = [
     'GARY_TOKEN',
     'GARY_CLIENT_ID',
-    'GARY_GUILD_ID',
-    'GARY_ALLOWED_CHANNEL_ID',
-    'GARY_LOG_CHANNEL_ID'
+    'GARY_ALLOWED_CHANNEL_ID'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -24,11 +22,9 @@ if (missingVars.length > 0) {
 module.exports = {
     token: process.env.GARY_TOKEN,
     clientId: process.env.GARY_CLIENT_ID,
-    guildId: process.env.GARY_GUILD_ID,
     allowedChannelIds: process.env.GARY_ALLOWED_CHANNEL_ID ? 
         process.env.GARY_ALLOWED_CHANNEL_ID.split(',').map(id => id.trim()) : 
         [],
-    logChannelId: process.env.GARY_LOG_CHANNEL_ID,
     
     // Lunar Mine Settings
     lunarMineSettings: {
@@ -77,8 +73,10 @@ module.exports = {
         verboseErrors: true
     },
     
-    // Authorized roles (example IDs - you should update these)
-    authorizedRoles: ["1170332302715396106", "1196586785413795850", "1196911721588199464"],
+    // Authorized roles for admin commands (beyond server administrators)
+    authorizedRoles: process.env.GARY_ADMIN_ROLES ? 
+        process.env.GARY_ADMIN_ROLES.split(',').map(id => id.trim()) : 
+        [],
     
     // Proxy Settings (optional - for network diversity testing)
     proxy: {
