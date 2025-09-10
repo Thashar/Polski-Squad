@@ -211,6 +211,20 @@ GARY_ADMIN_ROLES=role_id_1,role_id_2
 - `GARY_ALLOWED_CHANNEL_ID` - Kanały gdzie Gary może działać (obsługuje wiele serwerów)
 - `GARY_ADMIN_ROLES` - Role z dostępem do komend administracyjnych (opcjonalne)
 
+## Porównanie Funkcji Botów
+
+| Bot | OCR | Slash Commands | Multi-Server | Proxy Support | Auto-Tasks |
+|-----|-----|----------------|--------------|---------------|------------|
+| **Gary** | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Rekruter | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Szkolenia | ❌ | ✅ | ❌ | ❌ | ✅ |
+| StalkerLME | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Muteusz | ❌ | ✅ | ❌ | ❌ | ✅ |
+| EndersEcho | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Kontroler | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Konklawe | ❌ | ✅ | ❌ | ❌ | ✅ |
+| Wydarzynier | ❌ | ✅ | ❌ | ❌ | ✅ |
+
 ## Development
 
 ### Dla Claude Code:
