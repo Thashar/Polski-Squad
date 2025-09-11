@@ -23,8 +23,12 @@ class PlayerService {
     async fetchPlayerData() {
         try {
             this.logger.info('👥 Fetching player ranking data from API...');
+            this.logger.info('   🔧 Using axios timeout:', this.axios.defaults.timeout);
+            this.logger.info('   🔧 User-Agent:', this.axios.defaults.headers['User-Agent']);
             
+            this.logger.info('   🌐 Making request to garrytools.com/rank/players...');
             const response = await this.axios.get('https://garrytools.com/rank/players');
+            this.logger.info('   ✅ Response received:', response.status, response.data ? response.data.length + ' chars' : 'no data');
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
@@ -71,16 +75,23 @@ class PlayerService {
             }
         } catch (error) {
             this.logger.error('❌ Error fetching player ranking data:', error.message || 'Unknown error');
-            this.logger.error('   Error type:', error.constructor.name);
+            this.logger.error('   Error type:', error.constructor?.name || 'Unknown constructor');
             this.logger.error('   Error code:', error.code || 'No error code');
             this.logger.error('   Error details:', error.stack || 'No stack trace available');
             this.logger.error('   Response status:', error.response ? error.response.status : 'No response');
             this.logger.error('   Response data:', error.response ? (typeof error.response.data === 'string' ? error.response.data.substring(0, 200) : JSON.stringify(error.response.data)) : 'No response data');
             
+            // Advanced debugging for empty errors
+            this.logger.error('   🔍 Raw error typeof:', typeof error);
+            this.logger.error('   🔍 Error is instance of Error:', error instanceof Error);
+            this.logger.error('   🔍 Error object keys:', Object.keys(error));
+            this.logger.error('   🔍 Error toString():', error.toString());
+            
             // Check if this is actually not an error but some other issue
             if (!error.message && !error.code && !error.response) {
                 this.logger.error('   ⚠️ Empty error object - this may be a logic error in the code');
                 this.logger.error('   Full error object:', JSON.stringify(error, null, 2));
+                this.logger.error('   Full error with getOwnPropertyNames:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
             }
             
             // Fallback: return cached data if available

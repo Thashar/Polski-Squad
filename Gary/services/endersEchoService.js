@@ -24,6 +24,7 @@ class EndersEchoService {
     async fetchEndersEchoData() {
         try {
             this.logger.info('🏆 Fetching EndersEcho ranking data from API...');
+            this.logger.info('   🌐 Making request to garrytools.com/rank/enderecho...');
             
             const response = await this.axios.get('https://garrytools.com/rank/enderecho');
             

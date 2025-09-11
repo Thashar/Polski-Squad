@@ -40,40 +40,46 @@ async function initializeBot() {
         // Register slash commands
         await interactionHandler.registerSlashCommands(client);
         
-        // Initial data fetch (with detailed error handling)
+        // Initial data fetch (with detailed error handling and delays)
         logger.info('🔄 Starting initial data fetch...');
         
         try {
             logger.info('📊 Starting clan data fetch...');
-            await clanService.fetchClanData();
-            const clanCount = clanService.getClanData().length;
+            const clanData = await clanService.fetchClanData();
+            const clanCount = clanData.length;
             logger.info(`✅ Clan data loaded successfully: ${clanCount} clans`);
         } catch (error) {
             logger.error('❌ Clan data failed to load:', error.message || 'Unknown error');
-            logger.error('   Clan error type:', error.constructor.name);
-            logger.error('   Clan error stack:', error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack');
+            logger.error('   Clan error type:', error.constructor?.name || 'Unknown');
+            logger.error('   Clan error details:', error.stack ? error.stack.split('\n').slice(0, 2).join('\n') : 'No stack');
         }
+        
+        // Add small delay to prevent racing
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         try {
             logger.info('👥 Starting player data fetch...');
-            await playerService.fetchPlayerData();
-            const playerCount = playerService.getPlayerData().length;
+            const playerData = await playerService.fetchPlayerData();
+            const playerCount = playerData.length;
             logger.info(`✅ Player data loaded successfully: ${playerCount} players`);
         } catch (error) {
             logger.error('❌ Player data failed to load:', error.message || 'Unknown error');
-            logger.error('   Player error type:', error.constructor.name);
-            logger.error('   Player error stack:', error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack');
+            logger.error('   Player error type:', error.constructor?.name || 'Unknown');
+            logger.error('   Player error details:', error.stack ? error.stack.split('\n').slice(0, 2).join('\n') : 'No stack');
         }
+        
+        // Add small delay to prevent racing
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         try {
             logger.info('🏆 Starting EndersEcho data fetch...');
-            await endersEchoService.fetchEndersEchoData();
-            const eeCount = endersEchoService.getEndersEchoData().length;
+            const eeData = await endersEchoService.fetchEndersEchoData();
+            const eeCount = eeData.length;
             logger.info(`✅ EndersEcho data loaded successfully: ${eeCount} players`);
         } catch (error) {
             logger.error('❌ EndersEcho data failed to load:', error.message || 'Unknown error');
-            logger.error('   EE error type:', error.constructor.name);
-            logger.error('   EE error stack:', error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack');
+            logger.error('   EE error type:', error.constructor?.name || 'Unknown');
+            logger.error('   EE error details:', error.stack ? error.stack.split('\n').slice(0, 2).join('\n') : 'No stack');
         }
         
         
