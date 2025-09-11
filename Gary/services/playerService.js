@@ -11,7 +11,7 @@ class PlayerService {
         // PlayerService NEVER uses proxy for better reliability  
         this.proxyService = null;
         
-        // Debug axios availability (essential logging only)
+        // Axios debugging (can be removed in production)
         this.logger.info(`🔧 PlayerService constructor - axios available: ${typeof axios}`);
         this.logger.info(`🔧 PlayerService constructor - axios.create available: ${typeof axios?.create}`);
         
@@ -85,24 +85,24 @@ class PlayerService {
                 return [];
             }
         } catch (error) {
-            this.logger.error('❌ Error fetching player ranking data:', error.message || 'Unknown error');
-            this.logger.error('   Error type:', error.constructor?.name || 'Unknown constructor');
-            this.logger.error('   Error code:', error.code || 'No error code');
-            this.logger.error('   Error details:', error.stack || 'No stack trace available');
-            this.logger.error('   Response status:', error.response ? error.response.status : 'No response');
-            this.logger.error('   Response data:', error.response ? (typeof error.response.data === 'string' ? error.response.data.substring(0, 200) : JSON.stringify(error.response.data)) : 'No response data');
+            this.logger.error(`❌ Error fetching player ranking data: ${error.message || 'Unknown error'}`);
+            this.logger.error(`   Error type: ${error.constructor?.name || 'Unknown constructor'}`);
+            this.logger.error(`   Error code: ${error.code || 'No error code'}`);
+            this.logger.error(`   Error details: ${error.stack || 'No stack trace available'}`);
+            this.logger.error(`   Response status: ${error.response ? error.response.status : 'No response'}`);
+            this.logger.error(`   Response data: ${error.response ? (typeof error.response.data === 'string' ? error.response.data.substring(0, 200) : JSON.stringify(error.response.data)) : 'No response data'}`);
             
             // Advanced debugging for empty errors
-            this.logger.error('   🔍 Raw error typeof:', typeof error);
-            this.logger.error('   🔍 Error is instance of Error:', error instanceof Error);
-            this.logger.error('   🔍 Error object keys:', Object.keys(error));
-            this.logger.error('   🔍 Error toString():', error.toString());
+            this.logger.error(`   🔍 Raw error typeof: ${typeof error}`);
+            this.logger.error(`   🔍 Error is instance of Error: ${error instanceof Error}`);
+            this.logger.error(`   🔍 Error object keys: ${Object.keys(error).join(', ')}`);
+            this.logger.error(`   🔍 Error toString(): ${error.toString()}`);
             
             // Check if this is actually not an error but some other issue
             if (!error.message && !error.code && !error.response) {
                 this.logger.error('   ⚠️ Empty error object - this may be a logic error in the code');
-                this.logger.error('   Full error object:', JSON.stringify(error, null, 2));
-                this.logger.error('   Full error with getOwnPropertyNames:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+                this.logger.error(`   Full error object: ${JSON.stringify(error, null, 2)}`);
+                this.logger.error(`   Full error with getOwnPropertyNames: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`);
             }
             
             // Fallback: return cached data if available
