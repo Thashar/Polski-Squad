@@ -11,9 +11,7 @@ class PlayerService {
         // PlayerService uses proxy as fallback when receiving 403 errors
         this.proxyService = new ProxyService(config, logger);
         
-        // Axios debugging (can be removed in production)
-        this.logger.info(`🔧 PlayerService constructor - axios available: ${typeof axios}`);
-        this.logger.info(`🔧 PlayerService constructor - axios.create available: ${typeof axios?.create}`);
+        // Axios debugging removed for cleaner logs
         
         // Create direct axios instance for basic operations (no proxy)
         try {
@@ -34,10 +32,6 @@ class PlayerService {
     async fetchPlayerData() {
         try {
             this.logger.info('👥 Fetching player ranking data from API...');
-            this.logger.info(`   🔧 Using axios timeout: ${this.axios.defaults.timeout}`);
-            this.logger.info(`   🔧 User-Agent: ${this.axios.defaults.headers['User-Agent']}`);
-            
-            this.logger.info('   🌐 Making request to garrytools.com/rank/players...');
             let response;
             
             try {
@@ -52,7 +46,7 @@ class PlayerService {
                     throw directError; // Re-throw other errors
                 }
             }
-            this.logger.info(`   ✅ Response received: ${response.status} ${response.data ? response.data.length + ' chars' : 'no data'}`);
+            // Response details removed for cleaner logs
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio

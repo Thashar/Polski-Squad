@@ -26,7 +26,6 @@ class ClanAjaxService {
     async fetchClanData() {
         try {
             this.logger.info('📊 Fetching clan ranking data from AJAX API...');
-            this.logger.info('   🌐 Making request to garrytools.com/rank/clans...');
             
             // First, get the main page to establish session
             let sessionResponse;

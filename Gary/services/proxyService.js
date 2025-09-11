@@ -78,7 +78,7 @@ class ProxyService {
                 
                 baseConfig.httpsAgent = proxyAgent;
                 baseConfig.httpAgent = proxyAgent;
-                this.logger.info(`🌐 Using proxy: ${this.maskProxy(proxyUrl)}`);
+                // Proxy usage logged (reduced verbosity)
             } catch (error) {
                 this.logger.warn(`⚠️ Invalid proxy URL: ${proxyUrl}, using direct connection`);
             }
@@ -106,11 +106,7 @@ class ProxyService {
             try {
                 const response = await axiosInstance.get(url, options);
                 
-                if (proxyUrl) {
-                    this.logger.info(`✅ Request successful via proxy on attempt ${attempt}`);
-                } else {
-                    this.logger.info(`✅ Request successful via direct connection on attempt ${attempt}`);
-                }
+                // Success logging reduced for cleaner output
                 
                 return response;
                 
