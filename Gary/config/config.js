@@ -59,7 +59,7 @@ module.exports = {
     // Bot Settings
     botSettings: {
         enablePagination: true,
-        paginationTimeout: 600000,
+        paginationTimeout: 3600000, // 1 hour (was 600000 = 10 minutes)
         membersPerPage: 20,
         maxEmbedFields: 25,
         delayBetweenClans: 1500
