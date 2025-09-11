@@ -11,24 +11,35 @@ class PlayerService {
         // PlayerService NEVER uses proxy for better reliability  
         this.proxyService = null;
         
+        // Debug axios availability (essential logging only)
+        this.logger.info(`🔧 PlayerService constructor - axios available: ${typeof axios}`);
+        this.logger.info(`🔧 PlayerService constructor - axios.create available: ${typeof axios?.create}`);
+        
         // Create direct axios instance for basic operations (no proxy)
-        this.axios = axios.create({
-            timeout: 20000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
+        try {
+            this.axios = axios.create({
+                timeout: 20000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+            this.logger.info('✅ PlayerService axios instance created successfully');
+            this.logger.info(`   Timeout: ${this.axios.defaults.timeout}`);
+        } catch (error) {
+            this.logger.error('❌ Failed to create axios instance:', error.message);
+            throw error;
+        }
     }
 
     async fetchPlayerData() {
         try {
             this.logger.info('👥 Fetching player ranking data from API...');
-            this.logger.info('   🔧 Using axios timeout:', this.axios.defaults.timeout);
-            this.logger.info('   🔧 User-Agent:', this.axios.defaults.headers['User-Agent']);
+            this.logger.info(`   🔧 Using axios timeout: ${this.axios.defaults.timeout}`);
+            this.logger.info(`   🔧 User-Agent: ${this.axios.defaults.headers['User-Agent']}`);
             
             this.logger.info('   🌐 Making request to garrytools.com/rank/players...');
             const response = await this.axios.get('https://garrytools.com/rank/players');
-            this.logger.info('   ✅ Response received:', response.status, response.data ? response.data.length + ' chars' : 'no data');
+            this.logger.info(`   ✅ Response received: ${response.status} ${response.data ? response.data.length + ' chars' : 'no data'}`);
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
