@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const cron = require('node-cron');
 const config = require('./config/config');
 const GarrytoolsService = require('./services/garrytoolsService');
-const ClanService = require('./services/clanService');
+const ClanService = require('./services/clanAjaxService');
 const PlayerService = require('./services/playerService');
 const EndersEchoService = require('./services/endersEchoService');
 const LogService = require('./services/logService');
@@ -40,10 +40,27 @@ async function initializeBot() {
         // Register slash commands
         await interactionHandler.registerSlashCommands(client);
         
-        // Initial data fetch
-        await clanService.fetchClanData();
-        await playerService.fetchPlayerData();
-        await endersEchoService.fetchEndersEchoData();
+        // Initial data fetch (with error handling)
+        try {
+            await clanService.fetchClanData();
+            logger.info('✅ Clan data loaded successfully');
+        } catch (error) {
+            logger.warn('⚠️ Clan data failed to load:', error.message);
+        }
+        
+        try {
+            await playerService.fetchPlayerData();
+            logger.info('✅ Player data loaded successfully');
+        } catch (error) {
+            logger.warn('⚠️ Player data failed to load:', error.message);
+        }
+        
+        try {
+            await endersEchoService.fetchEndersEchoData();
+            logger.info('✅ EndersEcho data loaded successfully');
+        } catch (error) {
+            logger.warn('⚠️ EndersEcho data failed to load:', error.message);
+        }
         
         
         // Log successful initialization

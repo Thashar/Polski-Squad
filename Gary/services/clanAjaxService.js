@@ -1,46 +1,64 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const ProxyService = require('./proxyService');
 
-class ClanService {
+class ClanAjaxService {
     constructor(config, logger) {
         this.config = config;
         this.logger = logger;
         this.clanData = [];
         this.lastFetchTime = null;
-        this.proxyService = new ProxyService(config, logger);
         
-        // Create direct axios instance for basic operations (no proxy)
+        // Create axios instance for AJAX requests
         this.axios = axios.create({
             timeout: 20000,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html, */*; q=0.01',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'X-Requested-With': 'XMLHttpRequest'
             }
         });
     }
 
     async fetchClanData() {
         try {
-            this.logger.info('📊 Fetching clan ranking data from API...');
+            this.logger.info('📊 Fetching clan ranking data from AJAX API...');
             
-            const response = await this.axios.get('https://garrytools.com/rank/clans');
+            // First, get the main page to establish session
+            const sessionResponse = await this.axios.get('https://garrytools.com/rank/clans', {
+                headers: {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                }
+            });
+            
+            // Extract cookies from the session
+            const cookies = sessionResponse.headers?.['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || '';
+            
+            // Try to get data through AJAX (this might require specific parameters)
+            // For now, let's try a different approach - check if there's a direct API
+            
+            // Alternative: Check if clan data is available in a different format
+            const response = await this.axios.get('https://garrytools.com/rank/clans', {
+                headers: {
+                    'Cookie': cookies,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                }
+            });
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
                 const $ = cheerio.load(response.data);
                 const clans = [];
                 
-                // Find the ranking table and extract data
-                $('table tr').each((index, row) => {
-                    if (index === 0) return; // Skip header row
-                    
+                // Check if data is now loaded in the page (sometimes after session is established)
+                $('table tbody tr').each((index, row) => {
                     const cells = $(row).find('td');
                     if (cells.length >= 6) {
                         const rank = parseInt($(cells[0]).text().trim()) || 0;
                         const guildId = parseInt($(cells[1]).text().trim()) || 0;
                         const name = $(cells[2]).text().trim();
                         const level = parseInt($(cells[3]).text().trim()) || 1;
-                        const members = $(cells[4]).text().trim(); // Keep as string (e.g., "38/40")
+                        const members = $(cells[4]).text().trim();
                         const leader = $(cells[5]).text().trim();
                         const grade = cells.length > 6 ? $(cells[6]).text().trim() : '';
                         const score = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 0 : 0;
@@ -61,9 +79,18 @@ class ClanService {
                     }
                 });
                 
-                this.clanData = clans;
-                this.lastFetchTime = new Date();
-                return this.clanData;
+                if (clans.length > 0) {
+                    this.clanData = clans;
+                    this.lastFetchTime = new Date();
+                    this.logger.info(`✅ Fetched ${clans.length} clans from ranking page`);
+                    return this.clanData;
+                } else {
+                    this.logger.warn('⚠️ No clan data found in HTML - table may be loaded dynamically');
+                    
+                    // TEMPORARY SOLUTION: Return fallback message for now
+                    // In the future, we need to implement proper AJAX handling or find alternative endpoint
+                    throw new Error('Clan ranking data is loaded dynamically and requires JavaScript execution. This feature is temporarily unavailable.');
+                }
             } else {
                 this.logger.warn('⚠️ Invalid API response format for clan data');
                 return [];
@@ -72,7 +99,6 @@ class ClanService {
             this.logger.error('❌ Error fetching clan ranking data:', error.message);
             this.logger.error('   Error details:', error.stack || 'No stack trace available');
             this.logger.error('   Response status:', error.response ? error.response.status : 'No response');
-            this.logger.error('   Response data:', error.response ? error.response.data : 'No response data');
             
             // Fallback: return cached data if available
             if (this.clanData.length > 0) {
@@ -257,4 +283,4 @@ class ClanService {
     }
 }
 
-module.exports = ClanService;
+module.exports = ClanAjaxService;

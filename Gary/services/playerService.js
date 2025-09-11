@@ -70,6 +70,9 @@ class PlayerService {
             }
         } catch (error) {
             this.logger.error('❌ Error fetching player ranking data:', error.message);
+            this.logger.error('   Error details:', error.stack || 'No stack trace available');
+            this.logger.error('   Response status:', error.response ? error.response.status : 'No response');
+            this.logger.error('   Response data:', error.response ? error.response.data : 'No response data');
             
             // Fallback: return cached data if available
             if (this.playerData.length > 0) {

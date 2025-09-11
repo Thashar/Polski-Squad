@@ -395,9 +395,17 @@ class InteractionHandler {
     async handleRefreshCommand(interaction) {
         await interaction.deferReply();
         
+        let guildCount = 0;
+        let guildError = null;
+        
         this.logger.info('📊 Refreshing guild data...');
-        await this.clanService.fetchClanData();
-        const guildCount = this.clanService.getClanData().length;
+        try {
+            await this.clanService.fetchClanData();
+            guildCount = this.clanService.getClanData().length;
+        } catch (error) {
+            guildError = error.message;
+            this.logger.error('Failed to refresh guild data:', error.message);
+        }
         
         this.logger.info('👥 Refreshing player data...');
         await interaction.editReply('⏳ Refreshing guild, player, and EndersEcho data...');
@@ -408,7 +416,17 @@ class InteractionHandler {
         await this.endersEchoService.fetchEndersEchoData();
         const eePlayerCount = this.endersEchoService.getEndersEchoData().length;
         
-        await interaction.editReply(`✅ Data refreshed. Database contains: ${guildCount} guilds, ${playerCount} players, and ${eePlayerCount} EndersEcho players.`);
+        let statusMessage = `✅ Data refresh completed:\n` +
+                          `- 📊 Guilds: ${guildCount > 0 ? guildCount : 'Failed'}${guildError ? ' (JavaScript required)' : ''}\n` +
+                          `- 👥 Players: ${playerCount}\n` +
+                          `- 🏆 EndersEcho: ${eePlayerCount}`;
+        
+        if (guildError && guildError.includes('JavaScript')) {
+            statusMessage += `\n\n⚠️ **Guild data unavailable**: The garrytools.com clan ranking page requires JavaScript execution.\n` +
+                           `**Alternative**: Use player search (\`/player\`) or EndersEcho search (\`/ee\`) which work normally.`;
+        }
+        
+        await interaction.editReply(statusMessage);
     }
 
 
@@ -643,7 +661,14 @@ class InteractionHandler {
             const clanData = this.clanService.getClanData();
             
             if (clanData.length === 0) {
-                await interaction.editReply('❌ No guild data available. Please use `/refresh` to load guild data first.');
+                await interaction.editReply(
+                    '❌ **Guild data unavailable**\n\n' +
+                    'The clan ranking data requires JavaScript execution and cannot be loaded by the bot.\n\n' +
+                    '**Alternatives:**\n' +
+                    '• Use `/search [name] searching:GLOBAL` for live search (limited)\n' +
+                    '• Use `/player [name]` to search player rankings\n' +
+                    '• Use `/ee [name]` to search EndersEcho rankings'
+                );
                 return;
             }
 

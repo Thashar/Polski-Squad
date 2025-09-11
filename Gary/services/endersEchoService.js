@@ -103,6 +103,9 @@ class EndersEchoService {
             }
         } catch (error) {
             this.logger.error('❌ Error fetching EndersEcho ranking data:', error.message);
+            this.logger.error('   Error details:', error.stack || 'No stack trace available');
+            this.logger.error('   Response status:', error.response ? error.response.status : 'No response');
+            this.logger.error('   Response data:', error.response ? error.response.data : 'No response data');
             
             // Fallback: return cached data if available
             if (this.endersEchoData.length > 0) {
