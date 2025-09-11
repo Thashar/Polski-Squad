@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const ProxyService = require('./proxyService');
 
 class ClanAjaxService {
     constructor(config, logger) {
@@ -7,6 +8,8 @@ class ClanAjaxService {
         this.logger = logger;
         this.clanData = [];
         this.lastFetchTime = null;
+        // ClanAjaxService uses proxy as fallback when receiving 403 errors
+        this.proxyService = new ProxyService(config, logger);
         
         // Create axios instance for AJAX requests
         this.axios = axios.create({
@@ -26,11 +29,28 @@ class ClanAjaxService {
             this.logger.info('   🌐 Making request to garrytools.com/rank/clans...');
             
             // First, get the main page to establish session
-            const sessionResponse = await this.axios.get('https://garrytools.com/rank/clans', {
-                headers: {
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+            let sessionResponse;
+            
+            try {
+                // Try direct request first
+                sessionResponse = await this.axios.get('https://garrytools.com/rank/clans', {
+                    headers: {
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                    }
+                });
+            } catch (directError) {
+                // If we get 403 Forbidden, try with proxy
+                if (directError.response?.status === 403) {
+                    this.logger.info('   🔄 Session request blocked (403), trying with proxy...');
+                    sessionResponse = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
+                        headers: {
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                        }
+                    });
+                } else {
+                    throw directError; // Re-throw other errors
                 }
-            });
+            }
             
             // Extract cookies from the session
             const cookies = sessionResponse.headers?.['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || '';
@@ -39,12 +59,30 @@ class ClanAjaxService {
             // For now, let's try a different approach - check if there's a direct API
             
             // Alternative: Check if clan data is available in a different format
-            const response = await this.axios.get('https://garrytools.com/rank/clans', {
-                headers: {
-                    'Cookie': cookies,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            let response;
+            
+            try {
+                // Try direct request first
+                response = await this.axios.get('https://garrytools.com/rank/clans', {
+                    headers: {
+                        'Cookie': cookies,
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                });
+            } catch (directError) {
+                // If we get 403 Forbidden, try with proxy
+                if (directError.response?.status === 403) {
+                    this.logger.info('   🔄 Direct request blocked (403), trying with proxy...');
+                    response = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
+                        headers: {
+                            'Cookie': cookies,
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                        }
+                    });
+                } else {
+                    throw directError; // Re-throw other errors
                 }
-            });
+            }
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio

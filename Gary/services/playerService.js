@@ -8,8 +8,8 @@ class PlayerService {
         this.logger = logger;
         this.playerData = [];
         this.lastFetchTime = null;
-        // PlayerService NEVER uses proxy for better reliability  
-        this.proxyService = null;
+        // PlayerService uses proxy as fallback when receiving 403 errors
+        this.proxyService = new ProxyService(config, logger);
         
         // Axios debugging (can be removed in production)
         this.logger.info(`🔧 PlayerService constructor - axios available: ${typeof axios}`);
@@ -38,7 +38,20 @@ class PlayerService {
             this.logger.info(`   🔧 User-Agent: ${this.axios.defaults.headers['User-Agent']}`);
             
             this.logger.info('   🌐 Making request to garrytools.com/rank/players...');
-            const response = await this.axios.get('https://garrytools.com/rank/players');
+            let response;
+            
+            try {
+                // Try direct request first
+                response = await this.axios.get('https://garrytools.com/rank/players');
+            } catch (directError) {
+                // If we get 403 Forbidden, try with proxy
+                if (directError.response?.status === 403) {
+                    this.logger.info('   🔄 Direct request blocked (403), trying with proxy...');
+                    response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
+                } else {
+                    throw directError; // Re-throw other errors
+                }
+            }
             this.logger.info(`   ✅ Response received: ${response.status} ${response.data ? response.data.length + ' chars' : 'no data'}`);
             
             if (response.data && typeof response.data === 'string') {
