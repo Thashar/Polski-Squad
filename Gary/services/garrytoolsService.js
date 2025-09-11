@@ -8,6 +8,8 @@ class GarrytoolsService {
         this.logger = logger;
         this.baseUrl = 'https://garrytools.com/lunar/';
         this.proxyService = new ProxyService(config, logger);
+        // GarrytoolsService ALWAYS uses proxy for lunar mine operations
+        this.useProxy = true;
         
         // Create default axios instance (fallback)
         this.axiosInstance = axios.create({
@@ -25,6 +27,28 @@ class GarrytoolsService {
                 'Cache-Control': 'max-age=0'
             }
         });
+    }
+
+    /**
+     * Make HTTP GET request with proxy fallback
+     */
+    async makeRequest(url, options = {}) {
+        if (this.useProxy) {
+            return await this.proxyService.makeRequest(url, options);
+        } else {
+            return await this.axiosInstance.get(url, options);
+        }
+    }
+
+    /**
+     * Make HTTP POST request with proxy fallback
+     */
+    async makePostRequest(url, data, options = {}) {
+        if (this.useProxy) {
+            return await this.proxyService.makePostRequest(url, data, options);
+        } else {
+            return await this.axiosInstance.post(url, data, options);
+        }
     }
 
     modifyGuildIds(userGuildId, fixedGuilds) {
@@ -63,7 +87,7 @@ class GarrytoolsService {
         
         try {
             // Use proxy service for requests
-            const mainPageResponse = await this.proxyService.makeRequest(this.baseUrl);
+            const mainPageResponse = await this.makeRequest(this.baseUrl);
             const $ = cheerio.load(mainPageResponse.data);
             
             const forms = $('form');
@@ -102,7 +126,7 @@ class GarrytoolsService {
                 formData.append('_token', csrfToken);
             }
             
-            const response = await this.proxyService.makePostRequest(this.baseUrl, formData, {
+            const response = await this.makePostRequest(this.baseUrl, formData, {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Referer': this.baseUrl,
@@ -181,7 +205,7 @@ class GarrytoolsService {
 
     async getBaseData(url) {
         try {
-            const response = await this.proxyService.makeRequest(url);
+            const response = await this.makeRequest(url);
             const $ = cheerio.load(response.data);
             const tables = $('table');
             const clansData = [];
@@ -265,7 +289,7 @@ class GarrytoolsService {
 
     async getCoreData(url) {
         try {
-            const response = await this.proxyService.makeRequest(url);
+            const response = await this.makeRequest(url);
             const $ = cheerio.load(response.data);
             const tables = $('table');
             const clansData = [];

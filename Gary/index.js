@@ -40,26 +40,40 @@ async function initializeBot() {
         // Register slash commands
         await interactionHandler.registerSlashCommands(client);
         
-        // Initial data fetch (with error handling)
+        // Initial data fetch (with detailed error handling)
+        logger.info('🔄 Starting initial data fetch...');
+        
         try {
+            logger.info('📊 Starting clan data fetch...');
             await clanService.fetchClanData();
-            logger.info('✅ Clan data loaded successfully');
+            const clanCount = clanService.getClanData().length;
+            logger.info(`✅ Clan data loaded successfully: ${clanCount} clans`);
         } catch (error) {
-            logger.warn('⚠️ Clan data failed to load:', error.message);
+            logger.error('❌ Clan data failed to load:', error.message || 'Unknown error');
+            logger.error('   Clan error type:', error.constructor.name);
+            logger.error('   Clan error stack:', error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack');
         }
         
         try {
+            logger.info('👥 Starting player data fetch...');
             await playerService.fetchPlayerData();
-            logger.info('✅ Player data loaded successfully');
+            const playerCount = playerService.getPlayerData().length;
+            logger.info(`✅ Player data loaded successfully: ${playerCount} players`);
         } catch (error) {
-            logger.warn('⚠️ Player data failed to load:', error.message);
+            logger.error('❌ Player data failed to load:', error.message || 'Unknown error');
+            logger.error('   Player error type:', error.constructor.name);
+            logger.error('   Player error stack:', error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack');
         }
         
         try {
+            logger.info('🏆 Starting EndersEcho data fetch...');
             await endersEchoService.fetchEndersEchoData();
-            logger.info('✅ EndersEcho data loaded successfully');
+            const eeCount = endersEchoService.getEndersEchoData().length;
+            logger.info(`✅ EndersEcho data loaded successfully: ${eeCount} players`);
         } catch (error) {
-            logger.warn('⚠️ EndersEcho data failed to load:', error.message);
+            logger.error('❌ EndersEcho data failed to load:', error.message || 'Unknown error');
+            logger.error('   EE error type:', error.constructor.name);
+            logger.error('   EE error stack:', error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack');
         }
         
         
@@ -126,13 +140,56 @@ cron.schedule('*/10 * * * *', () => {
  */
 async function startBot() {
     try {
-        // Initialize services
-        garrytoolsService = new GarrytoolsService(config, logger);
-        clanService = new ClanService(config, logger);
-        playerService = new PlayerService(config, logger);
-        endersEchoService = new EndersEchoService(config, logger);
-        logService = new LogService(config, logger);
-        interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, logger);
+        // Initialize services with error handling
+        logger.info('🔧 Initializing services...');
+        
+        try {
+            garrytoolsService = new GarrytoolsService(config, logger);
+            logger.info('✅ GarrytoolsService initialized');
+        } catch (error) {
+            logger.error('❌ GarrytoolsService failed to initialize:', error.message);
+            throw error;
+        }
+        
+        try {
+            clanService = new ClanService(config, logger);
+            logger.info('✅ ClanService initialized');
+        } catch (error) {
+            logger.error('❌ ClanService failed to initialize:', error.message);
+            throw error;
+        }
+        
+        try {
+            playerService = new PlayerService(config, logger);
+            logger.info('✅ PlayerService initialized');
+        } catch (error) {
+            logger.error('❌ PlayerService failed to initialize:', error.message);
+            throw error;
+        }
+        
+        try {
+            endersEchoService = new EndersEchoService(config, logger);
+            logger.info('✅ EndersEchoService initialized');
+        } catch (error) {
+            logger.error('❌ EndersEchoService failed to initialize:', error.message);
+            throw error;
+        }
+        
+        try {
+            logService = new LogService(config, logger);
+            logger.info('✅ LogService initialized');
+        } catch (error) {
+            logger.error('❌ LogService failed to initialize:', error.message);
+            throw error;
+        }
+        
+        try {
+            interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, logger);
+            logger.info('✅ InteractionHandler initialized');
+        } catch (error) {
+            logger.error('❌ InteractionHandler failed to initialize:', error.message);
+            throw error;
+        }
         
         // Add timeout to prevent hanging
         const loginPromise = client.login(config.token);

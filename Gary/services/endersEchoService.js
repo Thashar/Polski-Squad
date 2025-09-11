@@ -8,7 +8,8 @@ class EndersEchoService {
         this.logger = logger;
         this.endersEchoData = [];
         this.lastFetchTime = null;
-        this.proxyService = new ProxyService(config, logger);
+        // EndersEchoService NEVER uses proxy for better reliability
+        this.proxyService = null;
         this.dateColumns = []; // Store dynamic date column names
         
         // Create direct axios instance for basic operations (no proxy)
@@ -102,10 +103,18 @@ class EndersEchoService {
                 return [];
             }
         } catch (error) {
-            this.logger.error('❌ Error fetching EndersEcho ranking data:', error.message);
+            this.logger.error('❌ Error fetching EndersEcho ranking data:', error.message || 'Unknown error');
+            this.logger.error('   Error type:', error.constructor.name);
+            this.logger.error('   Error code:', error.code || 'No error code');
             this.logger.error('   Error details:', error.stack || 'No stack trace available');
             this.logger.error('   Response status:', error.response ? error.response.status : 'No response');
-            this.logger.error('   Response data:', error.response ? error.response.data : 'No response data');
+            this.logger.error('   Response data:', error.response ? (typeof error.response.data === 'string' ? error.response.data.substring(0, 200) : JSON.stringify(error.response.data)) : 'No response data');
+            
+            // Check if this is actually not an error but some other issue
+            if (!error.message && !error.code && !error.response) {
+                this.logger.error('   ⚠️ Empty error object - this may be a logic error in the code');
+                this.logger.error('   Full error object:', JSON.stringify(error, null, 2));
+            }
             
             // Fallback: return cached data if available
             if (this.endersEchoData.length > 0) {
