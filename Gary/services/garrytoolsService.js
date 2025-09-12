@@ -229,9 +229,8 @@ class GarrytoolsService {
                     name: $(cells[2]).text().trim(),
                     level: $(cells[3]).text().trim(),
                     grade: $(cells[4]).text().trim(),
-                    gradeScore: $(cells[5]).text().trim(),
+                    gradeScore: $(cells[5]).text().trim() || '0%',
                     totalRelicCores: this.parseRelicCores($(cells[6]).text().trim()),
-                    extraBossDamage: $(cells[7]).text().trim() || '0%',
                     totalAttack: this.parseAttackValue($(cells[7]).text().trim())
                 };
                 
@@ -272,7 +271,7 @@ class GarrytoolsService {
                         level: clanInfo.level || '',
                         grade: clanInfo.grade || '',
                         guildId: clanInfo.guildId || 0,
-                        extraBossDamage: clanInfo.extraBossDamage || '0%',
+                        gradeScore: clanInfo.gradeScore || '0%',
                         phase: 'Lunar Mine Expedition',
                         points: parseInt(clanInfo.gradeScore) || 0,
                         status: 'Active'

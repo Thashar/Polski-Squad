@@ -308,7 +308,7 @@ class InteractionHandler {
                 const guildSummary = 
                     `**👥 Members:** ${guild.members.length}\n` +
                     `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                    `**💥 Grade Score:** ${guild.extraBossDamage || '0%'}\n` +
+                    `**💥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
                     `**💎 Relic ${this.CORES_ICON}:** ${guild.totalRelicCores}+\n` +
                     `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                     `**⭐ Level:** ${guild.level || 'N/A'}\n` +
@@ -360,7 +360,7 @@ class InteractionHandler {
             const guildSummary = 
                 `**👥 Members:** ${guild.members.length}\n` +
                 `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                `**💥 Grade Score:** ${guild.extraBossDamage || '0%'}\n` +
+                `**💥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
                 `**💎 Relic ${this.CORES_ICON}:** ${guild.totalRelicCores}+\n` +
                 `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                 `**⭐ Level:** ${guild.level || 'N/A'}\n` +
