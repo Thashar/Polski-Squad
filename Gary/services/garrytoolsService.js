@@ -230,9 +230,9 @@ class GarrytoolsService {
                     level: $(cells[3]).text().trim(),
                     grade: $(cells[4]).text().trim(),
                     gradeScore: $(cells[5]).text().trim(),
-                    extraBossDamage: $(cells[6]).text().trim() || '0%',
-                    totalRelicCores: this.parseRelicCores($(cells[7]).text().trim()),
-                    totalAttack: this.parseAttackValue($(cells[8]).text().trim())
+                    totalRelicCores: this.parseRelicCores($(cells[6]).text().trim()),
+                    extraBossDamage: $(cells[7]).text().trim() || '0%',
+                    totalAttack: this.parseAttackValue($(cells[7]).text().trim())
                 };
                 
                 clanOverview.push(clanInfo);
