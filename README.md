@@ -1,246 +1,434 @@
-# Polski Squad Discord Bot Collection
+# 🏰 Kolekcja Botów Discord Polski Squad
 
-Kolekcja botów Discord dla serwera Polish Squad, zawierająca dziewięć specjalistycznych botów z centralnym systemem logowania i zarządzania.
+> **Kompleksowy pakiet automatyzacji serwera Discord z 9 wyspecjalizowanymi botami i scentralizowanym zarządzaniem**
 
-## Boty
+[![Discord.js](https://img.shields.io/badge/discord.js-v14-blue.svg)](https://discord.js.org/)
+[![Node.js](https://img.shields.io/badge/node.js-%3E%3D16.0.0-brightgreen.svg)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-### 🎯 Gary Bot - **NOWY!**
-Analizuje dane z gry Survivor.io przy użyciu API Garrytools. Umożliwia wyszukiwanie gildii, graczy i danych EndersEcho. Obsługuje analizę Lunar Mine Expedition. Wspiera wiele serwerów i system proxy dla bardziej zaawansowanych operacji.
+## 🚀 Przegląd
 
-### 🎯 Rekruter Bot
-Automatyzuje proces rekrutacji nowych członków. Sprawdza kwalifikacje graczy poprzez analizę przesłanych zdjęć statystyk i pomaga w procesie dołączania do odpowiedniego klanu. Zawiera szybkie komendy do informacji o klanach oraz **system powiadomień o boostach** - automatyczne wiadomości dziękczynne dla osób boostujących serwer.
+Kolekcja Botów Polski Squad to modularny system zarządzania serwerem Discord zawierający **9 wyspecjalizowanych botów** z **scentralizowanym logowaniem**, **wspólnymi narzędziami** i **zaawansowanymi możliwościami OCR**. Każdy bot obsługuje określone funkcje serwera, zachowując płynną integrację i koordynację między botami.
 
-### 🎓 Szkolenia Bot
-Zarządza szkoleniami i wątkami treningowymi. Tworzy strukturę szkoleń z automatycznymi przypomnieniami dla uczestników, aby nikt nie zapomniał o ważnych sesjach treningowych.
+### ✨ Kluczowe Funkcje
 
-### ⚔️ Stalker LME Bot
-System karania dla graczy w grach boss fightów. Analizuje zdjęcia wyników walk i automatycznie karze punktami tych, którzy mają 0 damage/score. Zawiera system ostrzeżeń, automatyczne resetowanie punktów oraz **system zarządzania urlopami** z automatycznym monitorowaniem kanału i czasowymi ograniczeniami składania wniosków.
+- 🎯 **Architektura Modularna** - 9 wyspecjalizowanych botów do określonych funkcji serwera
+- 🔧 **Scentralizowane Zarządzanie** - Zunifikowane logowanie, przetwarzanie OCR i zarządzanie nickami
+- 🤖 **Zaawansowane OCR** - Wielojęzyczne rozpoznawanie tekstu z przechowywaniem przetworzonych obrazów
+- 🌐 **Wsparcie Wielu Serwerów** - Elastyczne wdrażanie na różnych serwerach Discord
+- ⚡ **Gotowe do Produkcji** - Kompleksowa obsługa błędów i bezpieczne wyłączanie
+- 📊 **Monitorowanie w Czasie Rzeczywistym** - Logowanie webhook Discord z ograniczeniem częstotliwości
 
-### 🤖 Muteusz Bot
-Wielofunkcyjny bot moderacyjny. Automatycznie przepisuje media między kanałami, moderuje treść wiadomości, zarządza rolami użytkowników i przywraca je po powrocie. Obsługuje również system wykroczeń i ostrzeżeń. **Losowe odpowiedzi PepeSoldier** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/250 na otrzymanie losowej odpowiedzi z emoji PepeSoldier.
+---
 
-### 🏆 EndersEcho Bot
-Bot rankingowy dla graczy. Analizuje wyniki gier z przesłanych zdjęć, tworzy rankingi najlepszych graczy i automatycznie przyznaje role TOP. Obsługuje różne formaty wyników i jednostki liczbowe. **Ulepszona korekcja OCR** - automatycznie poprawia błędy odczytu (TT→1T, 7→T, 0→Q). **Ulepszone logowanie** - wyświetla konkretne wartości znalezione po "Best:" i "Total:" zamiast tylko true/false, zredukowane duplikaty logów dla czystszego outputu.
+## 🤖 Kolekcja Botów
 
-### 🎯 Kontroler Bot
-Weryfikuje wyniki dla kanałów Daily i CX oraz zarządza zaawansowanym systemem loterii. Sprawdza czy przesłane zdjęcia wyników są poprawne, czy nick gracza jest widoczny na screenie i czy wyniki spełniają minimalne wymagania. **Nowy system loterii** z dokładnym planowaniem dat (dd.mm.yyyy), automatyczną obsługą strefy czasowej polskiej z DST, inteligentnym systemem ostrzeżeń i zabezpieczeniami przed limitami JavaScript. Obsługuje loterie jednorazowe i cykliczne (1-365 dni) z automatyczną migracją starych struktur danych.
+### 🎯 **Gary Bot** - *Analiza Survivor.io*
+> **NOWOŚĆ!** Zaawansowana analiza Lunar Mine Expedition z integracją API
 
-### ⛪ Konklawe Bot
-Obsługuje grę słowną "Konklawe". Gracze próbują odgadnąć hasła, papież dodaje podpowiedzi, bot liczy punkty i przyznaje medale. System automatycznych przypominań zapewnia płynność rozgrywki. **Losowe odpowiedzi JP2** - użytkownicy z medalem Virtutti Papajlari mają szansę 1/100 na otrzymanie losowej odpowiedzi z emoji JP2roll. **Specjalne komendy VIP**: `/blessing` (błogosławieństwa) i `/virtue-check` (sprawdzanie cnót) z cooldownami i limitami dziennymi - dostępne globalnie tylko dla posiadaczy medalu.
+**Funkcje:**
+- 🌙 **Analiza Lunar Expedition** - Kompleksowa analiza 4 gildii
+- 🔍 **Rozpoznawanie Gildii OCR** - Wielojęzyczne wykrywanie nazw gildii (EN/JP/KR)
+- 🌐 **Integracja API** - Dane w czasie rzeczywistym z garrytools.com
+- 🔄 **Cache'owane Rankingi** - Top 500 gildii z 6-godzinnymi cyklami odświeżania
+- 🛡️ **Wsparcie Proxy** - Różnorodność sieci z monitorowaniem zdrowia
 
-### 🎉 Wydarzynier Bot
-System zarządzania eventami i organizacji społeczności. **System lobby party** - tworzy prywatne wątki dla organizacji gier z systemem zaproszeń i automatycznym czyszczeniem. **Marketplace (Bazar)** - automatyczny system handlowy z cyklicznymi resetami co 2 godziny, ostrzeżeniami i systemem przypinania wiadomości. **Zarządzanie powiadomieniami** - interaktywny system zapisów na powiadomienia o eventach.
+**Komendy:**
+- `/lunarmine` - Analizuj 4 gildie podczas ekspedycji (Admin)
+- `/search` - Szukaj gildii (tryby TOP500/GLOBAL)
+- `/analyse` - Analiza pojedynczej gildii (Admin)
+- `/player` & `/ee` - Funkcja wyszukiwania graczy
 
-## System Logowania
+---
 
-**WAŻNE: Wszystkie boty używają scentralizowanego systemu logowania.**
+### 🎯 **Rekruter Bot** - *Zaawansowany System Rekrutacji*
+> Wieloetapowa weryfikacja z kontrolą kwalifikacji OCR
 
-### Zasady implementacji logów:
+**Funkcje:**
+- 📝 **Proces Wieloetapowy** - Narodowość → Cel → Weryfikacja statystyk
+- 🔍 **Analiza Statystyk OCR** - Analiza mocy postaci z rekomendacjami klanów
+- 🎉 **Śledzenie Boostów** - 10 unikalnych wiadomości gratulacyjnych + powiadomienia bonusowe
+- ⏰ **Monitorowanie Ról** - 24-godzinne śledzenie niekompletnych profili
+- 🎮 **Szybkie Komendy** - `!clan`, `!clan0`, `!clan1`, `!clan2`
 
+**System Klanowy:**
+- Poniżej 100K ataku: Brak kwalifikacji
+- 100K-599K: Rekomendacja Clan0  
+- 600K-799K: Rekomendacja Clan1
+- 800K-999K: Rekomendacja Clan2
+- 1000K+: Rekomendacja głównego klanu
+
+---
+
+### 🎓 **Szkolenia Bot** - *Zarządzanie Szkoleniami*
+> System szkoleń oparty na wątkach z automatycznym cyklem życia
+
+**Funkcje:**
+- 🧵 **Tworzenie Wątków** - Wyzwalanie reakcji emoji N_SSS
+- ⏰ **Auto-cykl życia** - Archiwizacja po 24h nieaktywności, usunięcie po 7 dniach
+- 🔔 **System Przypomnień** - 24-godzinne powiadomienia o nieaktywności
+- 📖 **Kompleksowe Wytyczne** - Sprzęt, części tech, zwierzaki, postacie
+
+---
+
+### ⚔️ **StalkerLME Bot** - *Egzekwowanie Udziału w Bossach*
+> System kar napędzany OCR z zarządzaniem wakacjami
+
+**Funkcje:**
+- 🔍 **Wykrywanie OCR** - Automatycznie identyfikuje graczy z 0 obrażeń/punktów
+- ⚖️ **Inteligentne Kary** - Stopniowany system kar (2+ punkty = rola, 3+ = ban loterii)
+- 🏖️ **System Wakacji** - Interaktywne wnioski z cooldownami i automatycznym czyszczeniem
+- 📅 **Cotygodniowe Czyszczenie** - Redukcja punktów w poniedziałek o północy
+- 🎯 **Ostrzeżenia Specyficzne dla Klanu** - Ukierunkowane powiadomienia
+
+---
+
+### 🤖 **Muteusz Bot** - *Zaawansowana Moderacja*
+> Kompleksowa auto-moderacja z cache'owaniem mediów
+
+**Funkcje:**
+- 🛡️ **Auto-moderacja** - Wykrywanie spamu, filtrowanie wulgaryzmów, blokowanie zaproszeń
+- 💾 **Cache'owanie Mediów** - Wsparcie plików 100MB z inteligentnym cache 2GB
+- 🎭 **Zarządzanie Rolami** - Grupy ekskluzywne z automatycznym rozwiązywaniem konfliktów
+- 🎲 **Funkcje Specjalne** - Losowe odpowiedzi PepeSoldier (szansa 1/250)
+- ⚠️ **Śledzenie Naruszeń** - System ostrzeżeń dla całego serwera
+
+---
+
+### 🏆 **EndersEcho Bot** - *System Rankingów Bossów*
+> Śledzenie wyników napędzane OCR z automatycznym zarządzaniem rolami
+
+**Funkcje:**
+- 🔍 **Analiza Wyników OCR** - Rozpoznawanie polsko/angielskie z korekcją błędów
+- 📊 **Trwałe Rankingi** - Interaktywne tabele wyników z paginacją
+- 👑 **System Ról TOP** - 4-poziomowe automatyczne zarządzanie (TOP 1, 2-3, 4-10, 11-30)
+- 🔧 **Wsparcie Jednostek** - Konwersje numeryczne K, M, B, T, Q
+- 📈 **Śledzenie Historyczne** - Kompletna historia wyników z znacznikami czasu
+
+---
+
+### 🎯 **Kontroler Bot** - *Weryfikacja Dwukanałowa + Zaawansowana Loteria*
+> Weryfikacja OCR z wyrafinowanym systemem loterii
+
+**Funkcje:**
+- 👀 **Podwójne Monitorowanie** - Kanał CX (2000+ punktów) i Kanał Daily (910+ punktów)
+- 🎰 **Zaawansowana Loteria** - Planowanie oparte na datach z polską strefą czasową DST
+- 🏰 **Wsparcie Wielu Klanów** - Kategorie: cały serwer, Main Squad, Squad 0/1/2
+- ⚠️ **Inteligentne Ostrzeżenia** - Automatyczne alerty 90-minutowe i 30-minutowe
+- 📅 **Elastyczne Planowanie** - Cykle loterii od jednorazowych do rocznych
+
+---
+
+### ⛪ **Konklawe Bot** - *Interaktywna Gra Słowna*
+> Gra hasłowa o tematyce papieskiej z systemem osiągnięć
+
+**Funkcje:**
+- 🎮 **Gra Hasłowa** - Domyślne "Konklawe" z opcjami niestandardowymi
+- 🏅 **System Osiągnięć** - Medale Virtutti Papajlari za 30+ poprawnych odpowiedzi
+- ⏰ **Inteligentne Timery** - Wielopoziomowe przypomnienia (15min, 30min, 1godz)
+- 🙏 **Specjalne Komendy** - `/blessing` i `/virtue-check` dla posiadaczy medali
+- 💫 **Losowe Odpowiedzi** - Szansa 1/100 na odpowiedzi JP2 dla użytkowników papieskich
+
+---
+
+### 🎉 **Wydarzynier Bot** - *Zarządzanie Wydarzeniami i Imprezami*
+> System lobby imprez z organizacją opartą na wątkach
+
+**Funkcje:**
+- 🏟️ **Lobby Imprez** - Pojemność 7 graczy (1 właściciel + 6 członków)
+- 🧵 **Organizacja Wątków** - Prywatne wątki z automatyczną kontrolą członków
+- 🛡️ **Ochrona Przed Griefingiem** - Tylko zaakceptowani gracze mogą uczestniczyć
+- 📢 **Subskrypcje Ról** - Powiadomienia o ogłoszeniach imprez
+- 📌 **Usługi Bazaru** - Przypinanie wiadomości i zarządzanie marketplace
+
+---
+
+## 🏗️ Architektura
+
+### Systemy Scentralizowane
+
+#### 🔧 **Zunifikowany System Logowania**
 ```javascript
-// ✅ POPRAWNIE - zawsze używaj createBotLogger
-const { createBotLogger } = require('../../utils/consoleLogger');
+const { createBotLogger } = require('./utils/consoleLogger');
 const logger = createBotLogger('BotName');
 
 logger.info('Wiadomość informacyjna');
-logger.error('Błąd');
+logger.error('Wiadomość błędu');
 logger.warn('Ostrzeżenie');
-
-// ❌ BŁĘDNIE - nigdy nie używaj
-console.log('wiadomość');
-console.error('błąd');
-logWithTimestamp('wiadomość', 'info');
 ```
 
-**Wszystkie logi muszą być prefixowane nazwą bota dla poprawnej identyfikacji w środowisku multi-bot.**
+**Funkcje:**
+- 🎨 **Kolorowe wyjście** według botów z inteligentnymi separatorami
+- 📝 **Wiele miejsc docelowych** - Konsola, plik (`logs/bots.log`), webhook Discord
+- ⚡ **Ograniczone częstotliwością** logowanie Discord z zarządzaniem kolejką
+- 🚀 **Zoptymalizowany start** - Jednoliniowe komunikaty statusu botów
 
-## Uruchamianie
+#### 🏷️ **Centralized Nickname Manager**
+```javascript
+const nicknameManager = require('./utils/nicknameManagerService');
 
-### Główne komendy:
+await nicknameManager.applyEffect(userId, 'CURSE', duration, metadata);
+await nicknameManager.removeEffect(userId, effectId);
+```
+
+**Features:**
+- 🔄 **Cross-bot coordination** - Prevents conflicts between Konklawe and Muteusz
+- 💾 **Original preservation** - Always restores true server nicknames
+- 📚 **Effect layering** - Supports overlapping effects
+- 🧹 **Automatic cleanup** - Removes expired effects
+
+#### 👁️ **OCR Processing System**
+```javascript
+const { saveProcessedImage, enhanceImage } = require('./utils/ocrFileUtils');
+
+const processedImage = await enhanceImage(imageBuffer);
+await saveProcessedImage(processedImage, 'BOTNAME', metadata);
+```
+
+**Features:**
+- 📁 **Shared storage** - `processed_ocr/` directory for all bots
+- 🏷️ **Standardized naming** - `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]`
+- 🔄 **Automatic rotation** - Max 400 files with cleanup
+- 🐛 **Admin debug mode** - Toggle via `/ocr-debug` command
+
+### Bot Architecture Pattern
+```
+BotName/
+├── index.js           # Main bot with Discord client setup
+├── config/
+│   ├── config.js      # Bot configuration and constants
+│   └── messages.js    # Message templates (some bots)
+├── handlers/
+│   ├── interactionHandlers.js  # Button/interaction events
+│   ├── messageHandlers.js      # Message events
+│   └── reactionHandlers.js     # Reaction events
+├── services/
+│   └── [various].js   # Business logic services
+├── utils/
+│   └── helpers.js     # Utility functions
+└── data/              # Persistent JSON storage
+```
+
+---
+
+## 🚀 Szybki Start
+
+### Wymagania Wstępne
+- **Node.js** 16.0.0 lub wyższy
+- Menedżer pakietów **npm** lub **yarn**
+- **Tokeny Botów Discord** dla każdego bota, który chcesz uruchomić
+
+### Instalacja
+
 ```bash
-# Wszystkie boty produkcyjne (na serwerze)
+# Klonuj repozytorium
+git clone <repository-url>
+cd "Polski Squad"
+
+# Zainstaluj zależności
+npm install
+
+# Skopiuj konfigurację środowiska
+cp .env.example .env
+
+# Skonfiguruj tokeny botów i ID kanałów w .env
+```
+
+### Konfiguracja Środowiska
+
+Stwórz plik `.env` z następującymi tokenami:
+```env
+# Bot Tokens
+REKRUTER_TOKEN=your_bot_token_here
+SZKOLENIA_TOKEN=your_bot_token_here
+STALKER_LME_TOKEN=your_bot_token_here
+MUTEUSZ_TOKEN=your_bot_token_here
+ENDERSECHO_TOKEN=your_bot_token_here
+KONTROLER_TOKEN=your_bot_token_here
+KONKLAWE_TOKEN=your_bot_token_here
+WYDARZYNIER_TOKEN=your_bot_token_here
+
+# Gary Bot Configuration
+GARY_TOKEN=your_bot_token_here
+GARY_CLIENT_ID=your_client_id_here
+GARY_ALLOWED_CHANNEL_ID=1234567890123456789
+GARY_ADMIN_ROLES=1234567890123456789
+
+# Optional: Proxy Configuration (Gary Bot)
+GARY_PROXY_ENABLED=true
+GARY_PROXY_STRATEGY=round-robin
+GARY_PROXY_LIST=http://proxy1:port,http://proxy2:port
+```
+
+### Uruchamianie Botów
+
+```bash
+# Uruchom wszystkie boty razem
 npm start
+# lub
+npm run dev
 
-# Boty rozwojowe (lokalnie)
-npm run local
+# Uruchom pojedyncze boty
+npm run rekruter     # Tylko Rekruter bot
+npm run szkolenia    # Tylko Szkolenia bot
+npm run stalker      # Tylko Stalker LME bot
+npm run muteusz      # Tylko Muteusz bot
+npm run endersecho   # Tylko EndersEcho bot
+npm run kontroler    # Tylko Kontroler bot
+npm run konklawe     # Tylko Konklawe bot
+npm run wydarzynier  # Tylko Wydarzynier bot
+npm run gary         # Tylko Gary bot
 ```
 
-### Poszczególne boty (legacy):
-```bash
-npm run rekruter
-npm run szkolenia  
-npm run stalker
-npm run muteusz
-npm run endersecho
-npm run kontroler
-npm run konklawe
-npm run wydarzynier
-npm run gary        # Nowy bot Gary
-```
+---
 
-### Konfiguracja botów:
-Plik `bot-config.json` określa które boty uruchamiać:
+## 📊 Technology Stack
+
+### Core Technologies
+- **[Discord.js v14](https://discord.js.org/)** - Primary Discord API library
+- **[Tesseract.js](https://tesseract.projectnaptha.com/)** - OCR text recognition (5 bots)
+- **[Sharp](https://sharp.pixelplumbing.com/)** - High-performance image processing
+- **[node-cron](https://www.npmjs.com/package/node-cron)** - Task scheduling
+- **[Canvas](https://www.npmjs.com/package/canvas)** - Image manipulation for OCR
+
+### Additional Dependencies
+- **[axios](https://axios-http.com/)** - HTTP client (Gary bot API integration)
+- **[cheerio](https://cheerio.js.org/)** - Server-side HTML parsing
+- **[https-proxy-agent](https://www.npmjs.com/package/https-proxy-agent)** - Proxy support
+- **[dotenv](https://www.npmjs.com/package/dotenv)** - Environment configuration
+
+---
+
+## 🔧 Development
+
+### Production Configuration
+The `bot-config.json` file controls which bots run in different environments:
+
 ```json
 {
-  "production": ["rekruter", "szkolenia", "stalkerlme", "muteusz", "endersecho", "kontroler", "konklawe", "wydarzynier", "gary"],
+  "production": [
+    "rekruter", "endersecho", "szkolenia", "stalkerlme", 
+    "kontroler", "konklawe", "muteusz", "wydarzynier", "gary"
+  ],
   "development": ["gary"]
 }
 ```
 
-- **production** - boty uruchamiane przez `npm start`
-- **development** - boty uruchamiane przez `npm run local`
+### Debug Features
 
-## Funkcje Systemowe
-
-### 🎨 Centralny System Logowania
-- **Kolorowe grupowanie komunikatów** według botów
-- **Inteligentne separatory** - pojawiają się tylko przy przejściu między różnymi botami
-- **Różne poziomy logowania**: informacje (•), sukces (✅), ostrzeżenia (⚠️), błędy (❌)
-- **Jednolite formatowanie** z timestampami i emoji identyfikatorami
-
-### 📡 Discord Logging
-- Opcjonalne logowanie komunikatów na kanały Discord (ID: 1393028610910326844)
-- Kolejkowanie wiadomości z obsługą rate limitów
-- Fallback na konsolę w przypadku problemów z Discord API
-
-### 🔧 Zarządzanie Procesami
-- **Graceful shutdown** - obsługa sygnałów SIGINT/SIGTERM
-- **Selektywne uruchamianie** - różne zestawy botów dla production/development
-- **Lazy loading** - boty ładowane dynamicznie tylko gdy potrzebne
-- **Timeout handling** - odporna obsługa Discord API timeouts
-- **Error recovery** - graceful error handling dla wszystkich interakcji
-
-### 🏷️ Centralny System Zarządzania Nickami
-
-**Problem**: Boty Konklawe (klątwy) i Muteusz (flagi) zmieniały nicki użytkowników, ale przywracały do głównego nicku zamiast oryginalnego serwerowego nicku, i mogły się konfliktować między sobą.
-
-**Rozwiązanie**: Scentralizowany system zarządzania nickami w `utils/nicknameManagerService.js`
-
-#### Kluczowe funkcjonalności:
-- **🚫 Zapobieganie konfliktom**: Koordynacja między botami - blokuje nakładanie tego samego typu efektu
-- **🔄 Nakładanie efektów**: Pozwala na nakładanie różnych typów (klątwa + flaga) z zachowaniem oryginalnego nicku
-- **💾 Zachowanie oryginalnych nicków**: Przywraca dokładnie to co użytkownik miał (nick serwerowy vs nick główny)
-- **⏰ Automatyczne czyszczenie**: Usuwa wygasłe efekty i utrzymuje spójność danych
-- **📊 Monitorowanie**: Śledzenie aktywnych efektów i statystyki systemu
-
-#### Typy efektów:
-- **CURSE** (Konklawe): Dodaje prefiks "Przeklęty " do nicków z konfigurowalnymi czasami
-- **FLAG** (Muteusz): Zmienia nick na flagi krajów (🇺🇦, 🇵🇱, 🇮🇱, 🇺🇸, 🇩🇪, 🇷🇺) na 5 minut
-
-#### Przykład działania:
-```
-1. Użytkownik "Janusz" (nick serwerowy) dostaje klątwę
-   → Nick: "Przeklęty Janusz" (zapisany oryginalny: "Janusz")
-
-2. Janusz dostaje flagę ukraińską  
-   → Nick: "Slava Ukrainu!" (oryginalny nadal: "Janusz")
-
-3. Efekt zostaje usunięty
-   → Nick: "Janusz" (przywrócony oryginalny, nie "Przeklęty Janusz")
-```
-
-#### Pliki konfiguracyjne:
-- **Konfiguracja**: `shared_data/nickname_manager_config.json`  
-- **Aktywne efekty**: `shared_data/active_nickname_effects.json`
-- **Automatyczna inicjalizacja**: Zintegrowane z sekwencjami startowymi botów
-- **Logowanie debug**: Szczegółowe logi aplikacji i przywracania efektów
-
-## System OCR i Debugowanie
-
-### 🔍 Zaawansowane funkcje OCR
-- **Pięć botów z OCR**: Rekruter, StalkerLME, EndersEcho, Kontroler, **Gary** (nowy!)
-- **Wspólny folder przetworzonych obrazów**: `processed_ocr/` w katalogu głównym  
-- **Format nazw plików**: `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]` lub `[KONTROLER][ hh:mm:ss rrrr-mm-dd ][daily/cx]`
-- **Automatyczna rotacja**: maksymalnie 400 plików dla wszystkich botów razem
-- **Szczegółowe logowanie**: przełączalne tryb debug za pomocą `/ocr-debug`
-
-### 🛠️ Komendy debugowania OCR
-**Dostępne tylko dla administratorów:**
-```
-/ocr-debug true          # Włącz szczegółowe logowanie OCR
-/ocr-debug false         # Wyłącz szczegółowe logowanie OCR
-/ocr-debug               # Sprawdź aktualny stan logowania
-```
-
-### 📁 Przykłady nazw przetworzonych plików
-```
-[KONTROLER][ 14:23:45 2025-08-02 ][daily].png  # Analiza kanału Daily
-[KONTROLER][ 14:23:47 2025-08-02 ][cx].png     # Analiza kanału CX
-[STALKER][ 14:24:12 2025-08-02 ][].png         # System kar Stalker
-[ENDERSECHO][ 14:25:30 2025-08-02 ][].png      # Analiza wyników rankingu
-[REKRUTER][ 14:26:15 2025-08-02 ][].png        # Weryfikacja kwalifikacji
-[GARY][ 14:27:30 2025-08-02 ][].png            # Rozpoznawanie gildii
-```
-
-## Technologie
-
-- **Node.js** + **Discord.js v14**
-- **Tesseract.js** - OCR do analizy obrazów
-- **Sharp** - przetwarzanie obrazów
-- **node-cron** - zadania zaplanowane
-- **Canvas** - manipulacja obrazami
-
-## Konfiguracja
-
-Każdy bot wymaga własnego pliku `.env` z konfiguracją:
-
+#### OCR Debug Mode
+All OCR bots support detailed logging via admin commands:
 ```bash
-# Przykład - Rekruter/.env
-REKRUTER_TOKEN=your_discord_bot_token
-REKRUTER_CHANNEL_ID=channel_id
-REKRUTER_ROLE_ID=role_id
-
-# Przykład - Gary/.env
-GARY_TOKEN=your_discord_bot_token
-GARY_CLIENT_ID=your_client_id
-GARY_ALLOWED_CHANNEL_ID=channel_id_1,channel_id_2
-GARY_ADMIN_ROLES=role_id_1,role_id_2
+/ocr-debug true   # Enable detailed OCR logging
+/ocr-debug false  # Disable detailed OCR logging
+/ocr-debug        # Check current status
 ```
 
-### Wymagane zmienne środowiskowe:
-- `REKRUTER_TOKEN` - Token Discord dla bota Rekruter
-- `SZKOLENIA_TOKEN` - Token Discord dla bota Szkolenia  
-- `STALKER_LME_TOKEN` - Token Discord dla bota Stalker LME
-- `MUTEUSZ_TOKEN` - Token Discord dla bota Muteusz
-- `ENDERSECHO_TOKEN` - Token Discord dla bota EndersEcho
-- `KONTROLER_TOKEN` - Token Discord dla bota Kontroler
-- `KONKLAWE_TOKEN` - Token Discord dla bota Konklawe
-- `WYDARZYNIER_TOKEN` - Token Discord dla bota Wydarzynier
-- `GARY_TOKEN` - Token Discord dla bota Gary (**nowy!**)
-- `GARY_CLIENT_ID` - Client ID dla bota Gary
-- `GARY_ALLOWED_CHANNEL_ID` - Kanały gdzie Gary może działać (obsługuje wiele serwerów)
-- `GARY_ADMIN_ROLES` - Role z dostępem do komend administracyjnych (opcjonalne)
+#### Logging System
+Access logs at:
+- **Console**: Real-time color-coded output
+- **File**: `logs/bots.log`
+- **Discord**: Webhook notifications (rate-limited)
 
-## Porównanie Funkcji Botów
+#### Processed Images
+OCR-processed images are automatically saved in:
+- **Directory**: `processed_ocr/`
+- **Naming**: `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]`
+- **Auto-rotation**: Max 400 files
 
-| Bot | OCR | Slash Commands | Multi-Server | Proxy Support | Auto-Tasks |
-|-----|-----|----------------|--------------|---------------|------------|
-| **Gary** | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Rekruter | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Szkolenia | ❌ | ✅ | ❌ | ❌ | ✅ |
-| StalkerLME | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Muteusz | ❌ | ✅ | ❌ | ❌ | ✅ |
-| EndersEcho | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Kontroler | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Konklawe | ❌ | ✅ | ❌ | ❌ | ✅ |
-| Wydarzynier | ❌ | ✅ | ❌ | ❌ | ✅ |
+---
 
-## Development
+## 🛠️ Configuration
 
-### Dla Claude Code:
-Projekt zawiera plik `CLAUDE.md` z szczegółowymi instrukcjami dla Claude Code, w tym:
-- Reguły implementacji logowania
-- Wzorce architektoniczne
-- Przykłady kodu
-- Zasady bezpieczeństwa
+### Bot-specific Settings
 
-### Debugowanie:
-- Wszystkie logi są prefixowane nazwą bota
-- Używaj `npm run local` do testowania pojedynczych botów
-- Edytuj `bot-config.json` aby zmienić które boty uruchamiać
+Each bot maintains its own configuration in `BotName/config/config.js`:
 
-### Debugowanie OCR:
-- Użyj `/ocr-debug true` aby włączyć szczegółowe logowanie OCR (tylko administratorzy)
-- Przetworzone obrazy są automatycznie zapisywane w `processed_ocr/` z timestampami
-- Format nazw: `[BOTNAME][ hh:mm:ss rrrr-mm-dd ][]` lub `[KONTROLER][ hh:mm:ss rrrr-mm-dd ][daily/cx]` ułatwia identyfikację problemów
-- Maksymalnie 400 plików - najstarsze automatycznie usuwane
+```javascript
+module.exports = {
+    // Discord settings
+    token: process.env.BOTNAME_TOKEN,
+    clientId: process.env.BOTNAME_CLIENT_ID,
+    
+    // Channel configurations
+    allowedChannelIds: ['1234567890123456789'],
+    
+    // OCR settings (if applicable)
+    ocr: {
+        saveProcessedImages: true,
+        detailedLogging: { enabled: false },
+        maxProcessedFiles: 400
+    },
+    
+    // Bot-specific features...
+};
+```
+
+### Shared Data Storage
+
+- **`shared_data/`** - Cross-bot data storage
+- **`processed_ocr/`** - OCR processed images (all bots)
+- **`logs/`** - Centralized log files
+
+---
+
+## 🤝 Contributing
+
+### Code Style
+- **Consistent Architecture** - Follow the established bot pattern
+- **Centralized Logging** - Always use `createBotLogger(botName)`
+- **Error Handling** - Implement comprehensive try-catch blocks
+- **Environment Variables** - All sensitive data in `.env`
+
+### Adding New Features
+1. **Use Existing Patterns** - Follow the modular architecture
+2. **Integrate with Utilities** - Leverage centralized systems
+3. **Document Changes** - Update both README and CLAUDE.md
+4. **Test Thoroughly** - Verify cross-bot compatibility
+
+### Development Workflow
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev
+
+# Test specific bot
+npm run botname
+
+# Check logs
+tail -f logs/bots.log
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🆘 Support
+
+### Documentation
+- **[CLAUDE.md](CLAUDE.md)** - Detailed developer documentation
+- **Bot Configs** - Individual `BotName/config/` directories
+- **Logs** - `logs/bots.log` for troubleshooting
+
+### Common Issues
+- **Missing Permissions** - Ensure bots have required Discord permissions
+- **OCR Not Working** - Check image quality and format
+- **Memory Issues** - Monitor processed image storage rotation
+- **API Limits** - Review rate limiting in logs
+
+---
+
+<div align="center">
+
+**Polski Squad Discord Bot Collection**  
+*Comprehensive server automation with 9 specialized bots*
+
+Made with ❤️ by the Polski Squad Development Team
+
+</div>
