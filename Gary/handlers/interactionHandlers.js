@@ -228,13 +228,14 @@ class InteractionHandler {
         
         const pageData = this.paginationData.get(paginationId);
         
-        if (pageData.userId !== interaction.user.id) {
-            await interaction.reply({ 
-                content: '❌ Only the person who ran the command can change pages!', 
-                ephemeral: true 
-            });
-            return;
-        }
+        // Removed user restriction - anyone can use pagination buttons
+        // if (pageData.userId !== interaction.user.id) {
+        //     await interaction.reply({ 
+        //         content: '❌ Only the person who ran the command can change pages!', 
+        //         ephemeral: true 
+        //     });
+        //     return;
+        // }
         
         let newPage = pageData.currentPage;
         
