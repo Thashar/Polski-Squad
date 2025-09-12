@@ -297,7 +297,7 @@ class InteractionHandler {
             const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower);
             
             const overviewEmbed = new EmbedBuilder()
-                .setTitle(`⛏️ Lunar Mine Expedition - Guild Overview`)
+                .setTitle(`🌙 Lunar Mine Expedition - Guild Overview`)
                 .setColor(0x8B4513)
                 .setDescription(`📊 ${sortedClans.length} guilds sorted by total attack power`)
                 .setTimestamp();
@@ -308,11 +308,11 @@ class InteractionHandler {
                 const guildSummary = 
                     `**👥 Members:** ${guild.members.length}\n` +
                     `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                    `**💥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
-                    `**💎 Relic ${this.CORES_ICON}:** ${guild.totalRelicCores}+\n` +
+                    `**<:II_RC:1385139885924421653> RC:** ${guild.totalRelicCores}+\n` +
                     `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                     `**⭐ Level:** ${guild.level || 'N/A'}\n` +
-                    `**📊 Grade:** ${guild.grade || 'N/A'}\n` +
+                    `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
+                    `**💥 Grade:** ${guild.grade || 'N/A'}\n` +
                     `**🆔 Guild ID:** ${guild.guildId || 'N/A'}`;
                 
                 overviewEmbed.addFields({
@@ -360,15 +360,15 @@ class InteractionHandler {
             const guildSummary = 
                 `**👥 Members:** ${guild.members.length}\n` +
                 `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                `**💥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
-                `**💎 Relic ${this.CORES_ICON}:** ${guild.totalRelicCores}+\n` +
+                `**<:II_RC:1385139885924421653> RC:** ${guild.totalRelicCores}+\n` +
                 `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                 `**⭐ Level:** ${guild.level || 'N/A'}\n` +
-                `**📊 Grade:** ${guild.grade || 'N/A'}\n` +
+                `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
+                `**💥 Grade:** ${guild.grade || 'N/A'}\n` +
                 `**🆔 Guild ID:** ${guild.guildId || 'N/A'}`;
 
             const embed = new EmbedBuilder()
-                .setTitle(`⛏️ ${guild.title}`)
+                .setTitle(`🏰 ${guild.title}`)
                 .setColor(0x8B4513)
                 .setDescription(guildSummary)
                 .setTimestamp();
