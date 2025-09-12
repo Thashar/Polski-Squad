@@ -86,7 +86,7 @@ async function initializeBot() {
         // Log successful initialization
         await logService.logInfo('🚀 Gary Bot initialized successfully');
         
-        logger.info('✅ Gary gotowy - Lunar Mine Expedition Analysis, OCR recognition, Proxy support');
+        logger.info('✅ Gary gotowy - Lunar Mine Expedition Analysis, API integration, Proxy support');
         
     } catch (error) {
         logger.error('Error during Gary bot initialization:', error);

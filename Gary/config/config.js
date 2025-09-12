@@ -43,17 +43,14 @@ module.exports = {
         maxResultsPerGuild: 30
     },
     
-    // OCR Settings
-    ocrSettings: {
-        minSimilarity: 0.49,
-        maxFields: 20,
-        tessdataPath: path.join(__dirname, '../../'),
-        enableImageInversion: true,
-        supportedLanguages: ["eng", "eng+jpn", "eng+jpn+kor"],
-        tempDir: path.join(__dirname, '../temp'),
-        saveProcessedImages: true,
-        processedDir: path.join(__dirname, '../../processed_ocr'),
-        maxProcessedFiles: 100
+    // Guild Search Settings
+    guildSearchSettings: {
+        exactMatchWeight: 1.0,
+        startsWithWeight: 0.9,
+        containsWeight: 0.8,
+        reverseContainsWeight: 0.7,
+        fuzzyThreshold: 0.6,
+        maxSearchResults: 10
     },
     
     // Bot Settings

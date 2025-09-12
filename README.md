@@ -28,7 +28,7 @@ Kolekcja Botów Polski Squad to modularny system zarządzania serwerem Discord z
 
 **Funkcje:**
 - 🌙 **Analiza Lunar Expedition** - Kompleksowa analiza 4 gildii
-- 🔍 **Rozpoznawanie Gildii OCR** - Wielojęzyczne wykrywanie nazw gildii (EN/JP/KR)
+- 🔍 **Inteligentne Wyszukiwanie** - Fuzzy matching nazw gildii z progami podobieństwa
 - 🌐 **Integracja API** - Dane w czasie rzeczywistym z garrytools.com
 - 🔄 **Cache'owane Rankingi** - Top 500 gildii z 6-godzinnymi cyklami odświeżania
 - 🛡️ **Wsparcie Proxy** - Różnorodność sieci z monitorowaniem zdrowia
