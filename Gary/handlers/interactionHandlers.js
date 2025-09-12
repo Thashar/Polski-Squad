@@ -369,7 +369,7 @@ class InteractionHandler {
                 `**🆔 Guild ID:** ${guild.guildId || 'N/A'}`;
 
             const embed = new EmbedBuilder()
-                .setTitle(`## 🏰 ${guild.title}`)
+                .setTitle(`🏰 ${guild.title}`)
                 .setColor(0x8B4513)
                 .setDescription(guildSummary)
                 .setTimestamp();
