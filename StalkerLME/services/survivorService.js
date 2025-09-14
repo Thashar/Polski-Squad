@@ -406,7 +406,7 @@ class SurvivorService {
             .setTimestamp();
 
         // Informacje główne
-        let description = `**💪 Total Power:** ${stats.totalPower}\n`;
+        let description = `**<:II_RC:1385139885924421653> Total RC:** ${stats.totalPower}\n`;
         description += `**⚡ Efficiency:** ${stats.efficiency}% ${this.getEfficiencyEmoji(stats.efficiency)}\n\n`;
 
         // Szczegółowe statystyki
@@ -428,6 +428,9 @@ class SurvivorService {
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
         const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
 
+        // Oblicz łączną sumę Ch dla Twin Lance
+        const totalCount = this.calculateTotalCount(buildData);
+
         // Spróbuj najpierw struktury z wielkimi literami
         for (let i = 0; i < itemTypes.length; i++) {
             const itemType = itemTypes[i];
@@ -435,27 +438,39 @@ class SurvivorService {
             const item = buildData[itemType] || buildData[itemTypeLower];
 
             if (item && item.name && item.name !== 'Unknown') {
-                const emoji = this.getItemEmoji(itemType);
+                const emoji = this.getItemEmojiByName(item.name, totalCount);
                 const e = item.e || item.evolution || 0;
                 const v = item.v || item.vigor || 0;
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
 
-                // Oblicz koszt zasobów zamiast prostego dodawania
+                // Oblicz koszt zasobów
                 const resourceCost = this.calculateItemResourceCost(e, v, c, base);
-
                 const costText = resourceCost > 0 ? ` (${resourceCost})` : '';
-                const detailText = (e > 0 || v > 0 || c > 0 || base > 0)
-                    ? ` E:${e} V:${v} C:${c} B:${base}`
-                    : '';
 
-                equipmentText += `${emoji} **${item.name}**${costText}\n${detailText}\n\n`;
+                // Sprawdź czy pokazać E/V/Ch czy B
+                let detailText = '';
+                if (this.shouldShowEVCh(item.name)) {
+                    // Pokaż E/V/Ch (bez B) w nowym formacie
+                    let details = [];
+                    if (e > 0) details.push(`E${e}`);
+                    if (v > 0) details.push(`V${v}`);
+                    if (c > 0) details.push(`Ch${c}`);
+                    detailText = details.length > 0 ? ` ${details.join(' ')}` : '';
+                } else {
+                    // Pokaż tylko B dla pozostałych przedmiotów
+                    if (base > 0) {
+                        detailText = ` B${base}`;
+                    }
+                }
+
+                equipmentText += `${emoji} **${item.name}**${costText}${detailText}\n\n`;
             }
         }
 
         if (equipmentText) {
             embed.addFields({
-                name: '🎒 Ekwipunek',
+                name: '🎒 EQ',
                 value: equipmentText.trim(),
                 inline: false
             });
@@ -567,6 +582,76 @@ class SurvivorService {
         // B (Base) kosztuje 0 za każdy poziom
 
         return eCost + vCost + cCost;
+    }
+
+    /**
+     * Sprawdza czy przedmiot ma E/V/Ch (True) czy B (False)
+     */
+    shouldShowEVCh(itemName) {
+        const evChItems = [
+            'Twin Lance', 'Evervoid Armor', 'Judgment Necklace',
+            'Stardust Sash', 'Moonscar Bracer', 'Glacial Warboots'
+        ];
+        return evChItems.includes(itemName);
+    }
+
+    /**
+     * Oblicza łączną sumę Ch we wszystkich przedmiotach
+     */
+    calculateTotalCount(buildData) {
+        let totalCount = 0;
+        const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
+        const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
+
+        // Sprawdź obie struktury
+        for (const type of itemTypes) {
+            const item = buildData[type];
+            if (item) {
+                totalCount += item.c || item.count || 0;
+            }
+        }
+
+        if (totalCount === 0) {
+            for (const type of itemTypesLowerCase) {
+                const item = buildData[type];
+                if (item) {
+                    totalCount += item.c || item.count || 0;
+                }
+            }
+        }
+
+        return totalCount;
+    }
+
+    /**
+     * Zwraca emoji dla Twin Lance w zależności od sumy Ch
+     */
+    getTwinLanceEmoji(totalCount) {
+        if (totalCount >= 36) return '<:H_LanceV5:1412958463977328720>';
+        if (totalCount >= 27) return '<:H_LanceV4:1402532664052813865>';
+        if (totalCount >= 18) return '<:H_LanceV3:1402532623288369162>';
+        if (totalCount >= 9) return '<:H_LanceV2:1402532579583983616>';
+        return '<:H_LanceV1:1402532523720052787>';
+    }
+
+    /**
+     * Zwraca emoji dla konkretnego przedmiotu
+     */
+    getItemEmojiByName(itemName, totalCount) {
+        const itemEmojis = {
+            'Twin Lance': this.getTwinLanceEmoji(totalCount),
+            'Evervoid Armor': '<:H_SSArmor:1280422683233746995>',
+            'Judgment Necklace': '<:H_SSNeck:1259958646712959132>',
+            'Stardust Sash': '<:H_SSBelt:1402532705845121096>',
+            'Moonscar Bracer': '<:H_SSGloves:1289551805868408882>',
+            'Glacial Warboots': '<:H_SSBoots:1320333759152918539>',
+            'Voidwaker Handguards': '<:I_VGloves:1209754539381751829>',
+            'Voidwaker Emblem': '<:I_VNeck:1209754519689502720>',
+            'Voidwaker Treads': '<:I_VBoots:1209754068885446716>',
+            'Twisting Belt': '<:I_Twisting:1209754500923920426>',
+            'Eternal Suit': '<:I_ESuit:1209754340114300931>'
+        };
+        return itemEmojis[itemName] || '❓';
     }
 
     /**
