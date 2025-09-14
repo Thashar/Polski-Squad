@@ -7,11 +7,11 @@ const logger = createBotLogger('StalkerLME');
 const confirmationData = new Map();
 
 async function handleInteraction(interaction, sharedState, config) {
-    const { client, databaseService, ocrService, punishmentService, reminderService } = sharedState;
-    
+    const { client, databaseService, ocrService, punishmentService, reminderService, survivorService } = sharedState;
+
     try {
         if (interaction.isCommand()) {
-            await handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService);
+            await handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService, survivorService);
         } else if (interaction.isStringSelectMenu()) {
             await handleSelectMenu(interaction, config, reminderService);
         } else if (interaction.isButton()) {
@@ -35,12 +35,12 @@ async function handleInteraction(interaction, sharedState, config) {
     }
 }
 
-async function handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService) {
+async function handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService, survivorService) {
     if (!hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, ephemeral: true });
         return;
     }
-    
+
     switch (interaction.commandName) {
         case 'punish':
             await handlePunishCommand(interaction, config, ocrService, punishmentService);
@@ -59,6 +59,9 @@ async function handleSlashCommand(interaction, config, databaseService, ocrServi
             break;
         case 'ocr-debug':
             await handleOcrDebugCommand(interaction, config);
+            break;
+        case 'decode':
+            await handleDecodeCommand(interaction, config, survivorService);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
@@ -750,6 +753,15 @@ async function registerSlashCommands(client) {
                 option.setName('enabled')
                     .setDescription('Włącz (true) lub wyłącz (false) szczegółowe logowanie')
                     .setRequired(false)
+            ),
+
+        new SlashCommandBuilder()
+            .setName('decode')
+            .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku')
+            .addStringOption(option =>
+                option.setName('code')
+                    .setDescription('Kod buildu Survivor.io do zdekodowania')
+                    .setRequired(true)
             )
     ];
     
@@ -1178,9 +1190,9 @@ async function handleOcrDebugCommand(interaction, config) {
         });
         return;
     }
-    
+
     const enabled = interaction.options.getBoolean('enabled');
-    
+
     if (enabled === null) {
         // Sprawdź aktualny stan
         const currentState = config.ocr.detailedLogging.enabled;
@@ -1190,19 +1202,70 @@ async function handleOcrDebugCommand(interaction, config) {
         });
         return;
     }
-    
+
     // Przełącz stan
     config.ocr.detailedLogging.enabled = enabled;
-    
+
     const statusText = enabled ? '✅ Włączone' : '❌ Wyłączone';
     const emoji = enabled ? '🔍' : '🔇';
-    
+
     logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
-    
+
     await interaction.reply({
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
         ephemeral: true
     });
+}
+
+async function handleDecodeCommand(interaction, config, survivorService) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const code = interaction.options.getString('code');
+
+    if (!code || code.trim().length === 0) {
+        await interaction.reply({
+            content: '❌ Nie podano kodu do dekodowania.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    try {
+        const buildData = survivorService.decodeBuild(code.trim());
+
+        if (!buildData.success) {
+            await interaction.editReply({
+                content: `❌ **Nie udało się zdekodować kodu**\n\n**Błąd:** ${buildData.error}\n**Kod:** \`${code}\``,
+                ephemeral: true
+            });
+            return;
+        }
+
+        const embed = survivorService.createBuildEmbed(buildData.data, interaction.user.tag, code);
+
+        await interaction.editReply({
+            embeds: [embed]
+        });
+
+        logger.info(`✅ Pomyślnie zdekodowano build Survivor.io dla ${interaction.user.tag}`);
+
+    } catch (error) {
+        logger.error(`❌ Błąd dekodowania build Survivor.io: ${error.message}`);
+
+        await interaction.editReply({
+            content: `❌ **Wystąpił błąd podczas dekodowania**\n\n**Błąd:** ${error.message}\n**Kod:** \`${code}\``,
+            ephemeral: true
+        });
+    }
 }
 
 module.exports = {

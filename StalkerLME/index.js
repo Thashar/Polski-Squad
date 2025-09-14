@@ -10,6 +10,7 @@ const OCRService = require('./services/ocrService');
 const PunishmentService = require('./services/punishmentService');
 const ReminderService = require('./services/reminderService');
 const VacationService = require('./services/vacationService');
+const SurvivorService = require('./services/survivorService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('StalkerLME');
@@ -29,6 +30,7 @@ const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config);
 const vacationService = new VacationService(config, logger);
+const survivorService = new SurvivorService(config, logger);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
@@ -38,7 +40,8 @@ const sharedState = {
     ocrService,
     punishmentService,
     reminderService,
-    vacationService
+    vacationService,
+    survivorService
 };
 
 client.once(Events.ClientReady, async () => {
