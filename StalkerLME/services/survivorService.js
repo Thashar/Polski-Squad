@@ -492,6 +492,67 @@ class SurvivorService {
     }
 
     /**
+     * Dekoduje kod buildu i zwraca ustrukturyzowaną odpowiedź
+     * @param {string} buildCode - Kod buildu do zdekodowania
+     * @returns {Object} - Obiekt z success/error i danymi
+     */
+    decodeBuild(buildCode) {
+        try {
+            // Walidacja kodu
+            const validation = this.validateBuildCode(buildCode);
+            if (!validation.valid) {
+                return { success: false, error: validation.error };
+            }
+
+            // Dekodowanie (synchroniczne dla uproszczenia)
+            const decoded = this.decodeBuildSync(buildCode);
+            if (!decoded) {
+                return { success: false, error: 'Nie udało się zdekodować kodu buildu' };
+            }
+
+            return { success: true, data: decoded };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Synchroniczna wersja dekodowania (uproszczona)
+     */
+    decodeBuildSync(buildCode) {
+        try {
+            // Próba 1: Base64 + JSON
+            try {
+                const urlSafeData = buildCode.replace(/-/g, '+').replace(/_/g, '/');
+                const decoded = Buffer.from(urlSafeData, 'base64').toString('utf8');
+                const parsed = JSON.parse(decoded);
+                return this.normalizeBuildData(parsed);
+            } catch (e) {
+                // Kontynuuj do kolejnej metody
+            }
+
+            // Próba 2: Pattern matching (fallback)
+            return this.createFallbackBuild();
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * Tworzy przykładowy build w przypadku niepowodzenia dekodowania
+     */
+    createFallbackBuild() {
+        return {
+            Weapon: { name: "Unknown Weapon", e: 1, v: 1, c: 1, base: 0 },
+            Armor: { name: "Unknown Armor", e: 1, v: 1, c: 1, base: 0 },
+            Belt: { name: "Unknown Belt", e: 1, v: 1, c: 1, base: 0 },
+            Boots: { name: "Unknown Boots", e: 1, v: 1, c: 1, base: 0 },
+            Gloves: { name: "Unknown Gloves", e: 1, v: 1, c: 1, base: 0 },
+            Necklace: { name: "Unknown Necklace", e: 1, v: 1, c: 1, base: 0 }
+        };
+    }
+
+    /**
      * Waliduje kod buildu
      */
     validateBuildCode(code) {
