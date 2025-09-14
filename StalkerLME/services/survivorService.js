@@ -464,17 +464,27 @@ class SurvivorService {
                     if (e > 0) details.push(`E${e}`);
                     if (v > 0) details.push(`V${v}`);
                     if (c > 0) details.push(`C${c}`);
-                    detailText = details.length > 0 ? ` ${details.join(' ')}` : '';
+                    detailText = details.length > 0 ? ` • ${details.join(' ')}` : '';
 
                     // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                    costText = resourceCost > 0 ? ` • ${resourceCost} <:II_RC:1385139885924421653>` : '';
+                    costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
                 } else {
-                    // Pokaż tylko B dla pozostałych przedmiotów (bez kosztów zasobów)
+                    // Pokaż B dla pozostałych przedmiotów
                     if (base > 0) {
                         detailText = ` B${base}`;
+
+                        // Sprawdź czy to specjalny przedmiot z kosztem zasobów
+                        const specialItems = ['Eternal Suit', 'Voidwaker Emblem', 'Voidwaker Treads', 'Voidwaker Handguards', 'Twisting Belt'];
+                        if (specialItems.includes(item.name)) {
+                            const resourceCost = this.calculateSpecialItemResourceCost(base, item.name);
+                            costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
+                        } else {
+                            costText = ''; // Brak kosztów dla zwykłych przedmiotów z B
+                        }
+                    } else {
+                        costText = '';
                     }
-                    costText = ''; // Brak kosztów dla przedmiotów z B
                 }
 
                 equipmentText += `${emoji} **${item.name}**${detailText}${costText}\n`;
@@ -587,17 +597,51 @@ class SurvivorService {
      */
     shouldCalculateResourceCost(itemName) {
         const noResourceCostItems = [
-            'Voidwaker Handguards', 'Voidwaker Emblem', 'Voidwaker Treads',
-            'Twisting Belt', 'Eternal Suit'
+            // Wszystkie przedmioty teraz mają koszt zasobów
         ];
         return !noResourceCostItems.includes(itemName);
+    }
+
+    /**
+     * Oblicza specjalne koszty zasobów dla określonych przedmiotów B
+     */
+    calculateSpecialItemResourceCost(base, itemName) {
+        const specialItems = {
+            'Eternal Suit': 'eternal',
+            'Voidwaker Emblem': 'void',
+            'Voidwaker Treads': 'void',
+            'Voidwaker Handguards': 'void',
+            'Twisting Belt': 'chaos'
+        };
+
+        const resourceType = specialItems[itemName];
+        if (!resourceType || base === 0) {
+            return 0;
+        }
+
+        // Pierwszy poziom B = 5 + 100, drugi = 10 + 200, trzeci = 20 + 300
+        const costs = [0, 5, 10, 20]; // poziom 0, 1, 2, 3
+        const baseCosts = [0, 100, 200, 300]; // base dla każdego poziomu
+
+        let totalCost = 0;
+        for (let i = 1; i <= base && i < costs.length; i++) {
+            totalCost += costs[i] + baseCosts[i];
+        }
+
+        return totalCost;
     }
 
     /**
      * Oblicza łączny koszt zasobów dla przedmiotu (proste dodawanie - stary system)
      */
     calculateItemResourceCost(e, v, c, base, itemName) {
-        // Niektóre przedmioty nie mają kosztu zasobów
+        // Sprawdź czy to przedmiot specjalny (B)
+        const specialItems = ['Eternal Suit', 'Voidwaker Emblem', 'Voidwaker Treads', 'Voidwaker Handguards', 'Twisting Belt'];
+        if (specialItems.includes(itemName)) {
+            return this.calculateSpecialItemResourceCost(base || 0, itemName);
+        }
+
+        // Standardowe przedmioty E/V/C
         if (!this.shouldCalculateResourceCost(itemName)) {
             return 0;
         }
@@ -606,7 +650,7 @@ class SurvivorService {
         const eCost = this.calculateOldEVCost(e || 0);
         const vCost = this.calculateOldEVCost(v || 0);
         const cCost = this.calculateOldCCost(c || 0);
-        // B (Base) kosztuje 0 za każdy poziom
+        // B (Base) kosztuje 0 za każdy poziom dla standardowych przedmiotów
 
         return eCost + vCost + cCost;
     }
