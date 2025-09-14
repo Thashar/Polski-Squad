@@ -413,7 +413,7 @@ class SurvivorService {
         embed.addFields(
             {
                 name: '## 📊 Statystyki Główne',
-                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEvolution}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVigor}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalCount}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBase}`,
+                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
                 inline: false
             }
         );
@@ -595,7 +595,7 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza łączny koszt zasobów dla przedmiotu (wszystkie fragmenty razem)
+     * Oblicza łączny koszt zasobów dla przedmiotu (proste dodawanie - stary system)
      */
     calculateItemResourceCost(e, v, c, base, itemName) {
         // Niektóre przedmioty nie mają kosztu zasobów
@@ -603,17 +603,37 @@ class SurvivorService {
             return 0;
         }
 
-        const eCosts = this.calculateEVCost(e || 0);
-        const vCosts = this.calculateEVCost(v || 0);
-        const cCosts = this.calculateCCost(c || 0);
+        // Stary system - proste dodawanie poziomów
+        const eCost = this.calculateOldEVCost(e || 0);
+        const vCost = this.calculateOldEVCost(v || 0);
+        const cCost = this.calculateOldCCost(c || 0);
+        // B (Base) kosztuje 0 za każdy poziom
 
-        // Suma wszystkich fragmentów
-        const totalEternal = eCosts.eternalVoid;
-        const totalVoid = vCosts.eternalVoid;
-        const totalChaos = cCosts.chaos;
-        const totalBase = eCosts.base + vCosts.base + cCosts.base;
+        return eCost + vCost + cCost;
+    }
 
-        return totalEternal + totalVoid + totalChaos + totalBase;
+    /**
+     * Stary system obliczania kosztów E/V (dla wyświetlania przy itemach)
+     */
+    calculateOldEVCost(level) {
+        const costs = [0, 1, 2, 3, 5, 8]; // Poziom 0 = 0, 1 = 1, 2 = 2, 3 = 3, 4 = 5, 5 = 8
+        let totalCost = 0;
+        for (let i = 1; i <= level && i < costs.length; i++) {
+            totalCost += costs[i];
+        }
+        return totalCost;
+    }
+
+    /**
+     * Stary system obliczania kosztów C (dla wyświetlania przy itemach)
+     */
+    calculateOldCCost(level) {
+        const costs = [0, 1, 2, 3, 3, 4, 4, 6, 6, 8, 8]; // Poziom 0 = 0, 1 = 1, ..., 9 = 8, 10 = 8
+        let totalCost = 0;
+        for (let i = 1; i <= level && i < costs.length; i++) {
+            totalCost += costs[i];
+        }
+        return totalCost;
     }
 
     /**
@@ -687,15 +707,21 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza statystyki buildu - używa kosztów zasobów zamiast prostego dodawania poziomów
+     * Oblicza statystyki buildu - nowe fragmenty do wyświetlania, stare koszty dla Total RC
      */
     calculateBuildStatistics(buildData) {
         let totalEvolutionLevels = 0;
         let totalVigorLevels = 0;
         let totalCountLevels = 0;
         let totalBaseLevels = 0;
-        let totalResourceCost = 0;
-        let totalEvolutionCost = 0;
+        let totalResourceCost = 0; // Stary system dla Total RC
+        let totalEvolutionCost = 0; // Stary system dla efficiency
+
+        // Nowe fragmenty (dla wyświetlania z emojis)
+        let totalEternalFragments = 0;
+        let totalVoidFragments = 0;
+        let totalChaosFragments = 0;
+        let totalBaseFragments = 0;
         let itemCount = 0;
 
         // Sprawdź strukturę danych i obsłuż obie wersje
@@ -710,25 +736,32 @@ class SurvivorService {
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
 
-                // Poziomy (dla wyświetlania)
+                // Poziomy (dla podstawowego wyświetlania)
                 totalEvolutionLevels += e;
                 totalVigorLevels += v;
                 totalCountLevels += c;
                 totalBaseLevels += base;
 
-                // Koszty zasobów (dla prawdziwych obliczeń) - tylko dla przedmiotów z kosztem
+                // Stary system kosztów dla Total RC i efficiency
                 if (this.shouldCalculateResourceCost(item.name)) {
-                    const eCosts = this.calculateEVCost(e);
-                    const vCosts = this.calculateEVCost(v);
-                    const cCosts = this.calculateCCost(c);
+                    const eCost = this.calculateOldEVCost(e);
+                    const vCost = this.calculateOldEVCost(v);
+                    const cCost = this.calculateOldCCost(c);
 
-                    // Suma Eternal fragmentów dla efficiency
-                    totalEvolutionCost += eCosts.eternalVoid;
+                    totalEvolutionCost += eCost;
+                    totalResourceCost += eCost + vCost + cCost;
+                }
 
-                    // Suma wszystkich fragmentów dla total power
-                    const itemTotalCost = eCosts.eternalVoid + vCosts.eternalVoid + cCosts.chaos +
-                                         eCosts.base + vCosts.base + cCosts.base;
-                    totalResourceCost += itemTotalCost;
+                // Nowy system fragmentów (dla wyświetlania z emojis)
+                if (this.shouldCalculateResourceCost(item.name)) {
+                    const eFragments = this.calculateEVCost(e);
+                    const vFragments = this.calculateEVCost(v);
+                    const cFragments = this.calculateCCost(c);
+
+                    totalEternalFragments += eFragments.eternalVoid;
+                    totalVoidFragments += vFragments.eternalVoid;
+                    totalChaosFragments += cFragments.chaos;
+                    totalBaseFragments += eFragments.base + vFragments.base + cFragments.base;
                 }
 
                 itemCount++;
@@ -752,12 +785,17 @@ class SurvivorService {
         const efficiency = totalResourceCost > 0 ? Math.round((totalEvolutionCost / totalResourceCost) * 100) : 0;
 
         return {
-            // Poziomy (dla wyświetlania)
+            // Poziomy (dla podstawowego wyświetlania)
             totalEvolution: totalEvolutionLevels,
             totalVigor: totalVigorLevels,
             totalCount: totalCountLevels,
             totalBase: totalBaseLevels,
-            // Koszty zasobów (rzeczywiste statystyki)
+            // Nowe fragmenty (dla wyświetlania z emojis)
+            totalEternalFragments,
+            totalVoidFragments,
+            totalChaosFragments,
+            totalBaseFragments,
+            // Stary system (dla Total RC i efficiency)
             totalPower: totalResourceCost,
             totalEvolutionCost,
             efficiency,
