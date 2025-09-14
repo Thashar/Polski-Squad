@@ -48,13 +48,8 @@ class MessageService {
 
             // Sprawdzenie czy przyznana rola to "Daily"
             if (roleResult.role.name === 'Daily') {
-                const lotteryInfo = this.lotteryService 
-                    ? this.lotteryService.formatActiveLotteriesInfo(roleResult.role.id)
-                    : '';
-                const lotteryMessage = lotteryInfo 
-                    ? `\n🎰 **Aktywne loterie:**\n${lotteryInfo}`
-                    : '';
-                baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: lotteryMessage });
+                // Usunięto informacje o aktywnych loteriach
+                baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: '' });
             }
         } else {
             baseMessage = formatMessage(this.config.messages.analysisAlreadyHasRole, {
@@ -63,13 +58,8 @@ class MessageService {
 
             // Sprawdzenie czy to kanał Daily
             if (channelConfig && channelConfig.name === 'Daily') {
-                const lotteryInfo = this.lotteryService 
-                    ? this.lotteryService.formatActiveLotteriesInfo(channelConfig.requiredRoleId)
-                    : '';
-                const lotteryMessage = lotteryInfo 
-                    ? `\n🎰 **Aktywne loterie:**\n${lotteryInfo}`
-                    : '';
-                baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: lotteryMessage });
+                // Usunięto informacje o aktywnych loteriach
+                baseMessage += formatMessage(this.config.messages.dailyLottery, { lotteryInfo: '' });
             }
         }
 
@@ -80,13 +70,8 @@ class MessageService {
 
         // Dodaj informację o loterii CX
         if (channelConfig && channelConfig.name === 'CX') {
-            const lotteryInfo = this.lotteryService 
-                ? this.lotteryService.formatActiveLotteriesInfo(channelConfig.requiredRoleId)
-                : '';
-            const lotteryMessage = lotteryInfo 
-                ? `\n🎰 **Aktywne loterie:** ${lotteryInfo}`
-                : '';
-            baseMessage += formatMessage(this.config.messages.cxLottery, { lotteryInfo: lotteryMessage });
+            // Usunięto informacje o aktywnych loteriach
+            baseMessage += formatMessage(this.config.messages.cxLottery, { lotteryInfo: '' });
         }
 
         return baseMessage;
