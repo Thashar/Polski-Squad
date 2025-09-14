@@ -378,8 +378,11 @@ class SurvivorService {
     /**
      * Tworzy embed z informacjami o buildzie
      */
-    createBuildEmbed(build, stats, originalCode) {
+    createBuildEmbed(buildData, userTag, buildCode) {
         const { EmbedBuilder } = require('discord.js');
+
+        // Oblicz statystyki buildu
+        const stats = this.calculateBuildStatistics(buildData);
 
         // Emojis dla różnych typów ekwipunku
         const itemEmojis = {
@@ -410,32 +413,43 @@ class SurvivorService {
         embed.addFields(
             {
                 name: '📊 Statystyki Główne',
-                value: `**Evolution:** ${stats.evolutionLevels}\n**Vigor:** ${stats.vigorPoints}\n**Count:** ${stats.countBonus}\n**Base:** ${stats.baseStats}`,
+                value: `**Evolution:** ${stats.totalEvolution}\n**Vigor:** ${stats.totalVigor}\n**Count:** ${stats.totalCount}\n**Base:** ${stats.totalBase}`,
                 inline: true
             },
             {
                 name: '⚙️ Informacje',
-                value: `**Items:** ${stats.itemCount}/6\n**Version:** ${build.metadata?.version || 0}\n**Method:** ${build.metadata?.analysisMethod || 'standard'}`,
+                value: `**Items:** ${stats.itemCount}/6\n**Version:** ${buildData.metadata?.version || 0}\n**Method:** ${buildData.metadata?.analysisMethod || 'standard'}`,
                 inline: true
             }
         );
 
-        // Lista ekwipunku
+        // Lista ekwipunku - obsłuż obie struktury danych
         let equipmentText = '';
-        const items = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
+        const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
+        const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
 
-        items.forEach(itemType => {
-            const item = build[itemType];
-            if (item) {
-                const emoji = itemEmojis[itemType] || '🔧';
-                const powerText = item.totalPower > 0 ? ` (${item.totalPower})` : '';
-                const detailText = item.evolution > 0 || item.vigor > 0 || item.count > 0 || item.base > 0
-                    ? ` E:${item.evolution} V:${item.vigor} C:${item.count} B:${item.base}`
+        // Spróbuj najpierw struktury z wielkimi literami
+        for (let i = 0; i < itemTypes.length; i++) {
+            const itemType = itemTypes[i];
+            const itemTypeLower = itemTypesLowerCase[i];
+            const item = buildData[itemType] || buildData[itemTypeLower];
+
+            if (item && item.name && item.name !== 'Unknown') {
+                const emoji = this.getItemEmoji(itemType);
+                const e = item.e || item.evolution || 0;
+                const v = item.v || item.vigor || 0;
+                const c = item.c || item.count || 0;
+                const base = item.base || 0;
+                const totalPower = e + v + c + base;
+
+                const powerText = totalPower > 0 ? ` (${totalPower})` : '';
+                const detailText = (e > 0 || v > 0 || c > 0 || base > 0)
+                    ? ` E:${e} V:${v} C:${c} B:${base}`
                     : '';
 
                 equipmentText += `${emoji} **${item.name}**${powerText}\n${detailText}\n\n`;
             }
-        });
+        }
 
         if (equipmentText) {
             embed.addFields({
@@ -456,11 +470,11 @@ class SurvivorService {
         }
 
         // Kod buildu (skrócony)
-        const shortCode = originalCode.length > 50
-            ? originalCode.substring(0, 47) + '...'
-            : originalCode;
+        const shortCode = buildCode.length > 50
+            ? buildCode.substring(0, 47) + '...'
+            : buildCode;
 
-        embed.setFooter({ text: `Build Code: ${shortCode}` });
+        embed.setFooter({ text: `Dekodowane przez ${userTag} | ${shortCode}` });
 
         embed.setDescription(description);
 
@@ -518,7 +532,7 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza statystyki buildu
+     * Oblicza statystyki buildu - obsługuje obie struktury danych
      */
     calculateBuildStatistics(buildData) {
         let totalEvolution = 0;
@@ -527,16 +541,33 @@ class SurvivorService {
         let totalBase = 0;
         let itemCount = 0;
 
+        // Sprawdź strukturę danych i obsłuż obie wersje
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
+        const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
 
+        // Obsłuż strukturę z wielkimi literami (nowa)
         for (const type of itemTypes) {
             const item = buildData[type];
-            if (item && item.name !== 'Unknown') {
+            if (item && item.name !== 'Unknown' && item.name) {
                 totalEvolution += item.e || 0;
                 totalVigor += item.v || 0;
                 totalCount += item.c || 0;
                 totalBase += item.base || 0;
                 itemCount++;
+            }
+        }
+
+        // Jeśli nie znaleziono przedmiotów, spróbuj struktury z małymi literami (oryginalna)
+        if (itemCount === 0) {
+            for (const type of itemTypesLowerCase) {
+                const item = buildData[type];
+                if (item && item.name !== 'Unknown' && item.name) {
+                    totalEvolution += item.evolution || item.e || 0;
+                    totalVigor += item.vigor || item.v || 0;
+                    totalCount += item.count || item.c || 0;
+                    totalBase += item.base || 0;
+                    itemCount++;
+                }
             }
         }
 
@@ -572,6 +603,9 @@ class SurvivorService {
             if (!decoded) {
                 return { success: false, error: 'Nie udało się zdekodować kodu buildu' };
             }
+
+            // Debug logging
+            this.logger.info('🔍 Zdekodowane dane:', JSON.stringify(decoded, null, 2));
 
             return { success: true, data: decoded };
         } catch (error) {
