@@ -440,14 +440,16 @@ class SurvivorService {
                 const v = item.v || item.vigor || 0;
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
-                const totalPower = e + v + c + base;
 
-                const powerText = totalPower > 0 ? ` (${totalPower})` : '';
+                // Oblicz koszt zasobów zamiast prostego dodawania
+                const resourceCost = this.calculateItemResourceCost(e, v, c, base);
+
+                const costText = resourceCost > 0 ? ` (${resourceCost})` : '';
                 const detailText = (e > 0 || v > 0 || c > 0 || base > 0)
                     ? ` E:${e} V:${v} C:${c} B:${base}`
                     : '';
 
-                equipmentText += `${emoji} **${item.name}**${powerText}\n${detailText}\n\n`;
+                equipmentText += `${emoji} **${item.name}**${costText}\n${detailText}\n\n`;
             }
         }
 
@@ -532,54 +534,108 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza statystyki buildu - obsługuje obie struktury danych
+     * Oblicza koszt zasobów dla danego poziomu E (Evolution) lub V (Vigor)
+     */
+    calculateEVCost(level) {
+        const costs = [0, 1, 2, 3, 5, 8]; // Poziom 0 = 0, 1 = 1, 2 = 2, 3 = 3, 4 = 5, 5 = 8
+        let totalCost = 0;
+        for (let i = 1; i <= level && i < costs.length; i++) {
+            totalCost += costs[i];
+        }
+        return totalCost;
+    }
+
+    /**
+     * Oblicza koszt zasobów dla danego poziomu C (Count)
+     */
+    calculateCCost(level) {
+        const costs = [0, 1, 2, 3, 3, 4, 4, 6, 6, 8, 8]; // Poziom 0 = 0, 1 = 1, ..., 9 = 8, 10 = 8
+        let totalCost = 0;
+        for (let i = 1; i <= level && i < costs.length; i++) {
+            totalCost += costs[i];
+        }
+        return totalCost;
+    }
+
+    /**
+     * Oblicza łączny koszt zasobów dla przedmiotu
+     */
+    calculateItemResourceCost(e, v, c, base) {
+        const eCost = this.calculateEVCost(e || 0);
+        const vCost = this.calculateEVCost(v || 0);
+        const cCost = this.calculateCCost(c || 0);
+        // B (Base) kosztuje 0 za każdy poziom
+
+        return eCost + vCost + cCost;
+    }
+
+    /**
+     * Oblicza statystyki buildu - używa kosztów zasobów zamiast prostego dodawania poziomów
      */
     calculateBuildStatistics(buildData) {
-        let totalEvolution = 0;
-        let totalVigor = 0;
-        let totalCount = 0;
-        let totalBase = 0;
+        let totalEvolutionLevels = 0;
+        let totalVigorLevels = 0;
+        let totalCountLevels = 0;
+        let totalBaseLevels = 0;
+        let totalResourceCost = 0;
+        let totalEvolutionCost = 0;
         let itemCount = 0;
 
         // Sprawdź strukturę danych i obsłuż obie wersje
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
         const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
 
+        // Funkcja do przetwarzania przedmiotu
+        const processItem = (item) => {
+            if (item && item.name !== 'Unknown' && item.name) {
+                const e = item.e || item.evolution || 0;
+                const v = item.v || item.vigor || 0;
+                const c = item.c || item.count || 0;
+                const base = item.base || 0;
+
+                // Poziomy (dla wyświetlania)
+                totalEvolutionLevels += e;
+                totalVigorLevels += v;
+                totalCountLevels += c;
+                totalBaseLevels += base;
+
+                // Koszty zasobów (dla prawdziwych obliczeń)
+                const eCost = this.calculateEVCost(e);
+                const vCost = this.calculateEVCost(v);
+                const cCost = this.calculateCCost(c);
+
+                totalEvolutionCost += eCost;
+                totalResourceCost += eCost + vCost + cCost; // B kosztuje 0
+
+                itemCount++;
+            }
+        };
+
         // Obsłuż strukturę z wielkimi literami (nowa)
         for (const type of itemTypes) {
             const item = buildData[type];
-            if (item && item.name !== 'Unknown' && item.name) {
-                totalEvolution += item.e || 0;
-                totalVigor += item.v || 0;
-                totalCount += item.c || 0;
-                totalBase += item.base || 0;
-                itemCount++;
-            }
+            processItem(item);
         }
 
         // Jeśli nie znaleziono przedmiotów, spróbuj struktury z małymi literami (oryginalna)
         if (itemCount === 0) {
             for (const type of itemTypesLowerCase) {
                 const item = buildData[type];
-                if (item && item.name !== 'Unknown' && item.name) {
-                    totalEvolution += item.evolution || item.e || 0;
-                    totalVigor += item.vigor || item.v || 0;
-                    totalCount += item.count || item.c || 0;
-                    totalBase += item.base || 0;
-                    itemCount++;
-                }
+                processItem(item);
             }
         }
 
-        const totalPower = totalEvolution + totalVigor + totalCount + totalBase;
-        const efficiency = totalPower > 0 ? Math.round((totalEvolution / totalPower) * 100) : 0;
+        const efficiency = totalResourceCost > 0 ? Math.round((totalEvolutionCost / totalResourceCost) * 100) : 0;
 
         return {
-            totalEvolution,
-            totalVigor,
-            totalCount,
-            totalBase,
-            totalPower,
+            // Poziomy (dla wyświetlania)
+            totalEvolution: totalEvolutionLevels,
+            totalVigor: totalVigorLevels,
+            totalCount: totalCountLevels,
+            totalBase: totalBaseLevels,
+            // Koszty zasobów (rzeczywiste statystyki)
+            totalPower: totalResourceCost,
+            totalEvolutionCost,
             efficiency,
             itemCount
         };
