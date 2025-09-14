@@ -294,9 +294,11 @@ class AnalysisService {
         if (nickIndex !== -1) {
             const afterNickStart = nickIndex + foundNickVariant.length;
             let afterNick = line.substring(afterNickStart);
-            
-            afterNick = afterNick.replace(/^[^a-zA-Z0-9]*/, '').trim();
-            logger.info(`Tekst po nicku: "${afterNick}"`);
+            logger.info(`Surowy tekst po nicku: "${afterNick}"`);
+
+            // Usuń wszystkie znaki specjalne z początku, pozostaw tylko cyfry i litery
+            afterNick = afterNick.replace(/^[^a-zA-Z0-9]+/, '').trim();
+            logger.info(`Tekst po nicku po czyszczeniu: "${afterNick}"`);
 
             // Próbuj znaleźć wynik na końcu linii, ignorując znaki specjalne przed liczbą
             const potentialScoreMatch = afterNick.match(/(\S+)\s*$/);
@@ -304,15 +306,20 @@ class AnalysisService {
                 let rawScore = potentialScoreMatch[1];
                 logger.info(`Potencjalny wynik: "${rawScore}"`);
 
-                // Jeśli wynik zaczyna się od + lub innych znaków specjalnych, usuń je
-                const cleanedScore = rawScore.replace(/^[+\-*"'`~!@#$%^&*()[\]{}\\|;:,.<>?/]+/, '');
+                // Usuń znaki specjalne z początku i końca wyniku
+                const cleanedScore = rawScore.replace(/^[+\-*"'`~!@#$%^&*()[\]{}\\|;:,.<>?/]+/, '').replace(/[+\-*"'`~!@#$%^&*()[\]{}\\|;:,.<>?/]+$/, '');
                 if (cleanedScore !== rawScore) {
                     logger.info(`Wynik po usunięciu znaków specjalnych: "${cleanedScore}"`);
                     rawScore = cleanedScore;
                 }
 
+                logger.info(`Wywołuję normalizeScore z: "${rawScore}"`);
                 const normalizedResult = this.ocrService.normalizeScore(rawScore, channelConfig);
+                logger.info(`Wynik normalizacji:`, normalizedResult);
+
+                logger.info(`Wywołuję validateScore z normalizacją:`, normalizedResult);
                 const validation = this.validateScore(normalizedResult, channelConfig);
+                logger.info(`Wynik walidacji:`, validation);
 
                 if (validation.isValid) {
                     logger.info(`Znaleziono prawidłowy wynik: ${validation.score}${validation.variant ? ` (s/S -> ${validation.variant})` : ''}`);
