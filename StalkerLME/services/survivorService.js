@@ -406,8 +406,7 @@ class SurvivorService {
             .setTimestamp();
 
         // Informacje główne
-        let description = `**<:II_RC:1385139885924421653> Total RC:** ${stats.totalPower}\n`;
-        description += `**⚡ Efficiency:** ${stats.efficiency}% ${this.getEfficiencyEmoji(stats.efficiency)}\n\n`;
+        let description = `**<:II_RC:1385139885924421653> Total RC:** ${stats.totalPower}\n\n`;
 
         // Szczegółowe statystyki
         embed.addFields(
@@ -455,28 +454,30 @@ class SurvivorService {
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
 
-                // Nowy format: emoji + e1v2 c2 - 7 RC (bez nazwy przedmiotu)
+                // Sprawdź czy pokazać E/V/C czy B
+                let detailText = '';
+                let costText = '';
+
                 if (this.shouldShowEVCh(item.name)) {
                     // Pokaż E/V/C (bez B) w nowym formacie + oblicz koszt zasobów
                     let details = [];
-                    if (e > 0) details.push(`e${e}`);
-                    if (v > 0) details.push(`v${v}`);
-                    if (c > 0) details.push(`c${c}`);
-                    const detailText = details.length > 0 ? details.join('') : '';
+                    if (e > 0) details.push(`E${e}`);
+                    if (v > 0) details.push(`V${v}`);
+                    if (c > 0) details.push(`C${c}`);
+                    detailText = details.length > 0 ? ` ${details.join(' ')}` : '';
 
-                    // Oblicz koszt zasobów tylko dla przedmiotów E/V/C
+                    // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                    const costText = resourceCost > 0 ? ` - ${resourceCost} <:II_RC:1385139885924421653>` : '';
-
-                    equipmentText += `${emoji} ${detailText}${costText}\n`;
+                    costText = resourceCost > 0 ? ` ${resourceCost} <:II_RC:1385139885924421653>` : '';
                 } else {
                     // Pokaż tylko B dla pozostałych przedmiotów (bez kosztów zasobów)
                     if (base > 0) {
-                        equipmentText += `${emoji} b${base}\n`;
-                    } else {
-                        equipmentText += `${emoji}\n`;
+                        detailText = ` B${base}`;
                     }
+                    costText = ''; // Brak kosztów dla przedmiotów z B
                 }
+
+                equipmentText += `${emoji} **${item.name}**${detailText}${costText}\n`;
             }
         }
 
@@ -740,8 +741,8 @@ class SurvivorService {
                 totalCountLevels += c;
                 totalBaseLevels += base;
 
-                // Stary system kosztów dla Total RC i efficiency
-                if (this.shouldCalculateResourceCost(item.name)) {
+                // Stary system kosztów dla Total RC i efficiency - tylko przedmioty E/V/C
+                if (this.shouldCalculateResourceCost(item.name) && this.shouldShowEVCh(item.name)) {
                     const eCost = this.calculateOldEVCost(e);
                     const vCost = this.calculateOldEVCost(v);
                     const cCost = this.calculateOldCCost(c);
@@ -750,8 +751,8 @@ class SurvivorService {
                     totalResourceCost += eCost + vCost + cCost;
                 }
 
-                // Nowy system fragmentów (dla wyświetlania z emojis)
-                if (this.shouldCalculateResourceCost(item.name)) {
+                // Nowy system fragmentów (dla wyświetlania z emojis) - tylko przedmioty E/V/C
+                if (this.shouldCalculateResourceCost(item.name) && this.shouldShowEVCh(item.name)) {
                     const eFragments = this.calculateEVCost(e);
                     const vFragments = this.calculateEVCost(v);
                     const cFragments = this.calculateCCost(c);
