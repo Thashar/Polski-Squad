@@ -468,7 +468,7 @@ class SurvivorService {
 
                     // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                    costText = resourceCost > 0 ? ` ${resourceCost} <:II_RC:1385139885924421653>` : '';
+                    costText = resourceCost > 0 ? ` • ${resourceCost} <:II_RC:1385139885924421653>` : '';
                 } else {
                     // Pokaż tylko B dla pozostałych przedmiotów (bez kosztów zasobów)
                     if (base > 0) {
