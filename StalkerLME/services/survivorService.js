@@ -412,14 +412,9 @@ class SurvivorService {
         // Szczegółowe statystyki
         embed.addFields(
             {
-                name: '📊 Statystyki Główne',
+                name: '## 📊 Statystyki Główne',
                 value: `**Evolution:** ${stats.totalEvolution}\n**Vigor:** ${stats.totalVigor}\n**Count:** ${stats.totalCount}\n**Base:** ${stats.totalBase}`,
-                inline: true
-            },
-            {
-                name: '⚙️ Informacje',
-                value: `**Items:** ${stats.itemCount}/6\n**Version:** ${buildData.metadata?.version || 0}\n**Method:** ${buildData.metadata?.analysisMethod || 'standard'}`,
-                inline: true
+                inline: false
             }
         );
 
@@ -445,7 +440,7 @@ class SurvivorService {
                 const base = item.base || 0;
 
                 // Oblicz koszt zasobów
-                const resourceCost = this.calculateItemResourceCost(e, v, c, base);
+                const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
                 const costText = resourceCost > 0 ? ` (${resourceCost})` : '';
 
                 // Sprawdź czy pokazać E/V/Ch czy B
@@ -464,34 +459,17 @@ class SurvivorService {
                     }
                 }
 
-                equipmentText += `${emoji} **${item.name}**${costText}${detailText}\n\n`;
+                equipmentText += `${emoji} **${item.name}**${costText}${detailText}\n`;
             }
         }
 
         if (equipmentText) {
             embed.addFields({
-                name: '🎒 EQ',
+                name: '## 🎒 EQ',
                 value: equipmentText.trim(),
                 inline: false
             });
         }
-
-        // Rekomendacje
-        const recommendations = this.getRecommendations(stats);
-        if (recommendations) {
-            embed.addFields({
-                name: '💡 Rekomendacje',
-                value: recommendations,
-                inline: false
-            });
-        }
-
-        // Kod buildu (skrócony)
-        const shortCode = buildCode.length > 50
-            ? buildCode.substring(0, 47) + '...'
-            : buildCode;
-
-        embed.setFooter({ text: `Dekodowane przez ${userTag} | ${shortCode}` });
 
         embed.setDescription(description);
 
@@ -573,9 +551,25 @@ class SurvivorService {
     }
 
     /**
+     * Sprawdza czy przedmiot ma koszt zasobów
+     */
+    shouldCalculateResourceCost(itemName) {
+        const noResourceCostItems = [
+            'Voidwaker Handguards', 'Voidwaker Emblem', 'Voidwaker Treads',
+            'Twisting Belt', 'Eternal Suit'
+        ];
+        return !noResourceCostItems.includes(itemName);
+    }
+
+    /**
      * Oblicza łączny koszt zasobów dla przedmiotu
      */
-    calculateItemResourceCost(e, v, c, base) {
+    calculateItemResourceCost(e, v, c, base, itemName) {
+        // Niektóre przedmioty nie mają kosztu zasobów
+        if (!this.shouldCalculateResourceCost(itemName)) {
+            return 0;
+        }
+
         const eCost = this.calculateEVCost(e || 0);
         const vCost = this.calculateEVCost(v || 0);
         const cCost = this.calculateCCost(c || 0);
@@ -684,13 +678,15 @@ class SurvivorService {
                 totalCountLevels += c;
                 totalBaseLevels += base;
 
-                // Koszty zasobów (dla prawdziwych obliczeń)
-                const eCost = this.calculateEVCost(e);
-                const vCost = this.calculateEVCost(v);
-                const cCost = this.calculateCCost(c);
+                // Koszty zasobów (dla prawdziwych obliczeń) - tylko dla przedmiotów z kosztem
+                if (this.shouldCalculateResourceCost(item.name)) {
+                    const eCost = this.calculateEVCost(e);
+                    const vCost = this.calculateEVCost(v);
+                    const cCost = this.calculateCCost(c);
 
-                totalEvolutionCost += eCost;
-                totalResourceCost += eCost + vCost + cCost; // B kosztuje 0
+                    totalEvolutionCost += eCost;
+                    totalResourceCost += eCost + vCost + cCost; // B kosztuje 0
+                }
 
                 itemCount++;
             }
