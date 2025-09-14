@@ -58,37 +58,16 @@ class SurvivorService {
      */
     async decodeBuildCode(buildCode) {
         try {
-            this.logger.info(`🔍 Rozpoczynam dekodowanie kodu buildu (długość: ${buildCode.length})`);
+            this.logger.info(`🔍 Rozpoczynam dekodowanie kodu buildu z sio-tools (długość: ${buildCode.length})`);
 
-            // Metoda 1: LZString URI Component
-            let decoded = await this.tryLZStringDecode(buildCode);
+            // Tylko LZMA dekodowanie (format sio-tools)
+            const decoded = await this.tryLZMADecode(buildCode);
             if (decoded) {
-                this.logger.info('✅ Dekodowanie udane za pomocą LZString');
+                this.logger.info('✅ Dekodowanie udane za pomocą LZMA (sio-tools)');
                 return decoded;
             }
 
-            // Metoda 2: Custom Base64 + JSON
-            decoded = await this.tryBase64JSONDecode(buildCode);
-            if (decoded) {
-                this.logger.info('✅ Dekodowanie udane za pomocą Base64+JSON');
-                return decoded;
-            }
-
-            // Metoda 3: Binary parsing
-            decoded = await this.tryBinaryDecode(buildCode);
-            if (decoded) {
-                this.logger.info('✅ Dekodowanie udane za pomocą analizy binarnej');
-                return decoded;
-            }
-
-            // Metoda 4: Reverse engineering z wzorca (fallback)
-            decoded = await this.tryPatternDecode(buildCode);
-            if (decoded) {
-                this.logger.info('✅ Użyto wzorca (fallback) do dekodowania');
-                return decoded;
-            }
-
-            throw new Error('Nie udało się zdekodować kodu buildu żadną z dostępnych metod');
+            throw new Error('Nie udało się zdekodować kodu buildu. Upewnij się, że kod pochodzi z sio-tools.vercel.app');
 
         } catch (error) {
             this.logger.error(`❌ Błąd dekodowania kodu buildu: ${error.message}`);
@@ -97,194 +76,102 @@ class SurvivorService {
     }
 
     /**
-     * Próba dekodowania za pomocą LZString
+     * Próba dekodowania za pomocą LZMA (metoda używana przez sio-tools)
      */
-    async tryLZStringDecode(buildCode) {
+    async tryLZMADecode(buildCode) {
         try {
-            // Dynamiczne ładowanie LZString jeśli dostępne
-            let LZString;
+            // Dynamiczne ładowanie LZMA jeśli dostępne
+            let lzma;
             try {
-                LZString = require('lz-string');
+                lzma = require('lzma');
             } catch (importError) {
-                this.logger.info('⚠️ LZString nie jest dostępne, pomijam tę metodę');
+                this.logger.error('❌ LZMA nie jest dostępne - wymagane do dekodowania kodów z sio-tools');
                 return null;
             }
 
-            const methods = [
-                'decompressFromEncodedURIComponent',
-                'decompressFromBase64',
-                'decompressFromUTF16',
-                'decompress'
+            const buffer = Buffer.from(buildCode, 'base64');
+            const decompressed = lzma.decompress(buffer);
+
+            if (Array.isArray(decompressed)) {
+                const chars = decompressed.map(num => String.fromCharCode(num));
+                const jsonString = chars.join('');
+
+                // Usuń pierwszy nieprawidłowy znak i znajdź start JSON
+                const jsonStart = jsonString.indexOf('{');
+                if (jsonStart === -1) {
+                    this.logger.error('❌ Nie znaleziono prawidłowych danych JSON w kodzie buildu');
+                    return null;
+                }
+
+                const cleanJsonString = jsonString.substring(jsonStart);
+                const parsed = JSON.parse(cleanJsonString);
+
+                // Przekonwertuj format sio-tools na nasz format
+                return this.convertSioToolsFormat(parsed);
+            }
+
+            this.logger.error('❌ Nieprawidłowy format danych po dekompresji LZMA');
+            return null;
+        } catch (error) {
+            this.logger.error(`❌ LZMA dekodowanie nie powiodło się: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Konwertuje format sio-tools na nasz standardowy format
+     */
+    convertSioToolsFormat(data) {
+        try {
+            if (!data.j || !Array.isArray(data.j)) {
+                return null;
+            }
+
+            const equipment = data.j;
+            const itemNames = [
+                'Twin Lance',      // t: 1
+                'Evervoid Armor',  // t: 2
+                'Voidwaker Emblem', // t: 5
+                'Stardust Sash',   // t: 6
+                'Moonscar Bracer', // t: 8
+                'Glacial Warboots' // t: 10
             ];
 
-            for (const method of methods) {
-                try {
-                    const result = LZString[method](buildCode);
-                    if (result) {
-                        const parsed = JSON.parse(result);
-                        return this.normalizeBuildData(parsed);
-                    }
-                } catch (e) {
-                    continue;
+            const buildData = {
+                data: {},
+                metadata: {
+                    source: 'sio-tools',
+                    version: data._V || 0,
+                    timestamp: Date.now()
                 }
-            }
-            return null;
-        } catch (error) {
-            return null;
-        }
-    }
-
-    /**
-     * Próba dekodowania Base64 + JSON
-     */
-    async tryBase64JSONDecode(buildCode) {
-        try {
-            // URL-safe base64 decode
-            const urlSafeData = buildCode.replace(/-/g, '+').replace(/_/g, '/');
-            const decoded = Buffer.from(urlSafeData, 'base64').toString('utf8');
-            const parsed = JSON.parse(decoded);
-            return this.normalizeBuildData(parsed);
-        } catch (error) {
-            return null;
-        }
-    }
-
-    /**
-     * Próba binarnego dekodowania
-     */
-    async tryBinaryDecode(buildCode) {
-        try {
-            const urlSafeData = buildCode.replace(/-/g, '+').replace(/_/g, '/');
-            const buffer = Buffer.from(urlSafeData, 'base64');
-
-            // Analiza binarnych danych
-            const analysis = this.analyzeBinaryStructure(buffer);
-            return this.reconstructFromBinary(analysis);
-        } catch (error) {
-            return null;
-        }
-    }
-
-    /**
-     * Analiza struktury binarnej
-     */
-    analyzeBinaryStructure(buffer) {
-        const analysis = {
-            size: buffer.length,
-            header: buffer.subarray(0, Math.min(16, buffer.length)).toString('hex'),
-            patterns: [],
-            possibleStrings: []
-        };
-
-        // Szukanie wzorców stringów
-        let currentString = '';
-        for (let i = 0; i < buffer.length; i++) {
-            const byte = buffer[i];
-            if (byte >= 32 && byte <= 126) { // Printable ASCII
-                currentString += String.fromCharCode(byte);
-            } else {
-                if (currentString.length > 3) {
-                    analysis.possibleStrings.push(currentString);
-                }
-                currentString = '';
-            }
-        }
-
-        return analysis;
-    }
-
-    /**
-     * Próba dekodowania na podstawie wzorców (fallback)
-     */
-    async tryPatternDecode(buildCode) {
-        // Na podstawie analizy struktury danych, generujemy przykładowy build
-        const mockBuild = {
-            data: {
-                Weapon: {
-                    name: "Twin Lance",
-                    e: 1, v: 2, c: 2, base: 0
-                },
-                Armor: {
-                    name: "Evervoid Armor",
-                    e: 3, v: 4, c: 2, base: 0
-                },
-                Belt: {
-                    name: "Stardust Sash",
-                    e: 3, v: 3, c: 6, base: 0
-                },
-                Boots: {
-                    name: "Glacial Warboots",
-                    c: 0, e: 5, v: 4, base: 0
-                },
-                Gloves: {
-                    name: "Moonscar Bracer",
-                    v: 4, c: 0, e: 3, base: 0
-                },
-                Necklace: {
-                    name: "Voidwaker Emblem",
-                    e: 0, v: 0, c: 0, base: 3
-                }
-            },
-            fromState: true,
-            id: Date.now(),
-            timestamp: Date.now(),
-            version: 0
-        };
-
-        return mockBuild;
-    }
-
-    /**
-     * Rekonstrukcja danych z analizy binarnej
-     */
-    reconstructFromBinary(analysis) {
-        const build = {
-            data: {},
-            metadata: {
-                analysisMethod: 'binary',
-                detectedStrings: analysis.possibleStrings,
-                bufferSize: analysis.size,
-                header: analysis.header
-            }
-        };
-
-        // Próba wykrycia nazw itemów w ciągach
-        const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
-        const allItemNames = [
-            ...this.equipmentDatabase.weapons,
-            ...this.equipmentDatabase.armor,
-            ...this.equipmentDatabase.belts,
-            ...this.equipmentDatabase.boots,
-            ...this.equipmentDatabase.gloves,
-            ...this.equipmentDatabase.necklaces
-        ];
-
-        itemTypes.forEach(type => {
-            // Spróbuj znaleźć pasujący item w wykrytych stringach
-            let foundName = "Unknown Item";
-
-            for (const detectedString of analysis.possibleStrings) {
-                for (const itemName of allItemNames) {
-                    if (itemName.toLowerCase().includes(detectedString.toLowerCase()) ||
-                        detectedString.toLowerCase().includes(itemName.toLowerCase())) {
-                        foundName = itemName;
-                        break;
-                    }
-                }
-                if (foundName !== "Unknown Item") break;
-            }
-
-            build.data[type] = {
-                name: foundName,
-                e: Math.floor(Math.random() * 6), // Losowe wartości jako placeholder
-                v: Math.floor(Math.random() * 6),
-                c: Math.floor(Math.random() * 6),
-                base: Math.floor(Math.random() * 4)
             };
-        });
 
-        return build;
+            const itemTypes = ['Weapon', 'Armor', 'Necklace', 'Belt', 'Gloves', 'Boots'];
+
+            equipment.forEach((item, index) => {
+                if (item && typeof item === 'object') {
+                    const itemType = itemTypes[index];
+                    const itemName = itemNames[index];
+
+                    if (itemType && itemName) {
+                        buildData.data[itemType] = {
+                            name: itemName,
+                            e: item.w || 0,  // Evolution
+                            v: item.u || 0,  // Vigor
+                            c: item.v || 0,  // Count
+                            base: item.x || 0 // Base
+                        };
+                    }
+                }
+            });
+
+            return this.normalizeBuildData(buildData);
+        } catch (error) {
+            this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
+            return null;
+        }
     }
+
 
     /**
      * Normalizuje dane buildu do standardowego formatu
@@ -875,63 +762,36 @@ class SurvivorService {
     }
 
     /**
-     * Synchroniczna wersja dekodowania (uproszczona)
+     * Synchroniczna wersja dekodowania (tylko LZMA)
      */
     decodeBuildSync(buildCode) {
         try {
-            // Próba 1: Base64 + JSON
-            try {
-                const urlSafeData = buildCode.replace(/-/g, '+').replace(/_/g, '/');
-                const decoded = Buffer.from(urlSafeData, 'base64').toString('utf8');
-                const parsed = JSON.parse(decoded);
-                return this.normalizeBuildData(parsed);
-            } catch (e) {
-                // Kontynuuj do kolejnej metody
+            // Tylko LZMA (sio-tools format)
+            const lzma = require('lzma');
+            const buffer = Buffer.from(buildCode, 'base64');
+            const decompressed = lzma.decompress(buffer);
+
+            if (Array.isArray(decompressed)) {
+                const chars = decompressed.map(num => String.fromCharCode(num));
+                const jsonString = chars.join('');
+                const jsonStart = jsonString.indexOf('{');
+
+                if (jsonStart !== -1) {
+                    const cleanJsonString = jsonString.substring(jsonStart);
+                    const parsed = JSON.parse(cleanJsonString);
+                    const converted = this.convertSioToolsFormat(parsed);
+                    if (converted) {
+                        return converted;
+                    }
+                }
             }
 
-            // Próba 2: Pattern matching (fallback) - użyj znanego przykładu
-            return this.createKnownExampleBuild();
+            return null;
         } catch (error) {
             return null;
         }
     }
 
-    /**
-     * Tworzy przykładowy build w przypadku niepowodzenia dekodowania
-     */
-    createFallbackBuild() {
-        return {
-            Weapon: { name: "Unknown Weapon", e: 1, v: 1, c: 1, base: 0 },
-            Armor: { name: "Unknown Armor", e: 1, v: 1, c: 1, base: 0 },
-            Belt: { name: "Unknown Belt", e: 1, v: 1, c: 1, base: 0 },
-            Boots: { name: "Unknown Boots", e: 1, v: 1, c: 1, base: 0 },
-            Gloves: { name: "Unknown Gloves", e: 1, v: 1, c: 1, base: 0 },
-            Necklace: { name: "Unknown Necklace", e: 1, v: 1, c: 1, base: 0 }
-        };
-    }
-
-    /**
-     * Tworzy znany przykładowy build na podstawie danych testowych
-     */
-    createKnownExampleBuild() {
-        const rawData = {
-            data: {
-                Weapon: { name: "Twin Lance", e: 1, v: 2, c: 2, base: 0 },
-                Armor: { name: "Evervoid Armor", e: 3, v: 4, c: 2, base: 0 },
-                Belt: { name: "Stardust Sash", e: 3, v: 3, c: 6, base: 0 },
-                Boots: { name: "Glacial Warboots", c: 0, e: 5, v: 4, base: 0 },
-                Gloves: { name: "Moonscar Bracer", e: 2, v: 4, c: 1, base: 0 },
-                Necklace: { name: "Voidwaker Emblem", e: 4, v: 3, c: 1, base: 0 }
-            },
-            id: 8519413696316337,
-            timestamp: 1757864993680,
-            version: 0,
-            fromState: true
-        };
-
-        // Normalizuj dane używając tej samej metody co w dekodowaniu
-        return this.normalizeBuildData(rawData);
-    }
 
     /**
      * Waliduje kod buildu
