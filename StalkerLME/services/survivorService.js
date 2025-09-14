@@ -412,7 +412,7 @@ class SurvivorService {
         // Szczegółowe statystyki
         embed.addFields(
             {
-                name: '## 📊 Statystyki Główne',
+                name: '📊 Statystyki Główne',
                 value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
                 inline: false
             }
@@ -455,36 +455,34 @@ class SurvivorService {
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
 
-                // Sprawdź czy pokazać E/V/C czy B
-                let detailText = '';
-                let costText = '';
-
+                // Nowy format: emoji + e1v2 c2 - 7 RC (bez nazwy przedmiotu)
                 if (this.shouldShowEVCh(item.name)) {
                     // Pokaż E/V/C (bez B) w nowym formacie + oblicz koszt zasobów
                     let details = [];
-                    if (e > 0) details.push(`E${e}`);
-                    if (v > 0) details.push(`V${v}`);
-                    if (c > 0) details.push(`C${c}`);
-                    detailText = details.length > 0 ? ` ${details.join(' ')}` : '';
+                    if (e > 0) details.push(`e${e}`);
+                    if (v > 0) details.push(`v${v}`);
+                    if (c > 0) details.push(`c${c}`);
+                    const detailText = details.length > 0 ? details.join('') : '';
 
                     // Oblicz koszt zasobów tylko dla przedmiotów E/V/C
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                    costText = resourceCost > 0 ? ` (${resourceCost})` : '';
+                    const costText = resourceCost > 0 ? ` - ${resourceCost} <:II_RC:1385139885924421653>` : '';
+
+                    equipmentText += `${emoji} ${detailText}${costText}\n`;
                 } else {
                     // Pokaż tylko B dla pozostałych przedmiotów (bez kosztów zasobów)
                     if (base > 0) {
-                        detailText = ` B${base}`;
+                        equipmentText += `${emoji} b${base}\n`;
+                    } else {
+                        equipmentText += `${emoji}\n`;
                     }
-                    costText = ''; // Brak kosztów dla przedmiotów z B
                 }
-
-                equipmentText += `${emoji} **${item.name}**${costText}${detailText}\n`;
             }
         }
 
         if (equipmentText) {
             embed.addFields({
-                name: '## 🎒 EQ',
+                name: '🎒 EQ',
                 value: equipmentText.trim(),
                 inline: false
             });
