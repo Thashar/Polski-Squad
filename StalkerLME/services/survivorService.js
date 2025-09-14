@@ -413,50 +413,69 @@ class SurvivorService {
         embed.addFields(
             {
                 name: '## 📊 Statystyki Główne',
-                value: `**Evolution:** ${stats.totalEvolution}\n**Vigor:** ${stats.totalVigor}\n**Count:** ${stats.totalCount}\n**Base:** ${stats.totalBase}`,
+                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEvolution}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVigor}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalCount}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBase}`,
                 inline: false
             }
         );
 
-        // Lista ekwipunku - obsłuż obie struktury danych
+        // Lista ekwipunku - wyświetl w określonej kolejności
         let equipmentText = '';
-        const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
-        const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
+        const itemOrder = [
+            'Twin Lance', 'Eternal Suit', 'Evervoid Armor', 'Voidwaker Emblem',
+            'Judgment Necklace', 'Twisting Belt', 'Stardust Sash', 'Voidwaker Handguards',
+            'Moonscar Bracer', 'Voidwaker Treads', 'Glacial Warboots'
+        ];
 
-        // Oblicz łączną sumę Ch dla Twin Lance
+        // Oblicz łączną sumę C dla Twin Lance
         const totalCount = this.calculateTotalCount(buildData);
 
-        // Spróbuj najpierw struktury z wielkimi literami
+        // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
+        const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
+        const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
+        const foundItems = {};
+
+        // Zbierz wszystkie itemy ze zdekodowanych danych
         for (let i = 0; i < itemTypes.length; i++) {
             const itemType = itemTypes[i];
             const itemTypeLower = itemTypesLowerCase[i];
             const item = buildData[itemType] || buildData[itemTypeLower];
 
             if (item && item.name && item.name !== 'Unknown') {
+                foundItems[item.name] = item;
+            }
+        }
+
+        // Wyświetl itemy w określonej kolejności
+        for (const itemName of itemOrder) {
+            const item = foundItems[itemName];
+            if (item) {
                 const emoji = this.getItemEmojiByName(item.name, totalCount);
                 const e = item.e || item.evolution || 0;
                 const v = item.v || item.vigor || 0;
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
 
-                // Oblicz koszt zasobów
-                const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                const costText = resourceCost > 0 ? ` (${resourceCost})` : '';
-
-                // Sprawdź czy pokazać E/V/Ch czy B
+                // Sprawdź czy pokazać E/V/C czy B
                 let detailText = '';
+                let costText = '';
+
                 if (this.shouldShowEVCh(item.name)) {
-                    // Pokaż E/V/Ch (bez B) w nowym formacie
+                    // Pokaż E/V/C (bez B) w nowym formacie + oblicz koszt zasobów
                     let details = [];
                     if (e > 0) details.push(`E${e}`);
                     if (v > 0) details.push(`V${v}`);
-                    if (c > 0) details.push(`Ch${c}`);
+                    if (c > 0) details.push(`C${c}`);
                     detailText = details.length > 0 ? ` ${details.join(' ')}` : '';
+
+                    // Oblicz koszt zasobów tylko dla przedmiotów E/V/C
+                    const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
+                    costText = resourceCost > 0 ? ` (${resourceCost})` : '';
                 } else {
-                    // Pokaż tylko B dla pozostałych przedmiotów
+                    // Pokaż tylko B dla pozostałych przedmiotów (bez kosztów zasobów)
                     if (base > 0) {
                         detailText = ` B${base}`;
                     }
+                    costText = ''; // Brak kosztów dla przedmiotów z B
                 }
 
                 equipmentText += `${emoji} **${item.name}**${costText}${detailText}\n`;
@@ -527,27 +546,41 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza koszt zasobów dla danego poziomu E (Evolution) lub V (Vigor)
+     * Oblicza koszt zasobów dla danego poziomu E (Evolution/Eternal) lub V (Vigor/Void)
      */
     calculateEVCost(level) {
-        const costs = [0, 1, 2, 3, 5, 8]; // Poziom 0 = 0, 1 = 1, 2 = 2, 3 = 3, 4 = 5, 5 = 8
-        let totalCost = 0;
-        for (let i = 1; i <= level && i < costs.length; i++) {
-            totalCost += costs[i];
+        // Każdy poziom E/V: 1=10+500Base, 2=20+500Base, 3=40+500Base, 4=60+500Base, 5=80+1000Base
+        const eternalVoidCosts = [0, 10, 20, 40, 60, 80]; // Eternal/Void fragmenty
+        const baseCosts = [0, 500, 500, 500, 500, 1000]; // Base fragmenty
+
+        let totalEternalVoid = 0;
+        let totalBase = 0;
+
+        for (let i = 1; i <= level && i < eternalVoidCosts.length; i++) {
+            totalEternalVoid += eternalVoidCosts[i];
+            totalBase += baseCosts[i];
         }
-        return totalCost;
+
+        return { eternalVoid: totalEternalVoid, base: totalBase };
     }
 
     /**
-     * Oblicza koszt zasobów dla danego poziomu C (Count)
+     * Oblicza koszt zasobów dla danego poziomu C (Count/Chaos)
      */
     calculateCCost(level) {
-        const costs = [0, 1, 2, 3, 3, 4, 4, 6, 6, 8, 8]; // Poziom 0 = 0, 1 = 1, ..., 9 = 8, 10 = 8
-        let totalCost = 0;
-        for (let i = 1; i <= level && i < costs.length; i++) {
-            totalCost += costs[i];
+        // Każdy poziom C: 1,2=20+500Base, 3,4=50+500Base, 5,6=100+500Base, 7,8=150+500Base, 9,10=200+1000Base
+        const chaosCosts = [0, 20, 20, 50, 50, 100, 100, 150, 150, 200, 200]; // Chaos fragmenty
+        const baseCosts = [0, 500, 500, 500, 500, 500, 500, 500, 500, 1000, 1000]; // Base fragmenty
+
+        let totalChaos = 0;
+        let totalBase = 0;
+
+        for (let i = 1; i <= level && i < chaosCosts.length; i++) {
+            totalChaos += chaosCosts[i];
+            totalBase += baseCosts[i];
         }
-        return totalCost;
+
+        return { chaos: totalChaos, base: totalBase };
     }
 
     /**
@@ -562,7 +595,7 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza łączny koszt zasobów dla przedmiotu
+     * Oblicza łączny koszt zasobów dla przedmiotu (wszystkie fragmenty razem)
      */
     calculateItemResourceCost(e, v, c, base, itemName) {
         // Niektóre przedmioty nie mają kosztu zasobów
@@ -570,16 +603,21 @@ class SurvivorService {
             return 0;
         }
 
-        const eCost = this.calculateEVCost(e || 0);
-        const vCost = this.calculateEVCost(v || 0);
-        const cCost = this.calculateCCost(c || 0);
-        // B (Base) kosztuje 0 za każdy poziom
+        const eCosts = this.calculateEVCost(e || 0);
+        const vCosts = this.calculateEVCost(v || 0);
+        const cCosts = this.calculateCCost(c || 0);
 
-        return eCost + vCost + cCost;
+        // Suma wszystkich fragmentów
+        const totalEternal = eCosts.eternalVoid;
+        const totalVoid = vCosts.eternalVoid;
+        const totalChaos = cCosts.chaos;
+        const totalBase = eCosts.base + vCosts.base + cCosts.base;
+
+        return totalEternal + totalVoid + totalChaos + totalBase;
     }
 
     /**
-     * Sprawdza czy przedmiot ma E/V/Ch (True) czy B (False)
+     * Sprawdza czy przedmiot ma E/V/C (True) czy B (False)
      */
     shouldShowEVCh(itemName) {
         const evChItems = [
@@ -590,7 +628,7 @@ class SurvivorService {
     }
 
     /**
-     * Oblicza łączną sumę Ch we wszystkich przedmiotach
+     * Oblicza łączną sumę C we wszystkich przedmiotach
      */
     calculateTotalCount(buildData) {
         let totalCount = 0;
@@ -618,7 +656,7 @@ class SurvivorService {
     }
 
     /**
-     * Zwraca emoji dla Twin Lance w zależności od sumy Ch
+     * Zwraca emoji dla Twin Lance w zależności od sumy C
      */
     getTwinLanceEmoji(totalCount) {
         if (totalCount >= 36) return '<:H_LanceV5:1412958463977328720>';
@@ -680,12 +718,17 @@ class SurvivorService {
 
                 // Koszty zasobów (dla prawdziwych obliczeń) - tylko dla przedmiotów z kosztem
                 if (this.shouldCalculateResourceCost(item.name)) {
-                    const eCost = this.calculateEVCost(e);
-                    const vCost = this.calculateEVCost(v);
-                    const cCost = this.calculateCCost(c);
+                    const eCosts = this.calculateEVCost(e);
+                    const vCosts = this.calculateEVCost(v);
+                    const cCosts = this.calculateCCost(c);
 
-                    totalEvolutionCost += eCost;
-                    totalResourceCost += eCost + vCost + cCost; // B kosztuje 0
+                    // Suma Eternal fragmentów dla efficiency
+                    totalEvolutionCost += eCosts.eternalVoid;
+
+                    // Suma wszystkich fragmentów dla total power
+                    const itemTotalCost = eCosts.eternalVoid + vCosts.eternalVoid + cCosts.chaos +
+                                         eCosts.base + vCosts.base + cCosts.base;
+                    totalResourceCost += itemTotalCost;
                 }
 
                 itemCount++;
