@@ -357,21 +357,11 @@ class SurvivorService {
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
                     costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
                 } else {
-                    // Pokaż B dla pozostałych przedmiotów
+                    // Pokaż B dla pozostałych przedmiotów (bez kosztów RC)
                     if (base > 0) {
                         detailText = ` B${base}`;
-
-                        // Sprawdź czy to specjalny przedmiot z kosztem zasobów
-                        const specialItems = ['Eternal Suit', 'Voidwaker Emblem', 'Voidwaker Treads', 'Voidwaker Handguards', 'Twisting Belt'];
-                        if (specialItems.includes(item.name)) {
-                            const resourceCost = this.calculateSpecialItemResourceCost(base, item.name);
-                            costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
-                        } else {
-                            costText = ''; // Brak kosztów dla zwykłych przedmiotów z B
-                        }
-                    } else {
-                        costText = '';
                     }
+                    costText = ''; // Wszystkie przedmioty B nie mają kosztów RC
                 }
 
                 equipmentText += `${emoji} **${item.name}**${detailText}${costText}\n`;
@@ -493,12 +483,9 @@ class SurvivorService {
      * Oblicza specjalne koszty zasobów dla określonych przedmiotów B
      */
     calculateSpecialItemResourceCost(base, itemName) {
+        // Tylko Eternal Suit ma koszty zasobów przy B
         const specialItems = {
-            'Eternal Suit': 'eternal',
-            'Voidwaker Emblem': 'void',
-            'Voidwaker Treads': 'void',
-            'Voidwaker Handguards': 'void',
-            'Twisting Belt': 'chaos'
+            'Eternal Suit': 'eternal'
         };
 
         const resourceType = specialItems[itemName];
@@ -522,12 +509,6 @@ class SurvivorService {
      * Oblicza łączny koszt zasobów dla przedmiotu (proste dodawanie - stary system)
      */
     calculateItemResourceCost(e, v, c, base, itemName) {
-        // Sprawdź czy to przedmiot specjalny (B)
-        const specialItems = ['Eternal Suit', 'Voidwaker Emblem', 'Voidwaker Treads', 'Voidwaker Handguards', 'Twisting Belt'];
-        if (specialItems.includes(itemName)) {
-            return this.calculateSpecialItemResourceCost(base || 0, itemName);
-        }
-
         // Standardowe przedmioty E/V/C
         if (!this.shouldCalculateResourceCost(itemName)) {
             return 0;
@@ -537,7 +518,7 @@ class SurvivorService {
         const eCost = this.calculateOldEVCost(e || 0);
         const vCost = this.calculateOldEVCost(v || 0);
         const cCost = this.calculateOldCCost(c || 0);
-        // B (Base) kosztuje 0 za każdy poziom dla standardowych przedmiotów
+        // B (Base) kosztuje 0 za każdy poziom dla wszystkich przedmiotów
 
         return eCost + vCost + cCost;
     }
@@ -571,8 +552,8 @@ class SurvivorService {
      */
     shouldShowEVCh(itemName) {
         const evChItems = [
-            'Twin Lance', 'Evervoid Armor', 'Judgment Necklace',
-            'Stardust Sash', 'Moonscar Bracer', 'Glacial Warboots'
+            'Twin Lance', 'Evervoid Armor', 'Stardust Sash',
+            'Moonscar Bracer', 'Glacial Warboots'
         ];
         return evChItems.includes(itemName);
     }
