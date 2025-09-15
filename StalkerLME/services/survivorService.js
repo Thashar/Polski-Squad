@@ -327,6 +327,8 @@ class SurvivorService {
             throw error;
         }
 
+        this.logger.info('📋 Rozpoczynam przetwarzanie itemów...');
+
         // Informacje główne - strona 1
         const page1Field = {
             name: 'Zasoby',
@@ -335,6 +337,8 @@ class SurvivorService {
         };
 
         let description = '';
+
+        this.logger.info('🔧 Obliczanie totalCount...');
 
         // Statystyki będą dodane do pierwszej strony poniżej
 
@@ -346,7 +350,14 @@ class SurvivorService {
         ];
 
         // Oblicz łączną sumę C dla Twin Lance
-        const totalCount = this.calculateTotalCount(buildData);
+        let totalCount;
+        try {
+            totalCount = this.calculateTotalCount(buildData);
+            this.logger.info(`✅ TotalCount obliczone: ${totalCount}`);
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy obliczaniu totalCount: ${error.message}`);
+            throw error;
+        }
 
         // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
