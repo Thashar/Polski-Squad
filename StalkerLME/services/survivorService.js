@@ -302,8 +302,16 @@ class SurvivorService {
             .setColor(embedColor)
             .setTimestamp();
 
-        // Informacje główne
-        let description = `**<:II_RC:1385139885924421653> Total RC:** ${stats.totalPower}\n\n`;
+        // Informacje główne - strona 1
+        const page1Field = {
+            name: 'Zasoby',
+            value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower}**`,
+            inline: false
+        };
+
+        embed.addFields(page1Field);
+
+        let description = '';
 
         // Statystyki będą dodane do pierwszej strony poniżej
 
@@ -350,7 +358,7 @@ class SurvivorService {
 
         // Dodaj pole z fragmentami jako pierwsze po prawej stronie
         page2.addFields({
-            name: '🧪 Zużyte suple',
+            name: 'Zużyte materiały',
             value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
             inline: true // Po prawej stronie
         });
