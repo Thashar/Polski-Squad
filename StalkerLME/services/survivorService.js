@@ -432,8 +432,28 @@ class SurvivorService {
 
         if (equipmentText) {
             const trimmedText = equipmentText.trim();
-            if (trimmedText.length > 1024) {
-                const truncatedText = trimmedText.substring(0, 1020) + '...';
+
+            // Inteligentne obcinanie - usuń całe itemy zamiast przerywania w środku
+            if (trimmedText.length > 1450) {
+                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1450 znaków`);
+
+                const lines = trimmedText.split('\n'); // Podziel na linie
+                let truncatedText = '';
+                let currentLength = 0;
+
+                for (const line of lines) {
+                    const lineWithNewline = line + '\n';
+                    if (currentLength + lineWithNewline.length <= 1420) { // Zostaw miejsce na "..."
+                        truncatedText += lineWithNewline;
+                        currentLength += lineWithNewline.length;
+                    } else {
+                        break; // Zatrzymaj dodawanie linii
+                    }
+                }
+
+                // Usuń ostatnie \n i dodaj oznaczenie obcięcia
+                truncatedText = truncatedText.trim() + '\n\n*...reszta ekwipunku...*';
+
                 page2.addFields({
                     name: 'Ekwipunek',
                     value: truncatedText,
