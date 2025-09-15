@@ -359,9 +359,9 @@ class SurvivorService {
                 if (this.shouldShowEVCh(item.name)) {
                     // Pokaż E/V/C (bez B) w nowym formacie + oblicz koszt zasobów
                     let details = [];
-                    if (e > 0) details.push(`<:ss_iconeternal:1217579774852071485>${e}`);
-                    if (v > 0) details.push(`<:ss_iconvoid:1217579535353249832>${v}`);
-                    if (c > 0) details.push(`<:ss_iconchaos:1217579750634164274>${c}`);
+                    if (e > 0) details.push(`<:ss_iconeternal:1217579774852071485> ${e}`);
+                    if (v > 0) details.push(`<:ss_iconvoid:1217579535353249832> ${v}`);
+                    if (c > 0) details.push(`<:ss_iconchaos:1217579750634164274> ${c}`);
                     detailText = details.length > 0 ? ` • ${details.join(' ')}` : '';
 
                     // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
