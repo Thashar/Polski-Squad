@@ -362,19 +362,19 @@ class SurvivorService {
                     // Dodaj linie ze gwiazdkami dla każdego typu zasobów (max 10 gwiazdek)
                     let starLines = '';
                     if (e > 0) {
-                        const starCount = Math.min(e, 5); // Ogranicz do 5 gwiazdek
-                        const yellowStars = '🟡'.repeat(starCount);
-                        starLines += `\n<:M_IconEternal:1417224046235619358> • ${yellowStars}`;
+                        const starCount = Math.min(e, 10); // Można teraz więcej dzięki krótszym emoji
+                        const stars = '☆'.repeat(starCount);
+                        starLines += `\n<:M_IconEternal:1417224046235619358> • ${stars}`;
                     }
                     if (v > 0) {
-                        const starCount = Math.min(v, 5);
-                        const yellowStars = '🟡'.repeat(starCount);
-                        starLines += `\n<:M_IconVoid:1417224049490268270> • ${yellowStars}`;
+                        const starCount = Math.min(v, 10);
+                        const stars = '☆'.repeat(starCount);
+                        starLines += `\n<:M_IconVoid:1417224049490268270> • ${stars}`;
                     }
                     if (c > 0) {
-                        const starCount = Math.min(c, 5);
-                        const redStars = '🔴'.repeat(starCount);
-                        starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
+                        const starCount = Math.min(c, 10);
+                        const stars = '★'.repeat(starCount);
+                        starLines += `\n<:M_IconChaos:1417224053055426811> • ${stars}`;
                     }
                     costText += starLines;
                 } else {
@@ -393,14 +393,14 @@ class SurvivorService {
                     let starLines = '';
                     if (base > 0) {
                         const bIcon = this.getBItemIcon(item.name);
-                        const starCount = Math.min(base, 5);
-                        const yellowStars = '🟡'.repeat(starCount);
-                        starLines += `\n${bIcon} • ${yellowStars}`;
+                        const starCount = Math.min(base, 10);
+                        const stars = '☆'.repeat(starCount);
+                        starLines += `\n${bIcon} • ${stars}`;
                     }
                     if (c > 0) {
-                        const starCount = Math.min(c, 5);
-                        const redStars = '🔴'.repeat(starCount);
-                        starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
+                        const starCount = Math.min(c, 10);
+                        const stars = '★'.repeat(starCount);
+                        starLines += `\n<:M_IconChaos:1417224053055426811> • ${stars}`;
                     }
                     costText += starLines;
                 }
