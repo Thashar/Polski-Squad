@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -11,7 +11,7 @@ async function handleInteraction(interaction, sharedState, config) {
 
     try {
         if (interaction.isCommand()) {
-            await handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService, survivorService);
+            await handleSlashCommand(interaction, sharedState);
         } else if (interaction.isStringSelectMenu()) {
             await handleSelectMenu(interaction, config, reminderService);
         } else if (interaction.isButton()) {
@@ -28,16 +28,17 @@ async function handleInteraction(interaction, sharedState, config) {
             .setTimestamp();
         
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+            await interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         } else {
-            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
     }
 }
 
-async function handleSlashCommand(interaction, config, databaseService, ocrService, punishmentService, reminderService, survivorService) {
+async function handleSlashCommand(interaction, sharedState) {
+    const { config, databaseService, ocrService, punishmentService, reminderService, survivorService } = sharedState;
     if (!hasPermission(interaction.member, config.allowedPunishRoles)) {
-        await interaction.reply({ content: messages.errors.noPermission, ephemeral: true });
+        await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -64,7 +65,7 @@ async function handleSlashCommand(interaction, config, databaseService, ocrServi
             await handleDecodeCommand(interaction, config, survivorService);
             break;
         default:
-            await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
+            await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -72,18 +73,18 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
     const attachment = interaction.options.getAttachment('image');
     
     if (!attachment) {
-        await interaction.reply({ content: messages.errors.noImage, ephemeral: true });
+        await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
         return;
     }
     
     if (!attachment.contentType?.startsWith('image/')) {
-        await interaction.reply({ content: messages.errors.invalidImage, ephemeral: true });
+        await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
         return;
     }
     
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
-        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', ephemeral: true });
+        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
         
         // Odśwież cache członków przed analizą
         logger.info('🔄 Odświeżanie cache\'u członków dla komendy /punish...');
@@ -111,18 +112,18 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
     const attachment = interaction.options.getAttachment('image');
     
     if (!attachment) {
-        await interaction.reply({ content: messages.errors.noImage, ephemeral: true });
+        await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
         return;
     }
     
     if (!attachment.contentType?.startsWith('image/')) {
-        await interaction.reply({ content: messages.errors.invalidImage, ephemeral: true });
+        await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
         return;
     }
     
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
-        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', ephemeral: true });
+        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
         
         // Odśwież cache członków przed analizą
         logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
@@ -209,7 +210,7 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
     const roleId = config.targetRoles[category];
     
     if (!roleId) {
-        await interaction.reply({ content: 'Nieprawidłowa kategoria!', ephemeral: true });
+        await interaction.reply({ content: 'Nieprawidłowa kategoria!', flags: MessageFlags.Ephemeral });
         return;
     }
     
@@ -310,7 +311,7 @@ async function handleDebugRolesCommand(interaction, config) {
     const roleId = config.targetRoles[category];
     
     if (!roleId) {
-        await interaction.reply({ content: 'Nieprawidłowa kategoria!', ephemeral: true });
+        await interaction.reply({ content: 'Nieprawidłowa kategoria!', flags: MessageFlags.Ephemeral });
         return;
     }
     
@@ -330,7 +331,7 @@ async function handleDebugRolesCommand(interaction, config) {
         const roleName = config.roleDisplayNames[category];
         
         if (!role) {
-            await interaction.editReply({ content: 'Nie znaleziono roli!', ephemeral: true });
+            await interaction.editReply({ content: 'Nie znaleziono roli!', flags: MessageFlags.Ephemeral });
             return;
         }
         
@@ -389,7 +390,7 @@ async function handleSelectMenu(interaction, config, reminderService) {
         const roleId = config.targetRoles[selectedRole];
         
         if (!roleId) {
-            await interaction.reply({ content: 'Nieprawidłowa rola!', ephemeral: true });
+            await interaction.reply({ content: 'Nieprawidłowa rola!', flags: MessageFlags.Ephemeral });
             return;
         }
         
@@ -411,19 +412,19 @@ async function handleButton(interaction, sharedState) {
     // Obsługa przycisków paginacji buildów
     if (interaction.customId === 'prev_page' || interaction.customId === 'next_page') {
         if (!sharedState.buildPagination) {
-            await interaction.reply({ content: '❌ Sesja paginacji wygasła.', ephemeral: true });
+            await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
             return;
         }
 
         const paginationData = sharedState.buildPagination.get(interaction.message.id);
         if (!paginationData) {
-            await interaction.reply({ content: '❌ Nie znaleziono danych paginacji.', ephemeral: true });
+            await interaction.reply({ content: '❌ Nie znaleziono danych paginacji.', flags: MessageFlags.Ephemeral });
             return;
         }
 
         // Sprawdź czy użytkownik może korzystać z przycisków
         if (paginationData.userId !== interaction.user.id) {
-            await interaction.reply({ content: '❌ Możesz używać tylko własnych przycisków nawigacji.', ephemeral: true });
+            await interaction.reply({ content: '❌ Możesz używać tylko własnych przycisków nawigacji.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -466,13 +467,13 @@ async function handleButton(interaction, sharedState) {
         const data = confirmationData.get(confirmationId);
         
         if (!data) {
-            await interaction.reply({ content: 'Dane potwierdzenia wygasły. Spróbuj ponownie.', ephemeral: true });
+            await interaction.reply({ content: 'Dane potwierdzenia wygasły. Spróbuj ponownie.', flags: MessageFlags.Ephemeral });
             return;
         }
         
         // Sprawdź czy użytkownik ma prawo do potwierdzenia
         if (data.originalUserId !== interaction.user.id) {
-            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', ephemeral: true });
+            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', flags: MessageFlags.Ephemeral });
             return;
         }
         
@@ -598,7 +599,7 @@ async function handleButton(interaction, sharedState) {
         } catch (error) {
             logger.error('[CONFIRM] ❌ Błąd potwierdzenia:', error.message);
             logger.error('[CONFIRM] ❌ Stack trace:', error.stack);
-            await interaction.followUp({ content: messages.errors.unknownError, ephemeral: true });
+            await interaction.followUp({ content: messages.errors.unknownError, flags: MessageFlags.Ephemeral });
         }
     } else if (interaction.customId.startsWith('vacation_')) {
         const parts = interaction.customId.split('_');
@@ -608,12 +609,12 @@ async function handleButton(interaction, sharedState) {
         const data = confirmationData.get(vacationId);
         
         if (!data) {
-            await interaction.reply({ content: 'Dane wygasły. Spróbuj ponownie.', ephemeral: true });
+            await interaction.reply({ content: 'Dane wygasły. Spróbuj ponownie.', flags: MessageFlags.Ephemeral });
             return;
         }
         
         if (data.originalUserId !== interaction.user.id) {
-            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', ephemeral: true });
+            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', flags: MessageFlags.Ephemeral });
             return;
         }
         
@@ -647,12 +648,12 @@ async function handleButton(interaction, sharedState) {
         const data = confirmationData.get(uncertaintyId);
         
         if (!data) {
-            await interaction.reply({ content: 'Dane wygasły. Spróbuj ponownie.', ephemeral: true });
+            await interaction.reply({ content: 'Dane wygasły. Spróbuj ponownie.', flags: MessageFlags.Ephemeral });
             return;
         }
         
         if (data.originalUserId !== interaction.user.id) {
-            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', ephemeral: true });
+            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją potwierdzić.', flags: MessageFlags.Ephemeral });
             return;
         }
         
@@ -686,7 +687,7 @@ async function handleButton(interaction, sharedState) {
         const data = confirmationData.get(confirmationId);
         
         if (data && data.originalUserId !== interaction.user.id) {
-            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją anulować.', ephemeral: true });
+            await interaction.reply({ content: 'Tylko osoba, która uruchomiła komendę może ją anulować.', flags: MessageFlags.Ephemeral });
             return;
         }
         
@@ -1225,7 +1226,7 @@ async function handleOcrDebugCommand(interaction, config) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1237,7 +1238,7 @@ async function handleOcrDebugCommand(interaction, config) {
         const currentState = config.ocr.detailedLogging.enabled;
         await interaction.reply({
             content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1252,7 +1253,7 @@ async function handleOcrDebugCommand(interaction, config) {
 
     await interaction.reply({
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -1261,7 +1262,7 @@ async function handleDecodeCommand(interaction, config, survivorService) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1271,7 +1272,7 @@ async function handleDecodeCommand(interaction, config, survivorService) {
     if (!code || code.trim().length === 0) {
         await interaction.reply({
             content: '❌ Nie podano kodu do dekodowania.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1284,7 +1285,7 @@ async function handleDecodeCommand(interaction, config, survivorService) {
         if (!buildData.success) {
             await interaction.editReply({
                 content: `❌ **Nie udało się zdekodować kodu**\n\n**Błąd:** ${buildData.error}\n**Kod:** \`${code}\``,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -1315,7 +1316,7 @@ async function handleDecodeCommand(interaction, config, survivorService) {
 
         await interaction.editReply({
             content: `❌ **Wystąpił błąd podczas dekodowania**\n\n**Błąd:** ${error.message}\n**Kod:** \`${code}\``,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }
