@@ -359,28 +359,31 @@ class SurvivorService {
                 let costText = '';
 
                 if (this.shouldShowEVCh(item.name)) {
-                    // Pokaż E/V/C (bez B) w nowym formacie + oblicz koszt zasobów
-                    let details = [];
-                    if (e > 0) details.push(`<:M_IconEternal:1417224046235619358> ${e}`);
-                    if (v > 0) details.push(`<:M_IconVoid:1417224049490268270> ${v}`);
-                    if (c > 0) details.push(`<:M_IconChaos:1417224053055426811> ${c}`);
+                    // Pokaż tylko RC w pierwszej linii dla itemów E/V/C
+                    detailText = '';
 
-                    detailText = details.length > 0 ? ` • ${details.join(' • ')}` : '';
-
-                    // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
+                    // Oblicz koszt zasobów tylko dla przedmiotów E/V/C
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
                     costText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> **${resourceCost}**` : '';
-                } else {
-                    // Pokaż B dla pozostałych przedmiotów z kropkami i odpowiednimi ikonami
-                    let details = [];
-                    if (base > 0) {
-                        const bIcon = this.getBItemIcon(item.name);
-                        details.push(`${bIcon} B${base}`);
+
+                    // Dodaj linie ze gwiazdkami dla każdego typu zasobów
+                    let starLines = '';
+                    if (e > 0) {
+                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(e);
+                        starLines += `\n<:M_IconEternal:1417224046235619358> • ${yellowStars}`;
+                    }
+                    if (v > 0) {
+                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(v);
+                        starLines += `\n<:M_IconVoid:1417224049490268270> • ${yellowStars}`;
                     }
                     if (c > 0) {
-                        details.push(`<:M_IconChaos:1417224053055426811> ${c}`);
+                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(c);
+                        starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
-                    detailText = details.length > 0 ? ` • ${details.join(' • ')}` : '';
+                    costText += starLines;
+                } else {
+                    // Pokaż tylko RC w pierwszej linii dla itemów B (jeśli mają C)
+                    detailText = '';
 
                     // Oblicz RC dla itemów B jeżeli mają C - tylko koszt C
                     if (c > 0) {
@@ -389,6 +392,19 @@ class SurvivorService {
                     } else {
                         costText = ''; // Brak C = brak kosztów RC
                     }
+
+                    // Dodaj linie ze gwiazdkami dla itemów B
+                    let starLines = '';
+                    if (base > 0) {
+                        const bIcon = this.getBItemIcon(item.name);
+                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(base);
+                        starLines += `\n${bIcon} • ${yellowStars}`;
+                    }
+                    if (c > 0) {
+                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(c);
+                        starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
+                    }
+                    costText += starLines;
                 }
 
                 equipmentText += `${emoji} **${item.name}**${detailText}${costText}\n`;
