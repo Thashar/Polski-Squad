@@ -436,8 +436,8 @@ class SurvivorService {
             // Inteligentne obcinanie - usuń całe itemy zamiast przerywania w środku
             this.logger.info(`Długość pola Ekwipunek: ${trimmedText.length} znaków`);
 
-            if (trimmedText.length > 1500) {
-                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1500 znaków - obcinam`);
+            if (trimmedText.length > 1024) {
+                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1024 znaków - obcinam`);
 
                 const lines = trimmedText.split('\n'); // Podziel na linie
                 let truncatedText = '';
@@ -445,7 +445,7 @@ class SurvivorService {
 
                 for (const line of lines) {
                     const lineWithNewline = line + '\n';
-                    if (currentLength + lineWithNewline.length <= 1470) { // Zostaw miejsce na "..."
+                    if (currentLength + lineWithNewline.length <= 1000) { // Zostaw miejsce na "..."
                         truncatedText += lineWithNewline;
                         currentLength += lineWithNewline.length;
                     } else {
