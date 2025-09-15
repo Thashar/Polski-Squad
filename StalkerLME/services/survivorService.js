@@ -297,15 +297,19 @@ class SurvivorService {
         else if (stats.efficiency >= 60) embedColor = '#ffff00'; // Żółty dla średniej
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
+        // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
+        const title = `Analiza Ekwipunku gracza ${userTag}`;
+        const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
+
         const embed = new EmbedBuilder()
-            .setTitle(`Analiza Ekwipunku gracza ${userTag}`)
+            .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Informacje główne - strona 1
         const page1Field = {
             name: 'Zasoby',
-            value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower}**`,
+            value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
             inline: false
         };
 
@@ -352,14 +356,14 @@ class SurvivorService {
 
         // Druga strona - każdy item ekwipunku w osobnym polu
         const page2 = new EmbedBuilder()
-            .setTitle(`Analiza Ekwipunku gracza ${userTag}`)
+            .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Dodaj pole z fragmentami jako pierwsze po prawej stronie
         page2.addFields({
             name: 'Zużyte materiały',
-            value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
+            value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments || 0}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments || 0}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments || 0}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments || 0}`,
             inline: true // Po prawej stronie
         });
 
@@ -454,13 +458,14 @@ class SurvivorService {
             }
         }
 
-        // Dodaj pola do embeda (maksymalnie 25 pól)
+        // Dodaj pola do embeda (maksymalnie 25 pól total, już mamy 1 pole "Zużyte materiały")
         if (equipmentFields.length > 0) {
-            const fieldsToAdd = equipmentFields.slice(0, 25); // Discord limit 25 pól
+            const maxFields = 24; // 25 total - 1 już dodane pole "Zużyte materiały"
+            const fieldsToAdd = equipmentFields.slice(0, maxFields);
             page2.addFields(fieldsToAdd);
 
-            if (equipmentFields.length > 25) {
-                this.logger.warn(`Za dużo pól ekwipunku: ${equipmentFields.length}/25 - obcięto`);
+            if (equipmentFields.length > maxFields) {
+                this.logger.warn(`Za dużo pól ekwipunku: ${equipmentFields.length}/${maxFields} - obcięto`);
             }
         }
 
