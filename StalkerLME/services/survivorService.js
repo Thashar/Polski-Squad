@@ -366,18 +366,21 @@ class SurvivorService {
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
                     costText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> **${resourceCost}**` : '';
 
-                    // Dodaj linie ze gwiazdkami dla każdego typu zasobów
+                    // Dodaj linie ze gwiazdkami dla każdego typu zasobów (max 10 gwiazdek)
                     let starLines = '';
                     if (e > 0) {
-                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(e);
+                        const starCount = Math.min(e, 10); // Ogranicz do 10 gwiazdek
+                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(starCount);
                         starLines += `\n<:M_IconEternal:1417224046235619358> • ${yellowStars}`;
                     }
                     if (v > 0) {
-                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(v);
+                        const starCount = Math.min(v, 10);
+                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(starCount);
                         starLines += `\n<:M_IconVoid:1417224049490268270> • ${yellowStars}`;
                     }
                     if (c > 0) {
-                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(c);
+                        const starCount = Math.min(c, 10);
+                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(starCount);
                         starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
                     costText += starLines;
@@ -393,15 +396,17 @@ class SurvivorService {
                         costText = ''; // Brak C = brak kosztów RC
                     }
 
-                    // Dodaj linie ze gwiazdkami dla itemów B
+                    // Dodaj linie ze gwiazdkami dla itemów B (max 10 gwiazdek)
                     let starLines = '';
                     if (base > 0) {
                         const bIcon = this.getBItemIcon(item.name);
-                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(base);
+                        const starCount = Math.min(base, 10);
+                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(starCount);
                         starLines += `\n${bIcon} • ${yellowStars}`;
                     }
                     if (c > 0) {
-                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(c);
+                        const starCount = Math.min(c, 10);
+                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(starCount);
                         starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
                     costText += starLines;
@@ -412,11 +417,28 @@ class SurvivorService {
         }
 
         if (equipmentText) {
-            embed.addFields({
-                name: 'Ekwipunek',
-                value: equipmentText.trim(),
-                inline: false
-            });
+            const trimmedText = equipmentText.trim();
+
+            // Debug: sprawdź długość pola
+            this.logger.info(`Długość pola Ekwipunek: ${trimmedText.length} znaków`);
+
+            // Discord ma limit 1024 znaków na pole
+            if (trimmedText.length > 1024) {
+                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1024`);
+                // Obetnij tekst jeśli za długi
+                const truncatedText = trimmedText.substring(0, 1020) + '...';
+                embed.addFields({
+                    name: 'Ekwipunek',
+                    value: truncatedText,
+                    inline: false
+                });
+            } else {
+                embed.addFields({
+                    name: 'Ekwipunek',
+                    value: trimmedText,
+                    inline: false
+                });
+            }
         }
 
         embed.setDescription(description);
