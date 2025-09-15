@@ -307,8 +307,7 @@ class SurvivorService {
 
         // Statystyki będą dodane do pierwszej strony poniżej
 
-        // Lista ekwipunku - wyświetl w określonej kolejności
-        let equipmentText = '';
+        // Przygotowanie itemów do drugiej strony (w osobnych polach)
         const itemOrder = [
             'Twin Lance', 'Eternal Suit', 'Evervoid Armor', 'Voidwaker Emblem',
             'Judgment Necklace', 'Twisting Belt', 'Stardust Sash', 'Voidwaker Handguards',
@@ -332,11 +331,31 @@ class SurvivorService {
 
             if (item && item.name && item.name !== 'Unknown') {
                 foundItems[item.name] = item;
-
             }
         }
 
-        // Wyświetl itemy w określonej kolejności
+        // Pierwsza strona - statystyki i Total RC
+        const page1 = new EmbedBuilder()
+            .setTitle('🎮 Survivor.io Build Analysis')
+            .setColor(embedColor)
+            .setTimestamp()
+            .setDescription(description)
+            .addFields({
+                name: '🧪 Zużyte suple',
+                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
+                inline: false
+            })
+            .setFooter({ text: `📝 Strona 1/2` });
+
+        // Druga strona - każdy item ekwipunku w osobnym polu
+        const page2 = new EmbedBuilder()
+            .setTitle('🎮 Survivor.io Build Analysis - Ekwipunek')
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // Zbierz wszystkie itemy w osobnych polach
+        const equipmentFields = [];
+
         for (const itemName of itemOrder) {
             const item = foundItems[itemName];
             if (item) {
@@ -345,7 +364,6 @@ class SurvivorService {
                 const v = item.v || item.vigor || 0;
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
-
 
                 // Sprawdź czy pokazać E/V/C czy B
                 let detailText = '';
@@ -359,10 +377,10 @@ class SurvivorService {
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
                     costText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> **${resourceCost}**` : '';
 
-                    // Dodaj linie ze gwiazdkami dla każdego typu zasobów (max 10 gwiazdek)
+                    // Dodaj linie ze gwiazdkami dla każdego typu zasobów
                     let starLines = '';
                     if (e > 0) {
-                        const starCount = Math.min(e, 10); // Można teraz więcej dzięki krótszym emoji
+                        const starCount = Math.min(e, 10);
                         const stars = '☆'.repeat(starCount);
                         starLines += `\n<:M_IconEternal:1417224046235619358> • ${stars}`;
                     }
@@ -389,7 +407,7 @@ class SurvivorService {
                         costText = ''; // Brak C = brak kosztów RC
                     }
 
-                    // Dodaj linie ze gwiazdkami dla itemów B (max 10 gwiazdek)
+                    // Dodaj linie ze gwiazdkami dla itemów B
                     let starLines = '';
                     if (base > 0) {
                         const bIcon = this.getBItemIcon(item.name);
@@ -405,66 +423,34 @@ class SurvivorService {
                     costText += starLines;
                 }
 
-                equipmentText += `${emoji} **${item.name}**${detailText}${costText}\n`;
+                const fieldValue = `${emoji} **${item.name}**${detailText}${costText}`;
+
+                // Sprawdź czy pole nie jest za długie (limit 1024 znaków na pole)
+                if (fieldValue.length <= 1024) {
+                    equipmentFields.push({
+                        name: '\u200B', // Niewidoczny znak - brak nazwy pola
+                        value: fieldValue,
+                        inline: false // Pola od góry do dołu
+                    });
+                } else {
+                    // Jeśli za długie, obetnij
+                    const truncated = fieldValue.substring(0, 1020) + '...';
+                    equipmentFields.push({
+                        name: '\u200B',
+                        value: truncated,
+                        inline: false
+                    });
+                }
             }
         }
 
-        // Przygotuj ekwipunek do drugiej strony (kod zostanie użyty poniżej)
+        // Dodaj pola do embeda (maksymalnie 25 pól)
+        if (equipmentFields.length > 0) {
+            const fieldsToAdd = equipmentFields.slice(0, 25); // Discord limit 25 pól
+            page2.addFields(fieldsToAdd);
 
-        // Pierwsza strona - statystyki i Total RC
-        const page1 = new EmbedBuilder()
-            .setTitle('🎮 Survivor.io Build Analysis')
-            .setColor(embedColor)
-            .setTimestamp()
-            .setDescription(description)
-            .addFields({
-                name: '🧪 Zużyte suple',
-                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
-                inline: false
-            })
-            .setFooter({ text: `📝 Strona 1/2` });
-
-        // Druga strona - tylko ekwipunek (w opisie zamiast pola)
-        const page2 = new EmbedBuilder()
-            .setTitle('🎮 Survivor.io Build Analysis - Ekwipunek')
-            .setColor(embedColor)
-            .setTimestamp();
-
-        if (equipmentText) {
-            const trimmedText = equipmentText.trim();
-
-            // Inteligentne obcinanie - usuń całe itemy zamiast przerywania w środku
-            this.logger.info(`Długość opisu Ekwipunek: ${trimmedText.length} znaków`);
-
-            // Uwzględnij znaki stopki: "📝 Strona 2/2" = ~12 znaków
-            // Opis embeda ma limit 4096 znaków, ale ograniczmy do 2000 dla czytelności
-            const footerLength = 12;
-            const maxDescriptionLength = 2000 - footerLength; // 1988 znaków dla opisu
-
-            if (trimmedText.length > maxDescriptionLength) {
-                this.logger.warn(`Opis Ekwipunek za długi: ${trimmedText.length}/${maxDescriptionLength} znaków (+ ${footerLength} stopka) - obcinam`);
-
-                const lines = trimmedText.split('\n'); // Podziel na linie
-                let truncatedText = '';
-                let currentLength = 0;
-                const truncationMessage = '\n\n*...reszta ekwipunku...*';
-                const safeLimit = maxDescriptionLength - truncationMessage.length; // Zostaw miejsce na oznaczenie
-
-                for (const line of lines) {
-                    const lineWithNewline = line + '\n';
-                    if (currentLength + lineWithNewline.length <= safeLimit) {
-                        truncatedText += lineWithNewline;
-                        currentLength += lineWithNewline.length;
-                    } else {
-                        break; // Zatrzymaj dodawanie linii
-                    }
-                }
-
-                // Usuń ostatnie \n i dodaj oznaczenie obcięcia
-                truncatedText = truncatedText.trim() + truncationMessage;
-                page2.setDescription(truncatedText);
-            } else {
-                page2.setDescription(trimmedText);
+            if (equipmentFields.length > 25) {
+                this.logger.warn(`Za dużo pól ekwipunku: ${equipmentFields.length}/25 - obcięto`);
             }
         }
 
