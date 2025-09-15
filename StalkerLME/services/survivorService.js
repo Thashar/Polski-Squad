@@ -137,12 +137,14 @@ class SurvivorService {
                 const typeNameMap = {
                     1: 'Twin Lance',
                     2: 'Evervoid Armor',
+                    3: 'Eternal Suit',  // Potwierdzone
                     5: 'Voidwaker Emblem',
                     6: 'Stardust Sash',
+                    7: 'Twisting Belt', // Potwierdzone (nie Voidwaker Treads!)
                     8: 'Moonscar Bracer',
                     9: 'Voidwaker Handguards',
-                    10: 'Glacial Warboots'
-                    // Dodamy inne gdy je zobaczymy w rzeczywistych danych
+                    10: 'Glacial Warboots',
+                    11: 'Voidwaker Treads' // Potwierdzone (nie Judgment Necklace!)
                 };
                 return typeNameMap[itemType] || `Unknown Item (type ${itemType})`;
             };
@@ -332,7 +334,8 @@ class SurvivorService {
         for (let i = 0; i < itemTypes.length; i++) {
             const itemType = itemTypes[i];
             const itemTypeLower = itemTypesLowerCase[i];
-            const item = buildData[itemType] || buildData[itemTypeLower];
+            const item = buildData[itemType] || buildData[itemTypeLower] ||
+                        (buildData.data && (buildData.data[itemType] || buildData.data[itemTypeLower]));
 
             if (item && item.name && item.name !== 'Unknown') {
                 foundItems[item.name] = item;
