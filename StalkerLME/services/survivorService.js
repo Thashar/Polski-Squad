@@ -308,7 +308,7 @@ class SurvivorService {
         // Szczegółowe statystyki
         embed.addFields(
             {
-                name: '📊 Statystyki Główne',
+                name: '🧪 Zużyte suple',
                 value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
                 inline: false
             }
@@ -339,6 +339,7 @@ class SurvivorService {
 
             if (item && item.name && item.name !== 'Unknown') {
                 foundItems[item.name] = item;
+
             }
         }
 
@@ -352,6 +353,7 @@ class SurvivorService {
                 const c = item.c || item.count || 0;
                 const base = item.base || 0;
 
+
                 // Sprawdź czy pokazać E/V/C czy B
                 let detailText = '';
                 let costText = '';
@@ -362,6 +364,7 @@ class SurvivorService {
                     if (e > 0) details.push(`<:M_IconEternal:1417224046235619358> ${e}`);
                     if (v > 0) details.push(`<:M_IconVoid:1417224049490268270> ${v}`);
                     if (c > 0) details.push(`<:M_IconChaos:1417224053055426811> ${c}`);
+
                     detailText = details.length > 0 ? ` • ${details.join(' • ')}` : '';
 
                     // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
@@ -369,10 +372,15 @@ class SurvivorService {
                     costText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> **${resourceCost}**` : '';
                 } else {
                     // Pokaż B dla pozostałych przedmiotów z kropkami i odpowiednimi ikonami
+                    let details = [];
                     if (base > 0) {
                         const bIcon = this.getBItemIcon(item.name);
-                        detailText = ` • ${bIcon} B${base}`;
+                        details.push(`${bIcon} B${base}`);
                     }
+                    if (c > 0) {
+                        details.push(`<:M_IconChaos:1417224053055426811> ${c}`);
+                    }
+                    detailText = details.length > 0 ? ` • ${details.join(' • ')}` : '';
 
                     // Oblicz RC dla itemów B jeżeli mają C - tylko koszt C
                     if (c > 0) {
@@ -389,13 +397,28 @@ class SurvivorService {
 
         if (equipmentText) {
             embed.addFields({
-                name: '🎒 EQ',
+                name: 'Ekwipunek',
                 value: equipmentText.trim(),
                 inline: false
             });
         }
 
         embed.setDescription(description);
+
+        // Oblicz łączną liczbę znaków w embedzie
+        const embedData = embed.toJSON();
+        let totalChars = 0;
+
+        if (embedData.title) totalChars += embedData.title.length;
+        if (embedData.description) totalChars += embedData.description.length;
+        if (embedData.fields) {
+            embedData.fields.forEach(field => {
+                totalChars += field.name.length + field.value.length;
+            });
+        }
+
+        // Dodaj stopkę z liczbą znaków
+        embed.setFooter({ text: `📝 ${totalChars} znaków` });
 
         return embed;
     }
