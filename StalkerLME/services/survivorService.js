@@ -424,7 +424,7 @@ class SurvivorService {
             })
             .setFooter({ text: `📝 Strona 1/2` });
 
-        // Druga strona - tylko ekwipunek
+        // Druga strona - tylko ekwipunek (w opisie zamiast pola)
         const page2 = new EmbedBuilder()
             .setTitle('🎮 Survivor.io Build Analysis - Ekwipunek')
             .setColor(embedColor)
@@ -434,20 +434,21 @@ class SurvivorService {
             const trimmedText = equipmentText.trim();
 
             // Inteligentne obcinanie - usuń całe itemy zamiast przerywania w środku
-            this.logger.info(`Długość pola Ekwipunek: ${trimmedText.length} znaków`);
+            this.logger.info(`Długość opisu Ekwipunek: ${trimmedText.length} znaków`);
 
             // Uwzględnij znaki stopki: "📝 Strona 2/2" = ~12 znaków
+            // Opis embeda ma limit 4096 znaków, ale ograniczmy do 2000 dla czytelności
             const footerLength = 12;
-            const maxFieldLength = 1200 - footerLength; // 1188 znaków dla pola
+            const maxDescriptionLength = 2000 - footerLength; // 1988 znaków dla opisu
 
-            if (trimmedText.length > maxFieldLength) {
-                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/${maxFieldLength} znaków (+ ${footerLength} stopka) - obcinam`);
+            if (trimmedText.length > maxDescriptionLength) {
+                this.logger.warn(`Opis Ekwipunek za długi: ${trimmedText.length}/${maxDescriptionLength} znaków (+ ${footerLength} stopka) - obcinam`);
 
                 const lines = trimmedText.split('\n'); // Podziel na linie
                 let truncatedText = '';
                 let currentLength = 0;
                 const truncationMessage = '\n\n*...reszta ekwipunku...*';
-                const safeLimit = maxFieldLength - truncationMessage.length; // Zostaw miejsce na oznaczenie
+                const safeLimit = maxDescriptionLength - truncationMessage.length; // Zostaw miejsce na oznaczenie
 
                 for (const line of lines) {
                     const lineWithNewline = line + '\n';
@@ -461,18 +462,9 @@ class SurvivorService {
 
                 // Usuń ostatnie \n i dodaj oznaczenie obcięcia
                 truncatedText = truncatedText.trim() + truncationMessage;
-
-                page2.addFields({
-                    name: 'Ekwipunek',
-                    value: truncatedText,
-                    inline: false
-                });
+                page2.setDescription(truncatedText);
             } else {
-                page2.addFields({
-                    name: 'Ekwipunek',
-                    value: trimmedText,
-                    inline: false
-                });
+                page2.setDescription(trimmedText);
             }
         }
 
