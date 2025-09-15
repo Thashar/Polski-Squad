@@ -488,6 +488,37 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza fragmenty dla itemów B na podstawie specjalnych wymagań
+     */
+    calculateBItemFragments(baseLevel, itemName) {
+        const fragments = { eternal: 0, void: 0, chaos: 0, base: 0 };
+
+        // Specjalne koszty dla itemów B
+        const specialBItems = {
+            'Eternal Suit': 'eternal',      // 5 Eternal + 100 Base per level
+            'Voidwaker Emblem': 'void',     // 5 Void + 100 Base per level
+            'Voidwaker Handguards': 'void', // 5 Void + 100 Base per level
+            'Voidwaker Treads': 'void',     // 5 Void + 100 Base per level
+            'Twisting Belt': 'chaos'        // 5 Chaos + 100 Base per level
+        };
+
+        const resourceType = specialBItems[itemName];
+        if (!resourceType) {
+            return fragments; // Brak specjalnych kosztów
+        }
+
+        // Koszty fragmentów per poziom B: [0, 5, 10, 20] dla poziomów [0, 1, 2, 3]
+        const fragmentCosts = [0, 5, 10, 20]; // poziom 0, 1, 2, 3
+
+        for (let i = 1; i <= baseLevel && i < fragmentCosts.length; i++) {
+            fragments[resourceType] += fragmentCosts[i];
+            fragments.base += 100; // Zawsze 100 Base per poziom
+        }
+
+        return fragments;
+    }
+
+    /**
      * Sprawdza czy przedmiot ma koszt zasobów
      */
     shouldCalculateResourceCost(itemName) {
@@ -688,16 +719,34 @@ class SurvivorService {
                     }
                 }
 
-                // Nowy system fragmentów (dla wyświetlania z emojis) - tylko przedmioty E/V/C
-                if (this.shouldCalculateResourceCost(item.name) && this.shouldShowEVCh(item.name)) {
-                    const eFragments = this.calculateEVCost(e);
-                    const vFragments = this.calculateEVCost(v);
-                    const cFragments = this.calculateCCost(c);
+                // Nowy system fragmentów (dla wyświetlania z emojis)
+                if (this.shouldCalculateResourceCost(item.name)) {
+                    if (this.shouldShowEVCh(item.name)) {
+                        // Przedmioty E/V/C - licz wszystkie fragmenty
+                        const eFragments = this.calculateEVCost(e);
+                        const vFragments = this.calculateEVCost(v);
+                        const cFragments = this.calculateCCost(c);
 
-                    totalEternalFragments += eFragments.eternalVoid;
-                    totalVoidFragments += vFragments.eternalVoid;
-                    totalChaosFragments += cFragments.chaos;
-                    totalBaseFragments += eFragments.base + vFragments.base + cFragments.base;
+                        totalEternalFragments += eFragments.eternalVoid;
+                        totalVoidFragments += vFragments.eternalVoid;
+                        totalChaosFragments += cFragments.chaos;
+                        totalBaseFragments += eFragments.base + vFragments.base + cFragments.base;
+                    } else {
+                        // Przedmioty B - licz tylko fragmenty C i B
+                        if (c > 0) {
+                            const cFragments = this.calculateCCost(c);
+                            totalChaosFragments += cFragments.chaos;
+                            totalBaseFragments += cFragments.base;
+                        }
+                        // Dodaj fragmenty dla poziomów B (specjalne koszty)
+                        if (base > 0) {
+                            const bFragments = this.calculateBItemFragments(base, item.name);
+                            totalEternalFragments += bFragments.eternal;
+                            totalVoidFragments += bFragments.void;
+                            totalChaosFragments += bFragments.chaos;
+                            totalBaseFragments += bFragments.base;
+                        }
+                    }
                 }
 
                 itemCount++;
