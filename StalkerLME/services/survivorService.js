@@ -307,15 +307,16 @@ class SurvivorService {
         else if (stats.efficiency >= 60) embedColor = '#ffff00'; // Żółty dla średniej
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
+        this.logger.info('🏗️ Tworzenie pierwszego embeda...');
+
+        // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
+        const title = `Analiza Ekwipunku gracza ${userTag}`;
+        const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
+        this.logger.info(`📝 Tytuł embeda: "${safeTitle}" (${safeTitle.length} znaków)`);
+
+        let embed;
         try {
-            this.logger.info('🏗️ Tworzenie pierwszego embeda...');
-
-            // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
-            const title = `Analiza Ekwipunku gracza ${userTag}`;
-            const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
-            this.logger.info(`📝 Tytuł embeda: "${safeTitle}" (${safeTitle.length} znaków)`);
-
-            const embed = new EmbedBuilder()
+            embed = new EmbedBuilder()
                 .setTitle(safeTitle)
                 .setColor(embedColor)
                 .setTimestamp();
@@ -326,22 +327,12 @@ class SurvivorService {
             throw error;
         }
 
-        try {
-            this.logger.info('📋 Dodawanie pola Zasoby...');
-
-            // Informacje główne - strona 1
-            const page1Field = {
-                name: 'Zasoby',
-                value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
-                inline: false
-            };
-
-            embed.addFields(page1Field);
-            this.logger.info('✅ Pole Zasoby dodane');
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy dodawaniu pola Zasoby: ${error.message}`);
-            throw error;
-        }
+        // Informacje główne - strona 1
+        const page1Field = {
+            name: 'Zasoby',
+            value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
+            inline: false
+        };
 
         let description = '';
 
@@ -376,10 +367,11 @@ class SurvivorService {
 
         // Pierwsza strona - tylko Total RC
         const page1 = new EmbedBuilder()
-            .setTitle('🎮 Survivor.io Build Analysis')
+            .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp()
             .setDescription(description)
+            .addFields(page1Field)
             .setFooter({ text: `📝 Strona 1/2` });
 
         // Druga strona - każdy item ekwipunku w osobnym polu
