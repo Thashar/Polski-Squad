@@ -366,17 +366,18 @@ class SurvivorService {
 
                     // Oblicz koszt zasobów tylko dla przedmiotów E/V/C - przenieś na koniec
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                    costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
+                    costText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> **${resourceCost}**` : '';
                 } else {
-                    // Pokaż B dla pozostałych przedmiotów z kropkami
+                    // Pokaż B dla pozostałych przedmiotów z kropkami i odpowiednimi ikonami
                     if (base > 0) {
-                        detailText = ` • B${base}`;
+                        const bIcon = this.getBItemIcon(item.name);
+                        detailText = ` • ${bIcon} B${base}`;
                     }
 
                     // Oblicz RC dla itemów B jeżeli mają C - tylko koszt C
                     if (c > 0) {
                         const cCost = this.calculateOldCCost(c);
-                        costText = cCost > 0 ? ` • **${cCost}** <:II_RC:1385139885924421653>` : '';
+                        costText = cCost > 0 ? ` • <:II_RC:1385139885924421653> **${cCost}**` : '';
                     } else {
                         costText = ''; // Brak C = brak kosztów RC
                     }
@@ -516,6 +517,21 @@ class SurvivorService {
         }
 
         return fragments;
+    }
+
+    /**
+     * Zwraca odpowiednią ikonę dla itemów B na podstawie typu
+     */
+    getBItemIcon(itemName) {
+        const bItemIcons = {
+            'Eternal Suit': '<:M_IconEternal:1417224046235619358>',
+            'Voidwaker Emblem': '<:M_IconVoid:1417224049490268270>',
+            'Voidwaker Handguards': '<:M_IconVoid:1417224049490268270>',
+            'Voidwaker Treads': '<:M_IconVoid:1417224049490268270>',
+            'Twisting Belt': '<:M_IconChaos:1417224053055426811>'
+        };
+
+        return bItemIcons[itemName] || ''; // Zwróć pustą string jeśli brak ikony
     }
 
     /**
