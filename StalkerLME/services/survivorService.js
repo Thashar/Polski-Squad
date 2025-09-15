@@ -373,10 +373,10 @@ class SurvivorService {
                         detailText = ` • B${base}`;
                     }
 
-                    // Oblicz RC dla itemów B jeżeli mają C
+                    // Oblicz RC dla itemów B jeżeli mają C - tylko koszt C
                     if (c > 0) {
-                        const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
-                        costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
+                        const cCost = this.calculateOldCCost(c);
+                        costText = cCost > 0 ? ` • **${cCost}** <:II_RC:1385139885924421653>` : '';
                     } else {
                         costText = ''; // Brak C = brak kosztów RC
                     }
@@ -671,14 +671,21 @@ class SurvivorService {
                 totalCountLevels += c;
                 totalBaseLevels += base;
 
-                // Stary system kosztów dla Total RC i efficiency - tylko przedmioty E/V/C
-                if (this.shouldCalculateResourceCost(item.name) && this.shouldShowEVCh(item.name)) {
-                    const eCost = this.calculateOldEVCost(e);
-                    const vCost = this.calculateOldEVCost(v);
-                    const cCost = this.calculateOldCCost(c);
+                // Stary system kosztów dla Total RC i efficiency
+                if (this.shouldCalculateResourceCost(item.name)) {
+                    if (this.shouldShowEVCh(item.name)) {
+                        // Przedmioty E/V/C - licz wszystko
+                        const eCost = this.calculateOldEVCost(e);
+                        const vCost = this.calculateOldEVCost(v);
+                        const cCost = this.calculateOldCCost(c);
 
-                    totalEvolutionCost += eCost;
-                    totalResourceCost += eCost + vCost + cCost;
+                        totalEvolutionCost += eCost;
+                        totalResourceCost += eCost + vCost + cCost;
+                    } else {
+                        // Przedmioty B - licz tylko C
+                        const cCost = this.calculateOldCCost(c);
+                        totalResourceCost += cCost;
+                    }
                 }
 
                 // Nowy system fragmentów (dla wyświetlania z emojis) - tylko przedmioty E/V/C
