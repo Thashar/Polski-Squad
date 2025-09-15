@@ -410,7 +410,7 @@ async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService } = sharedState;
 
     // Obsługa przycisków paginacji buildów
-    if (interaction.customId === 'prev_page' || interaction.customId === 'next_page') {
+    if (interaction.customId === 'zasoby_page' || interaction.customId === 'ekwipunek_page') {
         if (!sharedState.buildPagination) {
             await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
             return;
@@ -428,12 +428,12 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
-        // Zmień stronę
+        // Ustaw nową stronę na podstawie przycisku
         let newPage = paginationData.currentPage;
-        if (interaction.customId === 'prev_page' && newPage > 0) {
-            newPage--;
-        } else if (interaction.customId === 'next_page' && newPage < paginationData.embeds.length - 1) {
-            newPage++;
+        if (interaction.customId === 'zasoby_page') {
+            newPage = 0;
+        } else if (interaction.customId === 'ekwipunek_page') {
+            newPage = 1;
         }
 
         // Aktualizuj dane paginacji

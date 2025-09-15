@@ -298,7 +298,7 @@ class SurvivorService {
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
         const embed = new EmbedBuilder()
-            .setTitle('🎮 Survivor.io Build Analysis')
+            .setTitle(`Analiza Ekwipunku gracza ${userTag}`)
             .setColor(embedColor)
             .setTimestamp();
 
@@ -352,7 +352,7 @@ class SurvivorService {
 
         // Druga strona - każdy item ekwipunku w osobnym polu
         const page2 = new EmbedBuilder()
-            .setTitle('🎮 Survivor.io Build Analysis - Ekwipunek')
+            .setTitle(`Analiza Ekwipunku gracza ${userTag}`)
             .setColor(embedColor)
             .setTimestamp();
 
@@ -488,20 +488,13 @@ class SurvivorService {
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('prev_page')
-                    .setLabel('◀️ Poprzednia')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage === 0),
+                    .setCustomId('zasoby_page')
+                    .setLabel('Zasoby')
+                    .setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
-                    .setCustomId('page_info')
-                    .setLabel(`${currentPage + 1}/2`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId('next_page')
-                    .setLabel('Następna ▶️')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage === 1)
+                    .setCustomId('ekwipunek_page')
+                    .setLabel('Ekwipunek')
+                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
 
         return row;
