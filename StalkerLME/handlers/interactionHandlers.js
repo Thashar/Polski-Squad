@@ -1291,9 +1291,31 @@ async function handleDecodeCommand(interaction, sharedState) {
             return;
         }
 
+        logger.info('🔍 Tworzenie embedów...');
         const embeds = survivorService.createBuildEmbeds(buildData.data, interaction.user.tag, code);
+
+        logger.info('🔍 Tworzenie przycisków nawigacji...');
         const navigationButtons = survivorService.createNavigationButtons(0);
 
+        logger.info('🔍 Sprawdzanie struktury przycisków...');
+        try {
+            const buttonsJSON = JSON.stringify(navigationButtons.toJSON());
+            logger.info(`🔘 Przyciski JSON length: ${buttonsJSON.length}`);
+        } catch (buttonError) {
+            logger.error('❌ Błąd przy sprawdzaniu przycisków:', buttonError.message);
+            throw new Error(`Błędna struktura przycisków: ${buttonError.message}`);
+        }
+
+        logger.info('🔍 Sprawdzanie struktury embeda przed wysłaniem...');
+        try {
+            const embedJSON = JSON.stringify(embeds[0].toJSON());
+            logger.info(`📊 Pierwszy embed JSON length: ${embedJSON.length}`);
+        } catch (embedError) {
+            logger.error('❌ Błąd przy sprawdzaniu embeda:', embedError.message);
+            throw new Error(`Błędna struktura embeda: ${embedError.message}`);
+        }
+
+        logger.info('📤 Wysyłanie odpowiedzi...');
         const response = await interaction.editReply({
             embeds: [embeds[0]], // Rozpocznij od pierwszej strony
             components: [navigationButtons]
