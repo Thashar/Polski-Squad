@@ -334,17 +334,12 @@ class SurvivorService {
             }
         }
 
-        // Pierwsza strona - statystyki i Total RC
+        // Pierwsza strona - tylko Total RC
         const page1 = new EmbedBuilder()
             .setTitle('🎮 Survivor.io Build Analysis')
             .setColor(embedColor)
             .setTimestamp()
             .setDescription(description)
-            .addFields({
-                name: '🧪 Zużyte suple',
-                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
-                inline: false
-            })
             .setFooter({ text: `📝 Strona 1/2` });
 
         // Druga strona - każdy item ekwipunku w osobnym polu
@@ -352,6 +347,13 @@ class SurvivorService {
             .setTitle('🎮 Survivor.io Build Analysis - Ekwipunek')
             .setColor(embedColor)
             .setTimestamp();
+
+        // Dodaj pole z fragmentami jako pierwsze po prawej stronie
+        page2.addFields({
+            name: '🧪 Zużyte suple',
+            value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
+            inline: true // Po prawej stronie
+        });
 
         // Zbierz wszystkie itemy w osobnych polach
         const equipmentFields = [];
