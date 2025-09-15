@@ -359,37 +359,64 @@ class SurvivorService {
             throw error;
         }
 
+        this.logger.info('📦 Wyszukiwanie itemów...');
+
         // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
         const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
         const foundItems = {};
 
         // Zbierz wszystkie itemy ze zdekodowanych danych
-        for (let i = 0; i < itemTypes.length; i++) {
-            const itemType = itemTypes[i];
-            const itemTypeLower = itemTypesLowerCase[i];
-            const item = buildData[itemType] || buildData[itemTypeLower] ||
-                        (buildData.data && (buildData.data[itemType] || buildData.data[itemTypeLower]));
+        try {
+            for (let i = 0; i < itemTypes.length; i++) {
+                const itemType = itemTypes[i];
+                const itemTypeLower = itemTypesLowerCase[i];
+                const item = buildData[itemType] || buildData[itemTypeLower] ||
+                            (buildData.data && (buildData.data[itemType] || buildData.data[itemTypeLower]));
 
-            if (item && item.name && item.name !== 'Unknown') {
-                foundItems[item.name] = item;
+                if (item && item.name && item.name !== 'Unknown') {
+                    foundItems[item.name] = item;
+                    this.logger.info(`📋 Znaleziony item: ${item.name}`);
+                }
             }
+            this.logger.info(`✅ Znaleziono ${Object.keys(foundItems).length} itemów`);
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy wyszukiwaniu itemów: ${error.message}`);
+            throw error;
         }
 
+        this.logger.info('📄 Tworzenie pierwszej strony...');
+
         // Pierwsza strona - tylko Total RC
-        const page1 = new EmbedBuilder()
-            .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp()
-            .setDescription(description)
-            .addFields(page1Field)
-            .setFooter({ text: `📝 Strona 1/2` });
+        let page1;
+        try {
+            page1 = new EmbedBuilder()
+                .setTitle(safeTitle)
+                .setColor(embedColor)
+                .setTimestamp()
+                .setDescription(description)
+                .addFields(page1Field)
+                .setFooter({ text: `📝 Strona 1/2` });
+            this.logger.info('✅ Pierwsza strona utworzona');
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy tworzeniu pierwszej strony: ${error.message}`);
+            throw error;
+        }
+
+        this.logger.info('📄 Tworzenie drugiej strony...');
 
         // Druga strona - każdy item ekwipunku w osobnym polu
-        const page2 = new EmbedBuilder()
-            .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+        let page2;
+        try {
+            page2 = new EmbedBuilder()
+                .setTitle(safeTitle)
+                .setColor(embedColor)
+                .setTimestamp();
+            this.logger.info('✅ Druga strona utworzona');
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy tworzeniu drugiej strony: ${error.message}`);
+            throw error;
+        }
 
         // Dodaj pole z fragmentami jako pierwsze po prawej stronie
         page2.addFields({
