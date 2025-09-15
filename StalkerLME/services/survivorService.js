@@ -436,16 +436,22 @@ class SurvivorService {
             // Inteligentne obcinanie - usuń całe itemy zamiast przerywania w środku
             this.logger.info(`Długość pola Ekwipunek: ${trimmedText.length} znaków`);
 
-            if (trimmedText.length > 1024) {
-                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1024 znaków - obcinam`);
+            // Uwzględnij znaki stopki: "📝 Strona 2/2" = ~12 znaków
+            const footerLength = 12;
+            const maxFieldLength = 1200 - footerLength; // 1188 znaków dla pola
+
+            if (trimmedText.length > maxFieldLength) {
+                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/${maxFieldLength} znaków (+ ${footerLength} stopka) - obcinam`);
 
                 const lines = trimmedText.split('\n'); // Podziel na linie
                 let truncatedText = '';
                 let currentLength = 0;
+                const truncationMessage = '\n\n*...reszta ekwipunku...*';
+                const safeLimit = maxFieldLength - truncationMessage.length; // Zostaw miejsce na oznaczenie
 
                 for (const line of lines) {
                     const lineWithNewline = line + '\n';
-                    if (currentLength + lineWithNewline.length <= 1000) { // Zostaw miejsce na "..."
+                    if (currentLength + lineWithNewline.length <= safeLimit) {
                         truncatedText += lineWithNewline;
                         currentLength += lineWithNewline.length;
                     } else {
@@ -454,7 +460,7 @@ class SurvivorService {
                 }
 
                 // Usuń ostatnie \n i dodaj oznaczenie obcięcia
-                truncatedText = truncatedText.trim() + '\n\n*...reszta ekwipunku...*';
+                truncatedText = truncatedText.trim() + truncationMessage;
 
                 page2.addFields({
                     name: 'Ekwipunek',
