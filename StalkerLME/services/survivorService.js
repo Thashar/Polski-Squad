@@ -438,7 +438,7 @@ class SurvivorService {
                 // Sprawdź czy pole nie jest za długie (limit 1024 znaków na pole)
                 if (fieldValue.length <= 1024) {
                     equipmentFields.push({
-                        name: '\u200B', // Niewidoczny znak - brak nazwy pola
+                        name: '⚔️',
                         value: fieldValue,
                         inline: false // Pola od góry do dołu
                     });
@@ -446,7 +446,7 @@ class SurvivorService {
                     // Jeśli za długie, obetnij
                     const truncated = fieldValue.substring(0, 1020) + '...';
                     equipmentFields.push({
-                        name: '\u200B',
+                        name: '⚔️',
                         value: truncated,
                         inline: false
                     });
