@@ -278,8 +278,17 @@ class SurvivorService {
     createBuildEmbeds(buildData, userTag, buildCode) {
         const { EmbedBuilder } = require('discord.js');
 
-        // Oblicz statystyki buildu
-        const stats = this.calculateBuildStatistics(buildData);
+        try {
+            this.logger.info('📊 Rozpoczynam tworzenie embedów...');
+
+            // Oblicz statystyki buildu
+            this.logger.info('🔢 Obliczanie statystyk...');
+            const stats = this.calculateBuildStatistics(buildData);
+            this.logger.info(`📈 Stats obliczone: totalPower=${stats.totalPower}`);
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy obliczaniu statystyk: ${error.message}`);
+            throw error;
+        }
 
         // Emojis dla różnych typów ekwipunku
         const itemEmojis = {
@@ -297,23 +306,41 @@ class SurvivorService {
         else if (stats.efficiency >= 60) embedColor = '#ffff00'; // Żółty dla średniej
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
-        // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
-        const title = `Analiza Ekwipunku gracza ${userTag}`;
-        const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
+        try {
+            this.logger.info('🏗️ Tworzenie pierwszego embeda...');
 
-        const embed = new EmbedBuilder()
-            .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
+            const title = `Analiza Ekwipunku gracza ${userTag}`;
+            const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
+            this.logger.info(`📝 Tytuł embeda: "${safeTitle}" (${safeTitle.length} znaków)`);
 
-        // Informacje główne - strona 1
-        const page1Field = {
-            name: 'Zasoby',
-            value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
-            inline: false
-        };
+            const embed = new EmbedBuilder()
+                .setTitle(safeTitle)
+                .setColor(embedColor)
+                .setTimestamp();
 
-        embed.addFields(page1Field);
+            this.logger.info('✅ Pierwszy embed utworzony');
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy tworzeniu pierwszego embeda: ${error.message}`);
+            throw error;
+        }
+
+        try {
+            this.logger.info('📋 Dodawanie pola Zasoby...');
+
+            // Informacje główne - strona 1
+            const page1Field = {
+                name: 'Zasoby',
+                value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
+                inline: false
+            };
+
+            embed.addFields(page1Field);
+            this.logger.info('✅ Pole Zasoby dodane');
+        } catch (error) {
+            this.logger.error(`❌ Błąd przy dodawaniu pola Zasoby: ${error.message}`);
+            throw error;
+        }
 
         let description = '';
 
@@ -473,12 +500,15 @@ class SurvivorService {
 
         // Debug: sprawdź strukturę embedów przed zwróceniem
         try {
+            this.logger.info('🔍 Sprawdzanie struktury embedów...');
             const page1JSON = page1.toJSON();
             const page2JSON = page2.toJSON();
-            this.logger.info(`Strona 1: ${JSON.stringify(page1JSON).length} znaków JSON`);
-            this.logger.info(`Strona 2: ${JSON.stringify(page2JSON).length} znaków JSON`);
+            this.logger.info(`✅ Strona 1: ${JSON.stringify(page1JSON).length} znaków JSON`);
+            this.logger.info(`✅ Strona 2: ${JSON.stringify(page2JSON).length} znaków JSON`);
+            this.logger.info('🎉 Embeddy utworzone pomyślnie, zwracam tablicę');
         } catch (error) {
-            this.logger.error(`Błąd przy sprawdzaniu embedów: ${error.message}`);
+            this.logger.error(`❌ Błąd przy sprawdzaniu embedów: ${error.message}`);
+            throw error;
         }
 
         return [page1, page2];
