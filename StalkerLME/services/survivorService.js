@@ -362,17 +362,17 @@ class SurvivorService {
                     // Dodaj linie ze gwiazdkami dla każdego typu zasobów (max 10 gwiazdek)
                     let starLines = '';
                     if (e > 0) {
-                        const starCount = Math.min(e, 10); // Ogranicz do 10 gwiazdek
+                        const starCount = Math.min(e, 5); // Ogranicz do 5 gwiazdek
                         const yellowStars = '🟡'.repeat(starCount);
                         starLines += `\n<:M_IconEternal:1417224046235619358> • ${yellowStars}`;
                     }
                     if (v > 0) {
-                        const starCount = Math.min(v, 10);
+                        const starCount = Math.min(v, 5);
                         const yellowStars = '🟡'.repeat(starCount);
                         starLines += `\n<:M_IconVoid:1417224049490268270> • ${yellowStars}`;
                     }
                     if (c > 0) {
-                        const starCount = Math.min(c, 10);
+                        const starCount = Math.min(c, 5);
                         const redStars = '🔴'.repeat(starCount);
                         starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
@@ -393,12 +393,12 @@ class SurvivorService {
                     let starLines = '';
                     if (base > 0) {
                         const bIcon = this.getBItemIcon(item.name);
-                        const starCount = Math.min(base, 10);
+                        const starCount = Math.min(base, 5);
                         const yellowStars = '🟡'.repeat(starCount);
                         starLines += `\n${bIcon} • ${yellowStars}`;
                     }
                     if (c > 0) {
-                        const starCount = Math.min(c, 10);
+                        const starCount = Math.min(c, 5);
                         const redStars = '🔴'.repeat(starCount);
                         starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
@@ -434,8 +434,10 @@ class SurvivorService {
             const trimmedText = equipmentText.trim();
 
             // Inteligentne obcinanie - usuń całe itemy zamiast przerywania w środku
-            if (trimmedText.length > 1450) {
-                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1450 znaków`);
+            this.logger.info(`Długość pola Ekwipunek: ${trimmedText.length} znaków`);
+
+            if (trimmedText.length > 1024) {
+                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1024 znaków - obcinam`);
 
                 const lines = trimmedText.split('\n'); // Podziel na linie
                 let truncatedText = '';
@@ -443,7 +445,7 @@ class SurvivorService {
 
                 for (const line of lines) {
                     const lineWithNewline = line + '\n';
-                    if (currentLength + lineWithNewline.length <= 1420) { // Zostaw miejsce na "..."
+                    if (currentLength + lineWithNewline.length <= 1000) { // Zostaw miejsce na "..."
                         truncatedText += lineWithNewline;
                         currentLength += lineWithNewline.length;
                     } else {
@@ -469,6 +471,16 @@ class SurvivorService {
         }
 
         page2.setFooter({ text: `📝 Strona 2/2` });
+
+        // Debug: sprawdź strukturę embedów przed zwróceniem
+        try {
+            const page1JSON = page1.toJSON();
+            const page2JSON = page2.toJSON();
+            this.logger.info(`Strona 1: ${JSON.stringify(page1JSON).length} znaków JSON`);
+            this.logger.info(`Strona 2: ${JSON.stringify(page2JSON).length} znaków JSON`);
+        } catch (error) {
+            this.logger.error(`Błąd przy sprawdzaniu embedów: ${error.message}`);
+        }
 
         return [page1, page2];
     }
