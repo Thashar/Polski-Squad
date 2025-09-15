@@ -370,17 +370,17 @@ class SurvivorService {
                     let starLines = '';
                     if (e > 0) {
                         const starCount = Math.min(e, 10); // Ogranicz do 10 gwiazdek
-                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(starCount);
+                        const yellowStars = '🟡'.repeat(starCount);
                         starLines += `\n<:M_IconEternal:1417224046235619358> • ${yellowStars}`;
                     }
                     if (v > 0) {
                         const starCount = Math.min(v, 10);
-                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(starCount);
+                        const yellowStars = '🟡'.repeat(starCount);
                         starLines += `\n<:M_IconVoid:1417224049490268270> • ${yellowStars}`;
                     }
                     if (c > 0) {
                         const starCount = Math.min(c, 10);
-                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(starCount);
+                        const redStars = '🔴'.repeat(starCount);
                         starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
                     costText += starLines;
@@ -401,12 +401,12 @@ class SurvivorService {
                     if (base > 0) {
                         const bIcon = this.getBItemIcon(item.name);
                         const starCount = Math.min(base, 10);
-                        const yellowStars = '<:M_StarYellow:1417240942074658896>'.repeat(starCount);
+                        const yellowStars = '🟡'.repeat(starCount);
                         starLines += `\n${bIcon} • ${yellowStars}`;
                     }
                     if (c > 0) {
                         const starCount = Math.min(c, 10);
-                        const redStars = '<:M_StarRed:1259958133963620484>'.repeat(starCount);
+                        const redStars = '🔴'.repeat(starCount);
                         starLines += `\n<:M_IconChaos:1417224053055426811> • ${redStars}`;
                     }
                     costText += starLines;
