@@ -368,11 +368,18 @@ class SurvivorService {
                     const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
                     costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
                 } else {
-                    // Pokaż B dla pozostałych przedmiotów (bez kosztów RC)
+                    // Pokaż B dla pozostałych przedmiotów z kropkami
                     if (base > 0) {
-                        detailText = ` B${base}`;
+                        detailText = ` • B${base}`;
                     }
-                    costText = ''; // Wszystkie przedmioty B nie mają kosztów RC
+
+                    // Oblicz RC dla itemów B jeżeli mają C
+                    if (c > 0) {
+                        const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
+                        costText = resourceCost > 0 ? ` • **${resourceCost}** <:II_RC:1385139885924421653>` : '';
+                    } else {
+                        costText = ''; // Brak C = brak kosztów RC
+                    }
                 }
 
                 equipmentText += `${emoji} **${item.name}**${detailText}${costText}\n`;
