@@ -278,12 +278,13 @@ class SurvivorService {
     createBuildEmbeds(buildData, userTag, buildCode) {
         const { EmbedBuilder } = require('discord.js');
 
-        try {
-            this.logger.info('📊 Rozpoczynam tworzenie embedów...');
+        this.logger.info('📊 Rozpoczynam tworzenie embedów...');
 
-            // Oblicz statystyki buildu
-            this.logger.info('🔢 Obliczanie statystyk...');
-            const stats = this.calculateBuildStatistics(buildData);
+        // Oblicz statystyki buildu
+        this.logger.info('🔢 Obliczanie statystyk...');
+        let stats;
+        try {
+            stats = this.calculateBuildStatistics(buildData);
             this.logger.info(`📈 Stats obliczone: totalPower=${stats.totalPower}`);
         } catch (error) {
             this.logger.error(`❌ Błąd przy obliczaniu statystyk: ${error.message}`);
