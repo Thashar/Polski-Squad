@@ -129,19 +129,22 @@ class SurvivorService {
 
             const equipment = data.j;
 
-            // Mapowanie typów przedmiotów (item.t) na nazwy i kategorie
-            const itemTypeMap = {
-                1: { name: 'Twin Lance', type: 'Weapon' },
-                2: { name: 'Evervoid Armor', type: 'Armor' },
-                3: { name: 'Voidwaker Handguards', type: 'Gloves' },
-                4: { name: 'Voidwaker Treads', type: 'Boots' },
-                5: { name: 'Voidwaker Emblem', type: 'Necklace' },
-                6: { name: 'Stardust Sash', type: 'Belt' },
-                7: { name: 'Twisting Belt', type: 'Belt' },
-                8: { name: 'Moonscar Bracer', type: 'Gloves' },
-                9: { name: 'Eternal Suit', type: 'Armor' },
-                10: { name: 'Glacial Warboots', type: 'Boots' },
-                11: { name: 'Judgment Necklace', type: 'Necklace' }
+            // Mapowanie pozycji w tablicy na kategorie (stałe)
+            const itemTypes = ['Weapon', 'Armor', 'Necklace', 'Belt', 'Gloves', 'Boots'];
+
+            // Mapowanie typu (item.t) na nazwę przedmiotu (na podstawie rzeczywistych danych)
+            const getItemName = (itemType) => {
+                const typeNameMap = {
+                    1: 'Twin Lance',
+                    2: 'Evervoid Armor',
+                    5: 'Voidwaker Emblem',
+                    6: 'Stardust Sash',
+                    8: 'Moonscar Bracer',
+                    9: 'Voidwaker Handguards',
+                    10: 'Glacial Warboots'
+                    // Dodamy inne gdy je zobaczymy w rzeczywistych danych
+                };
+                return typeNameMap[itemType] || `Unknown Item (type ${itemType})`;
             };
 
             const buildData = {
@@ -153,13 +156,14 @@ class SurvivorService {
                 }
             };
 
-            equipment.forEach((item) => {
-                if (item && typeof item === 'object' && item.t) {
-                    const itemInfo = itemTypeMap[item.t];
+            equipment.forEach((item, index) => {
+                if (item && typeof item === 'object') {
+                    const itemType = itemTypes[index];
+                    const itemName = getItemName(item.t);
 
-                    if (itemInfo) {
-                        buildData.data[itemInfo.type] = {
-                            name: itemInfo.name,
+                    if (itemType) {
+                        buildData.data[itemType] = {
+                            name: itemName,
                             e: item.w || 0,  // Evolution
                             v: item.u || 0,  // Vigor
                             c: item.v || 0,  // Count
