@@ -275,7 +275,7 @@ class SurvivorService {
     /**
      * Tworzy embed z informacjami o buildzie
      */
-    createBuildEmbed(buildData, userTag, buildCode) {
+    createBuildEmbeds(buildData, userTag, buildCode) {
         const { EmbedBuilder } = require('discord.js');
 
         // Oblicz statystyki buildu
@@ -305,14 +305,7 @@ class SurvivorService {
         // Informacje główne
         let description = `**<:II_RC:1385139885924421653> Total RC:** ${stats.totalPower}\n\n`;
 
-        // Szczegółowe statystyki
-        embed.addFields(
-            {
-                name: '🧪 Zużyte suple',
-                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
-                inline: false
-            }
-        );
+        // Statystyki będą dodane do pierwszej strony poniżej
 
         // Lista ekwipunku - wyświetl w określonej kolejności
         let equipmentText = '';
@@ -416,24 +409,38 @@ class SurvivorService {
             }
         }
 
+        // Przygotuj ekwipunek do drugiej strony (kod zostanie użyty poniżej)
+
+        // Pierwsza strona - statystyki i Total RC
+        const page1 = new EmbedBuilder()
+            .setTitle('🎮 Survivor.io Build Analysis')
+            .setColor(embedColor)
+            .setTimestamp()
+            .setDescription(description)
+            .addFields({
+                name: '🧪 Zużyte suple',
+                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments}`,
+                inline: false
+            })
+            .setFooter({ text: `📝 Strona 1/2` });
+
+        // Druga strona - tylko ekwipunek
+        const page2 = new EmbedBuilder()
+            .setTitle('🎮 Survivor.io Build Analysis - Ekwipunek')
+            .setColor(embedColor)
+            .setTimestamp();
+
         if (equipmentText) {
             const trimmedText = equipmentText.trim();
-
-            // Debug: sprawdź długość pola
-            this.logger.info(`Długość pola Ekwipunek: ${trimmedText.length} znaków`);
-
-            // Discord ma limit 1024 znaków na pole
             if (trimmedText.length > 1024) {
-                this.logger.warn(`Pole Ekwipunek za długie: ${trimmedText.length}/1024`);
-                // Obetnij tekst jeśli za długi
                 const truncatedText = trimmedText.substring(0, 1020) + '...';
-                embed.addFields({
+                page2.addFields({
                     name: 'Ekwipunek',
                     value: truncatedText,
                     inline: false
                 });
             } else {
-                embed.addFields({
+                page2.addFields({
                     name: 'Ekwipunek',
                     value: trimmedText,
                     inline: false
@@ -441,24 +448,37 @@ class SurvivorService {
             }
         }
 
-        embed.setDescription(description);
+        page2.setFooter({ text: `📝 Strona 2/2` });
 
-        // Oblicz łączną liczbę znaków w embedzie
-        const embedData = embed.toJSON();
-        let totalChars = 0;
+        return [page1, page2];
+    }
 
-        if (embedData.title) totalChars += embedData.title.length;
-        if (embedData.description) totalChars += embedData.description.length;
-        if (embedData.fields) {
-            embedData.fields.forEach(field => {
-                totalChars += field.name.length + field.value.length;
-            });
-        }
+    /**
+     * Tworzy przyciski nawigacji dla paginacji
+     */
+    createNavigationButtons(currentPage = 0) {
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-        // Dodaj stopkę z liczbą znaków
-        embed.setFooter({ text: `📝 ${totalChars} znaków` });
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('prev_page')
+                    .setLabel('◀️ Poprzednia')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage === 0),
+                new ButtonBuilder()
+                    .setCustomId('page_info')
+                    .setLabel(`${currentPage + 1}/2`)
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId('next_page')
+                    .setLabel('Następna ▶️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage === 1)
+            );
 
-        return embed;
+        return row;
     }
 
     /**

@@ -406,7 +406,46 @@ async function handleSelectMenu(interaction, config, reminderService) {
 }
 
 async function handleButton(interaction, sharedState) {
-    const { config, databaseService, punishmentService } = sharedState;
+    const { config, databaseService, punishmentService, survivorService } = sharedState;
+
+    // Obsługa przycisków paginacji buildów
+    if (interaction.customId === 'prev_page' || interaction.customId === 'next_page') {
+        if (!sharedState.buildPagination) {
+            await interaction.reply({ content: '❌ Sesja paginacji wygasła.', ephemeral: true });
+            return;
+        }
+
+        const paginationData = sharedState.buildPagination.get(interaction.message.id);
+        if (!paginationData) {
+            await interaction.reply({ content: '❌ Nie znaleziono danych paginacji.', ephemeral: true });
+            return;
+        }
+
+        // Sprawdź czy użytkownik może korzystać z przycisków
+        if (paginationData.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ Możesz używać tylko własnych przycisków nawigacji.', ephemeral: true });
+            return;
+        }
+
+        // Zmień stronę
+        let newPage = paginationData.currentPage;
+        if (interaction.customId === 'prev_page' && newPage > 0) {
+            newPage--;
+        } else if (interaction.customId === 'next_page' && newPage < paginationData.embeds.length - 1) {
+            newPage++;
+        }
+
+        // Aktualizuj dane paginacji
+        paginationData.currentPage = newPage;
+        const navigationButtons = survivorService.createNavigationButtons(newPage);
+
+        await interaction.update({
+            embeds: [paginationData.embeds[newPage]],
+            components: [navigationButtons]
+        });
+        return;
+    }
+
     if (interaction.customId === 'vacation_request') {
         // Obsługa przycisku "Zgłoś urlop"
         await sharedState.vacationService.handleVacationRequest(interaction);
@@ -1250,10 +1289,23 @@ async function handleDecodeCommand(interaction, config, survivorService) {
             return;
         }
 
-        const embed = survivorService.createBuildEmbed(buildData.data, interaction.user.tag, code);
+        const embeds = survivorService.createBuildEmbeds(buildData.data, interaction.user.tag, code);
+        const navigationButtons = survivorService.createNavigationButtons(0);
 
-        await interaction.editReply({
-            embeds: [embed]
+        const response = await interaction.editReply({
+            embeds: [embeds[0]], // Rozpocznij od pierwszej strony
+            components: [navigationButtons]
+        });
+
+        // Przechowuj dane dla paginacji
+        if (!sharedState.buildPagination) {
+            sharedState.buildPagination = new Map();
+        }
+
+        sharedState.buildPagination.set(response.id, {
+            embeds: embeds,
+            currentPage: 0,
+            userId: interaction.user.id
         });
 
         logger.info(`✅ Pomyślnie zdekodowano build Survivor.io dla ${interaction.user.tag}`);
