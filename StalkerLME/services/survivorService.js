@@ -277,19 +277,10 @@ class SurvivorService {
      * Tworzy embed z informacjami o buildzie
      */
     createBuildEmbeds(buildData, userTag, buildCode) {
-        this.logger.info('📊 START: createBuildEmbeds');
         const { EmbedBuilder } = require('discord.js');
 
         // Oblicz statystyki buildu
-        this.logger.info('🔢 Obliczanie statystyk...');
-        let stats;
-        try {
-            stats = this.calculateBuildStatistics(buildData);
-            this.logger.info(`✅ Stats: totalPower=${stats.totalPower}`);
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy obliczaniu statystyk: ${error.message}`);
-            throw error;
-        }
+        const stats = this.calculateBuildStatistics(buildData);
 
         // Emojis dla różnych typów ekwipunku
         const itemEmojis = {
@@ -307,13 +298,9 @@ class SurvivorService {
         else if (stats.efficiency >= 60) embedColor = '#ffff00'; // Żółty dla średniej
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
-        this.logger.info('🏗️ Tworzenie tytułu...');
         // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
         const title = `Analiza Ekwipunku gracza ${userTag}`;
         const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
-        this.logger.info(`✅ Tytuł: "${safeTitle}"`);
-
-        this.logger.info('📋 Tworzenie pól...');
 
         // Informacje główne - strona 1
         const page1Field = {
@@ -331,10 +318,8 @@ class SurvivorService {
             'Moonscar Bracer', 'Voidwaker Treads', 'Glacial Warboots'
         ];
 
-        this.logger.info('🔧 Obliczanie totalCount...');
         // Oblicz łączną sumę C dla Twin Lance
         const totalCount = this.calculateTotalCount(buildData);
-        this.logger.info(`✅ TotalCount: ${totalCount}`);
 
         // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
@@ -353,63 +338,23 @@ class SurvivorService {
             }
         }
 
-        this.logger.info('📄 Tworzenie page1...');
-        this.logger.info(`🔍 safeTitle: "${safeTitle}"`);
-        this.logger.info(`🔍 embedColor: "${embedColor}"`);
-        this.logger.info(`🔍 description: "${description}"`);
-        this.logger.info(`🔍 page1Field: ${JSON.stringify(page1Field)}`);
-
         // Pierwsza strona - tylko Total RC
-        let page1;
-        try {
-            this.logger.info('🏗️ Tworzenie EmbedBuilder...');
-            page1 = new EmbedBuilder();
-            this.logger.info('✅ EmbedBuilder utworzony');
+        const page1 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp()
+            .addFields(page1Field);
 
-            this.logger.info('🏗️ Ustawianie tytułu...');
-            page1.setTitle(safeTitle);
-            this.logger.info('✅ Tytuł ustawiony');
-
-            this.logger.info('🏗️ Ustawianie koloru...');
-            page1.setColor(embedColor);
-            this.logger.info('✅ Kolor ustawiony');
-
-            this.logger.info('🏗️ Ustawianie timestamp...');
-            page1.setTimestamp();
-            this.logger.info('✅ Timestamp ustawiony');
-
-            this.logger.info('🏗️ Ustawianie description...');
-            if (description && description.length > 0) {
-                page1.setDescription(description);
-                this.logger.info('✅ Description ustawiony');
-            } else {
-                this.logger.info('⚠️ Description pominięty (pusty)');
-            }
-
-            this.logger.info('🏗️ Dodawanie pól...');
-            page1.addFields(page1Field);
-            this.logger.info('✅ Pola dodane');
-
-            this.logger.info('✅ Page1 utworzony');
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy tworzeniu page1: ${error.message}`);
-            this.logger.error(`❌ Stack: ${error.stack}`);
-            throw error;
+        // Ustaw description tylko jeśli nie jest pusty
+        if (description && description.length > 0) {
+            page1.setDescription(description);
         }
 
-        this.logger.info('📄 Tworzenie page2...');
         // Druga strona - każdy item ekwipunku w osobnym polu
-        let page2;
-        try {
-            page2 = new EmbedBuilder()
-                .setTitle(safeTitle)
-                .setColor(embedColor)
-                .setTimestamp();
-            this.logger.info('✅ Page2 utworzony');
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy tworzeniu page2: ${error.message}`);
-            throw error;
-        }
+        const page2 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
 
         // Dodaj pole z fragmentami jako pierwsze po prawej stronie
         page2.addFields({
@@ -523,7 +468,6 @@ class SurvivorService {
         // Usuń footer ze strony 2
         // page2.setFooter({ text: `📝 Strona 2/2` });
 
-        this.logger.info('🎉 KONIEC: createBuildEmbeds - zwracam embeddy');
         return [page1, page2];
     }
 
@@ -765,7 +709,7 @@ class SurvivorService {
      */
     shouldShowEVCh(itemName) {
         const evChItems = [
-            'Twin Lance', 'Evervoid Armor', 'Stardust Sash',
+            'Twin Lance', 'Evervoid Armor', 'Judgment Necklace', 'Stardust Sash',
             'Moonscar Bracer', 'Glacial Warboots'
         ];
         return evChItems.includes(itemName);
