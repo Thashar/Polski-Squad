@@ -1201,7 +1201,7 @@ class SurvivorService {
             'Portable Mech Case': '<:Coll_portable_mech_case:1417427556642062377>'
         };
 
-        // Kolejność collectibles jak w strukturze danych
+        // Tylko wybrane collectibles do wyświetlania
         const collectibleOrder = [
             'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
             'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
@@ -1209,14 +1209,6 @@ class SurvivorService {
             'Nano-Mimetic Mask', 'Dice of Destiny', 'Dimension Foil', 'Mental Sync Helm',
             'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
             'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
-            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
-            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
-            'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
-            'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
-            'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
-            'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
-            'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
-            'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
             'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
         ];
 
