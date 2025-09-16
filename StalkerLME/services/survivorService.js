@@ -1156,60 +1156,47 @@ class SurvivorService {
 
         // Mapowanie nazw collectibles na ikony
         const collectibleIcons = {
-            'Angelic Tear Crystal': '<:Coll_angelic_tear_crystal:1417427403579461704>',
-            'Anti-Gravity Device': '<:Coll_anti_gravity_device:1417427407677427802>',
-            'Antiparticle Gourd': '<:Coll_antiparticle_gourd:1417427413029093406>',
-            'Astral Dewdrop': '<:Coll_astral_dewdrop:1417427420092305500>',
-            'Atomic Mech': '<:Coll_atomic_mech:1417427423296884816>',
-            'Book of Ancient Wisdom': '<:Coll_book_of_ancient_wisdom:1417427426727690312>',
-            'Clone Mirror': '<:Coll_clone_mirror:1417427429781278720>',
-            'Comms Conch': '<:Coll_comms_conch:1417427433388376075>',
-            'Cosmic Compass': '<:Coll_cosmic_compass:1417427435841912933>',
-            'Cyber Totem': '<:Coll_cyber_totem:1417427439574974535>',
-            'Dice of Destiny': '<:Coll_dice_of_destiny:1417427443999834193>',
-            'Dimension Foil': '<:Coll_dimension_foil:1417427447430905886>',
-            'Dragon Tooth': '<:Coll_dragon_tooth:1417427451541327963>',
-            'Dreamscape Puzzle': '<:Coll_dreamscape_puzzle:1417427455244898367>',
-            'Elemental Ring': '<:Coll_elemental_ring:1417427457925058620>',
-            'Eye of True Vision': '<:Coll_eye_of_true_vision:1417427461859184700>',
-            'Flaming Plume': '<:Coll_flaming_plume:1417427465218822285>',
-            'Gene Splicer': '<:Coll_gene_splicer:1417427468519997580>',
-            'Golden Cutlery': '<:Coll_golden_cutlery:1417427471753547836>',
-            'Golden Horn': '<:Coll_golden_horn:1417427475100598282>',
-            'High-Lat Energy Cube': '<:Coll_high_lat_energy_cube:1417427478867083274>',
-            'Holodream Fluid': '<:Coll_holodream_fluid:1417427482453475368>',
-            'Human Genome Mapping': '<:Coll_human_genome_mapping:1417427485930295356>',
-            'Hydraulic Flipper': '<:Coll_hydraulic_flipper:1417427489541853295>',
-            'Hyper Neuron': '<:Coll_hyper_neuron:1417427493391958036>',
-            'Immortal Lucky Coin': '<:Coll_immortal_lucky_coin:1417427496600600586>',
-            'Infinity Score': '<:Coll_infinity_score:1417427499993796620>',
-            'Instellar Transition Matrix Design': '<:Coll_instellar_transition_matrix:1417427503634452543>',
-            'Klein Bottle': '<:Coll_klein_bottle:1417427507837403166>',
-            'Life Hourglass': '<:Coll_life_hourglass:1417427510609842186>',
-            'Lucky Charm': '<:Coll_lucky_charm:1417427513965154416>',
-            'Memory Editor': '<:Coll_memory_editor:1417427516875870249>',
-            'Mental Sync Helm': '<:Coll_mental_sync_helm:1417427520571179018>',
-            'Micro Artificial Sun': '<:Coll_micro_artificial_sun:1417427524044193814>',
-            'Mini Dyson Sphere': '<:Coll_mini_dyson_sphere:1417427527680524390>',
-            'Mystical Halo': '<:Coll_mystical_halo:1417427531300212816>',
-            'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417427535049920603>',
+            'Angelic Tear Crystal': '<:Coll_angelic_tear_crystal:1417442651304628244>',
+            'Atomic Mech': '<:Coll_atomic_mech:1417442654307876925>',
+            'Book of Ancient Wisdom': '<:Coll_book_of_ancient_wisdom:1417442657797410826>',
+            'Clone Mirror': '<:Coll_clone_mirror:1417442661014704229>',
+            'Cyber Totem': '<:Coll_cyber_totem:1417442715586662410>',
+            'Dice of Destiny': '<:Coll_dice_of_destiny:1417442718665146428>',
+            'Dimension Foil': '<:Coll_dimension_foil:1417442721961869395>',
+            'Dragon Tooth': '<:Coll_dragon_tooth:1417442725053206579>',
+            'Dreamscape Puzzle': '<:Coll_dreamscape_puzzle:1417442732388913275>',
+            'Gene Splicer': '<:Coll_gene_splicer:1417442735945945088>',
+            'High-Lat Energy Cube': '<:Coll_high_lat_energy_cube:1417442781269331989>',
+            'Holodream Fluid': '<:Coll_holodream_fluid:1417442785207910452>',
+            'Human Genome Mapping': '<:Coll_human_genome_mapping:1417442787921494026>',
+            'Hyper Neuron': '<:Coll_hyper_neuron:1417442791423869030>',
+            'Immortal Lucky Coin': '<:Coll_immortal_lucky_coin:1417442795685154828>',
+            'Instellar Transition Matrix Design': '<:Coll_instellar_transition_matrix:1417442840648220922>',
+            'Life Hourglass': '<:Coll_life_hourglass:1417442843739426876>',
+            'Memory Editor': '<:Coll_memory_editor:1417442846599811103>',
+            'Mental Sync Helm': '<:Coll_mental_sync_helm:1417442850391588975>',
+            'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417442936437866506>',
+            'Otherworld Key': '<:Coll_otherworld_key:1417442939784663061>',
+            'Spatial Rewinder': '<:Coll_spatial_rewinder:1417442944641794098>',
+            'Starcore Diamond': '<:Coll_starcore_diamond:1417442948211150858>',
+            'Time Essence Bottle': '<:Coll_time_essence_bottle:1417442951197495337>',
+            'Unicorn\'s Horn': '<:Coll_unicorn_s_horn:1417443057938468944>',
+            'Void Bloom': '<:Coll_void_bloom:1417443062891941961>',
+            'Eye of True Vision': '<:Coll_eye_of_true_vision:1417444490636951562>',
             'Neurochip': '<:Coll_neurochip:1417427540917751849>',
-            'Nuclear Battery': '<:Coll_nuclear_battery:1417427543497244712>',
-            'Old Medical Book': '<:Coll_old_medical_book:1417427546814808125>',
-            'Otherworld Key': '<:Coll_otherworld_key:1417427549633380372>',
-            'Plasma Sword': '<:Coll_plasma_sword:1417427552443695165>',
-            'Portable Mech Case': '<:Coll_portable_mech_case:1417427556642062377>'
+            'Portable Mech Case': '<:Coll_portable_mech_case:1417427556642062377>',
+            'Temporal Rewinder': '<:Coll_temporal_rewinder:1417444755192807465>'
         };
 
         // Tylko wybrane collectibles do wyświetlania
         const collectibleOrder = [
-            'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
-            'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
-            'High-Lat Energy Cube', 'Void Bloom', 'Eye of True Vision', 'Life Hourglass',
-            'Nano-Mimetic Mask', 'Dice of Destiny', 'Dimension Foil', 'Mental Sync Helm',
-            'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
-            'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
-            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
+            'Angelic Tear Crystal', 'Atomic Mech', 'Book of Ancient Wisdom', 'Clone Mirror',
+            'Cyber Totem', 'Dice of Destiny', 'Dimension Foil', 'Dragon Tooth',
+            'Dreamscape Puzzle', 'Gene Splicer', 'High-Lat Energy Cube', 'Holodream Fluid',
+            'Human Genome Mapping', 'Hyper Neuron', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
+            'Life Hourglass', 'Memory Editor', 'Mental Sync Helm', 'Nano-Mimetic Mask',
+            'Otherworld Key', 'Spatial Rewinder', 'Starcore Diamond', 'Time Essence Bottle',
+            'Unicorn\'s Horn', 'Void Bloom', 'Temporal Rewinder', 'Eye of True Vision'
         ];
 
         // Funkcja do formatowania gwiazdek
@@ -1219,50 +1206,32 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Grupuj collectibles po 4 w polu
-        const fields = [];
-        let currentField = [];
+        // Wszystkie collectibles w jednym polu
+        const allItems = [];
 
         for (const collectibleName of collectibleOrder) {
             const collectible = collectibles[collectibleName];
             if (collectible) {
                 const icon = collectibleIcons[collectibleName] || '❓';
                 const stars = formatStars(collectible.stars);
-
-                currentField.push(`${icon} ${stars}`);
-                currentField.push(''); // Pusty wiersz między itemami
-
-                // Jeśli mamy 4 itemy w polu, dodaj do listy pól
-                if (currentField.length >= 8) { // 4 itemy * 2 linie każdy
-                    fields.push({
-                        name: '\u200B',
-                        value: currentField.join('\n').trim(),
-                        inline: true
-                    });
-                    currentField = [];
-                }
+                allItems.push(`${icon} ${stars}`);
             }
         }
 
-        // Dodaj ostatnie pole jeśli nie jest puste
-        if (currentField.length > 0) {
-            fields.push({
-                name: '\u200B',
-                value: currentField.join('\n').trim(),
-                inline: true
-            });
-        }
-
         // Jeśli nie ma collectibles, pokaż wiadomość
-        if (fields.length === 0) {
+        if (allItems.length === 0) {
             embed.addFields({
                 name: 'Collectibles',
                 value: 'Brak danych o collectibles w tym buildzie.',
                 inline: false
             });
         } else {
-            // Dodaj pola do embeda
-            embed.addFields(...fields);
+            // Dodaj wszystkie collectibles do jednego pola
+            embed.addFields({
+                name: 'Collectibles',
+                value: allItems.join('\n'),
+                inline: false
+            });
         }
     }
 }
