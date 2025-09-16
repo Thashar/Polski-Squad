@@ -1344,10 +1344,18 @@ async function handleDecodeCommand(interaction, sharedState) {
         });
 
         // Ustaw timeout na 15 minut (900000 ms)
-        setTimeout(() => {
+        setTimeout(async () => {
             if (sharedState.buildPagination && sharedState.buildPagination.has(response.id)) {
-                sharedState.buildPagination.delete(response.id);
-                logger.info(`🗑️ Usunięto wygasłą paginację dla wiadomości ${response.id}`);
+                try {
+                    // Usuń wiadomość z embedem
+                    await response.delete();
+                    logger.info(`🗑️ Usunięto wygasłą wiadomość z embedem buildu ${response.id}`);
+                } catch (error) {
+                    logger.warn(`⚠️ Nie udało się usunąć wygasłej wiadomości ${response.id}: ${error.message}`);
+                } finally {
+                    // Usuń dane paginacji niezależnie od wyniku usuwania wiadomości
+                    sharedState.buildPagination.delete(response.id);
+                }
             }
         }, 15 * 60 * 1000);
 
