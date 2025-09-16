@@ -379,8 +379,12 @@ class SurvivorService {
             this.logger.info('✅ Timestamp ustawiony');
 
             this.logger.info('🏗️ Ustawianie description...');
-            page1.setDescription(description);
-            this.logger.info('✅ Description ustawiony');
+            if (description && description.length > 0) {
+                page1.setDescription(description);
+                this.logger.info('✅ Description ustawiony');
+            } else {
+                this.logger.info('⚠️ Description pominięty (pusty)');
+            }
 
             this.logger.info('🏗️ Dodawanie pól...');
             page1.addFields(page1Field);
