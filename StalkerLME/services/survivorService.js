@@ -864,6 +864,30 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza dodatkowe materiały E+V dla poziomów C w itemach B
+     */
+    calculateBItemCMaterialBonus(cLevel) {
+        const mapping = [
+            [0, 0], // C0 = 0E + 0V
+            [1, 0], // C1 = 1E + 0V
+            [1, 1], // C2 = 1E + 1V
+            [2, 1], // C3 = 2E + 1V
+            [2, 2], // C4 = 2E + 2V
+            [3, 2], // C5 = 3E + 2V
+            [3, 3], // C6 = 3E + 3V
+            [4, 3], // C7 = 4E + 3V
+            [4, 4], // C8 = 4E + 4V
+            [5, 4], // C9 = 5E + 4V
+            [5, 5]  // C10 = 5E + 5V
+        ];
+
+        if (cLevel < mapping.length) {
+            return { e: mapping[cLevel][0], v: mapping[cLevel][1] };
+        }
+        return { e: 0, v: 0 };
+    }
+
+    /**
      * Sprawdza czy przedmiot ma E/V/C (True) czy B (False)
      */
     shouldShowEVCh(itemName) {
@@ -1000,11 +1024,24 @@ class SurvivorService {
                         totalChaosFragments += cFragments.chaos;
                         totalBaseFragments += eFragments.base + vFragments.base + cFragments.base;
                     } else {
-                        // Przedmioty B - licz tylko fragmenty C i B
+                        // Przedmioty B - licz fragmenty C, B i dodatkowe E+V za poziomy C
                         if (c > 0) {
                             const cFragments = this.calculateCCost(c);
                             totalChaosFragments += cFragments.chaos;
                             totalBaseFragments += cFragments.base;
+
+                            // Dodatkowe materiały E+V za poziomy C w itemach B
+                            const bonus = this.calculateBItemCMaterialBonus(c);
+                            if (bonus.e > 0) {
+                                const bonusEFragments = this.calculateEVCost(bonus.e);
+                                totalEternalFragments += bonusEFragments.eternalVoid;
+                                totalBaseFragments += bonusEFragments.base;
+                            }
+                            if (bonus.v > 0) {
+                                const bonusVFragments = this.calculateEVCost(bonus.v);
+                                totalVoidFragments += bonusVFragments.eternalVoid;
+                                totalBaseFragments += bonusVFragments.base;
+                            }
                         }
                         // Dodaj fragmenty dla poziomów B (specjalne koszty)
                         if (base > 0) {
