@@ -390,16 +390,32 @@ class SurvivorService {
         // Pierwsza strona - tylko Total RC
         let page1;
         try {
+            this.logger.info(`🔍 Debug: safeTitle="${safeTitle}", embedColor="${embedColor}"`);
+            this.logger.info(`🔍 Debug: description="${description}"`);
+            this.logger.info(`🔍 Debug: page1Field=${JSON.stringify(page1Field)}`);
+
             page1 = new EmbedBuilder()
                 .setTitle(safeTitle)
                 .setColor(embedColor)
-                .setTimestamp()
-                .setDescription(description)
-                .addFields(page1Field)
-                .setFooter({ text: `📝 Strona 1/2` });
+                .setTimestamp();
+
+            this.logger.info('✅ Podstawowy embed utworzony');
+
+            if (description) {
+                page1.setDescription(description);
+                this.logger.info('✅ Description dodany');
+            }
+
+            page1.addFields(page1Field);
+            this.logger.info('✅ Pole dodane');
+
+            page1.setFooter({ text: `📝 Strona 1/2` });
+            this.logger.info('✅ Footer dodany');
+
             this.logger.info('✅ Pierwsza strona utworzona');
         } catch (error) {
             this.logger.error(`❌ Błąd przy tworzeniu pierwszej strony: ${error.message}`);
+            this.logger.error(`❌ Stack trace: ${error.stack}`);
             throw error;
         }
 
