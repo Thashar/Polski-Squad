@@ -179,6 +179,10 @@ class SurvivorService {
             // Dodaj obsługę collectibles jeśli istnieją w danych
             this.logger.info('🔍 [DEBUG] Sprawdzanie collectibles w surowych danych:');
             this.logger.info('data.collectibles:', data.collectibles ? 'ISTNIEJE' : 'BRAK');
+
+            // Debug: wyświetl wszystkie klucze w surowych danych
+            this.logger.info('🔍 [DEBUG] Wszystkie klucze w surowych danych:', Object.keys(data));
+
             if (data.collectibles) {
                 this.logger.info('Zawartość data.collectibles:', JSON.stringify(data.collectibles, null, 2));
                 buildData.collectibles = data.collectibles;
