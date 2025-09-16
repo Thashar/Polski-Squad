@@ -354,18 +354,42 @@ class SurvivorService {
         }
 
         this.logger.info('📄 Tworzenie page1...');
+        this.logger.info(`🔍 safeTitle: "${safeTitle}"`);
+        this.logger.info(`🔍 embedColor: "${embedColor}"`);
+        this.logger.info(`🔍 description: "${description}"`);
+        this.logger.info(`🔍 page1Field: ${JSON.stringify(page1Field)}`);
+
         // Pierwsza strona - tylko Total RC
         let page1;
         try {
-            page1 = new EmbedBuilder()
-                .setTitle(safeTitle)
-                .setColor(embedColor)
-                .setTimestamp()
-                .setDescription(description)
-                .addFields(page1Field);
+            this.logger.info('🏗️ Tworzenie EmbedBuilder...');
+            page1 = new EmbedBuilder();
+            this.logger.info('✅ EmbedBuilder utworzony');
+
+            this.logger.info('🏗️ Ustawianie tytułu...');
+            page1.setTitle(safeTitle);
+            this.logger.info('✅ Tytuł ustawiony');
+
+            this.logger.info('🏗️ Ustawianie koloru...');
+            page1.setColor(embedColor);
+            this.logger.info('✅ Kolor ustawiony');
+
+            this.logger.info('🏗️ Ustawianie timestamp...');
+            page1.setTimestamp();
+            this.logger.info('✅ Timestamp ustawiony');
+
+            this.logger.info('🏗️ Ustawianie description...');
+            page1.setDescription(description);
+            this.logger.info('✅ Description ustawiony');
+
+            this.logger.info('🏗️ Dodawanie pól...');
+            page1.addFields(page1Field);
+            this.logger.info('✅ Pola dodane');
+
             this.logger.info('✅ Page1 utworzony');
         } catch (error) {
             this.logger.error(`❌ Błąd przy tworzeniu page1: ${error.message}`);
+            this.logger.error(`❌ Stack: ${error.stack}`);
             throw error;
         }
 
