@@ -440,7 +440,7 @@ class SurvivorService {
                     equipmentFields.push({
                         name: '\u200B', // Niewidoczny znak
                         value: fieldValue,
-                        inline: false // Pola od góry do dołu
+                        inline: true // Pola obok siebie
                     });
                 } else {
                     // Jeśli za długie, obetnij
@@ -448,7 +448,7 @@ class SurvivorService {
                     equipmentFields.push({
                         name: '\u200B', // Niewidoczny znak
                         value: truncated,
-                        inline: false
+                        inline: true // Pola obok siebie
                     });
                 }
             }
