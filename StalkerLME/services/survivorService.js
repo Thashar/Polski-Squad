@@ -393,6 +393,8 @@ class SurvivorService {
             .setColor(embedColor)
             .setTimestamp();
 
+        // Nie ustawiaj description - może powodować błędy
+
 
         // Zbierz wszystkie itemy w osobnych polach
         const equipmentFields = [];
