@@ -345,8 +345,8 @@ class SurvivorService {
         // Przygotowanie itemów do drugiej strony (w osobnych polach)
         const itemOrder = [
             'Twin Lance', 'Eternal Suit', 'Evervoid Armor', 'Voidwaker Emblem',
-            'Judgment Necklace', 'Twisting Belt', 'Stardust Sash', 'Voidwaker Handguards',
-            'Moonscar Bracer', 'Voidwaker Treads', 'Glacial Warboots'
+            'Judgment Necklace', 'Judgement Necklace', 'Twisting Belt', 'Stardust Sash', 'Voidwaker Handguards',
+            'Moonscar Bracer', 'Voidwaker Treads', 'Glacial Warboots', 'Unknown Item (type 4)'
         ];
 
         // Oblicz łączną sumę C dla Twin Lance
@@ -360,6 +360,7 @@ class SurvivorService {
         }
 
         this.logger.info('📦 Wyszukiwanie itemów...');
+        this.logger.info(`🔍 Struktura buildData: ${JSON.stringify(buildData, null, 2)}`);
 
         // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
@@ -374,9 +375,11 @@ class SurvivorService {
                 const item = buildData[itemType] || buildData[itemTypeLower] ||
                             (buildData.data && (buildData.data[itemType] || buildData.data[itemTypeLower]));
 
-                if (item && item.name && item.name !== 'Unknown') {
+                if (item && item.name) {
                     foundItems[item.name] = item;
                     this.logger.info(`📋 Znaleziony item: ${item.name}`);
+                } else if (item) {
+                    this.logger.info(`🔍 Debug item ${itemType}: name="${item.name}", całość: ${JSON.stringify(item)}`);
                 }
             }
             this.logger.info(`✅ Znaleziono ${Object.keys(foundItems).length} itemów`);
