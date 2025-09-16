@@ -45,12 +45,6 @@ class EndersEchoService {
                 const players = [];
                 this.dateColumns = []; // Reset date columns
 
-                // Debug: sprawdź co faktycznie otrzymujemy
-                this.logger.info(`🔍 DEBUG EE: Response size: ${response.data.length} characters`);
-                this.logger.info(`🔍 DEBUG EE: Found ${$('table').length} tables`);
-                this.logger.info(`🔍 DEBUG EE: Found ${$('table tr').length} table rows`);
-                this.logger.info(`🔍 DEBUG EE: First 500 chars: ${response.data.substring(0, 500)}`);
-
                 // Find the ranking table and extract headers first
                 const headerRow = $('table tr').first();
                 const headers = [];
@@ -118,11 +112,6 @@ class EndersEchoService {
                 return this.endersEchoData;
             } else {
                 this.logger.warn('⚠️ Invalid API response format for EndersEcho data');
-                this.logger.warn(`🔍 DEBUG EE: Response type: ${typeof response.data}`);
-                this.logger.warn(`🔍 DEBUG EE: Response length: ${response.data ? response.data.length : 'null'}`);
-                this.logger.warn(`🔍 DEBUG EE: Response status: ${response.status}`);
-                this.logger.warn(`🔍 DEBUG EE: Response headers: ${JSON.stringify(response.headers)}`);
-                this.logger.warn(`🔍 DEBUG EE: Response data preview: ${JSON.stringify(response.data).substring(0, 200)}`);
                 return [];
             }
         } catch (error) {

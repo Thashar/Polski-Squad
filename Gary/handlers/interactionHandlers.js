@@ -691,15 +691,16 @@ class InteractionHandler {
             
             // TOP500 search - existing logic
             const clanData = this.clanService.getClanData();
-            
+
             if (clanData.length === 0) {
                 await interaction.editReply(
-                    '❌ **Guild data unavailable**\n\n' +
-                    'The clan ranking data requires JavaScript execution and cannot be loaded by the bot.\n\n' +
-                    '**Alternatives:**\n' +
-                    '• Use `/search [name] searching:GLOBAL` for live search (limited)\n' +
-                    '• Use `/player [name]` to search player rankings\n' +
-                    '• Use `/ee [name]` to search EndersEcho rankings'
+                    '❌ **No cached data available**\n\n' +
+                    'Guild ranking data has not been loaded yet.\n\n' +
+                    '**Solution:**\n' +
+                    '• Use `/refresh` command first to load guild data\n' +
+                    '• Then retry `/search [name] searching:TOP500`\n\n' +
+                    '**Alternative:**\n' +
+                    '• Use `/search [name] searching:GLOBAL` for live search (limited)'
                 );
                 return;
             }
@@ -804,17 +805,17 @@ class InteractionHandler {
         try {
             this.logger.info(`👥 Searching for player: "${playerName}"`);
             
-            let playerData = this.playerService.getPlayerData();
-            
-            // If no player data, try to fetch it first
+            const playerData = this.playerService.getPlayerData();
+
+            // If no player data in cache, ask user to refresh first
             if (playerData.length === 0) {
-                this.logger.info('No player data in cache, fetching from API...');
-                await interaction.editReply('⏳ No player data in cache, fetching from API...');
-                playerData = await this.playerService.fetchPlayerData();
-            }
-            
-            if (playerData.length === 0) {
-                await interaction.editReply('❌ No player data available. Please try again later or contact an administrator to refresh player data.');
+                await interaction.editReply(
+                    '❌ **No cached data available**\n\n' +
+                    'Player ranking data has not been loaded yet.\n\n' +
+                    '**Solution:**\n' +
+                    '• Use `/refresh` command first to load player data\n' +
+                    '• Then retry `/player [name]` search'
+                );
                 return;
             }
 
@@ -874,17 +875,17 @@ class InteractionHandler {
         try {
             this.logger.info(`🏆 Searching for EndersEcho player: "${playerName}"`);
             
-            let endersEchoData = this.endersEchoService.getEndersEchoData();
-            
-            // If no data, try to fetch it first
+            const endersEchoData = this.endersEchoService.getEndersEchoData();
+
+            // If no data in cache, ask user to refresh first
             if (endersEchoData.length === 0) {
-                this.logger.info('No EndersEcho data in cache, fetching from API...');
-                await interaction.editReply('⏳ No EndersEcho data in cache, fetching from API...');
-                endersEchoData = await this.endersEchoService.fetchEndersEchoData();
-            }
-            
-            if (endersEchoData.length === 0) {
-                await interaction.editReply('❌ No EndersEcho data available. Please try again later or contact an administrator to refresh data.');
+                await interaction.editReply(
+                    '❌ **No cached data available**\n\n' +
+                    'EndersEcho ranking data has not been loaded yet.\n\n' +
+                    '**Solution:**\n' +
+                    '• Use `/refresh` command first to load EndersEcho data\n' +
+                    '• Then retry `/ee [name]` search'
+                );
                 return;
             }
 
