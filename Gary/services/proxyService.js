@@ -107,9 +107,9 @@ class ProxyService {
             httpsAgent: new (require('https')).Agent({
                 rejectUnauthorized: false
             }),
-            // Validate status codes more permissively
+            // Validate status codes - traktuj 403 jako błąd dla automatycznej zmiany proxy
             validateStatus: function (status) {
-                return status >= 200 && status < 500; // Accept 2xx, 3xx, 4xx
+                return status >= 200 && status < 400; // Accept only 2xx, 3xx (success/redirect)
             }
         };
 
@@ -163,6 +163,13 @@ class ProxyService {
 
             try {
                 const response = await axiosInstance.get(url, options);
+
+                // Sprawdź czy otrzymaliśmy 403 mimo że nie był to axios error
+                if (response.status === 403) {
+                    const error403 = new Error(`HTTP 403 Forbidden`);
+                    error403.response = response;
+                    throw error403;
+                }
 
                 // Sukces - wyczyść używane proxy dla następnych zapytań
                 if (proxyUrl) {
@@ -267,6 +274,13 @@ class ProxyService {
 
             try {
                 const response = await axiosInstance.post(url, data, options);
+
+                // Sprawdź czy otrzymaliśmy 403 mimo że nie był to axios error
+                if (response.status === 403) {
+                    const error403 = new Error(`HTTP 403 Forbidden`);
+                    error403.response = response;
+                    throw error403;
+                }
 
                 // Sukces - wyczyść używane proxy dla następnych zapytań
                 if (proxyUrl) {
