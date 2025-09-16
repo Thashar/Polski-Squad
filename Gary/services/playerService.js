@@ -42,7 +42,13 @@ class PlayerService {
                 // Parse HTML response with cheerio
                 const $ = cheerio.load(response.data);
                 const players = [];
-                
+
+                // Debug: sprawdź co faktycznie otrzymujemy
+                this.logger.info(`🔍 DEBUG: Response size: ${response.data.length} characters`);
+                this.logger.info(`🔍 DEBUG: Found ${$('table').length} tables`);
+                this.logger.info(`🔍 DEBUG: Found ${$('table tr').length} table rows`);
+                this.logger.info(`🔍 DEBUG: First 500 chars: ${response.data.substring(0, 500)}`);
+
                 // Find the ranking table and extract data
                 $('table tr').each((index, row) => {
                     if (index === 0) return; // Skip header row
@@ -79,6 +85,8 @@ class PlayerService {
                 return this.playerData;
             } else {
                 this.logger.warn('⚠️ Invalid API response format for player data');
+                this.logger.warn(`🔍 DEBUG: Response type: ${typeof response.data}`);
+                this.logger.warn(`🔍 DEBUG: Response data: ${JSON.stringify(response.data).substring(0, 200)}`);
                 return [];
             }
         } catch (error) {
