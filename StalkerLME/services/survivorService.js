@@ -225,13 +225,19 @@ class SurvivorService {
             const collectibleData = collectiblesArray[i];
             const collectibleName = collectibleNames[i];
 
-            if (collectibleData && typeof collectibleData === 'object') {
+            if (collectibleData && typeof collectibleData === 'object' && collectibleData.r !== undefined) {
+                // Nowa struktura: {"r": wartość}
                 const stars = collectibleData.r || 0;
                 collectibles.data[collectibleName] = {
                     stars: stars
                 };
             } else if (collectibleData === null) {
                 // Null oznacza brak tego collectible
+                collectibles.data[collectibleName] = {
+                    stars: 0
+                };
+            } else {
+                // Fallback dla nieznanych struktur
                 collectibles.data[collectibleName] = {
                     stars: 0
                 };
