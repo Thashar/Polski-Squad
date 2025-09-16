@@ -371,7 +371,8 @@ class SurvivorService {
      * Tworzy embed z informacjami o buildzie
      */
     createBuildEmbeds(buildData, userTag, buildCode) {
-        const { EmbedBuilder } = require('discord.js');
+        const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+        const path = require('path');
 
         // Oblicz statystyki buildu
         const stats = this.calculateBuildStatistics(buildData);
@@ -423,11 +424,16 @@ class SurvivorService {
             }
         }
 
+        // Attachment dla ikony
+        const iconPath = path.join(__dirname, '../../ikona.webp');
+        const iconAttachment = new AttachmentBuilder(iconPath, { name: 'ikona.webp' });
+
         // Strona 0 - Statystyki
         const page0 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
-            .setTimestamp();
+            .setTimestamp()
+            .setThumbnail('attachment://ikona.webp');
 
         // Zawartość Statystyki
         this.addStatisticsFields(page0, buildData);
@@ -640,7 +646,10 @@ class SurvivorService {
             inline: false
         });
 
-        return [page0, page1, page2, page3, page4, page5, page6];
+        return {
+            embeds: [page0, page1, page2, page3, page4, page5, page6],
+            files: [iconAttachment]
+        };
     }
 
     /**
@@ -1442,10 +1451,10 @@ class SurvivorService {
      * Dodaje pola Statystyki do embeda
      */
     addStatisticsFields(embed, buildData) {
-        // Strona Statystyki - na razie pusta
+        // Strona Statystyki z lokalną ikoną
         embed.addFields({
             name: 'Statystyki',
-            value: 'Zawartość zostanie dodana wkrótce...',
+            value: 'To jest ikona',
             inline: false
         });
     }

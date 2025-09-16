@@ -448,7 +448,8 @@ async function handleButton(interaction, sharedState) {
 
         await interaction.update({
             embeds: [paginationData.embeds[newPage]],
-            components: navigationButtons
+            components: navigationButtons,
+            files: paginationData.files || []
         });
         return;
     }
@@ -1324,11 +1325,12 @@ async function handleDecodeCommand(interaction, sharedState) {
         }
 
         const userDisplayName = interaction.member?.displayName || interaction.user.username;
-        const embeds = survivorService.createBuildEmbeds(buildData.data, userDisplayName, code);
+        const buildEmbedData = survivorService.createBuildEmbeds(buildData.data, userDisplayName, code);
         const navigationButtons = survivorService.createNavigationButtons(0);
         const response = await interaction.editReply({
-            embeds: [embeds[0]], // Rozpocznij od pierwszej strony
-            components: navigationButtons
+            embeds: [buildEmbedData.embeds[0]], // Rozpocznij od pierwszej strony
+            components: navigationButtons,
+            files: buildEmbedData.files
         });
 
         // Przechowuj dane dla paginacji
@@ -1337,7 +1339,8 @@ async function handleDecodeCommand(interaction, sharedState) {
         }
 
         sharedState.buildPagination.set(response.id, {
-            embeds: embeds,
+            embeds: buildEmbedData.embeds,
+            files: buildEmbedData.files,
             currentPage: 0,
             userId: interaction.user.id,
             timestamp: Date.now()
