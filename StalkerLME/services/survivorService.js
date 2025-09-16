@@ -464,15 +464,6 @@ class SurvivorService {
         // Usuń footer ze strony 2
         // page2.setFooter({ text: `📝 Strona 2/2` });
 
-        // Sprawdź strukturę embedów przed zwróceniem
-        try {
-            page1.toJSON();
-            page2.toJSON();
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy sprawdzaniu embedów: ${error.message}`);
-            throw error;
-        }
-
         return [page1, page2];
     }
 
