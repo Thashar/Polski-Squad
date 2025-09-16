@@ -1190,15 +1190,16 @@ class SurvivorService {
             'Temporal Rewinder': '<:Coll_temporal_rewinder:1417444755192807465>'
         };
 
-        // Tylko wybrane collectibles do wyświetlania
+        // Tylko collectibles z dedykowanymi ikonami
         const collectibleOrder = [
-            'Angelic Tear Crystal', 'Atomic Mech', 'Book of Ancient Wisdom', 'Clone Mirror',
-            'Cyber Totem', 'Dice of Destiny', 'Dimension Foil', 'Dragon Tooth',
-            'Dreamscape Puzzle', 'Gene Splicer', 'High-Lat Energy Cube', 'Holodream Fluid',
-            'Human Genome Mapping', 'Hyper Neuron', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
-            'Life Hourglass', 'Memory Editor', 'Mental Sync Helm', 'Nano-Mimetic Mask',
-            'Otherworld Key', 'Spatial Rewinder', 'Starcore Diamond', 'Time Essence Bottle',
-            'Unicorn\'s Horn', 'Void Bloom', 'Temporal Rewinder', 'Eye of True Vision'
+            'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
+            'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
+            'High-Lat Energy Cube', 'Void Bloom', 'Eye of True Vision', 'Life Hourglass',
+            'Nano-Mimetic Mask', 'Dice of Destiny', 'Dimension Foil', 'Mental Sync Helm',
+            'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
+            'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
+            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
+            'Neurochip', 'Portable Mech Case'
         ];
 
         // Funkcja do formatowania gwiazdek
@@ -1221,13 +1222,13 @@ class SurvivorService {
             }
         }
 
-        // Grupuj po 8 itemów na pole (bez tytułów)
-        for (let i = 0; i < allItems.length; i += 8) {
-            const chunk = allItems.slice(i, i + 8);
+        // Grupuj po 4 itemy na pole (inline: true dla układu w prawo)
+        for (let i = 0; i < allItems.length; i += 4) {
+            const chunk = allItems.slice(i, i + 4);
             fields.push({
                 name: '\u200B',
                 value: chunk.join('\n'),
-                inline: false
+                inline: true
             });
         }
 
