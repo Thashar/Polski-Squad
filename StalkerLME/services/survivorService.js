@@ -1198,8 +1198,7 @@ class SurvivorService {
             'Nano-Mimetic Mask', 'Dice of Destiny', 'Dimension Foil', 'Mental Sync Helm',
             'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
             'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
-            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
-            'Neurochip', 'Portable Mech Case'
+            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid'
         ];
 
         // Funkcja do formatowania gwiazdek
@@ -1242,6 +1241,33 @@ class SurvivorService {
         } else {
             // Dodaj wszystkie pola do embeda
             embed.addFields(...fields);
+
+            // Oblicz łączną liczbę użytych skrzynek
+            let totalBoxes = 0;
+            for (const collectibleName of collectibleOrder) {
+                const collectible = collectibles[collectibleName];
+                if (collectible && collectible.stars > 0) {
+                    const stars = collectible.stars;
+                    // Mapowanie gwiazdek na liczbę skrzynek
+                    if (stars === 1) totalBoxes += 1;
+                    else if (stars === 2) totalBoxes += 2;
+                    else if (stars === 3) totalBoxes += 3;
+                    else if (stars === 4) totalBoxes += 4;
+                    else if (stars === 5) totalBoxes += 6;
+                    else if (stars === 6) totalBoxes += 8;
+                    else if (stars === 7) totalBoxes += 10;
+                    else if (stars === 8) totalBoxes += 13;
+                    else if (stars === 9) totalBoxes += 16;
+                    else if (stars === 10) totalBoxes += 20;
+                }
+            }
+
+            // Dodaj pole z użytymi skrzynkami
+            embed.addFields({
+                name: 'Użyte skrzynki',
+                value: `<:J_CollRed:1402533014080065546> ${totalBoxes}`,
+                inline: false
+            });
         }
     }
 }
