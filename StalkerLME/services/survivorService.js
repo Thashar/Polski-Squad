@@ -278,18 +278,8 @@ class SurvivorService {
     createBuildEmbeds(buildData, userTag, buildCode) {
         const { EmbedBuilder } = require('discord.js');
 
-        this.logger.info('📊 Rozpoczynam tworzenie embedów...');
-
         // Oblicz statystyki buildu
-        this.logger.info('🔢 Obliczanie statystyk...');
-        let stats;
-        try {
-            stats = this.calculateBuildStatistics(buildData);
-            this.logger.info(`📈 Stats obliczone: totalPower=${stats.totalPower}`);
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy obliczaniu statystyk: ${error.message}`);
-            throw error;
-        }
+        const stats = this.calculateBuildStatistics(buildData);
 
         // Emojis dla różnych typów ekwipunku
         const itemEmojis = {
@@ -307,27 +297,9 @@ class SurvivorService {
         else if (stats.efficiency >= 60) embedColor = '#ffff00'; // Żółty dla średniej
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
-        this.logger.info('🏗️ Tworzenie pierwszego embeda...');
-
         // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
         const title = `Analiza Ekwipunku gracza ${userTag}`;
         const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
-        this.logger.info(`📝 Tytuł embeda: "${safeTitle}" (${safeTitle.length} znaków)`);
-
-        let embed;
-        try {
-            embed = new EmbedBuilder()
-                .setTitle(safeTitle)
-                .setColor(embedColor)
-                .setTimestamp();
-
-            this.logger.info('✅ Pierwszy embed utworzony');
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy tworzeniu pierwszego embeda: ${error.message}`);
-            throw error;
-        }
-
-        this.logger.info('📋 Rozpoczynam przetwarzanie itemów...');
 
         // Informacje główne - strona 1
         const page1Field = {
@@ -338,10 +310,6 @@ class SurvivorService {
 
         let description = '';
 
-        this.logger.info('🔧 Obliczanie totalCount...');
-
-        // Statystyki będą dodane do pierwszej strony poniżej
-
         // Przygotowanie itemów do drugiej strony (w osobnych polach)
         const itemOrder = [
             'Twin Lance', 'Eternal Suit', 'Evervoid Armor', 'Voidwaker Emblem',
@@ -350,96 +318,39 @@ class SurvivorService {
         ];
 
         // Oblicz łączną sumę C dla Twin Lance
-        let totalCount;
-        try {
-            totalCount = this.calculateTotalCount(buildData);
-            this.logger.info(`✅ TotalCount obliczone: ${totalCount}`);
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy obliczaniu totalCount: ${error.message}`);
-            throw error;
-        }
+        const totalCount = this.calculateTotalCount(buildData);
 
-        this.logger.info('📦 Wyszukiwanie itemów...');
-        this.logger.info(`🔍 Struktura buildData: ${JSON.stringify(buildData, null, 2)}`);
-
-        // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
+        // Znajdź wszystkie itemy w buildzie - użyj buildData.data jeśli istnieje
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
         const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
         const foundItems = {};
 
         // Zbierz wszystkie itemy ze zdekodowanych danych
-        try {
-            // Sprawdź czy dane są w buildData.data czy bezpośrednio w buildData
-            const dataSource = buildData.data || buildData;
-            this.logger.info(`🔍 Używane źródło danych: ${buildData.data ? 'buildData.data' : 'buildData'}`);
+        const dataSource = buildData.data || buildData;
 
-            for (let i = 0; i < itemTypes.length; i++) {
-                const itemType = itemTypes[i];
-                const itemTypeLower = itemTypesLowerCase[i];
-                const item = dataSource[itemType] || dataSource[itemTypeLower];
+        for (let i = 0; i < itemTypes.length; i++) {
+            const itemType = itemTypes[i];
+            const itemTypeLower = itemTypesLowerCase[i];
+            const item = dataSource[itemType] || dataSource[itemTypeLower];
 
-                this.logger.info(`🔍 Sprawdzanie ${itemType}: ${item ? `znaleziony - ${item.name}` : 'nie znaleziony'}`);
-
-                if (item && item.name) {
-                    foundItems[item.name] = item;
-                    this.logger.info(`📋 Znaleziony item: ${item.name}`);
-                }
+            if (item && item.name) {
+                foundItems[item.name] = item;
             }
-            this.logger.info(`✅ Znaleziono ${Object.keys(foundItems).length} itemów`);
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy wyszukiwaniu itemów: ${error.message}`);
-            throw error;
         }
-
-        this.logger.info('📄 Tworzenie pierwszej strony...');
 
         // Pierwsza strona - tylko Total RC
-        let page1;
-        try {
-            this.logger.info(`🔍 Debug: safeTitle="${safeTitle}", embedColor="${embedColor}"`);
-            this.logger.info(`🔍 Debug: description="${description}"`);
-            this.logger.info(`🔍 Debug: page1Field=${JSON.stringify(page1Field)}`);
-
-            page1 = new EmbedBuilder()
-                .setTitle(safeTitle)
-                .setColor(embedColor)
-                .setTimestamp();
-
-            this.logger.info('✅ Podstawowy embed utworzony');
-
-            if (description) {
-                page1.setDescription(description);
-                this.logger.info('✅ Description dodany');
-            }
-
-            page1.addFields(page1Field);
-            this.logger.info('✅ Pole dodane');
-
-            // Usuń footer ze strony
-            // page1.setFooter({ text: `📝 Strona 1/2` });
-            this.logger.info('✅ Footer pominięty');
-
-            this.logger.info('✅ Pierwsza strona utworzona');
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy tworzeniu pierwszej strony: ${error.message}`);
-            this.logger.error(`❌ Stack trace: ${error.stack}`);
-            throw error;
-        }
-
-        this.logger.info('📄 Tworzenie drugiej strony...');
+        const page1 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp()
+            .setDescription(description)
+            .addFields(page1Field);
 
         // Druga strona - każdy item ekwipunku w osobnym polu
-        let page2;
-        try {
-            page2 = new EmbedBuilder()
-                .setTitle(safeTitle)
-                .setColor(embedColor)
-                .setTimestamp();
-            this.logger.info('✅ Druga strona utworzona');
-        } catch (error) {
-            this.logger.error(`❌ Błąd przy tworzeniu drugiej strony: ${error.message}`);
-            throw error;
-        }
+        const page2 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
 
         // Dodaj pole z fragmentami jako pierwsze po prawej stronie
         page2.addFields({
@@ -553,14 +464,10 @@ class SurvivorService {
         // Usuń footer ze strony 2
         // page2.setFooter({ text: `📝 Strona 2/2` });
 
-        // Debug: sprawdź strukturę embedów przed zwróceniem
+        // Sprawdź strukturę embedów przed zwróceniem
         try {
-            this.logger.info('🔍 Sprawdzanie struktury embedów...');
-            const page1JSON = page1.toJSON();
-            const page2JSON = page2.toJSON();
-            this.logger.info(`✅ Strona 1: ${JSON.stringify(page1JSON).length} znaków JSON`);
-            this.logger.info(`✅ Strona 2: ${JSON.stringify(page2JSON).length} znaków JSON`);
-            this.logger.info('🎉 Embeddy utworzone pomyślnie, zwracam tablicę');
+            page1.toJSON();
+            page2.toJSON();
         } catch (error) {
             this.logger.error(`❌ Błąd przy sprawdzaniu embedów: ${error.message}`);
             throw error;
