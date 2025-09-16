@@ -1140,14 +1140,25 @@ class SurvivorService {
             const buffer = Buffer.from(buildCode, 'base64');
             const decompressed = lzma.decompress(buffer);
 
+            this.logger.info('🔍 LZMA dekompresja - typ:', typeof decompressed);
+            this.logger.info('🔍 LZMA dekompresja - czy array:', Array.isArray(decompressed));
+
             if (Array.isArray(decompressed)) {
                 const chars = decompressed.map(num => String.fromCharCode(num));
                 const jsonString = chars.join('');
+                this.logger.info('🔍 JSON string z LZMA:', jsonString.substring(0, 500)); // Pierwszy kawałek
+
                 const jsonStart = jsonString.indexOf('{');
+                this.logger.info('🔍 JSON start pozycja:', jsonStart);
 
                 if (jsonStart !== -1) {
                     const cleanJsonString = jsonString.substring(jsonStart);
+                    this.logger.info('🔍 Clean JSON string:', cleanJsonString.substring(0, 500));
+
                     const parsed = JSON.parse(cleanJsonString);
+                    this.logger.info('🔍 Parsowany JSON - klucze:', Object.keys(parsed));
+                    this.logger.info('🔍 Parsowany JSON - pełne dane:', JSON.stringify(parsed, null, 2));
+
                     const converted = this.convertSioToolsFormat(parsed);
                     if (converted) {
                         return converted;
