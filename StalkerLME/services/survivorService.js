@@ -356,12 +356,6 @@ class SurvivorService {
             .setColor(embedColor)
             .setTimestamp();
 
-        // Dodaj pole z fragmentami jako pierwsze po prawej stronie
-        page2.addFields({
-            name: 'Zużyte materiały',
-            value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments || 0}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments || 0}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments || 0}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments || 0}`,
-            inline: true // Po prawej stronie
-        });
 
         // Zbierz wszystkie itemy w osobnych polach
         const equipmentFields = [];
@@ -454,9 +448,9 @@ class SurvivorService {
             }
         }
 
-        // Dodaj pola do embeda (maksymalnie 25 pól total, już mamy 1 pole "Zużyte materiały")
+        // Dodaj pola ekwipunku do embeda
         if (equipmentFields.length > 0) {
-            const maxFields = 24; // 25 total - 1 już dodane pole "Zużyte materiały"
+            const maxFields = 24; // 25 total - zostaw 1 miejsce na "Zużyte materiały"
             const fieldsToAdd = equipmentFields.slice(0, maxFields);
             page2.addFields(fieldsToAdd);
 
@@ -464,6 +458,13 @@ class SurvivorService {
                 this.logger.warn(`Za dużo pól ekwipunku: ${equipmentFields.length}/${maxFields} - obcięto`);
             }
         }
+
+        // Dodaj pole z fragmentami na końcu
+        page2.addFields({
+            name: 'Zużyte materiały',
+            value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments || 0}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments || 0}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments || 0}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments || 0}`,
+            inline: true // Po prawej stronie
+        });
 
         // Usuń footer ze strony 2
         // page2.setFooter({ text: `📝 Strona 2/2` });
