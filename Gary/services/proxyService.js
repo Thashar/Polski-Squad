@@ -6,7 +6,8 @@ class ProxyService {
         this.config = config;
         this.logger = logger;
         this.proxyList = config.proxy?.proxyList || [];
-        this.currentProxyIndex = 0;
+        // Losowy start proxy index przy każdym uruchomieniu
+        this.currentProxyIndex = this.proxyList.length > 0 ? Math.floor(Math.random() * this.proxyList.length) : 0;
         this.enabled = config.proxy?.enabled || false;
         this.retryAttempts = config.proxy?.retryAttempts || 3;
         this.maxProxyAttempts = 10; // Maksymalnie 10 prób zmiany proxy
@@ -67,14 +68,16 @@ class ProxyService {
         if (availableProxies.length === 0) {
             // Jeśli wszystkie proxy zostały użyte, resetuj listę i użyj losowego
             this.usedProxies.clear();
-            const randomIndex = Math.floor(Math.random() * this.proxyList.length);
-            const selectedProxy = this.proxyList[randomIndex];
+            // Dodaj shuffle dla większej losowości
+            const shuffledProxies = [...this.proxyList].sort(() => Math.random() - 0.5);
+            const selectedProxy = shuffledProxies[0];
             this.usedProxies.add(selectedProxy);
             return selectedProxy;
         }
 
-        const randomIndex = Math.floor(Math.random() * availableProxies.length);
-        const selectedProxy = availableProxies[randomIndex];
+        // Dodatkowo shuffle dostępnych proxy dla większej losowości
+        const shuffledAvailable = [...availableProxies].sort(() => Math.random() - 0.5);
+        const selectedProxy = shuffledAvailable[0];
         this.usedProxies.add(selectedProxy);
         return selectedProxy;
     }
