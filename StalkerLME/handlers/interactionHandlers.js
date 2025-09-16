@@ -410,7 +410,7 @@ async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService } = sharedState;
 
     // Obsługa przycisków paginacji buildów
-    if (interaction.customId === 'zasoby_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'collectible_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
+    if (interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'collectible_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
         if (!sharedState.buildPagination) {
             await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
             return;
@@ -422,28 +422,22 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
-        // Sprawdź czy użytkownik może korzystać z przycisków
-        if (paginationData.userId !== interaction.user.id) {
-            await interaction.reply({ content: '❌ Możesz używać tylko własnych przycisków nawigacji.', flags: MessageFlags.Ephemeral });
-            return;
-        }
+        // Wszyscy użytkownicy mogą zmieniać strony
 
         // Ustaw nową stronę na podstawie przycisku
         let newPage = paginationData.currentPage;
-        if (interaction.customId === 'zasoby_page') {
+        if (interaction.customId === 'ekwipunek_page') {
             newPage = 0;
-        } else if (interaction.customId === 'ekwipunek_page') {
-            newPage = 1;
         } else if (interaction.customId === 'tech_party_page') {
-            newPage = 2;
+            newPage = 1;
         } else if (interaction.customId === 'survivor_page') {
-            newPage = 3;
+            newPage = 2;
         } else if (interaction.customId === 'collectible_page') {
-            newPage = 4;
+            newPage = 3;
         } else if (interaction.customId === 'custom_sets_page') {
-            newPage = 5;
+            newPage = 4;
         } else if (interaction.customId === 'pets_page') {
-            newPage = 6;
+            newPage = 5;
         }
 
         // Aktualizuj dane paginacji
@@ -1317,8 +1311,17 @@ async function handleDecodeCommand(interaction, sharedState) {
         sharedState.buildPagination.set(response.id, {
             embeds: embeds,
             currentPage: 0,
-            userId: interaction.user.id
+            userId: interaction.user.id,
+            timestamp: Date.now()
         });
+
+        // Ustaw timeout na 15 minut (900000 ms)
+        setTimeout(() => {
+            if (sharedState.buildPagination && sharedState.buildPagination.has(response.id)) {
+                sharedState.buildPagination.delete(response.id);
+                logger.info(`🗑️ Usunięto wygasłą paginację dla wiadomości ${response.id}`);
+            }
+        }, 15 * 60 * 1000);
 
         logger.info(`✅ Pomyślnie zdekodowano build Survivor.io dla ${interaction.user.tag}`);
 

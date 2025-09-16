@@ -302,16 +302,7 @@ class SurvivorService {
         const title = `Analiza Ekwipunku gracza ${userTag}`;
         const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
 
-        // Informacje główne - strona 1
-        const page1Field = {
-            name: 'Zasoby',
-            value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
-            inline: false
-        };
-
-        let description = '';
-
-        // Przygotowanie itemów do drugiej strony (w osobnych polach)
+        // Przygotowanie itemów do pierwszej strony (w osobnych polach)
         const itemOrder = [
             'Twin Lance', 'Eternal Suit', 'Evervoid Armor', 'Voidwaker Emblem',
             'Judgment Necklace', 'Twisting Belt', 'Stardust Sash', 'Voidwaker Handguards',
@@ -338,20 +329,8 @@ class SurvivorService {
             }
         }
 
-        // Pierwsza strona - tylko Total RC
+        // Pierwsza strona - każdy item ekwipunku w osobnym polu
         const page1 = new EmbedBuilder()
-            .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp()
-            .addFields(page1Field);
-
-        // Ustaw description tylko jeśli nie jest pusty
-        if (description && description.length > 0) {
-            page1.setDescription(description);
-        }
-
-        // Druga strona - każdy item ekwipunku w osobnym polu
-        const page2 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
@@ -456,16 +435,16 @@ class SurvivorService {
             // Dodaj pola z pustymi polami co drugi rząd aby uzyskać 2 kolumny
             for (let i = 0; i < fieldsToAdd.length; i += 2) {
                 // Dodaj pierwsze pole
-                page2.addFields(fieldsToAdd[i]);
+                page1.addFields(fieldsToAdd[i]);
 
                 // Dodaj drugie pole jeśli istnieje
                 if (i + 1 < fieldsToAdd.length) {
-                    page2.addFields(fieldsToAdd[i + 1]);
+                    page1.addFields(fieldsToAdd[i + 1]);
                 }
 
                 // Dodaj puste pole aby zepsuć trzecią kolumnę (tylko jeśli jest miejsce)
-                if (i + 1 < fieldsToAdd.length && page2.data.fields.length < 24) {
-                    page2.addFields({
+                if (i + 1 < fieldsToAdd.length && page1.data.fields.length < 24) {
+                    page1.addFields({
                         name: '\u200B',
                         value: '\u200B',
                         inline: true
@@ -479,7 +458,7 @@ class SurvivorService {
         }
 
         // Dodaj pola na końcu
-        page2.addFields(
+        page1.addFields(
             {
                 name: 'Zużyte materiały',
                 value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments || 0}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments || 0}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments || 0}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments || 0}`,
@@ -497,72 +476,72 @@ class SurvivorService {
             }
         );
 
-        // Trzecia strona - Tech Party
-        const page3 = new EmbedBuilder()
+        // Druga strona - Tech Party
+        const page2 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Tymczasowa zawartość Tech Party
-        page3.addFields({
+        page2.addFields({
             name: 'Tech Party',
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
 
-        // Czwarta strona - Survivor
-        const page4 = new EmbedBuilder()
+        // Trzecia strona - Survivor
+        const page3 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Tymczasowa zawartość Survivor
-        page4.addFields({
+        page3.addFields({
             name: 'Survivor',
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
 
-        // Piąta strona - Collectible
-        const page5 = new EmbedBuilder()
+        // Czwarta strona - Collectible
+        const page4 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Tymczasowa zawartość Collectible
-        page5.addFields({
+        page4.addFields({
             name: 'Collectible',
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
 
-        // Szósta strona - Custom Sets
-        const page6 = new EmbedBuilder()
+        // Piąta strona - Custom Sets
+        const page5 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Tymczasowa zawartość Custom Sets
-        page6.addFields({
+        page5.addFields({
             name: 'Custom Sets',
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
 
-        // Siódma strona - Pets
-        const page7 = new EmbedBuilder()
+        // Szósta strona - Pets
+        const page6 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
             .setTimestamp();
 
         // Tymczasowa zawartość Pets
-        page7.addFields({
+        page6.addFields({
             name: 'Pets',
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
 
-        return [page1, page2, page3, page4, page5, page6, page7];
+        return [page1, page2, page3, page4, page5, page6];
     }
 
     /**
@@ -574,37 +553,33 @@ class SurvivorService {
         const row1 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('zasoby_page')
-                    .setLabel('Zasoby')
-                    .setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
-                new ButtonBuilder()
                     .setCustomId('ekwipunek_page')
                     .setLabel('Ekwipunek')
-                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('tech_party_page')
                     .setLabel('Tech Party')
-                    .setStyle(currentPage === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('survivor_page')
                     .setLabel('Survivor')
+                    .setStyle(currentPage === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('collectible_page')
+                    .setLabel('Collectible')
                     .setStyle(currentPage === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
 
         const row2 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('collectible_page')
-                    .setLabel('Collectible')
-                    .setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary),
-                new ButtonBuilder()
                     .setCustomId('custom_sets_page')
                     .setLabel('Custom Sets')
-                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('pets_page')
                     .setLabel('Pets')
-                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
 
         return [row1, row2];
