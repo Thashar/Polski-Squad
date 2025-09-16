@@ -1442,26 +1442,12 @@ class SurvivorService {
      * Dodaje pola Statystyki do embeda
      */
     addStatisticsFields(embed, buildData) {
-        // Oblicz szczegółowe statystyki buildu
-        const stats = this.calculateBuildStatisticsDetailed(buildData);
-
-        embed.addFields(
-            {
-                name: 'TOTAL RC',
-                value: `<:II_RC:1385139885924421653> **${stats.totalPower}**`,
-                inline: true
-            },
-            {
-                name: 'Efficiency',
-                value: `⚡ **${stats.efficiency}%**`,
-                inline: true
-            },
-            {
-                name: 'Zużyte materiały',
-                value: `<:JJ_FragmentEternal:1385139903997620275> Eternal: **${stats.totalEternalFragments}**\n<:JJ_FragmentVoid:1385139881558351882> Void: **${stats.totalVoidFragments}**\n<:JJ_FragmentChaos:1385139906694156410> Chaos: **${stats.totalChaosFragments}**\n<:JJ_FragmentBaseMaterial:1385139904651001866> Base: **${stats.totalBaseFragments}**`,
-                inline: false
-            }
-        );
+        // Strona Statystyki - na razie pusta
+        embed.addFields({
+            name: 'Statystyki',
+            value: 'Zawartość zostanie dodana wkrótce...',
+            inline: false
+        });
     }
 
     /**
