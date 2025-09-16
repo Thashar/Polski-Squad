@@ -1333,7 +1333,7 @@ class SurvivorService {
             'Portable Mech Case': '<:Coll_portable_mech_case:1417582046607310930>'
         };
 
-        // Collectibles w kolejności zgodnej z JSON
+        // Collectibles w kolejności zgodnej z rzeczywistymi danymi z API
         const collectibleOrder = [
             'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
             'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
@@ -1342,8 +1342,8 @@ class SurvivorService {
             'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
             'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
             'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
-            '', '', '', '', // Pola 8 i 9 puste (4 elementy na pole × 2 pola = 8 pustych elementów)
             'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
+            '', '', '', '', // Pola 8 i 9 puste (pozycje 32-35 w danych to null)
             'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
             'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
             'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
