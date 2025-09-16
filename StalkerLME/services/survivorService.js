@@ -178,7 +178,11 @@ class SurvivorService {
 
             // Dekodowanie collectibles z klucza "i"
             if (data.i && Array.isArray(data.i)) {
+                this.logger.info('🔍 [DEBUG] Wywołuję decodeCollectibles...');
                 buildData.collectibles = this.decodeCollectibles(data.i);
+                this.logger.info('🔍 [DEBUG] buildData.collectibles po dekodowaniu:', JSON.stringify(buildData.collectibles, null, 2));
+            } else {
+                this.logger.info('❌ [DEBUG] Brak data.i lub nie jest tablicą');
             }
 
             return this.normalizeBuildData(buildData);
@@ -1125,6 +1129,8 @@ class SurvivorService {
      * Dodaje pola Collectibles do embeda
      */
     addCollectibleFields(embed, buildData) {
+        this.logger.info('🔍 [DEBUG] addCollectibleFields - buildData:', JSON.stringify(buildData, null, 2));
+
         // Sprawdź czy buildData ma collectibles
         let collectibles = {};
 
