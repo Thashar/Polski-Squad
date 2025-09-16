@@ -409,8 +409,9 @@ class SurvivorService {
             page1.addFields(page1Field);
             this.logger.info('✅ Pole dodane');
 
-            page1.setFooter({ text: `📝 Strona 1/2` });
-            this.logger.info('✅ Footer dodany');
+            // Usuń footer ze strony
+            // page1.setFooter({ text: `📝 Strona 1/2` });
+            this.logger.info('✅ Footer pominięty');
 
             this.logger.info('✅ Pierwsza strona utworzona');
         } catch (error) {
@@ -516,7 +517,7 @@ class SurvivorService {
                 // Sprawdź czy pole nie jest za długie (limit 1024 znaków na pole)
                 if (fieldValue.length <= 1024) {
                     equipmentFields.push({
-                        name: '⚔️',
+                        name: '\u200B', // Niewidoczny znak
                         value: fieldValue,
                         inline: false // Pola od góry do dołu
                     });
@@ -524,7 +525,7 @@ class SurvivorService {
                     // Jeśli za długie, obetnij
                     const truncated = fieldValue.substring(0, 1020) + '...';
                     equipmentFields.push({
-                        name: '⚔️',
+                        name: '\u200B', // Niewidoczny znak
                         value: truncated,
                         inline: false
                     });
@@ -543,7 +544,8 @@ class SurvivorService {
             }
         }
 
-        page2.setFooter({ text: `📝 Strona 2/2` });
+        // Usuń footer ze strony 2
+        // page2.setFooter({ text: `📝 Strona 2/2` });
 
         // Debug: sprawdź strukturę embedów przed zwróceniem
         try {
