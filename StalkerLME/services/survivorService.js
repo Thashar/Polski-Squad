@@ -371,8 +371,7 @@ class SurvivorService {
      * Tworzy embed z informacjami o buildzie
      */
     createBuildEmbeds(buildData, userTag, buildCode) {
-        const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
-        const path = require('path');
+        const { EmbedBuilder } = require('discord.js');
 
         // Oblicz statystyki buildu
         const stats = this.calculateBuildStatistics(buildData);
@@ -424,16 +423,11 @@ class SurvivorService {
             }
         }
 
-        // Attachment dla ikony
-        const iconPath = path.join(__dirname, '../../ikona.webp');
-        const iconAttachment = new AttachmentBuilder(iconPath, { name: 'ikona.webp' });
-
         // Strona 0 - Statystyki
         const page0 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
-            .setTimestamp()
-            .setThumbnail('attachment://ikona.webp');
+            .setTimestamp();
 
         // Zawartość Statystyki
         this.addStatisticsFields(page0, buildData);
@@ -646,10 +640,7 @@ class SurvivorService {
             inline: false
         });
 
-        return {
-            embeds: [page0, page1, page2, page3, page4, page5, page6],
-            files: [iconAttachment]
-        };
+        return [page0, page1, page2, page3, page4, page5, page6];
     }
 
     /**
@@ -1271,39 +1262,69 @@ class SurvivorService {
 
         // Mapowanie nazw collectibles na ikony
         const collectibleIcons = {
-            'Angelic Tear Crystal': '<:Coll_angelic_tear_crystal:1417442651304628244>',
-            'Atomic Mech': '<:Coll_atomic_mech:1417442654307876925>',
-            'Book of Ancient Wisdom': '<:Coll_book_of_ancient_wisdom:1417442657797410826>',
-            'Clone Mirror': '<:Coll_clone_mirror:1417442661014704229>',
-            'Cyber Totem': '<:Coll_cyber_totem:1417442715586662410>',
+            'Human Genome Mapping': '<:Coll_human_genome_mapping:1417581576103133347>',
+            'Book of Ancient Wisdom': '<:Coll_book_of_ancient_wisdom:1417581162896949330>',
+            'Immortal Lucky Coin': '<:Coll_immortal_lucky_coin:1417581648786227260>',
+            'Instellar Transition Matrix Design': '<:Coll_instellar_transition_matrix:1417581693497511986>',
+            'Angelic Tear Crystal': '<:Coll_angelic_tear_crystal:1417580861649588236>',
+            'Unicorn\'s Horn': '<:Coll_unicorn_s_horn:1417582377831632966>',
+            'Otherworld Key': '<:Coll_otherworld_key:1417581987043999958>',
+            'Starcore Diamond': '<:Coll_starcore_diamond:1417582260751827066>',
+            'High-Lat Energy Cube': '<:Coll_high_lat_energy_cube:1417581540195565650>',
+            'Void Bloom': '<:Coll_void_bloom:1417582398073340035>',
+            'Eye of True Vision': '<:Coll_eye_of_true_vision:1417581382359584838>',
+            'Life Hourglass': '<:Coll_life_hourglass:1417581729216073738>',
+            'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417581892596662333>',
             'Dice of Destiny': '<:Coll_dice_of_destiny:1417442718665146428>',
-            'Dimension Foil': '<:Coll_dimension_foil:1417442721961869395>',
-            'Dragon Tooth': '<:Coll_dragon_tooth:1417442725053206579>',
-            'Dreamscape Puzzle': '<:Coll_dreamscape_puzzle:1417442732388913275>',
-            'Gene Splicer': '<:Coll_gene_splicer:1417442735945945088>',
-            'High-Lat Energy Cube': '<:Coll_high_lat_energy_cube:1417442781269331989>',
-            'Holodream Fluid': '<:Coll_holodream_fluid:1417442785207910452>',
-            'Human Genome Mapping': '<:Coll_human_genome_mapping:1417442787921494026>',
-            'Hyper Neuron': '<:Coll_hyper_neuron:1417442791423869030>',
-            'Immortal Lucky Coin': '<:Coll_immortal_lucky_coin:1417442795685154828>',
-            'Instellar Transition Matrix Design': '<:Coll_instellar_transition_matrix:1417442840648220922>',
-            'Life Hourglass': '<:Coll_life_hourglass:1417442843739426876>',
-            'Memory Editor': '<:Coll_memory_editor:1417442846599811103>',
-            'Mental Sync Helm': '<:Coll_mental_sync_helm:1417442850391588975>',
-            'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417442936437866506>',
-            'Otherworld Key': '<:Coll_otherworld_key:1417442939784663061>',
-            'Spatial Rewinder': '<:Coll_spatial_rewinder:1417442944641794098>',
-            'Starcore Diamond': '<:Coll_starcore_diamond:1417442948211150858>',
-            'Time Essence Bottle': '<:Coll_time_essence_bottle:1417442951197495337>',
-            'Unicorn\'s Horn': '<:Coll_unicorn_s_horn:1417443057938468944>',
-            'Void Bloom': '<:Coll_void_bloom:1417443062891941961>',
-            'Eye of True Vision': '<:Coll_eye_of_true_vision:1417444490636951562>',
-            'Neurochip': '<:Coll_neurochip:1417427540917751849>',
-            'Portable Mech Case': '<:Coll_portable_mech_case:1417427556642062377>',
-            'Temporal Rewinder': '<:Coll_temporal_rewinder:1417444755192807465>'
+            'Dimension Foil': '<:Coll_dimension_foil:1417581312029491240>',
+            'Mental Sync Helm': '<:Coll_mental_sync_helm:1417581806445793320>',
+            'Atomic Mech': '<:Coll_atomic_mech:1417581142483275892>',
+            'Time Essence Bottle': '<:Coll_time_essence_bottle:1417582361045893142>',
+            'Dragon Tooth': '<:Coll_dragon_tooth:1417581330719572038>',
+            'Hyper Neuron': '<:Coll_hyper_neuron:1417581619019255921>',
+            'Cyber Totem': '<:Coll_cyber_totem:1417581265829236888>',
+            'Clone Mirror': '<:Coll_clone_mirror:1417581204126961815>',
+            'Dreamscape Puzzle': '<:Coll_dreamscape_puzzle:1417581348851421397>',
+            'Gene Splicer': '<:Coll_gene_splicer:1417581442636058694>',
+            'Memory Editor': '<:Coll_memory_editor:1417581771234480249>',
+            'Temporal Rewinder': '<:Coll_temporal_rewinder:1417582340338614401>',
+            'Spatial Rewinder': '<:Coll_spatial_rewinder:1417582215629639801>',
+            'Holodream Fluid': '<:Coll_holodream_fluid:1417581561913806908>',
+            'Golden Cutlery': '<:Coll_golden_cutlery:1417581503298273484>',
+            'Old Medical Book': '<:Coll_old_medical_book:1417581963887509525>',
+            'Savior\'s Memento': '<:Coll_savior_s_memento:1417582102320386140>',
+            'Safehouse Map': '<:Coll_safehouse_map:1417582146511704074>',
+            'Lucky Charm': '<:Coll_lucky_charm:1417581754008731658>',
+            'Scientific Luminary\'s Journal': '<:Coll_scientific_luminary_s_journ:1417582167558590474>',
+            'Super Circuit Board': '<:Coll_super_circuit_board:1417582284948901898>',
+            'Mystical Halo': '<:Coll_mystical_halo:1417581868215173284>',
+            'Tablet of Epics': '<:Coll_tablet_of_epics:1417582318247477398>',
+            'Primordial War Drum': '<:Coll_primordial_war_drum:1417582068086472755>',
+            'Flaming Plume': '<:Coll_flaming_plume:1417581397065072701>',
+            'Astral Dewdrop': '<:Coll_astral_dewdrop:1417581123831070761>',
+            'Nuclear Battery': '<:Coll_nuclear_battery:1417581940340428822>',
+            'Plasma Sword': '<:Coll_plasma_sword:1417582018241499226>',
+            'Golden Horn': '<:Coll_golden_horn:1417581520700444893>',
+            'Elemental Ring': '<:Coll_elemental_ring:1417581367021146133>',
+            'Anti-Gravity Device': '<:Coll_anti_gravity_device:1417581048224809012>',
+            'Hydraulic Flipper': '<:Coll_hydraulic_flipper:1417581591412346880>',
+            'Superhuman Pill': '<:Coll_superhuman_pill:1417582302107799723>',
+            'Comms Conch': '<:Coll_comms_conch:1417581229435519006>',
+            'Mini Dyson Sphere': '<:Coll_mini_dyson_sphere:1417581850347704341>',
+            'Micro Artificial Sun': '<:Coll_micro_artificial_sun:1417581829212344433>',
+            'Klein Bottle': '<:Coll_klein_bottle:1417581710132117516>',
+            'Antiparticle Gourd': '<:Coll_antiparticle_gourd:1417581065152893058>',
+            'Wildfire Furnace': '<:Coll_wildfire_furnace:1417582420638826526>',
+            'Infinity Score': '<:Coll_infinity_score:1417581669329801286>',
+            'Cosmic Compass': '<:Coll_cosmic_compass:1417581245793046698>',
+            'Wormhole Detector': '<:Coll_wormhole_detector:1417582451647058071>',
+            'Shuttle Capsule': '<:Coll_shuttle_capsule:1417582195681263770>',
+            'Neurochip': '<:Coll_neurochip:1417581917804429442>',
+            'Star-Rail Passenger Card': '<:Coll_star_rail_passenger_card:1417582235636334803>',
+            'Portable Mech Case': '<:Coll_portable_mech_case:1417582046607310930>'
         };
 
-        // Tylko collectibles z dedykowanymi ikonami
+        // Collectibles w kolejności zgodnej z JSON
         const collectibleOrder = [
             'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
             'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
@@ -1311,7 +1332,16 @@ class SurvivorService {
             'Nano-Mimetic Mask', 'Dice of Destiny', 'Dimension Foil', 'Mental Sync Helm',
             'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
             'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
-            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid'
+            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
+            '', '', '', '', // Pola 8 i 9 puste (4 elementy na pole × 2 pola = 8 pustych elementów)
+            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
+            'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
+            'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
+            'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
+            'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
+            'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
+            'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
+            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
         ];
 
         // Funkcja do formatowania gwiazdek
@@ -1326,20 +1356,49 @@ class SurvivorService {
         const allItems = [];
 
         for (const collectibleName of collectibleOrder) {
-            const collectible = collectibles[collectibleName];
-            if (collectible) {
-                const icon = collectibleIcons[collectibleName] || '❓';
-                const stars = formatStars(collectible.stars);
-                allItems.push(`${icon} ${stars}`);
+            if (collectibleName === '') {
+                // Puste pole
+                allItems.push('');
+            } else {
+                const collectible = collectibles[collectibleName];
+                if (collectible && collectibleIcons[collectibleName]) {
+                    const icon = collectibleIcons[collectibleName];
+                    const stars = formatStars(collectible.stars);
+                    allItems.push(`${icon} ${stars}`);
+                }
             }
         }
 
         // Grupuj po 4 itemy na pole (inline: true dla układu w prawo)
         for (let i = 0; i < allItems.length; i += 4) {
             const chunk = allItems.slice(i, i + 4);
+            const fieldNumber = Math.floor(i / 4) + 1;
+
+            // Pola 8 i 9 są puste
+            if (fieldNumber === 8 || fieldNumber === 9) {
+                fields.push({
+                    name: '\u200B',
+                    value: '\u200B', // Puste pole
+                    inline: true
+                });
+            } else {
+                // Filtruj puste elementy i połącz
+                const nonEmptyItems = chunk.filter(item => item !== '');
+                if (nonEmptyItems.length > 0) {
+                    fields.push({
+                        name: '\u200B',
+                        value: nonEmptyItems.join('\n'),
+                        inline: true
+                    });
+                }
+            }
+        }
+
+        // Dodaj puste pola 8 i 9 jeśli nie zostały jeszcze dodane
+        while (fields.length < 9) {
             fields.push({
                 name: '\u200B',
-                value: chunk.join('\n'),
+                value: '\u200B',
                 inline: true
             });
         }
@@ -1451,10 +1510,10 @@ class SurvivorService {
      * Dodaje pola Statystyki do embeda
      */
     addStatisticsFields(embed, buildData) {
-        // Strona Statystyki z lokalną ikoną
+        // Strona Statystyki - na razie pusta
         embed.addFields({
             name: 'Statystyki',
-            value: 'To jest ikona',
+            value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
     }
