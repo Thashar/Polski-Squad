@@ -497,10 +497,72 @@ class SurvivorService {
             }
         );
 
-        // Usuń footer ze strony 2
-        // page2.setFooter({ text: `📝 Strona 2/2` });
+        // Trzecia strona - Tech Party
+        const page3 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
 
-        return [page1, page2];
+        // Tymczasowa zawartość Tech Party
+        page3.addFields({
+            name: 'Tech Party',
+            value: 'Zawartość zostanie dodana wkrótce...',
+            inline: false
+        });
+
+        // Czwarta strona - Survivor
+        const page4 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // Tymczasowa zawartość Survivor
+        page4.addFields({
+            name: 'Survivor',
+            value: 'Zawartość zostanie dodana wkrótce...',
+            inline: false
+        });
+
+        // Piąta strona - Collectible
+        const page5 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // Tymczasowa zawartość Collectible
+        page5.addFields({
+            name: 'Collectible',
+            value: 'Zawartość zostanie dodana wkrótce...',
+            inline: false
+        });
+
+        // Szósta strona - Custom Sets
+        const page6 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // Tymczasowa zawartość Custom Sets
+        page6.addFields({
+            name: 'Custom Sets',
+            value: 'Zawartość zostanie dodana wkrótce...',
+            inline: false
+        });
+
+        // Siódma strona - Pets
+        const page7 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // Tymczasowa zawartość Pets
+        page7.addFields({
+            name: 'Pets',
+            value: 'Zawartość zostanie dodana wkrótce...',
+            inline: false
+        });
+
+        return [page1, page2, page3, page4, page5, page6, page7];
     }
 
     /**
@@ -509,7 +571,7 @@ class SurvivorService {
     createNavigationButtons(currentPage = 0) {
         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-        const row = new ActionRowBuilder()
+        const row1 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('zasoby_page')
@@ -518,10 +580,34 @@ class SurvivorService {
                 new ButtonBuilder()
                     .setCustomId('ekwipunek_page')
                     .setLabel('Ekwipunek')
-                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('tech_party_page')
+                    .setLabel('Tech Party')
+                    .setStyle(currentPage === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('survivor_page')
+                    .setLabel('Survivor')
+                    .setStyle(currentPage === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
 
-        return row;
+        const row2 = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('collectible_page')
+                    .setLabel('Collectible')
+                    .setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('custom_sets_page')
+                    .setLabel('Custom Sets')
+                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('pets_page')
+                    .setLabel('Pets')
+                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+
+        return [row1, row2];
     }
 
     /**

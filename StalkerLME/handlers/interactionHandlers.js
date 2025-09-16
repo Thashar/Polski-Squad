@@ -410,7 +410,7 @@ async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService } = sharedState;
 
     // Obsługa przycisków paginacji buildów
-    if (interaction.customId === 'zasoby_page' || interaction.customId === 'ekwipunek_page') {
+    if (interaction.customId === 'zasoby_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'collectible_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
         if (!sharedState.buildPagination) {
             await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
             return;
@@ -434,6 +434,16 @@ async function handleButton(interaction, sharedState) {
             newPage = 0;
         } else if (interaction.customId === 'ekwipunek_page') {
             newPage = 1;
+        } else if (interaction.customId === 'tech_party_page') {
+            newPage = 2;
+        } else if (interaction.customId === 'survivor_page') {
+            newPage = 3;
+        } else if (interaction.customId === 'collectible_page') {
+            newPage = 4;
+        } else if (interaction.customId === 'custom_sets_page') {
+            newPage = 5;
+        } else if (interaction.customId === 'pets_page') {
+            newPage = 6;
         }
 
         // Aktualizuj dane paginacji
@@ -442,7 +452,7 @@ async function handleButton(interaction, sharedState) {
 
         await interaction.update({
             embeds: [paginationData.embeds[newPage]],
-            components: [navigationButtons]
+            components: navigationButtons
         });
         return;
     }
@@ -1296,7 +1306,7 @@ async function handleDecodeCommand(interaction, sharedState) {
         const navigationButtons = survivorService.createNavigationButtons(0);
         const response = await interaction.editReply({
             embeds: [embeds[0]], // Rozpocznij od pierwszej strony
-            components: [navigationButtons]
+            components: navigationButtons
         });
 
         // Przechowuj dane dla paginacji
