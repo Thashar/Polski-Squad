@@ -321,20 +321,19 @@ class SurvivorService {
         // Oblicz łączną sumę C dla Twin Lance
         const totalCount = this.calculateTotalCount(buildData);
 
-        // Znajdź wszystkie itemy w buildzie - użyj buildData.data jeśli istnieje
+        // Znajdź wszystkie itemy w buildzie - sprawdź obie struktury danych
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
         const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
         const foundItems = {};
 
         // Zbierz wszystkie itemy ze zdekodowanych danych
-        const dataSource = buildData.data || buildData;
-
         for (let i = 0; i < itemTypes.length; i++) {
             const itemType = itemTypes[i];
             const itemTypeLower = itemTypesLowerCase[i];
-            const item = dataSource[itemType] || dataSource[itemTypeLower];
+            const item = buildData[itemType] || buildData[itemTypeLower] ||
+                        (buildData.data && (buildData.data[itemType] || buildData.data[itemTypeLower]));
 
-            if (item && item.name) {
+            if (item && item.name && item.name !== 'Unknown') {
                 foundItems[item.name] = item;
             }
         }
@@ -729,12 +728,9 @@ class SurvivorService {
         const itemTypes = ['Weapon', 'Armor', 'Belt', 'Boots', 'Gloves', 'Necklace'];
         const itemTypesLowerCase = ['weapon', 'armor', 'belt', 'boots', 'gloves', 'necklace'];
 
-        // Użyj buildData.data jeśli istnieje, w przeciwnym razie buildData
-        const dataSource = buildData.data || buildData;
-
         // Sprawdź obie struktury
         for (const type of itemTypes) {
-            const item = dataSource[type];
+            const item = buildData[type];
             if (item) {
                 totalCount += item.c || item.count || 0;
             }
@@ -742,7 +738,7 @@ class SurvivorService {
 
         if (totalCount === 0) {
             for (const type of itemTypesLowerCase) {
-                const item = dataSource[type];
+                const item = buildData[type];
                 if (item) {
                     totalCount += item.c || item.count || 0;
                 }
@@ -807,7 +803,7 @@ class SurvivorService {
 
         // Funkcja do przetwarzania przedmiotu
         const processItem = (item) => {
-            if (item && item.name) {
+            if (item && item.name !== 'Unknown' && item.name) {
                 const e = item.e || item.evolution || 0;
                 const v = item.v || item.vigor || 0;
                 const c = item.c || item.count || 0;
@@ -870,19 +866,16 @@ class SurvivorService {
             }
         };
 
-        // Użyj buildData.data jeśli istnieje, w przeciwnym razie buildData
-        const dataSource = buildData.data || buildData;
-
         // Obsłuż strukturę z wielkimi literami (nowa)
         for (const type of itemTypes) {
-            const item = dataSource[type];
+            const item = buildData[type];
             processItem(item);
         }
 
         // Jeśli nie znaleziono przedmiotów, spróbuj struktury z małymi literami (oryginalna)
         if (itemCount === 0) {
             for (const type of itemTypesLowerCase) {
-                const item = dataSource[type];
+                const item = buildData[type];
                 processItem(item);
             }
         }

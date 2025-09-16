@@ -1292,7 +1292,7 @@ async function handleDecodeCommand(interaction, sharedState) {
         }
 
         logger.info('🔍 Tworzenie embedów...');
-        const embeds = survivorService.createBuildEmbeds(buildData, interaction.user.tag, code);
+        const embeds = survivorService.createBuildEmbeds(buildData.data, interaction.user.tag, code);
 
         logger.info('🔍 Tworzenie przycisków nawigacji...');
         const navigationButtons = survivorService.createNavigationButtons(0);
