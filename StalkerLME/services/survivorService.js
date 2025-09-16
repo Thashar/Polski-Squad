@@ -448,11 +448,30 @@ class SurvivorService {
             }
         }
 
-        // Dodaj pola ekwipunku do embeda
+        // Dodaj pola ekwipunku do embeda w układzie 2 kolumny
         if (equipmentFields.length > 0) {
-            const maxFields = 24; // 25 total - zostaw 1 miejsce na "Zużyte materiały"
+            const maxFields = 22; // Zostaw miejsce na puste pola i "Zużyte materiały"
             const fieldsToAdd = equipmentFields.slice(0, maxFields);
-            page2.addFields(fieldsToAdd);
+
+            // Dodaj pola z pustymi polami co drugi rząd aby uzyskać 2 kolumny
+            for (let i = 0; i < fieldsToAdd.length; i += 2) {
+                // Dodaj pierwsze pole
+                page2.addFields(fieldsToAdd[i]);
+
+                // Dodaj drugie pole jeśli istnieje
+                if (i + 1 < fieldsToAdd.length) {
+                    page2.addFields(fieldsToAdd[i + 1]);
+                }
+
+                // Dodaj puste pole aby zepsuć trzecią kolumnę (tylko jeśli jest miejsce)
+                if (i + 1 < fieldsToAdd.length && page2.data.fields.length < 24) {
+                    page2.addFields({
+                        name: '\u200B',
+                        value: '\u200B',
+                        inline: true
+                    });
+                }
+            }
 
             if (equipmentFields.length > maxFields) {
                 this.logger.warn(`Za dużo pól ekwipunku: ${equipmentFields.length}/${maxFields} - obcięto`);
