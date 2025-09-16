@@ -11,6 +11,18 @@ class ProxyService {
         this.retryAttempts = config.proxy?.retryAttempts || 3;
         this.maxProxyAttempts = 10; // Maksymalnie 10 prób zmiany proxy
         this.usedProxies = new Set(); // Śledzenie użytych proxy w jednej próbie
+
+        // Zaawansowane anti-detection: rotacja User-Agents
+        this.userAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ];
+        this.currentUserAgentIndex = 0;
     }
 
     /**
@@ -75,6 +87,35 @@ class ProxyService {
     }
 
     /**
+     * Generate random IP address for anti-detection
+     * @returns {string} Random IP address
+     */
+    generateRandomIP() {
+        const randomOctet = () => Math.floor(Math.random() * 255) + 1;
+        return `${randomOctet()}.${randomOctet()}.${randomOctet()}.${randomOctet()}`;
+    }
+
+    /**
+     * Add session-based cookies for better Cloudflare bypass
+     * @param {Object} headers - Existing headers
+     * @returns {Object} Headers with cookies
+     */
+    addSessionCookies(headers) {
+        // Generate realistic session cookies
+        const sessionId = Math.random().toString(36).substring(2, 15);
+        const timestamp = Date.now();
+
+        headers['Cookie'] = [
+            `cf_clearance=${sessionId}_${timestamp}`,
+            `__cfduid=${sessionId}${timestamp}`,
+            `sessionid=${sessionId}`,
+            `csrftoken=${Math.random().toString(36).substring(2, 15)}`
+        ].join('; ');
+
+        return headers;
+    }
+
+    /**
      * Check if error is 403 Forbidden
      * @param {Error} error - Error object
      * @returns {boolean} True if error is 403
@@ -84,25 +125,70 @@ class ProxyService {
     }
 
     /**
-     * Create axios instance with proxy configuration
+     * Get next User-Agent for rotation
+     * @returns {string} User-Agent string
+     */
+    getNextUserAgent() {
+        const userAgent = this.userAgents[this.currentUserAgentIndex];
+        this.currentUserAgentIndex = (this.currentUserAgentIndex + 1) % this.userAgents.length;
+        return userAgent;
+    }
+
+    /**
+     * Generate realistic browser headers for Cloudflare bypass
+     * @returns {Object} Headers object
+     */
+    generateCloudflareHeaders() {
+        const userAgent = this.getNextUserAgent();
+        const isChrome = userAgent.includes('Chrome');
+        const isFirefox = userAgent.includes('Firefox');
+        const isSafari = userAgent.includes('Safari') && !userAgent.includes('Chrome');
+
+        const baseHeaders = {
+            'User-Agent': userAgent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        };
+
+        // Chrome-specific headers
+        if (isChrome) {
+            baseHeaders['sec-ch-ua'] = '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"';
+            baseHeaders['sec-ch-ua-mobile'] = '?0';
+            baseHeaders['sec-ch-ua-platform'] = '"Windows"';
+            baseHeaders['Sec-Fetch-Dest'] = 'document';
+            baseHeaders['Sec-Fetch-Mode'] = 'navigate';
+            baseHeaders['Sec-Fetch-Site'] = 'none';
+            baseHeaders['Sec-Fetch-User'] = '?1';
+        }
+
+        // Firefox-specific headers
+        if (isFirefox) {
+            baseHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
+            baseHeaders['Accept-Language'] = 'en-US,en;q=0.5';
+        }
+
+        // Safari-specific headers
+        if (isSafari) {
+            baseHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+            baseHeaders['Accept-Language'] = 'en-US,en;q=0.9';
+        }
+
+        return baseHeaders;
+    }
+
+    /**
+     * Create axios instance with proxy configuration and advanced anti-detection
      * @param {string} proxyUrl - Proxy URL
      * @returns {Object} Configured axios instance
      */
     createProxyAxios(proxyUrl = null) {
         const baseConfig = {
             timeout: this.config.lunarMineSettings?.connectionTimeout || 20000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-                'Cache-Control': 'max-age=0'
-            },
+            headers: this.generateCloudflareHeaders(),
             // Ignore SSL certificate errors for proxy connections
             httpsAgent: new (require('https')).Agent({
                 rejectUnauthorized: false
@@ -110,22 +196,33 @@ class ProxyService {
             // Validate status codes - traktuj 403 jako błąd dla automatycznej zmiany proxy
             validateStatus: function (status) {
                 return status >= 200 && status < 400; // Accept only 2xx, 3xx (success/redirect)
-            }
+            },
+            // Anti-detection: follow redirects
+            maxRedirects: 5
         };
 
         if (proxyUrl && this.enabled) {
             try {
                 const proxyAgent = new HttpsProxyAgent(proxyUrl, {
                     rejectUnauthorized: false, // Ignore SSL cert issues
-                    timeout: 10000 // Shorter timeout for proxy connection
+                    timeout: 15000, // Longer timeout for stability
+                    keepAlive: true, // Keep connections alive
+                    keepAliveMsecs: 1000
                 });
-                
+
                 baseConfig.httpsAgent = proxyAgent;
                 baseConfig.httpAgent = proxyAgent;
-                // Proxy usage logged (reduced verbosity)
+
+                // Anti-detection: add proxy-specific headers
+                baseConfig.headers['X-Forwarded-For'] = this.generateRandomIP();
+                baseConfig.headers['X-Real-IP'] = this.generateRandomIP();
+
             } catch (error) {
                 this.logger.warn(`⚠️ Invalid proxy URL: ${proxyUrl}, using direct connection`);
             }
+        } else {
+            // Anti-detection: even for direct connections, vary headers
+            baseConfig.headers['X-Forwarded-For'] = this.generateRandomIP();
         }
 
         return axios.create(baseConfig);
@@ -197,8 +294,10 @@ class ProxyService {
                     // Nie zwiększaj głównego licznika próób dla błędów 403
                     attempt--;
 
-                    // Krótka pauza przed próbą z nowym proxy
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // Losowa pauza 1-3 sekundy dla uniknięcia rate limiting
+                    const delay = Math.floor(Math.random() * 2000) + 1000;
+                    this.logger.info(`⏱️ Pauza ${delay}ms przed kolejną próbą z nowym proxy...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
 
@@ -308,8 +407,10 @@ class ProxyService {
                     // Nie zwiększaj głównego licznika próób dla błędów 403
                     attempt--;
 
-                    // Krótka pauza przed próbą z nowym proxy
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // Losowa pauza 1-3 sekundy dla uniknięcia rate limiting
+                    const delay = Math.floor(Math.random() * 2000) + 1000;
+                    this.logger.info(`⏱️ POST pauza ${delay}ms przed kolejną próbą z nowym proxy...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
 

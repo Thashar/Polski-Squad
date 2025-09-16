@@ -32,8 +32,18 @@ class PlayerService {
     async fetchPlayerData() {
         try {
             this.logger.info('👥 Fetching player ranking data from API...');
+
+            // Anti-Cloudflare: najpierw spróbuj uzyskać session przez stronę główną
+            try {
+                this.logger.info('🔑 Uzyskiwanie sesji przez stronę główną...');
+                await this.proxyService.makeRequest('https://garrytools.com/');
+                // Krótka pauza po uzyskaniu sesji
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (sessionError) {
+                this.logger.warn('⚠️ Nie udało się uzyskać sesji, próbuję bezpośrednio...');
+            }
+
             let response;
-            
             // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
             response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
             // Response details removed for cleaner logs
