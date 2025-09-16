@@ -579,12 +579,8 @@ class SurvivorService {
             .setColor(embedColor)
             .setTimestamp();
 
-        // Tymczasowa zawartość Custom Sets
-        page5.addFields({
-            name: 'Custom Sets',
-            value: 'Zawartość zostanie dodana wkrótce...',
-            inline: false
-        });
+        // Zawartość Custom Sets
+        this.addCustomSetsFields(page5, buildData);
 
         // Szósta strona - Pets
         const page6 = new EmbedBuilder()
@@ -1314,6 +1310,69 @@ class SurvivorService {
             embed.addFields({
                 name: 'Użyte skrzynki',
                 value: `<:J_CollRed:1402533014080065546> ${totalBoxes}`,
+                inline: false
+            });
+        }
+    }
+
+    /**
+     * Dodaje pola Custom Sets do embeda
+     */
+    addCustomSetsFields(embed, buildData) {
+        // Sprawdź czy buildData ma customSets
+        let customSets = {};
+
+        // Sprawdź różne możliwe struktury
+        if (buildData.customSets && buildData.customSets.data) {
+            customSets = buildData.customSets.data;
+        } else if (buildData.CustomSets && buildData.CustomSets.data) {
+            customSets = buildData.CustomSets.data;
+        } else if (buildData.customSets) {
+            customSets = buildData.customSets;
+        }
+
+        // Sprawdź czy mamy dane
+        if (!customSets || Object.keys(customSets).length === 0) {
+            embed.addFields({
+                name: 'Custom Sets',
+                value: 'Brak danych o custom sets w tym buildzie.',
+                inline: false
+            });
+            return;
+        }
+
+        // Ikony dla różnych typów
+        const icons = {
+            'Legend': '<:J_CollRed:1402533014080065546>',
+            'Epic': '<:J_CollYellow:1402532951492657172>',
+            'None': '<:ZZ_Pusto:1209494954762829866>'
+        };
+
+        // Przetwórz każdy set
+        const setNames = ['0', '1', '2']; // 0 = set 1, 1 = set 2, 2 = set 3
+
+        for (const setKey of setNames) {
+            if (customSets[setKey] && Array.isArray(customSets[setKey])) {
+                const setNumber = parseInt(setKey) + 1; // 0 -> 1, 1 -> 2, 2 -> 3
+                const setItems = customSets[setKey];
+
+                // Konwertuj każdy item na ikonę
+                const iconString = setItems.map(item => icons[item] || icons['None']).join('');
+
+                embed.addFields({
+                    name: `Collection Set ${setNumber}`,
+                    value: iconString || icons['None'].repeat(4), // Fallback na 4 puste ikony
+                    inline: false
+                });
+            }
+        }
+
+        // Jeśli nie ma żadnych setów, pokaż wiadomość
+        const hasAnySets = setNames.some(setKey => customSets[setKey] && Array.isArray(customSets[setKey]));
+        if (!hasAnySets) {
+            embed.addFields({
+                name: 'Custom Sets',
+                value: 'Brak danych o custom sets w tym buildzie.',
                 inline: false
             });
         }
