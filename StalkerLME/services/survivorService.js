@@ -1229,12 +1229,11 @@ class SurvivorService {
                 const icon = collectibleIcons[collectibleName] || '❓';
                 const stars = formatStars(collectible.stars);
 
-                currentField.push(`${icon} ${collectibleName}`);
-                currentField.push(stars);
+                currentField.push(`${icon} ${stars}`);
                 currentField.push(''); // Pusty wiersz między itemami
 
                 // Jeśli mamy 4 itemy w polu, dodaj do listy pól
-                if (currentField.length >= 12) { // 4 itemy * 3 linie każdy
+                if (currentField.length >= 8) { // 4 itemy * 2 linie każdy
                     fields.push({
                         name: '\u200B',
                         value: currentField.join('\n').trim(),
