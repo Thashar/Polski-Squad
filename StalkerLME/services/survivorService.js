@@ -184,9 +184,9 @@ class SurvivorService {
                 buildData.collectibles = this.decodeCollectibles(data.i);
             }
 
-            // Dekodowanie customSets z danych
-            if (data.customSets) {
-                buildData.customSets = data.customSets;
+            // Dekodowanie customSets z klucza "n"
+            if (data.n && typeof data.n === 'object') {
+                buildData.customSets = this.decodeCustomSets(data.n);
             }
 
             return this.normalizeBuildData(buildData);
@@ -241,6 +241,32 @@ class SurvivorService {
         }
 
         return collectibles;
+    }
+
+    /**
+     * Dekoduje custom sets z klucza "n"
+     */
+    decodeCustomSets(customSetsData) {
+        // Mapowanie wartości na typy
+        const valueToType = {
+            0: 'None',
+            1: 'Epic',
+            2: 'Legend'
+        };
+
+        const customSets = {
+            data: {}
+        };
+
+        // Przetwórz każdy set (0, 1, 2)
+        for (const [setKey, setArray] of Object.entries(customSetsData)) {
+            if (Array.isArray(setArray)) {
+                customSets.data[setKey] = setArray.map(value => valueToType[value] || 'None');
+            }
+        }
+
+        console.log('🔍 Dekodowane customSets:', JSON.stringify(customSets, null, 2));
+        return customSets;
     }
 
     /**
