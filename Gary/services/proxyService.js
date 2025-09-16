@@ -152,12 +152,24 @@ class ProxyService {
                     : this.getNextProxy();
             }
 
+            // Loguj informacje o używanym proxy
+            if (proxyUrl) {
+                this.logger.info(`🌐 Używam proxy: ${this.maskProxy(proxyUrl)} (próba ${attempt})`);
+            } else {
+                this.logger.info(`🔗 Bezpośrednie połączenie (próba ${attempt})`);
+            }
+
             const axiosInstance = this.createProxyAxios(proxyUrl);
 
             try {
                 const response = await axiosInstance.get(url, options);
 
                 // Sukces - wyczyść używane proxy dla następnych zapytań
+                if (proxyUrl) {
+                    this.logger.info(`✅ Sukces przez proxy: ${this.maskProxy(proxyUrl)}`);
+                } else {
+                    this.logger.info(`✅ Sukces przez bezpośrednie połączenie`);
+                }
                 this.resetUsedProxies();
                 return response;
 
@@ -244,18 +256,24 @@ class ProxyService {
                     : this.getNextProxy();
             }
 
+            // Loguj informacje o używanym proxy dla POST
+            if (proxyUrl) {
+                this.logger.info(`🌐 POST używam proxy: ${this.maskProxy(proxyUrl)} (próba ${attempt})`);
+            } else {
+                this.logger.info(`🔗 POST bezpośrednie połączenie (próba ${attempt})`);
+            }
+
             const axiosInstance = this.createProxyAxios(proxyUrl);
 
             try {
                 const response = await axiosInstance.post(url, data, options);
 
-                if (proxyUrl) {
-                    this.logger.info(`✅ POST request successful via proxy on attempt ${attempt}`);
-                } else {
-                    this.logger.info(`✅ POST request successful via direct connection on attempt ${attempt}`);
-                }
-
                 // Sukces - wyczyść używane proxy dla następnych zapytań
+                if (proxyUrl) {
+                    this.logger.info(`✅ POST sukces przez proxy: ${this.maskProxy(proxyUrl)}`);
+                } else {
+                    this.logger.info(`✅ POST sukces przez bezpośrednie połączenie`);
+                }
                 this.resetUsedProxies();
                 return response;
 
