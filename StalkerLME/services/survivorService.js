@@ -369,17 +369,20 @@ class SurvivorService {
 
         // Zbierz wszystkie itemy ze zdekodowanych danych
         try {
+            // Sprawdź czy dane są w buildData.data czy bezpośrednio w buildData
+            const dataSource = buildData.data || buildData;
+            this.logger.info(`🔍 Używane źródło danych: ${buildData.data ? 'buildData.data' : 'buildData'}`);
+
             for (let i = 0; i < itemTypes.length; i++) {
                 const itemType = itemTypes[i];
                 const itemTypeLower = itemTypesLowerCase[i];
-                const item = buildData[itemType] || buildData[itemTypeLower] ||
-                            (buildData.data && (buildData.data[itemType] || buildData.data[itemTypeLower]));
+                const item = dataSource[itemType] || dataSource[itemTypeLower];
+
+                this.logger.info(`🔍 Sprawdzanie ${itemType}: ${item ? `znaleziony - ${item.name}` : 'nie znaleziony'}`);
 
                 if (item && item.name) {
                     foundItems[item.name] = item;
                     this.logger.info(`📋 Znaleziony item: ${item.name}`);
-                } else if (item) {
-                    this.logger.info(`🔍 Debug item ${itemType}: name="${item.name}", całość: ${JSON.stringify(item)}`);
                 }
             }
             this.logger.info(`✅ Znaleziono ${Object.keys(foundItems).length} itemów`);
