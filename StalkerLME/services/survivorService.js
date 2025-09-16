@@ -176,6 +176,11 @@ class SurvivorService {
                 }
             });
 
+            // Dodaj obsługę collectibles jeśli istnieją w danych
+            if (data.collectibles) {
+                buildData.collectibles = data.collectibles;
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
@@ -1074,9 +1079,27 @@ class SurvivorService {
      * Dodaje pola Collectibles do embeda
      */
     addCollectibleFields(embed, buildData) {
-        // Sprawdź czy buildData ma Collectibles
-        const collectibles = buildData.Collectibles || buildData.collectibles ||
-                           (buildData.data && (buildData.data.Collectibles || buildData.data.collectibles)) || {};
+        // Sprawdź czy buildData ma collectibles
+        let collectibles = {};
+
+        // Sprawdź różne możliwe struktury
+        if (buildData.collectibles && buildData.collectibles.data) {
+            collectibles = buildData.collectibles.data;
+        } else if (buildData.Collectibles && buildData.Collectibles.data) {
+            collectibles = buildData.Collectibles.data;
+        } else if (buildData.collectibles) {
+            collectibles = buildData.collectibles;
+        } else if (buildData.Collectibles) {
+            collectibles = buildData.Collectibles;
+        } else if (buildData.data && buildData.data.collectibles && buildData.data.collectibles.data) {
+            collectibles = buildData.data.collectibles.data;
+        } else if (buildData.data && buildData.data.Collectibles && buildData.data.Collectibles.data) {
+            collectibles = buildData.data.Collectibles.data;
+        } else if (buildData.data && buildData.data.collectibles) {
+            collectibles = buildData.data.collectibles;
+        } else if (buildData.data && buildData.data.Collectibles) {
+            collectibles = buildData.data.Collectibles;
+        }
 
         // Mapowanie nazw collectibles na ikony
         const collectibleIcons = {
