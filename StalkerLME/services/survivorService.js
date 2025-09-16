@@ -181,6 +181,11 @@ class SurvivorService {
                 buildData.collectibles = this.decodeCollectibles(data.i);
             }
 
+            // Dekodowanie customSets z danych
+            if (data.customSets) {
+                buildData.customSets = data.customSets;
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
@@ -271,6 +276,11 @@ class SurvivorService {
         // Zachowaj collectibles jeśli istnieją
         if (data.collectibles) {
             result.collectibles = data.collectibles;
+        }
+
+        // Zachowaj customSets jeśli istnieją
+        if (data.customSets) {
+            result.customSets = data.customSets;
         }
 
         return result;
