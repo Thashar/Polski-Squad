@@ -9,6 +9,11 @@ class ProxyService {
         // Losowy start proxy index przy każdym uruchomieniu
         this.currentProxyIndex = this.proxyList.length > 0 ? Math.floor(Math.random() * this.proxyList.length) : 0;
         this.enabled = config.proxy?.enabled || false;
+
+        // Log randomization
+        if (this.enabled && this.proxyList.length > 0) {
+            this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+        }
         this.retryAttempts = config.proxy?.retryAttempts || 3;
         this.maxProxyAttempts = 10; // Maksymalnie 10 prób zmiany proxy
         this.usedProxies = new Set(); // Śledzenie użytych proxy w jednej próbie
@@ -72,6 +77,7 @@ class ProxyService {
             const shuffledProxies = [...this.proxyList].sort(() => Math.random() - 0.5);
             const selectedProxy = shuffledProxies[0];
             this.usedProxies.add(selectedProxy);
+            this.logger.info(`🔄 Proxy pool exhausted, reshuffled and selected: ${this.maskProxy(selectedProxy)}`);
             return selectedProxy;
         }
 
@@ -79,6 +85,7 @@ class ProxyService {
         const shuffledAvailable = [...availableProxies].sort(() => Math.random() - 0.5);
         const selectedProxy = shuffledAvailable[0];
         this.usedProxies.add(selectedProxy);
+        this.logger.info(`🎲 Random selection from ${availableProxies.length} available proxies`);
         return selectedProxy;
     }
 
@@ -147,6 +154,14 @@ class ProxyService {
         const isFirefox = userAgent.includes('Firefox');
         const isSafari = userAgent.includes('Safari') && !userAgent.includes('Chrome');
 
+        // Log anti-detection: User-Agent rotation
+        let browserType = 'Unknown';
+        if (isChrome) browserType = 'Chrome';
+        else if (isFirefox) browserType = 'Firefox';
+        else if (isSafari) browserType = 'Safari';
+
+        this.logger.info(`🎭 Anti-Detection: Rotating to ${browserType} headers`);
+
         const baseHeaders = {
             'User-Agent': userAgent,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -166,18 +181,21 @@ class ProxyService {
             baseHeaders['Sec-Fetch-Mode'] = 'navigate';
             baseHeaders['Sec-Fetch-Site'] = 'none';
             baseHeaders['Sec-Fetch-User'] = '?1';
+            this.logger.info(`🔧 Adding Chrome-specific Sec-Fetch headers`);
         }
 
         // Firefox-specific headers
         if (isFirefox) {
             baseHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
             baseHeaders['Accept-Language'] = 'en-US,en;q=0.5';
+            this.logger.info(`🦊 Firefox headers applied`);
         }
 
         // Safari-specific headers
         if (isSafari) {
             baseHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
             baseHeaders['Accept-Language'] = 'en-US,en;q=0.9';
+            this.logger.info(`🍎 Safari headers applied`);
         }
 
         return baseHeaders;
@@ -217,15 +235,20 @@ class ProxyService {
                 baseConfig.httpAgent = proxyAgent;
 
                 // Anti-detection: add proxy-specific headers
-                baseConfig.headers['X-Forwarded-For'] = this.generateRandomIP();
-                baseConfig.headers['X-Real-IP'] = this.generateRandomIP();
+                const fakeIP1 = this.generateRandomIP();
+                const fakeIP2 = this.generateRandomIP();
+                baseConfig.headers['X-Forwarded-For'] = fakeIP1;
+                baseConfig.headers['X-Real-IP'] = fakeIP2;
+                this.logger.info(`🌍 Anti-Detection: Spoofed IPs - X-Forwarded-For: ${fakeIP1}, X-Real-IP: ${fakeIP2}`);
 
             } catch (error) {
                 this.logger.warn(`⚠️ Invalid proxy URL: ${proxyUrl}, using direct connection`);
             }
         } else {
             // Anti-detection: even for direct connections, vary headers
-            baseConfig.headers['X-Forwarded-For'] = this.generateRandomIP();
+            const fakeIP = this.generateRandomIP();
+            baseConfig.headers['X-Forwarded-For'] = fakeIP;
+            this.logger.info(`🌍 Anti-Detection: Direct connection with spoofed IP: ${fakeIP}`);
         }
 
         return axios.create(baseConfig);
@@ -252,11 +275,11 @@ class ProxyService {
                     : this.getNextProxy();
             }
 
-            // Loguj informacje o używanym proxy
+            // Loguj informacje o używanym proxy i technikach anti-detection
             if (proxyUrl) {
-                this.logger.info(`🌐 Używam proxy: ${this.maskProxy(proxyUrl)} (próba ${attempt})`);
+                this.logger.info(`🌐 Proxy: ${this.maskProxy(proxyUrl)} | Attempt: ${attempt} | Strategy: ${this.config.proxy?.strategy || 'round-robin'}`);
             } else {
-                this.logger.info(`🔗 Bezpośrednie połączenie (próba ${attempt})`);
+                this.logger.info(`🔗 Direct connection | Attempt: ${attempt}`);
             }
 
             const axiosInstance = this.createProxyAxios(proxyUrl);
@@ -272,10 +295,12 @@ class ProxyService {
                 }
 
                 // Sukces - wyczyść używane proxy dla następnych zapytań
+                const cfRay = response.headers['cf-ray'];
+                const server = response.headers['server'];
                 if (proxyUrl) {
-                    this.logger.info(`✅ Sukces przez proxy: ${this.maskProxy(proxyUrl)}`);
+                    this.logger.info(`✅ SUCCESS via proxy: ${this.maskProxy(proxyUrl)} | Status: ${response.status} | CF-Ray: ${cfRay || 'none'} | Server: ${server || 'unknown'}`);
                 } else {
-                    this.logger.info(`✅ Sukces przez bezpośrednie połączenie`);
+                    this.logger.info(`✅ SUCCESS direct connection | Status: ${response.status} | CF-Ray: ${cfRay || 'none'} | Server: ${server || 'unknown'}`);
                 }
                 this.resetUsedProxies();
                 return response;
@@ -291,7 +316,7 @@ class ProxyService {
 
                 // Specjalne traktowanie błędu 403 - próbuj zmienić proxy
                 if (this.is403Error(error) && this.enabled && this.proxyList.length > 0 && proxyAttempts < this.maxProxyAttempts) {
-                    this.logger.warn(`🔄 Błąd 403 wykryty, próba zmiany proxy (${proxyAttempts + 1}/${this.maxProxyAttempts})`);
+                    this.logger.warn(`🚫 Cloudflare 403 detected | Proxy attempt: ${proxyAttempts + 1}/${this.maxProxyAttempts} | Rotating...`);
                     proxyAttempts++;
 
                     // Nie zwiększaj głównego licznika próób dla błędów 403
@@ -299,7 +324,7 @@ class ProxyService {
 
                     // Losowa pauza 1-3 sekundy dla uniknięcia rate limiting
                     const delay = Math.floor(Math.random() * 2000) + 1000;
-                    this.logger.info(`⏱️ Pauza ${delay}ms przed kolejną próbą z nowym proxy...`);
+                    this.logger.info(`⏱️ Anti-Rate-Limit: Random delay ${delay}ms before next proxy attempt`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
@@ -385,10 +410,12 @@ class ProxyService {
                 }
 
                 // Sukces - wyczyść używane proxy dla następnych zapytań
+                const cfRay = response.headers['cf-ray'];
+                const server = response.headers['server'];
                 if (proxyUrl) {
-                    this.logger.info(`✅ POST sukces przez proxy: ${this.maskProxy(proxyUrl)}`);
+                    this.logger.info(`✅ POST SUCCESS via proxy: ${this.maskProxy(proxyUrl)} | Status: ${response.status} | CF-Ray: ${cfRay || 'none'} | Server: ${server || 'unknown'}`);
                 } else {
-                    this.logger.info(`✅ POST sukces przez bezpośrednie połączenie`);
+                    this.logger.info(`✅ POST SUCCESS direct connection | Status: ${response.status} | CF-Ray: ${cfRay || 'none'} | Server: ${server || 'unknown'}`);
                 }
                 this.resetUsedProxies();
                 return response;

@@ -27,12 +27,13 @@ class EndersEchoService {
 
             // Anti-Cloudflare: najpierw spróbuj uzyskać session przez stronę główną
             try {
-                this.logger.info('🔑 Uzyskiwanie sesji przez stronę główną...');
-                await this.proxyService.makeRequest('https://garrytools.com/');
+                this.logger.info('🔑 Anti-Detection: Establishing session via homepage...');
+                const sessionResponse = await this.proxyService.makeRequest('https://garrytools.com/');
+                this.logger.info(`✅ Session established | Status: ${sessionResponse.status} | CF-Ray: ${sessionResponse.headers['cf-ray'] || 'none'}`);
                 // Krótka pauza po uzyskaniu sesji
                 await new Promise(resolve => setTimeout(resolve, 1200));
             } catch (sessionError) {
-                this.logger.warn('⚠️ Nie udało się uzyskać sesji, próbuję bezpośrednio...');
+                this.logger.warn(`⚠️ Session establishment failed: ${sessionError.message}, proceeding anyway...`);
             }
 
             let response;
