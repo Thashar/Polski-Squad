@@ -123,6 +123,10 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
+            // Debug: wyświetl pełne surowe dane
+            this.logger.info('🔍 [DEBUG] PEŁNE SUROWE DANE z LZMA:');
+            this.logger.info(JSON.stringify(data, null, 2));
+
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
