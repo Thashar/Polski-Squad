@@ -442,10 +442,12 @@ class SurvivorService {
                     // Pokaż tylko RC w pierwszej linii dla itemów B (jeśli mają C)
                     detailText = '';
 
-                    // Oblicz RC dla itemów B jeżeli mają C - tylko koszt C
+                    // Oblicz RC dla itemów B jeżeli mają C - koszt C + bonus RC
                     if (c > 0) {
                         const cCost = this.calculateOldCCost(c);
-                        costText = cCost > 0 ? ` • <:II_RC:1385139885924421653> **${cCost}**` : '';
+                        const cBonus = this.calculateBItemCBonus(c);
+                        const totalCost = cCost + cBonus;
+                        costText = totalCost > 0 ? ` • <:II_RC:1385139885924421653> **${totalCost}**` : '';
                     } else {
                         costText = ''; // Brak C = brak kosztów RC
                     }
@@ -854,6 +856,14 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza bonus RC dla itemów B z poziomem C
+     */
+    calculateBItemCBonus(cLevel) {
+        const bonuses = [0, 1, 2, 4, 6, 9, 12, 17, 22, 30, 38]; // C0 = 0, C1 = 1, C2 = 2, itd.
+        return bonuses[cLevel] || 0;
+    }
+
+    /**
      * Sprawdza czy przedmiot ma E/V/C (True) czy B (False)
      */
     shouldShowEVCh(itemName) {
@@ -970,9 +980,10 @@ class SurvivorService {
                         totalEvolutionCost += eCost;
                         totalResourceCost += eCost + vCost + cCost;
                     } else {
-                        // Przedmioty B - licz tylko C
+                        // Przedmioty B - licz tylko C plus bonus RC
                         const cCost = this.calculateOldCCost(c);
-                        totalResourceCost += cCost;
+                        const cBonus = this.calculateBItemCBonus(c);
+                        totalResourceCost += cCost + cBonus;
                     }
                 }
 
