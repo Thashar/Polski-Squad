@@ -478,12 +478,19 @@ class SurvivorService {
             }
         }
 
-        // Dodaj pole z fragmentami na końcu
-        page2.addFields({
-            name: 'Zużyte materiały',
-            value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments || 0}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments || 0}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments || 0}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments || 0}`,
-            inline: true // Po prawej stronie
-        });
+        // Dodaj pola na końcu
+        page2.addFields(
+            {
+                name: 'Zużyte materiały',
+                value: `**<:JJ_FragmentEternal:1416896248837046404> Eternal:** ${stats.totalEternalFragments || 0}\n**<:JJ_FragmentVoid:1416896254431985764> Void:** ${stats.totalVoidFragments || 0}\n**<:JJ_FragmentChaos:1416896259561754796> Chaos:** ${stats.totalChaosFragments || 0}\n**<:JJ_FragmentBaseMaterial:1416896262938034289> Base:** ${stats.totalBaseFragments || 0}`,
+                inline: true
+            },
+            {
+                name: 'Zużyte zasoby',
+                value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
+                inline: true
+            }
+        );
 
         // Usuń footer ze strony 2
         // page2.setFooter({ text: `📝 Strona 2/2` });
