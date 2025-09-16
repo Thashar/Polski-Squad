@@ -177,7 +177,10 @@ class SurvivorService {
             });
 
             // Dodaj obsługę collectibles jeśli istnieją w danych
+            this.logger.info('🔍 [DEBUG] Sprawdzanie collectibles w surowych danych:');
+            this.logger.info('data.collectibles:', data.collectibles ? 'ISTNIEJE' : 'BRAK');
             if (data.collectibles) {
+                this.logger.info('Zawartość data.collectibles:', JSON.stringify(data.collectibles, null, 2));
                 buildData.collectibles = data.collectibles;
             }
 
@@ -1079,27 +1082,45 @@ class SurvivorService {
      * Dodaje pola Collectibles do embeda
      */
     addCollectibleFields(embed, buildData) {
+        // Debug: wyświetl pełną strukturę buildData
+        this.logger.info('🔍 [DEBUG] Pełna struktura buildData w addCollectibleFields:');
+        this.logger.info(JSON.stringify(buildData, null, 2));
+
         // Sprawdź czy buildData ma collectibles
         let collectibles = {};
 
         // Sprawdź różne możliwe struktury
+        this.logger.info('🔍 [DEBUG] Sprawdzanie struktur collectibles:');
+
         if (buildData.collectibles && buildData.collectibles.data) {
+            this.logger.info('✅ Znaleziono: buildData.collectibles.data');
             collectibles = buildData.collectibles.data;
         } else if (buildData.Collectibles && buildData.Collectibles.data) {
+            this.logger.info('✅ Znaleziono: buildData.Collectibles.data');
             collectibles = buildData.Collectibles.data;
         } else if (buildData.collectibles) {
+            this.logger.info('✅ Znaleziono: buildData.collectibles');
             collectibles = buildData.collectibles;
         } else if (buildData.Collectibles) {
+            this.logger.info('✅ Znaleziono: buildData.Collectibles');
             collectibles = buildData.Collectibles;
         } else if (buildData.data && buildData.data.collectibles && buildData.data.collectibles.data) {
+            this.logger.info('✅ Znaleziono: buildData.data.collectibles.data');
             collectibles = buildData.data.collectibles.data;
         } else if (buildData.data && buildData.data.Collectibles && buildData.data.Collectibles.data) {
+            this.logger.info('✅ Znaleziono: buildData.data.Collectibles.data');
             collectibles = buildData.data.Collectibles.data;
         } else if (buildData.data && buildData.data.collectibles) {
+            this.logger.info('✅ Znaleziono: buildData.data.collectibles');
             collectibles = buildData.data.collectibles;
         } else if (buildData.data && buildData.data.Collectibles) {
+            this.logger.info('✅ Znaleziono: buildData.data.Collectibles');
             collectibles = buildData.data.Collectibles;
+        } else {
+            this.logger.info('❌ Nie znaleziono collectibles w żadnej strukturze');
         }
+
+        this.logger.info('🔍 [DEBUG] Finalne collectibles:', JSON.stringify(collectibles, null, 2));
 
         // Mapowanie nazw collectibles na ikony
         const collectibleIcons = {
