@@ -30,26 +30,12 @@ class ClanAjaxService {
             // First, get the main page to establish session
             let sessionResponse;
             
-            try {
-                // Try direct request first
-                sessionResponse = await this.axios.get('https://garrytools.com/rank/clans', {
-                    headers: {
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-                    }
-                });
-            } catch (directError) {
-                // If we get 403 Forbidden, try with proxy
-                if (directError.response?.status === 403) {
-                    this.logger.info('   🔄 Session request blocked (403), trying with proxy...');
-                    sessionResponse = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
-                        headers: {
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-                        }
-                    });
-                } else {
-                    throw directError; // Re-throw other errors
+            // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
+            sessionResponse = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
+                headers: {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
                 }
-            }
+            });
             
             // Extract cookies from the session
             const cookies = sessionResponse.headers?.['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || '';
@@ -60,28 +46,13 @@ class ClanAjaxService {
             // Alternative: Check if clan data is available in a different format
             let response;
             
-            try {
-                // Try direct request first
-                response = await this.axios.get('https://garrytools.com/rank/clans', {
-                    headers: {
-                        'Cookie': cookies,
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    }
-                });
-            } catch (directError) {
-                // If we get 403 Forbidden, try with proxy
-                if (directError.response?.status === 403) {
-                    this.logger.info('   🔄 Direct request blocked (403), trying with proxy...');
-                    response = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
-                        headers: {
-                            'Cookie': cookies,
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                        }
-                    });
-                } else {
-                    throw directError; // Re-throw other errors
+            // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
+            response = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
+                headers: {
+                    'Cookie': cookies,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
                 }
-            }
+            });
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio

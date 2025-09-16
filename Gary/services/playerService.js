@@ -34,18 +34,8 @@ class PlayerService {
             this.logger.info('👥 Fetching player ranking data from API...');
             let response;
             
-            try {
-                // Try direct request first
-                response = await this.axios.get('https://garrytools.com/rank/players');
-            } catch (directError) {
-                // If we get 403 Forbidden, try with proxy
-                if (directError.response?.status === 403) {
-                    this.logger.info('   🔄 Direct request blocked (403), trying with proxy...');
-                    response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
-                } else {
-                    throw directError; // Re-throw other errors
-                }
-            }
+            // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
+            response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
             // Response details removed for cleaner logs
             
             if (response.data && typeof response.data === 'string') {

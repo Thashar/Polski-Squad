@@ -27,18 +27,8 @@ class EndersEchoService {
             
             let response;
             
-            try {
-                // Try direct request first
-                response = await this.axios.get('https://garrytools.com/rank/enderecho');
-            } catch (directError) {
-                // If we get 403 Forbidden, try with proxy
-                if (directError.response?.status === 403) {
-                    this.logger.info('   🔄 Direct request blocked (403), trying with proxy...');
-                    response = await this.proxyService.makeRequest('https://garrytools.com/rank/enderecho');
-                } else {
-                    throw directError; // Re-throw other errors
-                }
-            }
+            // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
+            response = await this.proxyService.makeRequest('https://garrytools.com/rank/enderecho');
             
             if (response.data && typeof response.data === 'string') {
                 // Parse HTML response with cheerio
