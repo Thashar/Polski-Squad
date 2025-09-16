@@ -127,6 +127,9 @@ class SurvivorService {
                 return null;
             }
 
+            // Debug: wyloguj wszystkie klucze w danych
+            this.logger.info('🔍 Dostępne klucze w surowych danych:', Object.keys(data));
+
             const equipment = data.j;
 
             // Mapowanie pozycji w tablicy na kategorie (stałe)
@@ -1329,16 +1332,25 @@ class SurvivorService {
      * Dodaje pola Custom Sets do embeda
      */
     addCustomSetsFields(embed, buildData) {
+        // Debug: sprawdź strukturę buildData
+        this.logger.info('🔍 Sprawdzam buildData dla customSets:', Object.keys(buildData));
+        this.logger.info('🔍 buildData.customSets:', buildData.customSets);
+
         // Sprawdź czy buildData ma customSets
         let customSets = {};
 
         // Sprawdź różne możliwe struktury
         if (buildData.customSets && buildData.customSets.data) {
+            this.logger.info('✅ Znaleziono customSets.data');
             customSets = buildData.customSets.data;
         } else if (buildData.CustomSets && buildData.CustomSets.data) {
+            this.logger.info('✅ Znaleziono CustomSets.data');
             customSets = buildData.CustomSets.data;
         } else if (buildData.customSets) {
+            this.logger.info('✅ Znaleziono customSets');
             customSets = buildData.customSets;
+        } else {
+            this.logger.info('❌ Nie znaleziono customSets');
         }
 
         // Sprawdź czy mamy dane
