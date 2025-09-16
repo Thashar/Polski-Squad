@@ -1208,7 +1208,8 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Wszystkie collectibles w jednym polu
+        // Grupuj collectibles po 8 w polu
+        const fields = [];
         const allItems = [];
 
         for (const collectibleName of collectibleOrder) {
@@ -1220,20 +1221,26 @@ class SurvivorService {
             }
         }
 
+        // Grupuj po 8 itemów na pole (bez tytułów)
+        for (let i = 0; i < allItems.length; i += 8) {
+            const chunk = allItems.slice(i, i + 8);
+            fields.push({
+                name: '\u200B',
+                value: chunk.join('\n'),
+                inline: false
+            });
+        }
+
         // Jeśli nie ma collectibles, pokaż wiadomość
-        if (allItems.length === 0) {
+        if (fields.length === 0) {
             embed.addFields({
                 name: 'Collectibles',
                 value: 'Brak danych o collectibles w tym buildzie.',
                 inline: false
             });
         } else {
-            // Dodaj wszystkie collectibles do jednego pola
-            embed.addFields({
-                name: 'Collectibles',
-                value: allItems.join('\n'),
-                inline: false
-            });
+            // Dodaj wszystkie pola do embeda
+            embed.addFields(...fields);
         }
     }
 }
