@@ -192,8 +192,39 @@ class InteractionHandler {
             }
         } catch (error) {
             await this.logService.logError(error, `command ${commandName}`);
-            if (!interaction.replied) {
+
+            // Specjalna obsługa błędu JavaScript limitation
+            if (error.isJavaScriptError) {
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({
+                        content: `❌ **Brak dostępu do danych**\n\n` +
+                                `The garrytools.com search requires JavaScript execution that cannot be simulated by the bot. ` +
+                                `This is a technical limitation of web scraping. Try using the command again.\n\n` +
+                                `**Alternatywy:**\n` +
+                                `• Spróbuj ponownie za kilka minut\n` +
+                                `• Użyj \`/search [nazwa] searching:TOP500\` dla wyszukiwania w cache\n` +
+                                `• Użyj \`/player [nazwa]\` lub \`/ee [nazwa]\` które działają normalnie`,
+                        ephemeral: false
+                    });
+                } else {
+                    await interaction.editReply({
+                        content: `❌ **Brak dostępu do danych**\n\n` +
+                                `The garrytools.com search requires JavaScript execution that cannot be simulated by the bot. ` +
+                                `This is a technical limitation of web scraping. Try using the command again.\n\n` +
+                                `**Alternatywy:**\n` +
+                                `• Spróbuj ponownie za kilka minut\n` +
+                                `• Użyj \`/search [nazwa] searching:TOP500\` dla wyszukiwania w cache\n` +
+                                `• Użyj \`/player [nazwa]\` lub \`/ee [nazwa]\` które działają normalnie`
+                    });
+                }
+                return;
+            }
+
+            // Standardowa obsługa błędów
+            if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply('❌ An error occurred while executing the command.');
+            } else if (interaction.deferred) {
+                await interaction.editReply('❌ An error occurred while executing the command.');
             }
         }
     }

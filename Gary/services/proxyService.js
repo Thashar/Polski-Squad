@@ -9,6 +9,8 @@ class ProxyService {
         this.currentProxyIndex = 0;
         this.enabled = config.proxy?.enabled || false;
         this.retryAttempts = config.proxy?.retryAttempts || 3;
+        this.maxProxyAttempts = 10; // Maksymalnie 10 prób zmiany proxy
+        this.usedProxies = new Set(); // Śledzenie użytych proxy w jednej próbie
     }
 
     /**
@@ -22,7 +24,7 @@ class ProxyService {
 
         const proxy = this.proxyList[this.currentProxyIndex];
         this.currentProxyIndex = (this.currentProxyIndex + 1) % this.proxyList.length;
-        
+
         return proxy;
     }
 
@@ -37,6 +39,48 @@ class ProxyService {
 
         const randomIndex = Math.floor(Math.random() * this.proxyList.length);
         return this.proxyList[randomIndex];
+    }
+
+    /**
+     * Get unused random proxy from the list
+     * @returns {string|null} Proxy URL or null if no unused proxies available
+     */
+    getUnusedRandomProxy() {
+        if (!this.enabled || this.proxyList.length === 0) {
+            return null;
+        }
+
+        const availableProxies = this.proxyList.filter(proxy => !this.usedProxies.has(proxy));
+
+        if (availableProxies.length === 0) {
+            // Jeśli wszystkie proxy zostały użyte, resetuj listę i użyj losowego
+            this.usedProxies.clear();
+            const randomIndex = Math.floor(Math.random() * this.proxyList.length);
+            const selectedProxy = this.proxyList[randomIndex];
+            this.usedProxies.add(selectedProxy);
+            return selectedProxy;
+        }
+
+        const randomIndex = Math.floor(Math.random() * availableProxies.length);
+        const selectedProxy = availableProxies[randomIndex];
+        this.usedProxies.add(selectedProxy);
+        return selectedProxy;
+    }
+
+    /**
+     * Reset used proxies list
+     */
+    resetUsedProxies() {
+        this.usedProxies.clear();
+    }
+
+    /**
+     * Check if error is 403 Forbidden
+     * @param {Error} error - Error object
+     * @returns {boolean} True if error is 403
+     */
+    is403Error(error) {
+        return error.response && error.response.status === 403;
     }
 
     /**
@@ -95,57 +139,85 @@ class ProxyService {
      */
     async makeRequest(url, options = {}) {
         let lastError;
-        
+        let proxyAttempts = 0;
+        this.resetUsedProxies(); // Reset na początku każdego zapytania
+
         for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-            const proxyUrl = this.config.proxy?.strategy === 'random' 
-                ? this.getRandomProxy() 
-                : this.getNextProxy();
-            
+            let proxyUrl = null;
+
+            // Użyj proxy tylko jeśli jest włączone i mamy dostępne proxy
+            if (this.enabled && this.proxyList.length > 0) {
+                proxyUrl = this.config.proxy?.strategy === 'random'
+                    ? this.getUnusedRandomProxy()
+                    : this.getNextProxy();
+            }
+
             const axiosInstance = this.createProxyAxios(proxyUrl);
-            
+
             try {
                 const response = await axiosInstance.get(url, options);
-                
-                // Success logging reduced for cleaner output
-                
+
+                // Sukces - wyczyść używane proxy dla następnych zapytań
+                this.resetUsedProxies();
                 return response;
-                
+
             } catch (error) {
                 lastError = error;
-                
+
                 if (proxyUrl) {
                     this.logger.warn(`❌ Request failed via proxy ${this.maskProxy(proxyUrl)} on attempt ${attempt}: ${error.message}`);
                 } else {
                     this.logger.warn(`❌ Request failed via direct connection on attempt ${attempt}: ${error.message}`);
                 }
-                
+
+                // Specjalne traktowanie błędu 403 - próbuj zmienić proxy
+                if (this.is403Error(error) && this.enabled && this.proxyList.length > 0 && proxyAttempts < this.maxProxyAttempts) {
+                    this.logger.warn(`🔄 Błąd 403 wykryty, próba zmiany proxy (${proxyAttempts + 1}/${this.maxProxyAttempts})`);
+                    proxyAttempts++;
+
+                    // Nie zwiększaj głównego licznika próób dla błędów 403
+                    attempt--;
+
+                    // Krótka pauza przed próbą z nowym proxy
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    continue;
+                }
+
                 // If this is the last attempt or we're not using proxies, don't continue
                 if (attempt === this.retryAttempts || !this.enabled) {
                     break;
                 }
-                
+
                 // Wait before retry
                 await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
             }
         }
-        
+
+        // Jeśli osiągnięto maksymalną liczbę prób proxy dla błędu 403
+        if (proxyAttempts >= this.maxProxyAttempts) {
+            this.logger.error(`❌ Osiągnięto maksymalną liczbę prób zmiany proxy (${this.maxProxyAttempts}) dla błędu 403`);
+            const javascriptError = new Error('The garrytools.com search requires JavaScript execution that cannot be simulated by the bot. This is a technical limitation of web scraping. Try using the command again.');
+            javascriptError.isJavaScriptError = true;
+            throw javascriptError;
+        }
+
         // If all proxy attempts failed, try direct connection as fallback
         if (this.enabled && this.proxyList.length > 0) {
             this.logger.warn(`⚠️ All proxy attempts failed, trying direct connection as fallback...`);
-            
+
             try {
                 const axiosInstance = this.createProxyAxios(null); // No proxy
                 const response = await axiosInstance.get(url, options);
-                
+
                 this.logger.info(`✅ Fallback request successful via direct connection`);
                 return response;
-                
+
             } catch (directError) {
                 this.logger.error(`❌ Direct connection fallback also failed: ${directError.message}`);
                 throw lastError; // Throw original proxy error, not direct connection error
             }
         }
-        
+
         // If all attempts failed, throw the last error
         throw lastError;
     }
@@ -159,59 +231,89 @@ class ProxyService {
      */
     async makePostRequest(url, data, options = {}) {
         let lastError;
-        
+        let proxyAttempts = 0;
+        this.resetUsedProxies(); // Reset na początku każdego zapytania
+
         for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
-            const proxyUrl = this.config.proxy?.strategy === 'random' 
-                ? this.getRandomProxy() 
-                : this.getNextProxy();
-            
+            let proxyUrl = null;
+
+            // Użyj proxy tylko jeśli jest włączone i mamy dostępne proxy
+            if (this.enabled && this.proxyList.length > 0) {
+                proxyUrl = this.config.proxy?.strategy === 'random'
+                    ? this.getUnusedRandomProxy()
+                    : this.getNextProxy();
+            }
+
             const axiosInstance = this.createProxyAxios(proxyUrl);
-            
+
             try {
                 const response = await axiosInstance.post(url, data, options);
-                
+
                 if (proxyUrl) {
                     this.logger.info(`✅ POST request successful via proxy on attempt ${attempt}`);
                 } else {
                     this.logger.info(`✅ POST request successful via direct connection on attempt ${attempt}`);
                 }
-                
+
+                // Sukces - wyczyść używane proxy dla następnych zapytań
+                this.resetUsedProxies();
                 return response;
-                
+
             } catch (error) {
                 lastError = error;
-                
+
                 if (proxyUrl) {
                     this.logger.warn(`❌ POST request failed via proxy ${this.maskProxy(proxyUrl)} on attempt ${attempt}: ${error.message}`);
                 } else {
                     this.logger.warn(`❌ POST request failed via direct connection on attempt ${attempt}: ${error.message}`);
                 }
-                
+
+                // Specjalne traktowanie błędu 403 - próbuj zmienić proxy
+                if (this.is403Error(error) && this.enabled && this.proxyList.length > 0 && proxyAttempts < this.maxProxyAttempts) {
+                    this.logger.warn(`🔄 Błąd 403 wykryty w POST, próba zmiany proxy (${proxyAttempts + 1}/${this.maxProxyAttempts})`);
+                    proxyAttempts++;
+
+                    // Nie zwiększaj głównego licznika próób dla błędów 403
+                    attempt--;
+
+                    // Krótka pauza przed próbą z nowym proxy
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    continue;
+                }
+
                 if (attempt === this.retryAttempts || !this.enabled) {
                     break;
                 }
-                
+
                 await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
             }
         }
-        
+
+        // Jeśli osiągnięto maksymalną liczbę prób proxy dla błędu 403
+        if (proxyAttempts >= this.maxProxyAttempts) {
+            this.logger.error(`❌ Osiągnięto maksymalną liczbę prób zmiany proxy (${this.maxProxyAttempts}) dla błędu 403 w POST`);
+            const javascriptError = new Error('The garrytools.com search requires JavaScript execution that cannot be simulated by the bot. This is a technical limitation of web scraping. Try using the command again.');
+            javascriptError.isJavaScriptError = true;
+            throw javascriptError;
+        }
+
         // If all proxy attempts failed, try direct connection as fallback
         if (this.enabled && this.proxyList.length > 0) {
             this.logger.warn(`⚠️ All proxy POST attempts failed, trying direct connection as fallback...`);
-            
+
             try {
                 const axiosInstance = this.createProxyAxios(null); // No proxy
                 const response = await axiosInstance.post(url, data, options);
-                
+
                 this.logger.info(`✅ Fallback POST request successful via direct connection`);
                 return response;
-                
+
             } catch (directError) {
                 this.logger.error(`❌ Direct connection POST fallback also failed: ${directError.message}`);
                 throw lastError; // Throw original proxy error, not direct connection error
             }
         }
-        
+
         throw lastError;
     }
 
@@ -279,7 +381,9 @@ class ProxyService {
             totalProxies: this.proxyList.length,
             currentIndex: this.currentProxyIndex,
             strategy: this.config.proxy?.strategy || 'round-robin',
-            retryAttempts: this.retryAttempts
+            retryAttempts: this.retryAttempts,
+            maxProxyAttempts: this.maxProxyAttempts,
+            usedProxiesCount: this.usedProxies.size
         };
     }
 }
