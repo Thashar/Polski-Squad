@@ -38,7 +38,7 @@ class PlayerService {
             response = await this.proxyService.makeRequest('https://garrytools.com/rank/players');
             // Response details removed for cleaner logs
             
-            if (response.data && typeof response.data === 'string') {
+            if (response.data && typeof response.data === 'string' && response.data.length > 0) {
                 // Parse HTML response with cheerio
                 const $ = cheerio.load(response.data);
                 const players = [];
@@ -86,7 +86,10 @@ class PlayerService {
             } else {
                 this.logger.warn('⚠️ Invalid API response format for player data');
                 this.logger.warn(`🔍 DEBUG: Response type: ${typeof response.data}`);
-                this.logger.warn(`🔍 DEBUG: Response data: ${JSON.stringify(response.data).substring(0, 200)}`);
+                this.logger.warn(`🔍 DEBUG: Response length: ${response.data ? response.data.length : 'null'}`);
+                this.logger.warn(`🔍 DEBUG: Response status: ${response.status}`);
+                this.logger.warn(`🔍 DEBUG: Response headers: ${JSON.stringify(response.headers)}`);
+                this.logger.warn(`🔍 DEBUG: Response data preview: ${JSON.stringify(response.data).substring(0, 200)}`);
                 return [];
             }
         } catch (error) {

@@ -30,7 +30,7 @@ class EndersEchoService {
             // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
             response = await this.proxyService.makeRequest('https://garrytools.com/rank/enderecho');
             
-            if (response.data && typeof response.data === 'string') {
+            if (response.data && typeof response.data === 'string' && response.data.length > 0) {
                 // Parse HTML response with cheerio
                 const $ = cheerio.load(response.data);
                 const players = [];
@@ -110,7 +110,10 @@ class EndersEchoService {
             } else {
                 this.logger.warn('⚠️ Invalid API response format for EndersEcho data');
                 this.logger.warn(`🔍 DEBUG EE: Response type: ${typeof response.data}`);
-                this.logger.warn(`🔍 DEBUG EE: Response data: ${JSON.stringify(response.data).substring(0, 200)}`);
+                this.logger.warn(`🔍 DEBUG EE: Response length: ${response.data ? response.data.length : 'null'}`);
+                this.logger.warn(`🔍 DEBUG EE: Response status: ${response.status}`);
+                this.logger.warn(`🔍 DEBUG EE: Response headers: ${JSON.stringify(response.headers)}`);
+                this.logger.warn(`🔍 DEBUG EE: Response data preview: ${JSON.stringify(response.data).substring(0, 200)}`);
                 return [];
             }
         } catch (error) {
