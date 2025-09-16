@@ -127,8 +127,6 @@ class SurvivorService {
                 return null;
             }
 
-            // Debug: wyloguj wszystkie klucze w danych
-            console.log('🔍 Dostępne klucze w surowych danych:', Object.keys(data));
 
             const equipment = data.j;
 
@@ -265,7 +263,6 @@ class SurvivorService {
             }
         }
 
-        console.log('🔍 Dekodowane customSets:', JSON.stringify(customSets, null, 2));
         return customSets;
     }
 
@@ -426,7 +423,16 @@ class SurvivorService {
             }
         }
 
-        // Pierwsza strona - każdy item ekwipunku w osobnym polu
+        // Strona 0 - Statystyki
+        const page0 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // Zawartość Statystyki
+        this.addStatisticsFields(page0, buildData);
+
+        // Pierwsza strona (teraz page1) - każdy item ekwipunku w osobnym polu
         const page1 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor)
@@ -634,48 +640,61 @@ class SurvivorService {
             inline: false
         });
 
-        return [page1, page2, page3, page4, page5, page6];
+        return [page0, page1, page2, page3, page4, page5, page6];
     }
 
     /**
      * Tworzy przyciski nawigacji dla paginacji
      */
-    createNavigationButtons(currentPage = 0) {
+    createNavigationButtons(currentPage = 0, userId = null) {
         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
         const row1 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
+                    .setCustomId('statystyki_page')
+                    .setLabel('Statystyki')
+                    .setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
                     .setCustomId('ekwipunek_page')
                     .setLabel('Ekwipunek')
-                    .setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('tech_party_page')
                     .setLabel('Tech Party')
-                    .setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('survivor_page')
                     .setLabel('Survivor')
-                    .setStyle(currentPage === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId('collectible_page')
-                    .setLabel('Collectible')
                     .setStyle(currentPage === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
 
         const row2 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
+                    .setCustomId('collectible_page')
+                    .setLabel('Collectible')
+                    .setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
                     .setCustomId('custom_sets_page')
                     .setLabel('Custom Sets')
-                    .setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('pets_page')
                     .setLabel('Pets')
-                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
 
-        return [row1, row2];
+        const row3 = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('delete_embed')
+                    .setLabel('Usuń')
+                    .setStyle(ButtonStyle.Danger)
+                    .setEmoji('🗑️')
+            );
+
+        return [row1, row2, row3];
     }
 
     /**
@@ -1166,24 +1185,15 @@ class SurvivorService {
             const buffer = Buffer.from(buildCode, 'base64');
             const decompressed = lzma.decompress(buffer);
 
-            console.log('🔍 LZMA dekompresja - typ:', typeof decompressed);
-            console.log('🔍 LZMA dekompresja - czy array:', Array.isArray(decompressed));
-
             if (Array.isArray(decompressed)) {
                 const chars = decompressed.map(num => String.fromCharCode(num));
                 const jsonString = chars.join('');
-                console.log('🔍 JSON string z LZMA (pierwsze 500 znaków):', jsonString.substring(0, 500));
 
                 const jsonStart = jsonString.indexOf('{');
-                console.log('🔍 JSON start pozycja:', jsonStart);
 
                 if (jsonStart !== -1) {
                     const cleanJsonString = jsonString.substring(jsonStart);
-                    console.log('🔍 Clean JSON string (pierwsze 500 znaków):', cleanJsonString.substring(0, 500));
-
                     const parsed = JSON.parse(cleanJsonString);
-                    console.log('🔍 Parsowany JSON - klucze:', Object.keys(parsed));
-                    console.log('🔍 Parsowany JSON - pełne dane:', JSON.stringify(parsed, null, 2));
 
                     const converted = this.convertSioToolsFormat(parsed);
                     if (converted) {
@@ -1369,25 +1379,16 @@ class SurvivorService {
      * Dodaje pola Custom Sets do embeda
      */
     addCustomSetsFields(embed, buildData) {
-        // Debug: sprawdź strukturę buildData
-        console.log('🔍 Sprawdzam buildData dla customSets:', Object.keys(buildData));
-        console.log('🔍 buildData.customSets:', buildData.customSets);
-
         // Sprawdź czy buildData ma customSets
         let customSets = {};
 
         // Sprawdź różne możliwe struktury
         if (buildData.customSets && buildData.customSets.data) {
-            console.log('✅ Znaleziono customSets.data');
             customSets = buildData.customSets.data;
         } else if (buildData.CustomSets && buildData.CustomSets.data) {
-            console.log('✅ Znaleziono CustomSets.data');
             customSets = buildData.CustomSets.data;
         } else if (buildData.customSets) {
-            console.log('✅ Znaleziono customSets');
             customSets = buildData.customSets;
-        } else {
-            console.log('❌ Nie znaleziono customSets');
         }
 
         // Sprawdź czy mamy dane
@@ -1435,6 +1436,39 @@ class SurvivorService {
                 inline: false
             });
         }
+    }
+
+    /**
+     * Dodaje pola Statystyki do embeda
+     */
+    addStatisticsFields(embed, buildData) {
+        // Oblicz szczegółowe statystyki buildu
+        const stats = this.calculateBuildStatisticsDetailed(buildData);
+
+        embed.addFields(
+            {
+                name: 'TOTAL RC',
+                value: `<:II_RC:1385139885924421653> **${stats.totalPower}**`,
+                inline: true
+            },
+            {
+                name: 'Efficiency',
+                value: `⚡ **${stats.efficiency}%**`,
+                inline: true
+            },
+            {
+                name: 'Zużyte materiały',
+                value: `<:JJ_FragmentEternal:1385139903997620275> Eternal: **${stats.totalEternalFragments}**\n<:JJ_FragmentVoid:1385139881558351882> Void: **${stats.totalVoidFragments}**\n<:JJ_FragmentChaos:1385139906694156410> Chaos: **${stats.totalChaosFragments}**\n<:JJ_FragmentBaseMaterial:1385139904651001866> Base: **${stats.totalBaseFragments}**`,
+                inline: false
+            }
+        );
+    }
+
+    /**
+     * Oblicza szczegółowe statystyki buildu - wykorzystuje istniejącą funkcję
+     */
+    calculateBuildStatisticsDetailed(buildData) {
+        return this.calculateBuildStatistics(buildData);
     }
 }
 

@@ -410,7 +410,7 @@ async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService } = sharedState;
 
     // Obsługa przycisków paginacji buildów
-    if (interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'collectible_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
+    if (interaction.customId === 'statystyki_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'collectible_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
         if (!sharedState.buildPagination) {
             await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
             return;
@@ -426,18 +426,20 @@ async function handleButton(interaction, sharedState) {
 
         // Ustaw nową stronę na podstawie przycisku
         let newPage = paginationData.currentPage;
-        if (interaction.customId === 'ekwipunek_page') {
+        if (interaction.customId === 'statystyki_page') {
             newPage = 0;
-        } else if (interaction.customId === 'tech_party_page') {
+        } else if (interaction.customId === 'ekwipunek_page') {
             newPage = 1;
-        } else if (interaction.customId === 'survivor_page') {
+        } else if (interaction.customId === 'tech_party_page') {
             newPage = 2;
-        } else if (interaction.customId === 'collectible_page') {
+        } else if (interaction.customId === 'survivor_page') {
             newPage = 3;
-        } else if (interaction.customId === 'custom_sets_page') {
+        } else if (interaction.customId === 'collectible_page') {
             newPage = 4;
-        } else if (interaction.customId === 'pets_page') {
+        } else if (interaction.customId === 'custom_sets_page') {
             newPage = 5;
+        } else if (interaction.customId === 'pets_page') {
+            newPage = 6;
         }
 
         // Aktualizuj dane paginacji
@@ -448,6 +450,32 @@ async function handleButton(interaction, sharedState) {
             embeds: [paginationData.embeds[newPage]],
             components: navigationButtons
         });
+        return;
+    }
+
+    // Obsługa przycisku "Usuń" dla embedów buildu
+    if (interaction.customId === 'delete_embed') {
+        if (!sharedState.buildPagination) {
+            await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const paginationData = sharedState.buildPagination.get(interaction.message.id);
+        if (!paginationData) {
+            await interaction.reply({ content: '❌ Nie znaleziono danych paginacji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem embeda
+        if (interaction.user.id !== paginationData.userId) {
+            await interaction.reply({ content: '❌ Tylko właściciel embeda może go usunąć.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Usuń embed i dane paginacji
+        await interaction.message.delete();
+        sharedState.buildPagination.delete(interaction.message.id);
+        logger.info(`🗑️ Embed buildu został usunięty przez ${interaction.user.tag}`);
         return;
     }
 
