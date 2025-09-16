@@ -489,6 +489,11 @@ class SurvivorService {
                 name: 'Zużyte zasoby',
                 value: `<:II_RC:1385139885924421653> Total RC: **${stats.totalPower || 0}**`,
                 inline: true
+            },
+            {
+                name: '\u200B',
+                value: '\u200B',
+                inline: true
             }
         );
 
