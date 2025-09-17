@@ -123,6 +123,8 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
+            console.log('🔍 KOMPLETNE SUROWE DANE ZDEKODOWANE:', JSON.stringify(data, null, 2));
+
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
