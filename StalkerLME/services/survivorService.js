@@ -513,21 +513,70 @@ class SurvivorService {
                     costText += starLines;
                 }
 
-                const fieldValue = `${emoji} **${item.name}**${detailText}${costText}`;
+                // Oblicz RC dla nagłówka
+                let rcText = '';
+                if (this.shouldShowEVCh(item.name)) {
+                    const resourceCost = this.calculateItemResourceCost(e, v, c, base, item.name);
+                    rcText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> ${resourceCost}` : '';
+                } else {
+                    if (c > 0) {
+                        const cCost = this.calculateOldCCost(c);
+                        const cBonus = this.calculateBItemCBonus(c);
+                        const totalCost = cCost + cBonus;
+                        rcText = totalCost > 0 ? ` • <:II_RC:1385139885924421653> ${totalCost}` : '';
+                    }
+                }
 
-                // Sprawdź czy pole nie jest za długie (limit 1024 znaków na pole)
-                if (fieldValue.length <= 1024) {
+                const fieldName = `${emoji} ${item.name}${rcText}`;
+
+                // Przygotuj gwiazdki dla value
+                let starLines = '';
+                if (this.shouldShowEVCh(item.name)) {
+                    if (e > 0) {
+                        const starCount = Math.min(e, 10);
+                        const stars = '☆'.repeat(starCount);
+                        starLines += `<:M_IconEternal:1417224046235619358> • ${stars}\n`;
+                    }
+                    if (v > 0) {
+                        const starCount = Math.min(v, 10);
+                        const stars = '☆'.repeat(starCount);
+                        starLines += `<:M_IconVoid:1417224049490268270> • ${stars}\n`;
+                    }
+                    if (c > 0) {
+                        const starCount = Math.min(c, 10);
+                        const stars = '★'.repeat(starCount);
+                        starLines += `<:M_IconChaos:1417224053055426811> • ${stars}\n`;
+                    }
+                } else {
+                    if (base > 0) {
+                        const bIcon = this.getBItemIcon(item.name);
+                        const starCount = Math.min(base, 10);
+                        const stars = '☆'.repeat(starCount);
+                        starLines += `${bIcon} • ${stars}\n`;
+                    }
+                    if (c > 0) {
+                        const starCount = Math.min(c, 10);
+                        const stars = '★'.repeat(starCount);
+                        starLines += `<:M_IconChaos:1417224053055426811> • ${stars}\n`;
+                    }
+                }
+
+                const fieldValue = starLines.trim() || '\u200B';
+
+                // Sprawdź czy pole nie jest za długie (limit 256 znaków na name, 1024 na value)
+                if (fieldName.length <= 256 && fieldValue.length <= 1024) {
                     equipmentFields.push({
-                        name: '\u200B', // Niewidoczny znak
+                        name: fieldName,
                         value: fieldValue,
                         inline: true // Pola obok siebie
                     });
                 } else {
-                    // Jeśli za długie, obetnij
-                    const truncated = fieldValue.substring(0, 1020) + '...';
+                    // Jeśli za długie, obetnij nazwę i value
+                    const truncatedName = fieldName.length > 256 ? fieldName.substring(0, 253) + '...' : fieldName;
+                    const truncatedValue = fieldValue.length > 1024 ? fieldValue.substring(0, 1020) + '...' : fieldValue;
                     equipmentFields.push({
-                        name: '\u200B', // Niewidoczny znak
-                        value: truncated,
+                        name: truncatedName,
+                        value: truncatedValue,
                         inline: true // Pola obok siebie
                     });
                 }
