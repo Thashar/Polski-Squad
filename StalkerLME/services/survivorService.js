@@ -202,20 +202,10 @@ class SurvivorService {
                 buildData.petSkills = this.decodePetSkills(data.petSkills);
             }
 
-            // Sprawdź inne możliwe klucze dla pet skills
-            const possiblePetSkillKeys = ['_V', 'Z', 'ps', 'skills'];
-            for (const key of possiblePetSkillKeys) {
-                if (data[key] && typeof data[key] === 'object') {
-                    console.log(`🔍 Sprawdzam klucz "${key}" dla pet skills:`, JSON.stringify(data[key], null, 2));
-                    // Sprawdź czy zawiera dane pet skills
-                    const skillNames = ['Motivation', 'Inspiration', 'Encouragement', 'Battle Lust', 'Gary', 'Sync Rate'];
-                    if (typeof data[key] === 'object' && skillNames.some(skill =>
-                        JSON.stringify(data[key]).includes(skill))) {
-                        console.log(`✅ ZNALEZIONO PET SKILLS w kluczu "${key}"`);
-                        buildData.petSkills = this.decodePetSkills(data[key]);
-                        break;
-                    }
-                }
+            // Sprawdź klucz "_V" dla pet skills (prawdopodobnie tutaj są)
+            if (data._V && typeof data._V === 'object') {
+                console.log(`🔍 Zawartość klucza "_V":`, JSON.stringify(data._V, null, 2));
+                buildData.petSkills = this.decodePetSkills(data._V);
             }
 
             return this.normalizeBuildData(buildData);
