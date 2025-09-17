@@ -1388,8 +1388,8 @@ class SurvivorService {
             // Dodaj nagłówek Legend do pola 1
             if (fieldNum === 1) {
                 fields.push({
-                    name: '\u200B',
-                    value: '<:J_CollRed:1402533014080065546> **Legend**',
+                    name: '<:J_CollRed:1402533014080065546> **Legend**',
+                    value: '\u200B',
                     inline: true
                 });
                 continue;
@@ -1398,8 +1398,8 @@ class SurvivorService {
             // Dodaj nagłówek Epic do pola 10
             if (fieldNum === 10) {
                 fields.push({
-                    name: '\u200B',
-                    value: '<:J_CollYellow:1402532951492657172> **Epic**',
+                    name: '<:J_CollYellow:1402532951492657172> **Epic**',
+                    value: '\u200B',
                     inline: true
                 });
                 continue;
@@ -1422,7 +1422,6 @@ class SurvivorService {
             }
 
             fields.push({
-                name: '\u200B',
                 value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
                 inline: true
             });
