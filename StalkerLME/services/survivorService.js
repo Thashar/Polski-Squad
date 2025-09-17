@@ -1618,13 +1618,34 @@ class SurvivorService {
             customSets = buildData.customSets;
         }
 
-        // Sprawdź czy mamy dane
+        // Sprawdź czy mamy dane - jeśli nie, wygeneruj puste sety
         if (!customSets || Object.keys(customSets).length === 0) {
-            embed.addFields({
-                name: 'Custom Sets',
-                value: 'Brak danych o custom sets w tym buildzie.',
-                inline: false
-            });
+            // Wygeneruj puste Collection Set 1, 2, 3 z pustymi skrzynkami
+            const emptyChestIcon = '<:chest_none:1417793926324289638>';
+
+            // Set 1: 4 skrzynki (1 linia po 4)
+            const set1Value = emptyChestIcon.repeat(4);
+
+            // Set 2 i 3: 8 skrzynek (2 linie po 4)
+            const set23Value = emptyChestIcon.repeat(4) + '\n' + emptyChestIcon.repeat(4);
+
+            embed.addFields(
+                {
+                    name: 'Collection Set 1',
+                    value: set1Value,
+                    inline: false
+                },
+                {
+                    name: 'Collection Set 2',
+                    value: set23Value,
+                    inline: false
+                },
+                {
+                    name: 'Collection Set 3',
+                    value: set23Value,
+                    inline: false
+                }
+            );
             return;
         }
 
@@ -1663,14 +1684,35 @@ class SurvivorService {
             }
         }
 
-        // Jeśli nie ma żadnych setów, pokaż wiadomość
+        // Jeśli nie ma żadnych setów, wygeneruj puste sety dla brakujących
         const hasAnySets = setNames.some(setKey => customSets[setKey] && Array.isArray(customSets[setKey]));
         if (!hasAnySets) {
-            embed.addFields({
-                name: 'Custom Sets',
-                value: 'Brak danych o custom sets w tym buildzie.',
-                inline: false
-            });
+            // Wygeneruj puste Collection Set 1, 2, 3
+            const emptyChestIcon = '<:chest_none:1417793926324289638>';
+
+            // Set 1: 4 skrzynki (1 linia po 4)
+            const set1Value = emptyChestIcon.repeat(4);
+
+            // Set 2 i 3: 8 skrzynek (2 linie po 4)
+            const set23Value = emptyChestIcon.repeat(4) + '\n' + emptyChestIcon.repeat(4);
+
+            embed.addFields(
+                {
+                    name: 'Collection Set 1',
+                    value: set1Value,
+                    inline: false
+                },
+                {
+                    name: 'Collection Set 2',
+                    value: set23Value,
+                    inline: false
+                },
+                {
+                    name: 'Collection Set 3',
+                    value: set23Value,
+                    inline: false
+                }
+            );
         }
     }
 
