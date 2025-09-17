@@ -6,9 +6,10 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 class SurvivorService {
-    constructor(config) {
+    constructor(config, logger, webFetchTool = null) {
         this.config = config;
-        this.logger = createBotLogger('StalkerLME');
+        this.logger = logger || createBotLogger('StalkerLME');
+        this.webFetchTool = webFetchTool;
         this.equipmentDatabase = this.initializeEquipmentDB();
     }
 
@@ -1863,18 +1864,25 @@ class SurvivorService {
             // Spróbuj różnych metod pobierania danych ze strony
             this.logger.info('Próbuję pobrać statystyki ze strony sio-tools...');
 
-            // Metoda 1: Próba pobierania poprzez API (jeśli istnieje)
-            // Strona sio-tools jest dynamiczna (React) więc WebFetch nie widzi zawartości
-            // Na razie pomijamy ale można dodać w przyszłości gdy znajdziemy endpoint
-
-            // Metoda 2: Użyj Puppeteer do pobrania zawartości dynamicznej strony
+            // Metoda 1: Użyj axios do pobrania raw HTML ze strony
             try {
-                const statisticsData = await this.fetchStatisticsWithPuppeteer(buildCode);
+                const statisticsData = await this.fetchStatisticsWithAxios(buildCode);
                 if (statisticsData) {
                     return statisticsData;
                 }
             } catch (error) {
-                this.logger.warn('Metoda Puppeteer nie powiodła się:', error.message);
+                this.logger.warn('Metoda Axios nie powiodła się:', error.message);
+            }
+
+
+            // Metoda 2: Spróbuj WebFetch (może się uda pobrać częściowe dane)
+            try {
+                const statisticsData = await this.fetchStatisticsWithWebFetch(buildCode);
+                if (statisticsData) {
+                    return statisticsData;
+                }
+            } catch (error) {
+                this.logger.warn('Metoda WebFetch nie powiodła się:', error.message);
             }
 
             // Nie udało się pobrać danych ze strony - zwróć null żeby wyświetlić "-"
@@ -1883,6 +1891,136 @@ class SurvivorService {
 
         } catch (error) {
             this.logger.error('Błąd podczas pobierania ze strony sio-tools:', error.message);
+            return null;
+        }
+    }
+
+
+    /**
+     * Pobiera statystyki za pomocą Axios (raw HTTP request)
+     */
+    async fetchStatisticsWithAxios(buildCode) {
+        try {
+            this.logger.info('Próbuję pobrać statystyki za pomocą Axios...');
+
+            const axios = require('axios');
+            const url = `https://sio-tools.vercel.app/?import=${buildCode}`;
+
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                timeout: 15000
+            });
+
+            if (response.data && response.data.includes('ant-collapse-content')) {
+                this.logger.info('Znaleziono dane HTML - próbuję parsować...');
+                return this.parseStatisticsFromHTML(response.data);
+            } else {
+                this.logger.warn('HTML nie zawiera oczekiwanych komponentów statystyk');
+                return null;
+            }
+
+        } catch (error) {
+            this.logger.error('Błąd Axios:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Pobiera statystyki za pomocą WebFetch (fallback method)
+     */
+    async fetchStatisticsWithWebFetch(buildCode) {
+        try {
+            this.logger.info('Próbuję pobrać statystyki za pomocą WebFetch...');
+
+            if (!this.webFetchTool) {
+                this.logger.warn('WebFetch tool nie jest dostępny');
+                return null;
+            }
+
+            const url = `https://sio-tools.vercel.app/?import=${buildCode}`;
+
+            // Użyj WebFetch tool bezpośrednio
+            const response = await this.webFetchTool(url, 'Extract all statistics data from this survivor.io build analysis page. Look for multiplier value (a large number with commas like "2,935,313.05") and statistics with names and percentage values. Return the data in a structured format.');
+
+            if (response && typeof response === 'string') {
+                this.logger.info('WebFetch zwrócił dane - próbuję parsować...');
+                return this.parseWebFetchResponse(response);
+            } else {
+                this.logger.warn('WebFetch nie zwrócił użytecznych danych');
+                return null;
+            }
+
+        } catch (error) {
+            this.logger.error('Błąd WebFetch:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Parsuje odpowiedź z WebFetch
+     */
+    parseWebFetchResponse(response) {
+        try {
+            this.logger.info('Parsowanie odpowiedzi WebFetch...');
+
+            // Spróbuj wyodrębnić multiplier - szukaj różnych formatów
+            let multiplier = null;
+
+            // Format: liczba z przecinkami np. "2,935,313.05"
+            const multiplierMatch1 = response.match(/([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)/);
+            if (multiplierMatch1) {
+                multiplier = multiplierMatch1[1];
+            }
+
+            // Alternatywne formaty dla multiplier
+            const multiplierMatch2 = response.match(/multiplier[:\s]*([0-9,]+\.?[0-9]*)/i);
+            if (!multiplier && multiplierMatch2) {
+                multiplier = multiplierMatch2[1];
+            }
+
+            // Spróbuj wyodrębnić statystyki - różne formaty
+            const details = [];
+            const statLines = response.split(/[\n\r]+/);
+
+            for (const line of statLines) {
+                // Format 1: "Name: Value%" lub "Name: Value"
+                const statMatch1 = line.match(/([A-Za-z\s]+):\s*([0-9]+%?)/);
+                if (statMatch1) {
+                    details.push(`${statMatch1[1].trim()}: ${statMatch1[2]}`);
+                    continue;
+                }
+
+                // Format 2: "Name - Value%"
+                const statMatch2 = line.match(/([A-Za-z\s]+)\s*-\s*([0-9]+%?)/);
+                if (statMatch2) {
+                    details.push(`${statMatch2[1].trim()}: ${statMatch2[2]}`);
+                    continue;
+                }
+
+                // Format 3: "Value% Name"
+                const statMatch3 = line.match(/([0-9]+%?)\s+([A-Za-z\s]+)/);
+                if (statMatch3) {
+                    details.push(`${statMatch3[2].trim()}: ${statMatch3[1]}`);
+                }
+            }
+
+            // Usuń duplikaty
+            const uniqueDetails = [...new Set(details)];
+
+            this.logger.info(`Znaleziono multiplier: ${multiplier}, statystyk: ${uniqueDetails.length}`);
+
+            if (multiplier || uniqueDetails.length > 0) {
+                return {
+                    multiplier: multiplier,
+                    details: uniqueDetails.length > 0 ? uniqueDetails : null
+                };
+            }
+
+            return null;
+        } catch (error) {
+            this.logger.error('Błąd podczas parsowania WebFetch:', error.message);
             return null;
         }
     }
@@ -2044,99 +2182,6 @@ class SurvivorService {
         }
     }
 
-    /**
-     * Pobiera statystyki ze strony sio-tools za pomocą Puppeteer
-     */
-    async fetchStatisticsWithPuppeteer(buildCode) {
-        let browser = null;
-        try {
-            const puppeteer = require('puppeteer');
-
-            this.logger.info('Uruchamiam Puppeteer do pobrania statystyk...');
-            // Uwaga: Puppeteer wymaga zainstalowanych bibliotek Chrome w systemie Linux/WSL
-
-            // Uruchom przeglądarkę z optymalnymi ustawieniami
-            browser = await puppeteer.launch({
-                headless: true,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--no-first-run',
-                    '--no-default-browser-check',
-                    '--disable-default-apps'
-                ]
-            });
-
-            const page = await browser.newPage();
-
-            // Ustaw User-Agent dla lepszej kompatybilności
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-            // Ustaw viewport
-            await page.setViewport({ width: 1920, height: 1080 });
-
-            // Przejdź na stronę z kodem buildu
-            const url = `https://sio-tools.vercel.app/?import=${buildCode}`;
-            this.logger.info(`Przechodzę na URL: ${url}`);
-
-            await page.goto(url, {
-                waitUntil: 'networkidle0',
-                timeout: 30000
-            });
-
-            // Poczekaj na załadowanie komponentu ze statystykami
-            await page.waitForSelector('.ant-collapse-content-box', { timeout: 15000 });
-
-            // Dodatkowo poczekaj, żeby upewnić się, że dane są załadowane
-            await page.waitForTimeout(2000);
-
-            // Wyodrębnij HTML ze statystykami
-            const statisticsHTML = await page.evaluate(() => {
-                // Znajdź wszystkie elementy zawierające statystyki
-                const multiplierElement = document.querySelector('.ant-typography-secondary');
-                const statisticsContainer = document.querySelector('.ant-collapse-content-box');
-
-                let result = '';
-
-                // Dodaj multiplier
-                if (multiplierElement) {
-                    result += `<span class="ant-typography-secondary">${multiplierElement.textContent}</span>`;
-                }
-
-                // Dodaj kontener ze statystykami
-                if (statisticsContainer) {
-                    result += statisticsContainer.outerHTML;
-                }
-
-                return result;
-            });
-
-            await browser.close();
-            browser = null;
-
-            if (statisticsHTML && statisticsHTML.length > 50) {
-                this.logger.info('Pomyślnie pobrano statystyki za pomocą Puppeteer');
-                return this.parseStatisticsFromHTML(statisticsHTML);
-            } else {
-                this.logger.warn('Nie znaleziono danych statystyk na stronie');
-                return null;
-            }
-
-        } catch (error) {
-            this.logger.error('Błąd Puppeteer:', error.message);
-            this.logger.error('Stack trace:', error.stack);
-            if (browser) {
-                try {
-                    await browser.close();
-                } catch (closeError) {
-                    this.logger.error('Błąd podczas zamykania przeglądarki:', closeError.message);
-                }
-            }
-            return null;
-        }
-    }
 
     /**
      * Dodaje pola Legend Collectibles do embeda (pola 1-9)
