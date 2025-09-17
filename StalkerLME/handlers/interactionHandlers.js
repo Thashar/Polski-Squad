@@ -1326,7 +1326,7 @@ async function handleDecodeCommand(interaction, sharedState) {
         }
 
         const userDisplayName = interaction.member?.displayName || interaction.user.username;
-        const embeds = survivorService.createBuildEmbeds(buildData.data, userDisplayName, code);
+        const embeds = await survivorService.createBuildEmbeds(buildData.data, userDisplayName, code);
         const navigationButtons = survivorService.createNavigationButtons(0);
         const response = await interaction.editReply({
             embeds: [embeds[0]], // Rozpocznij od pierwszej strony

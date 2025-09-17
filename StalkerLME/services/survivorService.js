@@ -497,7 +497,7 @@ class SurvivorService {
     /**
      * Tworzy embed z informacjami o buildzie
      */
-    createBuildEmbeds(buildData, userTag, buildCode) {
+    async createBuildEmbeds(buildData, userTag, buildCode) {
         const { EmbedBuilder } = require('discord.js');
 
         // Oblicz statystyki buildu
@@ -556,7 +556,7 @@ class SurvivorService {
             .setColor(embedColor);
 
         // Zawartość Statystyki
-        this.addStatisticsFields(page0, buildData);
+        await this.addStatisticsFields(page0, buildData, buildCode);
 
         // Pierwsza strona (teraz page1) - każdy item ekwipunku w osobnym polu
         const page1 = new EmbedBuilder()
@@ -1799,13 +1799,125 @@ class SurvivorService {
     /**
      * Dodaje pola Statystyki do embeda
      */
-    addStatisticsFields(embed, buildData) {
-        // Strona Statystyki - na razie pusta
-        embed.addFields({
-            name: 'Statystyki',
-            value: 'Zawartość zostanie dodana wkrótce...',
-            inline: false
-        });
+    async addStatisticsFields(embed, buildData, buildCode) {
+        try {
+            // Pobierz statystyki ze strony sio-tools
+            const stats = await this.fetchStatisticsFromSioTools(buildCode);
+
+            if (stats) {
+                // Pierwsze pole - Calculation based on multiplier z wartością
+                embed.addFields({
+                    name: 'Calculation based on multiplier',
+                    value: `**${stats.multiplier || 'Brak danych'}**`,
+                    inline: false
+                });
+
+                // Drugie pole - szczegółowe statystyki
+                if (stats.details && stats.details.length > 0) {
+                    const statsText = stats.details.join('\n');
+                    embed.addFields({
+                        name: 'Detailed Statistics',
+                        value: statsText,
+                        inline: false
+                    });
+                }
+            } else {
+                // Fallback - jeśli nie udało się pobrać danych
+                embed.addFields({
+                    name: 'Statystyki',
+                    value: 'Nie udało się pobrać statystyk ze strony sio-tools.',
+                    inline: false
+                });
+            }
+        } catch (error) {
+            this.logger.error('Błąd podczas pobierania statystyk:', error.message);
+            embed.addFields({
+                name: 'Statystyki',
+                value: 'Wystąpił błąd podczas pobierania statystyk.',
+                inline: false
+            });
+        }
+    }
+
+    /**
+     * Pobiera statystyki ze strony sio-tools.vercel.app
+     */
+    async fetchStatisticsFromSioTools(buildCode) {
+        try {
+            const url = 'https://sio-tools.vercel.app/';
+
+            // Symuluj przesłanie kodu buildu na stronę i pobranie wyników
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    buildCode: buildCode,
+                    action: 'calculate'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const html = await response.text();
+
+            // Parsuj HTML i wyciągnij dane statystyk
+            return this.parseStatisticsFromHTML(html);
+
+        } catch (error) {
+            this.logger.error('Błąd podczas pobierania ze strony sio-tools:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Parsuje statystyki z HTML strony sio-tools
+     */
+    parseStatisticsFromHTML(html) {
+        try {
+            // Znajdź wartość multiplier w HTML
+            const multiplierMatch = html.match(/(\d+(?:\s\d+)*(?:[,\.]\d+)?)/);
+            const multiplier = multiplierMatch ? multiplierMatch[1] : null;
+
+            // Znajdź wszystkie statystyki z ikonami
+            const statRegex = /<span[^>]*>([^<]+)<\/span>:\s*<span[^>]*>([^<]+)<\/span>/g;
+            const details = [];
+            let match;
+
+            const iconMap = {
+                'Crit Rate': '<:motivation:1417810080207736874>',
+                'Crit Damage': '<:inspiration:1417810056203730996>',
+                'Skill Damage': '<:encouragement:1417810034955517982>',
+                'Vulnerability': '<:vulnerability:1417810182926020619>',
+                'Shield Damage': '<:shield_damage:1417809918211391600>',
+                'Damage to Poisoned': '<:dmg_to_poisoned:1417809726284107886>',
+                'Damage to Weakened': '<:dmg_to_weakened:1417809742528512021>',
+                'Max Sync': '<:sync_rate:1417809974893219902>',
+                'Sync Loss': '<:sync_rate:1417809974893219902>',
+                'Beam': '<:sync_rate:1417809974893219902>',
+                'Xeno Resonance Multiplier': '<:resonance_damage:1417809758345367562>'
+            };
+
+            while ((match = statRegex.exec(html)) !== null) {
+                const statName = match[1].trim();
+                const statValue = match[2].trim();
+                const icon = iconMap[statName] || '❓';
+
+                details.push(`${icon} ${statName}: ${statValue}`);
+            }
+
+            return {
+                multiplier: multiplier,
+                details: details
+            };
+
+        } catch (error) {
+            this.logger.error('Błąd podczas parsowania HTML:', error.message);
+            return null;
+        }
     }
 
     /**
