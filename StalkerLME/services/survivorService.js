@@ -2053,19 +2053,44 @@ class SurvivorService {
             starDisplay = '☆☆☆☆☆\n★★★★★';
         }
 
-        // Dodaj pola z informacjami o pecie
-        embed.addFields(
-            {
-                name: `${pets.icon || '❓'} Pet`,
-                value: `**Name:** ${pets.name || 'Unknown'}`,
-                inline: false
-            },
-            {
-                name: 'Stars',
-                value: starDisplay || 'Brak gwiazdek',
-                inline: false
+        // Oblicz koszty kryształów w zależności od typu peta
+        const petName = pets.name || 'Unknown';
+        let resourceText = '';
+
+        if (petName === 'Rex' || petName === 'Croaky') {
+            // Rex i Croaky - tylko awakening crystals
+            const awakeningCosts = [0, 5, 10, 20, 40, 70, 110, 170, 230, 290, 350];
+            const awakeningCost = awakeningCosts[stars] || 0;
+
+            if (awakeningCost > 0) {
+                resourceText = `\n\n<:awakening_crystal:1417810137459982416> ${awakeningCost}`;
             }
-        );
+        } else if (petName === 'Puffo' || petName === 'Crucker' || petName === 'Capy') {
+            // Puffo, Crucker, Capy - awakening crystals + xeno pet cores
+            const awakeningCosts = [0, 10, 30, 70, 130, 190, 250, 310, 370, 430, 490];
+            const xenoCosts = [0, 0, 1, 2, 4, 7, 11, 17, 25, 35, 50];
+
+            const awakeningCost = awakeningCosts[stars] || 0;
+            const xenoCost = xenoCosts[stars] || 0;
+
+            if (awakeningCost > 0 || xenoCost > 0) {
+                resourceText = '\n\n';
+                if (awakeningCost > 0) {
+                    resourceText += `<:awakening_crystal:1417810137459982416> ${awakeningCost}`;
+                }
+                if (xenoCost > 0) {
+                    if (awakeningCost > 0) resourceText += '\n';
+                    resourceText += `<:xeno_pet_core:1417810117163749378> ${xenoCost}`;
+                }
+            }
+        }
+
+        // Dodaj pole z informacjami o pecie w jednym miejscu
+        embed.addFields({
+            name: `${pets.icon || '❓'} ${pets.name || 'Unknown'}`,
+            value: (starDisplay || 'Brak gwiazdek') + resourceText,
+            inline: false
+        });
     }
 }
 
