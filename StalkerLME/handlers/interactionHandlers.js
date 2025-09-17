@@ -410,7 +410,7 @@ async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService } = sharedState;
 
     // Obsługa przycisków paginacji buildów
-    if (interaction.customId === 'statystyki_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'collectible_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
+    if (interaction.customId === 'statystyki_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'legend_colls_page' || interaction.customId === 'epic_colls_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
         if (!sharedState.buildPagination) {
             await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
             return;
@@ -434,12 +434,14 @@ async function handleButton(interaction, sharedState) {
             newPage = 2;
         } else if (interaction.customId === 'survivor_page') {
             newPage = 3;
-        } else if (interaction.customId === 'collectible_page') {
+        } else if (interaction.customId === 'legend_colls_page') {
             newPage = 4;
-        } else if (interaction.customId === 'custom_sets_page') {
+        } else if (interaction.customId === 'epic_colls_page') {
             newPage = 5;
-        } else if (interaction.customId === 'pets_page') {
+        } else if (interaction.customId === 'custom_sets_page') {
             newPage = 6;
+        } else if (interaction.customId === 'pets_page') {
+            newPage = 7;
         }
 
         // Aktualizuj dane paginacji
