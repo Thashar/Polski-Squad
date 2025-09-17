@@ -689,10 +689,18 @@ class SurvivorService {
             inline: false
         });
 
-        // Dodaj footer z czasem wygaśnięcia do wszystkich stron
+        // Dodaj footer z czasem wygaśnięcia do wszystkich stron (15 minut, czas polski)
         const expirationTime = new Date();
-        expirationTime.setHours(expirationTime.getHours() + 1); // +1 godzina
-        const expirationText = `Analiza zostanie usunięta o ${expirationTime.toTimeString().slice(0, 5)}`;
+        expirationTime.setMinutes(expirationTime.getMinutes() + 15); // +15 minut
+
+        // Konwertuj na polską strefę czasową (UTC+1/UTC+2 w zależności od DST)
+        const polishTime = expirationTime.toLocaleTimeString('pl-PL', {
+            timeZone: 'Europe/Warsaw',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const expirationText = `Analiza zostanie usunięta o ${polishTime}`;
 
         page0.setFooter({ text: expirationText });
         page1.setFooter({ text: expirationText });
