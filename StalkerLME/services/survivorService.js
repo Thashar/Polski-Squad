@@ -426,8 +426,7 @@ class SurvivorService {
         // Strona 0 - Statystyki
         const page0 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Zawartość Statystyki
         this.addStatisticsFields(page0, buildData);
@@ -435,8 +434,7 @@ class SurvivorService {
         // Pierwsza strona (teraz page1) - każdy item ekwipunku w osobnym polu
         const page1 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Nie ustawiaj description - może powodować błędy
 
@@ -635,8 +633,7 @@ class SurvivorService {
         // Druga strona - Tech Party
         const page2 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Tymczasowa zawartość Tech Party
         page2.addFields({
@@ -648,8 +645,7 @@ class SurvivorService {
         // Trzecia strona - Survivor
         const page3 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Tymczasowa zawartość Survivor
         page3.addFields({
@@ -661,8 +657,7 @@ class SurvivorService {
         // Czwarta strona - Collectible
         const page4 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Zawartość Collectible
         this.addCollectibleFields(page4, buildData);
@@ -670,8 +665,7 @@ class SurvivorService {
         // Piąta strona - Custom Sets
         const page5 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Zawartość Custom Sets
         this.addCustomSetsFields(page5, buildData);
@@ -679,8 +673,7 @@ class SurvivorService {
         // Szósta strona - Pets
         const page6 = new EmbedBuilder()
             .setTitle(safeTitle)
-            .setColor(embedColor)
-            .setTimestamp();
+            .setColor(embedColor);
 
         // Tymczasowa zawartość Pets
         page6.addFields({
