@@ -1356,21 +1356,21 @@ class SurvivorService {
             // Pozycje 33-36 (Pole 9) - PUSTE
             '', '', '', '',
             // Pozycje 37-40 (Pole 10)
-            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
-            // Pozycje 41-44 (Pole 11)
             'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
-            // Pozycje 45-48 (Pole 12)
+            // Pozycje 41-44 (Pole 11)
             'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
-            // Pozycje 49-52 (Pole 13)
+            // Pozycje 45-48 (Pole 12)
             'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
-            // Pozycje 53-56 (Pole 14)
+            // Pozycje 49-52 (Pole 13)
             'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
-            // Pozycje 57-60 (Pole 15)
+            // Pozycje 53-56 (Pole 14)
             'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
-            // Pozycje 61-64 (Pole 16)
+            // Pozycje 57-60 (Pole 15)
             'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
+            // Pozycje 61-64 (Pole 16)
+            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case',
             // Pozycje 65-68 (Pole 17)
-            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
+            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map'
         ];
 
         // Funkcja do formatowania gwiazdek
