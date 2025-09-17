@@ -1574,12 +1574,21 @@ class SurvivorService {
                 const setNumber = parseInt(setKey) + 1; // 0 -> 1, 1 -> 2, 2 -> 3
                 const setItems = customSets[setKey];
 
-                // Konwertuj każdy item na ikonę
-                const iconString = setItems.map(item => icons[item] || icons['None']).join('');
+                // Konwertuj każdy item na ikonę i podziel na linijki po 4
+                const itemIcons = setItems.map(item => icons[item] || icons['None']);
+
+                // Podziel na grupy po 4 ikony
+                const iconLines = [];
+                for (let i = 0; i < itemIcons.length; i += 4) {
+                    const line = itemIcons.slice(i, i + 4).join('');
+                    iconLines.push(line);
+                }
+
+                const iconString = iconLines.join('\n') || icons['None'].repeat(4); // Fallback na 4 puste ikony
 
                 embed.addFields({
                     name: `Collection Set ${setNumber}`,
-                    value: iconString || icons['None'].repeat(4), // Fallback na 4 puste ikony
+                    value: iconString,
                     inline: false
                 });
             }
