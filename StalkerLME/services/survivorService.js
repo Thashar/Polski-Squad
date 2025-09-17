@@ -1335,7 +1335,7 @@ class SurvivorService {
             'Hyper Neuron': '<:Coll_hyper_neuron:1417581619019255921>'
         };
 
-        // Collectibles w kolejności zgodnej z danymi z JSON (dokładnie jak w build data)
+        // Collectibles w kolejności zgodnej z rzeczywistymi danymi z buildu (60 pozycji)
         const collectibleOrder = [
             // Pozycje 1-4 (Pole 1)
             'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
@@ -1356,21 +1356,21 @@ class SurvivorService {
             // Pozycje 33-36 (Pole 9) - PUSTE
             '', '', '', '',
             // Pozycje 37-40 (Pole 10)
-            'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
+            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
             // Pozycje 41-44 (Pole 11)
-            'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
+            'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
             // Pozycje 45-48 (Pole 12)
-            'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
+            'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
             // Pozycje 49-52 (Pole 13)
-            'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
+            'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
             // Pozycje 53-56 (Pole 14)
-            'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
+            'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
             // Pozycje 57-60 (Pole 15)
-            'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
+            'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
             // Pozycje 61-64 (Pole 16)
-            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case',
+            'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
             // Pozycje 65-68 (Pole 17)
-            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map'
+            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
         ];
 
         // Funkcja do formatowania gwiazdek
