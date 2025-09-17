@@ -221,18 +221,21 @@ class SurvivorService {
             data: {}
         };
 
-        for (let i = 0; i < collectiblesArray.length && i < collectibleNames.length; i++) {
+        let nameIndex = 0; // Indeks w collectibleNames
+
+        for (let i = 0; i < collectiblesArray.length && nameIndex < collectibleNames.length; i++) {
             const collectibleData = collectiblesArray[i];
-            const collectibleName = collectibleNames[i];
 
             if (collectibleData && typeof collectibleData === 'object' && collectibleData.r !== undefined) {
-                // Tylko obiekty z kluczem "r" są brane pod uwagę
+                // Znaleźliśmy collectible z wartością r - przypisz go do kolejnej nazwy
+                const collectibleName = collectibleNames[nameIndex];
                 const stars = collectibleData.r;
                 collectibles.data[collectibleName] = {
                     stars: stars
                 };
+                nameIndex++; // Przejdź do kolejnej nazwy
             }
-            // null i inne wartości są pomijane - nie dodajemy ich do collectibles.data
+            // null pomijamy ale nie zwiększamy nameIndex - szukamy dalej w array
         }
 
         return collectibles;
