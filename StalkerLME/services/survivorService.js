@@ -702,13 +702,13 @@ class SurvivorService {
 
         const expirationText = `Analiza zostanie usunięta o ${polishTime}`;
 
-        page0.setFooter({ text: expirationText });
-        page1.setFooter({ text: expirationText });
-        page2.setFooter({ text: expirationText });
-        page3.setFooter({ text: expirationText });
-        page4.setFooter({ text: expirationText });
-        page5.setFooter({ text: expirationText });
-        page6.setFooter({ text: expirationText });
+        page0.setFooter({ text: `Statystyki • ${expirationText}` });
+        page1.setFooter({ text: `Ekwipunek • ${expirationText}` });
+        page2.setFooter({ text: `Tech Party • ${expirationText}` });
+        page3.setFooter({ text: `Survivor • ${expirationText}` });
+        page4.setFooter({ text: `Collectible • ${expirationText}` });
+        page5.setFooter({ text: `Custom Sets • ${expirationText}` });
+        page6.setFooter({ text: `Pets • ${expirationText}` });
 
         return [page0, page1, page2, page3, page4, page5, page6];
     }
@@ -752,18 +752,14 @@ class SurvivorService {
                 new ButtonBuilder()
                     .setCustomId('pets_page')
                     .setLabel('Pets')
-                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary)
-            );
-
-        const row3 = new ActionRowBuilder()
-            .addComponents(
+                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('delete_embed')
                     .setStyle(ButtonStyle.Danger)
                     .setEmoji('🗑️')
             );
 
-        return [row1, row2, row3];
+        return [row1, row2];
     }
 
     /**
