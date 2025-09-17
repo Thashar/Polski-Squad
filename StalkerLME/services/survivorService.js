@@ -2153,22 +2153,22 @@ class SurvivorService {
             }
         }
 
-        // Przygotuj pet skills text
-        const petSkillsText = this.getPetSkillsText(buildData, petName);
-
-        // Dodaj pole z informacjami o pecie w jednym miejscu
-        let fullValue = (starDisplay || 'Brak gwiazdek') + resourceText;
-
-        // Dodaj pet skills do tego samego pola jeśli istnieją
-        if (petSkillsText) {
-            fullValue += '\n\n' + petSkillsText;
-        }
-
+        // Dodaj pierwsze pole z podstawowymi informacjami o pecie
         embed.addFields({
             name: `${pets.icon || '❓'} ${pets.name || 'Unknown'}`,
-            value: fullValue,
+            value: (starDisplay || 'Brak gwiazdek') + resourceText,
             inline: false
         });
+
+        // Przygotuj pet skills text i dodaj jako drugie pole jeśli istnieją
+        const petSkillsText = this.getPetSkillsText(buildData, petName);
+        if (petSkillsText) {
+            embed.addFields({
+                name: `${pets.icon || '❓'} Pet Skills`,
+                value: petSkillsText,
+                inline: false
+            });
+        }
     }
 
     /**
