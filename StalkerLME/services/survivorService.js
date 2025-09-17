@@ -1563,7 +1563,7 @@ class SurvivorService {
         const icons = {
             'Legend': '<:J_CollRed:1402533014080065546>',
             'Epic': '<:J_CollYellow:1402532951492657172>',
-            'None': '<:ZZ_Pusto:1209494954762829866>'
+            'None': '<:chest_none:1417793926324289638>'
         };
 
         // Przetwórz każdy set
