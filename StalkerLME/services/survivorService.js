@@ -123,15 +123,6 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
-            console.log('🔍 WSZYSTKIE KLUCZE w surowych danych:', Object.keys(data));
-
-            // Sprawdzamy każdy klucz czy zawiera dane podobne do pet skills
-            for (const [key, value] of Object.entries(data)) {
-                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                    console.log(`🔍 Klucz "${key}":`, JSON.stringify(value, null, 2));
-                }
-            }
-
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
@@ -2177,62 +2168,6 @@ class SurvivorService {
                 value: petSkillsText,
                 inline: false
             });
-        } else {
-            // Testowe dane pet skills dla demonstracji (usuń później)
-            const testPetSkills = {
-                "data": {
-                    "Motivation": {
-                        "enabled": true,
-                        "rarity": "Super"
-                    },
-                    "Inspiration": {
-                        "enabled": true,
-                        "rarity": "Super"
-                    },
-                    "Encouragement": {
-                        "enabled": true,
-                        "rarity": "Super"
-                    },
-                    "Battle Lust": {
-                        "enabled": true,
-                        "rarity": "Super"
-                    },
-                    "Gary": {
-                        "enabled": true,
-                        "rarity": "Super"
-                    },
-                    "Sync Rate": {
-                        "value": 10
-                    },
-                    "Resonance Chance": {
-                        "value": 10
-                    },
-                    "Dmg to Weakened": {
-                        "value": 50
-                    },
-                    "Resonance Damage": {
-                        "value": 10
-                    },
-                    "Dmg to Poisoned": {
-                        "value": 10
-                    },
-                    "Dmg to Chilled": {
-                        "value": 10
-                    },
-                    "Shield Damage": {
-                        "value": 10
-                    }
-                }
-            };
-
-            const testSkillsText = this.getPetSkillsText({ petSkills: testPetSkills }, petName);
-            if (testSkillsText) {
-                embed.addFields({
-                    name: `${pets.icon || '❓'} Pet Skills (TEST)`,
-                    value: testSkillsText,
-                    inline: false
-                });
-            }
         }
     }
 
