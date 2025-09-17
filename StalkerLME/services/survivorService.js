@@ -198,12 +198,8 @@ class SurvivorService {
             }
 
             // Dekodowanie petSkills z klucza "petSkills" (jeśli istnieje)
-            console.log('🔍 Sprawdzanie klucza petSkills w danych:', Object.keys(data));
             if (data.petSkills && typeof data.petSkills === 'object') {
-                console.log('✅ Znaleziono klucz petSkills:', JSON.stringify(data.petSkills, null, 2));
                 buildData.petSkills = this.decodePetSkills(data.petSkills);
-            } else {
-                console.log('❌ Brak klucza petSkills w danych');
             }
 
             return this.normalizeBuildData(buildData);
@@ -328,7 +324,6 @@ class SurvivorService {
     decodePetSkills(petSkillsData) {
         // Funkcja do dekodowania pet skills zgodnie z formatem z przykładu
         // Format: { "Motivation": { "enabled": true, "rarity": "Super" }, ... }
-        console.log('🔍 decodePetSkills wywołane z danymi:', JSON.stringify(petSkillsData, null, 2));
         return {
             data: petSkillsData
         };
@@ -2173,6 +2168,62 @@ class SurvivorService {
                 value: petSkillsText,
                 inline: false
             });
+        } else {
+            // Testowe dane pet skills dla demonstracji (usuń później)
+            const testPetSkills = {
+                "data": {
+                    "Motivation": {
+                        "enabled": true,
+                        "rarity": "Super"
+                    },
+                    "Inspiration": {
+                        "enabled": true,
+                        "rarity": "Super"
+                    },
+                    "Encouragement": {
+                        "enabled": true,
+                        "rarity": "Super"
+                    },
+                    "Battle Lust": {
+                        "enabled": true,
+                        "rarity": "Super"
+                    },
+                    "Gary": {
+                        "enabled": true,
+                        "rarity": "Super"
+                    },
+                    "Sync Rate": {
+                        "value": 10
+                    },
+                    "Resonance Chance": {
+                        "value": 10
+                    },
+                    "Dmg to Weakened": {
+                        "value": 50
+                    },
+                    "Resonance Damage": {
+                        "value": 10
+                    },
+                    "Dmg to Poisoned": {
+                        "value": 10
+                    },
+                    "Dmg to Chilled": {
+                        "value": 10
+                    },
+                    "Shield Damage": {
+                        "value": 10
+                    }
+                }
+            };
+
+            const testSkillsText = this.getPetSkillsText({ petSkills: testPetSkills }, petName);
+            if (testSkillsText) {
+                embed.addFields({
+                    name: `${pets.icon || '❓'} Pet Skills (TEST)`,
+                    value: testSkillsText,
+                    inline: false
+                });
+            }
         }
     }
 
@@ -2182,28 +2233,18 @@ class SurvivorService {
     getPetSkillsText(buildData, petName) {
         let petSkills = {};
 
-        console.log('🔍 getPetSkillsText - sprawdzanie buildData:', JSON.stringify(buildData, null, 2));
-        console.log('🔍 getPetSkillsText - petName:', petName);
-
         // Sprawdź różne możliwe struktury
         if (buildData.petSkills && buildData.petSkills.data) {
-            console.log('✅ Znaleziono petSkills.data');
             petSkills = buildData.petSkills.data;
         } else if (buildData.petSkills) {
-            console.log('✅ Znaleziono petSkills (bezpośrednio)');
             petSkills = buildData.petSkills;
         } else if (buildData.data && buildData.data.petSkills && buildData.data.petSkills.data) {
-            console.log('✅ Znaleziono data.petSkills.data');
             petSkills = buildData.data.petSkills.data;
         } else if (buildData.data && buildData.data.petSkills) {
-            console.log('✅ Znaleziono data.petSkills');
             petSkills = buildData.data.petSkills;
         }
 
-        console.log('🔍 Finalne petSkills:', JSON.stringify(petSkills, null, 2));
-
         if (!petSkills || Object.keys(petSkills).length === 0) {
-            console.log('❌ Brak pet skills - zwracam null');
             return null; // Brak pet skills - zwróć null
         }
 
