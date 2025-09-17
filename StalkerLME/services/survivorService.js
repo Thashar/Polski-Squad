@@ -1671,21 +1671,12 @@ class SurvivorService {
 
         const { collectibleIcons, collectibleOrder, formatStars } = this.getCollectibleData();
 
-        // Tylko pola 1-9 (Legend)
+        // Tylko pola 2-9 (Legend) - pomijamy pole 1 z nagłówkiem
         const fields = [];
-        for (let fieldNum = 1; fieldNum <= 9; fieldNum++) {
+        for (let fieldNum = 2; fieldNum <= 9; fieldNum++) {
             const fieldItems = [];
-            const startIndex = (fieldNum - 1) * 4;
-
-            // Dodaj nagłówek Legend do pola 1
-            if (fieldNum === 1) {
-                fields.push({
-                    name: '\u200B',
-                    value: '<:J_CollRed:1402533014080065546> **Legend**',
-                    inline: true
-                });
-                continue;
-            }
+            // Mapowanie: pole 2 = pozycje 0-3, pole 3 = pozycje 4-7, itd.
+            const startIndex = (fieldNum - 2) * 4;
 
             // Dla pozostałych pól, dodaj collectibles
             for (let i = 0; i < 4; i++) {
@@ -1779,21 +1770,13 @@ class SurvivorService {
 
         const { collectibleIcons, collectibleOrder, formatStars } = this.getCollectibleData();
 
-        // Tylko pola 10-18 (Epic)
+        // Tylko pola 11-18 (Epic) - pomijamy pole 10 z nagłówkiem
         const fields = [];
-        for (let fieldNum = 10; fieldNum <= 18; fieldNum++) {
+        for (let fieldNum = 11; fieldNum <= 18; fieldNum++) {
             const fieldItems = [];
-            const startIndex = (fieldNum - 1) * 4;
-
-            // Dodaj nagłówek Epic do pola 10
-            if (fieldNum === 10) {
-                fields.push({
-                    name: '\u200B',
-                    value: '<:J_CollYellow:1402532951492657172> **Epic**',
-                    inline: true
-                });
-                continue;
-            }
+            // Mapowanie: pole 11 = pozycje 36-39, pole 12 = pozycje 40-43, itd.
+            // Ale Epic zaczyna się od pozycji 36 w collectibleOrder
+            const startIndex = 36 + (fieldNum - 11) * 4;
 
             // Dla pozostałych pól, dodaj collectibles
             for (let i = 0; i < 4; i++) {
