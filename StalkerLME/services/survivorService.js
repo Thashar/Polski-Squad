@@ -2209,14 +2209,30 @@ class SurvivorService {
             }
         }
 
-        // Dodaj pierwsze pole z podstawowymi informacjami o pecie
+        // Pierwsze pole - tylko pet i gwiazdki
         embed.addFields({
             name: `${pets.icon || '❓'} ${pets.name || 'Unknown'}`,
-            value: (starDisplay || 'Brak gwiazdek') + resourceText,
+            value: starDisplay || 'Brak gwiazdek',
             inline: false
         });
 
-        // Przygotuj pet skills text i dodaj jako drugie pole jeśli istnieją
+        // Drugie pole - koszty awakening crystals i xeno cores
+        if (resourceText) {
+            embed.addFields({
+                name: 'Zużyte zasoby',
+                value: resourceText.replace(/^\n\n/, ''), // Usuń początkowe nowe linie
+                inline: false
+            });
+        }
+
+        // Trzecie pole - puste
+        embed.addFields({
+            name: '​', // Invisible character
+            value: '​', // Invisible character
+            inline: false
+        });
+
+        // Czwarte pole - pet skills
         const petSkillsText = this.getPetSkillsText(buildData, petName);
         if (petSkillsText) {
             embed.addFields({
