@@ -226,22 +226,13 @@ class SurvivorService {
             const collectibleName = collectibleNames[i];
 
             if (collectibleData && typeof collectibleData === 'object' && collectibleData.r !== undefined) {
-                // Nowa struktura: {"r": wartość}
-                const stars = collectibleData.r || 0;
+                // Tylko obiekty z kluczem "r" są brane pod uwagę
+                const stars = collectibleData.r;
                 collectibles.data[collectibleName] = {
                     stars: stars
                 };
-            } else if (collectibleData === null) {
-                // Null oznacza brak tego collectible
-                collectibles.data[collectibleName] = {
-                    stars: 0
-                };
-            } else {
-                // Fallback dla nieznanych struktur
-                collectibles.data[collectibleName] = {
-                    stars: 0
-                };
             }
+            // null i inne wartości są pomijane - nie dodajemy ich do collectibles.data
         }
 
         return collectibles;
