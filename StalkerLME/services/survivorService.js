@@ -1808,7 +1808,7 @@ class SurvivorService {
                 // Pierwsze pole - Calculation based on multiplier z wartością
                 embed.addFields({
                     name: 'Calculation based on multiplier',
-                    value: `**${stats.multiplier || 'Brak danych'}**`,
+                    value: `**${stats.multiplier || '-'}**`,
                     inline: false
                 });
 
@@ -1820,20 +1820,36 @@ class SurvivorService {
                         value: statsText,
                         inline: false
                     });
+                } else {
+                    embed.addFields({
+                        name: 'Detailed Statistics',
+                        value: '-',
+                        inline: false
+                    });
                 }
             } else {
                 // Fallback - jeśli nie udało się pobrać danych
                 embed.addFields({
-                    name: 'Statystyki',
-                    value: 'Nie udało się pobrać statystyk ze strony sio-tools.',
+                    name: 'Calculation based on multiplier',
+                    value: '**-**',
+                    inline: false
+                });
+                embed.addFields({
+                    name: 'Detailed Statistics',
+                    value: '-',
                     inline: false
                 });
             }
         } catch (error) {
             this.logger.error('Błąd podczas pobierania statystyk:', error.message);
             embed.addFields({
-                name: 'Statystyki',
-                value: 'Wystąpił błąd podczas pobierania statystyk.',
+                name: 'Calculation based on multiplier',
+                value: '**-**',
+                inline: false
+            });
+            embed.addFields({
+                name: 'Detailed Statistics',
+                value: '-',
                 inline: false
             });
         }
@@ -1851,31 +1867,19 @@ class SurvivorService {
             // Strona sio-tools jest dynamiczna (React) więc WebFetch nie widzi zawartości
             // Na razie pomijamy ale można dodać w przyszłości gdy znajdziemy endpoint
 
-            // Metoda 2: Próba bezpośredniego dostępu do API
+            // Metoda 2: Użyj Puppeteer do pobrania zawartości dynamicznej strony
             try {
-                const response = await fetch('https://sio-tools.vercel.app/api/calculate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ buildCode: buildCode })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.statistics) {
-                        return data.statistics;
-                    }
+                const statisticsData = await this.fetchStatisticsWithPuppeteer(buildCode);
+                if (statisticsData) {
+                    return statisticsData;
                 }
             } catch (error) {
-                this.logger.warn('Metoda API nie powiodła się:', error.message);
+                this.logger.warn('Metoda Puppeteer nie powiodła się:', error.message);
             }
 
-            // Metoda 3: Używaj rzeczywistego fragmentu HTML ze strony sio-tools
-            const htmlFragment = `<span class="ant-collapse-header-text"><div style="column-gap:8px;row-gap:8px;flex-direction:column;align-items:initial;padding-top:44px" class="Flex_flex__x69Yw"><span class="ant-typography css-jcarth" style="font-size:1.1em"><span class="ant-typography ant-typography-secondary css-jcarth" style="font-size:inherit">2,935,313.05</span></span></div></span></div><div class="ant-collapse-content ant-collapse-content-active"><div class="ant-collapse-content-box"><div class="Flex_flex__x69Yw" style="column-gap:16px;row-gap:16px;flex-direction:column;align-items:initial"><div style="column-gap:4px;row-gap:4px;display:grid;grid-template-columns:repeat(2, 1fr)" class="Flex_flex__x69Yw"><span class="ant-typography css-jcarth"><span>Crit Rate</span>: <span class="ant-typography ant-typography-secondary css-jcarth">340%</span></span><span class="ant-typography css-jcarth"><span>Crit Damage</span>: <span class="ant-typography ant-typography-secondary css-jcarth">914%</span></span><span class="ant-typography css-jcarth"><span>Skill Damage</span>: <span class="ant-typography ant-typography-secondary css-jcarth">635%</span></span><span class="ant-typography css-jcarth"><span>Vulnerability</span>: <span class="ant-typography ant-typography-secondary css-jcarth">35%</span></span><span class="ant-typography css-jcarth"><span>Shield Damage</span>: <span class="ant-typography ant-typography-secondary css-jcarth">361%</span></span><span class="ant-typography css-jcarth"><span>Damage to Poisoned</span><span class="ant-typography ant-typography-warning css-jcarth"> [<span>11.1% up</span>]</span>: <span class="ant-typography ant-typography-secondary css-jcarth">15%</span></span><span class="ant-typography css-jcarth"><span>Damage to Weakened</span><span class="ant-typography css-jcarth"> [<span>100% up</span>]</span>: <span class="ant-typography ant-typography-secondary css-jcarth">195%</span></span><span class="ant-typography css-jcarth"><span>Damage to Chilled</span><span class="ant-typography css-jcarth"> [<span>100% up</span>]</span>: <span class="ant-typography ant-typography-secondary css-jcarth">130%</span></span><span class="ant-typography css-jcarth"><span>Clarity</span>: <span class="ant-typography ant-typography-secondary css-jcarth">30%</span></span><span class="ant-typography css-jcarth"><span>Eternal Multiplier</span>: <span class="ant-typography ant-typography-secondary css-jcarth">55%</span></span><span class="ant-typography css-jcarth"><span>Glacial Bloodline</span>: <span class="ant-typography ant-typography-secondary css-jcarth">72%</span></span><span class="ant-typography css-jcarth"><span>Laceration</span><span class="ant-typography css-jcarth"> [<span>100% up</span>]</span>: <span class="ant-typography ant-typography-secondary css-jcarth">115%</span></span><span class="ant-typography css-jcarth"><span>CDR Effeciency</span>: <span class="ant-typography ant-typography-secondary css-jcarth">49.95%</span></span><span class="ant-typography css-jcarth"><span>Laser Effeciency</span>: <span class="ant-typography ant-typography-secondary css-jcarth">50%</span></span><span class="ant-typography css-jcarth"><span>Max Sync</span>: <span class="ant-typography ant-typography-secondary css-jcarth">400%</span></span><span class="ant-typography css-jcarth"><span>Sync Loss</span>: <span class="ant-typography ant-typography-secondary css-jcarth">8%</span></span><span class="ant-typography css-jcarth"><span>Beam</span>: <span class="ant-typography ant-typography-secondary css-jcarth">4.5%</span></span><span class="ant-typography css-jcarth"><span>Overload Efficiency</span>: <span class="ant-typography ant-typography-secondary css-jcarth">75%</span></span><span class="ant-typography css-jcarth"><span>Overload</span>: <span class="ant-typography ant-typography-secondary css-jcarth">45%</span></span></div></div></div></div>`;
-
-            this.logger.warn('Używam statycznych danych - nie udało się pobrać ze strony');
-            return this.parseStatisticsFromHTML(htmlFragment);
+            // Nie udało się pobrać danych ze strony - zwróć null żeby wyświetlić "-"
+            this.logger.warn('Nie udało się pobrać statystyk ze strony - wyświetlam "-"');
+            return null;
 
         } catch (error) {
             this.logger.error('Błąd podczas pobierania ze strony sio-tools:', error.message);
@@ -2036,6 +2040,100 @@ class SurvivorService {
 
         } catch (error) {
             this.logger.error('Błąd podczas parsowania HTML:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Pobiera statystyki ze strony sio-tools za pomocą Puppeteer
+     */
+    async fetchStatisticsWithPuppeteer(buildCode) {
+        let browser = null;
+        try {
+            const puppeteer = require('puppeteer');
+
+            this.logger.info('Uruchamiam Puppeteer do pobrania statystyk...');
+            // Uwaga: Puppeteer wymaga zainstalowanych bibliotek Chrome w systemie Linux/WSL
+
+            // Uruchom przeglądarkę z optymalnymi ustawieniami
+            browser = await puppeteer.launch({
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--no-first-run',
+                    '--no-default-browser-check',
+                    '--disable-default-apps'
+                ]
+            });
+
+            const page = await browser.newPage();
+
+            // Ustaw User-Agent dla lepszej kompatybilności
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+            // Ustaw viewport
+            await page.setViewport({ width: 1920, height: 1080 });
+
+            // Przejdź na stronę z kodem buildu
+            const url = `https://sio-tools.vercel.app/?import=${buildCode}`;
+            this.logger.info(`Przechodzę na URL: ${url}`);
+
+            await page.goto(url, {
+                waitUntil: 'networkidle0',
+                timeout: 30000
+            });
+
+            // Poczekaj na załadowanie komponentu ze statystykami
+            await page.waitForSelector('.ant-collapse-content-box', { timeout: 15000 });
+
+            // Dodatkowo poczekaj, żeby upewnić się, że dane są załadowane
+            await page.waitForTimeout(2000);
+
+            // Wyodrębnij HTML ze statystykami
+            const statisticsHTML = await page.evaluate(() => {
+                // Znajdź wszystkie elementy zawierające statystyki
+                const multiplierElement = document.querySelector('.ant-typography-secondary');
+                const statisticsContainer = document.querySelector('.ant-collapse-content-box');
+
+                let result = '';
+
+                // Dodaj multiplier
+                if (multiplierElement) {
+                    result += `<span class="ant-typography-secondary">${multiplierElement.textContent}</span>`;
+                }
+
+                // Dodaj kontener ze statystykami
+                if (statisticsContainer) {
+                    result += statisticsContainer.outerHTML;
+                }
+
+                return result;
+            });
+
+            await browser.close();
+            browser = null;
+
+            if (statisticsHTML && statisticsHTML.length > 50) {
+                this.logger.info('Pomyślnie pobrano statystyki za pomocą Puppeteer');
+                return this.parseStatisticsFromHTML(statisticsHTML);
+            } else {
+                this.logger.warn('Nie znaleziono danych statystyk na stronie');
+                return null;
+            }
+
+        } catch (error) {
+            this.logger.error('Błąd Puppeteer:', error.message);
+            this.logger.error('Stack trace:', error.stack);
+            if (browser) {
+                try {
+                    await browser.close();
+                } catch (closeError) {
+                    this.logger.error('Błąd podczas zamykania przeglądarki:', closeError.message);
+                }
+            }
             return null;
         }
     }
