@@ -1382,9 +1382,25 @@ class SurvivorService {
         const fields = [];
         let itemIndex = 0;
 
+        // Dodaj nagłówek Legend przed pierwszym polem
+        fields.push({
+            name: 'Legend',
+            value: '\u200B',
+            inline: false
+        });
+
         // Przetwórz wszystkie pola (72 pozycji ÷ 4 = 18 pól)
         const totalFields = Math.ceil(collectibleOrder.length / 4);
         for (let fieldIndex = 0; fieldIndex < totalFields; fieldIndex++) {
+
+            // Dodaj nagłówek Epic przed polem 10 (fieldIndex === 9)
+            if (fieldIndex === 9) {
+                fields.push({
+                    name: 'Epic',
+                    value: '\u200B',
+                    inline: false
+                });
+            }
             const fieldItems = [];
 
             // Pobierz 4 itemy dla tego pola
