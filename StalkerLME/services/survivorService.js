@@ -1378,7 +1378,7 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Nowa struktura: 18 pól z nagłówkami i pustymi polami
+        // Struktura z nagłówkami i itemami w odpowiednich polach
         const fields = [];
         let collectibleIndex = 0;
 
@@ -1393,20 +1393,21 @@ class SurvivorService {
         for (let fieldNum = 2; fieldNum <= 8; fieldNum++) {
             const fieldItems = [];
 
-            for (let i = 0; i < 4 && collectibleIndex < collectibleOrder.length; i++) {
-                const collectibleName = collectibleOrder[collectibleIndex];
-                if (collectibleName !== '') {
-                    const collectible = collectibles[collectibleName];
-                    if (collectible && collectibleIcons[collectibleName]) {
-                        const icon = collectibleIcons[collectibleName];
-                        const stars = formatStars(collectible.stars);
-                        fieldItems.push(`${icon} ${stars}`);
+            for (let i = 0; i < 4; i++) {
+                if (collectibleIndex < collectibleOrder.length) {
+                    const collectibleName = collectibleOrder[collectibleIndex];
+                    if (collectibleName !== '') {
+                        const collectible = collectibles[collectibleName];
+                        if (collectible && collectibleIcons[collectibleName]) {
+                            const icon = collectibleIcons[collectibleName];
+                            const stars = formatStars(collectible.stars);
+                            fieldItems.push(`${icon} ${stars}`);
+                        }
                     }
+                    collectibleIndex++;
                 }
-                collectibleIndex++;
             }
 
-            // Zawsze dodaj pole, nawet jeśli puste
             fields.push({
                 name: '\u200B',
                 value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
@@ -1425,27 +1426,28 @@ class SurvivorService {
         fields.push({
             name: '\u200B',
             value: '<:J_CollYellow:1402532951492657172> **Epic**',
-            inline: false
+            inline: true
         });
 
         // Pola 11-18: Epic collectibles (8 pól × 4 = 32 collectibles)
         for (let fieldNum = 11; fieldNum <= 18; fieldNum++) {
             const fieldItems = [];
 
-            for (let i = 0; i < 4 && collectibleIndex < collectibleOrder.length; i++) {
-                const collectibleName = collectibleOrder[collectibleIndex];
-                if (collectibleName !== '') {
-                    const collectible = collectibles[collectibleName];
-                    if (collectible && collectibleIcons[collectibleName]) {
-                        const icon = collectibleIcons[collectibleName];
-                        const stars = formatStars(collectible.stars);
-                        fieldItems.push(`${icon} ${stars}`);
+            for (let i = 0; i < 4; i++) {
+                if (collectibleIndex < collectibleOrder.length) {
+                    const collectibleName = collectibleOrder[collectibleIndex];
+                    if (collectibleName !== '') {
+                        const collectible = collectibles[collectibleName];
+                        if (collectible && collectibleIcons[collectibleName]) {
+                            const icon = collectibleIcons[collectibleName];
+                            const stars = formatStars(collectible.stars);
+                            fieldItems.push(`${icon} ${stars}`);
+                        }
                     }
+                    collectibleIndex++;
                 }
-                collectibleIndex++;
             }
 
-            // Zawsze dodaj pole, nawet jeśli puste
             fields.push({
                 name: '\u200B',
                 value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
