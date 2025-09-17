@@ -123,6 +123,15 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
+            console.log('🔍 WSZYSTKIE KLUCZE w surowych danych:', Object.keys(data));
+
+            // Sprawdzamy każdy klucz czy zawiera dane podobne do pet skills
+            for (const [key, value] of Object.entries(data)) {
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    console.log(`🔍 Klucz "${key}":`, JSON.stringify(value, null, 2));
+                }
+            }
+
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
