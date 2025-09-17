@@ -123,8 +123,7 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
-            console.log('🔍 KOMPLETNE SUROWE DANE ZDEKODOWANE:', JSON.stringify(data, null, 2));
-
+    
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
@@ -378,7 +377,6 @@ class SurvivorService {
             }
         }
 
-        console.log('🔍 Zdekodowane pet skills z tablicy:', JSON.stringify(decodedSkills, null, 2));
 
         return {
             data: decodedSkills
@@ -1961,8 +1959,11 @@ class SurvivorService {
                 }
             }
 
+            // Oblicz numer setu (1-8)
+            const setNumber = fieldNum - 10;
+
             fields.push({
-                name: '\u200B',
+                name: `Set ${setNumber}`,
                 value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
                 inline: true
             });
