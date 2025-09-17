@@ -654,29 +654,37 @@ class SurvivorService {
             inline: false
         });
 
-        // Czwarta strona - Collectible
+        // Czwarta strona - Legend Colls
         const page4 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor);
 
-        // Zawartość Collectible
-        this.addCollectibleFields(page4, buildData);
+        // Zawartość Legend Collectibles
+        this.addLegendCollectibleFields(page4, buildData);
 
-        // Piąta strona - Custom Sets
+        // Piąta strona - Epic Colls
         const page5 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor);
 
-        // Zawartość Custom Sets
-        this.addCustomSetsFields(page5, buildData);
+        // Zawartość Epic Collectibles
+        this.addEpicCollectibleFields(page5, buildData);
 
-        // Szósta strona - Pets
+        // Szósta strona - Custom Sets
         const page6 = new EmbedBuilder()
             .setTitle(safeTitle)
             .setColor(embedColor);
 
+        // Zawartość Custom Sets
+        this.addCustomSetsFields(page6, buildData);
+
+        // Siódma strona - Pets
+        const page7 = new EmbedBuilder()
+            .setTitle(safeTitle)
+            .setColor(embedColor);
+
         // Tymczasowa zawartość Pets
-        page6.addFields({
+        page7.addFields({
             name: 'Pets',
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
@@ -699,11 +707,12 @@ class SurvivorService {
         page1.setFooter({ text: `Ekwipunek • ${expirationText}` });
         page2.setFooter({ text: `Tech Party • ${expirationText}` });
         page3.setFooter({ text: `Survivor • ${expirationText}` });
-        page4.setFooter({ text: `Collectible • ${expirationText}` });
-        page5.setFooter({ text: `Custom Sets • ${expirationText}` });
-        page6.setFooter({ text: `Pets • ${expirationText}` });
+        page4.setFooter({ text: `Legend Colls • ${expirationText}` });
+        page5.setFooter({ text: `Epic Colls • ${expirationText}` });
+        page6.setFooter({ text: `Custom Sets • ${expirationText}` });
+        page7.setFooter({ text: `Pets • ${expirationText}` });
 
-        return [page0, page1, page2, page3, page4, page5, page6];
+        return [page0, page1, page2, page3, page4, page5, page6, page7];
     }
 
     /**
@@ -735,24 +744,32 @@ class SurvivorService {
         const row2 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('collectible_page')
-                    .setLabel('Collectible')
+                    .setCustomId('legend_colls_page')
+                    .setLabel('Legend Colls')
                     .setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('epic_colls_page')
+                    .setLabel('Epic Colls')
+                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('custom_sets_page')
                     .setLabel('Custom Sets')
-                    .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('pets_page')
                     .setLabel('Pets')
-                    .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                    .setStyle(currentPage === 7 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+
+        const row3 = new ActionRowBuilder()
+            .addComponents(
                 new ButtonBuilder()
                     .setCustomId('delete_embed')
                     .setStyle(ButtonStyle.Danger)
                     .setEmoji('🗑️')
             );
 
-        return [row1, row2];
+        return [row1, row2, row3];
     }
 
     /**
@@ -1624,6 +1641,324 @@ class SurvivorService {
             value: 'Zawartość zostanie dodana wkrótce...',
             inline: false
         });
+    }
+
+    /**
+     * Dodaje pola Legend Collectibles do embeda (pola 1-9)
+     */
+    addLegendCollectibleFields(embed, buildData) {
+        // Użyj tego samego kodu co addCollectibleFields ale tylko dla Legend
+        let collectibles = {};
+
+        // Sprawdź różne możliwe struktury
+        if (buildData.collectibles && buildData.collectibles.data) {
+            collectibles = buildData.collectibles.data;
+        } else if (buildData.Collectibles && buildData.Collectibles.data) {
+            collectibles = buildData.Collectibles.data;
+        } else if (buildData.collectibles) {
+            collectibles = buildData.collectibles;
+        } else if (buildData.Collectibles) {
+            collectibles = buildData.Collectibles;
+        } else if (buildData.data && buildData.data.collectibles && buildData.data.collectibles.data) {
+            collectibles = buildData.data.collectibles.data;
+        } else if (buildData.data && buildData.data.Collectibles && buildData.data.Collectibles.data) {
+            collectibles = buildData.data.Collectibles.data;
+        } else if (buildData.data && buildData.data.collectibles) {
+            collectibles = buildData.data.collectibles;
+        } else if (buildData.data && buildData.data.Collectibles) {
+            collectibles = buildData.data.Collectibles;
+        }
+
+        const { collectibleIcons, collectibleOrder, formatStars } = this.getCollectibleData();
+
+        // Tylko pola 1-9 (Legend)
+        const fields = [];
+        for (let fieldNum = 1; fieldNum <= 9; fieldNum++) {
+            const fieldItems = [];
+            const startIndex = (fieldNum - 1) * 4;
+
+            // Dodaj nagłówek Legend do pola 1
+            if (fieldNum === 1) {
+                fields.push({
+                    name: '\u200B',
+                    value: '<:J_CollRed:1402533014080065546> **Legend**',
+                    inline: true
+                });
+                continue;
+            }
+
+            // Dla pozostałych pól, dodaj collectibles
+            for (let i = 0; i < 4; i++) {
+                const collectibleIndex = startIndex + i;
+                if (collectibleIndex < collectibleOrder.length) {
+                    const collectibleName = collectibleOrder[collectibleIndex];
+                    if (collectibleName !== '') {
+                        const collectible = collectibles[collectibleName];
+                        if (collectible && collectibleIcons[collectibleName]) {
+                            const icon = collectibleIcons[collectibleName];
+                            const stars = formatStars(collectible.stars);
+                            fieldItems.push(`${icon} ${stars}`);
+                        }
+                    }
+                }
+            }
+
+            fields.push({
+                name: '\u200B',
+                value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
+                inline: true
+            });
+        }
+
+        if (fields.length === 0) {
+            embed.addFields({
+                name: 'Legend Collectibles',
+                value: 'Brak danych o Legend collectibles w tym buildzie.',
+                inline: false
+            });
+        } else {
+            embed.addFields(...fields);
+
+            // Oblicz liczbę użytych skrzynek Legend
+            let legendBoxes = 0;
+            for (let i = 0; i < 28; i++) { // Pierwsze 28 = Legend
+                const collectibleName = collectibleOrder[i];
+                const collectible = collectibles[collectibleName];
+
+                if (collectible && collectible.stars > 0) {
+                    const stars = collectible.stars;
+                    let boxes = 0;
+
+                    if (stars === 1) boxes = 1;
+                    else if (stars === 2) boxes = 2;
+                    else if (stars === 3) boxes = 3;
+                    else if (stars === 4) boxes = 4;
+                    else if (stars === 5) boxes = 6;
+                    else if (stars === 6) boxes = 8;
+                    else if (stars === 7) boxes = 10;
+                    else if (stars === 8) boxes = 13;
+                    else if (stars === 9) boxes = 16;
+                    else if (stars === 10) boxes = 20;
+
+                    legendBoxes += boxes;
+                }
+            }
+
+            embed.addFields({
+                name: 'Użyte skrzynki',
+                value: `<:J_CollRed:1402533014080065546> ${legendBoxes}`,
+                inline: false
+            });
+        }
+    }
+
+    /**
+     * Dodaje pola Epic Collectibles do embeda (pola 10-18)
+     */
+    addEpicCollectibleFields(embed, buildData) {
+        let collectibles = {};
+
+        // Sprawdź różne możliwe struktury
+        if (buildData.collectibles && buildData.collectibles.data) {
+            collectibles = buildData.collectibles.data;
+        } else if (buildData.Collectibles && buildData.Collectibles.data) {
+            collectibles = buildData.Collectibles.data;
+        } else if (buildData.collectibles) {
+            collectibles = buildData.collectibles;
+        } else if (buildData.Collectibles) {
+            collectibles = buildData.Collectibles;
+        } else if (buildData.data && buildData.data.collectibles && buildData.data.collectibles.data) {
+            collectibles = buildData.data.collectibles.data;
+        } else if (buildData.data && buildData.data.Collectibles && buildData.data.Collectibles.data) {
+            collectibles = buildData.data.Collectibles.data;
+        } else if (buildData.data && buildData.data.collectibles) {
+            collectibles = buildData.data.collectibles;
+        } else if (buildData.data && buildData.data.Collectibles) {
+            collectibles = buildData.data.Collectibles;
+        }
+
+        const { collectibleIcons, collectibleOrder, formatStars } = this.getCollectibleData();
+
+        // Tylko pola 10-18 (Epic)
+        const fields = [];
+        for (let fieldNum = 10; fieldNum <= 18; fieldNum++) {
+            const fieldItems = [];
+            const startIndex = (fieldNum - 1) * 4;
+
+            // Dodaj nagłówek Epic do pola 10
+            if (fieldNum === 10) {
+                fields.push({
+                    name: '\u200B',
+                    value: '<:J_CollYellow:1402532951492657172> **Epic**',
+                    inline: true
+                });
+                continue;
+            }
+
+            // Dla pozostałych pól, dodaj collectibles
+            for (let i = 0; i < 4; i++) {
+                const collectibleIndex = startIndex + i;
+                if (collectibleIndex < collectibleOrder.length) {
+                    const collectibleName = collectibleOrder[collectibleIndex];
+                    if (collectibleName !== '') {
+                        const collectible = collectibles[collectibleName];
+                        if (collectible && collectibleIcons[collectibleName]) {
+                            const icon = collectibleIcons[collectibleName];
+                            const stars = formatStars(collectible.stars);
+                            fieldItems.push(`${icon} ${stars}`);
+                        }
+                    }
+                }
+            }
+
+            fields.push({
+                name: '\u200B',
+                value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
+                inline: true
+            });
+        }
+
+        if (fields.length === 0) {
+            embed.addFields({
+                name: 'Epic Collectibles',
+                value: 'Brak danych o Epic collectibles w tym buildzie.',
+                inline: false
+            });
+        } else {
+            embed.addFields(...fields);
+
+            // Oblicz liczbę użytych skrzynek Epic
+            let epicBoxes = 0;
+            for (let i = 28; i < collectibleOrder.length; i++) { // Od 28+ = Epic
+                const collectibleName = collectibleOrder[i];
+                const collectible = collectibles[collectibleName];
+
+                if (collectible && collectible.stars > 0) {
+                    const stars = collectible.stars;
+                    let boxes = 0;
+
+                    if (stars === 1) boxes = 1;
+                    else if (stars === 2) boxes = 2;
+                    else if (stars === 3) boxes = 3;
+                    else if (stars === 4) boxes = 4;
+                    else if (stars === 5) boxes = 6;
+                    else if (stars === 6) boxes = 8;
+                    else if (stars === 7) boxes = 10;
+                    else if (stars === 8) boxes = 13;
+                    else if (stars === 9) boxes = 16;
+                    else if (stars === 10) boxes = 20;
+
+                    epicBoxes += boxes;
+                }
+            }
+
+            embed.addFields({
+                name: 'Użyte skrzynki',
+                value: `<:J_CollYellow:1402532951492657172> ${epicBoxes}`,
+                inline: false
+            });
+        }
+    }
+
+    /**
+     * Zwraca dane collectibles (ikony, kolejność, formatowanie)
+     */
+    getCollectibleData() {
+        const collectibleIcons = {
+            'Human Genome Mapping': '<:Coll_human_genome_mapping:1417581576103133347>',
+            'Book of Ancient Wisdom': '<:Coll_book_of_ancient_wisdom:1417581162896949330>',
+            'Immortal Lucky Coin': '<:Coll_immortal_lucky_coin:1417581648786227260>',
+            'Instellar Transition Matrix Design': '<:Coll_instellar_transition_matrix:1417581693497511986>',
+            'Angelic Tear Crystal': '<:Coll_angelic_tear_crystal:1417580861649588236>',
+            'Unicorn\'s Horn': '<:Coll_unicorn_s_horn:1417582377831632966>',
+            "Unicorn's Horn": '<:Coll_unicorn_s_horn:1417582377831632966>',
+            'Otherworld Key': '<:Coll_otherworld_key:1417581987043999958>',
+            'Starcore Diamond': '<:Coll_starcore_diamond:1417582260751827066>',
+            'High-Lat Energy Cube': '<:Coll_high_lat_energy_cube:1417581540195565650>',
+            'Void Bloom': '<:Coll_void_bloom:1417582398073340035>',
+            'Eye of True Vision': '<:Coll_eye_of_true_vision:1417581382359584838>',
+            'Life Hourglass': '<:Coll_life_hourglass:1417581729216073738>',
+            'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417581892596662333>',
+            'Dice of Destiny': '<:Coll_dice_of_destiny:1417581282916962427>',
+            'Dicern': '<:Coll_dicern:1454181949456273479>',
+            'Elemental Ring': '<:Coll_elemental_ring:1417581367021146133>',
+            'Anti-Gravity Device': '<:Coll_anti_gravity_device:1417581048224809012>',
+            'Hydraulic Flipper': '<:Coll_hydraulic_flipper:1417581591412346880>',
+            'Superhuman Pill': '<:Coll_superhuman_pill:1417582302107799723>',
+            'Comms Conch': '<:Coll_comms_conch:1417581229435519006>',
+            'Mini Dyson Sphere': '<:Coll_mini_dyson_sphere:1417581850347704341>',
+            'Klein Bottle': '<:Coll_klein_bottle:1417581710132117516>',
+            'Antiparticle Gourd': '<:Coll_antiparticle_gourd:1417581065152893058>',
+            'Wildfire Furnace': '<:Coll_wildfire_furnace:1417582420638826526>',
+            'Infinity Score': '<:Coll_infinity_score:1417581669329801286>',
+            'Cosmic Compass': '<:Coll_cosmic_compass:1417581245793046698>',
+            'Wormhole Detector': '<:Coll_wormhole_detector:1417582451647058071>',
+            'Shuttle Capsule': '<:Coll_shuttle_capsule:1417582195681263770>',
+            'Micro Artificial Sun': '<:Coll_micro_artihttpsficial_sun:1417581829212344433>',
+            'Neurochip': '<:Coll_neurochip:1417581917804429442>',
+            'Star-Rail Passenger Card': '<:Coll_star_rail_passenger_card:1417582235636334803>',
+            'Portable Mech Case': '<:Coll_portable_mech_case:1417582046607310930>',
+            'Time Essence Bottle': '<:Coll_time_essence_bottle:1417582361045893142>',
+            'Temporal Rewinder': '<:Coll_temporal_rewinder:1417582340338614401>',
+            'Tablet of Epics': '<:Coll_tablet_of_epics:1417582318247477398>',
+            'Super Circuit Board': '<:Coll_super_circuit_board:1417582284948901898>',
+            'Spatial Rewinder': '<:Coll_spatial_rewinder:1417582215629639801>',
+            'Scientific Luminary\'s Journal': '<:Coll_scientific_luminary_s_journ:1417582167558590474>',
+            "Scientific Luminary's Journal": '<:Coll_scientific_luminary_s_journ:1417582167558590474>',
+            'Safehouse Map': '<:Coll_safehouse_map:1417582146511704074>',
+            'Savior\'s Memento': '<:Coll_savior_s_memento:1417582102320386140>',
+            "Savior's Memento": '<:Coll_savior_s_memento:1417582102320386140>',
+            'Primordial War Drum': '<:Coll_primordial_war_drum:1417582068086472755>',
+            'Plasma Sword': '<:Coll_plasma_sword:1417582018241499226>',
+            'Old Medical Book': '<:Coll_old_medical_book:1417581963887509525>',
+            'Nuclear Battery': '<:Coll_nuclear_battery:1417581940340428822>',
+            'Mystical Halo': '<:Coll_mystical_halo:1417581868215173284>',
+            'Mental Sync Helm': '<:Coll_mental_sync_helm:1417581806445793320>',
+            'Memory Editor': '<:Coll_memory_editor:1417581771234480249>',
+            'Lucky Charm': '<:Coll_lucky_charm:1417581754008731658>',
+            'Golden Horn': '<:Coll_golden_horn:1417581520700444893>',
+            'Golden Cutlery': '<:Coll_golden_cutlery:1417581503298273484>',
+            'Gene Splicer': '<:Coll_gene_splicer:1417581442636058694>',
+            'Flaming Plume': '<:Coll_flaming_plume:1417581397065072701>',
+            'Dreamscape Puzzle': '<:Coll_dreamscape_puzzle:1417581348851421397>',
+            'Dragon Tooth': '<:Coll_dragon_tooth:1417581330719572038>',
+            'Dimension Foil': '<:Coll_dimension_foil:1417581312029491240>',
+            'Cyber Totem': '<:Coll_cyber_totem:1417581265829236888>',
+            'Clone Mirror': '<:Coll_clone_mirror:1417581204126961815>',
+            'Atomic Mech': '<:Coll_atomic_mech:1417581142483275892>',
+            'Astral Dewdrop': '<:Coll_astral_dewdrop:1417581123831070761>',
+            'Holodream Fluid': '<:Coll_holodream_fluid:1417581561913806908>',
+            'Hyper Neuron': '<:Coll_hyper_neuron:1417581619019255921>'
+        };
+
+        const collectibleOrder = [
+            'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
+            'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
+            'High-Lat Energy Cube', 'Void Bloom', 'Eye of True Vision', 'Life Hourglass',
+            'Nano-Mimetic Mask', 'Dice of Destiny', 'Dimension Foil', 'Mental Sync Helm',
+            'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
+            'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
+            'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
+            '', '', '', '',
+            '', '', '', '',
+            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
+            'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
+            'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
+            'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
+            'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
+            'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
+            'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
+            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case',
+            '', '', '', ''
+        ];
+
+        const formatStars = (stars) => {
+            if (stars === 0) return '-';
+            if (stars <= 5) return '☆'.repeat(stars);
+            return '★'.repeat(stars - 5);
+        };
+
+        return { collectibleIcons, collectibleOrder, formatStars };
     }
 
     /**
