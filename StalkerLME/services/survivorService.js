@@ -1385,7 +1385,7 @@ class SurvivorService {
         // Pole 1: Nagłówek Legend
         fields.push({
             name: '\u200B',
-            value: '<:J_CollRed:1402533014080065546> Legend',
+            value: '<:J_CollRed:1402533014080065546> **Legend**',
             inline: true
         });
 
@@ -1406,13 +1406,12 @@ class SurvivorService {
                 collectibleIndex++;
             }
 
-            if (fieldItems.length > 0) {
-                fields.push({
-                    name: '\u200B',
-                    value: fieldItems.join('\n'),
-                    inline: true
-                });
-            }
+            // Zawsze dodaj pole, nawet jeśli puste
+            fields.push({
+                name: '\u200B',
+                value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
+                inline: true
+            });
         }
 
         // Pole 9: Puste
@@ -1425,7 +1424,7 @@ class SurvivorService {
         // Pole 10: Nagłówek Epic
         fields.push({
             name: '\u200B',
-            value: '<:J_CollYellow:1402532951492657172> Epic',
+            value: '<:J_CollYellow:1402532951492657172> **Epic**',
             inline: true
         });
 
@@ -1446,13 +1445,12 @@ class SurvivorService {
                 collectibleIndex++;
             }
 
-            if (fieldItems.length > 0) {
-                fields.push({
-                    name: '\u200B',
-                    value: fieldItems.join('\n'),
-                    inline: true
-                });
-            }
+            // Zawsze dodaj pole, nawet jeśli puste
+            fields.push({
+                name: '\u200B',
+                value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
+                inline: true
+            });
         }
 
 
