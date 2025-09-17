@@ -204,6 +204,9 @@ class SurvivorService {
                 buildData.petSkills = this.decodePetSkills(data.petSkills);
             } else if (data._V && typeof data._V === 'object') {
                 buildData.petSkills = this.decodePetSkills(data._V);
+            } else if (data.l && Array.isArray(data.l)) {
+                // Pet skills są w kluczu "l" jako tablica
+                buildData.petSkills = this.decodePetSkillsFromArray(data.l);
             }
 
             return this.normalizeBuildData(buildData);
@@ -330,6 +333,55 @@ class SurvivorService {
         // Format: { "Motivation": { "enabled": true, "rarity": "Super" }, ... }
         return {
             data: petSkillsData
+        };
+    }
+
+    /**
+     * Dekoduje pet skills z tablicy (klucz "l")
+     */
+    decodePetSkillsFromArray(petSkillsArray) {
+        const skillNames = [
+            'Motivation', 'Inspiration', 'Encouragement', 'Battle Lust', 'Gary',
+            'Sync Rate', 'Resonance Chance', 'Resonance Damage', 'Shield Damage',
+            'Dmg to Poisoned', 'Dmg to Weakened', 'Dmg to Chilled'
+        ];
+
+        const rarityMap = {
+            0: 'Excellent',
+            1: 'Advanced',
+            2: 'Super'
+        };
+
+        const decodedSkills = {};
+
+        for (let i = 0; i < petSkillsArray.length && i < skillNames.length; i++) {
+            const skillData = petSkillsArray[i];
+            const skillName = skillNames[i];
+
+            if (skillData) {
+                if (i < 5) {
+                    // Pierwsze 5 skills (Rex/Croaky format)
+                    if (skillData.s !== undefined && skillData.B !== undefined) {
+                        decodedSkills[skillName] = {
+                            enabled: skillData.s === 1,
+                            rarity: rarityMap[skillData.B] || 'Advanced'
+                        };
+                    }
+                } else {
+                    // Pozostałe skills (Puffo/Crucker/Capy format)
+                    if (skillData.P !== undefined) {
+                        decodedSkills[skillName] = {
+                            value: skillData.P
+                        };
+                    }
+                }
+            }
+        }
+
+        console.log('🔍 Zdekodowane pet skills z tablicy:', JSON.stringify(decodedSkills, null, 2));
+
+        return {
+            data: decodedSkills
         };
     }
 
