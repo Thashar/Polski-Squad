@@ -30,20 +30,7 @@ const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config);
 const vacationService = new VacationService(config, logger);
-// Wrapper dla WebFetch tool (używany w Claude Code environment)
-const webFetchWrapper = async (url, prompt) => {
-    try {
-        // W środowisku produkcyjnym ten kod nie będzie działać
-        // Jest to tylko placeholder dla środowiska Claude Code
-        logger.warn('WebFetch wrapper - potrzebuje implementacji zewnętrznej');
-        return null;
-    } catch (error) {
-        logger.error('Błąd WebFetch wrapper:', error.message);
-        return null;
-    }
-};
-
-const survivorService = new SurvivorService(config, logger, webFetchWrapper);
+const survivorService = new SurvivorService(config, logger);
 
 // Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
