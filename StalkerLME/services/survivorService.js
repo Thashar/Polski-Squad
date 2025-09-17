@@ -1366,7 +1366,9 @@ class SurvivorService {
             // Pozycje 61-64 (Pole 16) - Rzeczywiste pozycje 53-56 z decodeCollectibles
             'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
             // Pozycje 65-68 (Pole 17) - Rzeczywiste pozycje 57-60 z decodeCollectibles
-            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
+            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case',
+            // Pozycje 69-72 (Pole 18) - PUSTE
+            '', '', '', ''
         ];
 
         // Funkcja do formatowania gwiazdek
@@ -1376,11 +1378,11 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Grupuj collectibles po 4 w polu (17 pól łącznie)
+        // Grupuj collectibles po 4 w polu (18 pól łącznie)
         const fields = [];
         let itemIndex = 0;
 
-        // Przetwórz wszystkie pola (68 pozycji ÷ 4 = 17 pól)
+        // Przetwórz wszystkie pola (72 pozycji ÷ 4 = 18 pól)
         const totalFields = Math.ceil(collectibleOrder.length / 4);
         for (let fieldIndex = 0; fieldIndex < totalFields; fieldIndex++) {
             const fieldItems = [];
@@ -1408,8 +1410,8 @@ class SurvivorService {
                     value: fieldItems.join('\n'),
                     inline: true
                 });
-            } else if (fieldIndex === 7 || fieldIndex === 8) {
-                // Pola 8 i 9 (indeksy 7 i 8) są celowo puste
+            } else if (fieldIndex === 7 || fieldIndex === 8 || fieldIndex === 17) {
+                // Pola 8, 9 i 18 (indeksy 7, 8 i 17) są celowo puste
                 fields.push({
                     name: '\u200B',
                     value: '\u200B',
@@ -1430,30 +1432,45 @@ class SurvivorService {
             // Dodaj wszystkie pola do embeda
             embed.addFields(...fields);
 
-            // Oblicz łączną liczbę użytych skrzynek
-            let totalBoxes = 0;
-            for (const collectibleName of collectibleOrder) {
+            // Oblicz liczbę użytych skrzynek Legend i Epic oddzielnie
+            let legendBoxes = 0;
+            let epicBoxes = 0;
+
+            for (let i = 0; i < collectibleOrder.length; i++) {
+                const collectibleName = collectibleOrder[i];
                 const collectible = collectibles[collectibleName];
+
                 if (collectible && collectible.stars > 0) {
                     const stars = collectible.stars;
+                    let boxes = 0;
+
                     // Mapowanie gwiazdek na liczbę skrzynek
-                    if (stars === 1) totalBoxes += 1;
-                    else if (stars === 2) totalBoxes += 2;
-                    else if (stars === 3) totalBoxes += 3;
-                    else if (stars === 4) totalBoxes += 4;
-                    else if (stars === 5) totalBoxes += 6;
-                    else if (stars === 6) totalBoxes += 8;
-                    else if (stars === 7) totalBoxes += 10;
-                    else if (stars === 8) totalBoxes += 13;
-                    else if (stars === 9) totalBoxes += 16;
-                    else if (stars === 10) totalBoxes += 20;
+                    if (stars === 1) boxes = 1;
+                    else if (stars === 2) boxes = 2;
+                    else if (stars === 3) boxes = 3;
+                    else if (stars === 4) boxes = 4;
+                    else if (stars === 5) boxes = 6;
+                    else if (stars === 6) boxes = 8;
+                    else if (stars === 7) boxes = 10;
+                    else if (stars === 8) boxes = 13;
+                    else if (stars === 9) boxes = 16;
+                    else if (stars === 10) boxes = 20;
+
+                    // Określ czy to Legend (pola 1-9, pozycje 0-35) czy Epic (pola 10+, pozycje 36+)
+                    if (i < 36) {
+                        // Pola 1-9 = Legend (pozycje 0-35 w collectibleOrder)
+                        legendBoxes += boxes;
+                    } else {
+                        // Pola 10+ = Epic (pozycje 36+ w collectibleOrder)
+                        epicBoxes += boxes;
+                    }
                 }
             }
 
-            // Dodaj pole z użytymi skrzynkami
+            // Dodaj pola z użytymi skrzynkami
             embed.addFields({
                 name: 'Użyte skrzynki',
-                value: `<:J_CollRed:1402533014080065546> ${totalBoxes}`,
+                value: `<:J_CollRed:1402533014080065546> ${legendBoxes}\n<:J_CollYellow:1402532951492657172> ${epicBoxes}`,
                 inline: false
             });
         }
