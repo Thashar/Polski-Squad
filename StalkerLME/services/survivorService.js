@@ -187,6 +187,11 @@ class SurvivorService {
                 buildData.customSets = this.decodeCustomSets(data.n);
             }
 
+            // Dekodowanie pets z klucza "o"
+            if (data.o && typeof data.o === 'object') {
+                buildData.pets = this.decodePets(data.o);
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
@@ -267,6 +272,43 @@ class SurvivorService {
     }
 
     /**
+     * Dekoduje pets z danych
+     */
+    decodePets(petData) {
+        // Mapowanie typów pets na nazwy
+        const petTypeToName = {
+            1: 'Rex',
+            2: 'Puffo',
+            3: 'Crucker',
+            4: 'Croaky',
+            5: 'Capy'
+        };
+
+        // Mapowanie nazw pets na ikony Discord
+        const petNameToIcon = {
+            'Rex': '<:rex:1417809684659966114>',
+            'Puffo': '<:puffo:1417809665806565397>',
+            'Crucker': '<:crucker:1417809647284523080>',
+            'Croaky': '<:croaky:1417809629622042675>',
+            'Capy': '<:capy:1417809563301974117>'
+        };
+
+        const petType = petData.t || 0;
+        const petStars = petData.r || 0;
+        const petName = petTypeToName[petType] || 'Unknown';
+        const petIcon = petNameToIcon[petName] || '❓';
+
+        return {
+            data: {
+                name: petName,
+                stars: petStars,
+                icon: petIcon,
+                type: petType
+            }
+        };
+    }
+
+    /**
      * Normalizuje dane buildu do standardowego formatu
      */
     normalizeBuildData(data) {
@@ -307,6 +349,11 @@ class SurvivorService {
         // Zachowaj customSets jeśli istnieją
         if (data.customSets) {
             result.customSets = data.customSets;
+        }
+
+        // Zachowaj pets jeśli istnieją
+        if (data.pets) {
+            result.pets = data.pets;
         }
 
         return result;
@@ -683,12 +730,8 @@ class SurvivorService {
             .setTitle(safeTitle)
             .setColor(embedColor);
 
-        // Tymczasowa zawartość Pets
-        page7.addFields({
-            name: 'Pets',
-            value: 'Zawartość zostanie dodana wkrótce...',
-            inline: false
-        });
+        // Dodaj pola Pets
+        this.addPetsFields(page7, buildData);
 
         // Dodaj footer z czasem wygaśnięcia do wszystkich stron (15 minut, czas polski)
         const expirationTime = new Date();
@@ -1956,6 +1999,73 @@ class SurvivorService {
      */
     calculateBuildStatisticsDetailed(buildData) {
         return this.calculateBuildStatistics(buildData);
+    }
+
+    /**
+     * Dodaje pola Pets do embeda
+     */
+    addPetsFields(embed, buildData) {
+        let pets = {};
+
+        // Sprawdź różne możliwe struktury
+        if (buildData.pets && buildData.pets.data) {
+            pets = buildData.pets.data;
+        } else if (buildData.pets) {
+            pets = buildData.pets;
+        } else if (buildData.data && buildData.data.pets && buildData.data.pets.data) {
+            pets = buildData.data.pets.data;
+        } else if (buildData.data && buildData.data.pets) {
+            pets = buildData.data.pets;
+        }
+
+        if (!pets || !pets.name || !pets.stars) {
+            embed.addFields({
+                name: 'Pets',
+                value: 'Brak danych o petach w tym buildzie.',
+                inline: false
+            });
+            return;
+        }
+
+        // Generowanie gwiazdek
+        const stars = pets.stars || 0;
+        let starDisplay = '';
+
+        if (stars === 1) {
+            starDisplay = '☆';
+        } else if (stars === 2) {
+            starDisplay = '☆☆';
+        } else if (stars === 3) {
+            starDisplay = '☆☆☆';
+        } else if (stars === 4) {
+            starDisplay = '☆☆☆☆';
+        } else if (stars === 5) {
+            starDisplay = '☆☆☆☆☆';
+        } else if (stars === 6) {
+            starDisplay = '☆☆☆☆☆\n★';
+        } else if (stars === 7) {
+            starDisplay = '☆☆☆☆☆\n★★';
+        } else if (stars === 8) {
+            starDisplay = '☆☆☆☆☆\n★★★';
+        } else if (stars === 9) {
+            starDisplay = '☆☆☆☆☆\n★★★★';
+        } else if (stars === 10) {
+            starDisplay = '☆☆☆☆☆\n★★★★★';
+        }
+
+        // Dodaj pola z informacjami o pecie
+        embed.addFields(
+            {
+                name: `${pets.icon || '❓'} Pet`,
+                value: `**Name:** ${pets.name || 'Unknown'}`,
+                inline: false
+            },
+            {
+                name: 'Stars',
+                value: starDisplay || 'Brak gwiazdek',
+                inline: false
+            }
+        );
     }
 }
 
