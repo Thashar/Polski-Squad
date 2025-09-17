@@ -2213,7 +2213,7 @@ class SurvivorService {
         embed.addFields({
             name: `${pets.icon || '❓'} ${pets.name || 'Unknown'}`,
             value: starDisplay || 'Brak gwiazdek',
-            inline: false
+            inline: true
         });
 
         // Drugie pole - koszty awakening crystals i xeno cores
@@ -2221,7 +2221,7 @@ class SurvivorService {
             embed.addFields({
                 name: 'Zużyte zasoby',
                 value: resourceText.replace(/^\n\n/, ''), // Usuń początkowe nowe linie
-                inline: false
+                inline: true
             });
         }
 
@@ -2229,10 +2229,10 @@ class SurvivorService {
         embed.addFields({
             name: '​', // Invisible character
             value: '​', // Invisible character
-            inline: false
+            inline: true
         });
 
-        // Czwarte pole - pet skills
+        // Czwarte pole - pet skills (nowy rząd)
         const petSkillsText = this.getPetSkillsText(buildData, petName);
         if (petSkillsText) {
             embed.addFields({
