@@ -202,6 +202,21 @@ class SurvivorService {
                 buildData.petSkills = this.decodePetSkills(data.petSkills);
             }
 
+            // Sprawdź wszystkie klucze w poszukiwaniu danych pet skills
+            for (const [key, value] of Object.entries(data)) {
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    // Sprawdź czy obiekt zawiera typowe nazwy pet skills
+                    const skillNames = ['Motivation', 'Inspiration', 'Encouragement', 'Battle Lust', 'Gary', 'Sync Rate', 'Resonance Chance', 'Resonance Damage', 'Shield Damage', 'Dmg to Poisoned', 'Dmg to Weakened', 'Dmg to Chilled'];
+                    const hasSkills = skillNames.some(skill => value.hasOwnProperty(skill));
+
+                    if (hasSkills) {
+                        console.log(`🔍 ZNALEZIONO PET SKILLS w kluczu "${key}":`, JSON.stringify(value, null, 2));
+                        buildData.petSkills = this.decodePetSkills(value);
+                        break;
+                    }
+                }
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
