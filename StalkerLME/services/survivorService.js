@@ -192,6 +192,11 @@ class SurvivorService {
                 buildData.pets = this.decodePets(data.o);
             }
 
+            // Dekodowanie petSkills z klucza "petSkills" (jeśli istnieje)
+            if (data.petSkills && typeof data.petSkills === 'object') {
+                buildData.petSkills = this.decodePetSkills(data.petSkills);
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
@@ -309,6 +314,17 @@ class SurvivorService {
     }
 
     /**
+     * Dekoduje pet skills z danych
+     */
+    decodePetSkills(petSkillsData) {
+        // Funkcja do dekodowania pet skills zgodnie z formatem z przykładu
+        // Format: { "Motivation": { "enabled": true, "rarity": "Super" }, ... }
+        return {
+            data: petSkillsData
+        };
+    }
+
+    /**
      * Normalizuje dane buildu do standardowego formatu
      */
     normalizeBuildData(data) {
@@ -354,6 +370,11 @@ class SurvivorService {
         // Zachowaj pets jeśli istnieją
         if (data.pets) {
             result.pets = data.pets;
+        }
+
+        // Zachowaj petSkills jeśli istnieją
+        if (data.petSkills) {
+            result.petSkills = data.petSkills;
         }
 
         return result;
@@ -2133,6 +2154,89 @@ class SurvivorService {
             value: (starDisplay || 'Brak gwiazdek') + resourceText,
             inline: false
         });
+
+        // Dodaj pet skills jeśli istnieją
+        this.addPetSkillsFields(embed, buildData, petName);
+    }
+
+    /**
+     * Dodaje pola Pet Skills do embeda
+     */
+    addPetSkillsFields(embed, buildData, petName) {
+        let petSkills = {};
+
+        // Sprawdź różne możliwe struktury
+        if (buildData.petSkills && buildData.petSkills.data) {
+            petSkills = buildData.petSkills.data;
+        } else if (buildData.petSkills) {
+            petSkills = buildData.petSkills;
+        } else if (buildData.data && buildData.data.petSkills && buildData.data.petSkills.data) {
+            petSkills = buildData.data.petSkills.data;
+        } else if (buildData.data && buildData.data.petSkills) {
+            petSkills = buildData.data.petSkills;
+        }
+
+        if (!petSkills || Object.keys(petSkills).length === 0) {
+            return; // Brak pet skills - nie dodawaj pola
+        }
+
+        // Ikony dla pet skills
+        const skillIcons = {
+            'Motivation': '<:motivation:1417810080207736874>',
+            'Inspiration': '<:inspiration:1417810056203730996>',
+            'Encouragement': '<:encouragement:1417810034955517982>',
+            'Battle Lust': '<:battle_lust:1417810016404246548>',
+            'Gary': '❓', // Brak ikony Gary w provided icons
+            'Sync Rate': '<:sync_rate:1417809974893219902>',
+            'Resonance Chance': '<:resonance_chance:1417809949068755094>',
+            'Resonance Damage': '<:resonance_damage:1417809758345367562>',
+            'Dmg to Weakened': '<:dmg_to_weakened:1417809742528512021>',
+            'Dmg to Poisoned': '<:dmg_to_poisoned:1417809726284107886>',
+            'Dmg to Chilled': '❓', // Brak ikony
+            'Shield Damage': '<:shield_damage:1417809918211391600>'
+        };
+
+        // Mapowanie rarity na tekst
+        const rarityToText = {
+            'Excellent': 'Excellent',
+            'Advanced': 'Epic',
+            'Super': 'Legend'
+        };
+
+        let skillsText = '';
+
+        if (petName === 'Rex' || petName === 'Croaky') {
+            // Rex i Croaky - wyświetl enabled skills z rarity
+            const skillOrder = ['Motivation', 'Inspiration', 'Encouragement', 'Battle Lust', 'Gary'];
+
+            for (const skillName of skillOrder) {
+                const skill = petSkills[skillName];
+                if (skill && skill.enabled === true) {
+                    const icon = skillIcons[skillName] || '❓';
+                    const rarity = rarityToText[skill.rarity] || skill.rarity || '';
+                    skillsText += `${icon} ${skillName}: ${rarity}\n`;
+                }
+            }
+        } else if (petName === 'Puffo' || petName === 'Crucker' || petName === 'Capy') {
+            // Puffo, Crucker, Capy - wyświetl value skills z %
+            const skillOrder = ['Sync Rate', 'Resonance Chance', 'Resonance Damage', 'Dmg to Weakened', 'Dmg to Poisoned', 'Dmg to Chilled', 'Shield Damage'];
+
+            for (const skillName of skillOrder) {
+                const skill = petSkills[skillName];
+                if (skill && skill.value !== undefined) {
+                    const icon = skillIcons[skillName] || '❓';
+                    skillsText += `${icon} ${skillName}: ${skill.value}%\n`;
+                }
+            }
+        }
+
+        if (skillsText.trim()) {
+            embed.addFields({
+                name: 'Pet Skills',
+                value: skillsText.trim(),
+                inline: false
+            });
+        }
     }
 }
 
