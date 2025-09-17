@@ -1422,6 +1422,7 @@ class SurvivorService {
             }
 
             fields.push({
+                name: '\u200B',
                 value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
                 inline: true
             });
