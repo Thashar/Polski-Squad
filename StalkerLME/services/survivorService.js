@@ -1378,37 +1378,24 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Grupuj collectibles po 4 w polu (18 pól łącznie)
+        // Nowa struktura: 18 pól z nagłówkami i pustymi polami
         const fields = [];
-        let itemIndex = 0;
+        let collectibleIndex = 0;
 
-        // Dodaj nagłówek Legend przed pierwszym polem
+        // Pole 1: Nagłówek Legend
         fields.push({
-            name: 'Legend',
-            value: '\u200B',
-            inline: false
+            name: '\u200B',
+            value: '<:J_CollRed:1402533014080065546> Legend',
+            inline: true
         });
 
-        // Przetwórz wszystkie pola (72 pozycji ÷ 4 = 18 pól)
-        const totalFields = Math.ceil(collectibleOrder.length / 4);
-        for (let fieldIndex = 0; fieldIndex < totalFields; fieldIndex++) {
-
-            // Dodaj nagłówek Epic przed polem 10 (fieldIndex === 9)
-            if (fieldIndex === 9) {
-                fields.push({
-                    name: 'Epic',
-                    value: '\u200B',
-                    inline: false
-                });
-            }
+        // Pola 2-8: Legend collectibles (7 pól × 4 = 28 collectibles)
+        for (let fieldNum = 2; fieldNum <= 8; fieldNum++) {
             const fieldItems = [];
 
-            // Pobierz 4 itemy dla tego pola
-            for (let i = 0; i < 4 && itemIndex < collectibleOrder.length; i++) {
-                const collectibleName = collectibleOrder[itemIndex];
-                if (collectibleName === '') {
-                    // Puste pozycje - nie dodawaj niczego
-                } else {
+            for (let i = 0; i < 4 && collectibleIndex < collectibleOrder.length; i++) {
+                const collectibleName = collectibleOrder[collectibleIndex];
+                if (collectibleName !== '') {
                     const collectible = collectibles[collectibleName];
                     if (collectible && collectibleIcons[collectibleName]) {
                         const icon = collectibleIcons[collectibleName];
@@ -1416,21 +1403,53 @@ class SurvivorService {
                         fieldItems.push(`${icon} ${stars}`);
                     }
                 }
-                itemIndex++;
+                collectibleIndex++;
             }
 
-            // Dodaj pole tylko jeśli ma jakieś itemy lub jeśli to puste pola 8 i 9
             if (fieldItems.length > 0) {
                 fields.push({
                     name: '\u200B',
                     value: fieldItems.join('\n'),
                     inline: true
                 });
-            } else if (fieldIndex === 7 || fieldIndex === 8 || fieldIndex === 17) {
-                // Pola 8, 9 i 18 (indeksy 7, 8 i 17) są celowo puste
+            }
+        }
+
+        // Pole 9: Puste
+        fields.push({
+            name: '\u200B',
+            value: '\u200B',
+            inline: true
+        });
+
+        // Pole 10: Nagłówek Epic
+        fields.push({
+            name: '\u200B',
+            value: '<:J_CollYellow:1402532951492657172> Epic',
+            inline: true
+        });
+
+        // Pola 11-18: Epic collectibles (8 pól × 4 = 32 collectibles)
+        for (let fieldNum = 11; fieldNum <= 18; fieldNum++) {
+            const fieldItems = [];
+
+            for (let i = 0; i < 4 && collectibleIndex < collectibleOrder.length; i++) {
+                const collectibleName = collectibleOrder[collectibleIndex];
+                if (collectibleName !== '') {
+                    const collectible = collectibles[collectibleName];
+                    if (collectible && collectibleIcons[collectibleName]) {
+                        const icon = collectibleIcons[collectibleName];
+                        const stars = formatStars(collectible.stars);
+                        fieldItems.push(`${icon} ${stars}`);
+                    }
+                }
+                collectibleIndex++;
+            }
+
+            if (fieldItems.length > 0) {
                 fields.push({
                     name: '\u200B',
-                    value: '\u200B',
+                    value: fieldItems.join('\n'),
                     inline: true
                 });
             }
@@ -1472,12 +1491,12 @@ class SurvivorService {
                     else if (stars === 9) boxes = 16;
                     else if (stars === 10) boxes = 20;
 
-                    // Określ czy to Legend (pola 1-9, pozycje 0-35) czy Epic (pola 10+, pozycje 36+)
-                    if (i < 36) {
-                        // Pola 1-9 = Legend (pozycje 0-35 w collectibleOrder)
+                    // Określ czy to Legend (pozycje 0-27) czy Epic (pozycje 28+)
+                    if (i < 28) {
+                        // Pierwsze 28 collectibles = Legend (pola 2-8)
                         legendBoxes += boxes;
                     } else {
-                        // Pola 10+ = Epic (pozycje 36+ w collectibleOrder)
+                        // Pozostałe collectibles = Epic (pola 11-18)
                         epicBoxes += boxes;
                     }
                 }
