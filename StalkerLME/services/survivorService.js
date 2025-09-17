@@ -520,7 +520,7 @@ class SurvivorService {
         else if (stats.efficiency >= 40) embedColor = '#ffa500'; // Pomarańczowy dla niskiej
 
         // Ogranicz długość tytułu do 250 znaków (Discord limit 256)
-        const title = `Analiza Ekwipunku gracza ${userTag}`;
+        const title = `Analiza konta gracza ${userTag}`;
         const safeTitle = title.length > 250 ? title.substring(0, 247) + '...' : title;
 
         // Przygotowanie itemów do pierwszej strony (w osobnych polach)
@@ -1963,7 +1963,7 @@ class SurvivorService {
             const setNumber = fieldNum - 10;
 
             fields.push({
-                name: `Set ${setNumber}`,
+                name: `<:pusto:1417874543283802143> Set ${setNumber}`,
                 value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
                 inline: true
             });
