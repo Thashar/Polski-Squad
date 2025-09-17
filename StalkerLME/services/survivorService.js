@@ -689,6 +689,19 @@ class SurvivorService {
             inline: false
         });
 
+        // Dodaj footer z czasem wygaśnięcia do wszystkich stron
+        const expirationTime = new Date();
+        expirationTime.setHours(expirationTime.getHours() + 1); // +1 godzina
+        const expirationText = `Analiza zostanie usunięta o ${expirationTime.toTimeString().slice(0, 5)}`;
+
+        page0.setFooter({ text: expirationText });
+        page1.setFooter({ text: expirationText });
+        page2.setFooter({ text: expirationText });
+        page3.setFooter({ text: expirationText });
+        page4.setFooter({ text: expirationText });
+        page5.setFooter({ text: expirationText });
+        page6.setFooter({ text: expirationText });
+
         return [page0, page1, page2, page3, page4, page5, page6];
     }
 
@@ -738,7 +751,6 @@ class SurvivorService {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('delete_embed')
-                    .setLabel('Usuń')
                     .setStyle(ButtonStyle.Danger)
                     .setEmoji('🗑️')
             );
@@ -1327,7 +1339,7 @@ class SurvivorService {
             'Eye of True Vision': '<:Coll_eye_of_true_vision:1417581382359584838>',
             'Life Hourglass': '<:Coll_life_hourglass:1417581729216073738>',
             'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417581892596662333>',
-            'Dice of Destiny': '<:Coll_dice_of_destiny:1417442718665146428>',
+            'Dice of Destiny': '<:Coll_dice_of_destiny:1417581282916962427>',
             'Dicern': '<:Coll_dicern:1454181949456273479>',
             'Elemental Ring': '<:Coll_elemental_ring:1417581367021146133>',
             'Anti-Gravity Device': '<:Coll_anti_gravity_device:1417581048224809012>',
