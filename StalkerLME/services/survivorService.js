@@ -1425,7 +1425,7 @@ class SurvivorService {
         fields.push({
             name: '\u200B',
             value: '<:J_CollYellow:1402532951492657172> **Epic**',
-            inline: true
+            inline: false
         });
 
         // Pola 11-18: Epic collectibles (8 pól × 4 = 32 collectibles)
