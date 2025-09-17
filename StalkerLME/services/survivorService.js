@@ -1247,6 +1247,7 @@ class SurvivorService {
         // Sprawdź czy buildData ma collectibles
         let collectibles = {};
 
+
         // Sprawdź różne możliwe struktury
         if (buildData.collectibles && buildData.collectibles.data) {
             collectibles = buildData.collectibles.data;
@@ -1265,6 +1266,7 @@ class SurvivorService {
         } else if (buildData.data && buildData.data.Collectibles) {
             collectibles = buildData.data.Collectibles;
         }
+
 
         // Mapowanie nazw collectibles na ikony
         const collectibleIcons = {
