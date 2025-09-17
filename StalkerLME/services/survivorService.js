@@ -1282,58 +1282,27 @@ class SurvivorService {
             'Eye of True Vision': '<:Coll_eye_of_true_vision:1417581382359584838>',
             'Life Hourglass': '<:Coll_life_hourglass:1417581729216073738>',
             'Nano-Mimetic Mask': '<:Coll_nano_mimetic_mask:1417581892596662333>',
-            'Dice of Destiny': '<:Coll_dice_of_destiny:1417442718665146428>',
-            'Dimension Foil': '<:Coll_dimension_foil:1417581312029491240>',
-            'Mental Sync Helm': '<:Coll_mental_sync_helm:1417581806445793320>',
-            'Atomic Mech': '<:Coll_atomic_mech:1417581142483275892>',
-            'Time Essence Bottle': '<:Coll_time_essence_bottle:1417582361045893142>',
-            'Dragon Tooth': '<:Coll_dragon_tooth:1417581330719572038>',
-            'Hyper Neuron': '<:Coll_hyper_neuron:1417581619019255921>',
-            'Cyber Totem': '<:Coll_cyber_totem:1417581265829236888>',
-            'Clone Mirror': '<:Coll_clone_mirror:1417581204126961815>',
-            'Dreamscape Puzzle': '<:Coll_dreamscape_puzzle:1417581348851421397>',
-            'Gene Splicer': '<:Coll_gene_splicer:1417581442636058694>',
-            'Memory Editor': '<:Coll_memory_editor:1417581771234480249>',
-            'Temporal Rewinder': '<:Coll_temporal_rewinder:1417582340338614401>',
-            'Spatial Rewinder': '<:Coll_spatial_rewinder:1417582215629639801>',
-            'Holodream Fluid': '<:Coll_holodream_fluid:1417581561913806908>',
-            'Golden Cutlery': '<:Coll_golden_cutlery:1417581503298273484>',
-            'Old Medical Book': '<:Coll_old_medical_book:1417581963887509525>',
-            'Savior\'s Memento': '<:Coll_savior_s_memento:1417582102320386140>',
-            "Savior's Memento": '<:Coll_savior_s_memento:1417582102320386140>',
-            'Safehouse Map': '<:Coll_safehouse_map:1417582146511704074>',
-            'Lucky Charm': '<:Coll_lucky_charm:1417581754008731658>',
-            'Scientific Luminary\'s Journal': '<:Coll_scientific_luminary_s_journ:1417582167558590474>',
-            "Scientific Luminary's Journal": '<:Coll_scientific_luminary_s_journ:1417582167558590474>',
-            'Super Circuit Board': '<:Coll_super_circuit_board:1417582284948901898>',
-            'Mystical Halo': '<:Coll_mystical_halo:1417581868215173284>',
-            'Tablet of Epics': '<:Coll_tablet_of_epics:1417582318247477398>',
-            'Primordial War Drum': '<:Coll_primordial_war_drum:1417582068086472755>',
-            'Flaming Plume': '<:Coll_flaming_plume:1417581397065072701>',
-            'Astral Dewdrop': '<:Coll_astral_dewdrop:1417581123831070761>',
-            'Nuclear Battery': '<:Coll_nuclear_battery:1417581940340428822>',
-            'Plasma Sword': '<:Coll_plasma_sword:1417582018241499226>',
-            'Golden Horn': '<:Coll_golden_horn:1417581520700444893>',
-            'Elemental Ring': '<:Coll_elemental_ring:1417581367021146133>',
-            'Anti-Gravity Device': '<:Coll_anti_gravity_device:1417581048224809012>',
-            'Hydraulic Flipper': '<:Coll_hydraulic_flipper:1417581591412346880>',
-            'Superhuman Pill': '<:Coll_superhuman_pill:1417582302107799723>',
-            'Comms Conch': '<:Coll_comms_conch:1417581229435519006>',
-            'Mini Dyson Sphere': '<:Coll_mini_dyson_sphere:1417581850347704341>',
-            'Micro Artificial Sun': '<:Coll_micro_artificial_sun:1417581829212344433>',
-            'Klein Bottle': '<:Coll_klein_bottle:1417581710132117516>',
-            'Antiparticle Gourd': '<:Coll_antiparticle_gourd:1417581065152893058>',
-            'Wildfire Furnace': '<:Coll_wildfire_furnace:1417582420638826526>',
-            'Infinity Score': '<:Coll_infinity_score:1417581669329801286>',
-            'Cosmic Compass': '<:Coll_cosmic_compass:1417581245793046698>',
-            'Wormhole Detector': '<:Coll_wormhole_detector:1417582451647058071>',
-            'Shuttle Capsule': '<:Coll_shuttle_capsule:1417582195681263770>',
-            'Neurochip': '<:Coll_neurochip:1417581917804429442>',
-            'Star-Rail Passenger Card': '<:Coll_star_rail_passenger_card:1417582235636334803>',
-            'Portable Mech Case': '<:Coll_portable_mech_case:1417582046607310930>'
+            'Dicern': '<:Coll_dicern:1454181949456273479>',
+            'Elemental Ring': '<:Coll_elemental_ring:1454181949456269548>',
+            'Anti-Gravity Device': '<:Coll_anti_gravity_device:1454181949456269584>',
+            'Hydraulic Flipper': '<:Coll_hydraulic_flipper:1454181949456269528>',
+            'Superhuman Pill': '<:Coll_superhuman_pill:1454181949456269440>',
+            'Comms Conch': '<:Coll_comms_conch:1454181949456269576>',
+            'Mini Dyson Sphere': '<:Coll_mini_dyson_sphere:1454181949456269588>',
+            'Klein Bottle': '<:Coll_klein_bottle:1454181949456269532>',
+            'Antiparticle Gourd': '<:Coll_antiparticle_gourd:1454181949456269560>',
+            'Wildfire Furnace': '<:Coll_wildfire_furnace:1454181949456273475>',
+            'Infinity Score': '<:Coll_infinity_score:1454181949456269536>',
+            'Cosmic Compass': '<:Coll_cosmic_compass:1454181949456269564>',
+            'Wormhole Detector': '<:Coll_wormhole_detector:1454181949456269524>',
+            'Shuttle Capsule': '<:Coll_shuttle_capsule:1454181949456269540>',
+            'Micro Artificial Sun': '<:Coll_micro_artificial_sun:1454181949456269544>',
+            'Neurochip': '<:Coll_neurochip:1454181949456269572>',
+            'Star-Rail Passenger Card': '<:Coll_star_rail_passenger_card:1454181949456269556>',
+            'Portable Mech Case': '<:Coll_portable_mech_case:1454181949456269552>'
         };
 
-        // Collectibles w kolejności zgodnej z rzeczywistymi danymi z API
+        // Collectibles w kolejności zgodnej z rzeczywistymi danymi z API (30 pozycji)
         const collectibleOrder = [
             'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
             'Angelic Tear Crystal', 'Unicorn\'s Horn', 'Otherworld Key', 'Starcore Diamond',
@@ -1342,15 +1311,8 @@ class SurvivorService {
             'Atomic Mech', 'Time Essence Bottle', 'Dragon Tooth', 'Hyper Neuron',
             'Cyber Totem', 'Clone Mirror', 'Dreamscape Puzzle', 'Gene Splicer',
             'Memory Editor', 'Temporal Rewinder', 'Spatial Rewinder', 'Holodream Fluid',
-            'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
-            '', '', '', '', // Pola 8 i 9 puste (pozycje 32-35 w danych to null)
-            'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
-            'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
-            'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
-            'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
-            'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
-            'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
-            'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
+            '', '', // Pola 8 i 9 puste
+            'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
         ];
 
         // Funkcja do formatowania gwiazdek
@@ -1360,57 +1322,73 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Grupuj collectibles po 8 w polu
+        // Grupuj collectibles po 4 w polu
         const fields = [];
-        const allItems = [];
+        let itemIndex = 0;
 
-        for (const collectibleName of collectibleOrder) {
-            if (collectibleName === '') {
-                // Puste pole
-                allItems.push('');
-            } else {
+        // Grupuj po 4 itemy na pole dla pierwszych 7 pól (28 itemów)
+        for (let fieldIndex = 0; fieldIndex < 7; fieldIndex++) {
+            const fieldItems = [];
+
+            for (let i = 0; i < 4 && itemIndex < collectibleOrder.length; i++) {
+                const collectibleName = collectibleOrder[itemIndex];
+                if (collectibleName === '') {
+                    // Pomiń puste wpisy
+                } else {
+                    const collectible = collectibles[collectibleName];
+                    if (collectible && collectibleIcons[collectibleName]) {
+                        const icon = collectibleIcons[collectibleName];
+                        const stars = formatStars(collectible.stars);
+                        fieldItems.push(`${icon} ${stars}`);
+                    }
+                }
+                itemIndex++;
+            }
+
+            if (fieldItems.length > 0) {
+                fields.push({
+                    name: '\u200B',
+                    value: fieldItems.join('\n'),
+                    inline: true
+                });
+            }
+        }
+
+        // Dodaj puste pola 8 i 9
+        fields.push({
+            name: '\u200B',
+            value: '\u200B',
+            inline: true
+        });
+        fields.push({
+            name: '\u200B',
+            value: '\u200B',
+            inline: true
+        });
+
+        // Dodaj ostatnie 2 itemy w polu 10 (jeśli istnieją)
+        const remainingItems = [];
+        while (itemIndex < collectibleOrder.length) {
+            const collectibleName = collectibleOrder[itemIndex];
+            if (collectibleName !== '') {
                 const collectible = collectibles[collectibleName];
                 if (collectible && collectibleIcons[collectibleName]) {
                     const icon = collectibleIcons[collectibleName];
                     const stars = formatStars(collectible.stars);
-                    allItems.push(`${icon} ${stars}`);
+                    remainingItems.push(`${icon} ${stars}`);
                 }
             }
+            itemIndex++;
         }
 
-        // Grupuj po 4 itemy na pole (inline: true dla układu w prawo)
-        for (let i = 0; i < allItems.length; i += 4) {
-            const chunk = allItems.slice(i, i + 4);
-            const fieldNumber = Math.floor(i / 4) + 1;
-
-            // Pola 8 i 9 są puste
-            if (fieldNumber === 8 || fieldNumber === 9) {
-                fields.push({
-                    name: '\u200B',
-                    value: '\u200B', // Puste pole
-                    inline: true
-                });
-            } else {
-                // Filtruj puste elementy i połącz
-                const nonEmptyItems = chunk.filter(item => item !== '');
-                if (nonEmptyItems.length > 0) {
-                    fields.push({
-                        name: '\u200B',
-                        value: nonEmptyItems.join('\n'),
-                        inline: true
-                    });
-                }
-            }
-        }
-
-        // Dodaj puste pola 8 i 9 jeśli nie zostały jeszcze dodane
-        while (fields.length < 9) {
+        if (remainingItems.length > 0) {
             fields.push({
                 name: '\u200B',
-                value: '\u200B',
+                value: remainingItems.join('\n'),
                 inline: true
             });
         }
+
 
         // Jeśli nie ma collectibles, pokaż wiadomość
         if (fields.length === 0) {
