@@ -278,10 +278,10 @@ class SurvivorService {
         // Mapowanie typów pets na nazwy
         const petTypeToName = {
             1: 'Rex',
-            2: 'Puffo',
-            3: 'Crucker',
-            4: 'Croaky',
-            5: 'Capy'
+            2: 'Croaky',
+            3: 'Capy',
+            4: 'Crucker',
+            5: 'Puffo'
         };
 
         // Mapowanie nazw pets na ikony Discord
