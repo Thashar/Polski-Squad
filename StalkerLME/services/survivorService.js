@@ -2148,21 +2148,28 @@ class SurvivorService {
             }
         }
 
+        // Przygotuj pet skills text
+        const petSkillsText = this.getPetSkillsText(buildData, petName);
+
         // Dodaj pole z informacjami o pecie w jednym miejscu
+        let fullValue = (starDisplay || 'Brak gwiazdek') + resourceText;
+
+        // Dodaj pet skills do tego samego pola jeśli istnieją
+        if (petSkillsText) {
+            fullValue += '\n\n' + petSkillsText;
+        }
+
         embed.addFields({
             name: `${pets.icon || '❓'} ${pets.name || 'Unknown'}`,
-            value: (starDisplay || 'Brak gwiazdek') + resourceText,
+            value: fullValue,
             inline: false
         });
-
-        // Dodaj pet skills jeśli istnieją
-        this.addPetSkillsFields(embed, buildData, petName);
     }
 
     /**
-     * Dodaje pola Pet Skills do embeda
+     * Zwraca tekst z Pet Skills
      */
-    addPetSkillsFields(embed, buildData, petName) {
+    getPetSkillsText(buildData, petName) {
         let petSkills = {};
 
         // Sprawdź różne możliwe struktury
@@ -2177,7 +2184,7 @@ class SurvivorService {
         }
 
         if (!petSkills || Object.keys(petSkills).length === 0) {
-            return; // Brak pet skills - nie dodawaj pola
+            return null; // Brak pet skills - zwróć null
         }
 
         // Ikony dla pet skills
@@ -2230,13 +2237,7 @@ class SurvivorService {
             }
         }
 
-        if (skillsText.trim()) {
-            embed.addFields({
-                name: 'Pet Skills',
-                value: skillsText.trim(),
-                inline: false
-            });
-        }
+        return skillsText.trim() || null;
     }
 }
 
