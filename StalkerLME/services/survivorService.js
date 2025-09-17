@@ -1335,7 +1335,7 @@ class SurvivorService {
             'Hyper Neuron': '<:Coll_hyper_neuron:1417581619019255921>'
         };
 
-        // Collectibles w kolejności zgodnej z rzeczywistymi danymi z buildu (60 pozycji)
+        // Collectibles w tej samej kolejności co w decodeCollectibles()
         const collectibleOrder = [
             // Pozycje 1-4 (Pole 1)
             'Human Genome Mapping', 'Book of Ancient Wisdom', 'Immortal Lucky Coin', 'Instellar Transition Matrix Design',
@@ -1355,21 +1355,21 @@ class SurvivorService {
             '', '', '', '',
             // Pozycje 33-36 (Pole 9) - PUSTE
             '', '', '', '',
-            // Pozycje 37-40 (Pole 10)
+            // Pozycje 37-40 (Pole 10) - Rzeczywiste pozycje 29-32 z decodeCollectibles
             'Golden Cutlery', 'Old Medical Book', 'Savior\'s Memento', 'Safehouse Map',
-            // Pozycje 41-44 (Pole 11)
+            // Pozycje 41-44 (Pole 11) - Rzeczywiste pozycje 33-36 z decodeCollectibles
             'Lucky Charm', 'Scientific Luminary\'s Journal', 'Super Circuit Board', 'Mystical Halo',
-            // Pozycje 45-48 (Pole 12)
+            // Pozycje 45-48 (Pole 12) - Rzeczywiste pozycje 37-40 z decodeCollectibles
             'Tablet of Epics', 'Primordial War Drum', 'Flaming Plume', 'Astral Dewdrop',
-            // Pozycje 49-52 (Pole 13)
+            // Pozycje 49-52 (Pole 13) - Rzeczywiste pozycje 41-44 z decodeCollectibles
             'Nuclear Battery', 'Plasma Sword', 'Golden Horn', 'Elemental Ring',
-            // Pozycje 53-56 (Pole 14)
+            // Pozycje 53-56 (Pole 14) - Rzeczywiste pozycje 45-48 z decodeCollectibles
             'Anti-Gravity Device', 'Hydraulic Flipper', 'Superhuman Pill', 'Comms Conch',
-            // Pozycje 57-60 (Pole 15)
+            // Pozycje 57-60 (Pole 15) - Rzeczywiste pozycje 49-52 z decodeCollectibles
             'Mini Dyson Sphere', 'Micro Artificial Sun', 'Klein Bottle', 'Antiparticle Gourd',
-            // Pozycje 61-64 (Pole 16)
+            // Pozycje 61-64 (Pole 16) - Rzeczywiste pozycje 53-56 z decodeCollectibles
             'Wildfire Furnace', 'Infinity Score', 'Cosmic Compass', 'Wormhole Detector',
-            // Pozycje 65-68 (Pole 17)
+            // Pozycje 65-68 (Pole 17) - Rzeczywiste pozycje 57-60 z decodeCollectibles
             'Shuttle Capsule', 'Neurochip', 'Star-Rail Passenger Card', 'Portable Mech Case'
         ];
 
