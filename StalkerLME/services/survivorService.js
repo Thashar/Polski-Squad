@@ -1378,62 +1378,36 @@ class SurvivorService {
             return '★'.repeat(stars - 5);
         };
 
-        // Struktura z nagłówkami i itemami w odpowiednich polach
+        // Tworzymy pola zgodnie z collectibleOrder
         const fields = [];
-        let collectibleIndex = 0;
 
-        // Pole 1: Nagłówek Legend
-        fields.push({
-            name: '\u200B',
-            value: '<:J_CollRed:1402533014080065546> **Legend**',
-            inline: true
-        });
-
-        // Pola 2-8: Legend collectibles (7 pól × 4 = 28 collectibles)
-        for (let fieldNum = 2; fieldNum <= 8; fieldNum++) {
+        for (let fieldNum = 1; fieldNum <= 18; fieldNum++) {
             const fieldItems = [];
+            const startIndex = (fieldNum - 1) * 4;
 
-            for (let i = 0; i < 4; i++) {
-                if (collectibleIndex < collectibleOrder.length) {
-                    const collectibleName = collectibleOrder[collectibleIndex];
-                    if (collectibleName !== '') {
-                        const collectible = collectibles[collectibleName];
-                        if (collectible && collectibleIcons[collectibleName]) {
-                            const icon = collectibleIcons[collectibleName];
-                            const stars = formatStars(collectible.stars);
-                            fieldItems.push(`${icon} ${stars}`);
-                        }
-                    }
-                    collectibleIndex++;
-                }
+            // Dodaj nagłówek Legend do pola 1
+            if (fieldNum === 1) {
+                fields.push({
+                    name: '\u200B',
+                    value: '<:J_CollRed:1402533014080065546> **Legend**',
+                    inline: true
+                });
+                continue;
             }
 
-            fields.push({
-                name: '\u200B',
-                value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
-                inline: true
-            });
-        }
+            // Dodaj nagłówek Epic do pola 10
+            if (fieldNum === 10) {
+                fields.push({
+                    name: '\u200B',
+                    value: '<:J_CollYellow:1402532951492657172> **Epic**',
+                    inline: true
+                });
+                continue;
+            }
 
-        // Pole 9: Puste
-        fields.push({
-            name: '\u200B',
-            value: '\u200B',
-            inline: true
-        });
-
-        // Pole 10: Nagłówek Epic
-        fields.push({
-            name: '\u200B',
-            value: '<:J_CollYellow:1402532951492657172> **Epic**',
-            inline: true
-        });
-
-        // Pola 11-18: Epic collectibles (8 pól × 4 = 32 collectibles)
-        for (let fieldNum = 11; fieldNum <= 18; fieldNum++) {
-            const fieldItems = [];
-
+            // Dla pozostałych pól, dodaj collectibles
             for (let i = 0; i < 4; i++) {
+                const collectibleIndex = startIndex + i;
                 if (collectibleIndex < collectibleOrder.length) {
                     const collectibleName = collectibleOrder[collectibleIndex];
                     if (collectibleName !== '') {
@@ -1444,7 +1418,6 @@ class SurvivorService {
                             fieldItems.push(`${icon} ${stars}`);
                         }
                     }
-                    collectibleIndex++;
                 }
             }
 
