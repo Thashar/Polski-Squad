@@ -187,9 +187,14 @@ class SurvivorService {
                 buildData.customSets = this.decodeCustomSets(data.n);
             }
 
-            // Dekodowanie pets z klucza "o"
+            // Dekodowanie pets z klucza "o" (podstawowy format)
             if (data.o && typeof data.o === 'object') {
-                buildData.pets = this.decodePets(data.o);
+                buildData.pet = this.decodePets(data.o);
+            }
+
+            // Dekodowanie pets z klucza "pet" (alternatywny format)
+            if (data.pet && typeof data.pet === 'object') {
+                buildData.pet = this.decodePets(data.pet);
             }
 
             // Dekodowanie petSkills z klucza "petSkills" (jeśli istnieje)
@@ -367,9 +372,9 @@ class SurvivorService {
             result.customSets = data.customSets;
         }
 
-        // Zachowaj pets jeśli istnieją
-        if (data.pets) {
-            result.pets = data.pets;
+        // Zachowaj pet jeśli istnieje
+        if (data.pet) {
+            result.pet = data.pet;
         }
 
         // Zachowaj petSkills jeśli istnieją
@@ -2071,14 +2076,14 @@ class SurvivorService {
         let pets = {};
 
         // Sprawdź różne możliwe struktury
-        if (buildData.pets && buildData.pets.data) {
-            pets = buildData.pets.data;
-        } else if (buildData.pets) {
-            pets = buildData.pets;
-        } else if (buildData.data && buildData.data.pets && buildData.data.pets.data) {
-            pets = buildData.data.pets.data;
-        } else if (buildData.data && buildData.data.pets) {
-            pets = buildData.data.pets;
+        if (buildData.pet && buildData.pet.data) {
+            pets = buildData.pet.data;
+        } else if (buildData.pet) {
+            pets = buildData.pet;
+        } else if (buildData.data && buildData.data.pet && buildData.data.pet.data) {
+            pets = buildData.data.pet.data;
+        } else if (buildData.data && buildData.data.pet) {
+            pets = buildData.data.pet;
         }
 
         if (!pets || !pets.name || !pets.stars) {
