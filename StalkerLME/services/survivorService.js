@@ -1810,6 +1810,13 @@ class SurvivorService {
         } else {
             embed.addFields(...fields);
 
+            // Dodaj puste pole 9 dla układu
+            embed.addFields({
+                name: '\u200B',
+                value: '\u200B',
+                inline: true
+            });
+
             // Oblicz liczbę użytych skrzynek Epic
             let epicBoxes = 0;
             for (let i = 28; i < collectibleOrder.length; i++) { // Od 28+ = Epic
