@@ -197,14 +197,10 @@ class SurvivorService {
                 buildData.pet = this.decodePets(data.pet);
             }
 
-            // Dekodowanie petSkills z klucza "petSkills" (jeśli istnieje)
+            // Dekodowanie petSkills - sprawdź różne możliwe klucze
             if (data.petSkills && typeof data.petSkills === 'object') {
                 buildData.petSkills = this.decodePetSkills(data.petSkills);
-            }
-
-            // Sprawdź klucz "_V" dla pet skills (prawdopodobnie tutaj są)
-            if (data._V && typeof data._V === 'object') {
-                console.log(`🔍 Zawartość klucza "_V":`, JSON.stringify(data._V, null, 2));
+            } else if (data._V && typeof data._V === 'object') {
                 buildData.petSkills = this.decodePetSkills(data._V);
             }
 
