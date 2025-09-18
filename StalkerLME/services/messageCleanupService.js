@@ -148,6 +148,24 @@ class MessageCleanupService {
         }
     }
 
+    async removeScheduledMessage(messageId) {
+        try {
+            const initialCount = this.scheduledMessages.length;
+            this.scheduledMessages = this.scheduledMessages.filter(msg => msg.messageId !== messageId);
+
+            if (this.scheduledMessages.length < initialCount) {
+                await this.saveScheduledMessages();
+                this.logger.info(`[MESSAGE_CLEANUP] ✅ Usunięto zaplanowane usuwanie dla wiadomości ${messageId}`);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            this.logger.error('[MESSAGE_CLEANUP] ❌ Błąd usuwania zaplanowanego usuwania:', error.message);
+            return false;
+        }
+    }
+
     getScheduledCount() {
         return this.scheduledMessages.length;
     }

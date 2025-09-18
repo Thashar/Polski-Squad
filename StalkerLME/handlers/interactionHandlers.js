@@ -475,9 +475,24 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Usuń embed i dane paginacji
-        await interaction.message.delete();
-        sharedState.buildPagination.delete(interaction.message.id);
-        logger.info(`🗑️ Embed buildu został usunięty przez ${interaction.user.tag}`);
+        try {
+            // Usuń zaplanowane automatyczne usuwanie z pliku
+            await sharedState.messageCleanupService.removeScheduledMessage(interaction.message.id);
+
+            // Usuń wiadomość
+            await interaction.message.delete();
+
+            // Usuń dane paginacji z pamięci
+            sharedState.buildPagination.delete(interaction.message.id);
+
+            logger.info(`🗑️ Embed buildu został usunięty przez ${interaction.user.tag}`);
+        } catch (error) {
+            logger.error(`❌ Błąd usuwania embeda: ${error.message}`);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas usuwania embeda.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
         return;
     }
 
