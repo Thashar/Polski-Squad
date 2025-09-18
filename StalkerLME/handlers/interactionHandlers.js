@@ -1327,6 +1327,29 @@ async function handleOcrDebugCommand(interaction, config) {
 async function handleDecodeCommand(interaction, sharedState) {
     const { config, survivorService } = sharedState;
 
+    // Lista dozwolonych kanałów dla zwykłych użytkowników
+    const allowedChannels = [
+        '1207041051831832586',
+        '1194299628905042040',
+        '1194298890069999756',
+        '1200051393843695699',
+        '1262792174475673610',
+        '1269698743393849458',
+        '1173653205557719140'
+    ];
+
+    // Sprawdź uprawnienia: admin może wszędzie, zwykły użytkownik tylko na dozwolonych kanałach
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const isAllowedChannel = allowedChannels.includes(interaction.channelId);
+
+    if (!isAdmin && !isAllowedChannel) {
+        await interaction.reply({
+            content: '❌ Komenda `/decode` może być używana tylko na określonych kanałach lub przez administratorów.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
     const code = interaction.options.getString('code');
 
     if (!code || code.trim().length === 0) {

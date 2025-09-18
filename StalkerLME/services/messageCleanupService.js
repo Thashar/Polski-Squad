@@ -102,19 +102,24 @@ class MessageCleanupService {
             // Pobierz klienta Discord z globalnego kontekstu
             const client = global.stalkerLMEClient;
             if (!client) {
-                this.logger.warn('[MESSAGE_CLEANUP] ⚠️ Brak dostępu do klienta Discord');
+                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Brak dostępu do klienta Discord dla wiadomości ${messageData.messageId}`);
+                return;
+            }
+
+            if (!client.isReady()) {
+                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Klient Discord nie jest gotowy dla wiadomości ${messageData.messageId}`);
                 return;
             }
 
             const channel = await client.channels.fetch(messageData.channelId);
             if (!channel) {
-                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Nie znaleziono kanału ${messageData.channelId}`);
+                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Nie znaleziono kanału ${messageData.channelId} dla wiadomości ${messageData.messageId}`);
                 return;
             }
 
             const message = await channel.messages.fetch(messageData.messageId);
             if (!message) {
-                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Nie znaleziono wiadomości ${messageData.messageId}`);
+                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Nie znaleziono wiadomości ${messageData.messageId} w kanale ${messageData.channelId}`);
                 return;
             }
 
@@ -125,8 +130,17 @@ class MessageCleanupService {
             if (error.code === 10008) {
                 // Wiadomość już nie istnieje
                 this.logger.info(`[MESSAGE_CLEANUP] ℹ️ Wiadomość ${messageData.messageId} już została usunięta`);
+            } else if (error.code === 10003) {
+                // Kanał nie istnieje
+                this.logger.info(`[MESSAGE_CLEANUP] ℹ️ Kanał ${messageData.channelId} już nie istnieje dla wiadomości ${messageData.messageId}`);
+            } else if (error.code === 50001) {
+                // Brak uprawnień
+                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Brak uprawnień do usunięcia wiadomości ${messageData.messageId} w kanale ${messageData.channelId}`);
+            } else if (error.code === 50013) {
+                // Brak uprawnień do zarządzania wiadomościami
+                this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Brak uprawnień 'Manage Messages' dla wiadomości ${messageData.messageId}`);
             } else {
-                this.logger.error(`[MESSAGE_CLEANUP] ❌ Błąd usuwania wiadomości ${messageData.messageId}:`, error.message);
+                this.logger.error(`[MESSAGE_CLEANUP] ❌ Błąd usuwania wiadomości ${messageData.messageId}: ${error.message} (kod: ${error.code || 'brak'})`);
             }
         }
     }
