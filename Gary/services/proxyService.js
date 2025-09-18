@@ -1,5 +1,7 @@
 const axios = require('axios');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const fs = require('fs');
+const path = require('path');
 
 class ProxyService {
     constructor(config, logger) {
@@ -9,6 +11,17 @@ class ProxyService {
         // Losowy start proxy index przy każdym uruchomieniu
         this.currentProxyIndex = this.proxyList.length > 0 ? Math.floor(Math.random() * this.proxyList.length) : 0;
         this.enabled = config.proxy?.enabled || false;
+
+        // Plik do przechowywania statusów proxy
+        this.proxyStatusFile = path.join(__dirname, '../data/proxy_status.json');
+        this.ensureDataDirectory();
+
+        // Proxy blacklist - serwery które mają problemy
+        this.disabledProxies = new Set();
+        this.proxyErrors = new Map(); // Przechowuje informacje o błędach
+
+        // Wczytaj zapisane statusy proxy
+        this.loadProxyStatuses();
 
         // Log randomization
         if (this.enabled && this.proxyList.length > 0) {
@@ -32,7 +45,147 @@ class ProxyService {
     }
 
     /**
-     * Get next proxy from the list (round-robin)
+     * Zapewnia istnienie katalogu data
+     */
+    ensureDataDirectory() {
+        const dataDir = path.dirname(this.proxyStatusFile);
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+    }
+
+    /**
+     * Wczytuje statusy proxy z pliku
+     */
+    loadProxyStatuses() {
+        try {
+            if (fs.existsSync(this.proxyStatusFile)) {
+                const data = JSON.parse(fs.readFileSync(this.proxyStatusFile, 'utf8'));
+                const now = Date.now();
+
+                // Wczytaj statusy z pliku
+                Object.entries(data.proxyErrors || {}).forEach(([proxyMask, error]) => {
+                    const disabledAt = new Date(error.disabledAt).getTime();
+
+                    // Status 407 = trwale wyłączone
+                    if (error.status === 407) {
+                        this.disabledProxies.add(proxyMask);
+                        this.proxyErrors.set(proxyMask, error);
+                        this.logger.warn(`💾 WCZYTANO TRWALE WYŁĄCZONE PROXY: ${proxyMask} | Status 407 - WYMIEŃ DANE!`);
+                    }
+                    // Status 403 = sprawdź czy minęło 24h
+                    else if (error.status === 403) {
+                        const hours24 = 24 * 60 * 60 * 1000; // 24 godziny w ms
+                        if (now - disabledAt < hours24) {
+                            // Jeszcze zablokowane
+                            this.proxyErrors.set(proxyMask, error);
+                            const remainingHours = Math.ceil((hours24 - (now - disabledAt)) / (60 * 60 * 1000));
+                            this.logger.warn(`⏰ WCZYTANO TYMCZASOWO ZABLOKOWANE PROXY: ${proxyMask} | Pozostało ${remainingHours}h`);
+                        } else {
+                            // 24h minęło - usuń blokadę
+                            this.logger.info(`✅ PROXY ODBLOKOWANE PO 24H: ${proxyMask} | Status 403 cleared`);
+                        }
+                    }
+                });
+
+                // Wczytaj listę proxy jeśli istnieje w pliku
+                if (data.proxyList && Array.isArray(data.proxyList)) {
+                    this.proxyList = data.proxyList;
+                    this.logger.info(`💾 Wczytano ${this.proxyList.length} proxy z pliku`);
+                }
+            }
+        } catch (error) {
+            this.logger.error('❌ Błąd wczytywania statusów proxy:', error.message);
+        }
+    }
+
+    /**
+     * Zapisuje statusy proxy do pliku
+     */
+    saveProxyStatuses() {
+        try {
+            const data = {
+                proxyList: this.proxyList,
+                proxyErrors: Object.fromEntries(this.proxyErrors),
+                lastUpdated: new Date().toISOString()
+            };
+
+            fs.writeFileSync(this.proxyStatusFile, JSON.stringify(data, null, 2), 'utf8');
+        } catch (error) {
+            this.logger.error('❌ Błąd zapisywania statusów proxy:', error.message);
+        }
+    }
+
+    /**
+     * Sprawdza czy proxy jest wyłączone
+     */
+    isProxyDisabled(proxyUrl) {
+        const maskedProxy = this.maskProxy(proxyUrl);
+
+        // Sprawdź czy jest trwale wyłączone (Status 407)
+        if (this.disabledProxies.has(maskedProxy)) {
+            return true;
+        }
+
+        // Sprawdź czy jest tymczasowo zablokowane (Status 403)
+        if (this.proxyErrors.has(maskedProxy)) {
+            const error = this.proxyErrors.get(maskedProxy);
+            if (error.status === 403) {
+                const now = Date.now();
+                const disabledAt = new Date(error.disabledAt).getTime();
+                const hours24 = 24 * 60 * 60 * 1000; // 24 godziny w ms
+
+                if (now - disabledAt < hours24) {
+                    return true; // Jeszcze zablokowane
+                } else {
+                    // 24h minęło - usuń blokadę
+                    this.proxyErrors.delete(maskedProxy);
+                    this.saveProxyStatuses();
+                    this.logger.info(`✅ PROXY ODBLOKOWANE PO 24H: ${maskedProxy}`);
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Wyłącza proxy z użycia na podstawie błędu
+     */
+    disableProxy(proxyUrl, statusCode, errorMessage) {
+        const maskedProxy = this.maskProxy(proxyUrl);
+
+        // Status 407 = trwale wyłącz (wygasło konto)
+        if (statusCode === 407) {
+            this.disabledProxies.add(maskedProxy);
+            this.proxyErrors.set(maskedProxy, {
+                status: statusCode,
+                error: errorMessage,
+                disabledAt: new Date().toISOString(),
+                type: 'PERMANENT'
+            });
+            this.logger.warn(`🚫 PROXY TRWALE WYŁĄCZONY: ${maskedProxy} | Status 407 - Konto wygasło! Wymień dane dostępowe.`);
+            this.saveProxyStatuses();
+            return;
+        }
+
+        // Status 403 = tymczasowo wyłącz na 24h
+        if (statusCode === 403) {
+            this.proxyErrors.set(maskedProxy, {
+                status: statusCode,
+                error: errorMessage,
+                disabledAt: new Date().toISOString(),
+                type: 'TEMPORARY_24H'
+            });
+            this.logger.warn(`⏰ PROXY ZABLOKOWANY NA 24H: ${maskedProxy} | Status 403 - Cloudflare block.`);
+            this.saveProxyStatuses();
+            return;
+        }
+    }
+
+    /**
+     * Get next proxy from the list (round-robin) z filtrowaniem wyłączonych
      * @returns {string|null} Proxy URL or null if no proxies available
      */
     getNextProxy() {
@@ -40,14 +193,25 @@ class ProxyService {
             return null;
         }
 
-        const proxy = this.proxyList[this.currentProxyIndex];
-        this.currentProxyIndex = (this.currentProxyIndex + 1) % this.proxyList.length;
+        let attempts = 0;
+        const maxAttempts = this.proxyList.length;
 
-        return proxy;
+        while (attempts < maxAttempts) {
+            const proxy = this.proxyList[this.currentProxyIndex];
+            this.currentProxyIndex = (this.currentProxyIndex + 1) % this.proxyList.length;
+
+            if (!this.isProxyDisabled(proxy)) {
+                return proxy;
+            }
+            attempts++;
+        }
+
+        this.logger.warn('⚠️ Wszystkie proxy są wyłączone!');
+        return null;
     }
 
     /**
-     * Get random proxy from the list
+     * Get random proxy from the list z filtrowaniem wyłączonych
      * @returns {string|null} Proxy URL or null if no proxies available
      */
     getRandomProxy() {
@@ -55,8 +219,16 @@ class ProxyService {
             return null;
         }
 
-        const randomIndex = Math.floor(Math.random() * this.proxyList.length);
-        return this.proxyList[randomIndex];
+        // Filtruj dostępne proxy
+        const availableProxies = this.proxyList.filter(proxy => !this.isProxyDisabled(proxy));
+
+        if (availableProxies.length === 0) {
+            this.logger.warn('⚠️ Wszystkie proxy są wyłączone!');
+            return null;
+        }
+
+        const randomIndex = Math.floor(Math.random() * availableProxies.length);
+        return availableProxies[randomIndex];
     }
 
     /**
@@ -310,6 +482,12 @@ class ProxyService {
 
                 if (proxyUrl) {
                     this.logger.warn(`❌ Request failed via proxy ${this.maskProxy(proxyUrl)} on attempt ${attempt}: ${error.message}`);
+
+                    // Automatycznie wyłączaj problematyczne proxy
+                    const statusCode = error.response?.status;
+                    if (statusCode === 407 || statusCode === 403) {
+                        this.disableProxy(proxyUrl, statusCode, error.message);
+                    }
                 } else {
                     this.logger.warn(`❌ Request failed via direct connection on attempt ${attempt}: ${error.message}`);
                 }
@@ -425,6 +603,12 @@ class ProxyService {
 
                 if (proxyUrl) {
                     this.logger.warn(`❌ POST request failed via proxy ${this.maskProxy(proxyUrl)} on attempt ${attempt}: ${error.message}`);
+
+                    // Automatycznie wyłączaj problematyczne proxy
+                    const statusCode = error.response?.status;
+                    if (statusCode === 407 || statusCode === 403) {
+                        this.disableProxy(proxyUrl, statusCode, error.message);
+                    }
                 } else {
                     this.logger.warn(`❌ POST request failed via direct connection on attempt ${attempt}: ${error.message}`);
                 }
@@ -538,15 +722,91 @@ class ProxyService {
      * Get proxy statistics
      * @returns {Object} Proxy usage statistics
      */
+    /**
+     * Dodaje nowe proxy do listy
+     */
+    addProxy(proxyUrl) {
+        try {
+            // Walidacja formatu URL
+            const url = new URL(proxyUrl);
+            if (!['http:', 'https:'].includes(url.protocol)) {
+                throw new Error('Proxy musi używać protokołu HTTP lub HTTPS');
+            }
+
+            // Sprawdź czy proxy już istnieje
+            if (this.proxyList.includes(proxyUrl)) {
+                throw new Error('Proxy już istnieje na liście');
+            }
+
+            // Dodaj proxy
+            this.proxyList.push(proxyUrl);
+            this.saveProxyStatuses();
+
+            this.logger.info(`✅ DODANO NOWE PROXY: ${this.maskProxy(proxyUrl)}`);
+            return true;
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd dodawania proxy: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Usuwa proxy z listy
+     */
+    removeProxy(proxyUrl) {
+        try {
+            const index = this.proxyList.indexOf(proxyUrl);
+            if (index === -1) {
+                throw new Error('Proxy nie znaleziono na liście');
+            }
+
+            // Usuń proxy z listy
+            this.proxyList.splice(index, 1);
+
+            // Usuń z błędów i wyłączonych
+            const maskedProxy = this.maskProxy(proxyUrl);
+            this.disabledProxies.delete(maskedProxy);
+            this.proxyErrors.delete(maskedProxy);
+
+            // Zapisz zmiany
+            this.saveProxyStatuses();
+
+            this.logger.info(`🗑️ USUNIĘTO PROXY: ${maskedProxy}`);
+            return true;
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd usuwania proxy: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Znajduje proxy po masce (dla wyboru do usunięcia)
+     */
+    findProxyByMask(mask) {
+        return this.proxyList.find(proxy => this.maskProxy(proxy) === mask);
+    }
+
     getStats() {
+        const availableProxies = this.proxyList.filter(proxy => !this.isProxyDisabled(proxy));
+
         return {
             enabled: this.enabled,
             totalProxies: this.proxyList.length,
+            availableProxies: availableProxies.length,
+            disabledProxies: this.disabledProxies.size,
             currentIndex: this.currentProxyIndex,
             strategy: this.config.proxy?.strategy || 'round-robin',
             retryAttempts: this.retryAttempts,
             maxProxyAttempts: this.maxProxyAttempts,
-            usedProxiesCount: this.usedProxies.size
+            usedProxiesCount: this.usedProxies.size,
+            proxyErrors: Array.from(this.proxyErrors.entries()).map(([proxy, error]) => ({
+                proxy,
+                status: error.status,
+                type: error.type,
+                disabledAt: error.disabledAt
+            }))
         };
     }
 }
