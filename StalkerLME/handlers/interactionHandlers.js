@@ -1344,7 +1344,11 @@ async function handleDecodeCommand(interaction, sharedState) {
 
     // Sprawdź czy to wątek na kanale 1207041051831832586
     const channel = interaction.channel;
-    const isThreadOnAllowedChannel = channel.isThread() && channel.parentId === '1207041051831832586';
+    const isThread = channel.type === 11 || channel.type === 12; // GUILD_PUBLIC_THREAD or GUILD_PRIVATE_THREAD
+    const isThreadOnAllowedChannel = isThread && channel.parentId === '1207041051831832586';
+
+    // Debug: loguj informacje o kanale
+    logger.info(`[DECODE] Kanał: ${channel.id}, typ: ${channel.type}, parent: ${channel.parentId}, isThread: ${isThread}, dozwolony: ${isThreadOnAllowedChannel}`);
 
     if (!isAdmin && !isAllowedChannel && !isThreadOnAllowedChannel) {
         await interaction.reply({
