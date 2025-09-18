@@ -113,7 +113,11 @@ class InteractionHandler {
                     option.setName('proxy')
                         .setDescription('Select expired proxy to remove (Status 407 only)')
                         .setRequired(true)
-                        .setAutocomplete(true))
+                        .setAutocomplete(true)),
+
+            new SlashCommandBuilder()
+                .setName('proxy-refresh')
+                .setDescription('Refresh proxy list from Webshare API (Admin only)')
         ];
     }
 
@@ -159,7 +163,7 @@ class InteractionHandler {
         const { commandName } = interaction;
         
         // Check permissions for admin-only commands
-        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-remove'];
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-remove', 'proxy-refresh'];
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
@@ -206,6 +210,10 @@ class InteractionHandler {
 
                 case 'proxy-remove':
                     await this.handleRemoveProxyCommand(interaction);
+                    break;
+
+                case 'proxy-refresh':
+                    await this.handleProxyRefreshCommand(interaction);
                     break;
             }
         } catch (error) {
@@ -738,6 +746,54 @@ class InteractionHandler {
         }
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    async handleProxyRefreshCommand(interaction) {
+        // Check if user is administrator
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            await interaction.reply({
+                content: '❌ This command requires administrator permissions!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const oldCount = this.garrytoolsService.proxyService.proxyList.length;
+
+            await this.garrytoolsService.proxyService.refreshProxyListFromWebshare();
+
+            const newCount = this.garrytoolsService.proxyService.proxyList.length;
+
+            const embed = new EmbedBuilder()
+                .setTitle('🔄 Proxy List Refreshed')
+                .setColor(0x00ff00)
+                .addFields([
+                    { name: '📥 Source', value: 'Webshare API', inline: true },
+                    { name: '📊 Previous Count', value: oldCount.toString(), inline: true },
+                    { name: '📊 New Count', value: newCount.toString(), inline: true }
+                ])
+                .setDescription(`✅ Successfully refreshed proxy list from Webshare API.`)
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            this.logger.error('Error refreshing proxy list:', error);
+
+            const embed = new EmbedBuilder()
+                .setTitle('❌ Proxy Refresh Failed')
+                .setColor(0xff0000)
+                .addFields([
+                    { name: '❌ Error', value: error.message || 'Unknown error', inline: false },
+                    { name: '🔄 Fallback', value: 'Using existing proxy list or env fallback', inline: false }
+                ])
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+        }
     }
 
     async handleAutocompleteInteraction(interaction) {

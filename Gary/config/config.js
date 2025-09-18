@@ -75,16 +75,17 @@ module.exports = {
         process.env.GARY_ADMIN_ROLES.split(',').map(id => id.trim()) : 
         [],
     
-    // Proxy Settings (optional - for network diversity testing)
+    // Proxy Settings (Webshare API integration)
     proxy: {
         enabled: process.env.GARY_PROXY_ENABLED === 'true',
         strategy: process.env.GARY_PROXY_STRATEGY || 'random', // 'round-robin' or 'random'
         retryAttempts: parseInt(process.env.GARY_PROXY_RETRY_ATTEMPTS) || 10,
-        proxyList: process.env.GARY_PROXY_LIST ? process.env.GARY_PROXY_LIST.split(',').map(p => p.trim()) : [
-            // Example proxy formats (replace with actual proxies):
-            // 'http://proxy1.example.com:8080',
-            // 'http://username:password@proxy2.example.com:8080',
-            // 'https://proxy3.example.com:3128'
-        ]
+        // Webshare API endpoint for auto-updating proxy list
+        webshareUrl: process.env.GARY_WEBSHARE_URL || '',
+        // Fallback manual proxy list (used if webshare fails)
+        proxyList: process.env.GARY_PROXY_LIST ? process.env.GARY_PROXY_LIST.split(',').map(p => p.trim()) : [],
+        // Auto-refresh settings
+        autoRefresh: true,
+        refreshOnStartup: true
     }
 };

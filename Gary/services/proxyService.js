@@ -23,9 +23,26 @@ class ProxyService {
         // Wczytaj zapisane statusy proxy
         this.loadProxyStatuses();
 
-        // Log randomization
-        if (this.enabled && this.proxyList.length > 0) {
-            this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+        // Auto-refresh proxy list from Webshare API on startup
+        if (this.enabled && this.config.proxy?.refreshOnStartup && this.config.proxy?.webshareUrl) {
+            this.refreshProxyListFromWebshare().then(() => {
+                // Log randomization after refresh
+                if (this.proxyList.length > 0) {
+                    this.currentProxyIndex = Math.floor(Math.random() * this.proxyList.length);
+                    this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+                }
+            }).catch(error => {
+                this.logger.warn(`⚠️ Failed to refresh proxy list from Webshare: ${error.message}`);
+                // Log randomization with existing proxy list
+                if (this.proxyList.length > 0) {
+                    this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+                }
+            });
+        } else {
+            // Log randomization with existing proxy list
+            if (this.enabled && this.proxyList.length > 0) {
+                this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+            }
         }
         this.retryAttempts = config.proxy?.retryAttempts || 3;
         this.maxProxyAttempts = 10; // Maksymalnie 10 prób zmiany proxy
@@ -113,6 +130,68 @@ class ProxyService {
             fs.writeFileSync(this.proxyStatusFile, JSON.stringify(data, null, 2), 'utf8');
         } catch (error) {
             this.logger.error('❌ Błąd zapisywania statusów proxy:', error.message);
+        }
+    }
+
+    /**
+     * Pobiera listę proxy z Webshare API
+     */
+    async refreshProxyListFromWebshare() {
+        try {
+            if (!this.config.proxy?.webshareUrl) {
+                throw new Error('Webshare URL not configured');
+            }
+
+            this.logger.info('🌐 Refreshing proxy list from Webshare API...');
+
+            // Pobierz dane z API
+            const response = await axios.get(this.config.proxy.webshareUrl, {
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+
+            if (response.status !== 200) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Parse proxy list (format: ip:port:username:password)
+            const proxyData = response.data.trim().split('\n');
+            const newProxyList = [];
+
+            for (const line of proxyData) {
+                const parts = line.trim().split(':');
+                if (parts.length === 4) {
+                    const [ip, port, username, password] = parts;
+                    const proxyUrl = `http://${username}:${password}@${ip}:${port}`;
+                    newProxyList.push(proxyUrl);
+                }
+            }
+
+            if (newProxyList.length === 0) {
+                throw new Error('No valid proxies found in Webshare response');
+            }
+
+            // Update proxy list
+            const oldCount = this.proxyList.length;
+            this.proxyList = newProxyList;
+
+            // Save updated list to file
+            this.saveProxyStatuses();
+
+            this.logger.info(`✅ Updated proxy list: ${oldCount} → ${newProxyList.length} proxies from Webshare`);
+
+        } catch (error) {
+            this.logger.error(`❌ Failed to refresh proxy list from Webshare: ${error.message}`);
+
+            // Fallback to config proxy list if available
+            if (this.config.proxy?.proxyList && this.config.proxy.proxyList.length > 0) {
+                this.logger.info(`🔄 Using fallback proxy list: ${this.config.proxy.proxyList.length} proxies`);
+                this.proxyList = [...this.config.proxy.proxyList];
+            }
+
+            throw error;
         }
     }
 
