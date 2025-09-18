@@ -786,6 +786,31 @@ function createConfirmationButtons(action) {
         );
 }
 
+// Funkcja do wyrejestrowania konkretnej komendy
+async function unregisterCommand(client, commandName) {
+    try {
+        logger.info(`[COMMANDS] 🗑️ Wyrejestrowanie komendy: ${commandName}`);
+
+        // Pobierz wszystkie komendy
+        const commands = await client.application.commands.fetch();
+
+        // Znajdź komendę do usunięcia
+        const commandToDelete = commands.find(cmd => cmd.name === commandName);
+
+        if (commandToDelete) {
+            await commandToDelete.delete();
+            logger.info(`[COMMANDS] ✅ Komenda ${commandName} została wyrejestrowana`);
+            return true;
+        } else {
+            logger.info(`[COMMANDS] ⚠️ Komenda ${commandName} nie została znaleziona`);
+            return false;
+        }
+    } catch (error) {
+        logger.error(`[COMMANDS] ❌ Błąd wyrejestrowania komendy ${commandName}:`, error);
+        return false;
+    }
+}
+
 // Funkcja do rejestracji komend slash
 async function registerSlashCommands(client) {
     const commands = [
@@ -865,8 +890,6 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('decode')
             .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku')
-            .setDefaultMemberPermissions(null) // Brak ograniczeń - dostępne dla wszystkich
-            .setDMPermission(true) // Dostępne również w wiadomościach prywatnych
             .addStringOption(option =>
                 option.setName('code')
                     .setDescription('Kod buildu Survivor.io do zdekodowania')
@@ -875,6 +898,13 @@ async function registerSlashCommands(client) {
     ];
     
     try {
+        // Najpierw wyrejestruj komendę /decode jeśli istnieje
+        logger.info('[COMMANDS] 🔄 Wyrejestrowanie starej komendy /decode...');
+        await unregisterCommand(client, 'decode');
+
+        // Krótka pauza dla Discord API
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
         await client.application.commands.set(commands);
         logger.info('[COMMANDS] ✅ Komendy slash zostały zarejestrowane');
@@ -1405,5 +1435,6 @@ async function handleDecodeCommand(interaction, sharedState) {
 module.exports = {
     handleInteraction,
     registerSlashCommands,
+    unregisterCommand,
     confirmationData
 };
