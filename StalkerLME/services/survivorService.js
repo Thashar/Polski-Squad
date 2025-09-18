@@ -800,20 +800,23 @@ class SurvivorService {
 
             // Pole 1: Harmonia
             const mainHeroIcon = this.getHeroIcon(meta.mainHero);
-            const harmonyLIcon = this.getHeroIcon(meta.harmonyL);
-            const harmonyRIcon = this.getHeroIcon(meta.harmonyR);
-
-            // Pobierz gwiazdki dla każdego hero z danych heroes
             const mainHeroStars = buildData.heroes && buildData.heroes[meta.mainHero]
                 ? this.formatStars(buildData.heroes[meta.mainHero].stars) : '';
-            const harmonyLStars = buildData.heroes && buildData.heroes[meta.harmonyL]
-                ? this.formatStars(buildData.heroes[meta.harmonyL].stars) : '';
-            const harmonyRStars = buildData.heroes && buildData.heroes[meta.harmonyR]
-                ? this.formatStars(buildData.heroes[meta.harmonyR].stars) : '';
 
-            const harmonyValue = `<:Sgrade:1418171792769552429> ${mainHeroIcon} **${meta.mainHero}**\n${mainHeroStars}\n` +
-                `⬅️ ${harmonyLIcon} **${meta.harmonyL}**\n${harmonyLStars}\n` +
-                `➡️ ${harmonyRIcon} **${meta.harmonyR}**\n${harmonyRStars}`;
+            let harmonyValue = `<:Sgrade:1418171792769552429> ${mainHeroIcon} **${meta.mainHero}**\n${mainHeroStars}`;
+
+            // Tylko jeśli synergy: true, pokaż harmonyL i harmonyR
+            if (meta.synergy) {
+                const harmonyLIcon = this.getHeroIcon(meta.harmonyL);
+                const harmonyRIcon = this.getHeroIcon(meta.harmonyR);
+                const harmonyLStars = buildData.heroes && buildData.heroes[meta.harmonyL]
+                    ? this.formatStars(buildData.heroes[meta.harmonyL].stars) : '';
+                const harmonyRStars = buildData.heroes && buildData.heroes[meta.harmonyR]
+                    ? this.formatStars(buildData.heroes[meta.harmonyR].stars) : '';
+
+                harmonyValue += `\n⬅️ ${harmonyLIcon} **${meta.harmonyL}**\n${harmonyLStars}\n` +
+                    `➡️ ${harmonyRIcon} **${meta.harmonyR}**\n${harmonyRStars}`;
+            }
 
             page3.addFields({
                 name: 'Harmonia',
@@ -822,30 +825,38 @@ class SurvivorService {
             });
 
             // Pole 2: Teamwork Passive
+            let teamworkValue = '';
             if (meta.teamwork && meta.teamwork.length > 0) {
-                let teamworkValue = '';
                 for (const heroName of meta.teamwork) {
                     const heroIcon = this.getHeroIcon(heroName);
                     const heroStars = buildData.heroes && buildData.heroes[heroName]
                         ? this.formatStars(buildData.heroes[heroName].stars) : '';
                     teamworkValue += `${heroIcon} **${heroName}**\n${heroStars}\n`;
                 }
-
-                page3.addFields({
-                    name: 'Teamwork Passive',
-                    value: teamworkValue.trim(),
-                    inline: true
-                });
+                teamworkValue = teamworkValue.trim();
+            } else {
+                teamworkValue = '\u200B'; // Invisible character dla pustego pola
             }
 
-            // Pole 3: Synergia (tylko gdy synergy: true)
+            page3.addFields({
+                name: 'Teamwork Passive',
+                value: teamworkValue,
+                inline: true
+            });
+
+            // Pole 3: Synergia
+            let synergiaValue = '';
             if (meta.synergy) {
-                page3.addFields({
-                    name: 'Synergia',
-                    value: `<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`,
-                    inline: true
-                });
+                synergiaValue = `<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`;
+            } else {
+                synergiaValue = '\u200B'; // Invisible character dla pustego pola
             }
+
+            page3.addFields({
+                name: 'Synergia',
+                value: synergiaValue,
+                inline: true
+            });
         }
 
         // Zawartość Survivor - Heroes
@@ -2364,7 +2375,7 @@ class SurvivorService {
             'Resonance Damage': '<:resonance_damage:1417809758345367562>',
             'Dmg to Weakened': '<:dmg_to_weakened:1417809742528512021>',
             'Dmg to Poisoned': '<:dmg_to_poisoned:1417809726284107886>',
-            'Dmg to Chilled': '❓', // Brak ikony
+            'Dmg to Chilled': '<:dmg_to_chilled:1418183631901429780>',
             'Shield Damage': '<:shield_damage:1417809918211391600>'
         };
 
