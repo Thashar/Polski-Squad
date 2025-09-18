@@ -213,6 +213,11 @@ class SurvivorService {
                 buildData.heroes = this.decodeHeroes(data.h);
             }
 
+            // Dekodowanie meta z klucza "a"
+            if (data.a && typeof data.a === 'object') {
+                buildData.meta = this.decodeMeta(data.a);
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
@@ -444,6 +449,11 @@ class SurvivorService {
         // Zachowaj heroes jeśli istnieją
         if (data.heroes) {
             result.heroes = data.heroes;
+        }
+
+        // Zachowaj meta jeśli istnieją
+        if (data.meta) {
+            result.meta = data.meta;
         }
 
         return result;
@@ -784,6 +794,60 @@ class SurvivorService {
             .setTitle(safeTitle)
             .setColor(embedColor);
 
+        // Zawartość Survivor - Meta dane na początku
+        if (buildData.meta) {
+            const meta = buildData.meta;
+
+            // Pole 1: Harmonia
+            const mainHeroIcon = this.getHeroIcon(meta.mainHero);
+            const harmonyLIcon = this.getHeroIcon(meta.harmonyL);
+            const harmonyRIcon = this.getHeroIcon(meta.harmonyR);
+
+            // Pobierz gwiazdki dla każdego hero z danych heroes
+            const mainHeroStars = buildData.heroes && buildData.heroes[meta.mainHero]
+                ? this.formatStars(buildData.heroes[meta.mainHero].stars) : '';
+            const harmonyLStars = buildData.heroes && buildData.heroes[meta.harmonyL]
+                ? this.formatStars(buildData.heroes[meta.harmonyL].stars) : '';
+            const harmonyRStars = buildData.heroes && buildData.heroes[meta.harmonyR]
+                ? this.formatStars(buildData.heroes[meta.harmonyR].stars) : '';
+
+            const harmonyValue = `<:Sgrade:1418171792769552429> ${mainHeroIcon} **${meta.mainHero}**\n${mainHeroStars}\n\n` +
+                `⬅️ ${harmonyLIcon} **${meta.harmonyL}**\n${harmonyLStars}\n` +
+                `➡️ ${harmonyRIcon} **${meta.harmonyR}**\n${harmonyRStars}`;
+
+            page3.addFields({
+                name: 'Harmonia',
+                value: harmonyValue,
+                inline: false
+            });
+
+            // Pole 2: Synergia (tylko gdy synergy: true)
+            if (meta.synergy) {
+                page3.addFields({
+                    name: 'Synergia',
+                    value: `<:lvl:1418173754692997130> ${meta.synergyLevel}`,
+                    inline: false
+                });
+            }
+
+            // Pole 3: Teamwork Passive
+            if (meta.teamwork && meta.teamwork.length > 0) {
+                let teamworkValue = '';
+                for (const heroName of meta.teamwork) {
+                    const heroIcon = this.getHeroIcon(heroName);
+                    const heroStars = buildData.heroes && buildData.heroes[heroName]
+                        ? this.formatStars(buildData.heroes[heroName].stars) : '';
+                    teamworkValue += `${heroIcon} **${heroName}**\n${heroStars}\n`;
+                }
+
+                page3.addFields({
+                    name: 'Teamwork Passive',
+                    value: teamworkValue.trim(),
+                    inline: false
+                });
+            }
+        }
+
         // Zawartość Survivor - Heroes
         if (buildData.heroes && Object.keys(buildData.heroes).length > 0) {
             for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
@@ -796,7 +860,7 @@ class SurvivorService {
                     inline: true
                 });
             }
-        } else {
+        } else if (!buildData.meta) {
             page3.addFields({
                 name: 'Heroes',
                 value: 'Brak danych o herosach',
@@ -2398,6 +2462,81 @@ class SurvivorService {
         }
 
         return heroes;
+    }
+
+    /**
+     * Dekoduje dane meta z obiektu
+     */
+    decodeMeta(metaData) {
+        // Kolejność heroes dla mapowania indeksów
+        const heroNames = [
+            'Common', 'Tsukuyomi', 'Catnips', 'Worm', 'King', 'Wesson', 'Yelena',
+            'Master Yang', 'Metalia', 'Joey', 'Taloxa', 'Raphael', 'April',
+            'Donatello', 'Splinter', 'Leonardo', 'Michelangelo', 'Squidward',
+            'Spongebob', 'Sandy', 'Patrick'
+        ];
+
+        const meta = {
+            synergy: metaData.b === 1,  // b = synergy (boolean)
+            synergyLevel: metaData.g || 0,  // g = synergyLevel
+            mainHero: heroNames[metaData.c - 1] || 'Unknown',  // c = mainHero (indeks - 1)
+            harmonyL: heroNames[metaData.d - 1] || 'Unknown',  // d = harmonyL (indeks - 1)
+            harmonyR: heroNames[metaData.e - 1] || 'Unknown',  // e = harmonyR (indeks - 1)
+            teamwork: [],  // f = teamwork (tablica indeksów)
+            gameMode: this.decodeGameMode(metaData.I),  // I = gameMode
+            lmeTestaments: metaData.J || 0,  // J = lmeTestaments
+            eeSkills: metaData.K || []  // K = eeSkills
+        };
+
+        // Dekoduj teamwork (f - tablica indeksów)
+        if (Array.isArray(metaData.f)) {
+            meta.teamwork = metaData.f.map(index => heroNames[index - 1] || 'Unknown');
+        }
+
+        return meta;
+    }
+
+    /**
+     * Dekoduje gameMode z kodu
+     */
+    decodeGameMode(code) {
+        const gameModeMap = {
+            'ee': 'lme1',
+            'lme': 'lme1',
+            'daily': 'daily',
+            'cx': 'cx'
+        };
+        return gameModeMap[code] || code || 'unknown';
+    }
+
+    /**
+     * Pobiera ikonę hero na podstawie nazwy
+     */
+    getHeroIcon(heroName) {
+        const heroIconMap = {
+            'Common': '<:common:1418160762618118205>',
+            'Tsukuyomi': '<:tsukuyomi:1418161037965922375>',
+            'Catnips': '<:catnips:1418160740657004554>',
+            'Worm': '<:worm:1418161060854235137>',
+            'King': '<:king:1418160820021493790>',
+            'Wesson': '<:wesson:1418161045754875934>',
+            'Yelena': '<:yelena:1418161077031538709>',
+            'Master Yang': '<:master_yang:1418160857019318274>',
+            'Metalia': '<:metalia:1418160878519582740>',
+            'Joey': '<:joey:1418160801704837252>',
+            'Taloxa': '<:taloxa:1418161010094637107>',
+            'Raphael': '<:raphael:1418160924899938396>',
+            'April': '<:april:1418160722914840719>',
+            'Donatello': '<:donatello:1418160783879176213>',
+            'Splinter': '<:splinter:1418160960014647316>',
+            'Leonardo': '<:leonardo:1418160838552064081>',
+            'Michelangelo': '<:michelangelo:1418160892884811918>',
+            'Squidward': '<:squidward:1418160994668122253>',
+            'Spongebob': '<:spongebob:1418160975747485817>',
+            'Sandy': '<:sandy:1418160939588386836>',
+            'Patrick': '<:patrick:1418160909544853564>'
+        };
+        return heroIconMap[heroName] || '';
     }
 
     /**
