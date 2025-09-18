@@ -2519,7 +2519,7 @@ class SurvivorService {
         // Definicje grup bohaterów
         const group1Heroes = ['Common', 'King', 'Yelena', 'Tsukuyomi', 'Catnips', 'Worm', 'Wesson'];
         const group2Heroes = ['Master Yang', 'Metalia', 'Joey', 'Taloxa'];
-        const group3Heroes = ['Paphael', 'Leonardo', 'Donatello', 'Michelangelo', 'April', 'Splinter'];
+        const group3Heroes = ['Raphael', 'Leonardo', 'Donatello', 'Michelangelo', 'April', 'Splinter'];
 
         // Tabele konwersji Core dla grup 1 i 2
         const coreTableGroup1 = {
@@ -2603,7 +2603,7 @@ class SurvivorService {
         // Synergia (jeśli istnieje)
         if (meta && meta.synergy) {
             if (result) result += '\n\n';
-            result += `**Synergia**\n<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`;
+            result += `**Synergia**\n<:lvl:1418173754692997130> ${meta.synergyLevel}`;
         }
 
         return result || '\u200B';
