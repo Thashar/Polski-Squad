@@ -208,6 +208,11 @@ class SurvivorService {
                 buildData.petSkills = this.decodePetSkillsFromArray(data.l);
             }
 
+            // Dekodowanie heroes z klucza "h"
+            if (data.h && Array.isArray(data.h)) {
+                buildData.heroes = this.decodeHeroes(data.h);
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
@@ -434,6 +439,11 @@ class SurvivorService {
         // Zachowaj petSkills jeśli istnieją
         if (data.petSkills) {
             result.petSkills = data.petSkills;
+        }
+
+        // Zachowaj heroes jeśli istnieją
+        if (data.heroes) {
+            result.heroes = data.heroes;
         }
 
         return result;
@@ -774,12 +784,25 @@ class SurvivorService {
             .setTitle(safeTitle)
             .setColor(embedColor);
 
-        // Tymczasowa zawartość Survivor
-        page3.addFields({
-            name: 'Survivor',
-            value: 'Zawartość zostanie dodana wkrótce...',
-            inline: false
-        });
+        // Zawartość Survivor - Heroes
+        if (buildData.heroes && Object.keys(buildData.heroes).length > 0) {
+            for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
+                const stars = this.formatStars(heroData.stars);
+                const fieldName = `${heroData.icon} **${heroName}**`;
+
+                page3.addFields({
+                    name: fieldName,
+                    value: stars,
+                    inline: true
+                });
+            }
+        } else {
+            page3.addFields({
+                name: 'Heroes',
+                value: 'Brak danych o herosach',
+                inline: false
+            });
+        }
 
         // Czwarta strona - Legend Colls
         const page4 = new EmbedBuilder()
@@ -2316,6 +2339,79 @@ class SurvivorService {
         }
 
         return skillsText.trim() || null;
+    }
+
+    /**
+     * Dekoduje dane heroes z tablicy
+     */
+    decodeHeroes(heroesData) {
+        // Kolejność heroes w tablicy
+        const heroNames = [
+            'Common', 'Tsukuyomi', 'Catnips', 'Worm', 'King', 'Wesson', 'Yelena',
+            'Master Yang', 'Metalia', 'Joey', 'Taloxa', 'Raphael', 'April',
+            'Donatello', 'Splinter', 'Leonardo', 'Michelangelo', 'Squidward',
+            'Spongebob', 'Sandy', 'Patrick'
+        ];
+
+        const heroIconMap = {
+            'Common': '<:common:1418160762618118205>',
+            'Tsukuyomi': '<:tsukuyomi:1418161037965922375>',
+            'Catnips': '<:catnips:1418160740657004554>',
+            'Worm': '<:worm:1418161060854235137>',
+            'King': '<:king:1418160820021493790>',
+            'Wesson': '<:wesson:1418161045754875934>',
+            'Yelena': '<:yelena:1418161077031538709>',
+            'Master Yang': '<:master_yang:1418160857019318274>',
+            'Metalia': '<:metalia:1418160878519582740>',
+            'Joey': '<:joey:1418160801704837252>',
+            'Taloxa': '<:taloxa:1418161010094637107>',
+            'Raphael': '<:raphael:1418160924899938396>',
+            'April': '<:april:1418160722914840719>',
+            'Donatello': '<:donatello:1418160783879176213>',
+            'Splinter': '<:splinter:1418160960014647316>',
+            'Leonardo': '<:leonardo:1418160838552064081>',
+            'Michelangelo': '<:michelangelo:1418160892884811918>',
+            'Squidward': '<:squidward:1418160994668122253>',
+            'Spongebob': '<:spongebob:1418160975747485817>',
+            'Sandy': '<:sandy:1418160939588386836>',
+            'Patrick': '<:patrick:1418160909544853564>'
+        };
+
+        const heroes = {};
+
+        // Przetwarzaj dane heroes jako tablicę
+        if (Array.isArray(heroesData)) {
+            for (let i = 0; i < heroesData.length && i < heroNames.length; i++) {
+                const heroData = heroesData[i];
+                const heroName = heroNames[i];
+                const heroIcon = heroIconMap[heroName] || '';
+
+                if (heroData && typeof heroData === 'object' && (heroData.r > 0 || heroData.q > 0)) {
+                    heroes[heroName] = {
+                        name: heroName,
+                        icon: heroIcon,
+                        stars: heroData.r || 0,  // 'r' to stars
+                        level: heroData.q || null  // 'q' to level
+                    };
+                }
+            }
+        }
+
+        return heroes;
+    }
+
+    /**
+     * Formatuje gwiazdki zgodnie z wymaganiami
+     */
+    formatStars(stars) {
+        if (stars <= 6) {
+            return '☆'.repeat(stars);
+        } else if (stars <= 12) {
+            const baseStars = '☆'.repeat(6);
+            const extraStars = '★'.repeat(stars - 6);
+            return baseStars + '\n' + ' '.repeat(4) + extraStars;
+        }
+        return '☆'.repeat(6) + '\n' + ' '.repeat(4) + '★'.repeat(6);
     }
 }
 
