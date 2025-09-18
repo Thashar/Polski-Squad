@@ -78,8 +78,8 @@ module.exports = {
     // Proxy Settings (optional - for network diversity testing)
     proxy: {
         enabled: process.env.GARY_PROXY_ENABLED === 'true',
-        strategy: process.env.GARY_PROXY_STRATEGY || 'round-robin', // 'round-robin' or 'random'
-        retryAttempts: parseInt(process.env.GARY_PROXY_RETRY_ATTEMPTS) || 3,
+        strategy: process.env.GARY_PROXY_STRATEGY || 'random', // 'round-robin' or 'random'
+        retryAttempts: parseInt(process.env.GARY_PROXY_RETRY_ATTEMPTS) || 10,
         proxyList: process.env.GARY_PROXY_LIST ? process.env.GARY_PROXY_LIST.split(',').map(p => p.trim()) : [
             // Example proxy formats (replace with actual proxies):
             // 'http://proxy1.example.com:8080',
