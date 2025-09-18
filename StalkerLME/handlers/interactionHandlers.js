@@ -1326,14 +1326,6 @@ async function handleOcrDebugCommand(interaction, config) {
 
 async function handleDecodeCommand(interaction, sharedState) {
     const { config, survivorService } = sharedState;
-    // Sprawdź uprawnienia administratora
-    if (!interaction.member.permissions.has('Administrator')) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
 
     const code = interaction.options.getString('code');
 
