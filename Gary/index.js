@@ -110,7 +110,12 @@ async function startBot() {
     try {
         // Initialize services with error handling
         logger.info('🔧 Initializing services...');
-        
+
+        // Initialize ProxyService first (singleton pattern)
+        const ProxyService = require('./services/proxyService');
+        const proxyService = new ProxyService(config, logger);
+        logger.info('✅ ProxyService initialized (singleton)');
+
         try {
             garrytoolsService = new GarrytoolsService(config, logger);
             logger.info('✅ GarrytoolsService initialized');
@@ -118,7 +123,7 @@ async function startBot() {
             logger.error('❌ GarrytoolsService failed to initialize:', error.message);
             throw error;
         }
-        
+
         try {
             clanService = new ClanService(config, logger);
             logger.info('✅ ClanService initialized');
@@ -126,7 +131,7 @@ async function startBot() {
             logger.error('❌ ClanService failed to initialize:', error.message);
             throw error;
         }
-        
+
         try {
             playerService = new PlayerService(config, logger);
             logger.info('✅ PlayerService initialized');
@@ -134,7 +139,7 @@ async function startBot() {
             logger.error('❌ PlayerService failed to initialize:', error.message);
             throw error;
         }
-        
+
         try {
             endersEchoService = new EndersEchoService(config, logger);
             logger.info('✅ EndersEchoService initialized');

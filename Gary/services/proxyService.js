@@ -5,6 +5,11 @@ const path = require('path');
 
 class ProxyService {
     constructor(config, logger) {
+        // Singleton pattern - zwróć istniejącą instancję jeśli już istnieje
+        if (ProxyService.instance) {
+            return ProxyService.instance;
+        }
+
         this.config = config;
         this.logger = logger;
         this.proxyList = config.proxy?.proxyList || [];
@@ -23,7 +28,7 @@ class ProxyService {
         // Wczytaj zapisane statusy proxy
         this.loadProxyStatuses();
 
-        // Auto-refresh proxy list from Webshare API on startup
+        // Auto-refresh proxy list from Webshare API on startup (tylko raz)
         if (this.enabled && this.config.proxy?.refreshOnStartup && this.config.proxy?.webshareUrl) {
             this.refreshProxyListFromWebshare().then(() => {
                 // Log randomization after refresh
@@ -59,6 +64,9 @@ class ProxyService {
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ];
         this.currentUserAgentIndex = 0;
+
+        // Zapisz instancję jako singleton
+        ProxyService.instance = this;
     }
 
     /**
@@ -859,6 +867,16 @@ class ProxyService {
             }))
         };
     }
+
+    /**
+     * Resetuje singleton instancję (do testów lub restart)
+     */
+    static resetInstance() {
+        ProxyService.instance = null;
+    }
 }
+
+// Resetuj instancję singleton przy każdym restartcie modułu
+ProxyService.instance = null;
 
 module.exports = ProxyService;
