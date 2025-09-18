@@ -926,7 +926,7 @@ class SurvivorService {
 
         const expirationText = `Analiza zostanie usunięta o ${polishTime}`;
 
-        page0.setFooter({ text: `Statystyki • ${expirationText}` });
+        page0.setFooter({ text: `Start • ${expirationText}` });
         page1.setFooter({ text: `Ekwipunek • ${expirationText}` });
         page2.setFooter({ text: `Tech Party • ${expirationText}` });
         page3.setFooter({ text: `Survivor • ${expirationText}` });
@@ -948,7 +948,7 @@ class SurvivorService {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('statystyki_page')
-                    .setLabel('Statystyki')
+                    .setLabel('Start')
                     .setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('ekwipunek_page')
@@ -1932,13 +1932,28 @@ class SurvivorService {
     }
 
     /**
-     * Dodaje pola Statystyki do embeda
+     * Dodaje pola Start do embeda
      */
     async addStatisticsFields(embed, buildData, buildCode) {
-        // Tylko jedno pole z napisem "Brak danych"
+        // Sprawdź klucz "I" w meta data
+        let statisticsValue = 'Brak danych';
+
+        if (buildData.meta && buildData.meta.gameMode) {
+            const gameMode = buildData.meta.gameMode;
+
+            if (gameMode === 'lme1') {
+                statisticsValue = 'Statystyki ustawień dla 1 fazy LME';
+            } else if (gameMode === 'lme2') {
+                const lmeTestaments = buildData.meta.lmeTestaments || 0;
+                statisticsValue = `Statystyki ustawień dla 2 fazy LME dla punktów przeciwnika: ${lmeTestaments}`;
+            } else if (gameMode === 'ee') {
+                statisticsValue = 'Statystyki ustawień dla EE';
+            }
+        }
+
         embed.addFields({
-            name: 'Statystyki',
-            value: 'Brak danych',
+            name: 'Start',
+            value: statisticsValue,
             inline: false
         });
     }
