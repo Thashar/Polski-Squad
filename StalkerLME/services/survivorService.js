@@ -932,7 +932,7 @@ class SurvivorService {
         page3.setFooter({ text: `Survivor • ${expirationText}` });
         page4.setFooter({ text: `Legend Colls • ${expirationText}` });
         page5.setFooter({ text: `Epic Colls • ${expirationText}` });
-        page6.setFooter({ text: `Custom Sets • ${expirationText}` });
+        page6.setFooter({ text: `Custom Colls • ${expirationText}` });
         page7.setFooter({ text: `Pets • ${expirationText}` });
 
         return [page0, page1, page2, page3, page4, page5, page6, page7];
@@ -976,7 +976,7 @@ class SurvivorService {
                     .setStyle(currentPage === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('custom_sets_page')
-                    .setLabel('Custom Sets')
+                    .setLabel('Custom Colls')
                     .setStyle(currentPage === 6 ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('pets_page')
@@ -1686,8 +1686,43 @@ class SurvivorService {
             // Dodaj nagłówek Legend do pola 1
             if (fieldNum === 1) {
                 fields.push({
-                    name: '\u200B',
+                    name: '<:pusto:1417874543283802143> <:I_LanceV1:1418181398115913788> Set',
                     value: '<:J_CollRed:1402533014080065546> **Legend**',
+                    inline: true
+                });
+                continue;
+            }
+
+            // Pola 2-7: Legend collectibles z custom nagłówkami
+            if (fieldNum >= 2 && fieldNum <= 7) {
+                // Wypełnij collectibles dla tego pola
+                for (let i = 0; i < 4; i++) {
+                    const collectibleIndex = startIndex + i;
+                    if (collectibleIndex < collectibleOrder.length) {
+                        const collectibleName = collectibleOrder[collectibleIndex];
+                        if (collectibleName !== '') {
+                            const collectible = collectibles[collectibleName];
+                            if (collectible && collectibleIcons[collectibleName]) {
+                                const icon = collectibleIcons[collectibleName];
+                                const stars = formatStars(collectible.stars);
+                                fieldItems.push(`${icon} ${stars}`);
+                            }
+                        }
+                    }
+                }
+
+                // Dodaj pole z odpowiednim nagłówkiem
+                let fieldName = '\u200B';
+                if (fieldNum === 2) fieldName = '<:pusto:1417874543283802143> <:SSArmor:1418182494561501234> Set';
+                else if (fieldNum === 3) fieldName = '<:pusto:1417874543283802143> <:SSNecklace:1418182845280813157> Set';
+                else if (fieldNum === 4) fieldName = '<:pusto:1417874543283802143> <:SSBelt:1418182394384748615> Set';
+                else if (fieldNum === 5) fieldName = '<:pusto:1417874543283802143> <:SSGloves:1418182564706914396> Set';
+                else if (fieldNum === 6) fieldName = '<:pusto:1417874543283802143> <:SSBoots:1418182624819544145> Set';
+                else if (fieldNum === 7) fieldName = '<:pusto:1417874543283802143> <:capy:1417809563301974117> Set';
+
+                fields.push({
+                    name: fieldName,
+                    value: fieldItems.length > 0 ? fieldItems.join('\n') : '\u200B',
                     inline: true
                 });
                 continue;
