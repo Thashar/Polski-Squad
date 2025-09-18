@@ -1952,8 +1952,8 @@ class SurvivorService {
         }
 
         embed.addFields({
-            name: 'Start',
-            value: statisticsValue,
+            name: '\u200B',
+            value: `**${statisticsValue}**`,
             inline: false
         });
     }
