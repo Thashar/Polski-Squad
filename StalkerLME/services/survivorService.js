@@ -2602,8 +2602,8 @@ class SurvivorService {
 
         // Synergia (jeśli istnieje)
         if (meta && meta.synergy) {
-            if (result) result += '\n';
-            result += `<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`;
+            if (result) result += '\n\n';
+            result += `**Synergia**\n<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`;
         }
 
         return result || '\u200B';
