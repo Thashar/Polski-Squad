@@ -28,6 +28,12 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery-debug':
                     await handleLotteryDebugCommand(interaction, config, lotteryService);
                     break;
+                case 'oligopoly':
+                    await handleOligopolyCommand(interaction, config);
+                    break;
+                case 'oligopoly-review':
+                    await handleOligopolyReviewCommand(interaction, config);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -1245,6 +1251,38 @@ async function registerSlashCommands(client, config) {
             .setName('lottery-debug')
             .setDescription('Debugowanie systemu loterii (admin only)'),
 
+        new SlashCommandBuilder()
+            .setName('oligopoly')
+            .setDescription('Dodaj swoje ID do systemu oligopoly dla wybranego klanu')
+            .addStringOption(option =>
+                option.setName('klan')
+                    .setDescription('Klan dla którego dodajesz ID')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: '🔥Polski Squad🔥', value: '🔥Polski Squad🔥' },
+                        { name: '🎮PolskiSquad⁰🎮', value: '🎮PolskiSquad⁰🎮' },
+                        { name: '⚡PolskiSquad¹⚡', value: '⚡PolskiSquad¹⚡' },
+                        { name: '💥PolskiSquad²💥', value: '💥PolskiSquad²💥' }
+                    ))
+            .addStringOption(option =>
+                option.setName('id')
+                    .setDescription('Twoje ID (tylko cyfry)')
+                    .setRequired(true)),
+
+        new SlashCommandBuilder()
+            .setName('oligopoly-review')
+            .setDescription('Przeglądaj listę ID dla wybranego klanu (tylko admini i moderatorzy)')
+            .addStringOption(option =>
+                option.setName('klan')
+                    .setDescription('Klan do przejrzenia')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: '🔥Polski Squad🔥', value: '🔥Polski Squad🔥' },
+                        { name: '🎮PolskiSquad⁰🎮', value: '🎮PolskiSquad⁰🎮' },
+                        { name: '⚡PolskiSquad¹⚡', value: '⚡PolskiSquad¹⚡' },
+                        { name: '💥PolskiSquad²💥', value: '💥PolskiSquad²💥' }
+                    )),
+
     ];
 
     const rest = new REST().setToken(config.token);
@@ -1583,6 +1621,128 @@ async function generateStatsEmbed(history, config) {
     ];
 
     return { embed, components };
+}
+
+/**
+ * Obsługuje komendę /oligopoly
+ */
+async function handleOligopolyCommand(interaction, config) {
+    const klan = interaction.options.getString('klan');
+    const id = interaction.options.getString('id');
+
+    // Walidacja ID (sprawdź czy to liczba)
+    if (!/^\d+$/.test(id)) {
+        await interaction.reply({
+            content: '❌ ID musi być liczbą (zawierać tylko cyfry).',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Sprawdź czy klan istnieje w konfiguracji (bez "cały serwer")
+    const availableClans = Object.values(config.lottery.clans)
+        .filter(clan => clan.roleId !== null) // Wyklucz "cały serwer"
+        .map(clan => clan.displayName);
+
+    if (!availableClans.includes(klan)) {
+        await interaction.reply({
+            content: `❌ Nieprawidłowy klan. Dostępne klany:\n${availableClans.map(name => `• ${name}`).join('\n')}`,
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Inicjalizuj oligopolyService jeśli nie istnieje
+    if (!interaction.client.oligopolyService) {
+        const OligopolyService = require('../services/oligopolyService');
+        interaction.client.oligopolyService = new OligopolyService(config, logger);
+    }
+
+    const success = await interaction.client.oligopolyService.addOligopolyEntry(
+        interaction.user.id,
+        interaction.user.username,
+        klan,
+        id
+    );
+
+    if (success) {
+        await interaction.reply({
+            content: `✅ **Dodano wpis oligopoly**\n🏰 **Klan:** ${klan}\n🆔 **ID:** ${id}`,
+            ephemeral: true
+        });
+    } else {
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas dodawania wpisu oligopoly.',
+            ephemeral: true
+        });
+    }
+}
+
+/**
+ * Obsługuje komendę /oligopoly-review
+ */
+async function handleOligopolyReviewCommand(interaction, config) {
+    // Sprawdź uprawnienia (administrator lub moderator)
+    const hasAdminPermission = interaction.member.permissions.has('Administrator');
+    const hasModeratorPermission = interaction.member.permissions.has('ManageMessages');
+
+    if (!hasAdminPermission && !hasModeratorPermission) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub **Zarządzanie wiadomościami**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const klan = interaction.options.getString('klan');
+
+    // Sprawdź czy klan istnieje w konfiguracji (bez "cały serwer")
+    const availableClans = Object.values(config.lottery.clans)
+        .filter(clan => clan.roleId !== null)
+        .map(clan => clan.displayName);
+
+    if (!availableClans.includes(klan)) {
+        await interaction.reply({
+            content: `❌ Nieprawidłowy klan. Dostępne klany:\n${availableClans.map(name => `• ${name}`).join('\n')}`,
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Inicjalizuj oligopolyService jeśli nie istnieje
+    if (!interaction.client.oligopolyService) {
+        const OligopolyService = require('../services/oligopolyService');
+        interaction.client.oligopolyService = new OligopolyService(config, logger);
+    }
+
+    const entries = interaction.client.oligopolyService.getOligopolyEntriesByKlan(klan);
+
+    if (entries.length === 0) {
+        await interaction.reply({
+            content: `📋 **Brak wpisów oligopoly dla klanu:** ${klan}`,
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Formatuj listę
+    const playerList = entries.map(entry => `Nick: ${entry.username} Klan: ${entry.klan} ID:${entry.id}`).join('\n');
+    const idList = entries.map(entry => entry.id).join(' ');
+
+    const response = `📋 **Lista oligopoly - ${klan}**\n\n${playerList}\n\n**ID zbiorczo:**\n${idList}`;
+
+    // Sprawdź długość odpowiedzi (limit Discord: 2000 znaków)
+    if (response.length > 1900) {
+        await interaction.reply({
+            content: `📋 **Lista oligopoly - ${klan}** (${entries.length} wpisów)\n\n⚠️ Lista jest za długa do wyświetlenia. Skontaktuj się z administratorem w celu otrzymania pełnej listy.`,
+            ephemeral: true
+        });
+    } else {
+        await interaction.reply({
+            content: response,
+            ephemeral: true
+        });
+    }
 }
 
 module.exports = {

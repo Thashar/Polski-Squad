@@ -10,6 +10,7 @@ const AnalysisService = require('./services/analysisService');
 const RoleService = require('./services/roleService');
 const MessageService = require('./services/messageService');
 const LotteryService = require('./services/lotteryService');
+const OligopolyService = require('./services/oligopolyService');
 
 // Import handlerów
 const MessageHandler = require('./handlers/messageHandlers');
@@ -29,7 +30,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService;
+let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService;
 
 /**
  * Inicjalizuje wszystkie serwisy
@@ -40,6 +41,7 @@ async function initializeServices() {
     analysisService = new AnalysisService(config, ocrService);
     roleService = new RoleService(config);
     lotteryService = new LotteryService(config);
+    oligopolyService = new OligopolyService(config, logger);
     messageService = new MessageService(config, lotteryService);
     messageHandler = new MessageHandler(
         config,
@@ -114,7 +116,10 @@ function setupEventHandlers() {
         await registerSlashCommands(client, config);
     });
     client.on('messageCreate', (message) => messageHandler.handleMessage(message));
-    client.on('interactionCreate', (interaction) => handleInteraction(interaction, config, lotteryService));
+    client.on('interactionCreate', (interaction) => {
+        interaction.client.oligopolyService = oligopolyService;
+        handleInteraction(interaction, config, lotteryService);
+    });
     client.on('error', onError);
 
     // Obsługa zamykania
