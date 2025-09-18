@@ -839,10 +839,10 @@ class SurvivorService {
                     }
                     teamworkValue = teamworkValue.trim();
                 } else {
-                    teamworkValue = '\u200B'; // Invisible character dla pustego pola
+                    teamworkValue = '-'; // Dash dla braku danych
                 }
             } else {
-                teamworkValue = '\u200B'; // Invisible character dla pustego pola
+                teamworkValue = '-'; // Dash dla braku danych
             }
 
             page3.addFields({
@@ -2600,10 +2600,14 @@ class SurvivorService {
             result += `<:I_PandaShard:1418241395524767877> ${totalPuzzle}`;
         }
 
-        // Synergia (jeśli istnieje)
-        if (meta && meta.synergy) {
-            if (result) result += '\n\n';
-            result += `**Synergia**\n<:lvl:1418173754692997130> ${meta.synergyLevel}`;
+        // Synergia - zawsze pokazuj nagłówek
+        if (result) result += '\n\n';
+        result += `**Synergia**\n`;
+
+        if (meta && meta.synergy && meta.synergyLevel > 0) {
+            result += `<:lvl:1418173754692997130> ${meta.synergyLevel}`;
+        } else {
+            result += '-';
         }
 
         return result || '\u200B';
