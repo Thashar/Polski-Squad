@@ -811,7 +811,7 @@ class SurvivorService {
             const harmonyRStars = buildData.heroes && buildData.heroes[meta.harmonyR]
                 ? this.formatStars(buildData.heroes[meta.harmonyR].stars) : '';
 
-            const harmonyValue = `<:Sgrade:1418171792769552429> ${mainHeroIcon} **${meta.mainHero}**\n${mainHeroStars}\n\n` +
+            const harmonyValue = `<:Sgrade:1418171792769552429> ${mainHeroIcon} **${meta.mainHero}**\n${mainHeroStars}\n` +
                 `⬅️ ${harmonyLIcon} **${meta.harmonyL}**\n${harmonyLStars}\n` +
                 `➡️ ${harmonyRIcon} **${meta.harmonyR}**\n${harmonyRStars}`;
 
@@ -821,16 +821,7 @@ class SurvivorService {
                 inline: true
             });
 
-            // Pole 2: Synergia (tylko gdy synergy: true)
-            if (meta.synergy) {
-                page3.addFields({
-                    name: 'Synergia',
-                    value: `<:lvl:1418173754692997130> ${meta.synergyLevel}`,
-                    inline: true
-                });
-            }
-
-            // Pole 3: Teamwork Passive
+            // Pole 2: Teamwork Passive
             if (meta.teamwork && meta.teamwork.length > 0) {
                 let teamworkValue = '';
                 for (const heroName of meta.teamwork) {
@@ -843,6 +834,15 @@ class SurvivorService {
                 page3.addFields({
                     name: 'Teamwork Passive',
                     value: teamworkValue.trim(),
+                    inline: true
+                });
+            }
+
+            // Pole 3: Synergia (tylko gdy synergy: true)
+            if (meta.synergy) {
+                page3.addFields({
+                    name: 'Synergia',
+                    value: `<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`,
                     inline: true
                 });
             }
