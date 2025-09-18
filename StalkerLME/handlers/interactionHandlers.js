@@ -898,13 +898,6 @@ async function registerSlashCommands(client) {
     ];
     
     try {
-        // Najpierw wyrejestruj komendę /decode jeśli istnieje
-        logger.info('[COMMANDS] 🔄 Wyrejestrowanie starej komendy /decode...');
-        await unregisterCommand(client, 'decode');
-
-        // Krótka pauza dla Discord API
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
         logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
         await client.application.commands.set(commands);
         logger.info('[COMMANDS] ✅ Komendy slash zostały zarejestrowane');
