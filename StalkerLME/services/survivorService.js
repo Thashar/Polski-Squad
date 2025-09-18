@@ -1974,18 +1974,11 @@ class SurvivorService {
         // Pola 1-8 (Legend) - z nagłówkami
         const fields = [];
 
-        // Pole 1: nagłówek Legend
-        fields.push({
-            name: '<:pusto:1417874543283802143> <:I_LanceV1:1418181398115913788> Set',
-            value: '<:J_CollRed:1402533014080065546> **Legend**',
-            inline: true
-        });
-
-        // Pola 2-8: collectibles z custom nagłówkami
-        for (let fieldNum = 2; fieldNum <= 8; fieldNum++) {
+        // Pola 1-8: collectibles z custom nagłówkami (przesunięte o 1 wstecz)
+        for (let fieldNum = 1; fieldNum <= 8; fieldNum++) {
             const fieldItems = [];
-            // Mapowanie: pole 2 = pozycje 0-3, pole 3 = pozycje 4-7, itd.
-            const startIndex = (fieldNum - 2) * 4;
+            // Mapowanie: pole 1 = pozycje 0-3, pole 2 = pozycje 4-7, itd.
+            const startIndex = (fieldNum - 1) * 4;
 
             // Dodaj collectibles dla tego pola
             for (let i = 0; i < 4; i++) {
@@ -2005,7 +1998,8 @@ class SurvivorService {
 
             // Wybierz odpowiedni nagłówek
             let fieldName = '\u200B';
-            if (fieldNum === 2) fieldName = '<:pusto:1417874543283802143> <:SSArmor:1418182494561501234> Set';
+            if (fieldNum === 1) fieldName = '<:pusto:1417874543283802143> <:I_LanceV1:1418181398115913788> Set';
+            else if (fieldNum === 2) fieldName = '<:pusto:1417874543283802143> <:SSArmor:1418182494561501234> Set';
             else if (fieldNum === 3) fieldName = '<:pusto:1417874543283802143> <:SSNecklace:1418182845280813157> Set';
             else if (fieldNum === 4) fieldName = '<:pusto:1417874543283802143> <:SSBelt:1418182394384748615> Set';
             else if (fieldNum === 5) fieldName = '<:pusto:1417874543283802143> <:SSGloves:1418182564706914396> Set';
