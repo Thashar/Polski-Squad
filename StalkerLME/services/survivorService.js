@@ -818,7 +818,7 @@ class SurvivorService {
             page3.addFields({
                 name: 'Harmonia',
                 value: harmonyValue,
-                inline: false
+                inline: true
             });
 
             // Pole 2: Synergia (tylko gdy synergy: true)
@@ -826,7 +826,7 @@ class SurvivorService {
                 page3.addFields({
                     name: 'Synergia',
                     value: `<:lvl:1418173754692997130> ${meta.synergyLevel}`,
-                    inline: false
+                    inline: true
                 });
             }
 
@@ -843,7 +843,7 @@ class SurvivorService {
                 page3.addFields({
                     name: 'Teamwork Passive',
                     value: teamworkValue.trim(),
-                    inline: false
+                    inline: true
                 });
             }
         }
@@ -864,7 +864,7 @@ class SurvivorService {
             page3.addFields({
                 name: 'Heroes',
                 value: 'Brak danych o herosach',
-                inline: false
+                inline: true
             });
         }
 
