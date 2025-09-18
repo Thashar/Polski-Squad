@@ -851,17 +851,12 @@ class SurvivorService {
                 inline: true
             });
 
-            // Pole 3: Synergia
-            let synergiaValue = '';
-            if (meta.synergy) {
-                synergiaValue = `<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`;
-            } else {
-                synergiaValue = '\u200B'; // Invisible character dla pustego pola
-            }
+            // Pole 3: Zużyte zasoby
+            let resourcesValue = this.calculateCoreAndPuzzle(buildData, meta);
 
             page3.addFields({
-                name: 'Synergia',
-                value: synergiaValue,
+                name: 'Zużyte zasoby',
+                value: resourcesValue,
                 inline: true
             });
         }
@@ -2512,6 +2507,106 @@ class SurvivorService {
         }
 
         return meta;
+    }
+
+    /**
+     * Oblicza Core i Puzzle na podstawie bohaterów i synergii oraz wyświetla synergie
+     */
+    calculateCoreAndPuzzle(buildData, meta) {
+        let totalCore = 0;
+        let totalPuzzle = 0;
+
+        // Definicje grup bohaterów
+        const group1Heroes = ['Common', 'King', 'Yelena', 'Tsukuyomi', 'Catnips', 'Worm', 'Wesson'];
+        const group2Heroes = ['Master Yang', 'Metalia', 'Joey', 'Taloxa'];
+        const group3Heroes = ['Paphael', 'Leonardo', 'Donatello', 'Michelangelo', 'April', 'Splinter'];
+
+        // Tabele konwersji Core dla grup 1 i 2
+        const coreTableGroup1 = {
+            7: 1, 8: 3, 9: 6, 10: 11, 11: 18, 12: 30
+        };
+        const coreTableGroup2 = {
+            7: 1, 8: 3, 9: 7, 10: 15, 11: 30, 12: 60
+        };
+
+        // Tabela konwersji Puzzle (tylko dla grupy 2)
+        const puzzleTable = {
+            1: 0, 2: 40, 3: 120, 4: 240, 5: 440, 6: 840,
+            7: 1040, 8: 1290, 9: 1590, 10: 1940, 11: 2340, 12: 2840
+        };
+
+        // Tabela synergii
+        const synergyTable = {
+            5: { core: 3, puzzle: 50 },
+            10: { core: 6, puzzle: 130 },
+            15: { core: 11, puzzle: 280 },
+            20: { core: 16, puzzle: 480 },
+            25: { core: 24, puzzle: 730 },
+            30: { core: 32, puzzle: 1030 },
+            35: { core: 40, puzzle: 1380 },
+            40: { core: 48, puzzle: 1780 },
+            45: { core: 63, puzzle: 2280 },
+            50: { core: 78, puzzle: 2880 },
+            55: { core: 93, puzzle: 3580 },
+            60: { core: 108, puzzle: 4380 }
+        };
+
+        // Przetwarzaj bohaterów
+        if (buildData.heroes) {
+            for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
+                const stars = heroData.stars || 0;
+
+                if (group1Heroes.includes(heroName)) {
+                    // Grupa 1: tylko Core dla 7-12 gwiazdek
+                    if (stars >= 7 && stars <= 12) {
+                        totalCore += coreTableGroup1[stars] || 0;
+                    }
+                } else if (group2Heroes.includes(heroName)) {
+                    // Grupa 2: Core dla 7-12 gwiazdek + Puzzle dla 1-12 gwiazdek
+                    if (stars >= 7 && stars <= 12) {
+                        totalCore += coreTableGroup2[stars] || 0;
+                    }
+                    if (stars >= 1 && stars <= 12) {
+                        totalPuzzle += puzzleTable[stars] || 0;
+                    }
+                } else if (group3Heroes.includes(heroName)) {
+                    // Grupa 3: 1 Core za każdą gwiazdkę od 7 do 12
+                    if (stars >= 7 && stars <= 12) {
+                        totalCore += (stars - 6); // 7 gwiazdek = 1 Core, 8 = 2, itd.
+                    }
+                }
+            }
+        }
+
+        // Dodaj Core i Puzzle z synergii
+        if (buildData.meta && buildData.meta.synergyLevel) {
+            const synergyLevel = buildData.meta.synergyLevel;
+            const synergyBonus = synergyTable[synergyLevel];
+            if (synergyBonus) {
+                totalCore += synergyBonus.core;
+                totalPuzzle += synergyBonus.puzzle;
+            }
+        }
+
+        // Formatuj wynik - Core i Puzzle na górze, synergia na dole
+        let result = '';
+
+        // Core i Puzzle
+        if (totalCore > 0) {
+            result += `<:I_AW:1418241339497250928> ${totalCore}`;
+        }
+        if (totalPuzzle > 0) {
+            if (result) result += '\n';
+            result += `<:I_PandaShard:1418241395524767877> ${totalPuzzle}`;
+        }
+
+        // Synergia (jeśli istnieje)
+        if (meta && meta.synergy) {
+            if (result) result += '\n';
+            result += `<:lvl:1418173754692997130> ${meta.synergyLevel + 4}`;
+        }
+
+        return result || '\u200B';
     }
 
     /**
