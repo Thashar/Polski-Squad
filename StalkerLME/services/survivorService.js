@@ -827,13 +827,20 @@ class SurvivorService {
             // Pole 2: Teamwork Passive
             let teamworkValue = '';
             if (meta.teamwork && meta.teamwork.length > 0) {
-                for (const heroName of meta.teamwork) {
-                    const heroIcon = this.getHeroIcon(heroName);
-                    const heroStars = buildData.heroes && buildData.heroes[heroName]
-                        ? this.formatStars(buildData.heroes[heroName].stars) : '';
-                    teamworkValue += `${heroIcon} **${heroName}**\n${heroStars}\n`;
+                // Filtruj "Unknown" bohaterów
+                const validTeamwork = meta.teamwork.filter(heroName => heroName !== 'Unknown');
+
+                if (validTeamwork.length > 0) {
+                    for (const heroName of validTeamwork) {
+                        const heroIcon = this.getHeroIcon(heroName);
+                        const heroStars = buildData.heroes && buildData.heroes[heroName]
+                            ? this.formatStars(buildData.heroes[heroName].stars) : '';
+                        teamworkValue += `${heroIcon} **${heroName}**\n${heroStars}\n`;
+                    }
+                    teamworkValue = teamworkValue.trim();
+                } else {
+                    teamworkValue = '\u200B'; // Invisible character dla pustego pola
                 }
-                teamworkValue = teamworkValue.trim();
             } else {
                 teamworkValue = '\u200B'; // Invisible character dla pustego pola
             }
