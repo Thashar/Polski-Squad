@@ -865,6 +865,8 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('decode')
             .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku')
+            .setDefaultMemberPermissions(null) // Brak ograniczeń - dostępne dla wszystkich
+            .setDMPermission(true) // Dostępne również w wiadomościach prywatnych
             .addStringOption(option =>
                 option.setName('code')
                     .setDescription('Kod buildu Survivor.io do zdekodowania')
