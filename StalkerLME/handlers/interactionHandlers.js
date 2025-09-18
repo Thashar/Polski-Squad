@@ -1342,9 +1342,13 @@ async function handleDecodeCommand(interaction, sharedState) {
     const isAdmin = interaction.member.permissions.has('Administrator');
     const isAllowedChannel = allowedChannels.includes(interaction.channelId);
 
-    if (!isAdmin && !isAllowedChannel) {
+    // Sprawdź czy to wątek na kanale 1207041051831832586
+    const channel = interaction.channel;
+    const isThreadOnAllowedChannel = channel.isThread() && channel.parentId === '1207041051831832586';
+
+    if (!isAdmin && !isAllowedChannel && !isThreadOnAllowedChannel) {
         await interaction.reply({
-            content: '❌ Komenda `/decode` może być używana tylko na określonych kanałach lub przez administratorów.',
+            content: '❌ Komenda `/decode` może być używana tylko na określonych kanałach, w wątkach kanału szkoleń lub przez administratorów.',
             flags: MessageFlags.Ephemeral
         });
         return;
