@@ -1342,17 +1342,16 @@ async function handleDecodeCommand(interaction, sharedState) {
     const isAdmin = interaction.member.permissions.has('Administrator');
     const isAllowedChannel = allowedChannels.includes(interaction.channelId);
 
-    // Sprawdź czy to wątek na kanale 1207041051831832586
+    // Sprawdź czy to wątek (dowolny wątek)
     const channel = interaction.channel;
     const isThread = channel.type === 11 || channel.type === 12; // GUILD_PUBLIC_THREAD or GUILD_PRIVATE_THREAD
-    const isThreadOnAllowedChannel = isThread && channel.parentId === '1207041051831832586';
 
     // Debug: loguj informacje o kanale
-    logger.info(`[DECODE] Kanał: ${channel.id}, typ: ${channel.type}, parent: ${channel.parentId}, isThread: ${isThread}, dozwolony: ${isThreadOnAllowedChannel}`);
+    logger.info(`[DECODE] Kanał: ${channel.id}, typ: ${channel.type}, parent: ${channel.parentId}, isThread: ${isThread}`);
 
-    if (!isAdmin && !isAllowedChannel && !isThreadOnAllowedChannel) {
+    if (!isAdmin && !isAllowedChannel && !isThread) {
         await interaction.reply({
-            content: '❌ Komenda `/decode` może być używana tylko na określonych kanałach, w wątkach kanału szkoleń lub przez administratorów.',
+            content: '❌ Komenda `/decode` może być używana tylko na określonych kanałach, w wątkach lub przez administratorów.',
             flags: MessageFlags.Ephemeral
         });
         return;
