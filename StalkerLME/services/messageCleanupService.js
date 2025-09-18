@@ -46,12 +46,13 @@ class MessageCleanupService {
         }
     }
 
-    async scheduleMessageDeletion(messageId, channelId, deleteAtTimestamp) {
+    async scheduleMessageDeletion(messageId, channelId, deleteAtTimestamp, userId = null) {
         try {
             const scheduledMessage = {
                 messageId,
                 channelId,
                 deleteAt: deleteAtTimestamp,
+                userId: userId, // Zapisz właściciela wiadomości
                 createdAt: new Date().toISOString()
             };
 
@@ -78,7 +79,6 @@ class MessageCleanupService {
     async processScheduledDeletions() {
         const now = Date.now();
         const messagesToDelete = this.scheduledMessages.filter(msg => msg.deleteAt <= now);
-        const remainingMessages = this.scheduledMessages.filter(msg => msg.deleteAt > now);
 
         if (messagesToDelete.length === 0) {
             return;
@@ -90,9 +90,11 @@ class MessageCleanupService {
             await this.deleteMessage(messageData);
         }
 
-        // Usuń przetworzone wiadomości z listy
-        this.scheduledMessages = remainingMessages;
+        // Usuń przetworzone wiadomości z listy (zarówno te pomyślnie usunięte jak i te z błędami)
+        this.scheduledMessages = this.scheduledMessages.filter(msg => msg.deleteAt > now);
         await this.saveScheduledMessages();
+
+        this.logger.info(`[MESSAGE_CLEANUP] 🧹 Usunięto ${messagesToDelete.length} wpisów z pliku zaplanowanych usunięć`);
     }
 
     async deleteMessage(messageData) {

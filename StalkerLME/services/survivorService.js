@@ -1942,7 +1942,7 @@ class SurvivorService {
             const gameMode = buildData.meta.gameMode;
 
             if (gameMode === 'lme1') {
-                statisticsValue = 'Statystyki ustawień dla 1 fazy LME';
+                statisticsValue = 'Ustawienia dla 1 fazy LME';
             } else if (gameMode === 'lme2') {
                 const lmeTestaments = buildData.meta.lmeTestaments || 0;
                 statisticsValue = `Statystyki ustawień dla 2 fazy LME dla punktów przeciwnika: ${lmeTestaments}`;

@@ -457,20 +457,38 @@ async function handleButton(interaction, sharedState) {
 
     // Obsługa przycisku "Usuń" dla embedów buildu
     if (interaction.customId === 'delete_embed') {
-        if (!sharedState.buildPagination) {
-            await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
-            return;
+        // Po restarcie bota nie ma danych paginacji w RAM, ale wiadomość nadal istnieje
+        // Pozwól na usunięcie wiadomości jeśli użytkownik jest jej właścicielem (sprawdź przez embed footer lub inne metody)
+
+        let canDelete = false;
+        let userId = null;
+
+        // Sprawdź czy mamy dane paginacji w pamięci
+        if (sharedState.buildPagination && sharedState.buildPagination.has(interaction.message.id)) {
+            const paginationData = sharedState.buildPagination.get(interaction.message.id);
+            userId = paginationData.userId;
+            canDelete = interaction.user.id === userId;
+        } else {
+            // Po restarcie nie ma danych w RAM, ale sprawdź czy wiadomość jest w pliku zaplanowanych usunięć
+            const scheduledMessages = sharedState.messageCleanupService.scheduledMessages || [];
+            const scheduledMessage = scheduledMessages.find(msg => msg.messageId === interaction.message.id);
+
+            if (scheduledMessage) {
+                // Sprawdź czy użytkownik jest właścicielem (jeśli mamy zapisane userId)
+                if (scheduledMessage.userId && scheduledMessage.userId === interaction.user.id) {
+                    canDelete = true;
+                } else if (!scheduledMessage.userId) {
+                    // Dla starszych wiadomości bez userId, pozwól każdemu usunąć
+                    canDelete = true;
+                }
+            }
         }
 
-        const paginationData = sharedState.buildPagination.get(interaction.message.id);
-        if (!paginationData) {
-            await interaction.reply({ content: '❌ Nie znaleziono danych paginacji.', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
-        // Sprawdź czy użytkownik jest właścicielem embeda
-        if (interaction.user.id !== paginationData.userId) {
-            await interaction.reply({ content: '❌ Tylko właściciel embeda może go usunąć.', flags: MessageFlags.Ephemeral });
+        if (!canDelete) {
+            await interaction.reply({
+                content: '❌ Tylko właściciel embeda może go usunąć lub sesja paginacji wygasła.',
+                flags: MessageFlags.Ephemeral
+            });
             return;
         }
 
@@ -1365,7 +1383,8 @@ async function handleDecodeCommand(interaction, sharedState) {
         await sharedState.messageCleanupService.scheduleMessageDeletion(
             response.id,
             response.channelId,
-            deleteAt
+            deleteAt,
+            interaction.user.id // Zapisz właściciela
         );
 
         // Usuń dane paginacji po 15 minutach (tylko jeśli bot nie zostanie zrestartowany)
