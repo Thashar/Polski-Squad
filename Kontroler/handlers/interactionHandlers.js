@@ -34,6 +34,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'oligopoly-review':
                     await handleOligopolyReviewCommand(interaction, config);
                     break;
+                case 'oligopoly-clear':
+                    await handleOligopolyClearCommand(interaction, config);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -1283,6 +1286,10 @@ async function registerSlashCommands(client, config) {
                         { name: '💥PolskiSquad²💥', value: '💥PolskiSquad²💥' }
                     )),
 
+        new SlashCommandBuilder()
+            .setName('oligopoly-clear')
+            .setDescription('Usuwa wszystkie wpisy oligopoly (tylko administratorzy)'),
+
     ];
 
     const rest = new REST().setToken(config.token);
@@ -1658,23 +1665,34 @@ async function handleOligopolyCommand(interaction, config) {
         interaction.client.oligopolyService = new OligopolyService(config, logger);
     }
 
-    const success = await interaction.client.oligopolyService.addOligopolyEntry(
+    // Pobierz nick na serwerze (displayName lub nick lub username)
+    const serverNickname = interaction.member.displayName;
+
+    const result = await interaction.client.oligopolyService.addOligopolyEntry(
         interaction.user.id,
         interaction.user.username,
+        serverNickname,
         klan,
         id
     );
 
-    if (success) {
+    if (result.success) {
         await interaction.reply({
             content: `✅ **Dodano wpis oligopoly**\n🏰 **Klan:** ${klan}\n🆔 **ID:** ${id}`,
             ephemeral: true
         });
     } else {
-        await interaction.reply({
-            content: '❌ Wystąpił błąd podczas dodawania wpisu oligopoly.',
-            ephemeral: true
-        });
+        if (result.error === 'ID_EXISTS') {
+            await interaction.reply({
+                content: `❌ **ID już istnieje w systemie!**\n\n🆔 **ID:** ${id}\n👤 **Używane przez:** ${result.existingUser}\n🏰 **Klan:** ${result.existingKlan}\n\n💡 Każde ID może być używane tylko przez jedną osobę.`,
+                ephemeral: true
+            });
+        } else {
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas dodawania wpisu oligopoly.',
+                ephemeral: true
+            });
+        }
     }
 }
 
@@ -1726,7 +1744,7 @@ async function handleOligopolyReviewCommand(interaction, config) {
     }
 
     // Formatuj listę
-    const playerList = entries.map(entry => `Nick: ${entry.username} Klan: ${entry.klan} ID:${entry.id}`).join('\n');
+    const playerList = entries.map(entry => `Nick: ${entry.serverNickname || entry.username} ID:${entry.id}`).join('\n');
     const idList = entries.map(entry => entry.id).join(' ');
 
     const response = `📋 **Lista oligopoly - ${klan}**\n\n${playerList}\n\n**ID zbiorczo:**\n${idList}`;
@@ -1740,6 +1758,50 @@ async function handleOligopolyReviewCommand(interaction, config) {
     } else {
         await interaction.reply({
             content: response,
+            ephemeral: true
+        });
+    }
+}
+
+/**
+ * Obsługuje komendę /oligopoly-clear
+ */
+async function handleOligopolyClearCommand(interaction, config) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Inicjalizuj oligopolyService jeśli nie istnieje
+    if (!interaction.client.oligopolyService) {
+        const OligopolyService = require('../services/oligopolyService');
+        interaction.client.oligopolyService = new OligopolyService(config, logger);
+    }
+
+    const entriesCount = interaction.client.oligopolyService.getEntryCount();
+
+    if (entriesCount === 0) {
+        await interaction.reply({
+            content: '📋 **Brak wpisów oligopoly do usunięcia.**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const success = await interaction.client.oligopolyService.clearAllEntries();
+
+    if (success) {
+        await interaction.reply({
+            content: `✅ **Usunięto wszystkie wpisy oligopoly**\n📊 Usuniętych wpisów: ${entriesCount}`,
+            ephemeral: true
+        });
+    } else {
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas usuwania wpisów oligopoly.',
             ephemeral: true
         });
     }

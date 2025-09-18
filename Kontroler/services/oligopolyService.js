@@ -45,36 +45,51 @@ class OligopolyService {
         }
     }
 
-    async addOligopolyEntry(userId, username, klan, id) {
+    async addOligopolyEntry(userId, username, serverNickname, klan, id) {
         try {
+            // Sprawdź czy ID już istnieje w systemie (dla wszystkich użytkowników i klanów)
+            const existingIdEntry = this.oligopolyData.find(entry => entry.id === id);
+
+            if (existingIdEntry && existingIdEntry.userId !== userId) {
+                // ID już istnieje u innego użytkownika
+                return {
+                    success: false,
+                    error: 'ID_EXISTS',
+                    existingUser: existingIdEntry.serverNickname || existingIdEntry.username,
+                    existingKlan: existingIdEntry.klan
+                };
+            }
+
             // Sprawdź czy użytkownik już ma wpis dla tego klanu
-            const existingEntryIndex = this.oligopolyData.findIndex(
+            const existingUserEntryIndex = this.oligopolyData.findIndex(
                 entry => entry.userId === userId && entry.klan === klan
             );
 
             const newEntry = {
                 userId,
                 username,
+                serverNickname,
                 klan,
                 id,
                 timestamp: new Date().toISOString()
             };
 
-            if (existingEntryIndex !== -1) {
-                // Zaktualizuj istniejący wpis
-                this.oligopolyData[existingEntryIndex] = newEntry;
-                this.logger.info(`[OLIGOPOLY] 🔄 Zaktualizowano wpis dla ${username} (${klan}): ${id}`);
+            if (existingUserEntryIndex !== -1) {
+                // Zaktualizuj istniejący wpis tego samego użytkownika
+                const oldId = this.oligopolyData[existingUserEntryIndex].id;
+                this.oligopolyData[existingUserEntryIndex] = newEntry;
+                this.logger.info(`[OLIGOPOLY] 🔄 Zaktualizowano wpis dla ${serverNickname} (${klan}): ${oldId} → ${id}`);
             } else {
                 // Dodaj nowy wpis
                 this.oligopolyData.push(newEntry);
-                this.logger.info(`[OLIGOPOLY] ➕ Dodano nowy wpis dla ${username} (${klan}): ${id}`);
+                this.logger.info(`[OLIGOPOLY] ➕ Dodano nowy wpis dla ${serverNickname} (${klan}): ${id}`);
             }
 
             await this.saveOligopolyData();
-            return true;
+            return { success: true };
         } catch (error) {
             this.logger.error('[OLIGOPOLY] ❌ Błąd dodawania wpisu oligopoly:', error.message);
-            return false;
+            return { success: false, error: 'SYSTEM_ERROR' };
         }
     }
 
@@ -89,6 +104,19 @@ class OligopolyService {
 
     getEntryCount() {
         return this.oligopolyData.length;
+    }
+
+    async clearAllEntries() {
+        try {
+            const clearedCount = this.oligopolyData.length;
+            this.oligopolyData = [];
+            await this.saveOligopolyData();
+            this.logger.info(`[OLIGOPOLY] 🗑️ Wyczyszczono wszystkie wpisy oligopoly (${clearedCount} wpisów)`);
+            return true;
+        } catch (error) {
+            this.logger.error('[OLIGOPOLY] ❌ Błąd czyszczenia wpisów oligopoly:', error.message);
+            return false;
+        }
     }
 }
 
