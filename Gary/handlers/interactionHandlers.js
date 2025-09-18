@@ -107,19 +107,11 @@ class InteractionHandler {
                 .setDescription('Show proxy configuration and statistics (Admin only)'),
 
             new SlashCommandBuilder()
-                .setName('add-proxy')
-                .setDescription('Add new proxy server (Admin only)')
-                .addStringOption(option =>
-                    option.setName('url')
-                        .setDescription('Proxy URL (format: http://username:password@host:port)')
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('remove-proxy')
-                .setDescription('Remove proxy server (Admin only)')
+                .setName('proxy-remove')
+                .setDescription('Remove expired proxy server (Admin only)')
                 .addStringOption(option =>
                     option.setName('proxy')
-                        .setDescription('Select proxy to remove')
+                        .setDescription('Select expired proxy to remove (Status 407 only)')
                         .setRequired(true)
                         .setAutocomplete(true))
         ];
@@ -167,7 +159,7 @@ class InteractionHandler {
         const { commandName } = interaction;
         
         // Check permissions for admin-only commands
-        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'add-proxy', 'remove-proxy'];
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-remove'];
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
@@ -212,11 +204,7 @@ class InteractionHandler {
                     await this.handleProxyStatsCommand(interaction);
                     break;
 
-                case 'add-proxy':
-                    await this.handleAddProxyCommand(interaction);
-                    break;
-
-                case 'remove-proxy':
+                case 'proxy-remove':
                     await this.handleRemoveProxyCommand(interaction);
                     break;
             }
@@ -669,45 +657,91 @@ class InteractionHandler {
     async handleProxyStatsCommand(interaction) {
         // Check if user is administrator
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            await interaction.reply({ 
-                content: '❌ This command requires administrator permissions!', 
-                ephemeral: true 
+            await interaction.reply({
+                content: '❌ This command requires administrator permissions!',
+                ephemeral: true
             });
             return;
         }
 
         const stats = this.garrytoolsService.proxyService.getStats();
-        
+
         const embed = new EmbedBuilder()
             .setTitle('📊 Proxy Configuration & Statistics')
             .setColor(stats.enabled ? 0x00ff00 : 0x999999)
             .addFields([
-                { 
-                    name: '🔧 Configuration', 
-                    value: `**Status:** ${stats.enabled ? '✅ Enabled' : '❌ Disabled'}\n**Strategy:** ${stats.strategy}\n**Retry Attempts:** ${stats.retryAttempts}`, 
-                    inline: true 
+                {
+                    name: '🔧 Configuration',
+                    value: `**Status:** ${stats.enabled ? '✅ Enabled' : '❌ Disabled'}\n**Strategy:** ${stats.strategy}\n**Retry Attempts:** ${stats.retryAttempts}`,
+                    inline: true
                 },
-                { 
-                    name: '📈 Statistics', 
-                    value: `**Total Proxies:** ${stats.totalProxies}\n**Current Index:** ${stats.currentIndex}\n**Next Proxy:** ${stats.totalProxies > 0 ? (stats.currentIndex + 1) % stats.totalProxies : 'N/A'}`, 
-                    inline: true 
+                {
+                    name: '📈 Statistics',
+                    value: `**Total Proxies:** ${stats.totalProxies}\n**Available:** ${stats.availableProxies}\n**Disabled:** ${stats.disabledProxies}\n**Current Index:** ${stats.currentIndex}`,
+                    inline: true
                 }
             ])
             .setTimestamp();
 
-        if (!stats.enabled) {
+        // Dodaj listę proxy ze statusami
+        if (stats.enabled && stats.totalProxies > 0) {
+            const proxyList = this.garrytoolsService.proxyService.proxyList;
+            const proxyStatuses = [];
+
+            for (let i = 0; i < Math.min(proxyList.length, 10); i++) { // Max 10 proxy w embed
+                const proxy = proxyList[i];
+                const masked = this.garrytoolsService.proxyService.maskProxy(proxy);
+                const isDisabled = this.garrytoolsService.proxyService.isProxyDisabled(proxy);
+
+                let status = '✅ Active';
+                let details = '';
+
+                if (this.garrytoolsService.proxyService.proxyErrors.has(masked)) {
+                    const error = this.garrytoolsService.proxyService.proxyErrors.get(masked);
+
+                    if (error.status === 407) {
+                        status = '🚫 Expired (407)';
+                        details = ' - Credentials expired';
+                    } else if (error.status === 403) {
+                        const now = Date.now();
+                        const disabledAt = new Date(error.disabledAt).getTime();
+                        const hours24 = 24 * 60 * 60 * 1000;
+                        const remainingHours = Math.ceil((hours24 - (now - disabledAt)) / (60 * 60 * 1000));
+
+                        if (remainingHours > 0) {
+                            status = `⏰ Blocked (403)`;
+                            details = ` - ${remainingHours}h left`;
+                        } else {
+                            status = '✅ Active';
+                        }
+                    }
+                }
+
+                proxyStatuses.push(`${status} \`${masked}\`${details}`);
+            }
+
+            embed.addFields({
+                name: '🌐 Proxy Status List',
+                value: proxyStatuses.join('\n') || 'No proxy data',
+                inline: false
+            });
+
+            if (proxyList.length > 10) {
+                embed.setFooter({ text: `Showing 10 of ${proxyList.length} proxies` });
+            }
+
+            embed.setDescription(`🌐 Proxy system active with ${stats.totalProxies} configured servers (${stats.availableProxies} available, ${stats.disabledProxies} disabled).`);
+        } else if (!stats.enabled) {
             embed.setDescription('⚠️ Proxy system is disabled. Set `GARRY_PROXY_ENABLED=true` to enable.');
-        } else if (stats.totalProxies === 0) {
-            embed.setDescription('⚠️ No proxies configured. Add proxy URLs to `GARRY_PROXY_LIST` environment variable.');
         } else {
-            embed.setDescription(`🌐 Proxy system active with ${stats.totalProxies} configured proxy servers.`);
+            embed.setDescription('⚠️ No proxies configured. Add proxy URLs to `GARRY_PROXY_LIST` environment variable.');
         }
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     async handleAutocompleteInteraction(interaction) {
-        if (interaction.commandName === 'remove-proxy') {
+        if (interaction.commandName === 'proxy-remove') {
             const focusedValue = interaction.options.getFocused();
 
             // Pobierz tylko proxy z błędem 407 (wygasłe konta)
@@ -745,43 +779,6 @@ class InteractionHandler {
             }
 
             await interaction.respond(choices);
-        }
-    }
-
-    async handleAddProxyCommand(interaction) {
-        // Check if user is administrator
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            await interaction.reply({
-                content: '❌ This command requires administrator permissions!',
-                ephemeral: true
-            });
-            return;
-        }
-
-        const proxyUrl = interaction.options.getString('url');
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-            const success = this.garrytoolsService.proxyService.addProxy(proxyUrl);
-
-            if (success) {
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Proxy Added Successfully')
-                    .setColor(0x00ff00)
-                    .addFields([
-                        { name: '🌐 Proxy URL', value: this.garrytoolsService.proxyService.maskProxy(proxyUrl), inline: false },
-                        { name: '📊 Total Proxies', value: this.garrytoolsService.proxyService.proxyList.length.toString(), inline: true }
-                    ])
-                    .setTimestamp();
-
-                await interaction.editReply({ embeds: [embed] });
-            } else {
-                await interaction.editReply('❌ Failed to add proxy. Check logs for details.');
-            }
-
-        } catch (error) {
-            this.logger.error('Error adding proxy:', error);
-            await interaction.editReply('❌ Error occurred while adding proxy.');
         }
     }
 

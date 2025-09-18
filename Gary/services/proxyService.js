@@ -723,35 +723,6 @@ class ProxyService {
      * @returns {Object} Proxy usage statistics
      */
     /**
-     * Dodaje nowe proxy do listy
-     */
-    addProxy(proxyUrl) {
-        try {
-            // Walidacja formatu URL
-            const url = new URL(proxyUrl);
-            if (!['http:', 'https:'].includes(url.protocol)) {
-                throw new Error('Proxy musi używać protokołu HTTP lub HTTPS');
-            }
-
-            // Sprawdź czy proxy już istnieje
-            if (this.proxyList.includes(proxyUrl)) {
-                throw new Error('Proxy już istnieje na liście');
-            }
-
-            // Dodaj proxy
-            this.proxyList.push(proxyUrl);
-            this.saveProxyStatuses();
-
-            this.logger.info(`✅ DODANO NOWE PROXY: ${this.maskProxy(proxyUrl)}`);
-            return true;
-
-        } catch (error) {
-            this.logger.error(`❌ Błąd dodawania proxy: ${error.message}`);
-            return false;
-        }
-    }
-
-    /**
      * Usuwa proxy z listy
      */
     removeProxy(proxyUrl) {
