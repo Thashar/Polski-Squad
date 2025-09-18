@@ -2433,7 +2433,7 @@ class SurvivorService {
             'Inspiration': '<:inspiration:1417810056203730996>',
             'Encouragement': '<:encouragement:1417810034955517982>',
             'Battle Lust': '<:battle_lust:1417810016404246548>',
-            'Gary': '❓', // Brak ikony Gary w provided icons
+            'Gary': '<:gary:1417809708043206728>',
             'Sync Rate': '<:sync_rate:1417809974893219902>',
             'Resonance Chance': '<:resonance_chance:1417809949068755094>',
             'Resonance Damage': '<:resonance_damage:1417809758345367562>',

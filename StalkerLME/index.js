@@ -11,6 +11,7 @@ const PunishmentService = require('./services/punishmentService');
 const ReminderService = require('./services/reminderService');
 const VacationService = require('./services/vacationService');
 const SurvivorService = require('./services/survivorService');
+const MessageCleanupService = require('./services/messageCleanupService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('StalkerLME');
@@ -31,8 +32,12 @@ const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config);
 const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
+const messageCleanupService = new MessageCleanupService(config, logger);
 
 // Obiekt zawierający wszystkie współdzielone stany
+// Ustaw globalny dostęp do klienta dla messageCleanupService
+global.stalkerLMEClient = client;
+
 const sharedState = {
     client,
     config,
@@ -41,7 +46,8 @@ const sharedState = {
     punishmentService,
     reminderService,
     vacationService,
-    survivorService
+    survivorService,
+    messageCleanupService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -50,6 +56,7 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizacja serwisów
     await databaseService.initializeDatabase();
     await ocrService.initializeOCR();
+    await messageCleanupService.init();
     
     // Rejestracja komend slash
     await registerSlashCommands(client);
@@ -253,6 +260,10 @@ async function startBot() {
 async function stopBot() {
     try {
         logger.info('Zatrzymywanie bota Stalker LME...');
+
+        // Zatrzymaj serwis automatycznego usuwania wiadomości
+        messageCleanupService.stop();
+
         await client.destroy();
         logger.info('Bot został zatrzymany');
     } catch (error) {

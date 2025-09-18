@@ -1345,19 +1345,18 @@ async function handleDecodeCommand(interaction, sharedState) {
             timestamp: Date.now()
         });
 
-        // Ustaw timeout na 15 minut (900000 ms)
-        setTimeout(async () => {
+        // Zaplanuj usunięcie wiadomości po 15 minutach (persist across restarts)
+        const deleteAt = Date.now() + (15 * 60 * 1000); // 15 minut
+        await sharedState.messageCleanupService.scheduleMessageDeletion(
+            response.id,
+            response.channelId,
+            deleteAt
+        );
+
+        // Usuń dane paginacji po 15 minutach (tylko jeśli bot nie zostanie zrestartowany)
+        setTimeout(() => {
             if (sharedState.buildPagination && sharedState.buildPagination.has(response.id)) {
-                try {
-                    // Usuń wiadomość z embedem
-                    await response.delete();
-                    logger.info(`🗑️ Usunięto wygasłą wiadomość z embedem buildu ${response.id}`);
-                } catch (error) {
-                    logger.warn(`⚠️ Nie udało się usunąć wygasłej wiadomości ${response.id}: ${error.message}`);
-                } finally {
-                    // Usuń dane paginacji niezależnie od wyniku usuwania wiadomości
-                    sharedState.buildPagination.delete(response.id);
-                }
+                sharedState.buildPagination.delete(response.id);
             }
         }, 15 * 60 * 1000);
 
