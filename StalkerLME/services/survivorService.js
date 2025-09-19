@@ -235,6 +235,14 @@ class SurvivorService {
                 buildData.techs = this.decodeTechParts(data.m);
             }
 
+            // Zachowaj dane zasobów (klucz X)
+            if (data.X) {
+                buildData.X = data.X;
+            }
+
+            // Zachowaj surowe dane do debugowania
+            buildData.rawData = data;
+
             // Debug logging dla tech parts
             this.logger.info(`🔧 Tech parts debug - dostępne klucze: ${Object.keys(data).join(', ')}`);
             if (buildData.techs) {
@@ -553,6 +561,16 @@ class SurvivorService {
         // Zachowaj techs jeśli istnieją
         if (data.techs) {
             result.techs = data.techs;
+        }
+
+        // Zachowaj dane zasobów X jeśli istnieją
+        if (data.X) {
+            result.X = data.X;
+        }
+
+        // Zachowaj surowe dane jeśli istnieją
+        if (data.rawData) {
+            result.rawData = data.rawData;
         }
 
         return result;
@@ -2085,6 +2103,63 @@ class SurvivorService {
         embed.addFields({
             name: 'Resonance',
             value: techLines.join('\n') || 'Brak danych',
+            inline: false
+        });
+
+        // Drugie pole: Zużyte zasoby
+        this.addResourcesField(embed, buildData);
+    }
+
+    /**
+     * Dodaje pole Zużyte zasoby do embeda
+     */
+    addResourcesField(embed, buildData) {
+        // Sprawdź czy mamy dane o zasobach w rawData lub gdzie indziej
+        let resourceData = null;
+
+        // Szukaj danych w różnych miejscach
+        if (buildData.rawData && buildData.rawData.X) {
+            resourceData = buildData.rawData.X;
+        } else if (buildData.X) {
+            resourceData = buildData.X;
+        }
+
+        if (!resourceData) {
+            embed.addFields({
+                name: 'Zużyte zasoby',
+                value: 'Brak danych o zasobach',
+                inline: false
+            });
+            return;
+        }
+
+        const chipCount = resourceData.U || 0;
+        const partCounts = resourceData.V || [0, 0, 0, 0, 0, 0];
+
+        // Ikony dla rodzajów partów (kolejność zgodna z tablicą V)
+        const partIcons = [
+            '<:eternal:1418558858233909361>',   // 0 - eternal
+            '<:legend4:1418558885052153926>',  // 1 - legend4
+            '<:legend3:1418558899929350237>',  // 2 - legend3
+            '<:legend2:1418558932321959938>',  // 3 - legend2
+            '<:legend1:1418558955763793970>',  // 4 - legend1
+            '<:legend:1418558973384200274>'    // 5 - legend
+        ];
+
+        // Buduj zawartość pola
+        const resourceLines = [
+            `<:I_Chip:1418559789939822723> • **${chipCount}**`
+        ];
+
+        // Dodaj wszystkie rodzaje partów
+        for (let i = 0; i < partIcons.length; i++) {
+            const count = partCounts[i] || 0;
+            resourceLines.push(`${partIcons[i]} • **${count}**`);
+        }
+
+        embed.addFields({
+            name: 'Zużyte zasoby',
+            value: resourceLines.join('\n'),
             inline: false
         });
     }
