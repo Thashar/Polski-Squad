@@ -3039,115 +3039,23 @@ class SurvivorService {
     }
 
     /**
-     * Dodaje pole "Zużyte zasoby" do strony Start z agregowanymi danymi z różnych zakładek
+     * Dodaje pole "Zużyte kluczowe zasoby" do strony Start używając istniejącej funkcji
      */
     async addStartResourcesField(embed, buildData) {
-        const resourceLines = [];
+        // Użyj istniejącej funkcji z Tech Parts, ale zmień nazwę pola
+        const originalAddFields = embed.addFields;
 
-        try {
-            this.logger.info('🔧 Debug agregacji zasobów - dostępne klucze w buildData:', Object.keys(buildData));
-
-            // 1. Zakładka Ekwipunek - RC data (usuń "Total RC" tekst, zostaw ikonę)
-            const stats = this.calculateBuildStatistics(buildData);
-            if (stats && stats.totalPower && stats.totalPower > 0) {
-                resourceLines.push(`<:II_RC:1385139885924421653> ${stats.totalPower}`);
-                this.logger.info('✅ RC znalezione:', stats.totalPower);
+        embed.addFields = function(field) {
+            if (field.name === 'Zużyte zasoby') {
+                field.name = 'Zużyte kluczowe zasoby';
             }
+            return originalAddFields.call(this, field);
+        };
 
-            // 2. Zakładka Tech Party - Chip data (usuń kropkę ze środka)
-            if (buildData.X && Array.isArray(buildData.X)) {
-                let chipCount = 0;
-                for (const resource of buildData.X) {
-                    if (resource.V === 0) { // Chips mają V = 0
-                        chipCount += resource.U || 0;
-                    }
-                }
-                if (chipCount > 0) {
-                    resourceLines.push(`<:I_Chip:1418559789939822723> ${chipCount}`);
-                    this.logger.info('✅ Chip znalezione:', chipCount);
-                }
-            }
+        this.addResourcesField(embed, buildData);
 
-            // 3. Zakładka Survivor - AW data - spróbuj bezpośrednio obliczyć
-            if (buildData.heroes && typeof buildData.heroes === 'object') {
-                let totalCore = 0;
-
-                // Oblicz Core bezpośrednio z heroes
-                for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
-                    const stars = heroData.stars || 0;
-
-                    // Uproszczona logika z decodeHeroes - tylko core
-                    if (stars >= 7 && stars <= 12) {
-                        if (['Tsukuyomi', 'Catnips', 'Worm', 'King', 'Wesson', 'Yelena'].includes(heroName)) {
-                            // Grupa 1
-                            const coreTableGroup1 = { 7: 7, 8: 14, 9: 21, 10: 35, 11: 56, 12: 84 };
-                            totalCore += coreTableGroup1[stars] || 0;
-                        } else if (['Master Yang', 'Metalia', 'Joey', 'Taloxa', 'Raphael'].includes(heroName)) {
-                            // Grupa 2
-                            const coreTableGroup2 = { 7: 14, 8: 28, 9: 42, 10: 70, 11: 112, 12: 168 };
-                            totalCore += coreTableGroup2[stars] || 0;
-                        } else if (['April', 'Donatello', 'Splinter', 'Leonardo', 'Michelangelo', 'Squidward', 'Spongebob', 'Sandy', 'Patrick'].includes(heroName)) {
-                            // Grupa 3: 1 Core za każdą gwiazdkę od 7 do 12
-                            totalCore += (stars - 6);
-                        }
-                    }
-                }
-
-                // Dodaj synergie
-                if (buildData.meta && buildData.meta.synergyLevel) {
-                    const synergyTable = {
-                        1: { core: 7, puzzle: 1 }, 2: { core: 14, puzzle: 2 }, 3: { core: 21, puzzle: 3 },
-                        4: { core: 35, puzzle: 5 }, 5: { core: 56, puzzle: 8 }, 6: { core: 84, puzzle: 13 }
-                    };
-                    const synergyBonus = synergyTable[buildData.meta.synergyLevel];
-                    if (synergyBonus) {
-                        totalCore += synergyBonus.core;
-                    }
-                }
-
-                if (totalCore > 0) {
-                    resourceLines.push(`<:I_AW:1418241339497250928> ${totalCore}`);
-                    this.logger.info('✅ AW znalezione:', totalCore);
-                }
-            }
-
-            // 4. Zakładka Pets - Xeno pet core data
-            if (buildData.pets && buildData.pets.data) {
-                const pets = buildData.pets.data;
-                let xenoCost = 0;
-
-                // Oblicz koszt xeno cores z petów
-                if (pets.xeno && pets.xeno.stars > 0) {
-                    const xenoStars = pets.xeno.stars;
-                    if (xenoStars > 0) {
-                        xenoCost = Math.pow(2, xenoStars - 1);
-                    }
-                }
-
-                if (xenoCost > 0) {
-                    resourceLines.push(`<:xeno_pet_core:1417810117163749378> ${xenoCost}`);
-                    this.logger.info('✅ Xeno core znalezione:', xenoCost);
-                }
-            }
-
-            // Dodaj pole jeśli są jakiekolwiek zasoby
-            if (resourceLines.length > 0) {
-                embed.addFields({
-                    name: 'Zużyte kluczowe zasoby',
-                    value: resourceLines.join('\n'),
-                    inline: false
-                });
-            }
-        } catch (error) {
-            this.logger.error('Błąd podczas agregacji zasobów dla strony Start:', error);
-
-            // Dodaj pole z informacją o błędzie
-            embed.addFields({
-                name: 'Zużyte kluczowe zasoby',
-                value: 'Brak danych o zasobach',
-                inline: false
-            });
-        }
+        // Przywróć oryginalną funkcję
+        embed.addFields = originalAddFields;
     }
 }
 
