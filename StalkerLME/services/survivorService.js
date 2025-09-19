@@ -1935,19 +1935,36 @@ class SurvivorService {
      * Dodaje pola Start do embeda
      */
     async addStatisticsFields(embed, buildData, buildCode) {
-        // Sprawdź klucz "I" w meta data
+        // Sprawdź klucz "I" w meta data - musimy sprawdzić surowy klucz przed dekodowaniem
         let statisticsValue = 'Brak danych';
 
         if (buildData.meta && buildData.meta.gameMode) {
             const gameMode = buildData.meta.gameMode;
 
-            if (gameMode === 'lme1') {
+            // Sprawdź oryginalny klucz I w surowych danych
+            let originalGameModeKey = null;
+            try {
+                // Próbuj zdekodować build ponownie żeby uzyskać dostęp do surowych danych
+                const decoded = this.decodeBuildSync(buildCode);
+                if (decoded && decoded.a && decoded.a.I) {
+                    originalGameModeKey = decoded.a.I;
+                }
+            } catch (error) {
+                // Jeśli nie uda się zdekodować ponownie, używamy zdekodowanej wartości
+            }
+
+            if (originalGameModeKey === 'ee') {
+                statisticsValue = 'Ustawienia dla trybu Ender\'s Echo';
+            } else if (gameMode === 'lme1') {
                 statisticsValue = 'Ustawienia dla 1 fazy LME';
             } else if (gameMode === 'lme2') {
                 const lmeTestaments = buildData.meta.lmeTestaments || 0;
-                statisticsValue = `Statystyki ustawień dla 2 fazy LME dla punktów przeciwnika: ${lmeTestaments}`;
-            } else if (gameMode === 'ee') {
-                statisticsValue = 'Statystyki ustawień dla EE';
+                embed.addFields({
+                    name: 'Ustawienia dla 2 fazy LME',
+                    value: `Punkty przeciwnika: **${lmeTestaments}**`,
+                    inline: false
+                });
+                return; // Wyjdź wcześniej dla lme2
             }
         }
 
