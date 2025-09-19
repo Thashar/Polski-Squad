@@ -139,5 +139,16 @@ module.exports = {
         vacationRequestRoleId: '1397677852966522920',
         // Czas po którym użytkownik może złożyć kolejny wniosek (w godzinach)
         cooldownHours: 6
-    }
+    },
+
+    // Kanały gdzie komenda /decode jest zablokowana
+    blockedDecodeChannels: [
+        '1173653205557719140',
+        '1194299628905042040',
+        '1194298890069999756',
+        '1200051393843695699',
+        '1262792174475673610',
+        '1207041051831832586',
+        '1269698743393849458'
+    ]
 };

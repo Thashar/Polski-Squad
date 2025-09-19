@@ -1355,7 +1355,21 @@ async function handleOcrDebugCommand(interaction, config) {
 async function handleDecodeCommand(interaction, sharedState) {
     const { config, survivorService } = sharedState;
 
-    // Brak ograniczeń - komenda dostępna dla wszystkich użytkowników wszędzie
+    // Sprawdź czy kanał jest zablokowany dla komendy /decode
+    const currentChannelId = interaction.channelId;
+    const parentChannelId = interaction.channel?.parent?.id;
+
+    // Sprawdź czy to kanał zablokowany lub wątek w zablokowanym kanale
+    const isBlockedChannel = config.blockedDecodeChannels.includes(currentChannelId) ||
+                            config.blockedDecodeChannels.includes(parentChannelId);
+
+    if (isBlockedChannel) {
+        await interaction.reply({
+            content: '❌ Komenda `/decode` jest wyłączona w tym kanale.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
 
     const code = interaction.options.getString('code');
 
