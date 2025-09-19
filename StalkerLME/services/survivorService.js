@@ -782,12 +782,8 @@ class SurvivorService {
             .setTitle(safeTitle)
             .setColor(embedColor);
 
-        // Tymczasowa zawartość Tech Party
-        page2.addFields({
-            name: 'Tech Party',
-            value: 'Zawartość zostanie dodana wkrótce...',
-            inline: false
-        });
+        // Zawartość Tech Party
+        this.addTechPartsFields(page2, buildData);
 
         // Trzecia strona - Survivor
         const page3 = new EmbedBuilder()
@@ -1929,6 +1925,130 @@ class SurvivorService {
                 }
             );
         }
+    }
+
+    /**
+     * Dodaje pola Tech Parts do embeda
+     */
+    addTechPartsFields(embed, buildData) {
+        // Sprawdź czy buildData ma techs
+        let techsData = {};
+
+        if (buildData.techs && buildData.techs.data) {
+            techsData = buildData.techs.data;
+        } else if (buildData.techs) {
+            techsData = buildData.techs;
+        }
+
+        // Sprawdź czy mamy dane
+        if (!techsData || Object.keys(techsData).length === 0) {
+            embed.addFields({
+                name: 'Tech Parts',
+                value: 'Brak danych o Tech Parts',
+                inline: false
+            });
+            return;
+        }
+
+        // Filtruj tylko deployed = true i sortuj po resonance (najwyższe na górze)
+        const deployedTechs = [];
+
+        for (const [techName, techData] of Object.entries(techsData)) {
+            if (techData.deployed) {
+                deployedTechs.push({
+                    name: techName,
+                    ...techData
+                });
+            }
+        }
+
+        // Sortuj po resonance (najwyższe na górze)
+        deployedTechs.sort((a, b) => (b.resonance || 0) - (a.resonance || 0));
+
+        if (deployedTechs.length === 0) {
+            embed.addFields({
+                name: 'Tech Parts',
+                value: 'Brak wdrożonych Tech Parts',
+                inline: false
+            });
+            return;
+        }
+
+        // Formatuj tech parts
+        const techLines = deployedTechs.map(tech => {
+            const icon = this.getTechPartIcon(tech.name, tech.rarity, tech.mode);
+            const displayName = tech.mode || tech.name;
+            const resonanceText = tech.resonance ? `**${tech.resonance}**` : '';
+
+            return `${icon} ${displayName} • ${resonanceText}`;
+        });
+
+        embed.addFields({
+            name: 'Tech Parts',
+            value: techLines.join('\n') || 'Brak danych',
+            inline: false
+        });
+    }
+
+    /**
+     * Pobiera ikonę Tech Part na podstawie nazwy, rarity i trybu
+     */
+    getTechPartIcon(techName, rarity, mode) {
+        // Mapowanie ikon dla tech parts z trybami
+        const modeIcons = {
+            'legend': {
+                'Soccer Mode': '<:legend_soccer_mode:1418545625959632977>',
+                'Rocket Mode': '<:legend_rocket_mode:1418545607936704615>',
+                'Lightning Mode': '<:legend_lightning_mode:1418545583328858142>',
+                'Forcefield Mode': '<:legend_force_field_mode:1418545566870405180>',
+                'Durian Mode': '<:legend_durian_mode:1418545546078982284>',
+                'Drone Mode': '<:legend_drone_mode:1418545528429482004>',
+                'Drill Shot Mode': '<:legend_drill_shot_mode:1418545511564312616>',
+                'Boomerang Mode': '<:legend_boomerang_mode:1418545498725290024>'
+            },
+            'eternal': {
+                'Soccer Mode': '<:eternal_soccer_mode:1418545480388055073>',
+                'Rocket Mode': '<:eternal_rocket_mode:1418545458350919680>',
+                'Lightning Mode': '<:eternal_lightning_mode:1418545442899230771>',
+                'Forcefield Mode': '<:eternal_force_field_mode:1418545421831114752>',
+                'Durian Mode': '<:eternal_durian_mode:1418545403028308048>',
+                'Drone Mode': '<:eternal_drone_mode:1418545385202389044>',
+                'Drill Shot Mode': '<:eternal_drill_shot_mode:1418545368106405999>',
+                'Boomerang Mode': '<:eternal_boomerang_mode:1418545314222182491>'
+            }
+        };
+
+        // Mapowanie ikon dla tech parts bez trybów
+        const noModeIcons = {
+            'Energy Diffuser': {
+                'Legend': '<:Energy_Diffuser_legend:1418544688062926998>',
+                'Eternal': '<:Energy_Diffuser_eternal:1418544672728678460>'
+            },
+            'Hi-Maintainer': {
+                'Legend': '<:HiMaintainer_legend:1418544778320023643>',
+                'Eternal': '<:HiMaintainer_eternal:1418544765107966042>'
+            },
+            'Antimatter Generator': {
+                'Legend': '<:Antimatter_Generator_legend:1418544648128827572>',
+                'Eternal': '<:Antimatter_Generator_eternal:1418544615518376006>'
+            },
+            'Precision Device': {
+                'Legend': '<:Precision_Device_legend:1418544744857866331>',
+                'Eternal': '<:Precision_Device_eternal:1418544725299953804>'
+            }
+        };
+
+        // Sprawdź czy ma tryb
+        if (mode && modeIcons[rarity?.toLowerCase()]) {
+            return modeIcons[rarity.toLowerCase()][mode] || '⚙️';
+        }
+
+        // Sprawdź tech parts bez trybu
+        if (noModeIcons[techName] && rarity) {
+            return noModeIcons[techName][rarity] || '⚙️';
+        }
+
+        return '⚙️'; // Fallback icon
     }
 
     /**
