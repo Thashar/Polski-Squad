@@ -3065,12 +3065,17 @@ class SurvivorService {
             }
 
             // 3. Zakładka Survivor - AW data
-            const survivorResult = this.calculateSurvivorResources(buildData);
-            if (survivorResult) {
-                const match = survivorResult.match(/<:I_AW:1418241339497250928>\s*(\d+)/);
-                if (match) {
-                    const awValue = match[1];
-                    resourceLines.push(`<:I_AW:1418241339497250928> ${awValue}`);
+            if (buildData.heroes) {
+                // Tymczasowo ustaw buildData.meta dla funkcji decodeHeroes
+                const originalMeta = buildData.meta;
+                const survivorResult = this.decodeHeroes(buildData.h || []);
+
+                if (survivorResult) {
+                    const match = survivorResult.match(/<:I_AW:1418241339497250928>\s*(\d+)/);
+                    if (match) {
+                        const awValue = match[1];
+                        resourceLines.push(`<:I_AW:1418241339497250928> ${awValue}`);
+                    }
                 }
             }
 
