@@ -2042,7 +2042,7 @@ class SurvivorService {
         // Sprawdź czy mamy dane
         if (!techsData || Object.keys(techsData).length === 0) {
             embed.addFields({
-                name: 'Tech Parts',
+                name: 'Resonance',
                 value: 'Brak danych o Tech Parts',
                 inline: false
             });
@@ -2066,7 +2066,7 @@ class SurvivorService {
 
         if (deployedTechs.length === 0) {
             embed.addFields({
-                name: 'Tech Parts',
+                name: 'Resonance',
                 value: 'Brak wdrożonych Tech Parts',
                 inline: false
             });
@@ -2083,7 +2083,7 @@ class SurvivorService {
         });
 
         embed.addFields({
-            name: 'Tech Parts',
+            name: 'Resonance',
             value: techLines.join('\n') || 'Brak danych',
             inline: false
         });
