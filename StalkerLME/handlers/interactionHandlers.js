@@ -1359,16 +1359,16 @@ async function handleDecodeCommand(interaction, sharedState) {
     const currentChannelId = interaction.channelId;
     const parentChannelId = interaction.channel?.parent?.id;
 
-    // Sprawdź czy to kanał zablokowany lub wątek w zablokowanym kanale
-    const isBlockedChannel = config.blockedDecodeChannels.includes(currentChannelId) ||
-                            config.blockedDecodeChannels.includes(parentChannelId);
+    // Sprawdź czy to kanał dozwolony lub wątek w dozwolonym kanale
+    const isAllowedChannel = config.allowedDecodeChannels.includes(currentChannelId) ||
+                            config.allowedDecodeChannels.includes(parentChannelId);
 
     // Administratorzy mogą używać komendy wszędzie
     const isAdmin = interaction.member.permissions.has('Administrator');
 
-    if (isBlockedChannel && !isAdmin) {
+    if (!isAllowedChannel && !isAdmin) {
         await interaction.reply({
-            content: '❌ Komenda `/decode` jest wyłączona w tym kanale.',
+            content: '❌ Komenda `/decode` jest dostępna tylko na wybranych kanałach.',
             flags: MessageFlags.Ephemeral
         });
         return;

@@ -141,8 +141,8 @@ module.exports = {
         cooldownHours: 6
     },
 
-    // Kanały gdzie komenda /decode jest zablokowana
-    blockedDecodeChannels: [
+    // Kanały gdzie komenda /decode jest dozwolona (whitelist)
+    allowedDecodeChannels: [
         '1173653205557719140',
         '1194299628905042040',
         '1194298890069999756',
