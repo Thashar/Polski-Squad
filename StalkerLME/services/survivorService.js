@@ -2258,6 +2258,9 @@ class SurvivorService {
             value: '\u200B',
             inline: false
         });
+
+        // Dodaj pole "Zużyte zasoby" z agregowanymi danymi
+        await this.addStartResourcesField(embed, buildData);
     }
 
 
@@ -3033,6 +3036,80 @@ class SurvivorService {
             return baseStars + '\n' + ' '.repeat(4) + extraStars;
         }
         return '☆'.repeat(6) + '\n' + ' '.repeat(4) + '★'.repeat(6);
+    }
+
+    /**
+     * Dodaje pole "Zużyte zasoby" do strony Start z agregowanymi danymi z różnych zakładek
+     */
+    async addStartResourcesField(embed, buildData) {
+        const resourceLines = [];
+
+        try {
+            // 1. Zakładka Ekwipunek - RC data (usuń "Total RC" tekst, zostaw ikonę)
+            const stats = this.calculateBuildStatistics(buildData);
+            if (stats && stats.totalPower && stats.totalPower > 0) {
+                resourceLines.push(`<:II_RC:1385139885924421653> ${stats.totalPower}`);
+            }
+
+            // 2. Zakładka Tech Party - Chip data (usuń kropkę ze środka)
+            if (buildData.X && Array.isArray(buildData.X)) {
+                let chipCount = 0;
+                for (const resource of buildData.X) {
+                    if (resource.V === 0) { // Chips mają V = 0
+                        chipCount += resource.U || 0;
+                    }
+                }
+                if (chipCount > 0) {
+                    resourceLines.push(`<:I_Chip:1418559789939822723> ${chipCount}`);
+                }
+            }
+
+            // 3. Zakładka Survivor - AW data
+            const survivorResult = this.calculateSurvivorResources(buildData);
+            if (survivorResult) {
+                const match = survivorResult.match(/<:I_AW:1418241339497250928>\s*(\d+)/);
+                if (match) {
+                    const awValue = match[1];
+                    resourceLines.push(`<:I_AW:1418241339497250928> ${awValue}`);
+                }
+            }
+
+            // 4. Zakładka Pets - Xeno pet core data
+            if (buildData.pets && buildData.pets.data) {
+                const pets = buildData.pets.data;
+                let xenoCost = 0;
+
+                // Oblicz koszt xeno cores z petów
+                if (pets.xeno && pets.xeno.stars > 0) {
+                    const xenoStars = pets.xeno.stars;
+                    if (xenoStars > 0) {
+                        xenoCost = Math.pow(2, xenoStars - 1);
+                    }
+                }
+
+                if (xenoCost > 0) {
+                    resourceLines.push(`<:xeno_pet_core:1417810117163749378> ${xenoCost}`);
+                }
+            }
+
+            // Dodaj pole jeśli są jakiekolwiek zasoby
+            if (resourceLines.length > 0) {
+                embed.addFields({
+                    name: 'Zużyte kluczowe zasoby',
+                    value: resourceLines.join('\n'),
+                    inline: false
+                });
+            }
+        } catch (error) {
+            this.logger.error('Błąd podczas agregacji zasobów dla strony Start:', error);
+
+            // Dodaj pole z informacją o błędzie
+            embed.addFields({
+                name: 'Zużyte kluczowe zasoby',
+                value: 'Brak danych o zasobach',
+                inline: false
+            });
+        }
     }
 }
 
