@@ -550,6 +550,11 @@ class SurvivorService {
             result.meta = data.meta;
         }
 
+        // Zachowaj techs jeśli istnieją
+        if (data.techs) {
+            result.techs = data.techs;
+        }
+
         return result;
     }
 
@@ -2025,27 +2030,17 @@ class SurvivorService {
      * Dodaje pola Tech Parts do embeda
      */
     addTechPartsFields(embed, buildData) {
-        // DEBUG: Sprawdź co otrzymujemy
-        this.logger.info('🔧 DEBUG addTechPartsFields:');
-        this.logger.info('  buildData.techs:', JSON.stringify(buildData.techs, null, 2));
-
         // Sprawdź czy buildData ma techs
         let techsData = {};
 
         if (buildData.techs && buildData.techs.data) {
             techsData = buildData.techs.data;
-            this.logger.info('  Używam buildData.techs.data');
         } else if (buildData.techs) {
             techsData = buildData.techs;
-            this.logger.info('  Używam buildData.techs');
         }
-
-        this.logger.info('  techsData:', JSON.stringify(techsData, null, 2));
-        this.logger.info('  techsData keys length:', Object.keys(techsData).length);
 
         // Sprawdź czy mamy dane
         if (!techsData || Object.keys(techsData).length === 0) {
-            this.logger.info('  Brak danych tech parts!');
             embed.addFields({
                 name: 'Tech Parts',
                 value: 'Brak danych o Tech Parts',
