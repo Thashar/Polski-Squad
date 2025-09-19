@@ -2878,6 +2878,77 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza tylko AW (totalCore) na podstawie bohaterów i synergii dla strony Start
+     */
+    calculateAWFromSurvivor(buildData) {
+        let totalCore = 0;
+
+        // Definicje grup bohaterów (kopiowane z calculateCoreAndPuzzle)
+        const group1Heroes = ['Common', 'King', 'Yelena', 'Tsukuyomi', 'Catnips', 'Worm', 'Wesson'];
+        const group2Heroes = ['Master Yang', 'Metalia', 'Joey', 'Taloxa'];
+        const group3Heroes = ['Raphael', 'Leonardo', 'Donatello', 'Michelangelo', 'April', 'Splinter'];
+
+        // Tabele konwersji Core dla grup 1 i 2 (kopiowane z calculateCoreAndPuzzle)
+        const coreTableGroup1 = {
+            7: 1, 8: 3, 9: 6, 10: 11, 11: 18, 12: 30
+        };
+        const coreTableGroup2 = {
+            7: 1, 8: 3, 9: 7, 10: 15, 11: 30, 12: 60
+        };
+
+        // Tabela synergii (kopiowane z calculateCoreAndPuzzle)
+        const synergyTable = {
+            5: { core: 3, puzzle: 50 },
+            10: { core: 6, puzzle: 130 },
+            15: { core: 11, puzzle: 280 },
+            20: { core: 16, puzzle: 480 },
+            25: { core: 24, puzzle: 730 },
+            30: { core: 32, puzzle: 1030 },
+            35: { core: 40, puzzle: 1380 },
+            40: { core: 48, puzzle: 1780 },
+            45: { core: 63, puzzle: 2280 },
+            50: { core: 78, puzzle: 2880 },
+            55: { core: 93, puzzle: 3580 },
+            60: { core: 108, puzzle: 4380 }
+        };
+
+        // Przetwarzaj bohaterów (kopiowane z calculateCoreAndPuzzle)
+        if (buildData.heroes) {
+            for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
+                const stars = heroData.stars || 0;
+
+                if (group1Heroes.includes(heroName)) {
+                    // Grupa 1: tylko Core dla 7-12 gwiazdek
+                    if (stars >= 7 && stars <= 12) {
+                        totalCore += coreTableGroup1[stars] || 0;
+                    }
+                } else if (group2Heroes.includes(heroName)) {
+                    // Grupa 2: Core dla 7-12 gwiazdek
+                    if (stars >= 7 && stars <= 12) {
+                        totalCore += coreTableGroup2[stars] || 0;
+                    }
+                } else if (group3Heroes.includes(heroName)) {
+                    // Grupa 3: 1 Core za każdą gwiazdkę od 7 do 12
+                    if (stars >= 7 && stars <= 12) {
+                        totalCore += (stars - 6); // 7 gwiazdek = 1 Core, 8 = 2, itd.
+                    }
+                }
+            }
+        }
+
+        // Dodaj Core z synergii (kopiowane z calculateCoreAndPuzzle)
+        if (buildData.meta && buildData.meta.synergyLevel) {
+            const synergyLevel = buildData.meta.synergyLevel;
+            const synergyBonus = synergyTable[synergyLevel];
+            if (synergyBonus) {
+                totalCore += synergyBonus.core;
+            }
+        }
+
+        return totalCore;
+    }
+
+    /**
      * Oblicza Core i Puzzle na podstawie bohaterów i synergii oraz wyświetla synergie
      */
     calculateCoreAndPuzzle(buildData, meta) {
@@ -3049,6 +3120,12 @@ class SurvivorService {
             const stats = this.calculateBuildStatistics(buildData);
             if (stats && stats.totalPower && stats.totalPower > 0) {
                 resourceLines.push(`<:II_RC:1385139885924421653> ${stats.totalPower}`);
+            }
+
+            // 2. AW z zakładki Survivor (logika z calculateCoreAndPuzzle)
+            const awAmount = this.calculateAWFromSurvivor(buildData);
+            if (awAmount > 0) {
+                resourceLines.push(`<:I_AW:1418241339497250928> ${awAmount}`);
             }
 
             // Dodaj pole tylko jeśli są jakiekolwiek zasoby
