@@ -3045,10 +3045,13 @@ class SurvivorService {
         const resourceLines = [];
 
         try {
+            this.logger.info('🔧 Debug agregacji zasobów - dostępne klucze w buildData:', Object.keys(buildData));
+
             // 1. Zakładka Ekwipunek - RC data (usuń "Total RC" tekst, zostaw ikonę)
             const stats = this.calculateBuildStatistics(buildData);
             if (stats && stats.totalPower && stats.totalPower > 0) {
                 resourceLines.push(`<:II_RC:1385139885924421653> ${stats.totalPower}`);
+                this.logger.info('✅ RC znalezione:', stats.totalPower);
             }
 
             // 2. Zakładka Tech Party - Chip data (usuń kropkę ze środka)
@@ -3061,21 +3064,50 @@ class SurvivorService {
                 }
                 if (chipCount > 0) {
                     resourceLines.push(`<:I_Chip:1418559789939822723> ${chipCount}`);
+                    this.logger.info('✅ Chip znalezione:', chipCount);
                 }
             }
 
-            // 3. Zakładka Survivor - AW data
-            if (buildData.heroes) {
-                // Tymczasowo ustaw buildData.meta dla funkcji decodeHeroes
-                const originalMeta = buildData.meta;
-                const survivorResult = this.decodeHeroes(buildData.h || []);
+            // 3. Zakładka Survivor - AW data - spróbuj bezpośrednio obliczyć
+            if (buildData.heroes && typeof buildData.heroes === 'object') {
+                let totalCore = 0;
 
-                if (survivorResult) {
-                    const match = survivorResult.match(/<:I_AW:1418241339497250928>\s*(\d+)/);
-                    if (match) {
-                        const awValue = match[1];
-                        resourceLines.push(`<:I_AW:1418241339497250928> ${awValue}`);
+                // Oblicz Core bezpośrednio z heroes
+                for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
+                    const stars = heroData.stars || 0;
+
+                    // Uproszczona logika z decodeHeroes - tylko core
+                    if (stars >= 7 && stars <= 12) {
+                        if (['Tsukuyomi', 'Catnips', 'Worm', 'King', 'Wesson', 'Yelena'].includes(heroName)) {
+                            // Grupa 1
+                            const coreTableGroup1 = { 7: 7, 8: 14, 9: 21, 10: 35, 11: 56, 12: 84 };
+                            totalCore += coreTableGroup1[stars] || 0;
+                        } else if (['Master Yang', 'Metalia', 'Joey', 'Taloxa', 'Raphael'].includes(heroName)) {
+                            // Grupa 2
+                            const coreTableGroup2 = { 7: 14, 8: 28, 9: 42, 10: 70, 11: 112, 12: 168 };
+                            totalCore += coreTableGroup2[stars] || 0;
+                        } else if (['April', 'Donatello', 'Splinter', 'Leonardo', 'Michelangelo', 'Squidward', 'Spongebob', 'Sandy', 'Patrick'].includes(heroName)) {
+                            // Grupa 3: 1 Core za każdą gwiazdkę od 7 do 12
+                            totalCore += (stars - 6);
+                        }
                     }
+                }
+
+                // Dodaj synergie
+                if (buildData.meta && buildData.meta.synergyLevel) {
+                    const synergyTable = {
+                        1: { core: 7, puzzle: 1 }, 2: { core: 14, puzzle: 2 }, 3: { core: 21, puzzle: 3 },
+                        4: { core: 35, puzzle: 5 }, 5: { core: 56, puzzle: 8 }, 6: { core: 84, puzzle: 13 }
+                    };
+                    const synergyBonus = synergyTable[buildData.meta.synergyLevel];
+                    if (synergyBonus) {
+                        totalCore += synergyBonus.core;
+                    }
+                }
+
+                if (totalCore > 0) {
+                    resourceLines.push(`<:I_AW:1418241339497250928> ${totalCore}`);
+                    this.logger.info('✅ AW znalezione:', totalCore);
                 }
             }
 
@@ -3094,6 +3126,7 @@ class SurvivorService {
 
                 if (xenoCost > 0) {
                     resourceLines.push(`<:xeno_pet_core:1417810117163749378> ${xenoCost}`);
+                    this.logger.info('✅ Xeno core znalezione:', xenoCost);
                 }
             }
 
