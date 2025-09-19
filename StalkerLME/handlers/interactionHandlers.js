@@ -1363,7 +1363,10 @@ async function handleDecodeCommand(interaction, sharedState) {
     const isBlockedChannel = config.blockedDecodeChannels.includes(currentChannelId) ||
                             config.blockedDecodeChannels.includes(parentChannelId);
 
-    if (isBlockedChannel) {
+    // Administratorzy mogą używać komendy wszędzie
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (isBlockedChannel && !isAdmin) {
         await interaction.reply({
             content: '❌ Komenda `/decode` jest wyłączona w tym kanale.',
             flags: MessageFlags.Ephemeral
