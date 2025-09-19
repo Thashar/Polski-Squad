@@ -2062,7 +2062,7 @@ class SurvivorService {
             embed.addFields({
                 name: 'Resonance',
                 value: 'Brak danych o Tech Parts',
-                inline: false
+                inline: true
             });
             return;
         }
@@ -2086,7 +2086,7 @@ class SurvivorService {
             embed.addFields({
                 name: 'Resonance',
                 value: 'Brak wdrożonych Tech Parts',
-                inline: false
+                inline: true
             });
             return;
         }
@@ -2103,7 +2103,7 @@ class SurvivorService {
         embed.addFields({
             name: 'Resonance',
             value: techLines.join('\n') || 'Brak danych',
-            inline: false
+            inline: true
         });
 
         // Drugie pole: Zużyte zasoby
@@ -2114,11 +2114,6 @@ class SurvivorService {
      * Dodaje pole Zużyte zasoby do embeda
      */
     addResourcesField(embed, buildData) {
-        // DEBUG: Sprawdź strukturę buildData
-        this.logger.info('🔧 DEBUG addResourcesField:');
-        this.logger.info('  buildData keys:', Object.keys(buildData));
-        this.logger.info('  buildData.X:', JSON.stringify(buildData.X, null, 2));
-        this.logger.info('  buildData.rawData?.X:', JSON.stringify(buildData.rawData?.X, null, 2));
 
         // Sprawdź czy mamy dane o zasobach w rawData lub gdzie indziej
         let resourceData = null;
@@ -2126,20 +2121,15 @@ class SurvivorService {
         // Szukaj danych w różnych miejscach
         if (buildData.rawData && buildData.rawData.X) {
             resourceData = buildData.rawData.X;
-            this.logger.info('  Używam buildData.rawData.X');
         } else if (buildData.X) {
             resourceData = buildData.X;
-            this.logger.info('  Używam buildData.X');
         }
 
-        this.logger.info('  resourceData:', JSON.stringify(resourceData, null, 2));
-
         if (!resourceData) {
-            this.logger.info('  Brak danych o zasobach!');
             embed.addFields({
                 name: 'Zużyte zasoby',
                 value: 'Brak danych o zasobach',
-                inline: false
+                inline: true
             });
             return;
         }
@@ -2171,7 +2161,7 @@ class SurvivorService {
         embed.addFields({
             name: 'Zużyte zasoby',
             value: resourceLines.join('\n'),
-            inline: false
+            inline: true
         });
     }
 
