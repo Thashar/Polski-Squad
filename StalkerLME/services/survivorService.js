@@ -1940,9 +1940,10 @@ class SurvivorService {
 
         if (buildData.meta && buildData.meta.gameMode) {
             const gameMode = buildData.meta.gameMode;
+            const originalGameMode = buildData.meta.originalGameMode;
 
-            // Sprawdź czy gameMode to "ee" przed dekodowaniem
-            if (gameMode === 'ee') {
+            // Sprawdź oryginalny gameMode przed dekodowaniem
+            if (originalGameMode === 'ee') {
                 statisticsValue = 'Ustawienia dla trybu Ender\'s Echo';
             } else if (gameMode === 'lme1') {
                 statisticsValue = 'Ustawienia dla 1 fazy LME';
@@ -2565,6 +2566,7 @@ class SurvivorService {
             harmonyR: heroNames[metaData.e - 1] || 'Unknown',  // e = harmonyR (indeks - 1)
             teamwork: [],  // f = teamwork (tablica indeksów)
             gameMode: this.decodeGameMode(metaData.I),  // I = gameMode
+            originalGameMode: metaData.I,  // Zachowaj oryginalną wartość przed dekodowaniem
             lmeTestaments: metaData.J || 0,  // J = lmeTestaments
             eeSkills: metaData.K || []  // K = eeSkills
         };
