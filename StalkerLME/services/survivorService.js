@@ -123,11 +123,6 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
-            // SUROWE DANE DEBUG - wyświetlenie pełnych danych do debugowania
-            this.logger.info('=== SUROWE DANE ZDEKODOWANE ===');
-            this.logger.info(JSON.stringify(data, null, 2));
-            this.logger.info('=== KONIEC SUROWYCH DANYCH ===');
-
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
@@ -298,22 +293,8 @@ class SurvivorService {
             // Dekoduj dane tech part
             const deployed = techData.y === 1;
 
-            // Mapowanie rarności - sprawdzę dokładnie na podstawie danych użytkownika
-            let rarity;
-            if (techData.z === 0) {
-                // Na podstawie danych: pierwszy i czwarty element to Eternal (A=3360, A=7650)
-                // drugi i trzeci to Legend (A=3360, A=900)
-                if (i === 0 || i === 3) {
-                    rarity = 'Eternal';
-                } else {
-                    rarity = 'Legend';
-                }
-            } else if (techData.z === 1) {
-                rarity = 'Eternal'; // dla wersji 2
-            } else {
-                // Brak z - sprawdzam na podstawie nazwy
-                rarity = (techName === 'Energy Diffuser') ? 'Eternal' : 'Legend';
-            }
+            // Mapowanie rarności na podstawie wartości B
+            const rarity = techData.B === 0 ? 'Eternal' : 'Legend';
 
             const resonance = techData.A || 0;
 
