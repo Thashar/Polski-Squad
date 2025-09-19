@@ -3039,85 +3039,22 @@ class SurvivorService {
     }
 
     /**
-     * Dodaje pole "Zużyte zasoby" do strony Start z konkretnymi danymi z określonych zakładek
+     * Dodaje pole "Zużyte kluczowe zasoby" do strony Start
      */
     async addStartResourcesField(embed, buildData) {
         const resourceLines = [];
 
         try {
-            // 1. Zakładka Ekwipunek - RC (usuń "Total RC", zostaw ikonę)
+            // 1. RC z zakładki Ekwipunek (taka sama logika jak w linii 887)
             const stats = this.calculateBuildStatistics(buildData);
             if (stats && stats.totalPower && stats.totalPower > 0) {
                 resourceLines.push(`<:II_RC:1385139885924421653> ${stats.totalPower}`);
             }
 
-            // 2. Zakładka Tech Party - Chip (usuń kropkę ze środka)
-            if (buildData.X && Array.isArray(buildData.X)) {
-                let chipCount = 0;
-                for (const resource of buildData.X) {
-                    if (resource && resource.V === 0) {
-                        chipCount += resource.U || 0;
-                    }
-                }
-                if (chipCount > 0) {
-                    resourceLines.push(`<:I_Chip:1418559789939822723> ${chipCount}`);
-                }
-            }
-
-            // 3. Zakładka Survivor - AW
-            if (buildData.heroes && typeof buildData.heroes === 'object') {
-                let totalCore = 0;
-                const coreTableGroup1 = { 7: 7, 8: 14, 9: 21, 10: 35, 11: 56, 12: 84 };
-                const coreTableGroup2 = { 7: 14, 8: 28, 9: 42, 10: 70, 11: 112, 12: 168 };
-                const group1Heroes = ['Tsukuyomi', 'Catnips', 'Worm', 'King', 'Wesson', 'Yelena'];
-                const group2Heroes = ['Master Yang', 'Metalia', 'Joey', 'Taloxa', 'Raphael'];
-                const group3Heroes = ['April', 'Donatello', 'Splinter', 'Leonardo', 'Michelangelo', 'Squidward', 'Spongebob', 'Sandy', 'Patrick'];
-
-                for (const [heroName, heroData] of Object.entries(buildData.heroes)) {
-                    if (heroData && typeof heroData === 'object') {
-                        const stars = heroData.stars || 0;
-                        if (stars >= 7 && stars <= 12) {
-                            if (group1Heroes.includes(heroName)) {
-                                totalCore += coreTableGroup1[stars] || 0;
-                            } else if (group2Heroes.includes(heroName)) {
-                                totalCore += coreTableGroup2[stars] || 0;
-                            } else if (group3Heroes.includes(heroName)) {
-                                totalCore += (stars - 6);
-                            }
-                        }
-                    }
-                }
-
-                // Dodaj synergie
-                if (buildData.meta && buildData.meta.synergyLevel) {
-                    const synergyTable = {
-                        1: { core: 7, puzzle: 1 }, 2: { core: 14, puzzle: 2 }, 3: { core: 21, puzzle: 3 },
-                        4: { core: 35, puzzle: 5 }, 5: { core: 56, puzzle: 8 }, 6: { core: 84, puzzle: 13 }
-                    };
-                    const synergyBonus = synergyTable[buildData.meta.synergyLevel];
-                    if (synergyBonus) {
-                        totalCore += synergyBonus.core;
-                    }
-                }
-
-                if (totalCore > 0) {
-                    resourceLines.push(`<:I_AW:1418241339497250928> ${totalCore}`);
-                }
-            }
-
-            // 4. Zakładka Pets - Xeno pet core
-            if (buildData.pets && buildData.pets.data && buildData.pets.data.xeno) {
-                const xenoStars = buildData.pets.data.xeno.stars || 0;
-                if (xenoStars > 0) {
-                    const xenoCost = Math.pow(2, xenoStars - 1);
-                    resourceLines.push(`<:xeno_pet_core:1417810117163749378> ${xenoCost}`);
-                }
-            }
-
             // Dodaj pole tylko jeśli są jakiekolwiek zasoby
             if (resourceLines.length > 0) {
                 embed.addFields({
-                    name: 'Zużyte zasoby',
+                    name: 'Zużyte kluczowe zasoby',
                     value: resourceLines.join('\n'),
                     inline: false
                 });
