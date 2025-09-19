@@ -218,13 +218,30 @@ class SurvivorService {
                 buildData.meta = this.decodeMeta(data.a);
             }
 
-            // Dekodowanie tech parts - mogą być bezpośrednio w data lub w kluczu techs
-            if (data.data && typeof data.data === 'object') {
+            // Dekodowanie tech parts - sprawdź różne możliwe klucze
+            if (data.m && typeof data.m === 'object') {
+                // Tech parts w kluczu "m" (główna lokalizacja)
+                buildData.techs = { data: data.m };
+            } else if (data.data && typeof data.data === 'object') {
                 // Tech parts w strukturze data.data
                 buildData.techs = { data: data.data };
             } else if (data.techs && typeof data.techs === 'object') {
                 // Tech parts w kluczu techs
                 buildData.techs = data.techs;
+            } else if (data.t && typeof data.t === 'object') {
+                // Tech parts mogą być w kluczu "t"
+                buildData.techs = { data: data.t };
+            } else if (data.techParts && typeof data.techParts === 'object') {
+                // Tech parts w kluczu techParts
+                buildData.techs = data.techParts;
+            }
+
+            // Debug logging dla tech parts
+            this.logger.info(`🔧 Tech parts debug - dostępne klucze: ${Object.keys(data).join(', ')}`);
+            if (buildData.techs) {
+                this.logger.info(`✅ Tech parts znalezione w buildData.techs`);
+            } else {
+                this.logger.info(`❌ Brak tech parts w buildData`);
             }
 
             return this.normalizeBuildData(buildData);
