@@ -34,6 +34,7 @@ Claude.md
 
 # Tests
 tests/
+**/test_*.js
 
 #TrainedData
 pol.TrainedData

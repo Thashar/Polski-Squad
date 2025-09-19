@@ -123,7 +123,11 @@ class SurvivorService {
      */
     convertSioToolsFormat(data) {
         try {
-    
+            // SUROWE DANE DEBUG - wyświetlenie pełnych danych do debugowania
+            this.logger.info('=== SUROWE DANE ZDEKODOWANE ===');
+            this.logger.info(JSON.stringify(data, null, 2));
+            this.logger.info('=== KONIEC SUROWYCH DANYCH ===');
+
             if (!data.j || !Array.isArray(data.j)) {
                 return null;
             }
@@ -218,13 +222,10 @@ class SurvivorService {
                 buildData.meta = this.decodeMeta(data.a);
             }
 
-            // Dekodowanie tech parts - sprawdź różne możliwe klucze
-            if (data.m && typeof data.m === 'object') {
-                // Tech parts w kluczu "m" (główna lokalizacja)
-                buildData.techs = { data: data.m };
-            } else if (data.data && typeof data.data === 'object') {
-                // Tech parts w strukturze data.data
-                buildData.techs = { data: data.data };
+            // Dekodowanie tech parts - priorytet dla gotowych danych
+            if (data.data && typeof data.data === 'object') {
+                // Tech parts w strukturze data.data (gotowe do użycia - najwyższy priorytet)
+                buildData.techs = { data: data.data, fromState: true };
             } else if (data.techs && typeof data.techs === 'object') {
                 // Tech parts w kluczu techs
                 buildData.techs = data.techs;
@@ -234,6 +235,9 @@ class SurvivorService {
             } else if (data.techParts && typeof data.techParts === 'object') {
                 // Tech parts w kluczu techParts
                 buildData.techs = data.techParts;
+            } else if (data.m && Array.isArray(data.m)) {
+                // Tech parts z klucza "m" (tablica danych do dekodowania - najniższy priorytet)
+                buildData.techs = this.decodeTechParts(data.m);
             }
 
             // Debug logging dla tech parts
@@ -249,6 +253,89 @@ class SurvivorService {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
             return null;
         }
+    }
+
+    /**
+     * Dekoduje tech parts z tablicy danych
+     */
+    decodeTechParts(techPartsArray) {
+        // Kolejność tech parts zgodna ze strukturą danych (8 tech parts)
+        const techPartNames = [
+            'Energy Guidance System', // 0 - Drone Mode / Forcefield Mode
+            'Antimatter Maintainer',  // 1 - Drill Shot Mode / Rocket Mode
+            'Quantum Nanobot',        // 2 - Durian Mode / Soccer Mode
+            'Phase Driver',           // 3 - Boomerang Mode / Lightning Mode
+            'Energy Diffuser',        // 4 - brak trybu
+            'Hi-Maintainer',         // 5 - brak trybu
+            'Antimatter Generator',   // 6 - brak trybu
+            'Precision Device'        // 7 - brak trybu
+        ];
+
+        // Mapowanie trybów na podstawie wartości "z" (0 lub 1)
+        const modeMapping = {
+            0: { // z: 0 = pierwszy tryb
+                'Energy Guidance System': 'Drone Mode',
+                'Antimatter Maintainer': 'Drill Shot Mode',
+                'Quantum Nanobot': 'Soccer Mode',
+                'Phase Driver': 'Lightning Mode'
+            },
+            1: { // z: 1 = drugi tryb
+                'Energy Guidance System': 'Forcefield Mode',
+                'Antimatter Maintainer': 'Rocket Mode',
+                'Quantum Nanobot': 'Durian Mode',
+                'Phase Driver': 'Boomerang Mode'
+            }
+        };
+
+        const decodedTechParts = {};
+
+        for (let i = 0; i < techPartsArray.length && i < techPartNames.length; i++) {
+            const techData = techPartsArray[i];
+            const techName = techPartNames[i];
+
+            if (!techData || !techName) continue;
+
+            // Dekoduj dane tech part
+            const deployed = techData.y === 1;
+
+            // Mapowanie rarności - sprawdzę dokładnie na podstawie danych użytkownika
+            let rarity;
+            if (techData.z === 0) {
+                // Na podstawie danych: pierwszy i czwarty element to Eternal (A=3360, A=7650)
+                // drugi i trzeci to Legend (A=3360, A=900)
+                if (i === 0 || i === 3) {
+                    rarity = 'Eternal';
+                } else {
+                    rarity = 'Legend';
+                }
+            } else if (techData.z === 1) {
+                rarity = 'Eternal'; // dla wersji 2
+            } else {
+                // Brak z - sprawdzam na podstawie nazwy
+                rarity = (techName === 'Energy Diffuser') ? 'Eternal' : 'Legend';
+            }
+
+            const resonance = techData.A || 0;
+
+            // Ustal tryb na podstawie wartości z
+            const mode = modeMapping[techData.z] ? modeMapping[techData.z][techName] : undefined;
+
+            decodedTechParts[techName] = {
+                deployed,
+                rarity,
+                resonance: resonance > 0 ? resonance : undefined
+            };
+
+            // Dodaj tryb jeśli istnieje
+            if (mode) {
+                decodedTechParts[techName].mode = mode;
+            }
+        }
+
+        return {
+            data: decodedTechParts,
+            fromState: true
+        };
     }
 
     /**
