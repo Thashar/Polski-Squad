@@ -1941,19 +1941,8 @@ class SurvivorService {
         if (buildData.meta && buildData.meta.gameMode) {
             const gameMode = buildData.meta.gameMode;
 
-            // Sprawdź oryginalny klucz I w surowych danych
-            let originalGameModeKey = null;
-            try {
-                // Próbuj zdekodować build ponownie żeby uzyskać dostęp do surowych danych
-                const decoded = this.decodeBuildSync(buildCode);
-                if (decoded && decoded.a && decoded.a.I) {
-                    originalGameModeKey = decoded.a.I;
-                }
-            } catch (error) {
-                // Jeśli nie uda się zdekodować ponownie, używamy zdekodowanej wartości
-            }
-
-            if (originalGameModeKey === 'ee') {
+            // Sprawdź czy gameMode to "ee" przed dekodowaniem
+            if (gameMode === 'ee') {
                 statisticsValue = 'Ustawienia dla trybu Ender\'s Echo';
             } else if (gameMode === 'lme1') {
                 statisticsValue = 'Ustawienia dla 1 fazy LME';
