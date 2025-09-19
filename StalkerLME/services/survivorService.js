@@ -2114,17 +2114,28 @@ class SurvivorService {
      * Dodaje pole Zużyte zasoby do embeda
      */
     addResourcesField(embed, buildData) {
+        // DEBUG: Sprawdź strukturę buildData
+        this.logger.info('🔧 DEBUG addResourcesField:');
+        this.logger.info('  buildData keys:', Object.keys(buildData));
+        this.logger.info('  buildData.X:', JSON.stringify(buildData.X, null, 2));
+        this.logger.info('  buildData.rawData?.X:', JSON.stringify(buildData.rawData?.X, null, 2));
+
         // Sprawdź czy mamy dane o zasobach w rawData lub gdzie indziej
         let resourceData = null;
 
         // Szukaj danych w różnych miejscach
         if (buildData.rawData && buildData.rawData.X) {
             resourceData = buildData.rawData.X;
+            this.logger.info('  Używam buildData.rawData.X');
         } else if (buildData.X) {
             resourceData = buildData.X;
+            this.logger.info('  Używam buildData.X');
         }
 
+        this.logger.info('  resourceData:', JSON.stringify(resourceData, null, 2));
+
         if (!resourceData) {
+            this.logger.info('  Brak danych o zasobach!');
             embed.addFields({
                 name: 'Zużyte zasoby',
                 value: 'Brak danych o zasobach',
