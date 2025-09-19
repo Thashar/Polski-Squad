@@ -2971,6 +2971,40 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza tylko ilość Xeno Pet Core na podstawie danych z Pets dla strony Start
+     */
+    calculateXenoCoreFromPets(buildData) {
+        let pets = {};
+
+        // Sprawdź różne możliwe struktury (kopiowane z addPetsFields)
+        if (buildData.pet && buildData.pet.data) {
+            pets = buildData.pet.data;
+        } else if (buildData.pet) {
+            pets = buildData.pet;
+        } else if (buildData.data && buildData.data.pet && buildData.data.pet.data) {
+            pets = buildData.data.pet.data;
+        } else if (buildData.data && buildData.data.pet) {
+            pets = buildData.data.pet;
+        }
+
+        if (!pets || !pets.name || !pets.stars) {
+            return 0;
+        }
+
+        const petName = pets.name || 'Unknown';
+        const stars = pets.stars || 0;
+
+        // Tylko Puffo, Crucker, Capy używają xeno pet cores (kopiowane z addPetsFields)
+        if (petName === 'Puffo' || petName === 'Crucker' || petName === 'Capy') {
+            const xenoCosts = [0, 0, 1, 2, 4, 7, 11, 17, 25, 35, 50];
+            const xenoCost = xenoCosts[stars] || 0;
+            return xenoCost;
+        }
+
+        return 0;
+    }
+
+    /**
      * Oblicza Core i Puzzle na podstawie bohaterów i synergii oraz wyświetla synergie
      */
     calculateCoreAndPuzzle(buildData, meta) {
@@ -3154,6 +3188,12 @@ class SurvivorService {
             const chipAmount = this.calculateChipFromTechParty(buildData);
             if (chipAmount > 0) {
                 resourceLines.push(`<:I_Chip:1418559789939822723> ${chipAmount}`);
+            }
+
+            // 4. Xeno Pet Core z zakładki Pets (logika z addPetsFields)
+            const xenoCoreAmount = this.calculateXenoCoreFromPets(buildData);
+            if (xenoCoreAmount > 0) {
+                resourceLines.push(`<:xeno_pet_core:1417810117163749378> ${xenoCoreAmount}`);
             }
 
             // Dodaj pole tylko jeśli są jakiekolwiek zasoby
