@@ -218,6 +218,15 @@ class SurvivorService {
                 buildData.meta = this.decodeMeta(data.a);
             }
 
+            // Dekodowanie tech parts - mogą być bezpośrednio w data lub w kluczu techs
+            if (data.data && typeof data.data === 'object') {
+                // Tech parts w strukturze data.data
+                buildData.techs = { data: data.data };
+            } else if (data.techs && typeof data.techs === 'object') {
+                // Tech parts w kluczu techs
+                buildData.techs = data.techs;
+            }
+
             return this.normalizeBuildData(buildData);
         } catch (error) {
             this.logger.error(`Błąd konwersji formatu sio-tools: ${error.message}`);
