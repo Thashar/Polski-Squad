@@ -2949,6 +2949,28 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza tylko ilość Chip na podstawie danych z Tech Party dla strony Start
+     */
+    calculateChipFromTechParty(buildData) {
+        // Szukaj danych w różnych miejscach (kopiowane z addResourcesField)
+        let resourceData = null;
+
+        if (buildData.rawData && buildData.rawData.X) {
+            resourceData = buildData.rawData.X;
+        } else if (buildData.X) {
+            resourceData = buildData.X;
+        }
+
+        if (!resourceData) {
+            return 0;
+        }
+
+        // Pobierz ilość Chip (kopiowane z addResourcesField)
+        const chipCount = resourceData.U || 0;
+        return chipCount;
+    }
+
+    /**
      * Oblicza Core i Puzzle na podstawie bohaterów i synergii oraz wyświetla synergie
      */
     calculateCoreAndPuzzle(buildData, meta) {
@@ -3126,6 +3148,12 @@ class SurvivorService {
             const awAmount = this.calculateAWFromSurvivor(buildData);
             if (awAmount > 0) {
                 resourceLines.push(`<:I_AW:1418241339497250928> ${awAmount}`);
+            }
+
+            // 3. Chip z zakładki Tech Party (logika z addResourcesField)
+            const chipAmount = this.calculateChipFromTechParty(buildData);
+            if (chipAmount > 0) {
+                resourceLines.push(`<:I_Chip:1418559789939822723> ${chipAmount}`);
             }
 
             // Dodaj pole tylko jeśli są jakiekolwiek zasoby
