@@ -74,7 +74,7 @@ class OCRService {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logImageProcessing) {
             logger.info('🔍 Szczegółowy debug: Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + quality 100');
         } else {
-            logger.info('Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + quality 100');
+            logger.info('Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + sharpen + redukcja szumów + quality 100');
         }
         
         // Najpierw pobierz metadane obrazu
@@ -89,6 +89,7 @@ class OCRService {
         await sharp(imagePath)
             .resize(newWidth, newHeight, { kernel: 'lanczos3' })
             .gamma(3.0)
+            .sharpen(1.5, 1.0, 3.0)
             .median(5)
             .grayscale()
             .threshold(200)
@@ -112,7 +113,7 @@ class OCRService {
             logger.info(`🔧 Debug: Zapisywanie przetworzonych obrazów WYŁĄCZONE`);
         }
         
-        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + upscaling x2 + gamma 3.0 + redukcja szumów + rozmycie)');
+        logger.info('Preprocessing dla białego tekstu zakończony (styl Rekruter - atak + upscaling x2 + gamma 3.0 + sharpen + redukcja szumów)');
         return outputPath;
     }
 
