@@ -50,7 +50,7 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     await handleLotteryRemoveHistoricalSelect(interaction, config, lotteryService);
                     break;
                 case 'lottery_reroll_select':
-                    await handleLotteryRerollSelect(interaction, config, lotteryService);
+                    await handleRerollLotterySelect(interaction, config, lotteryService);
                     break;
                 default:
                     await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
@@ -1256,17 +1256,7 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('oligopoly')
-            .setDescription('Dodaj swoje ID do systemu oligopoly dla wybranego klanu')
-            .addStringOption(option =>
-                option.setName('klan')
-                    .setDescription('Klan dla którego dodajesz ID')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: '🔥Polski Squad🔥', value: '🔥Polski Squad🔥' },
-                        { name: '🎮PolskiSquad⁰🎮', value: '🎮PolskiSquad⁰🎮' },
-                        { name: '⚡PolskiSquad¹⚡', value: '⚡PolskiSquad¹⚡' },
-                        { name: '💥PolskiSquad²💥', value: '💥PolskiSquad²💥' }
-                    ))
+            .setDescription('Dodaj swoje ID do systemu oligopoly - klan zostanie wykryty automatycznie')
             .addStringOption(option =>
                 option.setName('id')
                     .setDescription('Twoje ID (tylko cyfry)')
@@ -1634,7 +1624,6 @@ async function generateStatsEmbed(history, config) {
  * Obsługuje komendę /oligopoly
  */
 async function handleOligopolyCommand(interaction, config) {
-    const klan = interaction.options.getString('klan');
     const id = interaction.options.getString('id');
 
     // Walidacja ID (sprawdź czy to liczba)
@@ -1646,14 +1635,44 @@ async function handleOligopolyCommand(interaction, config) {
         return;
     }
 
-    // Sprawdź czy klan istnieje w konfiguracji (bez "cały serwer")
-    const availableClans = Object.values(config.lottery.clans)
+    // Sprawdź czy użytkownik ma którąkolwiek z ról klanowych
+    const clanRoles = Object.values(config.lottery.clans)
         .filter(clan => clan.roleId !== null) // Wyklucz "cały serwer"
-        .map(clan => clan.displayName);
+        .map(clan => clan.roleId);
 
-    if (!availableClans.includes(klan)) {
+    const userClanRoles = interaction.member.roles.cache.filter(role =>
+        clanRoles.includes(role.id)
+    );
+
+    if (userClanRoles.size === 0) {
+        const availableClans = Object.values(config.lottery.clans)
+            .filter(clan => clan.roleId !== null)
+            .map(clan => clan.displayName);
+
         await interaction.reply({
-            content: `❌ Nieprawidłowy klan. Dostępne klany:\n${availableClans.map(name => `• ${name}`).join('\n')}`,
+            content: `❌ **Brak uprawnień do używania tej komendy!**\n\n` +
+                    `Musisz posiadać jedną z ról klanowych:\n${availableClans.map(name => `• ${name}`).join('\n')}\n\n` +
+                    `💡 Skontaktuj się z administratorem jeśli uważasz, że to błąd.`,
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Jeśli użytkownik ma więcej niż jedną rolę klanową, użyj pierwszej znalezionej
+    const userClanRoleId = userClanRoles.first().id;
+
+    // Znajdź odpowiedni klan na podstawie roli
+    let detectedClan = null;
+    for (const [key, clan] of Object.entries(config.lottery.clans)) {
+        if (clan.roleId === userClanRoleId) {
+            detectedClan = clan.displayName;
+            break;
+        }
+    }
+
+    if (!detectedClan) {
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas wykrywania klanu. Skontaktuj się z administratorem.',
             ephemeral: true
         });
         return;
@@ -1672,13 +1691,13 @@ async function handleOligopolyCommand(interaction, config) {
         interaction.user.id,
         interaction.user.username,
         serverNickname,
-        klan,
+        detectedClan,
         id
     );
 
     if (result.success) {
         await interaction.reply({
-            content: `✅ **Dodano wpis oligopoly**\n🏰 **Klan:** ${klan}\n🆔 **ID:** ${id}`,
+            content: `✅ **Dodano wpis oligopoly**\n🏰 **Wykryty klan:** ${detectedClan}\n🆔 **ID:** ${id}`,
             ephemeral: true
         });
     } else {
