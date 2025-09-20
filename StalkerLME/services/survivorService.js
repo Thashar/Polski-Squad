@@ -408,7 +408,7 @@ class SurvivorService {
             1: 'Rex',
             2: 'Croaky',
             3: 'Capy',
-            4: 'Crucker',
+            4: 'Clucker',
             5: 'Puffo'
         };
 
@@ -416,7 +416,7 @@ class SurvivorService {
         const petNameToIcon = {
             'Rex': '<:rex:1417809684659966114>',
             'Puffo': '<:puffo:1417809665806565397>',
-            'Crucker': '<:crucker:1417809647284523080>',
+            'Clucker': '<:clucker:1417809647284523080>',
             'Croaky': '<:croaky:1417809629622042675>',
             'Capy': '<:capy:1417809563301974117>'
         };
@@ -479,7 +479,7 @@ class SurvivorService {
                         };
                     }
                 } else {
-                    // Pozostałe skills (Puffo/Crucker/Capy format)
+                    // Pozostałe skills (Puffo/Clucker/Capy format)
                     if (skillData.P !== undefined) {
                         decodedSkills[skillName] = {
                             value: skillData.P
@@ -2657,8 +2657,8 @@ class SurvivorService {
             if (awakeningCost > 0) {
                 resourceText = `\n\n<:awakening_crystal:1417810137459982416> ${awakeningCost}`;
             }
-        } else if (petName === 'Puffo' || petName === 'Crucker' || petName === 'Capy') {
-            // Puffo, Crucker, Capy - awakening crystals + xeno pet cores
+        } else if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy') {
+            // Puffo, Clucker, Capy - awakening crystals + xeno pet cores
             const awakeningCosts = [0, 10, 30, 70, 130, 190, 250, 310, 370, 430, 490];
             const xenoCosts = [0, 0, 1, 2, 4, 7, 11, 17, 25, 35, 50];
 
@@ -2769,8 +2769,8 @@ class SurvivorService {
                     skillsText += `${icon} ${skillName}: ${rarity}\n`;
                 }
             }
-        } else if (petName === 'Puffo' || petName === 'Crucker' || petName === 'Capy') {
-            // Puffo, Crucker, Capy - wyświetl value skills z %
+        } else if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy') {
+            // Puffo, Clucker, Capy - wyświetl value skills z %
             const skillOrder = ['Sync Rate', 'Resonance Chance', 'Resonance Damage', 'Dmg to Weakened', 'Dmg to Poisoned', 'Dmg to Chilled', 'Shield Damage'];
 
             for (const skillName of skillOrder) {
@@ -2994,8 +2994,8 @@ class SurvivorService {
         const petName = pets.name || 'Unknown';
         const stars = pets.stars || 0;
 
-        // Tylko Puffo, Crucker, Capy używają xeno pet cores (kopiowane z addPetsFields)
-        if (petName === 'Puffo' || petName === 'Crucker' || petName === 'Capy') {
+        // Tylko Puffo, Clucker, Capy używają xeno pet cores (kopiowane z addPetsFields)
+        if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy') {
             const xenoCosts = [0, 0, 1, 2, 4, 7, 11, 17, 25, 35, 50];
             const xenoCost = xenoCosts[stars] || 0;
             return xenoCost;
