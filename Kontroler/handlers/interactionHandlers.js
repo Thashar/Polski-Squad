@@ -1264,16 +1264,16 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('oligopoly-review')
-            .setDescription('Przeglądaj listę ID dla wybranego klanu (tylko admini i moderatorzy)')
+            .setDescription('Przeglądaj listę ID dla wybranego klanu')
             .addStringOption(option =>
                 option.setName('klan')
                     .setDescription('Klan do przejrzenia')
                     .setRequired(true)
                     .addChoices(
                         { name: '🔥Polski Squad🔥', value: '🔥Polski Squad🔥' },
-                        { name: '🎮PolskiSquad⁰🎮', value: '🎮PolskiSquad⁰🎮' },
+                        { name: '💥PolskiSquad²💥', value: '💥PolskiSquad²💥' },
                         { name: '⚡PolskiSquad¹⚡', value: '⚡PolskiSquad¹⚡' },
-                        { name: '💥PolskiSquad²💥', value: '💥PolskiSquad²💥' }
+                        { name: '🎮PolskiSquad⁰🎮', value: '🎮PolskiSquad⁰🎮' }
                     )),
 
         new SlashCommandBuilder()
@@ -1719,17 +1719,7 @@ async function handleOligopolyCommand(interaction, config) {
  * Obsługuje komendę /oligopoly-review
  */
 async function handleOligopolyReviewCommand(interaction, config) {
-    // Sprawdź uprawnienia (administrator lub moderator)
-    const hasAdminPermission = interaction.member.permissions.has('Administrator');
-    const hasModeratorPermission = interaction.member.permissions.has('ManageMessages');
-
-    if (!hasAdminPermission && !hasModeratorPermission) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub **Zarządzanie wiadomościami**',
-            ephemeral: true
-        });
-        return;
-    }
+    // Komenda dostępna dla wszystkich użytkowników - usunięto sprawdzanie uprawnień
 
     const klan = interaction.options.getString('klan');
 
