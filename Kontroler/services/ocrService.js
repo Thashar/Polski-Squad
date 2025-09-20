@@ -72,7 +72,7 @@ class OCRService {
      */
     async preprocessWhiteTextOnGray(imagePath, outputPath) {
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logImageProcessing) {
-            logger.info('🔍 Szczegółowy debug: Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + redukcja szumów + quality 100');
+            logger.info('🔍 Szczegółowy debug: Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + sharpen + redukcja szumów + quality 100');
         } else {
             logger.info('Użycie ustawień OCR z Rekrutera dla ataku z upscaling x2 + gamma 3.0 + sharpen + redukcja szumów + quality 100');
         }
