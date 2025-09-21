@@ -1754,7 +1754,7 @@ async function handleOligopolyReviewCommand(interaction, config) {
 
     // Formatuj listę
     const playerList = entries.map(entry => `Nick: ${entry.serverNickname || entry.username} ID:${entry.id}`).join('\n');
-    const idList = entries.map(entry => entry.id).join(' ');
+    const idList = entries.map(entry => entry.id).join('\n');
 
     const response = `📋 **Lista oligopoly - ${klan}**\n\n${playerList}\n\n**ID zbiorczo:**\n${idList}`;
 
