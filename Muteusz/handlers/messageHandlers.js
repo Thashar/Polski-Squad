@@ -263,7 +263,7 @@ class MessageHandler {
             result.badWords.map(word => word.original).join(', ') : 
             'Brak';
         
-        this.logger.error(`⚠️ Automatyczny WARN: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText} - Łączne warny: ${result.warnResult.totalWarnings}`);
+        this.logger.error(`⚠️ Automatyczny WARN: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText} - Łączne warny: ${result.warnResult ? result.warnResult.totalWarnings : 'nieznane'}`);
 
         // Powiadom użytkownika o warnie (reply z pingiem)
         if (this.config.autoModeration.notifyUser) {
@@ -379,7 +379,7 @@ class MessageHandler {
                     reason = `Naruszenie ${result.violationCount}/${this.config.autoModeration.violationsBeforeWarn}`;
                     break;
                 case 'warn':
-                    reason = result.warnResult.warning.reason;
+                    reason = result.warnResult && result.warnResult.warning ? result.warnResult.warning.reason : 'Auto-moderacja: używanie wyzwisk';
                     break;
                 case 'mute':
                     reason = result.reason;
