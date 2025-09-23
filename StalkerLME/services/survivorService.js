@@ -2115,14 +2115,30 @@ class SurvivorService {
      */
     addResourcesField(embed, buildData) {
 
-        // Sprawdź czy mamy dane o zasobach w rawData lub gdzie indziej
+        // Sprawdź czy mamy nowe dane w formacie data.inputs/chips
         let resourceData = null;
+        let chipCount = 0;
+        let isNewFormat = false;
 
-        // Szukaj danych w różnych miejscach
-        if (buildData.rawData && buildData.rawData.X) {
+        // Nowy format z data.inputs i data.chips
+        if (buildData.rawData && buildData.rawData.X && buildData.rawData.X.data) {
+            resourceData = buildData.rawData.X.data;
+            chipCount = resourceData.chips || 0;
+            isNewFormat = true;
+        } else if (buildData.X && buildData.X.data) {
+            resourceData = buildData.X.data;
+            chipCount = resourceData.chips || 0;
+            isNewFormat = true;
+        }
+        // Stary format z U i V
+        else if (buildData.rawData && buildData.rawData.X) {
             resourceData = buildData.rawData.X;
+            chipCount = resourceData.U || 0;
+            isNewFormat = false;
         } else if (buildData.X) {
             resourceData = buildData.X;
+            chipCount = resourceData.U || 0;
+            isNewFormat = false;
         }
 
         if (!resourceData) {
@@ -2134,28 +2150,49 @@ class SurvivorService {
             return;
         }
 
-        const chipCount = resourceData.U || 0;
-        const partCounts = resourceData.V || [0, 0, 0, 0, 0, 0];
-
-        // Ikony dla rodzajów partów (kolejność zgodna z tablicą V)
-        const partIcons = [
-            '<:eternal:1418558858233909361>',   // 0 - eternal
-            '<:legend4:1418558885052153926>',  // 1 - legend4
-            '<:legend3:1418558899929350237>',  // 2 - legend3
-            '<:legend2:1418558932321959938>',  // 3 - legend2
-            '<:legend1:1418558955763793970>',  // 4 - legend1
-            '<:legend:1418558973384200274>'    // 5 - legend
-        ];
-
-        // Buduj zawartość pola
         const resourceLines = [
             `<:I_Chip:1418559789939822723> • **${chipCount}**`
         ];
 
-        // Dodaj wszystkie rodzaje partów
-        for (let i = 0; i < partIcons.length; i++) {
-            const count = partCounts[i] || 0;
-            resourceLines.push(`${partIcons[i]} • **${count}**`);
+        if (isNewFormat && resourceData.inputs) {
+            // Nowy format - inputs jako obiekt
+            const partMapping = [
+                { key: 'Eternal', icon: '<:eternal:1418558858233909361>' },
+                { key: 'Legend4', icon: '<:legend4:1418558885052153926>' },
+                { key: 'Legend3', icon: '<:legend3:1418558899929350237>' },
+                { key: 'Legend2', icon: '<:legend2:1418558932321959938>' },
+                { key: 'Legend1', icon: '<:legend1:1418558955763793970>' },
+                { key: 'Legend', icon: '<:legend:1418558973384200274>' },
+                { key: 'Epic3', icon: '<:epic3:1420101183925649478>' },
+                { key: 'Epic2', icon: '<:epic2:1420101201676210176>' },
+                { key: 'Epic1', icon: '<:epic1:1420101213214478397>' }
+            ];
+
+            for (const part of partMapping) {
+                const count = resourceData.inputs[part.key] || 0;
+                if (count > 0) {
+                    resourceLines.push(`${part.icon} • **${count}**`);
+                }
+            }
+        } else {
+            // Stary format - V jako tablica
+            const partCounts = resourceData.V || [0, 0, 0, 0, 0, 0];
+            const partIcons = [
+                '<:eternal:1418558858233909361>',   // 0 - eternal
+                '<:legend4:1418558885052153926>',  // 1 - legend4
+                '<:legend3:1418558899929350237>',  // 2 - legend3
+                '<:legend2:1418558932321959938>',  // 3 - legend2
+                '<:legend1:1418558955763793970>',  // 4 - legend1
+                '<:legend:1418558973384200274>'    // 5 - legend
+            ];
+
+            // Dodaj wszystkie rodzaje partów
+            for (let i = 0; i < partIcons.length; i++) {
+                const count = partCounts[i] || 0;
+                if (count > 0) {
+                    resourceLines.push(`${partIcons[i]} • **${count}**`);
+                }
+            }
         }
 
         embed.addFields({
@@ -2952,21 +2989,27 @@ class SurvivorService {
      * Oblicza tylko ilość Chip na podstawie danych z Tech Party dla strony Start
      */
     calculateChipFromTechParty(buildData) {
-        // Szukaj danych w różnych miejscach (kopiowane z addResourcesField)
+        // Szukaj danych w różnych miejscach (synchronizowane z addResourcesField)
         let resourceData = null;
+        let chipCount = 0;
 
-        if (buildData.rawData && buildData.rawData.X) {
+        // Nowy format z data.inputs i data.chips
+        if (buildData.rawData && buildData.rawData.X && buildData.rawData.X.data) {
+            resourceData = buildData.rawData.X.data;
+            chipCount = resourceData.chips || 0;
+        } else if (buildData.X && buildData.X.data) {
+            resourceData = buildData.X.data;
+            chipCount = resourceData.chips || 0;
+        }
+        // Stary format z U
+        else if (buildData.rawData && buildData.rawData.X) {
             resourceData = buildData.rawData.X;
+            chipCount = resourceData.U || 0;
         } else if (buildData.X) {
             resourceData = buildData.X;
+            chipCount = resourceData.U || 0;
         }
 
-        if (!resourceData) {
-            return 0;
-        }
-
-        // Pobierz ilość Chip (kopiowane z addResourcesField)
-        const chipCount = resourceData.U || 0;
         return chipCount;
     }
 
