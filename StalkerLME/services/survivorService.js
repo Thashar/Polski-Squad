@@ -2115,6 +2115,8 @@ class SurvivorService {
      */
     addResourcesField(embed, buildData) {
 
+        console.log('[DEBUG] addResourcesField wywołane z buildData.rawData.X:', JSON.stringify(buildData.rawData?.X, null, 2));
+
         // Sprawdź czy mamy nowe dane w formacie data.inputs/chips
         let resourceData = null;
         let chipCount = 0;
@@ -2122,20 +2124,30 @@ class SurvivorService {
 
         // Nowy format z data.inputs i data.chips
         if (buildData.rawData && buildData.rawData.X && buildData.rawData.X.data) {
+            console.log('[DEBUG] Znaleziono buildData.rawData.X.data');
             resourceData = buildData.rawData.X.data;
             chipCount = resourceData.chips || 0;
             isNewFormat = true;
         } else if (buildData.X && buildData.X.data) {
+            console.log('[DEBUG] Znaleziono buildData.X.data');
             resourceData = buildData.X.data;
+            chipCount = resourceData.chips || 0;
+            isNewFormat = true;
+        } else if (buildData.X && buildData.X.inputs && buildData.X.chips !== undefined) {
+            // Nowy format bezpośrednio w X
+            console.log('[DEBUG] Znaleziono buildData.X z inputs i chips');
+            resourceData = buildData.X;
             chipCount = resourceData.chips || 0;
             isNewFormat = true;
         }
         // Stary format z U i V
         else if (buildData.rawData && buildData.rawData.X) {
+            console.log('[DEBUG] Znaleziono buildData.rawData.X (stary format)');
             resourceData = buildData.rawData.X;
             chipCount = resourceData.U || 0;
             isNewFormat = false;
         } else if (buildData.X) {
+            console.log('[DEBUG] Znaleziono buildData.X (stary format)');
             resourceData = buildData.X;
             chipCount = resourceData.U || 0;
             isNewFormat = false;
@@ -2156,6 +2168,8 @@ class SurvivorService {
 
         if (isNewFormat && resourceData.inputs) {
             // Nowy format - inputs jako obiekt
+            console.log('[DEBUG] Nowy format wykryty, resourceData.inputs:', JSON.stringify(resourceData.inputs, null, 2));
+
             const partMapping = [
                 { key: 'Eternal', icon: '<:eternal:1418558858233909361>' },
                 { key: 'Legend4', icon: '<:legend4:1418558885052153926>' },
@@ -2170,6 +2184,7 @@ class SurvivorService {
 
             for (const part of partMapping) {
                 const count = resourceData.inputs[part.key] || 0;
+                console.log(`[DEBUG] ${part.key}: ${count}`);
                 if (count > 0) {
                     resourceLines.push(`${part.icon} • **${count}**`);
                 }
@@ -2999,6 +3014,10 @@ class SurvivorService {
             chipCount = resourceData.chips || 0;
         } else if (buildData.X && buildData.X.data) {
             resourceData = buildData.X.data;
+            chipCount = resourceData.chips || 0;
+        } else if (buildData.X && buildData.X.inputs && buildData.X.chips !== undefined) {
+            // Nowy format bezpośrednio w X
+            resourceData = buildData.X;
             chipCount = resourceData.chips || 0;
         }
         // Stary format z U
