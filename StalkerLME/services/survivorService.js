@@ -2115,7 +2115,6 @@ class SurvivorService {
      */
     addResourcesField(embed, buildData) {
 
-        console.log('[DEBUG] addResourcesField wywołane z buildData.rawData.X:', JSON.stringify(buildData.rawData?.X, null, 2));
 
         // Sprawdź czy mamy nowe dane w formacie data.inputs/chips
         let resourceData = null;
@@ -2124,30 +2123,25 @@ class SurvivorService {
 
         // Nowy format z data.inputs i data.chips
         if (buildData.rawData && buildData.rawData.X && buildData.rawData.X.data) {
-            console.log('[DEBUG] Znaleziono buildData.rawData.X.data');
             resourceData = buildData.rawData.X.data;
             chipCount = resourceData.chips || 0;
             isNewFormat = true;
         } else if (buildData.X && buildData.X.data) {
-            console.log('[DEBUG] Znaleziono buildData.X.data');
             resourceData = buildData.X.data;
             chipCount = resourceData.chips || 0;
             isNewFormat = true;
         } else if (buildData.X && buildData.X.inputs && buildData.X.chips !== undefined) {
             // Nowy format bezpośrednio w X
-            console.log('[DEBUG] Znaleziono buildData.X z inputs i chips');
             resourceData = buildData.X;
             chipCount = resourceData.chips || 0;
             isNewFormat = true;
         }
         // Stary format z U i V
         else if (buildData.rawData && buildData.rawData.X) {
-            console.log('[DEBUG] Znaleziono buildData.rawData.X (stary format)');
             resourceData = buildData.rawData.X;
             chipCount = resourceData.U || 0;
             isNewFormat = false;
         } else if (buildData.X) {
-            console.log('[DEBUG] Znaleziono buildData.X (stary format)');
             resourceData = buildData.X;
             chipCount = resourceData.U || 0;
             isNewFormat = false;
@@ -2168,8 +2162,6 @@ class SurvivorService {
 
         if (isNewFormat && resourceData.inputs) {
             // Nowy format - inputs jako obiekt
-            console.log('[DEBUG] Nowy format wykryty, resourceData.inputs:', JSON.stringify(resourceData.inputs, null, 2));
-
             const partMapping = [
                 { key: 'Eternal', icon: '<:eternal:1418558858233909361>' },
                 { key: 'Legend4', icon: '<:legend4:1418558885052153926>' },
@@ -2184,25 +2176,27 @@ class SurvivorService {
 
             for (const part of partMapping) {
                 const count = resourceData.inputs[part.key] || 0;
-                console.log(`[DEBUG] ${part.key}: ${count}`);
                 if (count > 0) {
                     resourceLines.push(`${part.icon} • **${count}**`);
                 }
             }
         } else {
-            // Stary format - V jako tablica
-            const partCounts = resourceData.V || [0, 0, 0, 0, 0, 0];
+            // Stary format - V jako tablica (może mieć 6 lub 9 elementów)
+            const partCounts = resourceData.V || [];
             const partIcons = [
                 '<:eternal:1418558858233909361>',   // 0 - eternal
                 '<:legend4:1418558885052153926>',  // 1 - legend4
                 '<:legend3:1418558899929350237>',  // 2 - legend3
                 '<:legend2:1418558932321959938>',  // 3 - legend2
                 '<:legend1:1418558955763793970>',  // 4 - legend1
-                '<:legend:1418558973384200274>'    // 5 - legend
+                '<:legend:1418558973384200274>',   // 5 - legend
+                '<:epic3:1420101183925649478>',    // 6 - epic3 (nowe)
+                '<:epic2:1420101201676210176>',    // 7 - epic2 (nowe)
+                '<:epic1:1420101213214478397>'     // 8 - epic1 (nowe)
             ];
 
-            // Dodaj wszystkie rodzaje partów
-            for (let i = 0; i < partIcons.length; i++) {
+            // Dodaj wszystkie rodzaje partów (obsługuje zarówno 6 jak i 9 elementów)
+            for (let i = 0; i < Math.min(partIcons.length, partCounts.length); i++) {
                 const count = partCounts[i] || 0;
                 if (count > 0) {
                     resourceLines.push(`${partIcons[i]} • **${count}**`);
