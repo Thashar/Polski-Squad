@@ -1395,6 +1395,7 @@ class SurvivorService {
      * Zwraca emoji dla Twin Lance w zależności od sumy C
      */
     getTwinLanceEmoji(totalCount) {
+        if (totalCount >= 45) return '<:H_LanceV6:1420107824071049246>';
         if (totalCount >= 36) return '<:H_LanceV5:1412958463977328720>';
         if (totalCount >= 27) return '<:H_LanceV4:1402532664052813865>';
         if (totalCount >= 18) return '<:H_LanceV3:1402532623288369162>';
