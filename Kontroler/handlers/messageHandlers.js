@@ -574,6 +574,14 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
      */
     async handleVotingSystem(message) {
         try {
+            // Dozwolone kanały dla systemu głosowania
+            const allowedChannels = ['1194299628905042040', '1194298890069999756', '1200051393843695699', '1262792174475673610'];
+
+            // Sprawdź czy wiadomość jest z dozwolonego kanału
+            if (!allowedChannels.includes(message.channel.id)) {
+                return;
+            }
+
             // Sprawdź czy wiadomość jest odpowiedzią na inną wiadomość
             if (!this.votingService.isReplyToUser(message)) {
                 return;

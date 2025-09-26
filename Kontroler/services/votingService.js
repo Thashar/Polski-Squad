@@ -157,7 +157,7 @@ class VotingService {
     /**
      * Rozpoczyna głosowanie
      */
-    async startVoting(message, targetUser, isRetry = false) {
+    async startVoting(message, targetUser, isRetry = false, retryCount = 0) {
         const initiator = message.author;
         const targetUserId = targetUser.id;
 
@@ -199,6 +199,7 @@ class VotingService {
             initiatorId: initiator.id,
             startTime: Date.now(),
             endTime: Date.now() + this.VOTING_TIME,
+            retryCount: retryCount,
             votes: {
                 yes: new Set(),
                 no: new Set()
@@ -311,20 +312,31 @@ class VotingService {
                               `🛡️ <@${voteData.targetUserId}> został uratowany przez klan.`;
 
             } else {
-                // Remis - powtórz głosowanie
-                resultMessage = `**Nie udało się podjąć decyzji, głosowanie odbędzie się jeszcze raz!**\n\n` +
-                              `📊 **Wyniki głosowania:**\n` +
-                              `❌ Tak: ${yesVotes} głosów (${yesPercent}%)\n` +
-                              `✅ Nie: ${noVotes} głosów (${noPercent}%)\n` +
-                              `📈 Łącznie: ${totalVotes} głosów\n\n` +
-                              `🔄 Rozpoczynanie nowego głosowania za 10 sekund...`;
+                // Remis - sprawdź czy nie przekroczono limitu prób
+                if (voteData.retryCount >= 2) {
+                    // 3 remisy - użytkownik niewinny
+                    resultMessage = `**Po 3 remisach klan nie może podjąć decyzji - <@${voteData.targetUserId}> zostaje uznany za niewinnego!**\n\n` +
+                                  `📊 **Finalne wyniki głosowania:**\n` +
+                                  `❌ Tak: ${yesVotes} głosów (${yesPercent}%)\n` +
+                                  `✅ Nie: ${noVotes} głosów (${noPercent}%)\n` +
+                                  `📈 Łącznie: ${totalVotes} głosów\n\n` +
+                                  `🛡️ <@${voteData.targetUserId}> został automatycznie uratowany po 3 remisach.`;
+                } else {
+                    // Powtórz głosowanie
+                    resultMessage = `**Nie udało się podjąć decyzji, głosowanie odbędzie się jeszcze raz!**\n\n` +
+                                  `📊 **Wyniki głosowania:**\n` +
+                                  `❌ Tak: ${yesVotes} głosów (${yesPercent}%)\n` +
+                                  `✅ Nie: ${noVotes} głosów (${noPercent}%)\n` +
+                                  `📈 Łącznie: ${totalVotes} głosów\n\n` +
+                                  `🔄 Rozpoczynanie nowego głosowania za 10 sekund... (Próba ${voteData.retryCount + 2}/3)`;
+                }
             }
 
             // Wyślij wyniki
             await channel.send(resultMessage);
 
-            // Jeśli remis, rozpocznij nowe głosowanie po 10 sekundach
-            if (yesVotes === noVotes) {
+            // Jeśli remis i nie przekroczono limitu, rozpocznij nowe głosowanie po 10 sekundach
+            if (yesVotes === noVotes && voteData.retryCount < 2) {
                 setTimeout(async () => {
                     try {
                         const targetUser = await this.client.users.fetch(voteData.targetUserId);
@@ -332,7 +344,7 @@ class VotingService {
                             channel: channel,
                             author: { id: voteData.initiatorId }
                         };
-                        await this.startVoting(fakeMessage, targetUser, true);
+                        await this.startVoting(fakeMessage, targetUser, true, voteData.retryCount + 1);
                     } catch (error) {
                         this.logger.error('❌ Błąd podczas ponownego głosowania po remisie:', error);
                     }
