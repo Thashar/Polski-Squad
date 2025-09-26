@@ -174,11 +174,12 @@ class InteractionHandler {
         // Wyczyść wszystkie timery związane z przypomnieniami o podpowiedziach
         this.timerService.clearHintReminderTimer();
         this.timerService.clearFirstHintReminderTimer();
-        this.timerService.clearSecondHintReminderTimer();  
+        this.timerService.clearSecondHintReminderTimer();
         this.timerService.clearPapalRoleRemovalTimer();
         this.timerService.clearRecurringReminderTimer();
+        this.timerService.clearHintTimeoutTimer();
 
-        // Ustaw nowy timer dla kolejnej podpowiedzi (6 godzin)
+        // Ustaw nowy timer dla kolejnej podpowiedzi (6 godzin) i 24h timeout
         await this.timerService.setHintReminderTimer();
 
         if (!interaction.replied && !interaction.deferred) {

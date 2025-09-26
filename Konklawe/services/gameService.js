@@ -29,6 +29,7 @@ class GameService {
         this.firstHintReminderTimer = null;
         this.secondHintReminderTimer = null;
         this.recurringReminderTimer = null;
+        this.hintTimeoutTimer = null; // Timer dla 24h timeout za brak nowej podpowiedzi
         
         // Konwersja czasów z konfiguracji na milisekundy
         this.AUTO_RESET_TIME = this.config.timers.autoResetMinutes * 60 * 1000;
@@ -42,6 +43,7 @@ class GameService {
         this.ROLE_REMOVAL_TIME = 60 * 60 * 1000; // 1 godzina
         this.EXISTING_HINT_REMINDER_TIME = 6 * 60 * 60 * 1000; // 6 godzin
         this.RECURRING_REMINDER_TIME = 15 * 60 * 1000; // 15 minut dla powtarzających się przypomnień
+        this.HINT_TIMEOUT_TIME = 24 * 60 * 60 * 1000; // 24 godziny - timeout za brak nowej podpowiedzi
     }
 
     /**
@@ -78,7 +80,8 @@ class GameService {
                 hasHintReminder: !!this.hintReminderTimer,
                 hasAutoReset: !!this.autoResetTimer,
                 hasReminder: !!this.reminderTimer,
-                hasRecurringReminder: !!this.recurringReminderTimer
+                hasRecurringReminder: !!this.recurringReminderTimer,
+                hasHintTimeout: !!this.hintTimeoutTimer
             }
         };
         this.dataService.saveTriggerState(data);

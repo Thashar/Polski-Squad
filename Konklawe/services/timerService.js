@@ -29,6 +29,7 @@ class TimerService {
         this.clearFirstHintReminderTimer();
         this.clearSecondHintReminderTimer();
         this.clearRecurringReminderTimer();
+        this.clearHintTimeoutTimer();
     }
 
     /**
@@ -98,6 +99,16 @@ class TimerService {
         if (this.gameService.recurringReminderTimer) {
             clearTimeout(this.gameService.recurringReminderTimer);
             this.gameService.recurringReminderTimer = null;
+        }
+    }
+
+    /**
+     * Czyści timer 24h timeout za brak podpowiedzi
+     */
+    clearHintTimeoutTimer() {
+        if (this.gameService.hintTimeoutTimer) {
+            clearTimeout(this.gameService.hintTimeoutTimer);
+            this.gameService.hintTimeoutTimer = null;
         }
     }
 
@@ -270,7 +281,7 @@ class TimerService {
                         if (member && member.roles.cache.has(this.config.roles.papal)) {
                             await member.roles.remove(this.config.roles.papal);
                             logger.info(`Usunięto rolę papieską użytkownikowi ${member.user.tag} za brak podpowiedzi przez godzinę`);
-                            await this.resetToDefaultPassword();
+                            await this.resetToDefaultPassword('1h');
                         }
                     }
                 } catch (error) {
@@ -298,8 +309,9 @@ class TimerService {
                                 const papalMember = membersWithRole.first();
                                 const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
                                 const timeText = formatTimeDifference(timeSinceLastHint);
-                                await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Rozważ dodanie nowej podpowiedzi dla graczy. 💡`);
+                                await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
                                 await this.setHintReminderTimer();
+                                await this.setHintTimeoutTimer(); // Ustaw 24h timer
                             }
                         }
                     } catch (error) {
@@ -312,9 +324,38 @@ class TimerService {
     }
 
     /**
-     * Resetuje hasło na domyślne
+     * Ustawia timer 24h timeout za brak nowej podpowiedzi
      */
-    async resetToDefaultPassword() {
+    async setHintTimeoutTimer() {
+        this.clearHintTimeoutTimer();
+        if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.lastHintTimestamp) {
+            this.gameService.hintTimeoutTimer = setTimeout(async () => {
+                if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
+                    try {
+                        const guild = this.client.guilds.cache.first();
+                        if (guild) {
+                            const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
+                            if (membersWithRole.size > 0) {
+                                const papalMember = membersWithRole.first();
+                                await papalMember.roles.remove(this.config.roles.papal);
+                                logger.info(`Usunięto rolę papieską użytkownikowi ${papalMember.user.tag} za brak nowej podpowiedzi przez 24 godziny`);
+                                await this.resetToDefaultPassword('24h');
+                            }
+                        }
+                    } catch (error) {
+                        logger.error('Błąd podczas usuwania roli papieskiej za brak nowej podpowiedzi:', error);
+                    }
+                }
+            }, this.gameService.HINT_TIMEOUT_TIME);
+            this.gameService.saveTriggerState();
+        }
+    }
+
+    /**
+     * Resetuje hasło na domyślne
+     * @param {string} reason - Powód resetowania ('1h' lub '24h')
+     */
+    async resetToDefaultPassword(reason = '1h') {
         try {
             const guild = this.client.guilds.cache.first();
             const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
@@ -327,11 +368,15 @@ class TimerService {
             }
 
             if (startChannel && startChannel.isTextBased()) {
-                await startChannel.send(`🚨 **Rola papieska została usunięta** za brak podpowiedzi przez godzinę!`);
+                if (reason === '24h') {
+                    await startChannel.send(`🚨 **Rola papieska została usunięta** za brak nowej podpowiedzi przez 24 godziny!`);
+                } else {
+                    await startChannel.send(`🚨 **Rola papieska została usunięta** za brak podpowiedzi przez godzinę!`);
+                }
                 await startChannel.send(`Hasło zostało automatycznie ustawione na "${this.config.messages.defaultPassword}". Napisz **"${this.config.messages.defaultPassword}"** by rozpocząć grę.`);
             }
 
-            logger.info('Zresetowano hasło na domyślne po usunięciu roli papieskiej');
+            logger.info(`Zresetowano hasło na domyślne po usunięciu roli papieskiej (powód: ${reason})`);
         } catch (error) {
             logger.error('Błąd podczas resetowania hasła:', error);
         }
@@ -396,7 +441,7 @@ class TimerService {
                 if (membersWithRole.size > 0) {
                     const papalMember = membersWithRole.first();
                     await papalMember.roles.remove(this.config.roles.papal);
-                    await this.resetToDefaultPassword();
+                    await this.resetToDefaultPassword('1h');
                 }
             } else {
                 // Ustaw odpowiednie timery na pozostały czas
@@ -475,8 +520,10 @@ class TimerService {
                 }
             }
         } else if (this.gameService.lastHintTimestamp) {
-            // Są podpowiedzi - ustaw timer dla kolejnej podpowiedzi
+            // Są podpowiedzi - ustaw timer dla kolejnej podpowiedzi i 24h timeout
             const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
+
+            // Timer 6h dla przypomnienia o kolejnej podpowiedzi
             if (timeSinceLastHint >= this.gameService.EXISTING_HINT_REMINDER_TIME) {
                 await this.setHintReminderTimer();
                 logger.info(`⏱️ Czas od ostatniej podpowiedzi minął - ustawianie timer natychmiast`);
@@ -484,6 +531,25 @@ class TimerService {
                 const remainingTime = this.gameService.EXISTING_HINT_REMINDER_TIME - timeSinceLastHint;
                 setTimeout(async () => await this.setHintReminderTimer(), remainingTime);
                 logger.info(`⏱️ Ustawiono timer dla kolejnej podpowiedzi na ${Math.round(remainingTime / 1000)} sekund`);
+            }
+
+            // Timer 24h dla usunięcia roli za brak nowej podpowiedzi
+            if (timeSinceLastHint >= this.gameService.HINT_TIMEOUT_TIME) {
+                // Już minęło 24h - usuń rolę natychmiast
+                logger.info('⚠️ Minęło 24h bez nowej podpowiedzi - usuwanie roli papieskiej');
+                const guild = this.client.guilds.cache.first();
+                const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
+                if (membersWithRole.size > 0) {
+                    const papalMember = membersWithRole.first();
+                    await papalMember.roles.remove(this.config.roles.papal);
+                    await this.resetToDefaultPassword('24h');
+                }
+            } else {
+                const remainingTime = this.gameService.HINT_TIMEOUT_TIME - timeSinceLastHint;
+                setTimeout(async () => {
+                    await this.setHintTimeoutTimer();
+                }, remainingTime);
+                logger.info(`⏱️ Ustawiono timer 24h timeout na ${Math.round(remainingTime / 1000)} sekund`);
             }
         }
         
