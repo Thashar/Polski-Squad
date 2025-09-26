@@ -572,12 +572,27 @@ class TimerService {
             if (timeSinceLastHint >= this.gameService.HINT_TIMEOUT_TIME) {
                 // Już minęło 24h - usuń rolę natychmiast
                 logger.info('⚠️ Minęło 24h bez nowej podpowiedzi - usuwanie roli papieskiej');
+
                 const guild = this.client.guilds.cache.first();
+                logger.info(`🔍 DEBUG: guild = ${guild ? guild.name : 'null'}`);
+
                 const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
+                logger.info(`🔍 DEBUG: membersWithRole.size = ${membersWithRole.size}`);
+                logger.info(`🔍 DEBUG: papal role ID = ${this.config.roles.papal}`);
+
                 if (membersWithRole.size > 0) {
                     const papalMember = membersWithRole.first();
-                    await papalMember.roles.remove(this.config.roles.papal);
-                    await this.resetToDefaultPassword('24h');
+                    logger.info(`🔍 DEBUG: papalMember = ${papalMember.user.tag}`);
+
+                    try {
+                        await papalMember.roles.remove(this.config.roles.papal);
+                        logger.info(`✅ Usunięto rolę papieską użytkownikowi ${papalMember.user.tag} za brak nowej podpowiedzi przez 24 godziny`);
+                        await this.resetToDefaultPassword('24h');
+                    } catch (error) {
+                        logger.error(`❌ Błąd podczas usuwania roli papieskiej: ${error.message}`);
+                    }
+                } else {
+                    logger.info('ℹ️ Brak użytkowników z rolą papieską do usunięcia');
                 }
             } else {
                 const remainingTime = this.gameService.HINT_TIMEOUT_TIME - timeSinceLastHint;
