@@ -176,12 +176,12 @@ class VotingService {
                 new ButtonBuilder()
                     .setCustomId(`vote_yes_${targetUserId}`)
                     .setLabel('Tak')
-                    .setStyle(ButtonStyle.Danger)
+                    .setStyle(ButtonStyle.Secondary)
                     .setEmoji('❌'),
                 new ButtonBuilder()
                     .setCustomId(`vote_no_${targetUserId}`)
                     .setLabel('Nie')
-                    .setStyle(ButtonStyle.Success)
+                    .setStyle(ButtonStyle.Secondary)
                     .setEmoji('✅')
             );
 
