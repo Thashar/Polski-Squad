@@ -13,27 +13,16 @@ class DatabaseService {
 
     async initializeDatabase() {
         try {
-            logger.info('Inicjalizacja bazy danych');
-            logger.info('📁 Tworzenie katalogów...');
-            
             await fs.mkdir(path.dirname(this.punishmentsFile), { recursive: true });
             await fs.mkdir(path.dirname(this.weeklyRemovalFile), { recursive: true });
-            
+
             if (!(await this.fileExists(this.punishmentsFile))) {
-                logger.info('📄 Tworzenie pliku punishments.json...');
                 await this.savePunishments({});
-            } else {
-                logger.info('📄 Plik punishments.json już istnieje');
             }
-            
+
             if (!(await this.fileExists(this.weeklyRemovalFile))) {
-                logger.info('📄 Tworzenie pliku weekly_removal.json...');
                 await this.saveWeeklyRemoval({});
-            } else {
-                logger.info('📄 Plik weekly_removal.json już istnieje');
             }
-            
-            logger.info('✅ Baza danych została pomyślnie zainicjalizowana');
         } catch (error) {
             logger.error('Błąd inicjalizacji bazy');
             logger.error('❌ Błąd inicjalizacji bazy danych:', error);

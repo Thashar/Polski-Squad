@@ -88,10 +88,10 @@ class MemberCacheService {
                     totalCached++;
                 }
                 
-                this.logger.info(`✅ Zbudowano cache dla ${members.size} członków z ${guild.name}`);
+                // Cache zbudowany pomyślnie
             }
-            
-            this.logger.info(`🎯 Łącznie w cache: ${totalCached} członków`);
+
+            // Cache gotowy
             
             // Zapisz do pliku
             await this.saveCacheToFile();

@@ -1296,12 +1296,10 @@ async function registerSlashCommands(client, config) {
     const rest = new REST().setToken(config.token);
     
     try {
-        logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
         await rest.put(
             Routes.applicationGuildCommands(config.clientId, config.guildId),
             { body: commands }
         );
-        logger.info('[COMMANDS] ✅ Komendy slash zarejestrowane pomyślnie');
     } catch (error) {
         logger.error('[COMMANDS] ❌ Błąd rejestracji komend slash:', error);
     }

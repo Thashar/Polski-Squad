@@ -361,7 +361,7 @@ class MemberCacheService {
                         }
                     }
 
-                    this.logger.info(`✅ Zbudowano cache boost dla ${members.size} członków z ${guild.name}`);
+                    // Cache boost zbudowany pomyślnie
 
                 } catch (guildError) {
                     totalErrors++;
@@ -369,7 +369,7 @@ class MemberCacheService {
                 }
             }
 
-            this.logger.info(`🎯 Łącznie w cache boost: ${totalCached} członków (${totalErrors} błędów)`);
+            // Cache boost gotowy
 
             // Zapisz do pliku z error handling
             try {

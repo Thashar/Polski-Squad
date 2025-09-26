@@ -901,9 +901,7 @@ async function registerSlashCommands(client) {
     ];
     
     try {
-        logger.info('[COMMANDS] 🔄 Rejestracja komend slash...');
         await client.application.commands.set(commands);
-        logger.info('[COMMANDS] ✅ Komendy slash zostały zarejestrowane');
     } catch (error) {
         logger.error('[COMMANDS] ❌ Błąd rejestracji komend:', error);
     }
