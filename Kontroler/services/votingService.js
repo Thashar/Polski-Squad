@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -157,27 +157,18 @@ class VotingService {
     /**
      * Rozpoczyna głosowanie
      */
-    async startVoting(message, targetUser) {
+    async startVoting(message, targetUser, isRetry = false) {
         const initiator = message.author;
         const targetUserId = targetUser.id;
 
-        // Sprawdź cooldown
-        if (!this.canStartVoting(targetUserId)) {
+        // Sprawdź cooldown tylko jeśli to nie jest powtórka po remisie
+        if (!isRetry && !this.canStartVoting(targetUserId)) {
             return; // Cicho ignoruj jeśli w cooldownie
         }
 
-        // Utwórz embed
-        const embed = new EmbedBuilder()
-            .setColor('#FF6B6B')
-            .setTitle('🗳️ Głosowanie: Dywersja w klanie')
-            .setDescription(`Czy <@${targetUserId}> działa na szkodę klanu?`)
-            .addFields(
-                { name: '⚡ Czas głosowania', value: '5 minut', inline: true },
-                { name: '📋 Zgłoszenie od', value: `<@${initiator.id}>`, inline: true },
-                { name: '⏰ Koniec głosowania', value: `<t:${Math.floor((Date.now() + this.VOTING_TIME) / 1000)}:R>`, inline: true }
-            )
-            .setTimestamp()
-            .setFooter({ text: 'Każdy członek klanu ma jeden głos' });
+        // Utwórz wiadomość tekstową
+        const endTime = Math.floor((Date.now() + this.VOTING_TIME) / 1000);
+        const voteText = `# ⚠️ UWAGA! Dywersja w klanie!\nCzy <@${targetUserId}> działa na szkodę klanu?\nCzas do końca głosowania: <t:${endTime}:R>`;
 
         // Utwórz przyciski
         const row = new ActionRowBuilder()
@@ -196,7 +187,7 @@ class VotingService {
 
         // Wyślij wiadomość z głosowaniem
         const voteMessage = await message.channel.send({
-            embeds: [embed],
+            content: voteText,
             components: [row]
         });
 
@@ -223,12 +214,14 @@ class VotingService {
 
         this.voteTimers.set(voteMessage.id, timer);
 
-        // Zapisz w historii
-        this.voteHistory[targetUserId] = {
-            timestamp: Date.now(),
-            initiator: initiator.id
-        };
-        await this.saveVoteHistory();
+        // Zapisz w historii tylko jeśli to nie jest powtórka po remisie
+        if (!isRetry) {
+            this.voteHistory[targetUserId] = {
+                timestamp: Date.now(),
+                initiator: initiator.id
+            };
+            await this.saveVoteHistory();
+        }
 
         this.logger.info(`🗳️ Rozpoczęto głosowanie przeciwko ${targetUser.tag} (${targetUserId})`);
     }
@@ -294,39 +287,57 @@ class VotingService {
             const yesPercent = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
             const noPercent = totalVotes > 0 ? Math.round((noVotes / totalVotes) * 100) : 0;
 
-            const saboteurWins = yesVotes > noVotes;
+            let resultMessage;
 
-            // Utwórz embed z wynikami
-            const resultEmbed = new EmbedBuilder()
-                .setColor(saboteurWins ? '#FF4444' : '#44FF44')
-                .setTitle('📊 Wyniki głosowania')
-                .setDescription(`Głosowanie przeciwko <@${voteData.targetUserId}> zostało zakończone.`)
-                .addFields(
-                    { name: '❌ Tak (Dywersant)', value: `${yesVotes} głosów (${yesPercent}%)`, inline: true },
-                    { name: '✅ Nie (Członek klanu)', value: `${noVotes} głosów (${noPercent}%)`, inline: true },
-                    { name: '📈 Łącznie głosów', value: `${totalVotes}`, inline: true }
-                )
-                .setTimestamp();
-
-            if (saboteurWins) {
-                resultEmbed.addFields({
-                    name: '⚡ Wynik',
-                    value: `<@${voteData.targetUserId}> otrzymuje rolę **Dywersanta** na 24 godziny.`,
-                    inline: false
-                });
+            if (yesVotes > noVotes) {
+                // Większość głosów TAK - przyznaj rolę Dywersanta
+                resultMessage = `**Większość podjęła decyzję, że <@${voteData.targetUserId}> musi ponieść karę!**\n\n` +
+                              `📊 **Wyniki głosowania:**\n` +
+                              `❌ Tak: ${yesVotes} głosów (${yesPercent}%)\n` +
+                              `✅ Nie: ${noVotes} głosów (${noPercent}%)\n` +
+                              `📈 Łącznie: ${totalVotes} głosów\n\n` +
+                              `⚡ <@${voteData.targetUserId}> otrzymuje rolę **Dywersanta** na 24 godziny.`;
 
                 // Przyznaj rolę Dywersanta
                 await this.assignSaboteurRole(voteData.targetUserId);
+
+            } else if (noVotes > yesVotes) {
+                // Większość głosów NIE - uratowany
+                resultMessage = `**Większość podjęła decyzję, że <@${voteData.targetUserId}> nie zawinił i nie zasługuje na karę!**\n\n` +
+                              `📊 **Wyniki głosowania:**\n` +
+                              `❌ Tak: ${yesVotes} głosów (${yesPercent}%)\n` +
+                              `✅ Nie: ${noVotes} głosów (${noPercent}%)\n` +
+                              `📈 Łącznie: ${totalVotes} głosów\n\n` +
+                              `🛡️ <@${voteData.targetUserId}> został uratowany przez klan.`;
+
             } else {
-                resultEmbed.addFields({
-                    name: '🛡️ Wynik',
-                    value: `<@${voteData.targetUserId}> został uratowany przez klan.`,
-                    inline: false
-                });
+                // Remis - powtórz głosowanie
+                resultMessage = `**Nie udało się podjąć decyzji, głosowanie odbędzie się jeszcze raz!**\n\n` +
+                              `📊 **Wyniki głosowania:**\n` +
+                              `❌ Tak: ${yesVotes} głosów (${yesPercent}%)\n` +
+                              `✅ Nie: ${noVotes} głosów (${noPercent}%)\n` +
+                              `📈 Łącznie: ${totalVotes} głosów\n\n` +
+                              `🔄 Rozpoczynanie nowego głosowania za 10 sekund...`;
             }
 
             // Wyślij wyniki
-            await channel.send({ embeds: [resultEmbed] });
+            await channel.send(resultMessage);
+
+            // Jeśli remis, rozpocznij nowe głosowanie po 10 sekundach
+            if (yesVotes === noVotes) {
+                setTimeout(async () => {
+                    try {
+                        const targetUser = await this.client.users.fetch(voteData.targetUserId);
+                        const fakeMessage = {
+                            channel: channel,
+                            author: { id: voteData.initiatorId }
+                        };
+                        await this.startVoting(fakeMessage, targetUser, true);
+                    } catch (error) {
+                        this.logger.error('❌ Błąd podczas ponownego głosowania po remisie:', error);
+                    }
+                }, 10000);
+            }
 
             // Usuń oryginalną wiadomość z przyciskami
             await message.delete();
