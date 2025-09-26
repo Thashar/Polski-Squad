@@ -575,7 +575,7 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
     async handleVotingSystem(message) {
         try {
             // Dozwolone kanały dla systemu głosowania
-            const allowedChannels = ['1194299628905042040', '1194298890069999756', '1200051393843695699', '1262792174475673610'];
+            const allowedChannels = ['1194299628905042040', '1194298890069999756', '1200051393843695699', '1262792174475673610', '1170323972173340744'];
 
             // Sprawdź czy wiadomość jest z dozwolonego kanału
             if (!allowedChannels.includes(message.channel.id)) {
