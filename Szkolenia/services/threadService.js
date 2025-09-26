@@ -108,6 +108,13 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
 
     if (!threadOwner) return; // Pomiń wątki, które nie należą do naszego systemu
 
+    // Po 7 dniach automatycznie zamknij wątek (niezależnie od przypomnienia)
+    if (inactiveTime > lockThreshold) {
+        logger.info(`⏰ Wątek ${thread.name} nieaktywny przez ${Math.round(inactiveTime / (1000 * 60 * 60 * 24))} dni - automatyczne zamykanie`);
+        await lockThread(thread, state, config);
+        return; // Przerwij dalsze przetwarzanie
+    }
+
     // Sprawdź czas ostatniego przypomnienia (tylko przy normalnym sprawdzaniu)
     if (!isInitialCheck) {
         const threadData = state.lastReminderMap.get(thread.id);
@@ -150,11 +157,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
             return;
         }
         
-        // DODATKOWO: Nie wysyłaj przypomnienia jeśli wątek już przekroczył próg zamykania
-        if (inactiveTime > lockThreshold) {
-            logger.info(`⏰ Wątek ${thread.name} przekroczył próg zamykania (${Math.round(lockThreshold / (1000 * 60 * 60))}h) - pomijam przypomnienie`);
-            return;
-        }
         
         // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu i jeszcze nie wysłano
         if (inactiveTime > reminderThreshold && !reminderAlreadySent && timeSinceLastReminder > reminderThreshold) {
@@ -165,12 +167,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         } else {
             logger.info(`❌ Przypomnienie nie wysłane - warunki nie spełnione`);
         }
-    }
-
-    // Po 7 dniach zamknij wątek (tylko jeśli przypomnienie zostało wysłane)
-    const threadData = state.lastReminderMap.get(thread.id);
-    if (inactiveTime > lockThreshold && threadData && threadData.reminderSent) {
-        await lockThread(thread, state, config);
     }
     // Usuń auto-archiwizację po 24h - wątki pozostają otwarte
 }
