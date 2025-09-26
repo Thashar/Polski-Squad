@@ -554,6 +554,10 @@ class TimerService {
             // Są podpowiedzi - ustaw timer dla kolejnej podpowiedzi i 24h timeout
             const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
 
+            logger.info(`🔍 DEBUG: lastHintTimestamp = ${this.gameService.lastHintTimestamp}`);
+            logger.info(`🔍 DEBUG: timeSinceLastHint = ${Math.round(timeSinceLastHint / (60*60*1000))} godzin`);
+            logger.info(`🔍 DEBUG: HINT_TIMEOUT_TIME = ${Math.round(this.gameService.HINT_TIMEOUT_TIME / (60*60*1000))} godzin`);
+
             // Timer 6h dla przypomnienia o kolejnej podpowiedzi
             if (timeSinceLastHint >= this.gameService.EXISTING_HINT_REMINDER_TIME) {
                 await this.setHintReminderTimer();
