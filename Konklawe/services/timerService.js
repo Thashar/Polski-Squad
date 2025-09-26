@@ -328,7 +328,38 @@ class TimerService {
      */
     async setHintTimeoutTimer() {
         this.clearHintTimeoutTimer();
+
+        logger.info(`🔍 DEBUG setHintTimeoutTimer - trigger: ${this.gameService.trigger}, isDefault: ${this.gameService.trigger?.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()}, hasLastHint: ${!!this.gameService.lastHintTimestamp}`);
+
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.lastHintTimestamp) {
+
+            // Oblicz ile czasu już minęło od ostatniej podpowiedzi
+            const now = new Date();
+            const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
+            const timeUntilTimeout = this.gameService.HINT_TIMEOUT_TIME - timeSinceLastHint;
+
+            // Jeśli już minęło 24h, usuń rolę natychmiast
+            if (timeUntilTimeout <= 0) {
+                logger.info('⚠️ Już minęło 24h bez nowej podpowiedzi - usuwanie roli papieskiej natychmiast');
+                try {
+                    const guild = this.client.guilds.cache.first();
+                    if (guild) {
+                        const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
+                        if (membersWithRole.size > 0) {
+                            const papalMember = membersWithRole.first();
+                            await papalMember.roles.remove(this.config.roles.papal);
+                            logger.info(`Usunięto rolę papieską użytkownikowi ${papalMember.user.tag} za brak nowej podpowiedzi przez 24 godziny`);
+                            await this.resetToDefaultPassword('24h');
+                        }
+                    }
+                } catch (error) {
+                    logger.error('Błąd podczas usuwania roli papieskiej za brak nowej podpowiedzi:', error);
+                }
+                return;
+            }
+
+            // Ustaw timer na pozostały czas
+            logger.info(`⏰ Ustawiono timer 24h timeout na ${Math.round(timeUntilTimeout / 1000)} sekund (${Math.round(timeUntilTimeout / (60*60*1000))} godzin)`);
             this.gameService.hintTimeoutTimer = setTimeout(async () => {
                 if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
                     try {
@@ -346,7 +377,7 @@ class TimerService {
                         logger.error('Błąd podczas usuwania roli papieskiej za brak nowej podpowiedzi:', error);
                     }
                 }
-            }, this.gameService.HINT_TIMEOUT_TIME);
+            }, timeUntilTimeout);
             this.gameService.saveTriggerState();
         }
     }

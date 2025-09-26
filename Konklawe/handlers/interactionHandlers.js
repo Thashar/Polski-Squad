@@ -181,6 +181,7 @@ class InteractionHandler {
 
         // Ustaw nowy timer dla kolejnej podpowiedzi (6 godzin) i 24h timeout
         await this.timerService.setHintReminderTimer();
+        await this.timerService.setHintTimeoutTimer();
 
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply();
