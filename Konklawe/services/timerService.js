@@ -344,7 +344,13 @@ class TimerService {
                 try {
                     const guild = this.client.guilds.cache.first();
                     if (guild) {
+                        // Odśwież cache ról i członków przed sprawdzeniem
+                        await guild.roles.fetch();
+                        await guild.members.fetch();
+
                         const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
+                        logger.info(`🔍 DEBUG setHintTimeoutTimer: membersWithRole.size = ${membersWithRole.size}`);
+
                         if (membersWithRole.size > 0) {
                             const papalMember = membersWithRole.first();
                             await papalMember.roles.remove(this.config.roles.papal);
@@ -365,7 +371,13 @@ class TimerService {
                     try {
                         const guild = this.client.guilds.cache.first();
                         if (guild) {
+                            // Odśwież cache ról i członków przed sprawdzeniem
+                            await guild.roles.fetch();
+                            await guild.members.fetch();
+
                             const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
+                            logger.info(`🔍 DEBUG hintTimeoutTimer: membersWithRole.size = ${membersWithRole.size}`);
+
                             if (membersWithRole.size > 0) {
                                 const papalMember = membersWithRole.first();
                                 await papalMember.roles.remove(this.config.roles.papal);
@@ -576,9 +588,46 @@ class TimerService {
                 const guild = this.client.guilds.cache.first();
                 logger.info(`🔍 DEBUG: guild = ${guild ? guild.name : 'null'}`);
 
+                // Odśwież cache ról PRZED sprawdzeniem
+                try {
+                    await guild.roles.fetch();
+                    logger.info(`🔍 DEBUG: Odświeżono cache ról`);
+                } catch (error) {
+                    logger.error(`❌ Błąd odświeżania cache ról: ${error.message}`);
+                }
+
+                // Sprawdź czy rola papieska w ogóle istnieje
+                const papalRole = guild.roles.cache.get(this.config.roles.papal);
+                logger.info(`🔍 DEBUG: papal role exists = ${papalRole ? papalRole.name : 'NO - ROLE NOT FOUND!'}`);
+
+                // Odśwież cache członków przed sprawdzeniem
+                try {
+                    await guild.members.fetch();
+                    logger.info(`🔍 DEBUG: guild.members.cache.size = ${guild.members.cache.size}`);
+                } catch (error) {
+                    logger.error(`❌ Błąd odświeżania cache członków: ${error.message}`);
+                }
+
                 const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
                 logger.info(`🔍 DEBUG: membersWithRole.size = ${membersWithRole.size}`);
                 logger.info(`🔍 DEBUG: papal role ID = ${this.config.roles.papal}`);
+
+                // Pokaż wszystkich członków z rolą papieską
+                if (membersWithRole.size > 0) {
+                    membersWithRole.forEach(member => {
+                        logger.info(`🔍 DEBUG: Member with papal role: ${member.user.tag} (${member.user.id})`);
+                    });
+                } else {
+                    // Sprawdź czy rola papieska ma członków w ogóle
+                    if (papalRole) {
+                        logger.info(`🔍 DEBUG: Papal role '${papalRole.name}' has ${papalRole.members.size} members in role.members`);
+                        if (papalRole.members.size > 0) {
+                            papalRole.members.forEach(member => {
+                                logger.info(`🔍 DEBUG: Member from role.members: ${member.user.tag} (${member.user.id})`);
+                            });
+                        }
+                    }
+                }
 
                 if (membersWithRole.size > 0) {
                     const papalMember = membersWithRole.first();
