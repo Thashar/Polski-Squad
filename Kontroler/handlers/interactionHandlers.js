@@ -196,7 +196,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
     
-    // Sprawdź czy data nie jest w przeszłości i nie przekracza limitu 24 dni
+    // Sprawdź czy data nie jest w przeszłości i nie przekracza limitu 365 dni
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     drawDate.setHours(0, 0, 0, 0);
@@ -209,13 +209,13 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
     
-    // Sprawdź czy data nie przekracza limitu JavaScript setTimeout (~24 dni)
+    // Sprawdź czy data nie przekracza limitu 365 dni
     const maxDate = new Date(now);
-    maxDate.setDate(now.getDate() + 24);
-    
+    maxDate.setDate(now.getDate() + 365);
+
     if (drawDate > maxDate) {
         await interaction.reply({
-            content: '❌ Data następnego losowania nie może być dalej niż 24 dni w przyszłości (ograniczenie JavaScript).',
+            content: '❌ Data następnego losowania nie może być dalej niż 365 dni w przyszłości.',
             ephemeral: true
         });
         return;

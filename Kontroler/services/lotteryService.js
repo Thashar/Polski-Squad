@@ -309,6 +309,15 @@ class LotteryService {
                 this.cronJobs.delete(lotteryId + '_final');
             }
 
+            // Wyczyść długoterminowy timer jeśli istnieje
+            if (this.cronJobs.has(lotteryId + '_longterm')) {
+                const oldLongtermJob = this.cronJobs.get(lotteryId + '_longterm');
+                if (oldLongtermJob && typeof oldLongtermJob.destroy === 'function') {
+                    oldLongtermJob.destroy();
+                }
+                this.cronJobs.delete(lotteryId + '_longterm');
+            }
+
             // Dla jednorazowych loterii (frequency = 0) użyj prostego timeoutu zamiast cron
             if (lottery.frequency === 0) {
                 const nextDrawTime = new Date(lottery.nextDraw);
@@ -317,12 +326,14 @@ class LotteryService {
                 
                 // Maksymalny bezpieczny timeout w JavaScript (~24 dni)
                 const MAX_TIMEOUT = 2147483647;
-                
+
                 if (timeToWait <= 0) {
                     logger.warn(`⚠️ Jednorazowa loteria ${lotteryId} ma datę w przeszłości - wykonuję natychmiast`);
                     setTimeout(() => this.executeLottery(lotteryId), 1000);
                 } else if (timeToWait > MAX_TIMEOUT) {
-                    logger.error(`❌ Jednorazowa loteria ${lotteryId} ma datę zbyt daleko w przyszłości (${Math.round(timeToWait / (24*60*60*1000))} dni). Maksymalnie 24 dni.`);
+                    // Dla długoterminowych loterii (>24 dni) ustaw sprawdzenie co 24h
+                    logger.info(`📅 Jednorazowa loteria ${lotteryId} jest zaplanowana za ${Math.round(timeToWait / (24*60*60*1000))} dni - ustawiam sprawdzanie co 24h`);
+                    this.scheduleLongTermCheck(lotteryId, lottery);
                     return;
                 } else {
                     const polishTime = this.convertUTCToPolishTime(nextDrawTime);
@@ -365,12 +376,14 @@ class LotteryService {
             
             // Maksymalny bezpieczny timeout w JavaScript (~24 dni)
             const MAX_TIMEOUT = 2147483647;
-            
+
             if (timeToWait <= 0) {
                 logger.warn(`⚠️ Cykliczna loteria ${lotteryId} ma datę w przeszłości - wykonuję natychmiast`);
                 setTimeout(() => this.executeLottery(lotteryId), 1000);
             } else if (timeToWait > MAX_TIMEOUT) {
-                logger.error(`❌ Cykliczna loteria ${lotteryId} ma datę zbyt daleko w przyszłości (${Math.round(timeToWait / (24*60*60*1000))} dni). Maksymalnie 24 dni.`);
+                // Dla długoterminowych loterii (>24 dni) ustaw sprawdzenie co 24h
+                logger.info(`📅 Cykliczna loteria ${lotteryId} jest zaplanowana za ${Math.round(timeToWait / (24*60*60*1000))} dni - ustawiam sprawdzanie co 24h`);
+                this.scheduleLongTermCheck(lotteryId, lottery);
                 return;
             } else {
                 const polishTime = this.convertUTCToPolishTime(nextDrawTime);
@@ -1627,6 +1640,53 @@ class LotteryService {
             logger.error(`❌ Błąd podczas usuwania loterii historycznej:`, error);
             throw error;
         }
+    }
+
+    /**
+     * Planuje sprawdzanie długoterminowych loterii co 24h
+     * @param {string} lotteryId - ID loterii
+     * @param {Object} lottery - Obiekt loterii
+     */
+    scheduleLongTermCheck(lotteryId, lottery) {
+        // Ustaw sprawdzenie co 24h (lub krócej jeśli bliżej niż 24h do losowania)
+        const nextDrawTime = new Date(lottery.nextDraw);
+        const now = new Date();
+        const timeToWait = nextDrawTime.getTime() - now.getTime();
+
+        // Jeśli zostało mniej niż 24h, ustaw dokładny timer
+        const checkInterval = Math.min(timeToWait, 24 * 60 * 60 * 1000); // 24h maksymalnie
+
+        const polishTime = this.convertUTCToPolishTime(nextDrawTime);
+        logger.info(`⏰ Ustawiono sprawdzenie długoterminowej loterii ${lottery.name} za ${Math.round(checkInterval / (60*60*1000))} godzin (docelowa data: ${polishTime})`);
+
+        const checkTimeout = setTimeout(() => {
+            // Sprawdź czy loteria nadal istnieje
+            if (!this.activeLotteries.has(lotteryId)) {
+                logger.info(`ℹ️ Loteria ${lotteryId} została usunięta - anulowanie sprawdzania długoterminowego`);
+                return;
+            }
+
+            // Sprawdź czy już czas na losowanie
+            const currentTime = new Date();
+            const currentTimeToWait = nextDrawTime.getTime() - currentTime.getTime();
+
+            if (currentTimeToWait <= 0) {
+                // Czas minął - wykonaj lotę
+                logger.info(`🎰 Czas na długoterminową loterię ${lottery.name} - wykonuję natychmiast`);
+                setTimeout(() => this.executeLottery(lotteryId), 1000);
+            } else if (currentTimeToWait <= 2147483647) {
+                // Mniej niż 24 dni - można użyć normalnego planowania
+                logger.info(`📅 Długoterminowa loteria ${lottery.name} jest już w zasięgu normalnego planowania`);
+                this.scheduleNextLottery(lotteryId, lottery);
+            } else {
+                // Nadal za daleko - zaplanuj kolejne sprawdzenie
+                logger.info(`⏰ Długoterminowa loteria ${lottery.name} nadal za daleko - planowanie kolejnego sprawdzenia`);
+                this.scheduleLongTermCheck(lotteryId, lottery);
+            }
+        }, checkInterval);
+
+        // Zapisz timeout do czyszczenia
+        this.cronJobs.set(lotteryId + '_longterm', { destroy: () => clearTimeout(checkTimeout) });
     }
 }
 
