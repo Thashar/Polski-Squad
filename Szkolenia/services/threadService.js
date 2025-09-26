@@ -42,7 +42,6 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
             // Połącz aktywne i zarchiwizowane wątki
             allThreads = new Map([...activeThreads.threads, ...archivedThreads.threads]);
             
-            logger.info(`🔍 Sprawdzanie ${allThreads.size} wątków przy starcie bota (aktywne: ${activeThreads.threads.size}, zarchiwizowane: ${archivedThreads.threads.size})...`);
         } else {
             // Przy normalnym sprawdzaniu TAKŻE zarchiwizowane wątki (dla przypomnień)
             const activeThreads = await channel.threads.fetchActive();
@@ -51,7 +50,6 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
             // Połącz aktywne i zarchiwizowane wątki
             allThreads = new Map([...activeThreads.threads, ...archivedThreads.threads]);
             
-            logger.info(`🔄 Sprawdzanie ${allThreads.size} wątków (aktywne: ${activeThreads.threads.size}, zarchiwizowane: ${archivedThreads.threads.size})...`);
         }
         
         // Wyczyść nieistniejące wątki z danych przypomień
@@ -69,9 +67,6 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
             }
         }
         
-        if (isInitialCheck) {
-            logger.info('✅ Sprawdzenie wątków przy starcie zakończone');
-        }
     } catch (error) {
         logger.error('❌ Błąd podczas sprawdzania wątków:', error);
     }
@@ -139,12 +134,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         const timeSinceLastReminder = now - lastReminder;
         const threadAge = now - threadCreatedTime;
 
-        // Debug informacje
-        logger.info(`🔍 Wątek ${thread.name}:`);
-        logger.info(`   📅 Wiek wątku: ${Math.round(threadAge / (1000 * 60 * 60))}h`);
-        logger.info(`   💤 Nieaktywny od: ${Math.round(inactiveTime / (1000 * 60 * 60))}h`);
-        logger.info(`   🔔 Od ostatniego przypomnienia: ${Math.round(timeSinceLastReminder / (1000 * 60 * 60))}h`);
-        logger.info(`   🚨 Próg przypomnienia: ${Math.round(reminderThreshold / (1000 * 60 * 60))}h`);
 
         // Sprawdź czy przypomnienie już zostało wysłane
         const reminderAlreadySent = threadData && threadData.reminderSent;
@@ -160,12 +149,7 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         
         // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu i jeszcze nie wysłano
         if (inactiveTime > reminderThreshold && !reminderAlreadySent && timeSinceLastReminder > reminderThreshold) {
-            logger.info(`✅ Wysyłanie przypomnienia dla wątku ${thread.name}`);
             await sendInactivityReminder(thread, threadOwner, state, config, now);
-        } else if (reminderAlreadySent) {
-            logger.info(`⏳ Przypomnienie już wysłane dla wątku ${thread.name}, czekam na decyzję użytkownika`);
-        } else {
-            logger.info(`❌ Przypomnienie nie wysłane - warunki nie spełnione`);
         }
     }
     // Usuń auto-archiwizację po 24h - wątki pozostają otwarte
@@ -184,7 +168,6 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
         // Jeśli wątek jest zarchiwizowany, odarchiwizuj go aby móc wysłać wiadomość
         if (thread.archived) {
             await thread.setArchived(false, 'Odarchiwizowanie w celu wysłania przypomnienia');
-            logger.info(`📂 Odarchiwizowano wątek ${thread.name} w celu wysłania przypomnienia`);
         }
 
         const row = new ActionRowBuilder()
@@ -207,7 +190,7 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
         // Zaktualizuj czas ostatniego przypomnienia i oznacz jako wysłane
         await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
         await reminderStorage.markReminderSent(state.lastReminderMap, thread.id);
-        logger.info(`💬 Wysłano przypomnienie dla wątku: ${thread.name}`);
+        logger.info(`💬 Wysłano przypomnienie: ${thread.name}`);
         
     } catch (error) {
         logger.error(`❌ Błąd podczas wysyłania przypomnienia do wątku ${thread.name}:`, error);

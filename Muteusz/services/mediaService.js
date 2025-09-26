@@ -26,7 +26,6 @@ class MediaService {
         // Ustaw interwał czyszczenia cache co godzinę
         setInterval(() => this.cleanupCache(), 60 * 60 * 1000);
         
-        logger.info('Serwis mediów został zainicjalizowany');
         
         // Ustaw cleanup starych linków co 24 godziny
         if (this.config.deletedMessageLogs?.enabled) {

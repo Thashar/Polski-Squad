@@ -20,7 +20,6 @@ class WordBlockService {
         try {
             await this.loadWordBlocks();
             this.startCleanupInterval();
-            logger.info('🚫 WordBlockService zainicjalizowany');
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji WordBlockService: ${error.message}`);
             throw error;

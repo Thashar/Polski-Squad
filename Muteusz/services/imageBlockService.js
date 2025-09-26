@@ -20,7 +20,6 @@ class ImageBlockService {
         try {
             await this.loadBlocks();
             this.startCleanupInterval();
-            logger.info('🚫 ImageBlockService zainicjalizowany');
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji ImageBlockService: ${error.message}`);
             throw error;

@@ -23,7 +23,6 @@ class SpamDetectionService {
             this.cleanupOldMessages();
         }, 5 * 60 * 1000);
         
-        this.logger.info(`🔍 SpamDetectionService zainicjalizowany - wykrywanie duplikatów/podobnych wiadomości z linkami (timeout: ${this.timeoutDuration / (24 * 60 * 60 * 1000)} dni)`);
     }
     
     /**

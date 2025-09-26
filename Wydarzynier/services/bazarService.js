@@ -43,7 +43,6 @@ class BazarService {
             this.categoryId = bazarData.categoryId || null;
             this.channelIds = bazarData.channelIds || [];
             
-            logger.info(`Wczytano dane bazaru: aktywny=${this.isActive}, godzina=${this.startHour}, kanały=${this.channelIds.length}`);
         } catch (error) {
             if (error.code === 'ENOENT') {
                 logger.info('Plik bazaru nie istnieje, inicjalizacja z pustymi danymi');

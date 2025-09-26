@@ -324,10 +324,8 @@ class TimerService {
                 this.activeTimers.set(lobbyId, timerData);
             }
             
-            logger.info(`📂 Wczytano ${Object.keys(timersData).length} timerów z pliku`);
         } catch (error) {
             if (error.code === 'ENOENT') {
-                logger.info('📂 Brak pliku timerów - rozpoczynanie z pustą listą');
             } else {
                 logger.error('❌ Błąd podczas wczytywania timerów:', error);
             }
