@@ -105,7 +105,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
 
     // Po 7 dniach automatycznie zamknij wątek (niezależnie od przypomnienia)
     if (inactiveTime > lockThreshold) {
-        logger.info(`⏰ Wątek ${thread.name} nieaktywny przez ${Math.round(inactiveTime / (1000 * 60 * 60 * 24))} dni - automatyczne zamykanie`);
         await lockThread(thread, state, config);
         return; // Przerwij dalsze przetwarzanie
     }
@@ -124,7 +123,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         // Fallback - jeśli nie mamy zapisanych danych, użyj timestamp z Discord
         if (!threadCreatedTime) {
             threadCreatedTime = thread.createdTimestamp;
-            logger.warn(`⚠️ Brak zapisanej daty utworzenia dla wątku ${thread.name}, używam Discord timestamp`);
         }
         
         if (!lastReminder) {
@@ -140,7 +138,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         
         // KRYTYCZNE: Nie wysyłaj przypomnienia jeśli wątek jest zamknięty
         if (thread.locked) {
-            logger.info(`🔒 Wątek ${thread.name} jest zamknięty - pomijam przypomnienie`);
             // Usuń dane przypomnienia dla zamkniętego wątku
             await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
             return;
