@@ -59,6 +59,17 @@ async function handleInteraction(interaction, config, lotteryService = null) {
             // Obsługa Button
             if (interaction.customId.startsWith('lottery_remove_planned_confirm_')) {
                 await handleLotteryRemovePlannedConfirm(interaction, config, lotteryService);
+            } else if (interaction.customId.startsWith('vote_')) {
+                // Obsługa przycisków głosowania
+                const votingService = interaction.client.votingService;
+                if (votingService) {
+                    const handled = await votingService.handleVoteButton(interaction);
+                    if (!handled) {
+                        await interaction.reply({ content: 'Nieznany przycisk głosowania!', ephemeral: true });
+                    }
+                } else {
+                    await interaction.reply({ content: 'Serwis głosowania niedostępny!', ephemeral: true });
+                }
             } else {
                 switch (interaction.customId) {
                     case 'lottery_history_prev':

@@ -11,6 +11,7 @@ const RoleService = require('./services/roleService');
 const MessageService = require('./services/messageService');
 const LotteryService = require('./services/lotteryService');
 const OligopolyService = require('./services/oligopolyService');
+const VotingService = require('./services/votingService');
 
 // Import handlerów
 const MessageHandler = require('./handlers/messageHandlers');
@@ -30,7 +31,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService;
+let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService;
 
 /**
  * Inicjalizuje wszystkie serwisy
@@ -42,6 +43,7 @@ async function initializeServices() {
     roleService = new RoleService(config);
     lotteryService = new LotteryService(config);
     oligopolyService = new OligopolyService(config, logger);
+    votingService = new VotingService(config);
     messageService = new MessageService(config, lotteryService);
     messageHandler = new MessageHandler(
         config,
@@ -49,7 +51,8 @@ async function initializeServices() {
         analysisService,
         roleService,
         messageService,
-        lotteryService
+        lotteryService,
+        votingService
     );
 
     logger.success('Wszystkie serwisy zostały zainicjalizowane');
@@ -113,11 +116,14 @@ function setupEventHandlers() {
         await onReady();
         // Inicjalizuj serwis loterii z klientem Discord
         await lotteryService.initialize(client);
+        // Inicjalizuj serwis głosowania z klientem Discord
+        await votingService.initialize(client);
         await registerSlashCommands(client, config);
     });
     client.on('messageCreate', (message) => messageHandler.handleMessage(message));
     client.on('interactionCreate', (interaction) => {
         interaction.client.oligopolyService = oligopolyService;
+        interaction.client.votingService = votingService;
         handleInteraction(interaction, config, lotteryService);
     });
     client.on('error', onError);

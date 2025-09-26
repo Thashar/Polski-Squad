@@ -8,13 +8,14 @@ const path = require('path');
 const logger = createBotLogger('Kontroler');
 
 class MessageHandler {
-    constructor(config, ocrService, analysisService, roleService, messageService, lotteryService = null) {
+    constructor(config, ocrService, analysisService, roleService, messageService, lotteryService = null, votingService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.analysisService = analysisService;
         this.roleService = roleService;
         this.messageService = messageService;
         this.lotteryService = lotteryService;
+        this.votingService = votingService;
         this.lotterySchedules = new Map(); // Mapa zaplanowanych zadań cron dla każdego kanału
         this.lotteryMessageIds = new Map(); // Mapa ID wiadomości o loterii dla każdego kanału
         this.lotteryMessageIdsFile = path.join(__dirname, '../data/lottery_message_ids.json');
@@ -29,6 +30,11 @@ class MessageHandler {
      */
     async handleMessage(message) {
         if (message.author.bot) return;
+
+        // Sprawdź system głosowania "Działasz na szkodę klanu" (działa na wszystkich kanałach)
+        if (this.votingService) {
+            await this.handleVotingSystem(message);
+        }
 
         // Sprawdź czy wiadomość jest z monitorowanego kanału
         const channelConfig = this.roleService.getChannelConfig(message.channel.id);
@@ -559,6 +565,41 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
             logger.info(`💾 Zapisano ${Object.keys(idsData).length} ID wiadomości o loterii do pliku`);
         } catch (error) {
             logger.error('❌ Błąd podczas zapisywania ID wiadomości o loterii:', error);
+        }
+    }
+
+    /**
+     * Obsługuje system głosowania "Działasz na szkodę klanu"
+     * @param {Message} message - Wiadomość Discord
+     */
+    async handleVotingSystem(message) {
+        try {
+            // Sprawdź czy wiadomość jest odpowiedzią na inną wiadomość
+            if (!this.votingService.isReplyToUser(message)) {
+                return;
+            }
+
+            // Sprawdź czy wiadomość zawiera frazę uruchamiającą głosowanie
+            if (!this.votingService.checkTriggerPhrase(message.content)) {
+                return;
+            }
+
+            // Pobierz użytkownika z odpowiedzi
+            const targetUser = await this.votingService.getReferencedUser(message);
+            if (!targetUser || targetUser.bot) {
+                return; // Nie można głosować na boty lub błąd pobierania użytkownika
+            }
+
+            // Nie można głosować na siebie
+            if (targetUser.id === message.author.id) {
+                return;
+            }
+
+            // Rozpocznij głosowanie
+            await this.votingService.startVoting(message, targetUser);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi systemu głosowania:', error);
         }
     }
 
