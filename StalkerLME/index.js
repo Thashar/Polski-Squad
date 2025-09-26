@@ -96,7 +96,6 @@ client.once(Events.ClientReady, async () => {
     
     // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
     
-    logger.info('Bot Stalker LME jest gotowy do pracy!');
 });
 
 // Obsługa interakcji

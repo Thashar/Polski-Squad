@@ -133,9 +133,7 @@ async function startAllBots() {
     }
     
     for (const botConfig of botsToStart) {
-        logger.info(`🔄 Starting ${botConfig.name}...`);
         await startBot(botConfig);
-        logger.info(`✅ ${botConfig.name} started successfully`);
     }
 }
 

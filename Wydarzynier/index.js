@@ -56,7 +56,6 @@ client.once(Events.ClientReady, async () => {
     // Uruchom system repozycjonowania ogłoszeń co 5 minut
     startRepositionSystem(sharedState);
     
-    logger.info('Bot Wydarzynier jest gotowy do pracy!');
 });
 
 // Obsługa komend slash i przycisków

@@ -55,7 +55,6 @@ client.once(Events.ClientReady, async () => {
         checkThreads(client, sharedState, config);
     }, intervalMs);
     
-    logger.info(`Automatyczne sprawdzanie wątków uruchomione (co ${config.timing.checkIntervalMinutes} minut)`);
 });
 
 // Obsługa przycisków

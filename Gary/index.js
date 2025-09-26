@@ -40,11 +40,6 @@ async function initializeBot() {
         // Register slash commands
         await interactionHandler.registerSlashCommands(client);
         
-        // Startup data fetching disabled - use /refresh command to load data
-        logger.info('⏭️ Skipping initial data fetch to reduce API calls during startup');
-        logger.info('💡 Use /refresh command to load guild, player, and EndersEcho data');
-        
-        
         // Log successful initialization
         await logService.logInfo('🚀 Gary Bot initialized successfully');
         

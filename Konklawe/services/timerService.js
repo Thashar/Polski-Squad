@@ -118,7 +118,6 @@ class TimerService {
     async setAutoResetTimer() {
         this.clearAutoResetTimer();
         if (this.gameService.trigger === null) {
-            logger.info(`⏰ Ustawiono auto-reset na ${this.config.timers.autoResetMinutes} minut`);
             this.gameService.autoResetTimer = setTimeout(async () => {
                 if (this.gameService.trigger === null) {
                     logger.info(`⏰ Auto-reset hasła po ${this.config.timers.autoResetMinutes} min bezczynności`);
@@ -243,7 +242,6 @@ class TimerService {
      */
     async setRecurringReminders(userId) {
         this.clearRecurringReminderTimer();
-        logger.info(`🔄 Ustawiono powtarzające się przypomnienia co 15 minut dla użytkownika ${userId}`);
         this.gameService.recurringReminderTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -329,8 +327,6 @@ class TimerService {
     async setHintTimeoutTimer() {
         this.clearHintTimeoutTimer();
 
-        logger.info(`🔍 DEBUG setHintTimeoutTimer - trigger: ${this.gameService.trigger}, isDefault: ${this.gameService.trigger?.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()}, hasLastHint: ${!!this.gameService.lastHintTimestamp}`);
-
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.lastHintTimestamp) {
 
             // Oblicz ile czasu już minęło od ostatniej podpowiedzi
@@ -349,7 +345,6 @@ class TimerService {
                         await guild.members.fetch();
 
                         const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                        logger.info(`🔍 DEBUG setHintTimeoutTimer: membersWithRole.size = ${membersWithRole.size}`);
 
                         if (membersWithRole.size > 0) {
                             const papalMember = membersWithRole.first();
@@ -365,7 +360,6 @@ class TimerService {
             }
 
             // Ustaw timer na pozostały czas
-            logger.info(`⏰ Ustawiono timer 24h timeout na ${Math.round(timeUntilTimeout / 1000)} sekund (${Math.round(timeUntilTimeout / (60*60*1000))} godzin)`);
             this.gameService.hintTimeoutTimer = setTimeout(async () => {
                 if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
                     try {
@@ -376,7 +370,6 @@ class TimerService {
                             await guild.members.fetch();
 
                             const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                            logger.info(`🔍 DEBUG hintTimeoutTimer: membersWithRole.size = ${membersWithRole.size}`);
 
                             if (membersWithRole.size > 0) {
                                 const papalMember = membersWithRole.first();
@@ -461,18 +454,12 @@ class TimerService {
      * Przywraca timery po restarcie bota
      */
     async restoreRemindersAfterRestart() {
-        logger.info('🔄 Rozpoczynam przywracanie timerów po restarcie...');
-        
         if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
-            logger.info('❌ Hasło jest domyślne lub brak triggera - nie przywracam timerów');
             return;
         }
 
         const now = new Date();
         const timeSincePassword = now - this.gameService.triggerSetTimestamp;
-        
-        logger.info(`⏱️ Czas od ustawienia hasła: ${formatTimeDifference(timeSincePassword)}`);
-        logger.info(`📝 Liczba podpowiedzi: ${this.gameService.hints.length}`);
 
         // Jeśli brak podpowiedzi
         if (this.gameService.hints.length === 0) {
@@ -517,7 +504,6 @@ class TimerService {
                                 }
                             }
                         }, remainingTime);
-                        logger.info(`⏱️ Ustawiono pierwszy timer na ${Math.round(remainingTime / 1000)} sekund`);
                     } else if (timeSincePassword < this.gameService.SECOND_HINT_REMINDER_TIME) {
                         // Ustaw bezpośrednio timer na wysłanie drugiego przypomnienia
                         const remainingTime = this.gameService.SECOND_HINT_REMINDER_TIME - timeSincePassword;
@@ -543,7 +529,6 @@ class TimerService {
                                 }
                             }
                         }, remainingTime);
-                        logger.info(`⏱️ Ustawiono drugi timer na ${Math.round(remainingTime / 1000)} sekund`);
                     } else {
                         // Już po drugim przypomnieniu - ustaw usuwanie roli na pozostały czas
                         const remainingTime = this.gameService.ROLE_REMOVAL_TIME - timeSincePassword;
@@ -552,12 +537,10 @@ class TimerService {
                                 await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
                                 await this.setRecurringReminders(papalMember.user.id);
                             }, remainingTime);
-                            logger.info(`⏱️ Ustawiono timer usuwania roli na ${Math.round(remainingTime / 1000)} sekund`);
                         } else {
                             // Czas już minął - ustaw natychmiast
                             await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
                             await this.setRecurringReminders(papalMember.user.id);
-                            logger.info(`⏱️ Czas minął - ustawianie timerów natychmiast`);
                         }
                     }
                 }
@@ -566,18 +549,13 @@ class TimerService {
             // Są podpowiedzi - ustaw timer dla kolejnej podpowiedzi i 24h timeout
             const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
 
-            logger.info(`🔍 DEBUG: lastHintTimestamp = ${this.gameService.lastHintTimestamp}`);
-            logger.info(`🔍 DEBUG: timeSinceLastHint = ${Math.round(timeSinceLastHint / (60*60*1000))} godzin`);
-            logger.info(`🔍 DEBUG: HINT_TIMEOUT_TIME = ${Math.round(this.gameService.HINT_TIMEOUT_TIME / (60*60*1000))} godzin`);
 
             // Timer 6h dla przypomnienia o kolejnej podpowiedzi
             if (timeSinceLastHint >= this.gameService.EXISTING_HINT_REMINDER_TIME) {
                 await this.setHintReminderTimer();
-                logger.info(`⏱️ Czas od ostatniej podpowiedzi minął - ustawianie timer natychmiast`);
             } else {
                 const remainingTime = this.gameService.EXISTING_HINT_REMINDER_TIME - timeSinceLastHint;
                 setTimeout(async () => await this.setHintReminderTimer(), remainingTime);
-                logger.info(`⏱️ Ustawiono timer dla kolejnej podpowiedzi na ${Math.round(remainingTime / 1000)} sekund`);
             }
 
             // Timer 24h dla usunięcia roli za brak nowej podpowiedzi
@@ -586,73 +564,34 @@ class TimerService {
                 logger.info('⚠️ Minęło 24h bez nowej podpowiedzi - usuwanie roli papieskiej');
 
                 const guild = this.client.guilds.cache.first();
-                logger.info(`🔍 DEBUG: guild = ${guild ? guild.name : 'null'}`);
-
-                // Odśwież cache ról PRZED sprawdzeniem
-                try {
+                if (guild) {
+                    // Odśwież cache ról i członków
                     await guild.roles.fetch();
-                    logger.info(`🔍 DEBUG: Odświeżono cache ról`);
-                } catch (error) {
-                    logger.error(`❌ Błąd odświeżania cache ról: ${error.message}`);
-                }
-
-                // Sprawdź czy rola papieska w ogóle istnieje
-                const papalRole = guild.roles.cache.get(this.config.roles.papal);
-                logger.info(`🔍 DEBUG: papal role exists = ${papalRole ? papalRole.name : 'NO - ROLE NOT FOUND!'}`);
-
-                // Odśwież cache członków przed sprawdzeniem
-                try {
                     await guild.members.fetch();
-                    logger.info(`🔍 DEBUG: guild.members.cache.size = ${guild.members.cache.size}`);
-                } catch (error) {
-                    logger.error(`❌ Błąd odświeżania cache członków: ${error.message}`);
-                }
 
-                const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
-                logger.info(`🔍 DEBUG: membersWithRole.size = ${membersWithRole.size}`);
-                logger.info(`🔍 DEBUG: papal role ID = ${this.config.roles.papal}`);
+                    const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
 
-                // Pokaż wszystkich członków z rolą papieską
-                if (membersWithRole.size > 0) {
-                    membersWithRole.forEach(member => {
-                        logger.info(`🔍 DEBUG: Member with papal role: ${member.user.tag} (${member.user.id})`);
-                    });
-                } else {
-                    // Sprawdź czy rola papieska ma członków w ogóle
-                    if (papalRole) {
-                        logger.info(`🔍 DEBUG: Papal role '${papalRole.name}' has ${papalRole.members.size} members in role.members`);
-                        if (papalRole.members.size > 0) {
-                            papalRole.members.forEach(member => {
-                                logger.info(`🔍 DEBUG: Member from role.members: ${member.user.tag} (${member.user.id})`);
-                            });
+                    if (membersWithRole.size > 0) {
+                        const papalMember = membersWithRole.first();
+                        try {
+                            await papalMember.roles.remove(this.config.roles.papal);
+                            logger.info(`✅ Usunięto rolę papieską użytkownikowi ${papalMember.user.tag} za brak nowej podpowiedzi przez 24 godziny`);
+                            await this.resetToDefaultPassword('24h');
+                        } catch (error) {
+                            logger.error(`❌ Błąd podczas usuwania roli papieskiej: ${error.message}`);
                         }
+                    } else {
+                        logger.info('ℹ️ Brak użytkowników z rolą papieską do usunięcia');
                     }
-                }
-
-                if (membersWithRole.size > 0) {
-                    const papalMember = membersWithRole.first();
-                    logger.info(`🔍 DEBUG: papalMember = ${papalMember.user.tag}`);
-
-                    try {
-                        await papalMember.roles.remove(this.config.roles.papal);
-                        logger.info(`✅ Usunięto rolę papieską użytkownikowi ${papalMember.user.tag} za brak nowej podpowiedzi przez 24 godziny`);
-                        await this.resetToDefaultPassword('24h');
-                    } catch (error) {
-                        logger.error(`❌ Błąd podczas usuwania roli papieskiej: ${error.message}`);
-                    }
-                } else {
-                    logger.info('ℹ️ Brak użytkowników z rolą papieską do usunięcia');
                 }
             } else {
                 const remainingTime = this.gameService.HINT_TIMEOUT_TIME - timeSinceLastHint;
                 setTimeout(async () => {
                     await this.setHintTimeoutTimer();
                 }, remainingTime);
-                logger.info(`⏱️ Ustawiono timer 24h timeout na ${Math.round(remainingTime / 1000)} sekund`);
             }
         }
         
-        logger.info('✅ Zakończono przywracanie timerów po restarcie');
     }
 }
 

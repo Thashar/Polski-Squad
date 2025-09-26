@@ -111,20 +111,8 @@ async function onReady() {
             }
         }
 
-        // Wysyłanie powiadomień o stanie
-        if (commandChannel && commandChannel.isTextBased()) {
-            if (gameService.trigger.toLowerCase() === config.messages.defaultPassword.toLowerCase()) {
-                await commandChannel.send('✅ Konklawe zostało uruchomione.');
-                await commandChannel.send(`Napisz **"${config.messages.defaultPassword}"** by rozpocząć grę.`);
-            } else {
-                await triggerChannel.send('✅ Konklawe zostało uruchomione.');
-                await triggerChannel.send('⚠️ Poprzednio ustawione hasło nie zostało odgadnięte i jest wciąż aktualne!');
-            }
-        }
-
         if (triggerChannel && triggerChannel.isTextBased()) {
             await triggerChannel.send(`🔑 Aktualne hasło: ${gameService.trigger}`);
-            logger.info(`🔑 Automatycznie ustawiono hasło: ${gameService.trigger}`);
         }
 
         // Ustawienie odpowiednich timerów
