@@ -31,7 +31,7 @@ class MessageHandler {
     async handleMessage(message) {
         if (message.author.bot) return;
 
-        // Sprawdź system głosowania "Działasz na szkodę klanu" (działa na wszystkich kanałach)
+        // Sprawdź system głosowania "Działasz na szkodę klanu" (działa na określonych kanałach)
         if (this.votingService) {
             await this.handleVotingSystem(message);
         }
@@ -577,18 +577,29 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
             // Dozwolone kanały dla systemu głosowania
             const allowedChannels = ['1194299628905042040', '1194298890069999756', '1200051393843695699', '1262792174475673610', '1170323972173340744'];
 
+            // Debug: sprawdź kanał
+            logger.info(`🔍 [VOTING DEBUG] Kanał: ${message.channel.id}, Dozwolony: ${allowedChannels.includes(message.channel.id)}`);
+
             // Sprawdź czy wiadomość jest z dozwolonego kanału
             if (!allowedChannels.includes(message.channel.id)) {
                 return;
             }
 
+            // Debug: sprawdź czy to odpowiedź
+            const isReply = this.votingService.isReplyToUser(message);
+            logger.info(`🔍 [VOTING DEBUG] Czy odpowiedź: ${isReply}`);
+
             // Sprawdź czy wiadomość jest odpowiedzią na inną wiadomość
-            if (!this.votingService.isReplyToUser(message)) {
+            if (!isReply) {
                 return;
             }
 
+            // Debug: sprawdź frazę
+            const hasTrigger = this.votingService.checkTriggerPhrase(message.content);
+            logger.info(`🔍 [VOTING DEBUG] Treść: "${message.content}", Zawiera frazę: ${hasTrigger}`);
+
             // Sprawdź czy wiadomość zawiera frazę uruchamiającą głosowanie
-            if (!this.votingService.checkTriggerPhrase(message.content)) {
+            if (!hasTrigger) {
                 return;
             }
 
