@@ -77,11 +77,14 @@ class MemberCacheService {
      */
     cleanupOldEvents() {
         const now = Date.now();
+        let cleanedEvents = 0;
+        let cleanedNotifications = 0;
 
         // Czyść stare eventy deduplikacji
         for (const [userId, eventData] of this.recentEvents.entries()) {
             if (now - eventData.timestamp > this.eventCooldown * 2) {
                 this.recentEvents.delete(userId);
+                cleanedEvents++;
             }
         }
 
@@ -89,11 +92,14 @@ class MemberCacheService {
         for (const [userId, timestamp] of this.lastNotificationTime.entries()) {
             if (now - timestamp > this.notificationCooldown * 4) {
                 this.lastNotificationTime.delete(userId);
+                cleanedNotifications++;
             }
         }
 
-        // Loguj statystyki co 10 minut
-        this.logger.info(`🧹 Wyczyszczono stare eventy. Aktywne: ${this.recentEvents.size}, Powiadomienia: ${this.lastNotificationTime.size}, Cache: ${this.memberBoostCache.size}`);
+        // Loguj tylko gdy rzeczywiście coś zostało wyczyszczone
+        if (cleanedEvents > 0 || cleanedNotifications > 0) {
+            this.logger.info(`🧹 Wyczyszczono ${cleanedEvents} eventów, ${cleanedNotifications} powiadomień. Cache: ${this.memberBoostCache.size} członków`);
+        }
     }
 
     /**
