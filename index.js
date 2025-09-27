@@ -3,7 +3,7 @@ process.env.DOTENV_NO_MESSAGE = 'true';
 process.noDeprecation = true;
 
 // Import system logowania
-const { createBotLogger, setupGlobalLogging, enableCompressedLogging, finishStartupPhase } = require('./utils/consoleLogger');
+const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 
 const logger = createBotLogger('Launcher');
 
@@ -120,13 +120,12 @@ function loadBotConfig() {
  */
 async function startAllBots() {
     setupGlobalLogging();
-    enableCompressedLogging();
 
     const enabledBotNames = loadBotConfig();
     const isLocal = process.argv.includes('--local');
     const environment = isLocal ? 'development' : 'production';
 
-    logger.info(`🚀 ${environment}: ${enabledBotNames.length} bots starting...`);
+    logger.info(`🚀 ${environment}: ${enabledBotNames.join(', ')}`);
 
     const botsToStart = botConfigs.filter(bot =>
         enabledBotNames.includes(bot.loggerName.toLowerCase())
@@ -140,11 +139,6 @@ async function startAllBots() {
     for (const botConfig of botsToStart) {
         await startBot(botConfig);
     }
-
-    // Poczekaj chwilę na załadowanie wszystkich botów
-    setTimeout(() => {
-        finishStartupPhase();
-    }, 3000);
 }
 
 /**

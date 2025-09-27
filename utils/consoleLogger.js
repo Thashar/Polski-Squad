@@ -69,12 +69,6 @@ function getTimestamp() {
 let lastBotName = null;
 let lastWebhookBotName = null;
 
-// Nowy system kompresji logów
-let compressedLogging = false;
-let botWarnings = [];
-let botStatuses = [];
-let startupPhase = false;
-
 // Konfiguracja logowania do pliku
 const LOG_DIR = path.join(__dirname, '../logs');
 const LOG_FILE = path.join(LOG_DIR, 'bots.log');
@@ -300,19 +294,6 @@ class ConsoleLogger {
     }
     
     log(message) {
-        if (compressedLogging && startupPhase) {
-            // W trybie skompresowanym, sprawdź czy to ostrzeżenie lub status
-            if (message.includes('proxy') || message.includes('PROXY') || message.includes('Log channel')) {
-                if (addBotWarning(this.botName, message)) return;
-            }
-            if (message.includes('gotowy') || message.includes('ready')) {
-                const details = extractBotDetails(this.botName, message);
-                if (addBotStatus(this.botName, 'ready', details)) return;
-            }
-            // Inne logi w fazie startup są pomijane
-            return;
-        }
-
         console.log(formatMessage(this.botName, message, 'info'));
         writeToLogFile(this.botName, message, 'info');
         sendToDiscordWebhook(this.botName, message, 'info');
@@ -325,10 +306,6 @@ class ConsoleLogger {
     }
     
     warn(message) {
-        if (compressedLogging && startupPhase) {
-            if (addBotWarning(this.botName, message)) return;
-        }
-
         console.warn(formatMessage(this.botName, message, 'warn'));
         writeToLogFile(this.botName, message, 'warn');
         sendToDiscordWebhook(this.botName, message, 'warn');
@@ -365,137 +342,9 @@ function setupGlobalLogging() {
     // Można tutaj dodać globalne interceptory jeśli potrzebne
 }
 
-// Nowe funkcje dla skompresowanego logowania
-function enableCompressedLogging() {
-    compressedLogging = true;
-    startupPhase = true;
-    botWarnings = [];
-    botStatuses = [];
-}
-
-function addBotWarning(botName, message) {
-    if (compressedLogging && startupPhase) {
-        // Formatuj ostrzeżenia Gary Bot
-        if (botName.toLowerCase() === 'gary' && message.includes('PROXY')) {
-            let formattedMessage = message;
-
-            if (message.includes('WCZYTANO TRWALE WYŁĄCZONE PROXY')) {
-                const match = message.match(/http:\/\/[^:]+:\*\*\*@([^:]+):\d+/);
-                if (match) {
-                    const ip = match[1];
-                    formattedMessage = `🗑️ USUNĄĆ (407): ${ip}`;
-
-                    // Sprawdź czy już mamy entry dla usuwania
-                    const existing = botWarnings.find(w => w.message.includes('🗑️ USUNĄĆ'));
-                    if (existing) {
-                        existing.message += `, ${ip}`;
-                        return true;
-                    }
-                }
-            } else if (message.includes('TYMCZASOWO ZABLOKOWANE PROXY')) {
-                const ipMatch = message.match(/http:\/\/[^:]+:\*\*\*@([^:]+):\d+/);
-                const timeMatch = message.match(/Pozostało (\d+h)/);
-                if (ipMatch && timeMatch) {
-                    formattedMessage = `⏰ BLOCKED (${timeMatch[1]}): ${ipMatch[1]}`;
-                }
-            } else if (message.includes('Log channel not configured')) {
-                formattedMessage = 'Log channel not configured';
-            }
-
-            botWarnings.push({ bot: botName, message: formattedMessage });
-        } else {
-            botWarnings.push({ bot: botName, message });
-        }
-        return true; // Blokuj normalne logowanie
-    }
-    return false;
-}
-
-function addBotStatus(botName, status, details) {
-    if (compressedLogging && startupPhase) {
-        botStatuses.push({ bot: botName, status, details });
-        return true;
-    }
-    return false;
-}
-
-function finishStartupPhase() {
-    if (!compressedLogging || !startupPhase) return;
-
-    startupPhase = false;
-
-    // Wyświetl ostrzeżenia Gary Bot
-    const garyWarnings = botWarnings.filter(w => w.bot.toLowerCase() === 'gary');
-    if (garyWarnings.length > 0) {
-        console.log('\n⚠️ GARY PROXY STATUS:');
-        garyWarnings.forEach(warning => {
-            console.log(`• ${warning.message}`);
-        });
-    }
-
-    // Wyświetl inne ostrzeżenia
-    const otherWarnings = botWarnings.filter(w => w.bot.toLowerCase() !== 'gary');
-    otherWarnings.forEach(warning => {
-        console.log(`⚠️ ${warning.bot}: ${warning.message}`);
-    });
-
-    // Wyświetl podsumowanie botów
-    const readyBots = botStatuses.filter(s => s.status === 'ready');
-    console.log(`\n✅ ${readyBots.length}/${botStatuses.length} bots ready`);
-
-    botStatuses.forEach(bot => {
-        const emoji = botEmojis[bot.bot] || '🤖';
-        console.log(`• ${bot.bot} ✓ (${bot.details})`);
-    });
-
-    console.log(''); // Pusta linia na końcu
-}
-
 function resetLoggerState() {
     lastBotName = null;
     lastWebhookBotName = null;
-}
-
-// Funkcja do wyodrębniania szczegółów bota z wiadomości
-function extractBotDetails(botName, message) {
-    const lowerBot = botName.toLowerCase();
-
-    // Wyciągnij podstawowe szczegóły z wiadomości
-    if (message.includes('gotowy -')) {
-        const details = message.split('gotowy -')[1].trim();
-        return details.replace('✅', '').trim();
-    }
-
-    // Fallback dla różnych formatów
-    switch (lowerBot) {
-        case 'rekruter':
-            return 'OCR, boost, cron';
-        case 'szkolenia':
-            return 'wątki szkoleniowe, przypomnienia';
-        case 'stalkerlme':
-            return 'OCR, urlopy, cleanup';
-        case 'muteusz':
-            return 'moderacja, media (100MB), role';
-        case 'kontroler':
-            if (message.includes('kanały') && message.includes('klany')) {
-                const channelMatch = message.match(/(\d+)\s+kanały/);
-                const clanMatch = message.match(/(\d+)\s+klany/);
-                if (channelMatch && clanMatch) {
-                    return `OCR (${channelMatch[1]} kanały), Loterie (${clanMatch[1]} klany)`;
-                }
-            }
-            return 'OCR, loterie';
-        case 'endersecho':
-            return 'ranking, TOP role';
-        case 'konklawe':
-            return 'gra w hasła';
-        case 'wydarzynier':
-            return 'lobby partii, bazar';
-        case 'gary':
-            return 'LME Analysis, API, Proxy';
-        default:
-            return 'aktywny';
-    }
 }
 
 module.exports = {
@@ -503,8 +352,6 @@ module.exports = {
     createBotLogger,
     setupGlobalLogging,
     resetLoggerState,
-    enableCompressedLogging,
-    finishStartupPhase,
     colors,
     formatMessage
 };
