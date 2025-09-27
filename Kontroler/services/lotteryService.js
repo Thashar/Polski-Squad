@@ -881,7 +881,7 @@ class LotteryService {
             logger.info(`🎲 Losowanie dla ${eligibleMembers.size} uczestników (${lottery.winnersCount} zwycięzców)`);
 
             // Przeprowadź losowanie
-            const winners = this.drawWinners(eligibleMembers, lottery.winnersCount);
+            const winners = this.drawWinners(eligibleMembers, lottery.winnersCount, guild, lottery);
             
             logger.info(`🏆 Wylosowano ${winners.length} zwycięzców:`);
             winners.forEach((winner, index) => {
@@ -947,19 +947,55 @@ class LotteryService {
     /**
      * Losuje zwycięzców
      */
-    drawWinners(eligibleMembers, winnersCount) {
+    drawWinners(eligibleMembers, winnersCount, guild = null, lottery = null) {
         const membersArray = Array.from(eligibleMembers.values());
         const winners = [];
-        
+
         const actualWinnersCount = Math.min(winnersCount, membersArray.length);
-        
-        // Losowanie bez powtórzeń
-        const shuffled = membersArray.sort(() => 0.5 - Math.random());
-        
-        for (let i = 0; i < actualWinnersCount; i++) {
-            winners.push(shuffled[i]);
+
+        // Sprawdź czy to loteria CX i czy mamy dostęp do guild
+        let specialRoleId = null;
+        if (guild && lottery && lottery.targetRoleId) {
+            // Sprawdź czy to może być CX na podstawie roli docelowej
+            const cxConfig = this.config.channels.cx;
+            if (cxConfig && lottery.targetRoleId === cxConfig.requiredRoleId && cxConfig.specialRole) {
+                specialRoleId = cxConfig.specialRole.roleId;
+                logger.info(`🎲 Loteria CX wykryta - uwzględniam rolę specjalną ${specialRoleId}`);
+            }
         }
-        
+
+        // Utwórz pulę z podwójnymi wpisami dla użytkowników z rolą specjalną
+        let lotteryPool = [];
+        let specialRoleCount = 0;
+
+        for (const member of membersArray) {
+            lotteryPool.push(member);
+
+            // Sprawdź czy użytkownik ma rolę specjalną CX
+            if (specialRoleId && member.roles.cache.has(specialRoleId)) {
+                lotteryPool.push(member); // Dodaj drugi wpis (podwójna szansa)
+                specialRoleCount++;
+                logger.info(`🎲 Użytkownik ${member.displayName} ma dodatkową szansę (specjalna rola CX)`);
+            }
+        }
+
+        if (specialRoleCount > 0) {
+            logger.info(`👑 ${specialRoleCount} użytkowników ma podwójną szansę w loterii CX`);
+            logger.info(`🎲 Pula losowania: ${membersArray.length} członków → ${lotteryPool.length} wpisów`);
+        }
+
+        // Losowanie bez powtórzeń (ale jeden użytkownik może mieć więcej wpisów)
+        const shuffled = lotteryPool.sort(() => 0.5 - Math.random());
+        const selectedMembers = new Set();
+
+        for (let i = 0; i < shuffled.length && winners.length < actualWinnersCount; i++) {
+            const member = shuffled[i];
+            if (!selectedMembers.has(member.id)) {
+                winners.push(member);
+                selectedMembers.add(member.id);
+            }
+        }
+
         return winners;
     }
 

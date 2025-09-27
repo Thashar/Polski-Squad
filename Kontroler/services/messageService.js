@@ -11,9 +11,10 @@ class MessageService {
      * @param {Object} result - Wynik analizy
      * @param {Object|null} roleResult - Wynik przyznawania roli
      * @param {Object} channelConfig - Konfiguracja kanału
+     * @param {Object|null} specialRoleResult - Wynik przyznawania roli specjalnej
      * @returns {string} - Sformatowana wiadomość
      */
-    formatResultMessage(result, roleResult = null, channelConfig = null) {
+    formatResultMessage(result, roleResult = null, channelConfig = null, specialRoleResult = null) {
         if (!result.found) {
             let message = this.config.messages.nickNotFound;
             if (channelConfig && channelConfig.requireSecondOccurrence) {
@@ -66,6 +67,13 @@ class MessageService {
         // Dodaj informację o sposobie dopasowania nicku
         if (result.matchType === 'similarity' || result.matchType === 'similarity_low') {
             baseMessage += this.config.messages.similarityMatch;
+        }
+
+        // Dodaj informację o roli specjalnej CX
+        if (specialRoleResult && !specialRoleResult.alreadyHad) {
+            baseMessage += `\n\n👑 **BONUS:** Otrzymujesz dodatkową rolę za wynik 2800+ punktów!\n🎲 **Dodatkowa szansa** w loteriach CX!`;
+        } else if (specialRoleResult && specialRoleResult.alreadyHad) {
+            baseMessage += `\n\n👑 **Już posiadasz rolę specjalną CX** - dodatkowa szansa w loteriach!`;
         }
 
         // Dodaj informację o loterii CX

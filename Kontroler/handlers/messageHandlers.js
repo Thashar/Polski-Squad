@@ -313,9 +313,24 @@ class MessageHandler {
         logger.info('SUKCES! Wynik spełnia wymagania');
 
         const roleResult = await this.roleService.assignRole(member, channelConfig.requiredRoleId, guild);
-        
+
+        // Sprawdź czy to kanał CX i czy wynik kwalifikuje do roli specjalnej
+        let specialRoleResult = null;
+        if (channelConfig.name === 'CX' && channelConfig.specialRole &&
+            result.score >= channelConfig.specialRole.threshold) {
+
+            logger.info(`👑 Użytkownik ${member.displayName} osiągnął ${result.score} pkt - nadanie roli specjalnej CX`);
+            specialRoleResult = await this.roleService.assignRole(member, channelConfig.specialRole.roleId, guild);
+
+            if (specialRoleResult.success) {
+                logger.info(`👑 Pomyślnie nadano rolę specjalną CX użytkownikowi ${member.displayName}`);
+            } else {
+                logger.error(`❌ Błąd nadania roli specjalnej CX: ${specialRoleResult.error}`);
+            }
+        }
+
         if (roleResult.success) {
-            const message = this.messageService.formatResultMessage(result, roleResult, channelConfig);
+            const message = this.messageService.formatResultMessage(result, roleResult, channelConfig, specialRoleResult);
             await safeEditMessage(analysisMessage, message);
         } else {
             const message = this.messageService.formatRoleErrorMessage(result, roleResult.error);
@@ -486,7 +501,7 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
 
 Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
 
-🎯 osiągnąć w ciągu całego sezonu CX **2000 PKT**
+🎯 osiągnąć w ciągu całego sezonu CX **1500 PKT**
 📸 przesłać screen z tego osiągnięcia na tym kanale
 ⏰ czas na przesłanie screena jest do **18:30** w dniu, w którym rozpoczął się nowy sezon
 ✅ screen musi być zatwierdzony przez bota Kontroler

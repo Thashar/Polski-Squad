@@ -34,12 +34,17 @@ module.exports = {
         cx: {
             targetChannelId: '1305607184037449738',
             requiredRoleId: '1298594615619751966',
-            minimumScore: 2000,
+            minimumScore: 1500,
             scoreRange: [0, 2800],
             scoreStep: 100,
             requireSecondOccurrence: false,
             name: 'CX',
-            skipLines: 1
+            skipLines: 1,
+            // Nowa konfiguracja dla roli specjalnej
+            specialRole: {
+                roleId: '1421502672112058589',
+                threshold: 2800
+            }
         },
         daily: {
             targetChannelId: '1297828299006808124',
