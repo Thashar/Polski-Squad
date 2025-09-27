@@ -34,6 +34,14 @@ class VotingService {
 
         // Cooldown między głosowaniami dla tego samego użytkownika (7 dni)
         this.VOTE_COOLDOWN = 7 * 24 * 60 * 60 * 1000;
+
+        // Mapowanie kanałów do ról które mają być pingowane
+        this.CHANNEL_ROLE_MAPPING = {
+            '1194299628905042040': '1170331604846120980',
+            '1194298890069999756': '1193124672070484050',
+            '1200051393843695699': '1200053198472359987',
+            '1262792174475673610': '1262785926984237066'
+        };
     }
 
     /**
@@ -166,9 +174,11 @@ class VotingService {
             return; // Cicho ignoruj jeśli w cooldownie
         }
 
-        // Utwórz wiadomość tekstową
+        // Utwórz wiadomość tekstową z pingiem do odpowiedniej roli
         const endTime = Math.floor((Date.now() + this.VOTING_TIME) / 1000);
-        const voteText = `# ⚠️ UWAGA! Dywersja w klanie!\nCzy <@${targetUserId}> działa na szkodę klanu?\nCzas do końca głosowania: <t:${endTime}:R>`;
+        const roleId = this.CHANNEL_ROLE_MAPPING[message.channel.id];
+        const rolePing = roleId ? `<@&${roleId}>\n` : '';
+        const voteText = `${rolePing}# ⚠️ UWAGA! Dywersja w klanie!\nCzy <@${targetUserId}> działa na szkodę klanu?\nCzas do końca głosowania: <t:${endTime}:R>`;
 
         // Utwórz przyciski
         const row = new ActionRowBuilder()
@@ -224,7 +234,8 @@ class VotingService {
             await this.saveVoteHistory();
         }
 
-        this.logger.info(`🗳️ Rozpoczęto głosowanie przeciwko ${targetUser.tag} (${targetUserId})`);
+        const channelInfo = roleId ? ` na kanale ${message.channel.id} z pingiem do roli ${roleId}` : ` na kanale ${message.channel.id}`;
+        this.logger.info(`🗳️ Rozpoczęto głosowanie przeciwko ${targetUser.tag} (${targetUserId})${channelInfo}`);
     }
 
     /**
