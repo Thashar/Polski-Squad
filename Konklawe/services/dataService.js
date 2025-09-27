@@ -118,7 +118,9 @@ class DataService {
      */
     saveTriggerState(triggerState) {
         fs.writeFileSync(path.join(this.dataPath, 'trigger.json'), JSON.stringify(triggerState, null, 2));
-        logger.info('💾 Zapisano stan triggera:', triggerState);
+        const triggerDisplay = triggerState.trigger || 'brak';
+        const activeTimers = Object.values(triggerState.timerStates || {}).filter(Boolean).length;
+        logger.info(`💾 Zapisano stan triggera: "${triggerDisplay}" (${activeTimers} aktywnych timerów)`);
     }
 
     /**
