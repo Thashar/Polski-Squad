@@ -146,8 +146,8 @@ class PunishmentService {
 
     async sendWarningIfNeeded(guild, member, points) {
         try {
-            if (points !== 2 && points !== 3) {
-                return `Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 2 i 3)`;
+            if (points !== 2 && points !== 3 && points !== 5) {
+                return `Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 2, 3 i 5)`;
             }
             
             const userRoleId = this.getUserRoleId(member);
@@ -167,9 +167,11 @@ class PunishmentService {
             
             let message = '';
             if (points === 2) {
-                message = `⚠️ **OSTRZEŻENIE** ⚠️\n\n${member} otrzymał rolę karną za zebrane punkty karne!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Niewystarczająca ilość walk z bossem\n\n*Co poniedziałek o północy automatycznie usuwany jest 1 punkt każdemu.*`;
+                message = `⚠️ **OSTRZEŻENIE** ⚠️\n\n${member} otrzymał rolę karną za zebrane punkty karne!\n\n**Aktualne punkty kary:** ${points}\n**Przyczyna:** Niewystarczająca ilość walk z bossem`;
             } else if (points === 3) {
-                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii Glory!\n\n**Aktualne punkty:** ${points}\n**Przyczyna:** Przekroczenie limitu 3 punktów kary\n\n*Co poniedziałek o północy automatycznie usuwany jest 1 punkt każdemu.*`;
+                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii Glory!\n\n**Aktualne punkty kary:** ${points}\n**Przyczyna:** Przekroczenie limitu 3 punktów kary`;
+            } else if (points === 5) {
+                message = `🔴 **WYDALENIE Z KLANU** 🔴\n\n${member} osiągnął maksymalną ilość punktów karnych i zostaje wydalony z klanu!\n\n**Aktualne punkty kary:** ${points}\n**Przyczyna:** Osiągnięcie maksymalnego limitu punktów kary`;
             }
             
             if (message) {
