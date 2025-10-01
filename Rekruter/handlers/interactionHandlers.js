@@ -24,12 +24,23 @@ async function handleInteraction(interaction, state, config, client) {
       case 'ocr-debug':
         await handleOcrDebugCommand(interaction, config);
         return;
+      case 'nick':
+        await handleNickCommand(interaction);
+        return;
       default:
         await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
         return;
     }
   }
-  
+
+  // Obsługa modali
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'nick_change_modal') {
+      await handleNickChangeModal(interaction);
+      return;
+    }
+  }
+
   if (!interaction.isButton()) return;
 
   await delay(1_000);                                          // drobny „debounce”
@@ -219,6 +230,109 @@ async function handleOtherPurpose(interaction, state, config) {
 }
 
 /**
+ * Obsługuje komendę /nick - wyświetla modal do zmiany nicku
+ */
+async function handleNickCommand(interaction) {
+    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Utwórz modal (formularz)
+    const modal = new ModalBuilder()
+        .setCustomId('nick_change_modal')
+        .setTitle('Zmiana nicku użytkownika');
+
+    // Pole ID użytkownika
+    const userIdInput = new TextInputBuilder()
+        .setCustomId('user_id')
+        .setLabel('ID użytkownika')
+        .setPlaceholder('Wklej ID użytkownika Discord')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(20);
+
+    // Pole nowego nicku
+    const newNickInput = new TextInputBuilder()
+        .setCustomId('new_nickname')
+        .setLabel('Nowy nick')
+        .setPlaceholder('Wpisz nowy nick dla użytkownika')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(32);
+
+    // Dodaj pola do modalа
+    const firstRow = new ActionRowBuilder().addComponents(userIdInput);
+    const secondRow = new ActionRowBuilder().addComponents(newNickInput);
+
+    modal.addComponents(firstRow, secondRow);
+
+    // Wyświetl modal
+    await interaction.showModal(modal);
+}
+
+/**
+ * Obsługuje wysłanie formularza zmiany nicku
+ */
+async function handleNickChangeModal(interaction) {
+    const { createBotLogger } = require('../../utils/consoleLogger');
+    const logger = createBotLogger('Rekruter');
+
+    // Pobierz dane z formularza
+    const userId = interaction.fields.getTextInputValue('user_id').trim();
+    const newNickname = interaction.fields.getTextInputValue('new_nickname').trim();
+
+    // Sprawdź czy ID jest poprawne
+    if (!/^\d{17,20}$/.test(userId)) {
+        await interaction.reply({
+            content: '❌ Nieprawidłowe ID użytkownika! ID powinno składać się z 17-20 cyfr.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        // Znajdź użytkownika na serwerze
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+
+        if (!member) {
+            await interaction.editReply({
+                content: `❌ Nie znaleziono użytkownika o ID: \`${userId}\` na tym serwerze.`
+            });
+            return;
+        }
+
+        // Zapisz stary nick
+        const oldNick = member.displayName;
+
+        // Zmień nick
+        await member.setNickname(newNickname);
+
+        logger.info(`[NICK] ✅ ${interaction.user.tag} zmienił nick ${member.user.tag} z "${oldNick}" na "${newNickname}"`);
+
+        await interaction.editReply({
+            content: `✅ Pomyślnie zmieniono nick użytkownika ${member} (${member.user.tag})\n` +
+                     `\`${oldNick}\` → \`${newNickname}\``
+        });
+
+    } catch (error) {
+        logger.error(`[NICK] ❌ Błąd podczas zmiany nicku:`, error);
+
+        await interaction.editReply({
+            content: '❌ Nie udało się zmienić nicku. Sprawdź czy bot ma odpowiednie uprawnienia i znajduje się wyżej w hierarchii ról niż użytkownik.'
+        });
+    }
+}
+
+/**
  * Obsługuje komendę debug OCR
  */
 async function handleOcrDebugCommand(interaction, config) {
@@ -274,7 +388,10 @@ async function registerSlashCommands(client, config) {
             .addBooleanOption(option =>
                 option.setName('enabled')
                     .setDescription('Włącz (true) lub wyłącz (false) szczegółowe logowanie')
-                    .setRequired(false))
+                    .setRequired(false)),
+        new SlashCommandBuilder()
+            .setName('nick')
+            .setDescription('[ADMIN] Zmień nick użytkownika na serwerze')
     ];
 
     const rest = new REST().setToken(config.token);
