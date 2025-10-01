@@ -11,6 +11,7 @@ class RoleKickingService {
         this.client = null;
         this.cronJob = null;
         this.rekruterDataPath = this.config.roleKicking.rekruterDataPath;
+        this.roleTimestampPath = path.join(__dirname, '../data/role_timestamps.json');
     }
 
     /**
@@ -19,9 +20,10 @@ class RoleKickingService {
      */
     async initialize(client) {
         this.client = client;
-        
+
         if (this.config.roleKicking.enabled) {
             this.startCronJob();
+            this.setupRoleUpdateListener();
             logger.info('Serwis kickowania użytkowników bez ról został zainicjalizowany');
         }
     }
@@ -68,7 +70,11 @@ class RoleKickingService {
             const usersToKick = this.getUsersForKick(rekruterData);
             logger.info(`📋 Znaleziono ${usersToKick.length} użytkowników do kickowania`);
 
-            if (usersToKick.length === 0) {
+            // Sprawdź dodatkowo użytkowników z rolą 1183332089492418631
+            const roleBasedKicks = await this.checkRoleBasedKicks(dryRun);
+            logger.info(`📋 Znaleziono ${roleBasedKicks.length} użytkowników z rolą do kickowania`);
+
+            if (usersToKick.length === 0 && roleBasedKicks.length === 0) {
                 logger.info('✅ Brak użytkowników do kickowania');
                 return;
             }
@@ -289,6 +295,216 @@ Bot Muteusz`;
             }
         } catch (error) {
             logger.error(`Błąd podczas usuwania użytkownika z danych Rekrutera: ${error.message}`);
+        }
+    }
+
+    /**
+     * Sprawdza użytkowników z konkretną rolą i kickuje ich po 24h od otrzymania roli
+     * @param {boolean} dryRun - Czy tylko symulować
+     * @returns {Array} - Lista kickniętych użytkowników
+     */
+    async checkRoleBasedKicks(dryRun = false) {
+        try {
+            const kickedUsers = [];
+            const guild = this.client.guilds.cache.get(this.config.guildId);
+            if (!guild) {
+                logger.error('Nie znaleziono serwera');
+                return kickedUsers;
+            }
+
+            const targetRoleId = '1183332089492418631';
+            const kick24h = 24 * 60 * 60 * 1000; // 24 godziny w ms
+            const now = Date.now();
+
+            logger.info(`🔍 Sprawdzanie użytkowników z rolą ${targetRoleId}...`);
+
+            // Załaduj timestamp nadania ról
+            const roleTimestamps = await this.loadRoleTimestamps();
+
+            await guild.members.fetch();
+            const role = guild.roles.cache.get(targetRoleId);
+
+            if (!role) {
+                logger.warn(`Nie znaleziono roli ${targetRoleId}`);
+                return kickedUsers;
+            }
+
+            const membersWithRole = role.members;
+            logger.info(`📊 Znaleziono ${membersWithRole.size} użytkowników z rolą ${role.name}`);
+
+            for (const [memberId, member] of membersWithRole) {
+                // Sprawdź czy mamy zapisany timestamp nadania roli
+                const roleTimestamp = roleTimestamps[memberId]?.[targetRoleId];
+
+                if (!roleTimestamp) {
+                    // Jeśli nie ma timestampu, zapisz obecny czas jako moment nadania
+                    await this.saveRoleTimestamp(memberId, targetRoleId, now);
+                    logger.info(`📝 Zapisano timestamp dla ${member.user.tag} - rola otrzymana`);
+                    continue;
+                }
+
+                const timeSinceRole = now - roleTimestamp;
+                const hoursWithRole = (timeSinceRole / (60 * 60 * 1000)).toFixed(1);
+
+                logger.info(`👤 ${member.user.tag}: ma rolę od ${hoursWithRole}h (od ${new Date(roleTimestamp).toISOString()})`);
+
+                if (timeSinceRole >= kick24h) {
+                    logger.info(`🎯 ${member.user.tag} kwalifikuje się do kicka (>24h z rolą)`);
+
+                    if (dryRun) {
+                        logger.info(`🧪 SYMULACJA: ${member.user.tag} zostałby kicknięty`);
+                    } else {
+                        try {
+                            // Wyślij wiadomość przed kickiem
+                            await this.sendRoleBasedKickNotification(member, timeSinceRole);
+
+                            // Kicknij użytkownika
+                            const reason = `Automatyczny kick - 24h bez wypełnienia ankiety rekrutacyjnej`;
+                            await member.kick(reason);
+
+                            logger.info(`✅ Kicknięto ${member.user.tag} - 24h z rolą ${role.name}`);
+                            kickedUsers.push(memberId);
+
+                            // Usuń timestamp po kicku
+                            await this.removeRoleTimestamp(memberId, targetRoleId);
+                        } catch (error) {
+                            logger.error(`❌ Błąd kickowania ${member.user.tag}: ${error.message}`);
+                        }
+                    }
+
+                    await this.delay(1000);
+                }
+            }
+
+            return kickedUsers;
+        } catch (error) {
+            logger.error(`Błąd podczas sprawdzania użytkowników z rolą: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * Wysyła powiadomienie o kicku dla użytkowników z rolą
+     * @param {GuildMember} member - Członek serwera
+     * @param {number} timeSinceJoin - Czas od dołączenia w ms
+     */
+    async sendRoleBasedKickNotification(member, timeSinceJoin) {
+        try {
+            const timeText = this.formatTime(timeSinceJoin);
+
+            const kickMessage = `🚨 **Automatyczny kick z serwera** 🚨
+
+Witaj ${member.user.username}!
+
+Zostałeś usunięty z serwera **${member.guild.name}** z następującego powodu:
+
+⏰ **Czas na serwerze bez wypełnienia ankiety:** ${timeText}
+📋 **Nie wypełniłeś ankiety rekrutacyjnej w ciągu 24 godzin**
+
+❓ **W razie pytań możesz skontaktować się z właścicielem serwera.**
+
+Możesz ponownie dołączyć do serwera i wypełnić ankietę rekrutacyjną.
+
+Pozdrawiamy,
+Bot Muteusz`;
+
+            await member.send(kickMessage);
+            logger.info(`📨 Wysłano powiadomienie o kicku do ${member.user.tag}`);
+        } catch (error) {
+            logger.error(`❌ Nie można wysłać powiadomienia o kicku do ${member.user.tag}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Nasłuchuje na nadawanie ról i zapisuje timestamp
+     */
+    setupRoleUpdateListener() {
+        const targetRoleId = '1183332089492418631';
+
+        this.client.on('guildMemberUpdate', async (oldMember, newMember) => {
+            try {
+                // Sprawdź czy dodano rolę targetRoleId
+                const hadRole = oldMember.roles.cache.has(targetRoleId);
+                const hasRole = newMember.roles.cache.has(targetRoleId);
+
+                if (!hadRole && hasRole) {
+                    // Rola została dodana
+                    const timestamp = Date.now();
+                    await this.saveRoleTimestamp(newMember.id, targetRoleId, timestamp);
+                    logger.info(`📝 Zapisano timestamp nadania roli dla ${newMember.user.tag} (${new Date(timestamp).toISOString()})`);
+                } else if (hadRole && !hasRole) {
+                    // Rola została usunięta
+                    await this.removeRoleTimestamp(newMember.id, targetRoleId);
+                    logger.info(`🗑️ Usunięto timestamp roli dla ${newMember.user.tag}`);
+                }
+            } catch (error) {
+                logger.error(`Błąd podczas aktualizacji timestampu roli: ${error.message}`);
+            }
+        });
+
+        logger.info('✅ Listener nadawania ról został uruchomiony');
+    }
+
+    /**
+     * Ładuje timestampy nadania ról
+     * @returns {Object} - Obiekt z timestampami
+     */
+    async loadRoleTimestamps() {
+        try {
+            const data = await fs.readFile(this.roleTimestampPath, 'utf8');
+            return JSON.parse(data);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                return {};
+            }
+            logger.error(`Błąd ładowania timestampów ról: ${error.message}`);
+            return {};
+        }
+    }
+
+    /**
+     * Zapisuje timestamp nadania roli
+     * @param {string} userId - ID użytkownika
+     * @param {string} roleId - ID roli
+     * @param {number} timestamp - Timestamp
+     */
+    async saveRoleTimestamp(userId, roleId, timestamp) {
+        try {
+            const data = await this.loadRoleTimestamps();
+
+            if (!data[userId]) {
+                data[userId] = {};
+            }
+
+            data[userId][roleId] = timestamp;
+
+            await fs.writeFile(this.roleTimestampPath, JSON.stringify(data, null, 2));
+        } catch (error) {
+            logger.error(`Błąd zapisywania timestampu roli: ${error.message}`);
+        }
+    }
+
+    /**
+     * Usuwa timestamp roli
+     * @param {string} userId - ID użytkownika
+     * @param {string} roleId - ID roli
+     */
+    async removeRoleTimestamp(userId, roleId) {
+        try {
+            const data = await this.loadRoleTimestamps();
+
+            if (data[userId]) {
+                delete data[userId][roleId];
+
+                // Jeśli użytkownik nie ma już żadnych ról w trackingu, usuń całkowicie
+                if (Object.keys(data[userId]).length === 0) {
+                    delete data[userId];
+                }
+            }
+
+            await fs.writeFile(this.roleTimestampPath, JSON.stringify(data, null, 2));
+        } catch (error) {
+            logger.error(`Błąd usuwania timestampu roli: ${error.message}`);
         }
     }
 
