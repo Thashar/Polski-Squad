@@ -110,17 +110,17 @@ class SpamDetectionService {
      */
     extractSuspiciousLinks(content) {
         const links = [];
-        
-        // 1. Linki zewnętrzne (nie Discord)
-        const externalUrlRegex = /https?:\/\/(?!(?:discord\.gg|discord\.com|discordapp\.com))[^\s]+/gi;
+
+        // 1. Linki zewnętrzne (nie Discord i nie tenor.com)
+        const externalUrlRegex = /https?:\/\/(?!(?:discord\.gg|discord\.com|discordapp\.com|tenor\.com))[^\s]+/gi;
         const externalLinks = content.match(externalUrlRegex) || [];
         links.push(...externalLinks);
-        
+
         // 2. Zaproszenia Discord (wszystkie formy)
         const discordInviteRegex = /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord\.com\/invite|discordapp\.com\/invite)\/[a-zA-Z0-9]+/gi;
         const discordInvites = content.match(discordInviteRegex) || [];
         links.push(...discordInvites);
-        
+
         return links;
     }
     
