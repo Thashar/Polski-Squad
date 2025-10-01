@@ -58,13 +58,21 @@ async function assignClanRole(member, attack, user, config, client) {
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.clan2Welcome}`);
             }
-        } else if (attack >= 1000000) {
+        } else if (attack >= 1200000) {
             logger.info(`[CLAN_ASSIGN] Przypisano do MainClan (atak: ${attack})`);
             await safeAddRole(member, config.roles.mainClan);
             targetChannelId = config.channels.mainClan;
             const channel = client.channels.cache.get(targetChannelId);
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.mainClanWelcome}`);
+            }
+        } else if (attack >= 1000000 && attack <= 1199999) {
+            logger.info(`[CLAN_ASSIGN] Przypisano do Clan2 (atak: ${attack})`);
+            await safeAddRole(member, config.roles.clan2);
+            targetChannelId = config.channels.clan2;
+            const channel = client.channels.cache.get(targetChannelId);
+            if (channel) {
+                await channel.send(`# ${user}\n${config.messages.clan2Welcome}`);
             }
         }
     }
