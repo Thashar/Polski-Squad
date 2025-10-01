@@ -6,15 +6,18 @@ class MemberCacheService {
     constructor(config) {
         this.config = config;
         this.logger = createBotLogger('Muteusz');
-        
+
         // Cache ról członków w pamięci
         this.memberRolesCache = new Map(); // userId -> roleIds[]
-        
+
         // Ścieżka do pliku cache
         this.cacheFilePath = path.join(__dirname, '../data/member_roles_cache.json');
-        
+
         // Klient Discord
         this.client = null;
+
+        // ID kanału do logowania zmian ról
+        this.roleChangeLogChannelId = '1407485227927998545';
     }
 
     /**
@@ -145,7 +148,7 @@ class MemberCacheService {
     async handleMemberUpdate(oldMember, newMember) {
         try {
             const userId = newMember.user.id;
-            
+
             // Pobierz rzeczywiste nowe role
             let freshMember;
             try {
@@ -153,36 +156,45 @@ class MemberCacheService {
             } catch (fetchError) {
                 freshMember = newMember;
             }
-            
+
             const currentRoleIds = freshMember.roles.cache.map(role => role.id);
-            
+
             // Pobierz poprzednie role z NASZEGO cache (nie z oldMember!)
             const previousRoleIds = this.getPreviousRoles(userId);
-            
+
             // Porównaj
             const changes = this.compareRoles(previousRoleIds, currentRoleIds);
-            
+
             // Aktualizuj cache
             await this.updateMemberRoles(userId, currentRoleIds);
-            
+
             // Loguj tylko jeśli są zmiany - z nazwami ról zamiast ID
             if (changes.changed) {
+                const memberDisplayName = freshMember.displayName;
+                const memberTag = freshMember.user.tag;
+
                 if (changes.added.length > 0) {
                     const addedRoleNames = changes.added.map(roleId => {
                         const role = freshMember.guild.roles.cache.get(roleId);
                         return role ? role.name : `ID:${roleId}`;
                     });
-                    this.logger.info(`➕ Dodane role: ${addedRoleNames.join(', ')}`);
+                    this.logger.info(`➕ ${memberDisplayName} - Dodane role: ${addedRoleNames.join(', ')}`);
+
+                    // Wyślij log na kanał Discord
+                    await this.logRoleChangeToChannel(freshMember, addedRoleNames, 'added');
                 }
                 if (changes.removed.length > 0) {
                     const removedRoleNames = changes.removed.map(roleId => {
                         const role = freshMember.guild.roles.cache.get(roleId);
                         return role ? role.name : `ID:${roleId}`;
                     });
-                    this.logger.info(`➖ Usunięte role: ${removedRoleNames.join(', ')}`);
+                    this.logger.info(`➖ ${memberDisplayName} - Usunięte role: ${removedRoleNames.join(', ')}`);
+
+                    // Wyślij log na kanał Discord
+                    await this.logRoleChangeToChannel(freshMember, removedRoleNames, 'removed');
                 }
             }
-            
+
             return {
                 changed: changes.changed,
                 previousRoles: previousRoleIds,
@@ -191,7 +203,7 @@ class MemberCacheService {
                 removed: changes.removed,
                 member: freshMember
             };
-            
+
         } catch (error) {
             this.logger.error(`❌ Błąd w handleMemberUpdate cache:`, error);
             return {
@@ -202,6 +214,36 @@ class MemberCacheService {
                 removed: [],
                 member: newMember
             };
+        }
+    }
+
+    /**
+     * Loguje zmianę ról na kanał Discord
+     * @param {GuildMember} member - Członek serwera
+     * @param {Array} roleNames - Nazwy ról
+     * @param {string} type - Typ zmiany ('added' lub 'removed')
+     */
+    async logRoleChangeToChannel(member, roleNames, type) {
+        try {
+            if (!this.client) {
+                return;
+            }
+
+            const channel = this.client.channels.cache.get(this.roleChangeLogChannelId);
+            if (!channel) {
+                this.logger.warn(`⚠️ Nie znaleziono kanału logów zmian ról: ${this.roleChangeLogChannelId}`);
+                return;
+            }
+
+            const emoji = type === 'added' ? '➕' : '➖';
+            const action = type === 'added' ? 'Dodane role' : 'Usunięte role';
+            const rolesText = roleNames.join(', ');
+
+            const message = `${emoji} **${member.displayName}** (${member.user.tag}) - ${action}: ${rolesText}`;
+
+            await channel.send(message);
+        } catch (error) {
+            this.logger.error(`❌ Błąd logowania zmian ról na kanał: ${error.message}`);
         }
     }
 
