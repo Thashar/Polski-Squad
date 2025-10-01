@@ -46,7 +46,15 @@ async function handleInteraction(interaction, state, config, client) {
   await delay(1_000);                                          // drobny „debounce”
 
   /* ---------------------------------------------------------------------- */
-  /* 1.  Przyciski zmiany nicku                                              */
+  /* 1.  Przycisk otwierający modal zmiany nicku                            */
+  /* ---------------------------------------------------------------------- */
+  if (interaction.customId === 'open_nick_change_modal') {
+    await handleOpenNickChangeModal(interaction);
+    return;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* 2.  Przyciski zmiany nicku                                              */
   /* ---------------------------------------------------------------------- */
   if (interaction.customId.startsWith('nickname_')) {
     await handleNicknameButtons(interaction, state, client);
@@ -54,7 +62,7 @@ async function handleInteraction(interaction, state, config, client) {
   }
 
   /* ---------------------------------------------------------------------- */
-  /* 2.  Pozostałe przyciski                                                 */
+  /* 3.  Pozostałe przyciski                                                 */
   /* ---------------------------------------------------------------------- */
   switch (interaction.customId) {
     /* ──────────────── użytkownik NIE jest Polakiem ────────────────────── */
@@ -230,11 +238,9 @@ async function handleOtherPurpose(interaction, state, config) {
 }
 
 /**
- * Obsługuje komendę /nick - wyświetla modal do zmiany nicku
+ * Obsługuje komendę /nick - wysyła publiczną wiadomość z przyciskiem do zmiany nicku
  */
 async function handleNickCommand(interaction) {
-    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
-
     // Sprawdź uprawnienia administratora
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
@@ -244,36 +250,49 @@ async function handleNickCommand(interaction) {
         return;
     }
 
+    // Przycisk do otwarcia formularza zmiany nicku
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('open_nick_change_modal')
+            .setLabel('Zmień nick')
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji('✏️')
+    );
+
+    // Wyślij wiadomość na kanale
+    await interaction.reply({
+        content: '📝 **Zmiana nicku na serwerze**\n\n' +
+                 'Kliknij przycisk poniżej, aby zmienić swój nick Discord na taki sam jak w grze.\n' +
+                 'Dzięki temu będzie łatwiej Cię rozpoznać! 🎮',
+        components: [row]
+    });
+}
+
+/**
+ * Obsługuje kliknięcie przycisku - otwiera modal do zmiany nicku
+ */
+async function handleOpenNickChangeModal(interaction) {
+    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+
     // Utwórz modal (formularz)
     const modal = new ModalBuilder()
         .setCustomId('nick_change_modal')
-        .setTitle('Zmiana nicku użytkownika');
-
-    // Pole ID użytkownika
-    const userIdInput = new TextInputBuilder()
-        .setCustomId('user_id')
-        .setLabel('ID użytkownika')
-        .setPlaceholder('Wklej ID użytkownika Discord')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(20);
+        .setTitle('Zmiana nicku na serwerze');
 
     // Pole nowego nicku
     const newNickInput = new TextInputBuilder()
         .setCustomId('new_nickname')
-        .setLabel('Nowy nick')
-        .setPlaceholder('Wpisz nowy nick dla użytkownika')
+        .setLabel('Twój nick w grze')
+        .setPlaceholder('Wpisz swój nick z gry (np. xXProGamerXx)')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
+        .setMinLength(2)
         .setMaxLength(32);
 
-    // Dodaj pola do modalа
-    const firstRow = new ActionRowBuilder().addComponents(userIdInput);
-    const secondRow = new ActionRowBuilder().addComponents(newNickInput);
+    const row = new ActionRowBuilder().addComponents(newNickInput);
+    modal.addComponents(row);
 
-    modal.addComponents(firstRow, secondRow);
-
-    // Wyświetl modal
+    // Wyświetl modal użytkownikowi
     await interaction.showModal(modal);
 }
 
@@ -284,50 +303,37 @@ async function handleNickChangeModal(interaction) {
     const { createBotLogger } = require('../../utils/consoleLogger');
     const logger = createBotLogger('Rekruter');
 
-    // Pobierz dane z formularza
-    const userId = interaction.fields.getTextInputValue('user_id').trim();
+    // Pobierz nowy nick z formularza
     const newNickname = interaction.fields.getTextInputValue('new_nickname').trim();
 
-    // Sprawdź czy ID jest poprawne
-    if (!/^\d{17,20}$/.test(userId)) {
-        await interaction.reply({
-            content: '❌ Nieprawidłowe ID użytkownika! ID powinno składać się z 17-20 cyfr.',
-            ephemeral: true
-        });
-        return;
-    }
+    // Pobierz członka który wypełnił formularz
+    const member = interaction.member;
+    const oldNick = member.displayName;
 
     await interaction.deferReply({ ephemeral: true });
 
     try {
-        // Znajdź użytkownika na serwerze
-        const member = await interaction.guild.members.fetch(userId).catch(() => null);
-
-        if (!member) {
-            await interaction.editReply({
-                content: `❌ Nie znaleziono użytkownika o ID: \`${userId}\` na tym serwerze.`
-            });
-            return;
-        }
-
-        // Zapisz stary nick
-        const oldNick = member.displayName;
-
-        // Zmień nick
+        // Zmień nick użytkownikowi który wypełnił formularz
         await member.setNickname(newNickname);
 
-        logger.info(`[NICK] ✅ ${interaction.user.tag} zmienił nick ${member.user.tag} z "${oldNick}" na "${newNickname}"`);
+        logger.info(`[NICK] ✅ ${interaction.user.tag} zmienił swój nick z "${oldNick}" na "${newNickname}"`);
 
         await interaction.editReply({
-            content: `✅ Pomyślnie zmieniono nick użytkownika ${member} (${member.user.tag})\n` +
-                     `\`${oldNick}\` → \`${newNickname}\``
+            content: `✅ **Sukces!** Twój nick został zmieniony!\n\n` +
+                     `\`${oldNick}\` → \`${newNickname}\`\n\n` +
+                     `Teraz wszyscy będą widzieć Cię jako **${newNickname}** na tym serwerze! 🎮`
         });
 
     } catch (error) {
-        logger.error(`[NICK] ❌ Błąd podczas zmiany nicku:`, error);
+        logger.error(`[NICK] ❌ Błąd podczas zmiany nicku dla ${interaction.user.tag}:`, error);
 
         await interaction.editReply({
-            content: '❌ Nie udało się zmienić nicku. Sprawdź czy bot ma odpowiednie uprawnienia i znajduje się wyżej w hierarchii ról niż użytkownik.'
+            content: '❌ **Ups!** Nie udało się zmienić nicku.\n\n' +
+                     'Możliwe przyczyny:\n' +
+                     '• Bot nie ma odpowiednich uprawnień\n' +
+                     '• Twoja rola jest wyżej w hierarchii niż rola bota\n' +
+                     '• Nick zawiera niedozwolone znaki\n\n' +
+                     'Skontaktuj się z administratorem, jeśli problem się powtarza.'
         });
     }
 }
