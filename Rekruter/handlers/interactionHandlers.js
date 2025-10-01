@@ -283,7 +283,7 @@ async function handleOpenNickChangeModal(interaction) {
     const newNickInput = new TextInputBuilder()
         .setCustomId('new_nickname')
         .setLabel('Twój nick w grze')
-        .setPlaceholder('Wpisz swój nick z gry (np. xXProGamerXx)')
+        .setPlaceholder('Wpisz swój nick z gry (bez przedrostka PLㅣ)')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
         .setMinLength(2)
