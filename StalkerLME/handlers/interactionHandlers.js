@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -16,6 +16,8 @@ async function handleInteraction(interaction, sharedState, config) {
             await handleSelectMenu(interaction, config, reminderService);
         } else if (interaction.isButton()) {
             await handleButton(interaction, sharedState);
+        } else if (interaction.isModalSubmit()) {
+            await handleModalSubmit(interaction, sharedState);
         }
     } catch (error) {
         logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error.message);
@@ -893,11 +895,6 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('decode')
             .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku')
-            .addStringOption(option =>
-                option.setName('code')
-                    .setDescription('Kod buildu Survivor.io do zdekodowania')
-                    .setRequired(true)
-            )
     ];
     
     try {
@@ -1372,7 +1369,36 @@ async function handleDecodeCommand(interaction, sharedState) {
         return;
     }
 
-    const code = interaction.options.getString('code');
+    // Wyświetl modal z polem do wpisania kodu
+    const modal = new ModalBuilder()
+        .setCustomId('decode_modal')
+        .setTitle('Dekoduj build Survivor.io');
+
+    const codeInput = new TextInputBuilder()
+        .setCustomId('build_code')
+        .setLabel('Kod buildu')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Skopiuj tu kod otrzymany po kliknięciu "EXPORT" na stronie https://sio-tools.vercel.app/')
+        .setRequired(true)
+        .setMinLength(10)
+        .setMaxLength(4000);
+
+    const actionRow = new ActionRowBuilder().addComponents(codeInput);
+    modal.addComponents(actionRow);
+
+    await interaction.showModal(modal);
+}
+
+async function handleModalSubmit(interaction, sharedState) {
+    if (interaction.customId === 'decode_modal') {
+        await handleDecodeModalSubmit(interaction, sharedState);
+    }
+}
+
+async function handleDecodeModalSubmit(interaction, sharedState) {
+    const { config, survivorService } = sharedState;
+
+    const code = interaction.fields.getTextInputValue('build_code');
 
     if (!code || code.trim().length === 0) {
         await interaction.reply({
