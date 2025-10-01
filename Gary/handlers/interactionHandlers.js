@@ -1,4 +1,4 @@
-const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const axios = require('axios');
 const { hasPermission, formatNumber, generatePaginationId, isAllowedChannel } = require('../utils/helpers');
 
@@ -20,31 +20,7 @@ class InteractionHandler {
         this.commands = [
             new SlashCommandBuilder()
                 .setName('lunarmine')
-                .setDescription('Analyzes 4 guilds during Lunar Mine Expedition in Survivor.io')
-                .addIntegerOption(option =>
-                    option.setName('guild1')
-                        .setDescription('First guild ID')
-                        .setRequired(true)
-                        .setMinValue(1)
-                        .setMaxValue(999999))
-                .addIntegerOption(option =>
-                    option.setName('guild2')
-                        .setDescription('Second guild ID')
-                        .setRequired(true)
-                        .setMinValue(1)
-                        .setMaxValue(999999))
-                .addIntegerOption(option =>
-                    option.setName('guild3')
-                        .setDescription('Third guild ID')
-                        .setRequired(true)
-                        .setMinValue(1)
-                        .setMaxValue(999999))
-                .addIntegerOption(option =>
-                    option.setName('guild4')
-                        .setDescription('Fourth guild ID')
-                        .setRequired(true)
-                        .setMinValue(1)
-                        .setMaxValue(999999)),
+                .setDescription('Analyzes 4 guilds during Lunar Mine Expedition in Survivor.io'),
                 
             new SlashCommandBuilder()
                 .setName('refresh')
@@ -52,51 +28,19 @@ class InteractionHandler {
                 
             new SlashCommandBuilder()
                 .setName('analyse')
-                .setDescription('Analyzes a single guild during Lunar Expedition (+ 3 fixed guilds)')
-                .addIntegerOption(option =>
-                    option.setName('guildid')
-                        .setDescription('Guild ID to analyze')
-                        .setRequired(true)
-                        .setMinValue(1)
-                        .setMaxValue(999999)),
+                .setDescription('Analyzes a single guild during Lunar Expedition (+ 3 fixed guilds)'),
                         
             new SlashCommandBuilder()
                 .setName('search')
-                .setDescription('Search for guilds by name from cached ranking data')
-                .addStringOption(option =>
-                    option.setName('name')
-                        .setDescription('Guild name to search for (minimum 3 characters)')
-                        .setRequired(true)
-                        .setMinLength(3)
-                        .setMaxLength(50))
-                .addStringOption(option =>
-                    option.setName('searching')
-                        .setDescription('Search mode: TOP500 (cached top 500 guilds) or GLOBAL (live search via garrytools.com)')
-                        .setRequired(false)
-                        .addChoices(
-                            { name: 'TOP500', value: 'top500' },
-                            { name: 'GLOBAL', value: 'global' }
-                        )),
+                .setDescription('Search for guilds by name from cached ranking data'),
                         
             new SlashCommandBuilder()
                 .setName('player')
-                .setDescription('Search for players by name from cached ranking data (public)')
-                .addStringOption(option =>
-                    option.setName('name')
-                        .setDescription('Player name to search for (minimum 3 characters)')
-                        .setRequired(true)
-                        .setMinLength(3)
-                        .setMaxLength(50)),
+                .setDescription('Search for players by name from cached ranking data (public)'),
                         
             new SlashCommandBuilder()
                 .setName('ee')
-                .setDescription('Search for EndersEcho players by name from cached ranking data (public)')
-                .addStringOption(option =>
-                    option.setName('name')
-                        .setDescription('Player name to search for (minimum 3 characters)')
-                        .setRequired(true)
-                        .setMinLength(3)
-                        .setMaxLength(50)),
+                .setDescription('Search for EndersEcho players by name from cached ranking data (public)'),
                         
             new SlashCommandBuilder()
                 .setName('proxy-test')
@@ -130,8 +74,12 @@ class InteractionHandler {
     }
 
     async handleInteraction(interaction) {
-        if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isAutocomplete()) return;
+        if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isAutocomplete() && !interaction.isModalSubmit()) return;
 
+        // Handle modal submissions
+        if (interaction.isModalSubmit()) {
+            return await this.handleModalSubmit(interaction);
+        }
 
         // Handle pagination buttons
         if (interaction.isButton()) {
@@ -313,13 +261,58 @@ class InteractionHandler {
     }
 
     async handleLunarMineCommand(interaction) {
-        const guild1 = interaction.options.getInteger('guild1');
-        const guild2 = interaction.options.getInteger('guild2');
-        const guild3 = interaction.options.getInteger('guild3');
-        const guild4 = interaction.options.getInteger('guild4');
-        
-        const guildIds = [guild1, guild2, guild3, guild4];
-        
+        // Show modal form
+        const modal = new ModalBuilder()
+            .setCustomId('lunarmine_modal')
+            .setTitle('🌙 Lunar Mine Expedition Analysis');
+
+        const guild1Input = new TextInputBuilder()
+            .setCustomId('guild1')
+            .setLabel('Guild ID 1')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter first guild ID (1-999999)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const guild2Input = new TextInputBuilder()
+            .setCustomId('guild2')
+            .setLabel('Guild ID 2')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter second guild ID (1-999999)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const guild3Input = new TextInputBuilder()
+            .setCustomId('guild3')
+            .setLabel('Guild ID 3')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter third guild ID (1-999999)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const guild4Input = new TextInputBuilder()
+            .setCustomId('guild4')
+            .setLabel('Guild ID 4')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter fourth guild ID (1-999999)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const row1 = new ActionRowBuilder().addComponents(guild1Input);
+        const row2 = new ActionRowBuilder().addComponents(guild2Input);
+        const row3 = new ActionRowBuilder().addComponents(guild3Input);
+        const row4 = new ActionRowBuilder().addComponents(guild4Input);
+
+        modal.addComponents(row1, row2, row3, row4);
+
+        await interaction.showModal(modal);
+    }
+
+    async processLunarMineCommand(interaction, guildIds) {
         await interaction.deferReply();
         
         try {
@@ -379,7 +372,27 @@ class InteractionHandler {
     }
 
     async handleAnalyseCommand(interaction) {
-        const userGuildId = interaction.options.getInteger('guildid');
+        // Show modal form
+        const modal = new ModalBuilder()
+            .setCustomId('analyse_modal')
+            .setTitle('🔍 Analyze Guild');
+
+        const guildIdInput = new TextInputBuilder()
+            .setCustomId('guildid')
+            .setLabel('Guild ID')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter guild ID to analyze (1-999999)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const row = new ActionRowBuilder().addComponents(guildIdInput);
+        modal.addComponents(row);
+
+        await interaction.showModal(modal);
+    }
+
+    async processAnalyseCommand(interaction, userGuildId) {
         await interaction.deferReply();
 
         try {
@@ -430,6 +443,66 @@ class InteractionHandler {
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
+
+    async handleModalSubmit(interaction) {
+        const modalId = interaction.customId;
+
+        try {
+            if (modalId === 'lunarmine_modal') {
+                const guild1 = parseInt(interaction.fields.getTextInputValue('guild1'));
+                const guild2 = parseInt(interaction.fields.getTextInputValue('guild2'));
+                const guild3 = parseInt(interaction.fields.getTextInputValue('guild3'));
+                const guild4 = parseInt(interaction.fields.getTextInputValue('guild4'));
+
+                // Validate inputs
+                if (isNaN(guild1) || isNaN(guild2) || isNaN(guild3) || isNaN(guild4)) {
+                    await interaction.reply({ content: '❌ All guild IDs must be valid numbers!', ephemeral: true });
+                    return;
+                }
+
+                if ([guild1, guild2, guild3, guild4].some(id => id < 1 || id > 999999)) {
+                    await interaction.reply({ content: '❌ All guild IDs must be between 1 and 999999!', ephemeral: true });
+                    return;
+                }
+
+                const guildIds = [guild1, guild2, guild3, guild4];
+                await this.processLunarMineCommand(interaction, guildIds);
+            }
+            else if (modalId === 'analyse_modal') {
+                const guildId = parseInt(interaction.fields.getTextInputValue('guildid'));
+
+                if (isNaN(guildId) || guildId < 1 || guildId > 999999) {
+                    await interaction.reply({ content: '❌ Guild ID must be a valid number between 1 and 999999!', ephemeral: true });
+                    return;
+                }
+
+                await this.processAnalyseCommand(interaction, guildId);
+            }
+            else if (modalId === 'search_modal') {
+                const guildName = interaction.fields.getTextInputValue('name');
+                let searchMode = interaction.fields.getTextInputValue('searching')?.toLowerCase().trim() || 'top500';
+
+                if (!['top500', 'global'].includes(searchMode)) {
+                    searchMode = 'top500';
+                }
+
+                await this.processSearchCommand(interaction, guildName, searchMode);
+            }
+            else if (modalId === 'player_modal') {
+                const playerName = interaction.fields.getTextInputValue('name');
+                await this.processPlayerCommand(interaction, playerName);
+            }
+            else if (modalId === 'ee_modal') {
+                const playerName = interaction.fields.getTextInputValue('name');
+                await this.processEeCommand(interaction, playerName);
+            }
+        } catch (error) {
+            this.logger.error('❌ Error handling modal submit:', error);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ An error occurred processing your request.', ephemeral: true });
+            }
         }
     }
 
@@ -838,8 +911,36 @@ class InteractionHandler {
     }
 
     async handleSearchCommand(interaction) {
-        const guildName = interaction.options.getString('name');
-        const searchMode = interaction.options.getString('searching') || 'top500';
+        // Show modal form
+        const modal = new ModalBuilder()
+            .setCustomId('search_modal')
+            .setTitle('🔍 Search for Guild');
+
+        const guildNameInput = new TextInputBuilder()
+            .setCustomId('name')
+            .setLabel('Guild Name')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter guild name (minimum 3 characters)')
+            .setRequired(true)
+            .setMinLength(3)
+            .setMaxLength(50);
+
+        const searchModeInput = new TextInputBuilder()
+            .setCustomId('searching')
+            .setLabel('Search Mode (top500 or global)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('top500 or global (default: top500)')
+            .setRequired(false)
+            .setMaxLength(10);
+
+        const row1 = new ActionRowBuilder().addComponents(guildNameInput);
+        const row2 = new ActionRowBuilder().addComponents(searchModeInput);
+        modal.addComponents(row1, row2);
+
+        await interaction.showModal(modal);
+    }
+
+    async processSearchCommand(interaction, guildName, searchMode) {
         await interaction.deferReply();
 
         try {
@@ -960,7 +1061,27 @@ class InteractionHandler {
     }
 
     async handlePlayerCommand(interaction) {
-        const playerName = interaction.options.getString('name');
+        // Show modal form
+        const modal = new ModalBuilder()
+            .setCustomId('player_modal')
+            .setTitle('👥 Search for Player');
+
+        const playerNameInput = new TextInputBuilder()
+            .setCustomId('name')
+            .setLabel('Player Name')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter player name (minimum 3 characters)')
+            .setRequired(true)
+            .setMinLength(3)
+            .setMaxLength(50);
+
+        const row = new ActionRowBuilder().addComponents(playerNameInput);
+        modal.addComponents(row);
+
+        await interaction.showModal(modal);
+    }
+
+    async processPlayerCommand(interaction, playerName) {
         await interaction.deferReply();
 
         try {
@@ -1030,7 +1151,27 @@ class InteractionHandler {
     }
 
     async handleEeCommand(interaction) {
-        const playerName = interaction.options.getString('name');
+        // Show modal form
+        const modal = new ModalBuilder()
+            .setCustomId('ee_modal')
+            .setTitle('🏆 Search EndersEcho Player');
+
+        const playerNameInput = new TextInputBuilder()
+            .setCustomId('name')
+            .setLabel('Player Name')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter player name (minimum 3 characters)')
+            .setRequired(true)
+            .setMinLength(3)
+            .setMaxLength(50);
+
+        const row = new ActionRowBuilder().addComponents(playerNameInput);
+        modal.addComponents(row);
+
+        await interaction.showModal(modal);
+    }
+
+    async processEeCommand(interaction, playerName) {
         await interaction.deferReply();
 
         try {
