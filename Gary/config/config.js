@@ -29,7 +29,7 @@ module.exports = {
     // Lunar Mine Settings
     lunarMineSettings: {
         autoRefresh: true,
-        refreshInterval: 6,
+        refreshInterval: 24,
         maxGuildsPerAnalysis: 4,
         defaultFixedGuilds: [10256, 12554, 20145],
         connectionTimeout: 20000,
