@@ -87,10 +87,16 @@ async function preprocessImageStalkerStyle(inputPath, outputPath) {
     try {
         logger.info(`[IMAGE] Przetwarzanie obrazu w stylu Stalker: ${inputPath} -> ${outputPath}`);
         // Zaawansowane przetwarzanie obrazu jak w StalkerLME
+        const originalImage = sharp(inputPath);
+        const originalMetadata = await originalImage.metadata();
         await sharp(inputPath)
             .greyscale()
             // 1. Zwiększamy rozdzielczość x3 dla lepszej jakości OCR
-            .resize({ width: null, height: null, fit: 'inside', withoutEnlargement: false, scale: 3 })
+            .resize(
+                Math.round(originalMetadata.width * 3),
+                Math.round(originalMetadata.height * 3),
+                { fit: 'inside' }
+            )
             // 2. Delikatne rozmycie Gaussa - redukuje szum i artefakty
             .blur(0.3)
             // 3. Normalizacja dla pełnego wykorzystania zakresu tonalnego
@@ -113,7 +119,7 @@ async function preprocessImageStalkerStyle(inputPath, outputPath) {
             .threshold(130, { greyscale: false }) // Nieco wyższy próg po wszystkich operacjach
             .png()
             .toFile(outputPath);
-        
+
         logger.info(`[IMAGE] ✅ Przetworzono obraz w stylu Stalker (x3, blur, gamma, sharpen, morph)`);
     } catch (error) {
         logger.error(`[IMAGE] ❌ Błąd przetwarzania obrazu w stylu Stalker:`, error);
@@ -266,12 +272,13 @@ async function readTextFromCombinedImageRegions(inputPath, regions) {
     try {
         // Najpierw przetwórz cały obraz - powiększ 4x i popraw jakość
         const enhancedPath = inputPath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '_enhanced.png');
+        const originalImage = sharp(inputPath);
+        const originalMetadata = await originalImage.metadata();
         await sharp(inputPath)
-            .resize({
-                width: null,
-                height: null,
-                scale: 4 // Powiększ 4x (było 3x)
-            })
+            .resize(
+                Math.round(originalMetadata.width * 4),
+                Math.round(originalMetadata.height * 4)
+            )
             .sharpen({ sigma: 1.2 }) // Silniejsze wyostrzenie (było 1.0)
             .gamma(1.2) // Lepsza korekcja gamma (było 1.1)
             .png()
@@ -346,12 +353,13 @@ async function readTextFromCombinedImageRegionsOriginal(inputPath, regions) {
     try {
         // Powiększ obraz 3x przed wycinaniem dla lepszej jakości
         const enhancedPath = inputPath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '_enhanced_attack.png');
+        const originalImage = sharp(inputPath);
+        const originalMetadata = await originalImage.metadata();
         await sharp(inputPath)
-            .resize({
-                width: null,
-                height: null,
-                scale: 3 // Powiększ 3x
-            })
+            .resize(
+                Math.round(originalMetadata.width * 3),
+                Math.round(originalMetadata.height * 3)
+            )
             .sharpen({ sigma: 1.0 })
             .png()
             .toFile(enhancedPath);
