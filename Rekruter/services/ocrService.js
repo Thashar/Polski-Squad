@@ -598,37 +598,53 @@ function extractAttackFromFullText(text, nickLineIndex = 0) {
         }
     }
 
-    // WZORZEC 2: Druga najwyższa liczba w kolejnych 5 liniach po nicku
+    // WZORZEC 2: Druga najwyższa liczba Z TEJ SAMEJ LINII co najwyższa liczba
     const lines = text.split('\n');
     const startLine = Math.max(0, nickLineIndex);
     const endLine = Math.min(lines.length, startLine + 5);
 
     logger.info(`[OCR] Szukanie liczb w liniach ${startLine + 1}-${endLine} (5 linii po nicku)`);
 
-    const numbersInRange = [];
+    // Zbierz liczby z każdej linii osobno
+    let maxNumber = -1;
+    let maxLineIndex = -1;
+    const numbersPerLine = [];
+
     for (let i = startLine; i < endLine; i++) {
         const numberMatches = lines[i].match(/\b\d{4,7}\b/g);
         if (numberMatches) {
-            numberMatches.forEach(numStr => {
-                const num = parseInt(numStr);
-                if (num >= 1000 && num <= 9999999) {
-                    numbersInRange.push(num);
-                    logger.info(`[OCR] Znaleziono liczbę ${num} w linii ${i + 1}`);
+            const numsInLine = numberMatches
+                .map(numStr => parseInt(numStr))
+                .filter(num => num >= 1000 && num <= 9999999);
+
+            if (numsInLine.length > 0) {
+                numbersPerLine.push({ lineIndex: i, numbers: numsInLine });
+                logger.info(`[OCR] Linia ${i + 1}: [${numsInLine.join(', ')}]`);
+
+                // Znajdź najwyższą liczbę
+                const maxInLine = Math.max(...numsInLine);
+                if (maxInLine > maxNumber) {
+                    maxNumber = maxInLine;
+                    maxLineIndex = i;
                 }
-            });
+            }
         }
     }
 
-    if (numbersInRange.length >= 2) {
-        // Sortuj malejąco i weź drugą najwyższą
-        numbersInRange.sort((a, b) => b - a);
-        const secondHighest = numbersInRange[1];
-        logger.info(`[OCR] ✅ Wzorzec 2 (druga najwyższa): Liczby znalezione: [${numbersInRange.join(', ')}]`);
-        logger.info(`[OCR] ✅ Wzorzec 2 (druga najwyższa): Wybrany atak: ${secondHighest}`);
-        return secondHighest;
-    } else if (numbersInRange.length === 1) {
-        logger.info(`[OCR] ⚠️ Tylko jedna liczba znaleziona: ${numbersInRange[0]} - zwracam ją jako atak`);
-        return numbersInRange[0];
+    // Jeśli znaleziono liczby
+    if (maxLineIndex !== -1) {
+        const lineData = numbersPerLine.find(item => item.lineIndex === maxLineIndex);
+        if (lineData && lineData.numbers.length >= 2) {
+            // Sortuj liczby z tej linii malejąco
+            const sortedNumbers = lineData.numbers.sort((a, b) => b - a);
+            const secondHighest = sortedNumbers[1];
+            logger.info(`[OCR] ✅ Wzorzec 2 (druga najwyższa z linii ${maxLineIndex + 1}): Liczby w linii: [${sortedNumbers.join(', ')}]`);
+            logger.info(`[OCR] ✅ Wzorzec 2: Najwyższa: ${sortedNumbers[0]}, druga najwyższa (atak): ${secondHighest}`);
+            return secondHighest;
+        } else if (lineData && lineData.numbers.length === 1) {
+            logger.info(`[OCR] ⚠️ Tylko jedna liczba w linii ${maxLineIndex + 1}: ${lineData.numbers[0]} - zwracam ją jako atak`);
+            return lineData.numbers[0];
+        }
     }
 
     // WZORZEC 3: Pierwsza liczba 5-cyfrowa (fallback)
