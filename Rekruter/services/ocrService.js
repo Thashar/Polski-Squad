@@ -264,20 +264,20 @@ async function cropImageRegion(inputPath, outputPath, regionNumber) {
 // Łączy kilka części obrazu w jedną i odczytuje tekst - nowe ustawienia dla nicku
 async function readTextFromCombinedImageRegions(inputPath, regions) {
     try {
-        // Najpierw przetwórz cały obraz - powiększ 3x i popraw jakość
+        // Najpierw przetwórz cały obraz - powiększ 4x i popraw jakość
         const enhancedPath = inputPath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '_enhanced.png');
         await sharp(inputPath)
-            .resize({ 
-                width: null, 
-                height: null, 
-                scale: 3 // Powiększ 3x
+            .resize({
+                width: null,
+                height: null,
+                scale: 4 // Powiększ 4x (było 3x)
             })
-            .sharpen({ sigma: 1.0 }) // Wyostrz
-            .gamma(1.1) // Popraw gamma
+            .sharpen({ sigma: 1.2 }) // Silniejsze wyostrzenie (było 1.0)
+            .gamma(1.2) // Lepsza korekcja gamma (było 1.1)
             .png()
             .toFile(enhancedPath);
-        
-        logger.info(`[OCR] Powiększono cały obraz 3x z wyostrzeniem i poprawą gamma`);
+
+        logger.info(`[OCR] Powiększono cały obraz 4x z wyostrzeniem i poprawą gamma`);
         
         const image = sharp(enhancedPath);
         const metadata = await image.metadata();
@@ -315,9 +315,13 @@ async function readTextFromCombinedImageRegions(inputPath, regions) {
         // Przetwórz połączony fragment
         const processedPath = combinedPath.replace('.png', '_processed.png');
         await preprocessImageForWhiteText(combinedPath, processedPath);
-        
-        // Odczytaj tekst z przetworzonego fragmentu - proste ustawienia OCR
-        const { data: { text } } = await Tesseract.recognize(processedPath);
+
+        // Odczytaj tekst z przetworzonego fragmentu z poprawionymi ustawieniami OCR
+        const { data: { text } } = await Tesseract.recognize(processedPath, {
+            lang: 'eng',
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
+        });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - NICK (części ${regions.join(', ')}) =====`);
         logger.info(`[NICK] POCZĄTEK TEKSTU:`);
@@ -337,56 +341,73 @@ async function readTextFromCombinedImageRegions(inputPath, regions) {
     }
 }
 
-// Łączy kilka części obrazu w jedną i odczytuje tekst - oryginalne ustawienia dla ataku
+// Łączy kilka części obrazu w jedną i odczytuje tekst - ulepszone ustawienia dla ataku
 async function readTextFromCombinedImageRegionsOriginal(inputPath, regions) {
     try {
-        const image = sharp(inputPath);
+        // Powiększ obraz 3x przed wycinaniem dla lepszej jakości
+        const enhancedPath = inputPath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '_enhanced_attack.png');
+        await sharp(inputPath)
+            .resize({
+                width: null,
+                height: null,
+                scale: 3 // Powiększ 3x
+            })
+            .sharpen({ sigma: 1.0 })
+            .png()
+            .toFile(enhancedPath);
+
+        const image = sharp(enhancedPath);
         const metadata = await image.metadata();
         const { width, height } = metadata;
-        
-        // Oblicz wymiary pojedynczej części (bez powiększenia)
+
+        // Oblicz wymiary pojedynczej części (dla powiększonego obrazu)
         const regionWidth = Math.floor(width / 5);
         const regionHeight = Math.floor(height / 10);
-        
+
         // Znajdź zakres części do połączenia
         const rows = regions.map(r => Math.floor((r - 1) / 5));
         const cols = regions.map(r => (r - 1) % 5);
-        
+
         const minRow = Math.min(...rows);
         const maxRow = Math.max(...rows);
         const minCol = Math.min(...cols);
         const maxCol = Math.max(...cols);
-        
+
         // Oblicz wymiary połączonego obszaru
         const combinedLeft = minCol * regionWidth;
         const combinedTop = minRow * regionHeight;
         const combinedWidth = (maxCol - minCol + 1) * regionWidth;
         const combinedHeight = (maxRow - minRow + 1) * regionHeight;
-        
-        logger.info(`[OCR] Łączenie części ${regions.join(', ')} w jeden obszar (oryginalne ustawienia):`);
+
+        logger.info(`[OCR] Łączenie części ${regions.join(', ')} w jeden obszar (ulepszone ustawienia):`);
         logger.info(`[OCR] Pozycja: (${combinedLeft}, ${combinedTop}), wymiary: ${combinedWidth}x${combinedHeight}`);
-        
-        // Wytnij połączony obszar bez powiększenia
+
+        // Wytnij połączony obszar z powiększonego obrazu
         const combinedPath = inputPath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, `_combined_original_${regions.join('_')}.png`);
         await image
             .extract({ left: combinedLeft, top: combinedTop, width: combinedWidth, height: combinedHeight })
             .png()
             .toFile(combinedPath);
-        
-        // Przetwórz połączony fragment z oryginalnymi ustawieniami
+
+        // Przetwórz połączony fragment z ulepszonymi ustawieniami
         const processedPath = combinedPath.replace('.png', '_processed.png');
         await preprocessImageForWhiteTextOriginal(combinedPath, processedPath);
-        
-        // Odczytaj tekst z przetworzonego fragmentu - oryginalne ustawienia OCR
-        const { data: { text } } = await Tesseract.recognize(processedPath);
+
+        // Odczytaj tekst z przetworzonego fragmentu z ustawieniami dla cyfr
+        const { data: { text } } = await Tesseract.recognize(processedPath, {
+            lang: 'eng',
+            tessedit_char_whitelist: '0123456789/',
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
+        });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - ATAK (części ${regions.join(', ')}) =====`);
         logger.info(`[ATAK] POCZĄTEK TEKSTU:`);
         logger.info(text.trim());
         logger.info(`[ATAK] KONIEC TEKSTU`);
         logger.info(`[OCR] ===============================`);
-        
+
         // Usuń pliki tymczasowe
+        await fs.unlink(enhancedPath).catch(() => {});
         await fs.unlink(combinedPath).catch(() => {});
         await fs.unlink(processedPath).catch(() => {});
         
@@ -538,16 +559,23 @@ function calculateSimpleConfidence(playerNick, characterAttack) {
 async function preprocessImageForNickDetection(inputPath, outputPath) {
     try {
         logger.info(`[IMAGE] Przetwarzanie obrazu dla odczytu nicku: ${inputPath} -> ${outputPath}`);
-        
-        // Krok 1: Zamień wszystkie kolory na czarne, poza białym
-        // Krok 2: Odwróć kolory (biały → czarny, czarny → biały)
+
+        // Ulepszone przetwarzanie dla białego tekstu na ciemnym tle
+        // 1. Zwiększamy kontrast
+        // 2. Konwertujemy na grayscale
+        // 3. Odwracamy kolory (biały tekst staje się czarny)
+        // 4. Normalizujemy dla pełnego zakresu tonów
+        // 5. Binaryzacja z niższym progiem dla lepszego odczytu
         await sharp(inputPath)
-            .threshold(240) // Wszystko co nie jest prawie białe staje się czarne
-            .negate()       // Odwróć kolory: biały tekst → czarny tekst na białym tle
+            .grayscale()           // Najpierw grayscale
+            .normalize()           // Normalizacja - rozciąga zakres tonów
+            .linear(1.5, -20)      // Zwiększ kontrast (a=1.5, b=-20)
+            .negate()              // Odwróć kolory: biały tekst → czarny
+            .threshold(120)        // Niższy threshold dla lepszego odczytu
             .png()
             .toFile(outputPath);
-        
-        logger.info(`[IMAGE] ✅ Przetworzono obraz - kolory zamienione na czarno-białe i odwrócone`);
+
+        logger.info(`[IMAGE] ✅ Przetworzono obraz z ulepszoną techniką dla białego tekstu`);
     } catch (error) {
         logger.error(`[IMAGE] ❌ Błąd przetwarzania obrazu dla nicku:`, error);
         throw error;
