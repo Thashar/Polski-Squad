@@ -439,6 +439,137 @@ function extractLettersOnly(text) {
 }
 
 
+// NOWA FUNKCJA - ekstraktuje nick z pełnego tekstu OCR używając wzorców
+function findNicknameInFullText(text) {
+    logger.info(`[OCR] Szukanie nicku gracza w pełnym tekście OCR`);
+
+    const lines = text.split('\n');
+    const firstTwoLines = lines.slice(0, 2).join(' ');
+    logger.info(`[OCR] Pierwsze 2 linie: "${firstTwoLines}"`);
+
+    // WZORZEC 1: Nick poprzedzony backslashem (np. "\Lemurrinio" lub "\\Lemurrinio")
+    const backslashPattern = /\\+([a-zA-Z][a-zA-Z0-9_]{2,19})/;
+    const backslashMatch = firstTwoLines.match(backslashPattern);
+
+    if (backslashMatch) {
+        const nick = backslashMatch[1];
+        logger.info(`[OCR] ✅ Wzorzec 1: Nick po backslashu: "${nick}"`);
+        return { nickname: nick, lineIndex: 0 };
+    }
+
+    const words = firstTwoLines.split(/\s+/);
+    const uiKeywords = ['ATK', 'HP', 'DEF', 'BE', 'LV', 'EXP', 'SKILL', 'PET', 'EQUIPMENT', 'MY'];
+
+    // WZORZEC 2: Najdłuższe słowo z mixed case (małe i wielkie litery)
+    let bestMixedCase = '';
+    let bestMixedCaseWord = '';
+
+    for (const word of words) {
+        if (uiKeywords.includes(word.toUpperCase())) continue;
+
+        const lettersOnly = extractLettersOnly(word);
+        if (lettersOnly.length < 3) continue;
+
+        const hasMixedCase = /[a-z]/.test(lettersOnly) && /[A-Z]/.test(lettersOnly);
+
+        if (hasMixedCase && lettersOnly.length > bestMixedCase.length) {
+            bestMixedCase = lettersOnly;
+            bestMixedCaseWord = word;
+        }
+    }
+
+    if (bestMixedCase.length >= 3) {
+        const finalNick = extractLettersAndNumbers(bestMixedCaseWord);
+        logger.info(`[OCR] ✅ Wzorzec 2: Nick z mixed case: "${finalNick}" (${bestMixedCase.length} liter)`);
+        return { nickname: finalNick, lineIndex: 0 };
+    }
+
+    // WZORZEC 3: Najdłuższe słowo (lowercase lub uppercase, min 5 liter)
+    let longestWord = '';
+    let longestOriginal = '';
+
+    for (const word of words) {
+        if (uiKeywords.includes(word.toUpperCase())) continue;
+
+        const lettersOnly = extractLettersOnly(word);
+
+        if (lettersOnly.length >= 5 && lettersOnly.length > longestWord.length) {
+            longestWord = lettersOnly;
+            longestOriginal = word;
+        }
+    }
+
+    if (longestWord.length >= 5) {
+        const finalNick = extractLettersAndNumbers(longestOriginal);
+        logger.info(`[OCR] ✅ Wzorzec 3: Nick (najdłuższe słowo): "${finalNick}" (${longestWord.length} liter)`);
+        return { nickname: finalNick, lineIndex: 0 };
+    }
+
+    // WZORZEC 4: Pierwsze słowo >= 4 litery (jako ostatnia deska ratunku)
+    for (const word of words) {
+        if (uiKeywords.includes(word.toUpperCase())) continue;
+
+        const lettersOnly = extractLettersOnly(word);
+
+        if (lettersOnly.length >= 4) {
+            const finalNick = extractLettersAndNumbers(word);
+            logger.info(`[OCR] ✅ Wzorzec 4: Nick (pierwsze słowo >= 4 litery): "${finalNick}"`);
+            return { nickname: finalNick, lineIndex: 0 };
+        }
+    }
+
+    logger.info(`[OCR] ❌ Nie znaleziono nicku w pełnym tekście OCR`);
+    return { nickname: null, lineIndex: -1 };
+}
+
+// Ekstraktuje atak z pełnego tekstu OCR
+function extractAttackFromFullText(text) {
+    logger.info(`[OCR] Ekstraktacja ataku z pełnego tekstu OCR`);
+
+    // WZORZEC 1 (PRIORYTET): Liczba po słowie "ATK" (50% przypadków)
+    // Przykłady: "ATK 1110284", "8 ATK 279057"
+    const atkPattern = /(?:ATK|atk)[\s:]*(\d{5,7})/i;
+    const atkMatch = text.match(atkPattern);
+
+    if (atkMatch) {
+        const attack = parseInt(atkMatch[1]);
+        if (attack >= 1000 && attack <= 9999999) {
+            logger.info(`[OCR] ✅ Wzorzec 1 (ATK): Znaleziono atak: ${attack}`);
+            return attack;
+        }
+    }
+
+    // WZORZEC 2: Pierwsza liczba 6-7 cyfrowa w liniach 2-4
+    // Przykłady: 377029, 1110284, 621670, 2242486, 279057
+    const lines = text.split('\n');
+    for (let i = 1; i < Math.min(5, lines.length); i++) {
+        const numberMatches = lines[i].match(/\b(\d{6,7})\b/g);
+        if (numberMatches) {
+            const num = parseInt(numberMatches[0]);
+            if (num >= 100000 && num <= 9999999) {
+                logger.info(`[OCR] ✅ Wzorzec 2 (6-7 cyfr): Znaleziono atak w linii ${i + 1}: ${num}`);
+                return num;
+            }
+        }
+    }
+
+    // WZORZEC 3: Pierwsza liczba 5-cyfrowa (dla niższych ataków)
+    // Przykład: 66523
+    const allNumbers = text.match(/\b\d{5,7}\b/g);
+    if (allNumbers) {
+        for (const numStr of allNumbers) {
+            const num = parseInt(numStr);
+            if (num >= 10000 && num <= 9999999) {
+                logger.info(`[OCR] ✅ Wzorzec 3 (5+ cyfr): Znaleziono atak: ${num}`);
+                return num;
+            }
+        }
+    }
+
+    logger.info(`[OCR] ❌ Nie znaleziono ataku w pełnym tekście OCR`);
+    return null;
+}
+
 // POPRAWIONA FUNKCJA - szuka najdłuższego nicku PRZED pierwszą dużą liczbą
 function findNicknameInText(text) {
     logger.info(`[OCR] Szukanie nicku gracza w odczytanym tekście`);
@@ -604,28 +735,21 @@ async function preprocessImageForNickDetection(inputPath, outputPath) {
 }
 
 
-async function extractStatsFromImage(imagePath) {
-    logger.info(`[OCR] Rozpoczynam ekstraktację statystyk z obrazu z podziałem na części`);
-    
-    // Najpierw przetwórz cały obraz - zamień kolory dla lepszego odczytu nicku
-    const preprocessedPath = imagePath.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '_preprocessed_for_nick.png');
-    await preprocessImageForNickDetection(imagePath, preprocessedPath);
-    
+async function extractStatsFromImage(imagePath, fullOcrText) {
+    logger.info(`[OCR] Rozpoczynam ekstraktację statystyk z pełnego tekstu OCR`);
+
     let playerNick = null;
     let characterAttack = null;
-    
-    // Odczytaj nick z połączonych części 1-2 jako jeden obszar - użyj przetworzonego obrazu
-    // Części 1-2 to lewy górny róg, gdzie znajduje się nick gracza
-    logger.info(`[OCR] Odczytywanie nicku z połączonych części 1-2 (lewy górny róg)...`);
-    const nickText = await readTextFromCombinedImageRegions(preprocessedPath, [1, 2]);
-    const nicknameResult = findNicknameInText(nickText);
+
+    // Najpierw spróbuj znaleźć nick w pełnym tekście OCR używając wzorców
+    logger.info(`[OCR] Szukanie nicku w pełnym tekście OCR...`);
+    const nicknameResult = findNicknameInFullText(fullOcrText);
 
     if (nicknameResult.nickname) {
         playerNick = nicknameResult.nickname;
-        logger.info(`[OCR] Znaleziono nick "${playerNick}" w połączonych częściach 1-2`);
-        
+        logger.info(`[OCR] Znaleziono nick "${playerNick}" w pełnym tekście OCR`);
     } else {
-        logger.info(`[OCR] ❌ Nie znaleziono nicku w połączonych częściach 1-2 - zwracam błąd`);
+        logger.info(`[OCR] ❌ Nie znaleziono nicku w pełnym tekście OCR - zwracam błąd`);
         return {
             playerNick: null,
             characterAttack: null,
@@ -633,28 +757,24 @@ async function extractStatsFromImage(imagePath) {
             isValidEquipment: false
         };
     }
-    
-    // Odczytaj atak z połączonych części 7 i 8 jako jeden obszar - z oryginalnymi ustawieniami
-    logger.info(`[OCR] Odczytywanie ataku z połączonych części 7 i 8...`);
-    const attackText = await readTextFromCombinedImageRegionsOriginal(imagePath, [7, 8]);
-    characterAttack = extractAttackFromText(attackText);
-    
+
+    // Wyciągnij atak z pełnego tekstu - szukaj liczby po słowie "ATK" lub pierwszej dużej liczby
+    logger.info(`[OCR] Szukanie ataku w pełnym tekście OCR...`);
+    characterAttack = extractAttackFromFullText(fullOcrText);
+
     if (characterAttack) {
-        logger.info(`[OCR] Znaleziono atak ${characterAttack} w połączonych częściach 7 i 8`);
+        logger.info(`[OCR] Znaleziono atak ${characterAttack} w pełnym tekście OCR`);
     } else {
-        logger.info(`[OCR] ❌ Nie znaleziono ataku w połączonych częściach 7 i 8`);
+        logger.info(`[OCR] ❌ Nie znaleziono ataku w pełnym tekście OCR`);
     }
-    
+
     const result = {
         playerNick,
         characterAttack,
         confidence: calculateSimpleConfidence(playerNick, characterAttack),
         isValidEquipment: true
     };
-    
-    // Usuń plik tymczasowy
-    await fs.unlink(preprocessedPath).catch(() => {});
-    
+
     logger.info(`[OCR] Finalne wyniki ekstraktacji:`, result);
     return result;
 }
@@ -772,10 +892,10 @@ async function extractOptimizedStatsFromImage(imagePath, userId, userEphemeralRe
             };
         }
         
-        await updateUserEphemeralReply(userId, '📊 Analizuję statystyki z części obrazu...', [], userEphemeralReplies);
-        logger.info(`[OCR] Rozpoczynam analizę statystyk z podziałem na części`);
-        
-        const stats = await extractStatsFromImage(imagePath);
+        await updateUserEphemeralReply(userId, '📊 Analizuję statystyki z pełnego tekstu OCR...', [], userEphemeralReplies);
+        logger.info(`[OCR] Rozpoczynam analizę statystyk z pełnego tekstu OCR`);
+
+        const stats = await extractStatsFromImage(imagePath, text);
         
         if (!stats.playerNick) {
             logger.info(`[OCR] ❌ Nie znaleziono nicku w pierwszych 3 linijkach - odrzucam obraz`);
@@ -821,6 +941,8 @@ module.exports = {
     checkForEquipmentKeyword,
     checkForEquipmentKeywordFlexible,
     findNicknameInText,
+    findNicknameInFullText,
+    extractAttackFromFullText,
     extractLettersAndNumbers,
     extractLettersOnly,
     extractAttackFromLine,
