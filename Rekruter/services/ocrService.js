@@ -324,10 +324,9 @@ async function readTextFromCombinedImageRegions(inputPath, regions) {
         await preprocessImageForWhiteText(combinedPath, processedPath);
 
         // Odczytaj tekst z przetworzonego fragmentu z poprawionymi ustawieniami OCR
-        const { data: { text } } = await Tesseract.recognize(processedPath, {
-            lang: 'eng',
+        const { data: { text } } = await Tesseract.recognize(processedPath, 'eng', {
             tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
-            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
+            tessedit_pageseg_mode: '6'  // PSM 6 = Uniform block of text
         });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - NICK (części ${regions.join(', ')}) =====`);
@@ -402,10 +401,9 @@ async function readTextFromCombinedImageRegionsOriginal(inputPath, regions) {
         await preprocessImageForWhiteTextOriginal(combinedPath, processedPath);
 
         // Odczytaj tekst z przetworzonego fragmentu z ustawieniami dla cyfr
-        const { data: { text } } = await Tesseract.recognize(processedPath, {
-            lang: 'eng',
+        const { data: { text } } = await Tesseract.recognize(processedPath, 'eng', {
             tessedit_char_whitelist: '0123456789/',
-            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
+            tessedit_pageseg_mode: '7'  // PSM 7 = Single line of text
         });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - ATAK (części ${regions.join(', ')}) =====`);
