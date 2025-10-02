@@ -439,52 +439,67 @@ function extractLettersOnly(text) {
 }
 
 
-// POPRAWIONA FUNKCJA - traktuje cały tekst jako jedną linię i wyodrębnia same litery
+// POPRAWIONA FUNKCJA - szuka najdłuższego nicku PRZED pierwszą dużą liczbą
 function findNicknameInText(text) {
-    logger.info(`[OCR] Szukanie najdłuższego nicku BEZ znaków interpunkcyjnych w tekście z części 1-5`);
-    
+    logger.info(`[OCR] Szukanie nicku gracza w odczytanym tekście`);
+
     // Zamień wszystkie znaki nowej linii na spacje i traktuj jako jedną linię
     const singleLine = text.replace(/\n/g, ' ').trim();
     logger.info(`[OCR] Cały tekst w jednej linii: "${singleLine}"`);
-    
+
     const words = singleLine.split(/\s+/);
-    const filteredWords = words.filter(word => /[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(word));
-    logger.info(`[OCR] Znalezione słowa w całym tekście:`, filteredWords);
-    
-    // Szukamy najdłuższego słowa, ale licząc TYLKO litery (bez cyfr)
+    logger.info(`[OCR] Znalezione słowa:`, words);
+
+    // Znajdź indeks pierwszej dużej liczby (>= 10000) - to prawdopodobnie statystyka, nie nick
+    let firstBigNumberIndex = words.length;
+    for (let i = 0; i < words.length; i++) {
+        const num = parseInt(words[i].replace(/[^0-9]/g, ''));
+        if (!isNaN(num) && num >= 10000) {
+            firstBigNumberIndex = i;
+            logger.info(`[OCR] Znaleziono pierwszą dużą liczbę (${num}) na pozycji ${i}`);
+            break;
+        }
+    }
+
+    // Szukaj nicku tylko w słowach PRZED pierwszą dużą liczbą
+    const wordsBeforeBigNumber = words.slice(0, firstBigNumberIndex);
+    logger.info(`[OCR] Słowa przed pierwszą dużą liczbą:`, wordsBeforeBigNumber);
+
+    const filteredWords = wordsBeforeBigNumber.filter(word => /[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(word));
+    logger.info(`[OCR] Słowa zawierające litery:`, filteredWords);
+
+    // Szukamy najdłuższego słowa
     let longestNick = '';
     let originalWord = '';
-    
+
     for (let j = 0; j < filteredWords.length; j++) {
         const word = filteredWords[j];
         logger.info(`[OCR] Sprawdzanie słowa ${j + 1}: "${word}"`);
-        
+
         // Wyodrębnij TYLKO litery z słowa (bez cyfr i znaków specjalnych)
         const lettersOnly = extractLettersOnly(word);
         logger.info(`[OCR] Litery wyodrębnione ze słowa "${word}": "${lettersOnly}"`);
-        
+
         // Sprawdź długość słowa po wyodrębnieniu TYLKO liter
         if (lettersOnly.length >= 3 && lettersOnly.length > longestNick.length) {
-            // Ale jako nick zwróć litery i cyfry razem
-            const cleanNick = extractLettersAndNumbers(word);
-            longestNick = lettersOnly; // Do porównania długości używamy tylko liter
+            longestNick = lettersOnly;
             originalWord = word;
-            logger.info(`[OCR] ✅ Nowy najdłuższy nick: "${cleanNick}" (${lettersOnly.length} liter) z oryginalnego słowa "${word}"`);
+            logger.info(`[OCR] ✅ Nowy najdłuższy nick: "${lettersOnly}" (${lettersOnly.length} liter) z oryginalnego słowa "${word}"`);
         } else if (lettersOnly.length < 3) {
             logger.info(`[OCR] ❌ Słowo "${word}" ma tylko ${lettersOnly.length} liter (minimum 3 litery)`);
         } else {
             logger.info(`[OCR] ❌ Słowo "${word}" ma ${lettersOnly.length} liter, krótsze niż obecne najdłuższe (${longestNick.length})`);
         }
     }
-    
+
     // Jeśli znaleziono najdłuższy nick
     if (longestNick.length >= 3) {
         // Zwróć pełny nick (litery + cyfry) z najdłuższego słowa
         const finalNick = extractLettersAndNumbers(originalWord);
-        logger.info(`[OCR] ✅ Znaleziono najdłuższy nick "${finalNick}" w całym tekście (${longestNick.length} liter z oryginalnego słowa "${originalWord}")`);
+        logger.info(`[OCR] ✅ Znaleziono nick gracza "${finalNick}" w tekście (${longestNick.length} liter z oryginalnego słowa "${originalWord}")`);
         return { nickname: finalNick, lineIndex: 0 };
     } else {
-        logger.info(`[OCR] ❌ Nie znaleziono odpowiednio długiego nicku w całym tekście`);
+        logger.info(`[OCR] ❌ Nie znaleziono odpowiednio długiego nicku w tekście`);
         return { nickname: null, lineIndex: -1 };
     }
 }
@@ -599,17 +614,18 @@ async function extractStatsFromImage(imagePath) {
     let playerNick = null;
     let characterAttack = null;
     
-    // Odczytaj nick z połączonych części 1-5 jako jeden obszar - użyj przetworzonego obrazu
-    logger.info(`[OCR] Odczytywanie nicku z połączonych części 1-5...`);
-    const nickText = await readTextFromCombinedImageRegions(preprocessedPath, [1, 2, 3, 4, 5]);
+    // Odczytaj nick z połączonych części 1-2 jako jeden obszar - użyj przetworzonego obrazu
+    // Części 1-2 to lewy górny róg, gdzie znajduje się nick gracza
+    logger.info(`[OCR] Odczytywanie nicku z połączonych części 1-2 (lewy górny róg)...`);
+    const nickText = await readTextFromCombinedImageRegions(preprocessedPath, [1, 2]);
     const nicknameResult = findNicknameInText(nickText);
-    
+
     if (nicknameResult.nickname) {
         playerNick = nicknameResult.nickname;
-        logger.info(`[OCR] Znaleziono nick "${playerNick}" w połączonych częściach 1-5`);
+        logger.info(`[OCR] Znaleziono nick "${playerNick}" w połączonych częściach 1-2`);
         
     } else {
-        logger.info(`[OCR] ❌ Nie znaleziono nicku w połączonych częściach 1-5 - zwracam błąd`);
+        logger.info(`[OCR] ❌ Nie znaleziono nicku w połączonych częściach 1-2 - zwracam błąd`);
         return {
             playerNick: null,
             characterAttack: null,
