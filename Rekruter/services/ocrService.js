@@ -69,14 +69,25 @@ async function preprocessImageForWhiteText(inputPath, outputPath, config = null)
 
 async function preprocessImageForWhiteTextOriginal(inputPath, outputPath) {
     try {
-        logger.info(`[IMAGE] Przetwarzanie obrazu (oryginalne ustawienia): ${inputPath} -> ${outputPath}`);
+        logger.info(`[IMAGE] Przetwarzanie obrazu (ustawienia z Kontrolera/CX): ${inputPath} -> ${outputPath}`);
+
+        // Najpierw pobierz metadane obrazu dla powiększenia 2x
+        const metadata = await sharp(inputPath).metadata();
+        const newWidth = metadata.width * 2;
+        const newHeight = metadata.height * 2;
+
         await sharp(inputPath)
-            .grayscale()
-            .threshold(200)
-            .negate()
-            .png()
+            .resize(newWidth, newHeight, { kernel: 'lanczos3' })  // 2x powiększenie z wysoką jakością
+            .gamma(3.0)                                           // Rozjaśnienie
+            .sharpen(1.5, 1.0, 3.0)                              // Wyostrzenie
+            .median(5)                                            // Redukcja szumów
+            .grayscale()                                          // Konwersja na szarości
+            .threshold(200)                                       // Binaryzacja
+            .negate()                                             // Inwersja kolorów
+            .png({ quality: 100 })                                // Najwyższa jakość PNG
             .toFile(outputPath);
-        logger.info(`[IMAGE] ✅ Przetworzono obraz z oryginalnymi ustawieniami`);
+
+        logger.info(`[IMAGE] ✅ Przetworzono obraz z ustawieniami Kontrolera (2x upscale, gamma 3.0, sharpen, median)`);
     } catch (error) {
         logger.error(`[IMAGE] ❌ Błąd przetwarzania obrazu:`, error);
         throw error;
@@ -323,10 +334,11 @@ async function readTextFromCombinedImageRegions(inputPath, regions) {
         const processedPath = combinedPath.replace('.png', '_processed.png');
         await preprocessImageForWhiteText(combinedPath, processedPath);
 
-        // Odczytaj tekst z przetworzonego fragmentu z poprawionymi ustawieniami OCR
-        const { data: { text } } = await Tesseract.recognize(processedPath, 'eng', {
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
-            tessedit_pageseg_mode: '6'  // PSM 6 = Uniform block of text
+        // Odczytaj tekst z przetworzonego fragmentu z ustawieniami OCR jak w Kontrolerze
+        const { data: { text } } = await Tesseract.recognize(processedPath, 'pol+eng', {
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż0123456789',
+            tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+            tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY
         });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - NICK (części ${regions.join(', ')}) =====`);
@@ -400,10 +412,11 @@ async function readTextFromCombinedImageRegionsOriginal(inputPath, regions) {
         const processedPath = combinedPath.replace('.png', '_processed.png');
         await preprocessImageForWhiteTextOriginal(combinedPath, processedPath);
 
-        // Odczytaj tekst z przetworzonego fragmentu z ustawieniami dla cyfr
-        const { data: { text } } = await Tesseract.recognize(processedPath, 'eng', {
+        // Odczytaj tekst z przetworzonego fragmentu z ustawieniami OCR jak w Kontrolerze (cyfry)
+        const { data: { text } } = await Tesseract.recognize(processedPath, 'pol+eng', {
             tessedit_char_whitelist: '0123456789/',
-            tessedit_pageseg_mode: '7'  // PSM 7 = Single line of text
+            tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+            tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY
         });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - ATAK (części ${regions.join(', ')}) =====`);
@@ -895,8 +908,16 @@ async function extractOptimizedStatsFromImage(imagePath, userId, userEphemeralRe
         
         await updateUserEphemeralReply(userId, '🔍 Analizuję obraz...', [], userEphemeralReplies);
         logger.info(`[OCR] Rozpoczynam rozpoznawanie tekstu Tesseract`);
-        
-        const { data: { text } } = await Tesseract.recognize(processedPath);
+
+        // Ustawienia OCR takie same jak w Kontrolerze
+        const { data: { text } } = await Tesseract.recognize(processedPath, 'pol+eng', {
+            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż .,:-_[](){}/',
+            tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+            tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
+            textord_heavy_nr: '1',
+            textord_debug_tabfind: '0',
+            classify_bln_numeric_mode: '1'
+        });
         
         logger.info(`[OCR] ===== WYNIK TESSERACT - CAŁY OBRAZ =====`);
         logger.info(`[OCR] Rozpoznany tekst (equipment):`);
