@@ -66,16 +66,6 @@ async function onReady() {
     await commandService.registerSlashCommands();
 
     try {
-        const triggerChannel = await client.channels.fetch(config.channels.trigger);
-        if (triggerChannel && triggerChannel.isTextBased()) {
-            const messages = await triggerChannel.messages.fetch({ limit: 100 });
-            await triggerChannel.bulkDelete(messages, true);
-        }
-    } catch (error) {
-        logger.error(`❌ Błąd podczas czyszczenia kanału ${config.channels.trigger}:`, error);
-    }
-
-    try {
         const commandChannel = await client.channels.fetch(config.channels.command);
         const triggerChannel = await client.channels.fetch(config.channels.trigger);
 
@@ -112,7 +102,19 @@ async function onReady() {
         }
 
         if (triggerChannel && triggerChannel.isTextBased()) {
-            await triggerChannel.send(`🔑 Aktualne hasło: ${gameService.trigger}`);
+            // Sprawdź ostatnią wiadomość - wyślij tylko jeśli nie jest wiadomością o haśle
+            const lastMessages = await triggerChannel.messages.fetch({ limit: 1 });
+            const lastMessage = lastMessages.first();
+
+            const shouldSendPasswordMessage = !lastMessage ||
+                !lastMessage.content.startsWith('🔑 Aktualne hasło:');
+
+            if (shouldSendPasswordMessage) {
+                await triggerChannel.send(`🔑 Aktualne hasło: ${gameService.trigger}`);
+                logger.info(`📤 Wysłano wiadomość o aktualnym haśle: ${gameService.trigger}`);
+            } else {
+                logger.info(`⏭️ Pominięto wysyłanie wiadomości - ostatnia wiadomość to już info o haśle`);
+            }
         }
 
         // Ustawienie odpowiednich timerów
