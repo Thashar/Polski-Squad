@@ -445,7 +445,17 @@ function findNicknameInFullText(text) {
 
     const lines = text.split('\n');
     const firstTwoLines = lines.slice(0, 2).join(' ');
-    logger.info(`[OCR] Pierwsze 2 linie: "${firstTwoLines}"`);
+    logger.info(`[OCR] Linia 1: "${lines[0]}"`);
+    logger.info(`[OCR] Linia 2: "${lines[1] || '(brak)'}"`);
+
+    // Znajdź w której linii jest nick
+    let nickLineIndex = 0;
+    for (let i = 0; i < 2 && i < lines.length; i++) {
+        if (lines[i].trim().length > 0) {
+            nickLineIndex = i;
+            break;
+        }
+    }
 
     // WZORZEC 1: Nick poprzedzony backslashem (np. "\Lemurrinio" lub "\\Lemurrinio")
     const backslashPattern = /\\+([a-zA-Z][a-zA-Z0-9_]{2,19})/;
@@ -453,8 +463,8 @@ function findNicknameInFullText(text) {
 
     if (backslashMatch) {
         const nick = backslashMatch[1];
-        logger.info(`[OCR] ✅ Wzorzec 1: Nick po backslashu: "${nick}"`);
-        return { nickname: nick, lineIndex: 0 };
+        logger.info(`[OCR] ✅ Wzorzec 1: Nick po backslashu: "${nick}" (linia ${nickLineIndex + 1})`);
+        return { nickname: nick, lineIndex: nickLineIndex };
     }
 
     const words = firstTwoLines.split(/\s+/);
@@ -480,8 +490,8 @@ function findNicknameInFullText(text) {
 
     if (bestMixedCase.length >= 3) {
         const finalNick = extractLettersAndNumbers(bestMixedCaseWord);
-        logger.info(`[OCR] ✅ Wzorzec 2: Nick z mixed case: "${finalNick}" (${bestMixedCase.length} liter)`);
-        return { nickname: finalNick, lineIndex: 0 };
+        logger.info(`[OCR] ✅ Wzorzec 2: Nick z mixed case: "${finalNick}" (${bestMixedCase.length} liter, linia ${nickLineIndex + 1})`);
+        return { nickname: finalNick, lineIndex: nickLineIndex };
     }
 
     // WZORZEC 3: Najdłuższe słowo (lowercase lub uppercase, min 5 liter)
@@ -501,8 +511,8 @@ function findNicknameInFullText(text) {
 
     if (longestWord.length >= 5) {
         const finalNick = extractLettersAndNumbers(longestOriginal);
-        logger.info(`[OCR] ✅ Wzorzec 3: Nick (najdłuższe słowo): "${finalNick}" (${longestWord.length} liter)`);
-        return { nickname: finalNick, lineIndex: 0 };
+        logger.info(`[OCR] ✅ Wzorzec 3: Nick (najdłuższe słowo): "${finalNick}" (${longestWord.length} liter, linia ${nickLineIndex + 1})`);
+        return { nickname: finalNick, lineIndex: nickLineIndex };
     }
 
     // WZORZEC 4: Pierwsze słowo >= 4 litery (jako ostatnia deska ratunku)
@@ -513,8 +523,8 @@ function findNicknameInFullText(text) {
 
         if (lettersOnly.length >= 4) {
             const finalNick = extractLettersAndNumbers(word);
-            logger.info(`[OCR] ✅ Wzorzec 4: Nick (pierwsze słowo >= 4 litery): "${finalNick}"`);
-            return { nickname: finalNick, lineIndex: 0 };
+            logger.info(`[OCR] ✅ Wzorzec 4: Nick (pierwsze słowo >= 4 litery): "${finalNick}" (linia ${nickLineIndex + 1})`);
+            return { nickname: finalNick, lineIndex: nickLineIndex };
         }
     }
 
@@ -523,8 +533,8 @@ function findNicknameInFullText(text) {
 }
 
 // Ekstraktuje atak z pełnego tekstu OCR
-function extractAttackFromFullText(text) {
-    logger.info(`[OCR] Ekstraktacja ataku z pełnego tekstu OCR`);
+function extractAttackFromFullText(text, nickLineIndex = 0) {
+    logger.info(`[OCR] Ekstraktacja ataku z pełnego tekstu OCR (nick w linii ${nickLineIndex})`);
 
     // WZORZEC 1 (PRIORYTET): Liczba po słowie "ATK" (50% przypadków)
     // Przykłady: "ATK 1110284", "8 ATK 279057"
@@ -539,28 +549,46 @@ function extractAttackFromFullText(text) {
         }
     }
 
-    // WZORZEC 2: Pierwsza liczba 6-7 cyfrowa w liniach 2-4
-    // Przykłady: 377029, 1110284, 621670, 2242486, 279057
+    // WZORZEC 2: Druga najwyższa liczba w kolejnych 5 liniach po nicku
     const lines = text.split('\n');
-    for (let i = 1; i < Math.min(5, lines.length); i++) {
-        const numberMatches = lines[i].match(/\b(\d{6,7})\b/g);
+    const startLine = Math.max(0, nickLineIndex);
+    const endLine = Math.min(lines.length, startLine + 5);
+
+    logger.info(`[OCR] Szukanie liczb w liniach ${startLine + 1}-${endLine} (5 linii po nicku)`);
+
+    const numbersInRange = [];
+    for (let i = startLine; i < endLine; i++) {
+        const numberMatches = lines[i].match(/\b\d{4,7}\b/g);
         if (numberMatches) {
-            const num = parseInt(numberMatches[0]);
-            if (num >= 100000 && num <= 9999999) {
-                logger.info(`[OCR] ✅ Wzorzec 2 (6-7 cyfr): Znaleziono atak w linii ${i + 1}: ${num}`);
-                return num;
-            }
+            numberMatches.forEach(numStr => {
+                const num = parseInt(numStr);
+                if (num >= 1000 && num <= 9999999) {
+                    numbersInRange.push(num);
+                    logger.info(`[OCR] Znaleziono liczbę ${num} w linii ${i + 1}`);
+                }
+            });
         }
     }
 
-    // WZORZEC 3: Pierwsza liczba 5-cyfrowa (dla niższych ataków)
-    // Przykład: 66523
+    if (numbersInRange.length >= 2) {
+        // Sortuj malejąco i weź drugą najwyższą
+        numbersInRange.sort((a, b) => b - a);
+        const secondHighest = numbersInRange[1];
+        logger.info(`[OCR] ✅ Wzorzec 2 (druga najwyższa): Liczby znalezione: [${numbersInRange.join(', ')}]`);
+        logger.info(`[OCR] ✅ Wzorzec 2 (druga najwyższa): Wybrany atak: ${secondHighest}`);
+        return secondHighest;
+    } else if (numbersInRange.length === 1) {
+        logger.info(`[OCR] ⚠️ Tylko jedna liczba znaleziona: ${numbersInRange[0]} - zwracam ją jako atak`);
+        return numbersInRange[0];
+    }
+
+    // WZORZEC 3: Pierwsza liczba 5-cyfrowa (fallback)
     const allNumbers = text.match(/\b\d{5,7}\b/g);
     if (allNumbers) {
         for (const numStr of allNumbers) {
             const num = parseInt(numStr);
             if (num >= 10000 && num <= 9999999) {
-                logger.info(`[OCR] ✅ Wzorzec 3 (5+ cyfr): Znaleziono atak: ${num}`);
+                logger.info(`[OCR] ✅ Wzorzec 3 (fallback): Znaleziono atak: ${num}`);
                 return num;
             }
         }
@@ -758,9 +786,9 @@ async function extractStatsFromImage(imagePath, fullOcrText) {
         };
     }
 
-    // Wyciągnij atak z pełnego tekstu - szukaj liczby po słowie "ATK" lub pierwszej dużej liczby
+    // Wyciągnij atak z pełnego tekstu - przekaż pozycję nicku dla kontekstu
     logger.info(`[OCR] Szukanie ataku w pełnym tekście OCR...`);
-    characterAttack = extractAttackFromFullText(fullOcrText);
+    characterAttack = extractAttackFromFullText(fullOcrText, nicknameResult.lineIndex);
 
     if (characterAttack) {
         logger.info(`[OCR] Znaleziono atak ${characterAttack} w pełnym tekście OCR`);
