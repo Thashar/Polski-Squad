@@ -457,35 +457,48 @@ function findNicknameInFullText(text) {
     logger.info(`[OCR] Szukanie nicku gracza w pełnym tekście OCR`);
 
     const lines = text.split('\n');
-    const firstTwoLines = lines.slice(0, 2).join(' ');
-    logger.info(`[OCR] Linia 1: "${lines[0]}"`);
-    logger.info(`[OCR] Linia 2: "${lines[1] || '(brak)'}"`);
 
-    // Znajdź w której linii jest nick
+    // Szukaj nicku w pierwszych 5 liniach (zamiast tylko 2)
+    let searchLines = '';
     let nickLineIndex = 0;
-    for (let i = 0; i < 2 && i < lines.length; i++) {
-        if (lines[i].trim().length > 0) {
+
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+        logger.info(`[OCR] Linia ${i + 1}: "${lines[i]}"`);
+        searchLines += lines[i] + ' ';
+
+        // Zapamiętaj pierwszą niepustą linię jako potencjalną linię z nickiem
+        if (nickLineIndex === 0 && lines[i].trim().length > 0) {
             nickLineIndex = i;
-            break;
         }
     }
 
+    searchLines = searchLines.trim();
+    logger.info(`[OCR] Przeszukiwane linie (1-5): "${searchLines}"`);
+
     // WZORZEC 1: Nick poprzedzony backslashem (np. "\Lemurrinio" lub "\\Lemurrinio")
     const backslashPattern = /\\+([a-zA-Z][a-zA-Z0-9_]{2,19})/;
-    const backslashMatch = firstTwoLines.match(backslashPattern);
+    const backslashMatch = searchLines.match(backslashPattern);
 
     if (backslashMatch) {
         const nick = backslashMatch[1];
+        // Znajdź w której linii jest ten nick
+        for (let i = 0; i < Math.min(5, lines.length); i++) {
+            if (lines[i].includes(nick)) {
+                nickLineIndex = i;
+                break;
+            }
+        }
         logger.info(`[OCR] ✅ Wzorzec 1: Nick po backslashu: "${nick}" (linia ${nickLineIndex + 1})`);
         return { nickname: nick, lineIndex: nickLineIndex };
     }
 
-    const words = firstTwoLines.split(/\s+/);
-    const uiKeywords = ['ATK', 'HP', 'DEF', 'BE', 'LV', 'EXP', 'SKILL', 'PET', 'EQUIPMENT', 'MY'];
+    const words = searchLines.split(/\s+/);
+    const uiKeywords = ['ATK', 'HP', 'DEF', 'BE', 'LV', 'EXP', 'SKILL', 'PET', 'EQUIPMENT', 'MY', 'LEVEL', 'MERGE', 'VISUAL', 'TECH', 'PARTS', 'SURVIVORS', 'COLLECTIBLE'];
 
     // WZORZEC 2: Najdłuższe słowo z mixed case (małe i wielkie litery)
     let bestMixedCase = '';
     let bestMixedCaseWord = '';
+    let bestMixedCaseLineIndex = 0;
 
     for (const word of words) {
         if (uiKeywords.includes(word.toUpperCase())) continue;
@@ -498,18 +511,26 @@ function findNicknameInFullText(text) {
         if (hasMixedCase && lettersOnly.length > bestMixedCase.length) {
             bestMixedCase = lettersOnly;
             bestMixedCaseWord = word;
+            // Znajdź w której linii jest to słowo
+            for (let i = 0; i < Math.min(5, lines.length); i++) {
+                if (lines[i].includes(word)) {
+                    bestMixedCaseLineIndex = i;
+                    break;
+                }
+            }
         }
     }
 
     if (bestMixedCase.length >= 3) {
         const finalNick = extractLettersAndNumbers(bestMixedCaseWord);
-        logger.info(`[OCR] ✅ Wzorzec 2: Nick z mixed case: "${finalNick}" (${bestMixedCase.length} liter, linia ${nickLineIndex + 1})`);
-        return { nickname: finalNick, lineIndex: nickLineIndex };
+        logger.info(`[OCR] ✅ Wzorzec 2: Nick z mixed case: "${finalNick}" (${bestMixedCase.length} liter, linia ${bestMixedCaseLineIndex + 1})`);
+        return { nickname: finalNick, lineIndex: bestMixedCaseLineIndex };
     }
 
     // WZORZEC 3: Najdłuższe słowo (lowercase lub uppercase, min 5 liter)
     let longestWord = '';
     let longestOriginal = '';
+    let longestLineIndex = 0;
 
     for (const word of words) {
         if (uiKeywords.includes(word.toUpperCase())) continue;
@@ -519,13 +540,20 @@ function findNicknameInFullText(text) {
         if (lettersOnly.length >= 5 && lettersOnly.length > longestWord.length) {
             longestWord = lettersOnly;
             longestOriginal = word;
+            // Znajdź w której linii jest to słowo
+            for (let i = 0; i < Math.min(5, lines.length); i++) {
+                if (lines[i].includes(word)) {
+                    longestLineIndex = i;
+                    break;
+                }
+            }
         }
     }
 
     if (longestWord.length >= 5) {
         const finalNick = extractLettersAndNumbers(longestOriginal);
-        logger.info(`[OCR] ✅ Wzorzec 3: Nick (najdłuższe słowo): "${finalNick}" (${longestWord.length} liter, linia ${nickLineIndex + 1})`);
-        return { nickname: finalNick, lineIndex: nickLineIndex };
+        logger.info(`[OCR] ✅ Wzorzec 3: Nick (najdłuższe słowo): "${finalNick}" (${longestWord.length} liter, linia ${longestLineIndex + 1})`);
+        return { nickname: finalNick, lineIndex: longestLineIndex };
     }
 
     // WZORZEC 4: Pierwsze słowo >= 4 litery (jako ostatnia deska ratunku)
@@ -536,8 +564,16 @@ function findNicknameInFullText(text) {
 
         if (lettersOnly.length >= 4) {
             const finalNick = extractLettersAndNumbers(word);
-            logger.info(`[OCR] ✅ Wzorzec 4: Nick (pierwsze słowo >= 4 litery): "${finalNick}" (linia ${nickLineIndex + 1})`);
-            return { nickname: finalNick, lineIndex: nickLineIndex };
+            // Znajdź w której linii jest to słowo
+            let foundLineIndex = 0;
+            for (let i = 0; i < Math.min(5, lines.length); i++) {
+                if (lines[i].includes(word)) {
+                    foundLineIndex = i;
+                    break;
+                }
+            }
+            logger.info(`[OCR] ✅ Wzorzec 4: Nick (pierwsze słowo >= 4 litery): "${finalNick}" (linia ${foundLineIndex + 1})`);
+            return { nickname: finalNick, lineIndex: foundLineIndex };
         }
     }
 
