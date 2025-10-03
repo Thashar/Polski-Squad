@@ -147,26 +147,47 @@ client.on(Events.MessageCreate, async (message) => {
             if (imageAttachments.size > 0) {
                 logger.info(`[PHASE1] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
-                // Zapisz wiadomość do późniejszego usunięcia
-                session.messageToDelete = message;
-
-                // Przetwórz zdjęcia z przekazaniem publicInteraction
                 const attachmentsArray = Array.from(imageAttachments.values());
-                const results = await phaseService.processImages(
-                    session.sessionId,
-                    attachmentsArray,
-                    message.guild,
-                    message.member,
-                    session.publicInteraction
-                );
 
-                // Usuń wiadomość ze zdjęciami z kanału
+                // KROK 1: Zapisz wszystkie zdjęcia na dysk
+                logger.info('[PHASE1] 💾 Zapisywanie zdjęć na dysk...');
+                const downloadedFiles = [];
+
+                for (let i = 0; i < attachmentsArray.length; i++) {
+                    try {
+                        const filepath = await phaseService.downloadImage(
+                            attachmentsArray[i].url,
+                            session.sessionId,
+                            session.downloadedFiles.length + i
+                        );
+                        downloadedFiles.push({
+                            filepath,
+                            originalAttachment: attachmentsArray[i]
+                        });
+                    } catch (error) {
+                        logger.error(`[PHASE1] ❌ Błąd pobierania zdjęcia ${i + 1}:`, error);
+                    }
+                }
+
+                session.downloadedFiles.push(...downloadedFiles.map(f => f.filepath));
+                logger.info(`[PHASE1] ✅ Zapisano ${downloadedFiles.length} zdjęć na dysk`);
+
+                // KROK 2: Usuń wiadomość ze zdjęciami z kanału
                 try {
                     await message.delete();
                     logger.info('[PHASE1] 🗑️ Usunięto wiadomość ze zdjęciami z kanału');
                 } catch (deleteError) {
                     logger.error('[PHASE1] ❌ Błąd usuwania wiadomości:', deleteError);
                 }
+
+                // KROK 3: Przetwarzaj zdjęcia z dysku
+                const results = await phaseService.processImagesFromDisk(
+                    session.sessionId,
+                    downloadedFiles,
+                    message.guild,
+                    message.member,
+                    session.publicInteraction
+                );
 
                 // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
                 const processedCount = results.length;

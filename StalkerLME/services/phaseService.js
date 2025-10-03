@@ -195,9 +195,9 @@ class PhaseService {
     }
 
     /**
-     * Przetwarza zdjęcia i dodaje wyniki do sesji
+     * Przetwarza zdjęcia z dysku (już pobrane)
      */
-    async processImages(sessionId, attachments, guild, member, publicInteraction) {
+    async processImagesFromDisk(sessionId, downloadedFiles, guild, member, publicInteraction) {
         const session = this.getSession(sessionId);
         if (!session) {
             throw new Error('Sesja nie istnieje lub wygasła');
@@ -205,19 +205,16 @@ class PhaseService {
 
         session.publicInteraction = publicInteraction;
 
-        logger.info(`[PHASE1] 📸 Przetwarzanie ${attachments.length} zdjęć dla sesji ${sessionId}`);
+        logger.info(`[PHASE1] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
         const results = [];
-        const totalImages = attachments.length;
+        const totalImages = downloadedFiles.length;
 
-        for (let i = 0; i < attachments.length; i++) {
-            const attachment = attachments[i];
+        for (let i = 0; i < downloadedFiles.length; i++) {
+            const fileData = downloadedFiles[i];
+            const attachment = fileData.originalAttachment;
 
             try {
-                // Pobierz i zapisz zdjęcie lokalnie
-                const filepath = await this.downloadImage(attachment.url, sessionId, i);
-                session.downloadedFiles.push(filepath);
-
                 // Aktualizuj postęp
                 await this.updateProgress(session, {
                     currentImage: i + 1,
@@ -228,13 +225,20 @@ class PhaseService {
 
                 logger.info(`[PHASE1] 📷 Przetwarzanie zdjęcia ${i + 1}/${totalImages}: ${attachment.name}`);
 
-                // Przetwórz OCR
-                const text = await this.ocrService.processImage(attachment);
+                // Przetwórz OCR z pliku lokalnego
+                const text = await this.ocrService.processImageFromFile(fileData.filepath);
 
                 // Wyciągnij wszystkich graczy z wynikami (nie tylko zerami)
                 const playersWithScores = await this.ocrService.extractAllPlayersWithScores(text, guild, member);
 
                 results.push({
+                    imageUrl: attachment.url,
+                    imageName: attachment.name,
+                    results: playersWithScores
+                });
+
+                // Dodaj do sesji
+                session.processedImages.push({
                     imageUrl: attachment.url,
                     imageName: attachment.name,
                     results: playersWithScores
@@ -247,6 +251,13 @@ class PhaseService {
             } catch (error) {
                 logger.error(`[PHASE1] ❌ Błąd przetwarzania zdjęcia ${i + 1}:`, error);
                 results.push({
+                    imageUrl: attachment.url,
+                    imageName: attachment.name,
+                    error: error.message,
+                    results: []
+                });
+
+                session.processedImages.push({
                     imageUrl: attachment.url,
                     imageName: attachment.name,
                     error: error.message,
