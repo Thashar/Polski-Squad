@@ -7,7 +7,7 @@ const logger = createBotLogger('StalkerLME');
 const confirmationData = new Map();
 
 async function handleInteraction(interaction, sharedState, config) {
-    const { client, databaseService, ocrService, punishmentService, reminderService, survivorService } = sharedState;
+    const { client, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
 
     try {
         if (interaction.isCommand()) {
@@ -38,7 +38,7 @@ async function handleInteraction(interaction, sharedState, config) {
 }
 
 async function handleSlashCommand(interaction, sharedState) {
-    const { config, databaseService, ocrService, punishmentService, reminderService, survivorService } = sharedState;
+    const { config, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /decode i /ocr-debug
     const publicCommands = ['decode', 'ocr-debug'];
@@ -68,6 +68,9 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'decode':
             await handleDecodeCommand(interaction, sharedState);
+            break;
+        case 'faza1':
+            await handlePhase1Command(interaction, sharedState);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
@@ -412,7 +415,7 @@ async function handleSelectMenu(interaction, config, reminderService) {
 }
 
 async function handleButton(interaction, sharedState) {
-    const { config, databaseService, punishmentService, survivorService } = sharedState;
+    const { config, databaseService, punishmentService, survivorService, phaseService } = sharedState;
 
     // Obsługa przycisków paginacji buildów
     if (interaction.customId === 'statystyki_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'legend_colls_page' || interaction.customId === 'epic_colls_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
@@ -765,11 +768,23 @@ async function handleButton(interaction, sharedState) {
         
         confirmationData.delete(confirmationId);
         
-        await interaction.update({ 
-            content: '❌ Akcja została anulowana.', 
-            components: [], 
-            embeds: [] 
+        await interaction.update({
+            content: '❌ Akcja została anulowana.',
+            components: [],
+            embeds: []
         });
+    } else if (interaction.customId === 'phase1_overwrite_yes' || interaction.customId === 'phase1_overwrite_no') {
+        // Obsługa przycisków nadpisywania danych Phase 1
+        await handlePhase1OverwriteButton(interaction, sharedState);
+    } else if (interaction.customId === 'phase1_complete_yes' || interaction.customId === 'phase1_complete_no') {
+        // Obsługa przycisków potwierdzenia zakończenia dodawania zdjęć
+        await handlePhase1CompleteButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase1_resolve_')) {
+        // Obsługa przycisków rozstrzygania konfliktów
+        await handlePhase1ConflictResolveButton(interaction, sharedState);
+    } else if (interaction.customId === 'phase1_confirm_save' || interaction.customId === 'phase1_cancel_save') {
+        // Obsługa przycisków finalnego potwierdzenia zapisu
+        await handlePhase1FinalConfirmButton(interaction, sharedState);
     }
 }
 
@@ -894,9 +909,13 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('decode')
-            .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku')
+            .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku'),
+
+        new SlashCommandBuilder()
+            .setName('faza1')
+            .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 1')
     ];
-    
+
     try {
         await client.application.commands.set(commands);
     } catch (error) {
@@ -1395,6 +1414,71 @@ async function handleModalSubmit(interaction, sharedState) {
     }
 }
 
+async function handlePhase1Command(interaction, sharedState) {
+    const { config, phaseService, databaseService } = sharedState;
+
+    // Sprawdź uprawnienia (admin lub allowedPunishRoles)
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        // Sprawdź czy dane dla tego tygodnia już istnieją
+        const weekInfo = phaseService.getCurrentWeekInfo();
+        const existingData = await databaseService.checkPhase1DataExists(
+            interaction.guild.id,
+            weekInfo.weekNumber,
+            weekInfo.year
+        );
+
+        if (existingData.exists) {
+            // Pokaż ostrzeżenie z przyciskami
+            const warningEmbed = await phaseService.createOverwriteWarningEmbed(
+                interaction.guild.id,
+                weekInfo
+            );
+
+            if (warningEmbed) {
+                await interaction.editReply({
+                    embeds: [warningEmbed.embed],
+                    components: [warningEmbed.row]
+                });
+                return;
+            }
+        }
+
+        // Utwórz sesję
+        const sessionId = phaseService.createSession(
+            interaction.user.id,
+            interaction.guild.id,
+            interaction.channelId
+        );
+
+        // Pokaż embed z prośbą o zdjęcia
+        const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
+        await interaction.editReply({
+            embeds: [awaitingEmbed]
+        });
+
+        logger.info(`[PHASE1] ✅ Sesja utworzona, czekam na zdjęcia od ${interaction.user.tag}`);
+
+    } catch (error) {
+        logger.error('[PHASE1] ❌ Błąd komendy /faza1:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas inicjalizacji komendy /faza1.'
+        });
+    }
+}
+
 async function handleDecodeModalSubmit(interaction, sharedState) {
     const { config, survivorService } = sharedState;
 
@@ -1467,6 +1551,242 @@ async function handleDecodeModalSubmit(interaction, sharedState) {
             flags: MessageFlags.Ephemeral
         });
     }
+}
+
+// =============== PHASE 1 HANDLERS ===============
+
+async function handlePhase1OverwriteButton(interaction, sharedState) {
+    const { phaseService, config } = sharedState;
+
+    if (interaction.customId === 'phase1_overwrite_no') {
+        // Anuluj
+        await interaction.update({
+            content: '❌ Operacja anulowana.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    // Nadpisz - utwórz sesję i kontynuuj
+    const sessionId = phaseService.createSession(
+        interaction.user.id,
+        interaction.guild.id,
+        interaction.channelId
+    );
+
+    const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
+    await interaction.update({
+        embeds: [awaitingEmbed],
+        components: []
+    });
+
+    logger.info(`[PHASE1] ✅ Sesja utworzona (nadpisywanie), czekam na zdjęcia od ${interaction.user.tag}`);
+}
+
+async function handlePhase1CompleteButton(interaction, sharedState) {
+    const { phaseService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Tylko osoba, która uruchomiła komendę może ją potwierdzić.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (interaction.customId === 'phase1_complete_no') {
+        // Dodaj więcej zdjęć
+        session.stage = 'awaiting_images';
+        phaseService.refreshSessionTimeout(session.sessionId);
+
+        const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
+        await interaction.update({
+            embeds: [awaitingEmbed],
+            components: []
+        });
+
+        logger.info(`[PHASE1] ➕ Użytkownik chce dodać więcej zdjęć`);
+        return;
+    }
+
+    // Tak, analizuj
+    await interaction.update({
+        content: '🔄 Analizuję wyniki...',
+        embeds: [],
+        components: []
+    });
+
+    try {
+        // Identyfikuj konflikty
+        const conflicts = phaseService.identifyConflicts(session);
+
+        if (conflicts.length > 0) {
+            // Przejdź do rozstrzygania konfliktów
+            session.stage = 'resolving_conflicts';
+            const firstConflict = phaseService.getNextUnresolvedConflict(session);
+
+            if (firstConflict) {
+                const conflictEmbed = phaseService.createConflictEmbed(firstConflict, 1, conflicts.length);
+                await interaction.editReply({
+                    content: '',
+                    embeds: [conflictEmbed.embed],
+                    components: [conflictEmbed.row]
+                });
+            }
+        } else {
+            // Brak konfliktów - przejdź do finalnego podsumowania
+            await showPhase1FinalSummary(interaction, session, phaseService);
+        }
+
+    } catch (error) {
+        logger.error('[PHASE1] ❌ Błąd analizy wyników:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas analizy wyników.'
+        });
+    }
+}
+
+async function handlePhase1ConflictResolveButton(interaction, sharedState) {
+    const { phaseService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Tylko osoba, która uruchomiła komendę może rozstrzygać konflikty.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Wyciągnij nick i wartość z customId
+    // Format: phase1_resolve_{nick}_{value}
+    const parts = interaction.customId.split('_');
+    const value = parts[parts.length - 1];
+    const nick = parts.slice(2, parts.length - 1).join('_');
+
+    // Rozstrzygnij konflikt
+    phaseService.resolveConflict(session, nick, parseInt(value) || 0);
+
+    // Sprawdź czy są jeszcze konflikty
+    const nextConflict = phaseService.getNextUnresolvedConflict(session);
+
+    if (nextConflict) {
+        // Pokaż następny konflikt
+        const currentIndex = session.resolvedConflicts.size + 1;
+        const totalConflicts = session.conflicts.length;
+
+        const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts);
+        await interaction.update({
+            embeds: [conflictEmbed.embed],
+            components: [conflictEmbed.row]
+        });
+    } else {
+        // Wszystkie konflikty rozstrzygnięte - pokaż finalne podsumowanie
+        await interaction.update({
+            content: '🔄 Przygotowuję podsumowanie...',
+            embeds: [],
+            components: []
+        });
+
+        await showPhase1FinalSummary(interaction, session, phaseService);
+    }
+}
+
+async function handlePhase1FinalConfirmButton(interaction, sharedState) {
+    const { phaseService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Tylko osoba, która uruchomiła komendę może ją zatwierdzić.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (interaction.customId === 'phase1_cancel_save') {
+        // Anuluj
+        phaseService.cleanupSession(session.sessionId);
+
+        await interaction.update({
+            content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    // Zatwierdź - zapisz do bazy
+    await interaction.update({
+        content: '💾 Zapisuję wyniki do bazy danych...',
+        embeds: [],
+        components: []
+    });
+
+    try {
+        const finalResults = phaseService.getFinalResults(session);
+        const savedCount = await phaseService.saveFinalResults(session, finalResults, interaction.guild);
+
+        const weekInfo = phaseService.getCurrentWeekInfo();
+
+        await interaction.editReply({
+            content: `✅ **Dane zapisane pomyślnie!**\n\n📊 Zapisano **${savedCount}** wyników dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}**.`
+        });
+
+        phaseService.cleanupSession(session.sessionId);
+        logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
+
+    } catch (error) {
+        logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas zapisu danych do bazy.'
+        });
+    }
+}
+
+async function showPhase1FinalSummary(interaction, session, phaseService) {
+    const finalResults = phaseService.getFinalResults(session);
+    const stats = phaseService.calculateStatistics(finalResults);
+    const weekInfo = phaseService.getCurrentWeekInfo();
+
+    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo);
+
+    session.stage = 'final_confirmation';
+
+    await interaction.editReply({
+        content: '',
+        embeds: [summaryEmbed.embed],
+        components: [summaryEmbed.row]
+    });
 }
 
 module.exports = {

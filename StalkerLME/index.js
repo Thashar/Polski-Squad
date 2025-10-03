@@ -33,6 +33,8 @@ const reminderService = new ReminderService(config);
 const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
+const PhaseService = require('./services/phaseService');
+const phaseService = new PhaseService(config, databaseService, ocrService);
 
 // Obiekt zawierający wszystkie współdzielone stany
 // Ustaw globalny dostęp do klienta dla messageCleanupService
@@ -47,7 +49,8 @@ const sharedState = {
     reminderService,
     vacationService,
     survivorService,
-    messageCleanupService
+    messageCleanupService,
+    phaseService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -122,15 +125,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Obsługa wiadomości (dla usuwania roli urlopowej po napisaniu wniosku)
+// Obsługa wiadomości (dla usuwania roli urlopowej po napisaniu wniosku + Phase 1 images)
 client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
-    
+
     try {
         await vacationService.handleVacationMessage(message);
     } catch (error) {
         logger.error(`❌ Błąd podczas obsługi wiadomości urlopowej: ${error.message}`);
+    }
+
+    // Obsługa wiadomości z zdjęciami dla Phase 1
+    try {
+        const session = phaseService.getSessionByUserId(message.author.id);
+
+        if (session && session.stage === 'awaiting_images' && session.channelId === message.channelId) {
+            // Sprawdź czy wiadomość ma załączniki (zdjęcia)
+            const imageAttachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
+
+            if (imageAttachments.size > 0) {
+                logger.info(`[PHASE1] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
+
+                // Przetwórz zdjęcia
+                const attachmentsArray = Array.from(imageAttachments.values());
+                const results = await phaseService.processImages(
+                    session.sessionId,
+                    attachmentsArray,
+                    message.guild,
+                    message.member
+                );
+
+                // Pokaż potwierdzenie przetworzenia
+                const processedCount = results.length;
+                const totalImages = session.processedImages.length;
+
+                const confirmation = phaseService.createProcessedImagesEmbed(processedCount, totalImages);
+
+                session.stage = 'confirming_complete';
+                phaseService.refreshSessionTimeout(session.sessionId);
+
+                await message.reply({
+                    embeds: [confirmation.embed],
+                    components: [confirmation.row]
+                });
+            }
+        }
+    } catch (error) {
+        logger.error(`[PHASE1] ❌ Błąd podczas obsługi wiadomości Phase 1: ${error.message}`);
     }
 });
 

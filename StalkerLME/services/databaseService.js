@@ -9,6 +9,7 @@ class DatabaseService {
         this.config = config;
         this.punishmentsFile = config.database.punishments;
         this.weeklyRemovalFile = config.database.weeklyRemoval;
+        this.phase1File = path.join(path.dirname(this.punishmentsFile), 'phase1_results.json');
     }
 
     async initializeDatabase() {
@@ -22,6 +23,10 @@ class DatabaseService {
 
             if (!(await this.fileExists(this.weeklyRemovalFile))) {
                 await this.saveWeeklyRemoval({});
+            }
+
+            if (!(await this.fileExists(this.phase1File))) {
+                await this.savePhase1Data({});
             }
         } catch (error) {
             logger.error('Błąd inicjalizacji bazy');
@@ -247,6 +252,146 @@ class DatabaseService {
             target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
         }
         return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+
+    // =============== PHASE 1 METHODS ===============
+
+    async loadPhase1Data() {
+        try {
+            const data = await fs.readFile(this.phase1File, 'utf8');
+            return JSON.parse(data);
+        } catch (error) {
+            logger.error('💥 Błąd wczytywania danych Fazy 1:', error);
+            return {};
+        }
+    }
+
+    async savePhase1Data(data) {
+        try {
+            await fs.writeFile(this.phase1File, JSON.stringify(data, null, 2), 'utf8');
+        } catch (error) {
+            logger.error('💥 Błąd zapisywania danych Fazy 1:', error);
+        }
+    }
+
+    /**
+     * Sprawdza czy dane dla danego tygodnia już istnieją
+     * Struktura: { guildId: { "weekNumber-year": { players: [...], createdAt, updatedAt } } }
+     */
+    async checkPhase1DataExists(guildId, weekNumber, year) {
+        const data = await this.loadPhase1Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (data[guildId] && data[guildId][weekKey]) {
+            return {
+                exists: true,
+                data: data[guildId][weekKey]
+            };
+        }
+
+        return { exists: false };
+    }
+
+    /**
+     * Usuwa dane dla danego tygodnia
+     */
+    async deletePhase1DataForWeek(guildId, weekNumber, year) {
+        logger.info(`[PHASE1] 🗑️ Usuwanie danych dla tygodnia ${weekNumber}/${year}`);
+
+        const data = await this.loadPhase1Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (data[guildId] && data[guildId][weekKey]) {
+            delete data[guildId][weekKey];
+            await this.savePhase1Data(data);
+            logger.info(`[PHASE1] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}`);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Zapisuje pojedynczy wynik gracza dla danego tygodnia
+     */
+    async savePhase1Result(guildId, userId, displayName, score, weekNumber, year) {
+        const data = await this.loadPhase1Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId]) {
+            data[guildId] = {};
+        }
+
+        if (!data[guildId][weekKey]) {
+            data[guildId][weekKey] = {
+                players: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+        }
+
+        // Sprawdź czy gracz już istnieje w tym tygodniu (aktualizuj jeśli tak)
+        const existingPlayerIndex = data[guildId][weekKey].players.findIndex(p => p.userId === userId);
+
+        if (existingPlayerIndex !== -1) {
+            data[guildId][weekKey].players[existingPlayerIndex] = {
+                userId,
+                displayName,
+                score,
+                updatedAt: new Date().toISOString()
+            };
+        } else {
+            data[guildId][weekKey].players.push({
+                userId,
+                displayName,
+                score,
+                createdAt: new Date().toISOString()
+            });
+        }
+
+        data[guildId][weekKey].updatedAt = new Date().toISOString();
+
+        await this.savePhase1Data(data);
+        logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów`);
+    }
+
+    /**
+     * Pobiera podsumowanie danych dla danego tygodnia
+     */
+    async getPhase1Summary(guildId, weekNumber, year) {
+        const data = await this.loadPhase1Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId] || !data[guildId][weekKey]) {
+            return null;
+        }
+
+        const weekData = data[guildId][weekKey];
+        const players = weekData.players || [];
+
+        const scores = players.map(p => p.score).sort((a, b) => b - a);
+        const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
+
+        return {
+            playerCount: players.length,
+            top30Sum: top30Sum,
+            createdAt: weekData.createdAt,
+            updatedAt: weekData.updatedAt
+        };
+    }
+
+    /**
+     * Pobiera wszystkie wyniki dla danego tygodnia
+     */
+    async getPhase1Results(guildId, weekNumber, year) {
+        const data = await this.loadPhase1Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId] || !data[guildId][weekKey]) {
+            return null;
+        }
+
+        return data[guildId][weekKey];
     }
 }
 

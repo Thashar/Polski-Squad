@@ -922,13 +922,13 @@ class OCRService {
     async cleanupTempFiles() {
         try {
             const files = await fs.readdir(this.tempDir);
-            
+
             for (const file of files) {
                 const filePath = path.join(this.tempDir, file);
                 const stats = await fs.stat(filePath);
-                
+
                 const ageInHours = (Date.now() - stats.mtime.getTime()) / (1000 * 60 * 60);
-                
+
                 if (ageInHours > 1) {
                     await fs.unlink(filePath);
                     logger.info(`[OCR] 🗑️ Usunięto stary plik tymczasowy: ${file}`);
@@ -936,6 +936,128 @@ class OCRService {
             }
         } catch (error) {
             logger.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych:', error);
+        }
+    }
+
+    /**
+     * Wyciąga wszystkich graczy z ich wynikami (nie tylko z zerem)
+     * Używane dla komendy /faza1
+     */
+    async extractAllPlayersWithScores(text, guild = null, requestingMember = null) {
+        try {
+            logger.info('[PHASE1] 🎯 Rozpoczynam ekstrakcję wszystkich graczy z wynikami...');
+
+            if (!guild || !requestingMember) {
+                logger.error('[PHASE1] ❌ Brak guild lub requestingMember - nie można kontynuować');
+                return [];
+            }
+
+            // Pobierz nicki z odpowiedniej roli
+            const roleNicks = await this.getRoleNicks(guild, requestingMember);
+            if (roleNicks.length === 0) {
+                logger.info('[PHASE1] ❌ Brak nicków z odpowiedniej roli');
+                return [];
+            }
+
+            logger.info(`[PHASE1] 👥 Znaleziono ${roleNicks.length} nicków z roli`);
+
+            // Przygotuj linie OCR
+            const lines = text.split('\n').filter(line => line.trim().length > 0);
+            const validLines = lines.filter(line => line.trim().length >= 5);
+
+            logger.info(`[PHASE1] 📋 Analizuję ${validLines.length}/${lines.length} linii`);
+
+            const playersWithScores = [];
+            const processedNicks = new Set();
+
+            // Dla każdej linii znajdź najlepiej dopasowany nick z roli
+            for (let i = 0; i < validLines.length; i++) {
+                const line = validLines[i];
+
+                // Znajdź najlepsze dopasowanie ze wszystkich nicków z roli
+                let bestMatch = null;
+                let bestSimilarity = 0;
+
+                for (const roleNick of roleNicks) {
+                    const similarity = this.calculateLineSimilarity(line, roleNick.displayName);
+
+                    let requiredSimilarity = 0.6;
+                    if (roleNick.displayName.length <= 5) {
+                        requiredSimilarity = 0.75;
+                    } else if (roleNick.displayName.length <= 8) {
+                        requiredSimilarity = 0.7;
+                    }
+
+                    if (similarity >= requiredSimilarity &&
+                        (similarity > bestSimilarity ||
+                         (similarity === bestSimilarity && roleNick.displayName.length > (bestMatch?.displayName?.length || 0)))) {
+                        bestSimilarity = similarity;
+                        bestMatch = roleNick;
+                    }
+                }
+
+                if (bestMatch) {
+                    // Sprawdź czy już przetworzyliśmy tego gracza
+                    if (processedNicks.has(bestMatch.displayName)) {
+                        continue;
+                    }
+
+                    // Wyciągnij wynik z końca linii
+                    const endResult = this.analyzeLineEnd(line, bestMatch.displayName);
+
+                    // Jeśli nick ma 10+ liter i nie znaleziono wyniku w tej linii, sprawdź następną
+                    let finalScore = null;
+
+                    if (bestMatch.displayName.length >= 10 && endResult.type === 'unknown') {
+                        const currentLineText = line.trim();
+                        const allLines = text.split('\n').filter(line => line.trim().length > 0);
+                        const currentLineIndex = allLines.findIndex(l => l.trim() === currentLineText);
+
+                        if (currentLineIndex !== -1 && currentLineIndex + 1 < allLines.length) {
+                            const nextLine = allLines[currentLineIndex + 1];
+                            const nextEndResult = this.analyzeLineEnd(nextLine, null);
+
+                            if (nextEndResult.type === 'zero') {
+                                finalScore = 0;
+                            } else if (nextEndResult.type === 'negative') {
+                                finalScore = parseInt(nextEndResult.value) || 0;
+                            }
+                        }
+                    } else {
+                        // Wynik w tej samej linii
+                        if (endResult.type === 'zero') {
+                            finalScore = 0;
+                        } else if (endResult.type === 'negative') {
+                            finalScore = parseInt(endResult.value) || 0;
+                        } else if (endResult.type === 'unknown') {
+                            // Spróbuj wyciągnąć liczbę z wartości
+                            const numberMatch = endResult.value.match(/\d+/);
+                            if (numberMatch) {
+                                finalScore = parseInt(numberMatch[0]) || 0;
+                            }
+                        }
+                    }
+
+                    // Tylko jeśli udało się wyciągnąć wynik
+                    if (finalScore !== null) {
+                        processedNicks.add(bestMatch.displayName);
+
+                        playersWithScores.push({
+                            nick: bestMatch.displayName,
+                            score: finalScore
+                        });
+
+                        logger.info(`[PHASE1] ✅ "${bestMatch.displayName}" → ${finalScore} punktów`);
+                    }
+                }
+            }
+
+            logger.info(`[PHASE1] 📊 Znaleziono ${playersWithScores.length} graczy z wynikami`);
+            return playersWithScores;
+
+        } catch (error) {
+            logger.error('[PHASE1] ❌ Błąd ekstrakcji graczy z wynikami:', error);
+            return [];
         }
     }
 
