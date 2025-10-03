@@ -1,5 +1,8 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
+const path = require('path');
+const https = require('https');
 
 const logger = createBotLogger('StalkerLME');
 
@@ -9,6 +12,96 @@ class PhaseService {
         this.databaseService = databaseService;
         this.ocrService = ocrService;
         this.activeSessions = new Map(); // sessionId → session data
+        this.tempDir = path.join(__dirname, '..', 'temp', 'phase1');
+        this.activeProcessing = new Map(); // guildId → userId (kto obecnie przetwarza)
+    }
+
+    /**
+     * Sprawdza czy ktoś obecnie przetwarza w danym guild
+     */
+    isProcessingActive(guildId) {
+        return this.activeProcessing.has(guildId);
+    }
+
+    /**
+     * Pobiera ID użytkownika który obecnie przetwarza
+     */
+    getActiveProcessor(guildId) {
+        return this.activeProcessing.get(guildId);
+    }
+
+    /**
+     * Ustawia aktywne przetwarzanie
+     */
+    setActiveProcessing(guildId, userId) {
+        this.activeProcessing.set(guildId, userId);
+        logger.info(`[PHASE1] 🔒 Użytkownik ${userId} zablokował przetwarzanie dla guild ${guildId}`);
+    }
+
+    /**
+     * Usuwa aktywne przetwarzanie
+     */
+    clearActiveProcessing(guildId) {
+        this.activeProcessing.delete(guildId);
+        logger.info(`[PHASE1] 🔓 Odblokowano przetwarzanie dla guild ${guildId}`);
+    }
+
+    /**
+     * Inicjalizuje folder tymczasowy
+     */
+    async initTempDir() {
+        try {
+            await fs.mkdir(this.tempDir, { recursive: true });
+        } catch (error) {
+            logger.error('[PHASE1] ❌ Błąd tworzenia folderu temp:', error);
+        }
+    }
+
+    /**
+     * Pobiera zdjęcie z URL i zapisuje lokalnie
+     */
+    async downloadImage(url, sessionId, index) {
+        await this.initTempDir();
+
+        const filename = `${sessionId}_${index}_${Date.now()}.png`;
+        const filepath = path.join(this.tempDir, filename);
+
+        return new Promise((resolve, reject) => {
+            https.get(url, (response) => {
+                const fileStream = require('fs').createWriteStream(filepath);
+                response.pipe(fileStream);
+
+                fileStream.on('finish', () => {
+                    fileStream.close();
+                    logger.info(`[PHASE1] 💾 Zapisano zdjęcie: ${filename}`);
+                    resolve(filepath);
+                });
+
+                fileStream.on('error', (err) => {
+                    reject(err);
+                });
+            }).on('error', (err) => {
+                reject(err);
+            });
+        });
+    }
+
+    /**
+     * Usuwa pliki sesji z temp
+     */
+    async cleanupSessionFiles(sessionId) {
+        try {
+            const files = await fs.readdir(this.tempDir);
+            const sessionFiles = files.filter(f => f.startsWith(sessionId));
+
+            for (const file of sessionFiles) {
+                const filepath = path.join(this.tempDir, file);
+                await fs.unlink(filepath);
+                logger.info(`[PHASE1] 🗑️ Usunięto plik: ${file}`);
+            }
+        } catch (error) {
+            logger.error('[PHASE1] ❌ Błąd czyszczenia plików sesji:', error);
+        }
     }
 
     /**
@@ -28,7 +121,10 @@ class PhaseService {
             resolvedConflicts: new Map(), // nick → finalScore
             stage: 'awaiting_images', // 'awaiting_images' | 'confirming_complete' | 'resolving_conflicts' | 'final_confirmation'
             createdAt: Date.now(),
-            timeout: null
+            timeout: null,
+            downloadedFiles: [], // ścieżki do pobranych plików
+            messageToDelete: null, // wiadomość ze zdjęciami do usunięcia
+            publicInteraction: null // interakcja do aktualizacji postępu (PUBLICZNA)
         };
 
         this.activeSessions.set(sessionId, session);
@@ -80,13 +176,19 @@ class PhaseService {
     /**
      * Usuwa sesję
      */
-    cleanupSession(sessionId) {
+    async cleanupSession(sessionId) {
         const session = this.activeSessions.get(sessionId);
         if (!session) return;
 
         if (session.timeout) {
             clearTimeout(session.timeout);
         }
+
+        // Usuń pliki z temp
+        await this.cleanupSessionFiles(sessionId);
+
+        // Odblokuj przetwarzanie dla tego guild
+        this.clearActiveProcessing(session.guildId);
 
         this.activeSessions.delete(sessionId);
         logger.info(`[PHASE1] 🗑️ Usunięto sesję: ${sessionId}`);
@@ -95,21 +197,36 @@ class PhaseService {
     /**
      * Przetwarza zdjęcia i dodaje wyniki do sesji
      */
-    async processImages(sessionId, attachments, guild, member) {
+    async processImages(sessionId, attachments, guild, member, publicInteraction) {
         const session = this.getSession(sessionId);
         if (!session) {
             throw new Error('Sesja nie istnieje lub wygasła');
         }
 
+        session.publicInteraction = publicInteraction;
+
         logger.info(`[PHASE1] 📸 Przetwarzanie ${attachments.length} zdjęć dla sesji ${sessionId}`);
 
         const results = [];
+        const totalImages = attachments.length;
 
         for (let i = 0; i < attachments.length; i++) {
             const attachment = attachments[i];
 
             try {
-                logger.info(`[PHASE1] 📷 Przetwarzanie zdjęcia ${i + 1}/${attachments.length}: ${attachment.url}`);
+                // Pobierz i zapisz zdjęcie lokalnie
+                const filepath = await this.downloadImage(attachment.url, sessionId, i);
+                session.downloadedFiles.push(filepath);
+
+                // Aktualizuj postęp
+                await this.updateProgress(session, {
+                    currentImage: i + 1,
+                    totalImages: totalImages,
+                    stage: 'processing',
+                    currentImageName: attachment.name
+                });
+
+                logger.info(`[PHASE1] 📷 Przetwarzanie zdjęcia ${i + 1}/${totalImages}: ${attachment.name}`);
 
                 // Przetwórz OCR
                 const text = await this.ocrService.processImage(attachment);
@@ -123,6 +240,9 @@ class PhaseService {
                     results: playersWithScores
                 });
 
+                // Tymczasowa agregacja dla statystyk postępu
+                this.aggregateResults(session);
+
                 logger.info(`[PHASE1] ✅ Znaleziono ${playersWithScores.length} graczy na zdjęciu ${i + 1}`);
             } catch (error) {
                 logger.error(`[PHASE1] ❌ Błąd przetwarzania zdjęcia ${i + 1}:`, error);
@@ -135,13 +255,57 @@ class PhaseService {
             }
         }
 
-        // Dodaj wyniki do sesji
-        session.processedImages.push(...results);
-
-        // Agreguj wyniki
+        // Finalna agregacja
         this.aggregateResults(session);
 
         return results;
+    }
+
+    /**
+     * Aktualizuje postęp w publicznej wiadomości
+     */
+    async updateProgress(session, progress) {
+        if (!session.publicInteraction) return;
+
+        try {
+            const { currentImage, totalImages, stage, currentImageName } = progress;
+            const percent = Math.round((currentImage / totalImages) * 100);
+
+            // Oblicz statystyki
+            const uniqueNicks = session.aggregatedResults.size;
+            const confirmedResults = Array.from(session.aggregatedResults.values())
+                .filter(scores => new Set(scores).size === 1).length;
+            const unconfirmedResults = uniqueNicks - confirmedResults;
+
+            const progressBar = this.createProgressBar(percent);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🔄 Przetwarzanie zdjęć - Faza 1')
+                .setDescription(`**Zdjęcie:** ${currentImage}/${totalImages} - ${currentImageName}\n${progressBar} ${percent}%`)
+                .setColor('#FFA500')
+                .addFields(
+                    { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
+                    { name: '✅ Potwierdzonych wyników', value: confirmedResults.toString(), inline: true },
+                    { name: '❓ Niepotwierdzonych', value: unconfirmedResults.toString(), inline: true }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Przetwarzanie...' });
+
+            await session.publicInteraction.editReply({
+                embeds: [embed]
+            });
+        } catch (error) {
+            logger.error('[PHASE1] ❌ Błąd aktualizacji postępu:', error);
+        }
+    }
+
+    /**
+     * Tworzy pasek postępu
+     */
+    createProgressBar(percent) {
+        const filled = Math.round(percent / 5);
+        const empty = 20 - filled;
+        return '█'.repeat(filled) + '░'.repeat(empty);
     }
 
     /**
@@ -345,9 +509,20 @@ class PhaseService {
      * Tworzy embed z prośbą o zdjęcia
      */
     createAwaitingImagesEmbed() {
+        const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minut od teraz
+        const expiryTimestamp = Math.floor(expiryTime / 1000);
+
         return new EmbedBuilder()
             .setTitle('📸 Faza 1 - Prześlij zdjęcia wyników')
-            .setDescription('Możesz przesłać od **1 do 10 zdjęć** w jednej wiadomości.\n\n⏱️ Czekam **5 minut** na zdjęcia...')
+            .setDescription(
+                '**⚠️ WAŻNE - Zasady robienia screenów:**\n' +
+                '• Rób screeny **prosto i starannie**\n' +
+                '• Im więcej screenów (do 10), tym lepsza jakość odczytu\n' +
+                '• Jeśli nick pojawi się **przynajmniej 2x**, zwiększa to pewność danych\n' +
+                '• Unikaj rozmazanych lub przekrzywionych zdjęć\n\n' +
+                '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**\n\n' +
+                `⏱️ Czas wygaśnięcia: <t:${expiryTimestamp}:R>`
+            )
             .setColor('#0099FF')
             .setTimestamp()
             .setFooter({ text: 'Prześlij zdjęcia zwykłą wiadomością na tym kanale' });

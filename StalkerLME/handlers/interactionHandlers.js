@@ -1429,7 +1429,17 @@ async function handlePhase1Command(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    // Sprawdź czy ktoś już przetwarza
+    if (phaseService.isProcessingActive(interaction.guild.id)) {
+        const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+        await interaction.reply({
+            content: `⏳ Trwa już przetwarzanie Fazy 1 przez <@${activeUserId}>.\n\nProszę poczekać na zakończenie obecnego procesu.`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply();
 
     try {
         // Sprawdź czy dane dla tego tygodnia już istnieją
@@ -1456,6 +1466,9 @@ async function handlePhase1Command(interaction, sharedState) {
             }
         }
 
+        // Zablokuj przetwarzanie dla tego guild
+        phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+
         // Utwórz sesję
         const sessionId = phaseService.createSession(
             interaction.user.id,
@@ -1463,7 +1476,10 @@ async function handlePhase1Command(interaction, sharedState) {
             interaction.channelId
         );
 
-        // Pokaż embed z prośbą o zdjęcia
+        const session = phaseService.getSession(sessionId);
+        session.publicInteraction = interaction;
+
+        // Pokaż embed z prośbą o zdjęcia (PUBLICZNY)
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
         await interaction.editReply({
             embeds: [awaitingEmbed]
@@ -1473,6 +1489,10 @@ async function handlePhase1Command(interaction, sharedState) {
 
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd komendy /faza1:', error);
+
+        // Odblokuj w przypadku błędu
+        phaseService.clearActiveProcessing(interaction.guild.id);
+
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas inicjalizacji komendy /faza1.'
         });
@@ -1559,7 +1579,9 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
     const { phaseService, config } = sharedState;
 
     if (interaction.customId === 'phase1_overwrite_no') {
-        // Anuluj
+        // Anuluj - odblokuj przetwarzanie
+        phaseService.clearActiveProcessing(interaction.guild.id);
+
         await interaction.update({
             content: '❌ Operacja anulowana.',
             embeds: [],
@@ -1568,12 +1590,17 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
         return;
     }
 
-    // Nadpisz - utwórz sesję i kontynuuj
+    // Nadpisz - zablokuj przetwarzanie i utwórz sesję
+    phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+
     const sessionId = phaseService.createSession(
         interaction.user.id,
         interaction.guild.id,
         interaction.channelId
     );
+
+    const session = phaseService.getSession(sessionId);
+    session.publicInteraction = interaction;
 
     const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
     await interaction.update({
@@ -1734,8 +1761,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase1_cancel_save') {
-        // Anuluj
-        phaseService.cleanupSession(session.sessionId);
+        // Anuluj - usuń pliki temp
+        await phaseService.cleanupSession(session.sessionId);
 
         await interaction.update({
             content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
@@ -1757,18 +1784,37 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         const savedCount = await phaseService.saveFinalResults(session, finalResults, interaction.guild);
 
         const weekInfo = phaseService.getCurrentWeekInfo();
+        const stats = phaseService.calculateStatistics(finalResults);
 
-        await interaction.editReply({
-            content: `✅ **Dane zapisane pomyślnie!**\n\n📊 Zapisano **${savedCount}** wyników dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}**.`
-        });
+        // Publiczny raport (wszystko widoczne dla wszystkich)
+        const publicEmbed = new EmbedBuilder()
+            .setTitle('✅ Faza 1 - Dane zapisane pomyślnie')
+            .setDescription(`Wyniki dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** zostały zapisane.`)
+            .setColor('#00FF00')
+            .addFields(
+                { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
+                { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
+                { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
+                { name: '🏆 Suma top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false }
+            )
+            .setTimestamp()
+            .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
 
-        phaseService.cleanupSession(session.sessionId);
+        await interaction.editReply({ embeds: [publicEmbed], components: [] });
+
+        // Usuń pliki temp po zapisaniu (odblokuje też przetwarzanie)
+        await phaseService.cleanupSession(session.sessionId);
         logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
+
+        // Odblokuj przetwarzanie w przypadku błędu
+        phaseService.clearActiveProcessing(interaction.guild.id);
+
         await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas zapisu danych do bazy.'
+            content: '❌ Wystąpił błąd podczas zapisu danych do bazy.',
+            components: []
         });
     }
 }

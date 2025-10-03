@@ -147,16 +147,28 @@ client.on(Events.MessageCreate, async (message) => {
             if (imageAttachments.size > 0) {
                 logger.info(`[PHASE1] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
-                // Przetwórz zdjęcia
+                // Zapisz wiadomość do późniejszego usunięcia
+                session.messageToDelete = message;
+
+                // Przetwórz zdjęcia z przekazaniem publicInteraction
                 const attachmentsArray = Array.from(imageAttachments.values());
                 const results = await phaseService.processImages(
                     session.sessionId,
                     attachmentsArray,
                     message.guild,
-                    message.member
+                    message.member,
+                    session.publicInteraction
                 );
 
-                // Pokaż potwierdzenie przetworzenia
+                // Usuń wiadomość ze zdjęciami z kanału
+                try {
+                    await message.delete();
+                    logger.info('[PHASE1] 🗑️ Usunięto wiadomość ze zdjęciami z kanału');
+                } catch (deleteError) {
+                    logger.error('[PHASE1] ❌ Błąd usuwania wiadomości:', deleteError);
+                }
+
+                // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
                 const processedCount = results.length;
                 const totalImages = session.processedImages.length;
 
@@ -165,10 +177,12 @@ client.on(Events.MessageCreate, async (message) => {
                 session.stage = 'confirming_complete';
                 phaseService.refreshSessionTimeout(session.sessionId);
 
-                await message.reply({
-                    embeds: [confirmation.embed],
-                    components: [confirmation.row]
-                });
+                if (session.publicInteraction) {
+                    await session.publicInteraction.editReply({
+                        embeds: [confirmation.embed],
+                        components: [confirmation.row]
+                    });
+                }
             }
         }
     } catch (error) {

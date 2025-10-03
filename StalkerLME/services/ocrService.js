@@ -659,8 +659,8 @@ class OCRService {
 
 
     calculateLineSimilarity(line, nick) {
-        const lineLower = line.toLowerCase().replace(/[^a-z0-9]/g, ''); // Usuń wszystkie znaki specjalne
-        const nickLower = nick.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const lineLower = line.toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]/g, ''); // Usuń wszystkie znaki specjalne oprócz polskich
+        const nickLower = nick.toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]/g, '');
         
         // Sprawdź czy nick występuje w linii, ale tylko jeśli nick ma 3+ znaki
         // To zapobiega false positive dla krótkich fragmentów jak "21"
