@@ -13,7 +13,7 @@ async function handleInteraction(interaction, sharedState, config) {
         if (interaction.isCommand()) {
             await handleSlashCommand(interaction, sharedState);
         } else if (interaction.isStringSelectMenu()) {
-            await handleSelectMenu(interaction, config, reminderService);
+            await handleSelectMenu(interaction, config, reminderService, sharedState);
         } else if (interaction.isButton()) {
             await handleButton(interaction, sharedState);
         } else if (interaction.isModalSubmit()) {
@@ -71,6 +71,9 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'faza1':
             await handlePhase1Command(interaction, sharedState);
+            break;
+        case 'wyniki':
+            await handleWynikiCommand(interaction, sharedState);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
@@ -392,18 +395,18 @@ async function handleDebugRolesCommand(interaction, config) {
     }
 }
 
-async function handleSelectMenu(interaction, config, reminderService) {
+async function handleSelectMenu(interaction, config, reminderService, sharedState) {
     if (interaction.customId === 'reminder_role_select') {
         const selectedRole = interaction.values[0];
         const roleId = config.targetRoles[selectedRole];
-        
+
         if (!roleId) {
             await interaction.reply({ content: 'Nieprawidłowa rola!', flags: MessageFlags.Ephemeral });
             return;
         }
-        
+
         await interaction.deferReply();
-        
+
         try {
             await reminderService.sendBulkReminder(interaction.guild, roleId);
             await interaction.editReply({ content: `✅ Wysłano przypomnienie do roli ${config.roleDisplayNames[selectedRole]}` });
@@ -411,6 +414,8 @@ async function handleSelectMenu(interaction, config, reminderService) {
             logger.error('[REMINDER] ❌ Błąd wysyłania przypomnienia:', error);
             await interaction.editReply({ content: messages.errors.unknownError });
         }
+    } else if (interaction.customId === 'wyniki_select_week') {
+        await handleWynikiWeekSelect(interaction, sharedState);
     }
 }
 
@@ -913,7 +918,20 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('faza1')
-            .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 1')
+            .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 1'),
+
+        new SlashCommandBuilder()
+            .setName('wyniki')
+            .setDescription('Wyświetl wyniki dla wybranej fazy')
+            .addStringOption(option =>
+                option.setName('faza')
+                    .setDescription('Wybierz fazę')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Faza 1', value: 'phase1' },
+                        { name: 'Faza 2', value: 'phase2' }
+                    )
+            )
     ];
 
     try {
@@ -1833,6 +1851,133 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
         embeds: [summaryEmbed.embed],
         components: [summaryEmbed.row]
     });
+}
+
+async function handleWynikiWeekSelect(interaction, sharedState) {
+    const { databaseService } = sharedState;
+
+    await interaction.deferUpdate();
+
+    try {
+        const selectedWeek = interaction.values[0]; // Format: "weekNumber-year"
+        const [weekNumber, year] = selectedWeek.split('-').map(Number);
+
+        // Pobierz wyniki dla wybranego tygodnia
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year);
+
+        if (!weekData || !weekData.players || weekData.players.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak danych dla wybranego tygodnia.',
+                components: []
+            });
+            return;
+        }
+
+        // Sortuj graczy według wyniku (malejąco)
+        const sortedPlayers = weekData.players.sort((a, b) => b.score - a.score);
+
+        // Znajdź maksymalny wynik do obliczania proporcji
+        const maxScore = sortedPlayers[0]?.score || 1;
+
+        // Utwórz wizualizację wyników
+        const resultsText = sortedPlayers.map((player, index) => {
+            const position = index + 1;
+            const barLength = 16; // Długość paska
+            const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
+            const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+            // Sprawdź czy to użytkownik wywołujący komendę
+            const isCaller = player.userId === interaction.user.id;
+            const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
+
+            return `${progressBar} ${position}. ${displayName} - ${player.score}`;
+        }).join('\n');
+
+        const embed = new EmbedBuilder()
+            .setTitle(`📊 Wyniki - Faza 1 (Tydzień ${weekNumber}/${year})`)
+            .setDescription(resultsText.length > 0 ? resultsText : 'Brak wyników')
+            .setColor('#0099FF')
+            .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: []
+        });
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd wyświetlania wyników:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyświetlania wyników.',
+            components: []
+        });
+    }
+}
+
+async function handleWynikiCommand(interaction, sharedState) {
+    const { databaseService } = sharedState;
+    const phase = interaction.options.getString('faza');
+
+    if (phase === 'phase2') {
+        await interaction.reply({
+            content: '⚠️ Faza 2 nie jest jeszcze dostępna.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    try {
+        // Pobierz dostępne tygodnie
+        const weeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (weeks.length === 0) {
+            await interaction.editReply({
+                content: '📊 Brak zapisanych wyników dla Fazy 1.\n\nUżyj `/faza1` aby rozpocząć zbieranie danych.'
+            });
+            return;
+        }
+
+        // Utwórz select menu z tygodniami
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('wyniki_select_week')
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(
+                weeks.slice(0, 25).map(week => { // Discord limit: 25 opcji
+                    const date = new Date(week.createdAt);
+                    const dateStr = date.toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                        .setDescription(`Zapisano: ${dateStr}`)
+                        .setValue(`${week.weekNumber}-${week.year}`);
+                })
+            );
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Wyniki - Faza 1')
+            .setDescription('Wybierz tydzień, aby zobaczyć wyniki:')
+            .setColor('#0099FF')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd pobierania wyników:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania wyników.'
+        });
+    }
 }
 
 module.exports = {

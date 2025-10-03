@@ -393,6 +393,35 @@ class DatabaseService {
 
         return data[guildId][weekKey];
     }
+
+    /**
+     * Pobiera listę wszystkich tygodni z danymi dla guild
+     */
+    async getAvailableWeeks(guildId) {
+        const data = await this.loadPhase1Data();
+
+        if (!data[guildId]) {
+            return [];
+        }
+
+        const weeks = Object.keys(data[guildId]).map(weekKey => {
+            const [weekNumber, year] = weekKey.split('-');
+            return {
+                weekNumber: parseInt(weekNumber),
+                year: parseInt(year),
+                weekKey: weekKey,
+                createdAt: data[guildId][weekKey].createdAt
+            };
+        });
+
+        // Sortuj od najnowszego
+        weeks.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
+
+        return weeks;
+    }
 }
 
 module.exports = DatabaseService;
