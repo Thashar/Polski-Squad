@@ -78,6 +78,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'modyfikuj':
             await handleModyfikujCommand(interaction, sharedState);
             break;
+        case 'faza2':
+            await handlePhase2Command(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -417,10 +420,12 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
             logger.error('[REMINDER] ❌ Błąd wysyłania przypomnienia:', error);
             await interaction.editReply({ content: messages.errors.unknownError });
         }
-    } else if (interaction.customId === 'wyniki_select_clan') {
-        await handleWynikiClanSelect(interaction, sharedState);
-    } else if (interaction.customId === 'wyniki_select_week') {
-        await handleWynikiWeekSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('wyniki_select_clan_')) {
+        const phase = interaction.customId.replace('wyniki_select_clan_', '');
+        await handleWynikiClanSelect(interaction, sharedState, phase);
+    } else if (interaction.customId.startsWith('wyniki_select_week_')) {
+        const phase = interaction.customId.replace('wyniki_select_week_', '');
+        await handleWynikiWeekSelect(interaction, sharedState, phase);
     } else if (interaction.customId === 'modyfikuj_select_clan') {
         await handleModyfikujClanSelect(interaction, sharedState);
     } else if (interaction.customId === 'modyfikuj_select_week') {
@@ -807,6 +812,14 @@ async function handleButton(interaction, sharedState) {
         await handleModyfikujPaginationButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_week_prev|') || interaction.customId.startsWith('modyfikuj_week_next|')) {
         await handleModyfikujWeekPaginationButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('wyniki_weeks_prev_') || interaction.customId.startsWith('wyniki_weeks_next_')) {
+        await handleWynikiWeekPaginationButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase2_overwrite_')) {
+        await handlePhase2OverwriteButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase2_complete_') || interaction.customId.startsWith('phase2_resolve_')) {
+        await handlePhase2CompleteButton(interaction, sharedState);
+    } else if (interaction.customId === 'phase2_confirm_save' || interaction.customId === 'phase2_cancel_save') {
+        await handlePhase2FinalConfirmButton(interaction, sharedState);
     }
 }
 
@@ -952,7 +965,11 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
-            .setDescription('Modyfikuj wynik gracza dla Fazy 1')
+            .setDescription('Modyfikuj wynik gracza dla Fazy 1'),
+
+        new SlashCommandBuilder()
+            .setName('faza2')
+            .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 2 (3 rundy)')
     ];
 
     try {
@@ -1922,6 +1939,334 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     });
 }
 
+// =============== PHASE 2 HANDLERS ===============
+
+async function handlePhase2Command(interaction, sharedState) {
+    const { config, phaseService, databaseService } = sharedState;
+
+    // Sprawdź uprawnienia (admin lub allowedPunishRoles)
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Sprawdź czy ktoś już przetwarza
+    if (phaseService.isProcessingActive(interaction.guild.id)) {
+        const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+        await interaction.reply({
+            content: `⏳ Trwa już przetwarzanie przez <@${activeUserId}>.\n\nProszę poczekać na zakończenie obecnego procesu.`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    try {
+        // Wykryj klan użytkownika
+        const targetRoleIds = Object.entries(config.targetRoles);
+        let userClan = null;
+
+        for (const [clanKey, roleId] of targetRoleIds) {
+            if (interaction.member.roles.cache.has(roleId)) {
+                userClan = clanKey;
+                logger.info(`[PHASE2] 🎯 Wykryto klan użytkownika: ${clanKey} (${config.roleDisplayNames[clanKey]})`);
+                break;
+            }
+        }
+
+        if (!userClan) {
+            await interaction.editReply({
+                content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról: ' +
+                    Object.values(config.roleDisplayNames).join(', ')
+            });
+            return;
+        }
+
+        // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
+        const weekInfo = phaseService.getCurrentWeekInfo();
+        const existingData = await databaseService.checkPhase2DataExists(
+            interaction.guild.id,
+            weekInfo.weekNumber,
+            weekInfo.year,
+            userClan
+        );
+
+        if (existingData.exists) {
+            // Pokaż ostrzeżenie z przyciskami
+            const warningEmbed = await phaseService.createOverwriteWarningEmbed(
+                interaction.guild.id,
+                weekInfo,
+                userClan,
+                2 // phase 2
+            );
+
+            if (warningEmbed) {
+                await interaction.editReply({
+                    embeds: [warningEmbed.embed],
+                    components: [warningEmbed.row]
+                });
+                return;
+            }
+        }
+
+        // Zablokuj przetwarzanie dla tego guild
+        phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+
+        // Utwórz sesję dla fazy 2
+        const sessionId = phaseService.createSession(
+            interaction.user.id,
+            interaction.guild.id,
+            interaction.channelId,
+            2 // phase 2
+        );
+
+        const session = phaseService.getSession(sessionId);
+        session.publicInteraction = interaction;
+        session.clan = userClan;
+
+        // Pokaż embed z prośbą o zdjęcia dla rundy 1 (PUBLICZNY)
+        const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
+        await interaction.editReply({
+            embeds: [awaitingEmbed]
+        });
+
+        logger.info(`[PHASE2] ✅ Sesja utworzona, czekam na zdjęcia z rundy 1/3 od ${interaction.user.tag}`);
+
+    } catch (error) {
+        logger.info(`[PHASE2] ❌ Błąd komendy /faza2:`, error);
+
+        // Odblokuj w przypadku błędu
+        phaseService.clearActiveProcessing(interaction.guild.id);
+
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas uruchamiania komendy.'
+        });
+    }
+}
+
+async function handlePhase2OverwriteButton(interaction, sharedState) {
+    const { phaseService, config } = sharedState;
+
+    if (interaction.customId === 'phase2_overwrite_no') {
+        phaseService.clearActiveProcessing(interaction.guild.id);
+        await interaction.update({
+            content: '❌ Operacja anulowana.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    const targetRoleIds = Object.entries(config.targetRoles);
+    let userClan = null;
+
+    for (const [clanKey, roleId] of targetRoleIds) {
+        if (interaction.member.roles.cache.has(roleId)) {
+            userClan = clanKey;
+            break;
+        }
+    }
+
+    if (!userClan) {
+        await interaction.update({
+            content: '❌ Nie wykryto Twojego klanu.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+
+    const sessionId = phaseService.createSession(
+        interaction.user.id,
+        interaction.guild.id,
+        interaction.channelId,
+        2
+    );
+
+    const session = phaseService.getSession(sessionId);
+    session.publicInteraction = interaction;
+    session.clan = userClan;
+
+    const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
+    await interaction.update({
+        embeds: [awaitingEmbed],
+        components: []
+    });
+
+    logger.info(`[PHASE2] ✅ Sesja utworzona (nadpisywanie), czekam na zdjęcia od ${interaction.user.tag}`);
+}
+
+async function handlePhase2CompleteButton(interaction, sharedState) {
+    const { phaseService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session || session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie masz uprawnień.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (interaction.customId === 'phase2_complete_no') {
+        session.stage = 'awaiting_images';
+        phaseService.refreshSessionTimeout(session.sessionId);
+
+        const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+        await interaction.update({
+            embeds: [awaitingEmbed],
+            components: []
+        });
+        return;
+    }
+
+    await interaction.update({
+        content: '🔄 Analizuję wyniki...',
+        embeds: [],
+        components: []
+    });
+
+    try {
+        const aggregated = phaseService.aggregateResults(session);
+        const conflicts = phaseService.identifyConflicts(session);
+
+        if (conflicts.length > 0) {
+            session.stage = 'resolving_conflicts';
+            session.currentConflictIndex = 0;
+            const conflictEmbed = phaseService.createConflictEmbed(conflicts[0], 0, conflicts.length);
+            await interaction.editReply({
+                content: '',
+                embeds: [conflictEmbed.embed],
+                components: [conflictEmbed.row]
+            });
+        } else {
+            if (session.currentRound < 3) {
+                phaseService.startNextRound(session);
+                const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+                await interaction.editReply({
+                    embeds: [awaitingEmbed]
+                });
+                logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
+            } else {
+                await showPhase2FinalSummary(interaction, session, phaseService);
+            }
+        }
+    } catch (error) {
+        logger.error('[PHASE2] ❌ Błąd analizy:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas analizy wyników.'
+        });
+    }
+}
+
+async function handlePhase2FinalConfirmButton(interaction, sharedState) {
+    const { phaseService, databaseService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session || session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie masz uprawnień.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (interaction.customId === 'phase2_cancel_save') {
+        await interaction.update({
+            content: '❌ Anulowano zapis danych.',
+            embeds: [],
+            components: []
+        });
+        phaseService.cleanupSession(session.sessionId);
+        return;
+    }
+
+    await interaction.update({
+        content: '💾 Zapisywanie wyników...',
+        embeds: [],
+        components: []
+    });
+
+    try {
+        const summedResults = phaseService.sumPhase2Results(session);
+        const weekInfo = phaseService.getCurrentWeekInfo();
+
+        for (const [nick, totalScore] of summedResults) {
+            const member = interaction.guild.members.cache.find(m =>
+                m.displayName.toLowerCase() === nick.toLowerCase() ||
+                m.user.username.toLowerCase() === nick.toLowerCase()
+            );
+
+            if (member) {
+                await databaseService.savePhase2Result(
+                    session.guildId,
+                    member.id,
+                    member.displayName,
+                    totalScore,
+                    weekInfo.weekNumber,
+                    weekInfo.year,
+                    session.clan
+                );
+            }
+        }
+
+        const stats = phaseService.calculateStatistics(summedResults);
+        const clanName = sharedState.config.roleDisplayNames[session.clan] || session.clan;
+
+        const publicEmbed = new EmbedBuilder()
+            .setTitle('✅ Faza 2 - Dane zapisane pomyślnie')
+            .setDescription(`Wyniki dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** zostały zapisane.`)
+            .setColor('#00FF00')
+            .addFields(
+                { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
+                { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
+                { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
+                { name: '🏆 Suma top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false },
+                { name: '🎯 Klan', value: clanName, inline: false }
+            )
+            .setTimestamp()
+            .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
+
+        await interaction.editReply({ embeds: [publicEmbed], components: [] });
+        await phaseService.cleanupSession(session.sessionId);
+        logger.info(`[PHASE2] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
+
+    } catch (error) {
+        logger.error('[PHASE2] ❌ Błąd zapisu:', error);
+        phaseService.clearActiveProcessing(interaction.guild.id);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas zapisywania danych.'
+        });
+    }
+}
+
+async function showPhase2FinalSummary(interaction, session, phaseService) {
+    const summedResults = phaseService.sumPhase2Results(session);
+    const stats = phaseService.calculateStatistics(summedResults);
+    const weekInfo = phaseService.getCurrentWeekInfo();
+
+    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan);
+
+    session.stage = 'final_confirmation';
+
+    await interaction.editReply({
+        content: '',
+        embeds: [summaryEmbed.embed],
+        components: [summaryEmbed.row]
+    });
+}
+
 // =============== MODYFIKUJ HANDLERS ===============
 
 async function handleModyfikujCommand(interaction, sharedState) {
@@ -2564,7 +2909,7 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
 
 // =============== WYNIKI HANDLERS ===============
 
-async function handleWynikiClanSelect(interaction, sharedState) {
+async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -2573,24 +2918,38 @@ async function handleWynikiClanSelect(interaction, sharedState) {
         const selectedClan = interaction.values[0];
         const clanName = config.roleDisplayNames[selectedClan];
 
-        // Pobierz dostępne tygodnie dla wybranego klanu
-        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        // Pobierz dostępne tygodnie dla wybranego klanu (w zależności od fazy)
+        let allWeeks;
+        if (phase === 'phase2') {
+            allWeeks = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
+        } else {
+            allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        }
+
         const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
 
         if (weeksForClan.length === 0) {
+            const commandName = phase === 'phase2' ? '/faza2' : '/faza1';
             await interaction.editReply({
-                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`/faza1\` aby rozpocząć zbieranie danych.`,
+                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`${commandName}\` aby rozpocząć zbieranie danych.`,
                 components: []
             });
             return;
         }
 
+        // Paginacja: 20 tygodni na stronę
+        const weeksPerPage = 20;
+        const totalPages = Math.ceil(weeksForClan.length / weeksPerPage);
+        const startIndex = page * weeksPerPage;
+        const endIndex = Math.min(startIndex + weeksPerPage, weeksForClan.length);
+        const weeksOnPage = weeksForClan.slice(startIndex, endIndex);
+
         // Utwórz select menu z tygodniami
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('wyniki_select_week')
+            .setCustomId(`wyniki_select_week_${phase}`)
             .setPlaceholder('Wybierz tydzień')
             .addOptions(
-                weeksForClan.slice(0, 25).map(week => { // Discord limit: 25 opcji
+                weeksOnPage.map(week => {
                     const date = new Date(week.createdAt);
                     const dateStr = date.toLocaleDateString('pl-PL', {
                         day: '2-digit',
@@ -2601,21 +2960,43 @@ async function handleWynikiClanSelect(interaction, sharedState) {
                     return new StringSelectMenuOptionBuilder()
                         .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
                         .setDescription(`Zapisano: ${dateStr}`)
-                        .setValue(`${selectedClan}|${week.weekNumber}-${week.year}`); // Przekaż klan w value
+                        .setValue(`${selectedClan}|${week.weekNumber}-${week.year}`);
                 })
             );
 
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
 
+        // Dodaj przyciski nawigacji jeśli jest więcej niż jedna strona
+        if (totalPages > 1) {
+            const navRow = new ActionRowBuilder();
+
+            const prevButton = new ButtonBuilder()
+                .setCustomId(`wyniki_weeks_prev_${phase}|${selectedClan}|${page}`)
+                .setLabel('◀ Poprzednia')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page === 0);
+
+            const nextButton = new ButtonBuilder()
+                .setCustomId(`wyniki_weeks_next_${phase}|${selectedClan}|${page}`)
+                .setLabel('Następna ▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page >= totalPages - 1);
+
+            navRow.addComponents(prevButton, nextButton);
+            components.push(navRow);
+        }
+
+        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
         const embed = new EmbedBuilder()
-            .setTitle('📊 Wyniki - Faza 1')
+            .setTitle(`📊 Wyniki - ${phaseTitle}`)
             .setDescription(`**Krok 2/2:** Wybierz tydzień dla klanu **${clanName}**:`)
             .setColor('#0099FF')
+            .setFooter({ text: `Strona ${page + 1}/${totalPages} | Łącznie tygodni: ${weeksForClan.length}` })
             .setTimestamp();
 
         await interaction.editReply({
             embeds: [embed],
-            components: [row]
+            components: components
         });
 
     } catch (error) {
@@ -2627,7 +3008,124 @@ async function handleWynikiClanSelect(interaction, sharedState) {
     }
 }
 
-async function handleWynikiWeekSelect(interaction, sharedState) {
+async function handleWynikiWeekPaginationButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        // Format customId: wyniki_weeks_prev_phase1|clanKey|page lub wyniki_weeks_next_phase2|clanKey|page
+        const customIdParts = interaction.customId.split('|');
+        const actionAndPhase = customIdParts[0]; // np. "wyniki_weeks_prev_phase1"
+        const clan = customIdParts[1];
+        const currentPage = parseInt(customIdParts[2]);
+
+        // Wyciągnij phase z customId
+        const phase = actionAndPhase.includes('phase2') ? 'phase2' : 'phase1';
+        const action = actionAndPhase.startsWith('wyniki_weeks_prev_') ? 'prev' : 'next';
+
+        // Oblicz nową stronę
+        let newPage = currentPage;
+        if (action === 'prev') {
+            newPage = Math.max(0, currentPage - 1);
+        } else if (action === 'next') {
+            newPage = currentPage + 1;
+        }
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Pobierz dostępne tygodnie dla wybranego klanu (w zależności od fazy)
+        let allWeeks;
+        if (phase === 'phase2') {
+            allWeeks = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
+        } else {
+            allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        }
+
+        const weeksForClan = allWeeks.filter(week => week.clans.includes(clan));
+
+        if (weeksForClan.length === 0) {
+            const commandName = phase === 'phase2' ? '/faza2' : '/faza1';
+            await interaction.update({
+                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`${commandName}\` aby rozpocząć zbieranie danych.`,
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        // Paginacja: 20 tygodni na stronę
+        const weeksPerPage = 20;
+        const totalPages = Math.ceil(weeksForClan.length / weeksPerPage);
+        const validPage = Math.max(0, Math.min(newPage, totalPages - 1));
+        const startIndex = validPage * weeksPerPage;
+        const endIndex = Math.min(startIndex + weeksPerPage, weeksForClan.length);
+        const weeksOnPage = weeksForClan.slice(startIndex, endIndex);
+
+        // Utwórz select menu z tygodniami
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`wyniki_select_week_${phase}`)
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(
+                weeksOnPage.map(week => {
+                    const date = new Date(week.createdAt);
+                    const dateStr = date.toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                        .setDescription(`Zapisano: ${dateStr}`)
+                        .setValue(`${clan}|${week.weekNumber}-${week.year}`);
+                })
+            );
+
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
+
+        // Dodaj przyciski nawigacji jeśli jest więcej niż jedna strona
+        if (totalPages > 1) {
+            const navRow = new ActionRowBuilder();
+
+            const prevButton = new ButtonBuilder()
+                .setCustomId(`wyniki_weeks_prev_${phase}|${clan}|${validPage}`)
+                .setLabel('◀ Poprzednia')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(validPage === 0);
+
+            const nextButton = new ButtonBuilder()
+                .setCustomId(`wyniki_weeks_next_${phase}|${clan}|${validPage}`)
+                .setLabel('Następna ▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(validPage >= totalPages - 1);
+
+            navRow.addComponents(prevButton, nextButton);
+            components.push(navRow);
+        }
+
+        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
+        const embed = new EmbedBuilder()
+            .setTitle(`📊 Wyniki - ${phaseTitle}`)
+            .setDescription(`**Krok 2/2:** Wybierz tydzień dla klanu **${clanName}**:`)
+            .setColor('#0099FF')
+            .setFooter({ text: `Strona ${validPage + 1}/${totalPages} | Łącznie tygodni: ${weeksForClan.length}` })
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [embed],
+            components: components
+        });
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd paginacji tygodni:', error);
+        await interaction.update({
+            content: '❌ Wystąpił błąd podczas zmiany strony.',
+            embeds: [],
+            components: []
+        });
+    }
+}
+
+async function handleWynikiWeekSelect(interaction, sharedState, phase) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -2639,8 +3137,13 @@ async function handleWynikiWeekSelect(interaction, sharedState) {
 
         const clanName = config.roleDisplayNames[clan];
 
-        // Pobierz wyniki dla wybranego tygodnia i klanu
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        // Pobierz wyniki dla wybranego tygodnia i klanu (w zależności od fazy)
+        let weekData;
+        if (phase === 'phase2') {
+            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+        } else {
+            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        }
 
         if (!weekData || !weekData.players || weekData.players.length === 0) {
             await interaction.editReply({
@@ -2670,8 +3173,9 @@ async function handleWynikiWeekSelect(interaction, sharedState) {
             return `${progressBar} ${position}. ${displayName} - ${player.score}`;
         }).join('\n');
 
+        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Wyniki - Faza 1`)
+            .setTitle(`📊 Wyniki - ${phaseTitle}`)
             .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
             .setColor('#0099FF')
             .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
@@ -2695,14 +3199,6 @@ async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
     const phase = interaction.options.getString('faza');
 
-    if (phase === 'phase2') {
-        await interaction.reply({
-            content: '⚠️ Faza 2 nie jest jeszcze dostępna.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
     await interaction.deferReply();
 
     try {
@@ -2714,14 +3210,15 @@ async function handleWynikiCommand(interaction, sharedState) {
         });
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('wyniki_select_clan')
+            .setCustomId(`wyniki_select_clan_${phase}`)
             .setPlaceholder('Wybierz klan')
             .addOptions(clanOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
+        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
         const embed = new EmbedBuilder()
-            .setTitle('📊 Wyniki - Faza 1')
+            .setTitle(`📊 Wyniki - ${phaseTitle}`)
             .setDescription('**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:')
             .setColor('#0099FF')
             .setTimestamp();

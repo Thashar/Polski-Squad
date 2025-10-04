@@ -10,6 +10,7 @@ class DatabaseService {
         this.punishmentsFile = config.database.punishments;
         this.weeklyRemovalFile = config.database.weeklyRemoval;
         this.phase1File = path.join(path.dirname(this.punishmentsFile), 'phase1_results.json');
+        this.phase2File = path.join(path.dirname(this.punishmentsFile), 'phase2_results.json');
     }
 
     async initializeDatabase() {
@@ -27,6 +28,10 @@ class DatabaseService {
 
             if (!(await this.fileExists(this.phase1File))) {
                 await this.savePhase1Data({});
+            }
+
+            if (!(await this.fileExists(this.phase2File))) {
+                await this.savePhase2Data({});
             }
         } catch (error) {
             logger.error('Błąd inicjalizacji bazy');
@@ -432,6 +437,169 @@ class DatabaseService {
         });
 
         // Sortuj od najnowszego
+        weeks.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
+
+        return weeks;
+    }
+
+    // =============== PHASE 2 METHODS ===============
+
+    async loadPhase2Data() {
+        try {
+            const data = await fs.readFile(this.phase2File, 'utf8');
+            return JSON.parse(data);
+        } catch (error) {
+            logger.error('💥 Błąd wczytywania danych Fazy 2:', error);
+            return {};
+        }
+    }
+
+    async savePhase2Data(data) {
+        try {
+            await fs.writeFile(this.phase2File, JSON.stringify(data, null, 2), 'utf8');
+        } catch (error) {
+            logger.error('💥 Błąd zapisywania danych Fazy 2:', error);
+        }
+    }
+
+    async checkPhase2DataExists(guildId, weekNumber, year, clan) {
+        const data = await this.loadPhase2Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
+            return {
+                exists: true,
+                data: data[guildId][weekKey][clan]
+            };
+        }
+
+        return { exists: false };
+    }
+
+    async deletePhase2DataForWeek(guildId, weekNumber, year, clan) {
+        logger.info(`[PHASE2] 🗑️ Usuwanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
+
+        const data = await this.loadPhase2Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
+            delete data[guildId][weekKey][clan];
+
+            if (Object.keys(data[guildId][weekKey]).length === 0) {
+                delete data[guildId][weekKey];
+            }
+
+            await this.savePhase2Data(data);
+            logger.info(`[PHASE2] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
+            return true;
+        }
+
+        return false;
+    }
+
+    async savePhase2Result(guildId, userId, displayName, score, weekNumber, year, clan) {
+        const data = await this.loadPhase2Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId]) {
+            data[guildId] = {};
+        }
+
+        if (!data[guildId][weekKey]) {
+            data[guildId][weekKey] = {};
+        }
+
+        if (!data[guildId][weekKey][clan]) {
+            data[guildId][weekKey][clan] = {
+                players: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+        }
+
+        const existingPlayerIndex = data[guildId][weekKey][clan].players.findIndex(p => p.userId === userId);
+
+        if (existingPlayerIndex !== -1) {
+            data[guildId][weekKey][clan].players[existingPlayerIndex] = {
+                userId,
+                displayName,
+                score,
+                updatedAt: new Date().toISOString()
+            };
+        } else {
+            data[guildId][weekKey][clan].players.push({
+                userId,
+                displayName,
+                score,
+                createdAt: new Date().toISOString()
+            });
+        }
+
+        data[guildId][weekKey][clan].updatedAt = new Date().toISOString();
+
+        await this.savePhase2Data(data);
+        logger.info(`[PHASE2] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan})`);
+    }
+
+    async getPhase2Summary(guildId, weekNumber, year, clan) {
+        const data = await this.loadPhase2Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
+            return null;
+        }
+
+        const clanData = data[guildId][weekKey][clan];
+        const players = clanData.players || [];
+
+        const scores = players.map(p => p.score).sort((a, b) => b - a);
+        const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
+
+        return {
+            playerCount: players.length,
+            top30Sum: top30Sum,
+            createdAt: clanData.createdAt,
+            updatedAt: clanData.updatedAt
+        };
+    }
+
+    async getPhase2Results(guildId, weekNumber, year, clan) {
+        const data = await this.loadPhase2Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
+            return null;
+        }
+
+        return data[guildId][weekKey][clan];
+    }
+
+    async getAvailableWeeksPhase2(guildId) {
+        const data = await this.loadPhase2Data();
+
+        if (!data[guildId]) {
+            return [];
+        }
+
+        const weeks = Object.keys(data[guildId]).map(weekKey => {
+            const [weekNumber, year] = weekKey.split('-');
+            const clans = Object.keys(data[guildId][weekKey]);
+
+            const createdDates = clans.map(clan => data[guildId][weekKey][clan].createdAt);
+            const earliestDate = createdDates.sort()[0];
+
+            return {
+                weekNumber: parseInt(weekNumber),
+                year: parseInt(year),
+                weekKey: weekKey,
+                clans: clans,
+                createdAt: earliestDate
+            };
+        });
+
         weeks.sort((a, b) => {
             if (a.year !== b.year) return b.year - a.year;
             return b.weekNumber - a.weekNumber;

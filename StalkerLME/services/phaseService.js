@@ -107,7 +107,7 @@ class PhaseService {
     /**
      * Tworzy nową sesję Fazy 1
      */
-    createSession(userId, guildId, channelId) {
+    createSession(userId, guildId, channelId, phase = 1) {
         const sessionId = `${userId}_${Date.now()}`;
 
         const session = {
@@ -115,6 +115,9 @@ class PhaseService {
             userId,
             guildId,
             channelId,
+            phase, // 1 lub 2
+            currentRound: 1, // dla fazy 2: 1, 2 lub 3
+            roundsData: [], // dla fazy 2: dane z każdej rundy
             processedImages: [], // [{imageUrl, results: [{nick, score}]}]
             aggregatedResults: new Map(), // nick → [scores]
             conflicts: [], // [{nick, values: [{value, count}]}]
@@ -134,7 +137,7 @@ class PhaseService {
             this.cleanupSession(sessionId);
         }, 15 * 60 * 1000);
 
-        logger.info(`[PHASE1] 📝 Utworzono sesję: ${sessionId}`);
+        logger.info(`[PHASE${phase}] 📝 Utworzono sesję: ${sessionId}`);
         return sessionId;
     }
 
@@ -553,12 +556,17 @@ class PhaseService {
     /**
      * Tworzy embed z prośbą o zdjęcia
      */
-    createAwaitingImagesEmbed() {
+    createAwaitingImagesEmbed(phase = 1, round = null) {
         const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minut od teraz
         const expiryTimestamp = Math.floor(expiryTime / 1000);
 
+        let title = `📸 Faza ${phase} - Prześlij zdjęcia wyników`;
+        if (phase === 2 && round) {
+            title = `📸 Faza 2 - Runda ${round}/3 - Prześlij zdjęcia wyników`;
+        }
+
         return new EmbedBuilder()
-            .setTitle('📸 Faza 1 - Prześlij zdjęcia wyników')
+            .setTitle(title)
             .setDescription(
                 '**⚠️ WAŻNE - Zasady robienia screenów:**\n' +
                 '• Rób screeny **prosto i starannie**\n' +
@@ -667,8 +675,14 @@ class PhaseService {
     /**
      * Tworzy embed z ostrzeżeniem o istniejących danych
      */
-    async createOverwriteWarningEmbed(guildId, weekInfo, clan) {
-        const existingData = await this.databaseService.getPhase1Summary(guildId, weekInfo.weekNumber, weekInfo.year, clan);
+    async createOverwriteWarningEmbed(guildId, weekInfo, clan, phase = 1) {
+        let existingData;
+
+        if (phase === 2) {
+            existingData = await this.databaseService.getPhase2Summary(guildId, weekInfo.weekNumber, weekInfo.year, clan);
+        } else {
+            existingData = await this.databaseService.getPhase1Summary(guildId, weekInfo.weekNumber, weekInfo.year, clan);
+        }
 
         if (!existingData) {
             return null;
@@ -681,7 +695,7 @@ class PhaseService {
 
         const embed = new EmbedBuilder()
             .setTitle('⚠️ Dane już istnieją')
-            .setDescription(`Dane dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** (klan: **${clanName}**) już istnieją w bazie.`)
+            .setDescription(`Dane Fazy ${phase} dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** (klan: **${clanName}**) już istnieją w bazie.`)
             .setColor('#FF6600')
             .addFields(
                 { name: '📅 Data zapisu', value: dateStr, inline: true },
@@ -691,19 +705,62 @@ class PhaseService {
             .setTimestamp()
             .setFooter({ text: 'Czy chcesz nadpisać te dane?' });
 
+        const customIdPrefix = phase === 2 ? 'phase2' : 'phase1';
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('phase1_overwrite_yes')
+                    .setCustomId(`${customIdPrefix}_overwrite_yes`)
                     .setLabel('🔴 Nadpisz stare dane')
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
-                    .setCustomId('phase1_overwrite_no')
+                    .setCustomId(`${customIdPrefix}_overwrite_no`)
                     .setLabel('⚪ Anuluj')
                     .setStyle(ButtonStyle.Secondary)
             );
 
         return { embed, row };
+    }
+
+    /**
+     * Przechodzi do następnej rundy dla Fazy 2
+     */
+    startNextRound(session) {
+        // Zapisz dane z aktualnej rundy
+        const roundData = {
+            round: session.currentRound,
+            results: this.getFinalResults(session)
+        };
+        session.roundsData.push(roundData);
+
+        logger.info(`[PHASE2] ✅ Zakończono rundę ${session.currentRound}/3`);
+
+        // Wyczyść dane do następnej rundy
+        session.processedImages = [];
+        session.aggregatedResults = new Map();
+        session.conflicts = [];
+        session.resolvedConflicts = new Map();
+        session.downloadedFiles = [];
+        session.currentRound++;
+        session.stage = 'awaiting_images';
+
+        logger.info(`[PHASE2] 🔄 Rozpoczynam rundę ${session.currentRound}/3`);
+    }
+
+    /**
+     * Sumuje wyniki ze wszystkich rund dla Fazy 2
+     */
+    sumPhase2Results(session) {
+        const summedResults = new Map(); // nick → total score
+
+        // Sumuj wyniki ze wszystkich rund
+        for (const roundData of session.roundsData) {
+            for (const [nick, score] of roundData.results) {
+                const currentScore = summedResults.get(nick) || 0;
+                summedResults.set(nick, currentScore + score);
+            }
+        }
+
+        return summedResults;
     }
 }
 
