@@ -587,21 +587,23 @@ class PhaseService {
     /**
      * Tworzy embed z potwierdzeniem przetworzonych zdjęć
      */
-    createProcessedImagesEmbed(processedCount, totalImages) {
+    createProcessedImagesEmbed(processedCount, totalImages, phase = 1) {
         const embed = new EmbedBuilder()
             .setTitle('✅ Zdjęcia przetworzone')
             .setDescription(`Przetworzono **${processedCount}** zdjęć.\nŁącznie w sesji: **${totalImages}** zdjęć.`)
             .setColor('#00FF00')
             .setTimestamp();
 
+        const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
+
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('phase1_complete_yes')
+                    .setCustomId(`${phasePrefix}_complete_yes`)
                     .setLabel('✅ Tak, analizuj')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
-                    .setCustomId('phase1_complete_no')
+                    .setCustomId(`${phasePrefix}_complete_no`)
                     .setLabel('➕ Dodaj więcej')
                     .setStyle(ButtonStyle.Primary)
             );
@@ -612,7 +614,7 @@ class PhaseService {
     /**
      * Tworzy embed z konfliktem
      */
-    createConflictEmbed(conflict, currentIndex, totalConflicts) {
+    createConflictEmbed(conflict, currentIndex, totalConflicts, phase = 1) {
         const valuesText = conflict.values
             .map(v => `• **${v.value}** (${v.count}x)`)
             .join('\n');
@@ -625,13 +627,14 @@ class PhaseService {
             .setFooter({ text: `Rozstrzyganie konfliktów • ${currentIndex} z ${totalConflicts}` });
 
         const row = new ActionRowBuilder();
+        const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
 
         // Dodaj przyciski dla każdej wartości (max 5)
         for (let i = 0; i < Math.min(conflict.values.length, 5); i++) {
             const value = conflict.values[i];
             row.addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`phase1_resolve_${conflict.nick}_${value.value}`)
+                    .setCustomId(`${phasePrefix}_resolve_${value.value}`)
                     .setLabel(`${value.value}`)
                     .setStyle(ButtonStyle.Secondary)
             );
@@ -643,11 +646,13 @@ class PhaseService {
     /**
      * Tworzy embed z finalnym podsumowaniem
      */
-    createFinalSummaryEmbed(stats, weekInfo, clan) {
+    createFinalSummaryEmbed(stats, weekInfo, clan, phase = 1) {
         const clanName = this.config.roleDisplayNames[clan] || clan;
+        const phaseTitle = phase === 2 ? 'Faza 2' : 'Faza 1';
+        const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
 
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Podsumowanie Faza 1 - Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
+            .setTitle(`📊 Podsumowanie ${phaseTitle} - Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
             .setDescription('Przeanalizowano wszystkie zdjęcia i rozstrzygnięto konflikty.')
             .setColor('#00FF00')
             .addFields(
@@ -663,11 +668,11 @@ class PhaseService {
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('phase1_confirm_save')
+                    .setCustomId(`${phasePrefix}_confirm_save`)
                     .setLabel('🟢 Zatwierdź')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
-                    .setCustomId('phase1_cancel_save')
+                    .setCustomId(`${phasePrefix}_cancel_save`)
                     .setLabel('🔴 Anuluj')
                     .setStyle(ButtonStyle.Danger)
             );

@@ -1766,7 +1766,7 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
             const firstConflict = phaseService.getNextUnresolvedConflict(session);
 
             if (firstConflict) {
-                const conflictEmbed = phaseService.createConflictEmbed(firstConflict, 1, conflicts.length);
+                const conflictEmbed = phaseService.createConflictEmbed(firstConflict, 1, conflicts.length, 1);
                 await interaction.editReply({
                     content: '',
                     embeds: [conflictEmbed.embed],
@@ -1824,7 +1824,7 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
         const currentIndex = session.resolvedConflicts.size + 1;
         const totalConflicts = session.conflicts.length;
 
-        const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts);
+        const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts, 1);
         await interaction.update({
             embeds: [conflictEmbed.embed],
             components: [conflictEmbed.row]
@@ -1928,7 +1928,7 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     const stats = phaseService.calculateStatistics(finalResults);
     const weekInfo = phaseService.getCurrentWeekInfo();
 
-    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan);
+    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan, 1);
 
     session.stage = 'final_confirmation';
 
@@ -2143,7 +2143,8 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                 const conflictEmbed = phaseService.createConflictEmbed(
                     nextConflict,
                     session.resolvedConflicts.size + 1,
-                    session.conflicts.length
+                    session.conflicts.length,
+                    2
                 );
                 await interaction.update({
                     embeds: [conflictEmbed.embed],
@@ -2190,7 +2191,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         if (conflicts.length > 0) {
             session.stage = 'resolving_conflicts';
             session.currentConflictIndex = 0;
-            const conflictEmbed = phaseService.createConflictEmbed(conflicts[0], 0, conflicts.length);
+            const conflictEmbed = phaseService.createConflictEmbed(conflicts[0], 0, conflicts.length, 2);
             await interaction.editReply({
                 content: '',
                 embeds: [conflictEmbed.embed],
@@ -2306,7 +2307,7 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
     const stats = phaseService.calculateStatistics(summedResults);
     const weekInfo = phaseService.getCurrentWeekInfo();
 
-    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan);
+    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan, 2);
 
     session.stage = 'final_confirmation';
 

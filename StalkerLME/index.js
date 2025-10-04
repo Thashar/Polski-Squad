@@ -193,7 +193,7 @@ client.on(Events.MessageCreate, async (message) => {
                 const processedCount = results.length;
                 const totalImages = session.processedImages.length;
 
-                const confirmation = phaseService.createProcessedImagesEmbed(processedCount, totalImages);
+                const confirmation = phaseService.createProcessedImagesEmbed(processedCount, totalImages, session.phase);
 
                 session.stage = 'confirming_complete';
                 phaseService.refreshSessionTimeout(session.sessionId);
