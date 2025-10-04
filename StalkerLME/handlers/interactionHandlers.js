@@ -3321,7 +3321,7 @@ async function handleWynikiPhase2ViewButton(interaction, sharedState) {
             return;
         }
 
-        await showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config);
+        await showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config, true);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd przełączania widoku Phase 2:', error);
@@ -3333,7 +3333,7 @@ async function handleWynikiPhase2ViewButton(interaction, sharedState) {
     }
 }
 
-async function showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config) {
+async function showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config, isUpdate = false) {
     const clanName = config.roleDisplayNames[clan];
 
     // Wybierz dane do wyświetlenia w zależności od widoku
@@ -3356,14 +3356,16 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     }
 
     if (!players || players.length === 0) {
-        await interaction.editReply({
+        const replyMethod = isUpdate ? 'update' : 'editReply';
+        await interaction[replyMethod]({
             content: `❌ Brak danych dla wybranego widoku.`,
+            embeds: [],
             components: []
         });
         return;
     }
 
-    const sortedPlayers = players.sort((a, b) => b.score - a.score);
+    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
     const maxScore = sortedPlayers[0]?.score || 1;
 
     const resultsText = sortedPlayers.map((player, index) => {
@@ -3406,7 +3408,8 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
                 .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
         );
 
-    await interaction.editReply({
+    const replyMethod = isUpdate ? 'update' : 'editReply';
+    await interaction[replyMethod]({
         embeds: [embed],
         components: [navRow]
     });
