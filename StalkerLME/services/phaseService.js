@@ -836,14 +836,26 @@ class PhaseService {
             }
 
             logger.info(`[PHASE2] Runda ${roundData.round}: ${roundData.results.size} graczy`);
-            for (const [nick, score] of roundData.results) {
-                if (score === null || score === undefined || isNaN(score)) {
-                    logger.warn(`[PHASE2] ⚠️ Nieprawidłowy wynik dla ${nick} w rundzie ${roundData.round}: ${score}`);
-                    continue;
+
+            try {
+                let count = 0;
+                for (const [nick, score] of roundData.results) {
+                    count++;
+                    logger.info(`[PHASE2] Przetwarzam gracza ${count}/${roundData.results.size}: ${nick} = ${score}`);
+
+                    if (score === null || score === undefined || isNaN(score)) {
+                        logger.warn(`[PHASE2] ⚠️ Nieprawidłowy wynik dla ${nick} w rundzie ${roundData.round}: ${score}`);
+                        continue;
+                    }
+                    const currentScore = summedResults.get(nick) || 0;
+                    summedResults.set(nick, currentScore + score);
+                    logger.debug(`[PHASE2] ${nick}: ${currentScore} + ${score} = ${currentScore + score}`);
                 }
-                const currentScore = summedResults.get(nick) || 0;
-                summedResults.set(nick, currentScore + score);
-                logger.debug(`[PHASE2] ${nick}: ${currentScore} + ${score} = ${currentScore + score}`);
+            } catch (iterError) {
+                logger.error(`[PHASE2] ❌ Błąd podczas iteracji po rundzie ${roundData.round}:`, iterError);
+                logger.error(`[PHASE2] ❌ Results type:`, typeof roundData.results);
+                logger.error(`[PHASE2] ❌ Results constructor:`, roundData.results?.constructor?.name);
+                throw iterError;
             }
         }
 

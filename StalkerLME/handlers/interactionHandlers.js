@@ -2185,17 +2185,13 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         }
 
         // Wszystkie konflikty rozwiązane - przejdź dalej
-        await interaction.update({
-            content: '✅ Wszystkie konflikty rozwiązane!',
-            embeds: [],
-            components: []
-        });
+        logger.info(`[PHASE2] ✅ Wszystkie konflikty rozwiązane!`);
 
         // Sprawdź czy to była ostatnia runda
         if (session.currentRound < 3) {
             phaseService.startNextRound(session);
             const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
-            await interaction.editReply({
+            await interaction.update({
                 content: '',
                 embeds: [awaitingEmbed],
                 components: []
@@ -2211,6 +2207,13 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             logger.info(`[PHASE2] 📊 Wyniki rundy 3: ${lastRoundData.results.size} graczy`);
             session.roundsData.push(lastRoundData);
             logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3. Łącznie ${session.roundsData.length} rund w roundsData`);
+
+            // Użyj update() zamiast editReply() bo to przycisk
+            await interaction.update({
+                content: '✅ Wszystkie konflikty rozwiązane! Przygotowuję podsumowanie...',
+                embeds: [],
+                components: []
+            });
 
             try {
                 await showPhase2FinalSummary(interaction, session, phaseService);
@@ -2416,14 +2419,23 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
         logger.info(`[PHASE2] 🔍 Stan interakcji - deferred: ${interaction.deferred}, replied: ${interaction.replied}`);
 
         try {
-            await interaction.editReply({
-                content: '',
-                embeds: [summaryEmbed.embed],
-                components: [summaryEmbed.row]
-            });
+            // Po update() trzeba użyć followUp() zamiast editReply()
+            if (interaction.replied) {
+                await interaction.followUp({
+                    content: '',
+                    embeds: [summaryEmbed.embed],
+                    components: [summaryEmbed.row]
+                });
+            } else {
+                await interaction.editReply({
+                    content: '',
+                    embeds: [summaryEmbed.embed],
+                    components: [summaryEmbed.row]
+                });
+            }
             logger.info(`[PHASE2] ✅ Podsumowanie wysłane pomyślnie`);
         } catch (replyError) {
-            logger.error(`[PHASE2] ❌ Błąd podczas editReply:`, replyError);
+            logger.error(`[PHASE2] ❌ Błąd podczas wysyłania odpowiedzi:`, replyError);
             logger.error(`[PHASE2] ❌ Reply error message:`, replyError?.message);
             logger.error(`[PHASE2] ❌ Reply error code:`, replyError?.code);
             throw replyError;
