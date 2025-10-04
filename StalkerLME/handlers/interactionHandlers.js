@@ -2896,13 +2896,16 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
 async function handleModyfikujPaginationButton(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
+    await interaction.deferUpdate();
+
     try {
         const parts = interaction.customId.split('|');
         const action = parts[0]; // modyfikuj_page_prev lub modyfikuj_page_next
         const clan = parts[1];
         const weekKey = parts[2];
         const currentPage = parseInt(parts[3]);
-        const phaseAndRound = parts[4] || 'phase1'; // phase1 lub phase2|round1
+        const selectedPhase = parts[4] || 'phase1'; // phase1 lub phase2
+        const selectedRound = parts[5] || null; // round1, round2, round3 lub null
 
         const [weekNumber, year] = weekKey.split('-').map(Number);
 
@@ -2915,11 +2918,6 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         }
 
         const clanName = config.roleDisplayNames[clan];
-
-        // Parsuj fazę i rundę
-        const phaseParts = phaseAndRound.split('|');
-        const selectedPhase = phaseParts[0];
-        const selectedRound = phaseParts[1] || null;
 
         // Pobierz wyniki dla wybranego tygodnia i klanu
         let weekData;
@@ -2941,9 +2939,20 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
             players = weekData.players;
         }
 
-        if (!players || players.length === 0) {
+        if (!weekData) {
+            logger.error(`[MODYFIKUJ] Brak weekData dla: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}, phase=${selectedPhase}`);
             await interaction.update({
                 content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        if (!players || players.length === 0) {
+            logger.error(`[MODYFIKUJ] Brak players dla: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}, phase=${selectedPhase}, round=${selectedRound}`);
+            await interaction.update({
+                content: `❌ Brak graczy dla wybranego tygodnia i klanu **${clanName}**.`,
                 embeds: [],
                 components: []
             });
@@ -2977,20 +2986,24 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         const components = [new ActionRowBuilder().addComponents(selectMenu)];
 
         // Dodaj przyciski paginacji
+        const paginationCustomId = selectedRound
+            ? `|${selectedPhase}|${selectedRound}`
+            : `|${selectedPhase}`;
+
         const paginationRow = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${validPage}|${phaseAndRound}`)
+                    .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${validPage}${paginationCustomId}`)
                     .setLabel('◀ Poprzednia')
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(validPage === 0),
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${validPage}|${phaseAndRound}`)
+                    .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${validPage}${paginationCustomId}`)
                     .setLabel(`Strona ${validPage + 1}/${totalPages}`)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(true),
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${validPage}|${phaseAndRound}`)
+                    .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${validPage}${paginationCustomId}`)
                     .setLabel('Następna ▶')
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(validPage === totalPages - 1)
@@ -2999,7 +3012,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
 
         const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
         const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
-        const stepNumber = selectedPhase === 'phase2' ? '5/5' : '4/5';
+        const stepNumber = selectedPhase === 'phase2' ? (selectedRound ? '4/4' : '?/4') : '3/3';
 
         const embed = new EmbedBuilder()
             .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}${roundText}`)
