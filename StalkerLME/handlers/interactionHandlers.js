@@ -3038,11 +3038,26 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
 
     } catch (error) {
         logger.error('[MODYFIKUJ] ❌ Błąd paginacji:', error);
-        await interaction.update({
-            content: '❌ Wystąpił błąd podczas zmiany strony.',
-            embeds: [],
-            components: []
-        });
+        logger.error('[MODYFIKUJ] ❌ Error stack:', error.stack);
+        logger.error('[MODYFIKUJ] ❌ customId:', interaction.customId);
+
+        try {
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas zmiany strony.',
+                    embeds: [],
+                    components: []
+                });
+            } else {
+                await interaction.update({
+                    content: '❌ Wystąpił błąd podczas zmiany strony.',
+                    embeds: [],
+                    components: []
+                });
+            }
+        } catch (replyError) {
+            logger.error('[MODYFIKUJ] ❌ Błąd podczas odpowiedzi na błąd:', replyError);
+        }
     }
 }
 
