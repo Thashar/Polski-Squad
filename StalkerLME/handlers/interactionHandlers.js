@@ -414,6 +414,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
             logger.error('[REMINDER] ❌ Błąd wysyłania przypomnienia:', error);
             await interaction.editReply({ content: messages.errors.unknownError });
         }
+    } else if (interaction.customId === 'wyniki_select_clan') {
+        await handleWynikiClanSelect(interaction, sharedState);
     } else if (interaction.customId === 'wyniki_select_week') {
         await handleWynikiWeekSelect(interaction, sharedState);
     }
@@ -1460,19 +1462,41 @@ async function handlePhase1Command(interaction, sharedState) {
     await interaction.deferReply();
 
     try {
-        // Sprawdź czy dane dla tego tygodnia już istnieją
+        // Wykryj klan użytkownika
+        const targetRoleIds = Object.entries(config.targetRoles);
+        let userClan = null;
+
+        for (const [clanKey, roleId] of targetRoleIds) {
+            if (interaction.member.roles.cache.has(roleId)) {
+                userClan = clanKey;
+                logger.info(`[PHASE1] 🎯 Wykryto klan użytkownika: ${clanKey} (${config.roleDisplayNames[clanKey]})`);
+                break;
+            }
+        }
+
+        if (!userClan) {
+            await interaction.editReply({
+                content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról: ' +
+                    Object.values(config.roleDisplayNames).join(', ')
+            });
+            return;
+        }
+
+        // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
         const existingData = await databaseService.checkPhase1DataExists(
             interaction.guild.id,
             weekInfo.weekNumber,
-            weekInfo.year
+            weekInfo.year,
+            userClan
         );
 
         if (existingData.exists) {
             // Pokaż ostrzeżenie z przyciskami
             const warningEmbed = await phaseService.createOverwriteWarningEmbed(
                 interaction.guild.id,
-                weekInfo
+                weekInfo,
+                userClan
             );
 
             if (warningEmbed) {
@@ -1496,6 +1520,7 @@ async function handlePhase1Command(interaction, sharedState) {
 
         const session = phaseService.getSession(sessionId);
         session.publicInteraction = interaction;
+        session.clan = userClan;
 
         // Pokaż embed z prośbą o zdjęcia (PUBLICZNY)
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
@@ -1608,6 +1633,26 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
         return;
     }
 
+    // Wykryj klan użytkownika ponownie
+    const targetRoleIds = Object.entries(config.targetRoles);
+    let userClan = null;
+
+    for (const [clanKey, roleId] of targetRoleIds) {
+        if (interaction.member.roles.cache.has(roleId)) {
+            userClan = clanKey;
+            break;
+        }
+    }
+
+    if (!userClan) {
+        await interaction.update({
+            content: '❌ Nie wykryto Twojego klanu.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
     // Nadpisz - zablokuj przetwarzanie i utwórz sesję
     phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
 
@@ -1619,6 +1664,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
 
     const session = phaseService.getSession(sessionId);
     session.publicInteraction = interaction;
+    session.clan = userClan;
 
     const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
     await interaction.update({
@@ -1853,21 +1899,87 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     });
 }
 
-async function handleWynikiWeekSelect(interaction, sharedState) {
-    const { databaseService } = sharedState;
+async function handleWynikiClanSelect(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
 
     try {
-        const selectedWeek = interaction.values[0]; // Format: "weekNumber-year"
-        const [weekNumber, year] = selectedWeek.split('-').map(Number);
+        const selectedClan = interaction.values[0];
+        const clanName = config.roleDisplayNames[selectedClan];
 
-        // Pobierz wyniki dla wybranego tygodnia
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year);
+        // Pobierz dostępne tygodnie dla wybranego klanu
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
+
+        if (weeksForClan.length === 0) {
+            await interaction.editReply({
+                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`/faza1\` aby rozpocząć zbieranie danych.`,
+                components: []
+            });
+            return;
+        }
+
+        // Utwórz select menu z tygodniami
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('wyniki_select_week')
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(
+                weeksForClan.slice(0, 25).map(week => { // Discord limit: 25 opcji
+                    const date = new Date(week.createdAt);
+                    const dateStr = date.toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                        .setDescription(`Zapisano: ${dateStr}`)
+                        .setValue(`${selectedClan}|${week.weekNumber}-${week.year}`); // Przekaż klan w value
+                })
+            );
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Wyniki - Faza 1')
+            .setDescription(`**Krok 2/2:** Wybierz tydzień dla klanu **${clanName}**:`)
+            .setColor('#0099FF')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd wyboru klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyboru klanu.',
+            components: []
+        });
+    }
+}
+
+async function handleWynikiWeekSelect(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    await interaction.deferUpdate();
+
+    try {
+        const selectedValue = interaction.values[0]; // Format: "clanKey|weekNumber-year"
+        const [clan, weekKey] = selectedValue.split('|');
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Pobierz wyniki dla wybranego tygodnia i klanu
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
 
         if (!weekData || !weekData.players || weekData.players.length === 0) {
             await interaction.editReply({
-                content: '❌ Brak danych dla wybranego tygodnia.',
+                content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
                 components: []
             });
             return;
@@ -1894,8 +2006,8 @@ async function handleWynikiWeekSelect(interaction, sharedState) {
         }).join('\n');
 
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Wyniki - Faza 1 (Tydzień ${weekNumber}/${year})`)
-            .setDescription(resultsText.length > 0 ? resultsText : 'Brak wyników')
+            .setTitle(`📊 Wyniki - Faza 1`)
+            .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
             .setColor('#0099FF')
             .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
             .setTimestamp();
@@ -1915,7 +2027,7 @@ async function handleWynikiWeekSelect(interaction, sharedState) {
 }
 
 async function handleWynikiCommand(interaction, sharedState) {
-    const { databaseService } = sharedState;
+    const { config } = sharedState;
     const phase = interaction.options.getString('faza');
 
     if (phase === 'phase2') {
@@ -1929,41 +2041,23 @@ async function handleWynikiCommand(interaction, sharedState) {
     await interaction.deferReply();
 
     try {
-        // Pobierz dostępne tygodnie
-        const weeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        // Utwórz select menu z klanami
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
 
-        if (weeks.length === 0) {
-            await interaction.editReply({
-                content: '📊 Brak zapisanych wyników dla Fazy 1.\n\nUżyj `/faza1` aby rozpocząć zbieranie danych.'
-            });
-            return;
-        }
-
-        // Utwórz select menu z tygodniami
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('wyniki_select_week')
-            .setPlaceholder('Wybierz tydzień')
-            .addOptions(
-                weeks.slice(0, 25).map(week => { // Discord limit: 25 opcji
-                    const date = new Date(week.createdAt);
-                    const dateStr = date.toLocaleDateString('pl-PL', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric'
-                    });
-
-                    return new StringSelectMenuOptionBuilder()
-                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
-                        .setDescription(`Zapisano: ${dateStr}`)
-                        .setValue(`${week.weekNumber}-${week.year}`);
-                })
-            );
+            .setCustomId('wyniki_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
             .setTitle('📊 Wyniki - Faza 1')
-            .setDescription('Wybierz tydzień, aby zobaczyć wyniki:')
+            .setDescription('**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:')
             .setColor('#0099FF')
             .setTimestamp();
 

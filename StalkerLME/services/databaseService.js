@@ -276,16 +276,16 @@ class DatabaseService {
 
     /**
      * Sprawdza czy dane dla danego tygodnia już istnieją
-     * Struktura: { guildId: { "weekNumber-year": { players: [...], createdAt, updatedAt } } }
+     * Struktura: { guildId: { "weekNumber-year": { clanKey: { players: [...], createdAt, updatedAt } } } }
      */
-    async checkPhase1DataExists(guildId, weekNumber, year) {
+    async checkPhase1DataExists(guildId, weekNumber, year, clan) {
         const data = await this.loadPhase1Data();
         const weekKey = `${weekNumber}-${year}`;
 
-        if (data[guildId] && data[guildId][weekKey]) {
+        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
             return {
                 exists: true,
-                data: data[guildId][weekKey]
+                data: data[guildId][weekKey][clan]
             };
         }
 
@@ -293,18 +293,24 @@ class DatabaseService {
     }
 
     /**
-     * Usuwa dane dla danego tygodnia
+     * Usuwa dane dla danego tygodnia i klanu
      */
-    async deletePhase1DataForWeek(guildId, weekNumber, year) {
-        logger.info(`[PHASE1] 🗑️ Usuwanie danych dla tygodnia ${weekNumber}/${year}`);
+    async deletePhase1DataForWeek(guildId, weekNumber, year, clan) {
+        logger.info(`[PHASE1] 🗑️ Usuwanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
 
         const data = await this.loadPhase1Data();
         const weekKey = `${weekNumber}-${year}`;
 
-        if (data[guildId] && data[guildId][weekKey]) {
-            delete data[guildId][weekKey];
+        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
+            delete data[guildId][weekKey][clan];
+
+            // Jeśli to był ostatni klan w tym tygodniu, usuń cały tydzień
+            if (Object.keys(data[guildId][weekKey]).length === 0) {
+                delete data[guildId][weekKey];
+            }
+
             await this.savePhase1Data(data);
-            logger.info(`[PHASE1] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}`);
+            logger.info(`[PHASE1] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
             return true;
         }
 
@@ -312,9 +318,9 @@ class DatabaseService {
     }
 
     /**
-     * Zapisuje pojedynczy wynik gracza dla danego tygodnia
+     * Zapisuje pojedynczy wynik gracza dla danego tygodnia i klanu
      */
-    async savePhase1Result(guildId, userId, displayName, score, weekNumber, year) {
+    async savePhase1Result(guildId, userId, displayName, score, weekNumber, year, clan) {
         const data = await this.loadPhase1Data();
         const weekKey = `${weekNumber}-${year}`;
 
@@ -323,25 +329,29 @@ class DatabaseService {
         }
 
         if (!data[guildId][weekKey]) {
-            data[guildId][weekKey] = {
+            data[guildId][weekKey] = {};
+        }
+
+        if (!data[guildId][weekKey][clan]) {
+            data[guildId][weekKey][clan] = {
                 players: [],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
         }
 
-        // Sprawdź czy gracz już istnieje w tym tygodniu (aktualizuj jeśli tak)
-        const existingPlayerIndex = data[guildId][weekKey].players.findIndex(p => p.userId === userId);
+        // Sprawdź czy gracz już istnieje w tym tygodniu i klanie (aktualizuj jeśli tak)
+        const existingPlayerIndex = data[guildId][weekKey][clan].players.findIndex(p => p.userId === userId);
 
         if (existingPlayerIndex !== -1) {
-            data[guildId][weekKey].players[existingPlayerIndex] = {
+            data[guildId][weekKey][clan].players[existingPlayerIndex] = {
                 userId,
                 displayName,
                 score,
                 updatedAt: new Date().toISOString()
             };
         } else {
-            data[guildId][weekKey].players.push({
+            data[guildId][weekKey][clan].players.push({
                 userId,
                 displayName,
                 score,
@@ -349,25 +359,25 @@ class DatabaseService {
             });
         }
 
-        data[guildId][weekKey].updatedAt = new Date().toISOString();
+        data[guildId][weekKey][clan].updatedAt = new Date().toISOString();
 
         await this.savePhase1Data(data);
-        logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów`);
+        logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan})`);
     }
 
     /**
-     * Pobiera podsumowanie danych dla danego tygodnia
+     * Pobiera podsumowanie danych dla danego tygodnia i klanu
      */
-    async getPhase1Summary(guildId, weekNumber, year) {
+    async getPhase1Summary(guildId, weekNumber, year, clan) {
         const data = await this.loadPhase1Data();
         const weekKey = `${weekNumber}-${year}`;
 
-        if (!data[guildId] || !data[guildId][weekKey]) {
+        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
             return null;
         }
 
-        const weekData = data[guildId][weekKey];
-        const players = weekData.players || [];
+        const clanData = data[guildId][weekKey][clan];
+        const players = clanData.players || [];
 
         const scores = players.map(p => p.score).sort((a, b) => b - a);
         const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
@@ -375,23 +385,23 @@ class DatabaseService {
         return {
             playerCount: players.length,
             top30Sum: top30Sum,
-            createdAt: weekData.createdAt,
-            updatedAt: weekData.updatedAt
+            createdAt: clanData.createdAt,
+            updatedAt: clanData.updatedAt
         };
     }
 
     /**
-     * Pobiera wszystkie wyniki dla danego tygodnia
+     * Pobiera wszystkie wyniki dla danego tygodnia i klanu
      */
-    async getPhase1Results(guildId, weekNumber, year) {
+    async getPhase1Results(guildId, weekNumber, year, clan) {
         const data = await this.loadPhase1Data();
         const weekKey = `${weekNumber}-${year}`;
 
-        if (!data[guildId] || !data[guildId][weekKey]) {
+        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
             return null;
         }
 
-        return data[guildId][weekKey];
+        return data[guildId][weekKey][clan];
     }
 
     /**
@@ -406,11 +416,18 @@ class DatabaseService {
 
         const weeks = Object.keys(data[guildId]).map(weekKey => {
             const [weekNumber, year] = weekKey.split('-');
+            const clans = Object.keys(data[guildId][weekKey]);
+
+            // Znajdź najwcześniejszą datę utworzenia spośród klanów
+            const createdDates = clans.map(clan => data[guildId][weekKey][clan].createdAt);
+            const earliestDate = createdDates.sort()[0];
+
             return {
                 weekNumber: parseInt(weekNumber),
                 year: parseInt(year),
                 weekKey: weekKey,
-                createdAt: data[guildId][weekKey].createdAt
+                clans: clans,
+                createdAt: earliestDate
             };
         });
 

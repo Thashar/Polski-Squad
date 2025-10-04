@@ -478,7 +478,8 @@ class PhaseService {
                     member.displayName,
                     parseInt(score) || 0,
                     weekInfo.weekNumber,
-                    weekInfo.year
+                    weekInfo.year,
+                    session.clan
                 );
                 savedCount.push(nick);
             } else {
@@ -630,8 +631,8 @@ class PhaseService {
     /**
      * Tworzy embed z ostrzeżeniem o istniejących danych
      */
-    async createOverwriteWarningEmbed(guildId, weekInfo) {
-        const existingData = await this.databaseService.getPhase1Summary(guildId, weekInfo.weekNumber, weekInfo.year);
+    async createOverwriteWarningEmbed(guildId, weekInfo, clan) {
+        const existingData = await this.databaseService.getPhase1Summary(guildId, weekInfo.weekNumber, weekInfo.year, clan);
 
         if (!existingData) {
             return null;
@@ -640,9 +641,11 @@ class PhaseService {
         const createdDate = new Date(existingData.createdAt);
         const dateStr = createdDate.toLocaleString('pl-PL');
 
+        const clanName = this.config.roleDisplayNames[clan] || clan;
+
         const embed = new EmbedBuilder()
             .setTitle('⚠️ Dane już istnieją')
-            .setDescription(`Dane dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** już istnieją w bazie.`)
+            .setDescription(`Dane dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** (klan: **${clanName}**) już istnieją w bazie.`)
             .setColor('#FF6600')
             .addFields(
                 { name: '📅 Data zapisu', value: dateStr, inline: true },
