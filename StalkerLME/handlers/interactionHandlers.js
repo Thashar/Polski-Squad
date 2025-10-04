@@ -808,7 +808,7 @@ async function handleButton(interaction, sharedState) {
     } else if (interaction.customId === 'phase1_confirm_save' || interaction.customId === 'phase1_cancel_save') {
         // Obsługa przycisków finalnego potwierdzenia zapisu
         await handlePhase1FinalConfirmButton(interaction, sharedState);
-    } else if (interaction.customId.startsWith('modyfikuj_confirm|') || interaction.customId === 'modyfikuj_cancel') {
+    } else if (interaction.customId.startsWith('modyfikuj_confirm_') || interaction.customId === 'modyfikuj_cancel') {
         await handleModyfikujConfirmButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_page_prev|') || interaction.customId.startsWith('modyfikuj_page_next|')) {
         await handleModyfikujPaginationButton(interaction, sharedState);
@@ -1480,7 +1480,7 @@ async function handleDecodeCommand(interaction, sharedState) {
 async function handleModalSubmit(interaction, sharedState) {
     if (interaction.customId === 'decode_modal') {
         await handleDecodeModalSubmit(interaction, sharedState);
-    } else if (interaction.customId.startsWith('modyfikuj_modal|')) {
+    } else if (interaction.customId.startsWith('modyfikuj_modal_')) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     }
 }
