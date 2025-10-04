@@ -657,11 +657,12 @@ class PhaseService {
         const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
 
         // Dodaj przyciski dla każdej wartości (max 5)
+        // CustomId format: phase1_resolve_{nick}_{value}
         for (let i = 0; i < Math.min(conflict.values.length, 5); i++) {
             const value = conflict.values[i];
             row.addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`${phasePrefix}_resolve_${value.value}`)
+                    .setCustomId(`${phasePrefix}_resolve_${conflict.nick}_${value.value}`)
                     .setLabel(`${value.value}`)
                     .setStyle(ButtonStyle.Secondary)
             );
