@@ -75,6 +75,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'wyniki':
             await handleWynikiCommand(interaction, sharedState);
             break;
+        case 'modyfikuj':
+            await handleModyfikujCommand(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -418,6 +421,12 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleWynikiClanSelect(interaction, sharedState);
     } else if (interaction.customId === 'wyniki_select_week') {
         await handleWynikiWeekSelect(interaction, sharedState);
+    } else if (interaction.customId === 'modyfikuj_select_clan') {
+        await handleModyfikujClanSelect(interaction, sharedState);
+    } else if (interaction.customId === 'modyfikuj_select_week') {
+        await handleModyfikujWeekSelect(interaction, sharedState);
+    } else if (interaction.customId === 'modyfikuj_select_player') {
+        await handleModyfikujPlayerSelect(interaction, sharedState);
     }
 }
 
@@ -792,6 +801,8 @@ async function handleButton(interaction, sharedState) {
     } else if (interaction.customId === 'phase1_confirm_save' || interaction.customId === 'phase1_cancel_save') {
         // Obsługa przycisków finalnego potwierdzenia zapisu
         await handlePhase1FinalConfirmButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_confirm|') || interaction.customId === 'modyfikuj_cancel') {
+        await handleModyfikujConfirmButton(interaction, sharedState);
     }
 }
 
@@ -933,7 +944,11 @@ async function registerSlashCommands(client) {
                         { name: 'Faza 1', value: 'phase1' },
                         { name: 'Faza 2', value: 'phase2' }
                     )
-            )
+            ),
+
+        new SlashCommandBuilder()
+            .setName('modyfikuj')
+            .setDescription('Modyfikuj wynik gracza dla Fazy 1')
     ];
 
     try {
@@ -1431,6 +1446,8 @@ async function handleDecodeCommand(interaction, sharedState) {
 async function handleModalSubmit(interaction, sharedState) {
     if (interaction.customId === 'decode_modal') {
         await handleDecodeModalSubmit(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_modal|')) {
+        await handleModyfikujModalSubmit(interaction, sharedState);
     }
 }
 
@@ -1900,6 +1917,381 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
         components: [summaryEmbed.row]
     });
 }
+
+// =============== MODYFIKUJ HANDLERS ===============
+
+async function handleModyfikujCommand(interaction, sharedState) {
+    const { config } = sharedState;
+
+    // Sprawdź uprawnienia (admin lub allowedPunishRoles)
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        // Utwórz select menu z klanami
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('modyfikuj_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
+            .setDescription('**Krok 1/4:** Wybierz klan:')
+            .setColor('#FF9900')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd komendy /modyfikuj:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas uruchamiania komendy.'
+        });
+    }
+}
+
+async function handleModyfikujClanSelect(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    await interaction.deferUpdate();
+
+    try {
+        const selectedClan = interaction.values[0];
+        const clanName = config.roleDisplayNames[selectedClan];
+
+        // Pobierz dostępne tygodnie dla wybranego klanu
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
+
+        if (weeksForClan.length === 0) {
+            await interaction.editReply({
+                content: `❌ Brak zapisanych wyników dla klanu **${clanName}**.`,
+                components: []
+            });
+            return;
+        }
+
+        // Utwórz select menu z tygodniami
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('modyfikuj_select_week')
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(
+                weeksForClan.slice(0, 25).map(week => {
+                    const date = new Date(week.createdAt);
+                    const dateStr = date.toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                        .setDescription(`Zapisano: ${dateStr}`)
+                        .setValue(`${selectedClan}|${week.weekNumber}-${week.year}`);
+                })
+            );
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
+            .setDescription(`**Krok 2/4:** Wybierz tydzień dla klanu **${clanName}**:`)
+            .setColor('#FF9900')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd wyboru klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyboru klanu.',
+            components: []
+        });
+    }
+}
+
+async function handleModyfikujWeekSelect(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    await interaction.deferUpdate();
+
+    try {
+        const selectedValue = interaction.values[0];
+        const [clan, weekKey] = selectedValue.split('|');
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Pobierz wyniki dla wybranego tygodnia i klanu
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+
+        if (!weekData || !weekData.players || weekData.players.length === 0) {
+            await interaction.editReply({
+                content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                components: []
+            });
+            return;
+        }
+
+        // Sortuj graczy alfabetycznie
+        const sortedPlayers = weekData.players.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        // Utwórz select menu z graczami (max 25)
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('modyfikuj_select_player')
+            .setPlaceholder('Wybierz gracza')
+            .addOptions(
+                sortedPlayers.slice(0, 25).map(player => {
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`${player.displayName} - ${player.score} pkt`)
+                        .setValue(`${clan}|${weekNumber}-${year}|${player.userId}`);
+                })
+            );
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
+            .setDescription(`**Krok 3/4:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**):`)
+            .setColor('#FF9900')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd wyboru tygodnia:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyboru tygodnia.',
+            components: []
+        });
+    }
+}
+
+async function handleModyfikujPlayerSelect(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        const selectedValue = interaction.values[0];
+        const [clan, weekKey, userId] = selectedValue.split('|');
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        // Pobierz dane gracza
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        const player = weekData.players.find(p => p.userId === userId);
+
+        if (!player) {
+            await interaction.reply({
+                content: '❌ Nie znaleziono gracza.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Pokaż modal do wprowadzenia nowego wyniku
+        const modal = new ModalBuilder()
+            .setCustomId(`modyfikuj_modal|${clan}|${weekNumber}-${year}|${userId}`)
+            .setTitle('Modyfikuj wynik gracza');
+
+        const scoreInput = new TextInputBuilder()
+            .setCustomId('new_score')
+            .setLabel(`Nowy wynik dla ${player.displayName}`)
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder(`Aktualny wynik: ${player.score}`)
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const row = new ActionRowBuilder().addComponents(scoreInput);
+        modal.addComponents(row);
+
+        await interaction.showModal(modal);
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd wyboru gracza:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas wyboru gracza.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleModyfikujModalSubmit(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        const [_, clan, weekKey, userId] = interaction.customId.split('|');
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+        const newScore = interaction.fields.getTextInputValue('new_score');
+
+        // Walidacja nowego wyniku
+        if (!/^\d+$/.test(newScore)) {
+            await interaction.reply({
+                content: '❌ Wynik musi być liczbą całkowitą.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const newScoreNum = parseInt(newScore);
+
+        // Pobierz dane gracza
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        const player = weekData.players.find(p => p.userId === userId);
+
+        if (!player) {
+            await interaction.reply({
+                content: '❌ Nie znaleziono gracza.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Pokaż potwierdzenie
+        const embed = new EmbedBuilder()
+            .setTitle('⚠️ Potwierdzenie zmiany wyniku')
+            .setDescription(`Czy na pewno chcesz zmienić wynik dla **${player.displayName}**?`)
+            .setColor('#FF9900')
+            .addFields(
+                { name: '🎯 Klan', value: clanName, inline: true },
+                { name: '📅 Tydzień', value: `${weekNumber}/${year}`, inline: true },
+                { name: '📊 Stary wynik', value: player.score.toString(), inline: true },
+                { name: '📈 Nowy wynik', value: newScoreNum.toString(), inline: true }
+            )
+            .setTimestamp();
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_confirm|${clan}|${weekNumber}-${year}|${userId}|${newScoreNum}`)
+                    .setLabel('🟢 Zamień')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('modyfikuj_cancel')
+                    .setLabel('🔴 Anuluj')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+        await interaction.reply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd modala:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas przetwarzania formularza.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleModyfikujConfirmButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    if (interaction.customId === 'modyfikuj_cancel') {
+        await interaction.update({
+            content: '❌ Operacja anulowana.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    try {
+        const [_, clan, weekKey, userId, newScore] = interaction.customId.split('|');
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+        const newScoreNum = parseInt(newScore);
+
+        // Pobierz dane gracza przed zmianą
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        const player = weekData.players.find(p => p.userId === userId);
+
+        if (!player) {
+            await interaction.update({
+                content: '❌ Nie znaleziono gracza.',
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        const oldScore = player.score;
+
+        // Zaktualizuj wynik
+        await databaseService.savePhase1Result(
+            interaction.guild.id,
+            userId,
+            player.displayName,
+            newScoreNum,
+            weekNumber,
+            year,
+            clan
+        );
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Potwierdzenie
+        const embed = new EmbedBuilder()
+            .setTitle('✅ Wynik został zmieniony')
+            .setDescription(`Pomyślnie zmieniono wynik dla **${player.displayName}**`)
+            .setColor('#00FF00')
+            .addFields(
+                { name: '🎯 Klan', value: clanName, inline: true },
+                { name: '📅 Tydzień', value: `${weekNumber}/${year}`, inline: true },
+                { name: '📊 Stary wynik', value: oldScore.toString(), inline: true },
+                { name: '📈 Nowy wynik', value: newScoreNum.toString(), inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: `Zmodyfikowane przez ${interaction.user.tag}` });
+
+        await interaction.update({
+            embeds: [embed],
+            components: []
+        });
+
+        logger.info(`[MODYFIKUJ] ✅ Zmieniono wynik ${player.displayName}: ${oldScore} → ${newScoreNum} (Klan: ${clan}, Tydzień: ${weekNumber}/${year})`);
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd potwierdzenia:', error);
+        await interaction.update({
+            content: '❌ Wystąpił błąd podczas zapisywania zmiany.',
+            embeds: [],
+            components: []
+        });
+    }
+}
+
+// =============== WYNIKI HANDLERS ===============
 
 async function handleWynikiClanSelect(interaction, sharedState) {
     const { databaseService, config } = sharedState;
