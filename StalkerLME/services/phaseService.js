@@ -744,13 +744,18 @@ class PhaseService {
         ];
 
         // Dodaj informacje o twórcy jeśli dostępne
+        logger.info(`[PHASE${phase}] createdBy: ${existingData.createdBy}, guild: ${guild ? 'exists' : 'null'}`);
+
         if (existingData.createdBy && guild) {
             try {
                 const creator = await guild.members.fetch(existingData.createdBy);
                 fields.push({ name: '👤 Dodane przez', value: creator.displayName, inline: true });
+                logger.info(`[PHASE${phase}] Dodano pole 'Dodane przez': ${creator.displayName}`);
             } catch (error) {
-                logger.warn(`[PHASE${phase}] Nie znaleziono użytkownika ${existingData.createdBy}`);
+                logger.warn(`[PHASE${phase}] Nie znaleziono użytkownika ${existingData.createdBy}:`, error.message);
             }
+        } else {
+            logger.warn(`[PHASE${phase}] Brak informacji o twórcy - createdBy: ${existingData.createdBy}, guild: ${guild ? 'exists' : 'null'}`);
         }
 
         // Dodaj liczbę graczy tylko dla Fazy 1
