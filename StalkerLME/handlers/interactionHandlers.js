@@ -1826,8 +1826,12 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
     const value = parts[parts.length - 1];
     const nick = parts.slice(2, parts.length - 1).join('_');
 
+    logger.info(`[PHASE1] Rozstrzygam konflikt dla nick="${nick}", value="${value}"`);
+
     // Rozstrzygnij konflikt
     phaseService.resolveConflict(session, nick, parseInt(value) || 0);
+
+    logger.info(`[PHASE1] Rozstrzygnięto konfliktów: ${session.resolvedConflicts.size}/${session.conflicts.length}`);
 
     // Sprawdź czy są jeszcze konflikty
     const nextConflict = phaseService.getNextUnresolvedConflict(session);
@@ -1837,12 +1841,15 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
         const currentIndex = session.resolvedConflicts.size + 1;
         const totalConflicts = session.conflicts.length;
 
+        logger.info(`[PHASE1] Następny konflikt: nick="${nextConflict.nick}", index=${currentIndex}/${totalConflicts}`);
+
         const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts, 1);
         await interaction.update({
             embeds: [conflictEmbed.embed],
             components: [conflictEmbed.row]
         });
     } else {
+        logger.info(`[PHASE1] Wszystkie konflikty rozstrzygnięte!`);
         // Wszystkie konflikty rozstrzygnięte - pokaż finalne podsumowanie
         await interaction.update({
             content: '🔄 Przygotowuję podsumowanie...',
