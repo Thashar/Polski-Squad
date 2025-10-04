@@ -215,18 +215,34 @@ class PhaseService {
             const attachment = fileData.originalAttachment;
 
             try {
-                // Aktualizuj postęp
+                // Aktualizuj postęp - ładowanie
                 await this.updateProgress(session, {
                     currentImage: i + 1,
                     totalImages: totalImages,
-                    stage: 'processing',
-                    currentImageName: attachment.name
+                    stage: 'loading',
+                    action: 'Ładowanie zdjęcia'
                 });
 
                 logger.info(`[PHASE1] 📷 Przetwarzanie zdjęcia ${i + 1}/${totalImages}: ${attachment.name}`);
 
+                // Aktualizuj postęp - OCR
+                await this.updateProgress(session, {
+                    currentImage: i + 1,
+                    totalImages: totalImages,
+                    stage: 'ocr',
+                    action: 'Rozpoznawanie tekstu (OCR)'
+                });
+
                 // Przetwórz OCR z pliku lokalnego
                 const text = await this.ocrService.processImageFromFile(fileData.filepath);
+
+                // Aktualizuj postęp - ekstrakcja
+                await this.updateProgress(session, {
+                    currentImage: i + 1,
+                    totalImages: totalImages,
+                    stage: 'extracting',
+                    action: 'Wyciąganie wyników graczy'
+                });
 
                 // Wyciągnij wszystkich graczy z wynikami (nie tylko zerami)
                 const playersWithScores = await this.ocrService.extractAllPlayersWithScores(text, guild, member);
@@ -242,6 +258,14 @@ class PhaseService {
                     imageUrl: attachment.url,
                     imageName: attachment.name,
                     results: playersWithScores
+                });
+
+                // Aktualizuj postęp - agregacja
+                await this.updateProgress(session, {
+                    currentImage: i + 1,
+                    totalImages: totalImages,
+                    stage: 'aggregating',
+                    action: 'Agregacja wyników'
                 });
 
                 // Tymczasowa agregacja dla statystyk postępu
@@ -279,7 +303,7 @@ class PhaseService {
         if (!session.publicInteraction) return;
 
         try {
-            const { currentImage, totalImages, stage, currentImageName } = progress;
+            const { currentImage, totalImages, stage, action } = progress;
             const percent = Math.round((currentImage / totalImages) * 100);
 
             // Oblicz statystyki
@@ -290,9 +314,18 @@ class PhaseService {
 
             const progressBar = this.createProgressBar(percent);
 
+            // Ikony dla różnych etapów
+            const stageIcons = {
+                'loading': '📥',
+                'ocr': '🔍',
+                'extracting': '📊',
+                'aggregating': '🔄'
+            };
+            const icon = stageIcons[stage] || '⚙️';
+
             const embed = new EmbedBuilder()
                 .setTitle('🔄 Przetwarzanie zdjęć - Faza 1')
-                .setDescription(`**Zdjęcie:** ${currentImage}/${totalImages} - ${currentImageName}\n${progressBar} ${percent}%`)
+                .setDescription(`**Zdjęcie:** ${currentImage}/${totalImages}\n${icon} ${action}\n${progressBar} ${percent}%`)
                 .setColor('#FFA500')
                 .addFields(
                     { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
@@ -599,7 +632,9 @@ class PhaseService {
     /**
      * Tworzy embed z finalnym podsumowaniem
      */
-    createFinalSummaryEmbed(stats, weekInfo) {
+    createFinalSummaryEmbed(stats, weekInfo, clan) {
+        const clanName = this.config.roleDisplayNames[clan] || clan;
+
         const embed = new EmbedBuilder()
             .setTitle(`📊 Podsumowanie Faza 1 - Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
             .setDescription('Przeanalizowano wszystkie zdjęcia i rozstrzygnięto konflikty.')
@@ -608,7 +643,8 @@ class PhaseService {
                 { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
                 { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
                 { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true },
-                { name: '🏆 Suma wyników top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
+                { name: '🏆 Suma wyników top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false },
+                { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()
             .setFooter({ text: 'Czy zatwierdzić i zapisać dane?' });

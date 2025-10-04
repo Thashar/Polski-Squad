@@ -1849,6 +1849,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
 
         const weekInfo = phaseService.getCurrentWeekInfo();
         const stats = phaseService.calculateStatistics(finalResults);
+        const clanName = sharedState.config.roleDisplayNames[session.clan] || session.clan;
 
         // Publiczny raport (wszystko widoczne dla wszystkich)
         const publicEmbed = new EmbedBuilder()
@@ -1859,7 +1860,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
                 { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
                 { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
                 { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
-                { name: '🏆 Suma top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false }
+                { name: '🏆 Suma top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false },
+                { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()
             .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
@@ -1888,7 +1890,7 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     const stats = phaseService.calculateStatistics(finalResults);
     const weekInfo = phaseService.getCurrentWeekInfo();
 
-    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo);
+    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan);
 
     session.stage = 'final_confirmation';
 
