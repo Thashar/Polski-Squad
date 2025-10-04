@@ -2201,14 +2201,21 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
         } else {
             // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
+            logger.info(`[PHASE2] 💾 Zapisywanie wyników rundy 3 przed podsumowaniem...`);
             const lastRoundData = {
                 round: session.currentRound,
                 results: phaseService.getFinalResults(session)
             };
+            logger.info(`[PHASE2] 📊 Wyniki rundy 3: ${lastRoundData.results.size} graczy`);
             session.roundsData.push(lastRoundData);
-            logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3`);
+            logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3. Łącznie ${session.roundsData.length} rund w roundsData`);
 
-            await showPhase2FinalSummary(interaction, session, phaseService);
+            try {
+                await showPhase2FinalSummary(interaction, session, phaseService);
+            } catch (error) {
+                logger.error(`[PHASE2] ❌ Błąd podczas wyświetlania podsumowania:`, error);
+                throw error;
+            }
         }
         return;
     }
@@ -2386,19 +2393,35 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
 }
 
 async function showPhase2FinalSummary(interaction, session, phaseService) {
-    const summedResults = phaseService.sumPhase2Results(session);
-    const stats = phaseService.calculateStatistics(summedResults);
-    const weekInfo = phaseService.getCurrentWeekInfo();
+    logger.info(`[PHASE2] 📋 Tworzenie finalnego podsumowania...`);
 
-    const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan, 2);
+    try {
+        logger.info(`[PHASE2] 🔢 Rozpoczynam sumowanie wyników...`);
+        const summedResults = phaseService.sumPhase2Results(session);
 
-    session.stage = 'final_confirmation';
+        logger.info(`[PHASE2] 📊 Obliczam statystyki...`);
+        const stats = phaseService.calculateStatistics(summedResults);
 
-    await interaction.editReply({
-        content: '',
-        embeds: [summaryEmbed.embed],
-        components: [summaryEmbed.row]
-    });
+        logger.info(`[PHASE2] 📅 Pobieram informacje o tygodniu...`);
+        const weekInfo = phaseService.getCurrentWeekInfo();
+
+        logger.info(`[PHASE2] 🎨 Tworzę embed podsumowania...`);
+        const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan, 2);
+
+        session.stage = 'final_confirmation';
+
+        logger.info(`[PHASE2] 📤 Wysyłam podsumowanie do użytkownika...`);
+        await interaction.editReply({
+            content: '',
+            embeds: [summaryEmbed.embed],
+            components: [summaryEmbed.row]
+        });
+        logger.info(`[PHASE2] ✅ Podsumowanie wysłane pomyślnie`);
+    } catch (error) {
+        logger.error(`[PHASE2] ❌ Błąd w showPhase2FinalSummary:`, error);
+        logger.error(`[PHASE2] ❌ Error stack:`, error.stack);
+        throw error;
+    }
 }
 
 // =============== MODYFIKUJ HANDLERS ===============
