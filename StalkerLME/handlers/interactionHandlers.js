@@ -2928,7 +2928,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
 
             if (!weekData) {
                 logger.error(`[MODYFIKUJ] Brak weekData dla Phase2: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}`);
-                await interaction.update({
+                await interaction.editReply({
                     content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
                     embeds: [],
                     components: []
@@ -2949,7 +2949,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
 
             if (!weekData) {
                 logger.error(`[MODYFIKUJ] Brak weekData dla Phase1: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}`);
-                await interaction.update({
+                await interaction.editReply({
                     content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
                     embeds: [],
                     components: []
@@ -2962,7 +2962,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
 
         if (!players || players.length === 0) {
             logger.error(`[MODYFIKUJ] Brak players dla: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}, phase=${selectedPhase}, round=${selectedRound}`);
-            await interaction.update({
+            await interaction.editReply({
                 content: `❌ Brak graczy dla wybranego tygodnia i klanu **${clanName}**.`,
                 embeds: [],
                 components: []
@@ -3031,7 +3031,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
             .setColor('#FF9900')
             .setTimestamp();
 
-        await interaction.update({
+        await interaction.editReply({
             embeds: [embed],
             components: components
         });
