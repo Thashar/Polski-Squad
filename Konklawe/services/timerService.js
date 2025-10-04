@@ -552,7 +552,23 @@ class TimerService {
 
             // Timer 6h dla przypomnienia o kolejnej podpowiedzi
             if (timeSinceLastHint >= this.gameService.EXISTING_HINT_REMINDER_TIME) {
-                await this.setHintReminderTimer();
+                // Już minęło 6h - wyślij przypomnienie natychmiast
+                try {
+                    const guild = this.client.guilds.cache.first();
+                    const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
+                    if (guild && triggerChannel && triggerChannel.isTextBased()) {
+                        const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
+                        if (membersWithRole.size > 0) {
+                            const papalMember = membersWithRole.first();
+                            const timeText = formatTimeDifference(timeSinceLastHint);
+                            await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
+                            // Ustaw kolejny timer
+                            await this.setHintReminderTimer();
+                        }
+                    }
+                } catch (error) {
+                    logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi po restarcie:', error);
+                }
             } else {
                 const remainingTime = this.gameService.EXISTING_HINT_REMINDER_TIME - timeSinceLastHint;
                 setTimeout(async () => await this.setHintReminderTimer(), remainingTime);
