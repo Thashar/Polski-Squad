@@ -20,8 +20,10 @@ async function handleInteraction(interaction, sharedState, config) {
             await handleModalSubmit(interaction, sharedState);
         }
     } catch (error) {
-        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error.message);
-        logger.error('[INTERACTION] ❌ Stack trace:', error.stack);
+        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
+        logger.error('[INTERACTION] ❌ Error message:', error?.message);
+        logger.error('[INTERACTION] ❌ Stack trace:', error?.stack);
+        logger.error('[INTERACTION] ❌ Full error object:', JSON.stringify(error, null, 2));
         
         const errorEmbed = new EmbedBuilder()
             .setTitle('❌ Wystąpił błąd')
@@ -2411,12 +2413,21 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
         session.stage = 'final_confirmation';
 
         logger.info(`[PHASE2] 📤 Wysyłam podsumowanie do użytkownika...`);
-        await interaction.editReply({
-            content: '',
-            embeds: [summaryEmbed.embed],
-            components: [summaryEmbed.row]
-        });
-        logger.info(`[PHASE2] ✅ Podsumowanie wysłane pomyślnie`);
+        logger.info(`[PHASE2] 🔍 Stan interakcji - deferred: ${interaction.deferred}, replied: ${interaction.replied}`);
+
+        try {
+            await interaction.editReply({
+                content: '',
+                embeds: [summaryEmbed.embed],
+                components: [summaryEmbed.row]
+            });
+            logger.info(`[PHASE2] ✅ Podsumowanie wysłane pomyślnie`);
+        } catch (replyError) {
+            logger.error(`[PHASE2] ❌ Błąd podczas editReply:`, replyError);
+            logger.error(`[PHASE2] ❌ Reply error message:`, replyError?.message);
+            logger.error(`[PHASE2] ❌ Reply error code:`, replyError?.code);
+            throw replyError;
+        }
     } catch (error) {
         logger.error(`[PHASE2] ❌ Błąd w showPhase2FinalSummary:`, error);
         logger.error(`[PHASE2] ❌ Error stack:`, error.stack);
