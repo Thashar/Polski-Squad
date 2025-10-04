@@ -426,11 +426,11 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
     } else if (interaction.customId.startsWith('wyniki_select_week_')) {
         const phase = interaction.customId.replace('wyniki_select_week_', '');
         await handleWynikiWeekSelect(interaction, sharedState, phase);
-    } else if (interaction.customId === 'modyfikuj_select_clan') {
-        await handleModyfikujClanSelect(interaction, sharedState);
-    } else if (interaction.customId === 'modyfikuj_select_week') {
+    } else if (interaction.customId.startsWith('modyfikuj_select_phase|')) {
+        await handleModyfikujPhaseSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_select_week_')) {
         await handleModyfikujWeekSelect(interaction, sharedState);
-    } else if (interaction.customId === 'modyfikuj_select_player') {
+    } else if (interaction.customId.startsWith('modyfikuj_select_player_')) {
         await handleModyfikujPlayerSelect(interaction, sharedState);
     }
 }
@@ -2375,26 +2375,49 @@ async function handleModyfikujCommand(interaction, sharedState) {
         return;
     }
 
+    // Wykryj klan użytkownika
+    const targetRoleIds = Object.entries(config.targetRoles);
+    let userClan = null;
+
+    for (const [clanKey, roleId] of targetRoleIds) {
+        if (interaction.member.roles.cache.has(roleId)) {
+            userClan = clanKey;
+            break;
+        }
+    }
+
+    if (!userClan) {
+        await interaction.reply({
+            content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról klanowych aby modyfikować wyniki.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-        // Utwórz select menu z klanami
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
-            return new StringSelectMenuOptionBuilder()
-                .setLabel(config.roleDisplayNames[clanKey])
-                .setValue(clanKey);
-        });
+        // Utwórz select menu z wyborem fazy
+        const phaseOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 1')
+                .setValue('phase1'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 2')
+                .setValue('phase2')
+        ];
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('modyfikuj_select_clan')
-            .setPlaceholder('Wybierz klan')
-            .addOptions(clanOptions);
+            .setCustomId(`modyfikuj_select_phase|${userClan}`)
+            .setPlaceholder('Wybierz fazę')
+            .addOptions(phaseOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
+        const clanName = config.roleDisplayNames[userClan];
         const embed = new EmbedBuilder()
-            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
-            .setDescription('**Krok 1/4:** Wybierz klan:')
+            .setTitle('🔧 Modyfikacja wyniku')
+            .setDescription(`**Klan:** ${clanName}\n**Krok 1/4:** Wybierz fazę do modyfikacji:`)
             .setColor('#FF9900')
             .setTimestamp();
 
@@ -2411,17 +2434,27 @@ async function handleModyfikujCommand(interaction, sharedState) {
     }
 }
 
-async function handleModyfikujClanSelect(interaction, sharedState, page = 0) {
+async function handleModyfikujPhaseSelect(interaction, sharedState, page = 0) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
 
     try {
-        const selectedClan = interaction.values[0];
+        // Format: modyfikuj_select_phase|clanKey
+        const parts = interaction.customId.split('|');
+        const selectedClan = parts[1];
+        const selectedPhase = interaction.values[0]; // 'phase1' lub 'phase2'
+
         const clanName = config.roleDisplayNames[selectedClan];
 
-        // Pobierz dostępne tygodnie dla wybranego klanu (już posortowane od najnowszych)
-        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        // Pobierz dostępne tygodnie dla wybranego klanu i fazy
+        let allWeeks;
+        if (selectedPhase === 'phase2') {
+            allWeeks = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
+        } else {
+            allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        }
+
         const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
 
         if (weeksForClan.length === 0) {
@@ -2442,7 +2475,7 @@ async function handleModyfikujClanSelect(interaction, sharedState, page = 0) {
 
         // Utwórz select menu z tygodniami na aktualnej stronie
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('modyfikuj_select_week')
+            .setCustomId(`modyfikuj_select_week_${selectedPhase}`)
             .setPlaceholder('Wybierz tydzień')
             .addOptions(
                 weeksOnPage.map(week => {
@@ -2467,17 +2500,17 @@ async function handleModyfikujClanSelect(interaction, sharedState, page = 0) {
             const paginationRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`modyfikuj_week_prev|${selectedClan}|${currentPage}`)
+                        .setCustomId(`modyfikuj_week_prev|${selectedPhase}|${selectedClan}|${currentPage}`)
                         .setLabel('◀ Poprzednia')
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(currentPage === 0),
                     new ButtonBuilder()
-                        .setCustomId(`modyfikuj_week_info|${selectedClan}|${currentPage}`)
+                        .setCustomId(`modyfikuj_week_info|${selectedPhase}|${selectedClan}|${currentPage}`)
                         .setLabel(`Strona ${currentPage + 1}/${totalPages}`)
                         .setStyle(ButtonStyle.Secondary)
                         .setDisabled(true),
                     new ButtonBuilder()
-                        .setCustomId(`modyfikuj_week_next|${selectedClan}|${currentPage}`)
+                        .setCustomId(`modyfikuj_week_next|${selectedPhase}|${selectedClan}|${currentPage}`)
                         .setLabel('Następna ▶')
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(currentPage === totalPages - 1)
@@ -2485,8 +2518,9 @@ async function handleModyfikujClanSelect(interaction, sharedState, page = 0) {
             components.push(paginationRow);
         }
 
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
         const embed = new EmbedBuilder()
-            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
+            .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}`)
             .setDescription(`**Krok 2/4:** Wybierz tydzień dla klanu **${clanName}**\n\nTygodni: ${weeksForClan.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
             .setColor('#FF9900')
             .setTimestamp();
@@ -2497,9 +2531,9 @@ async function handleModyfikujClanSelect(interaction, sharedState, page = 0) {
         });
 
     } catch (error) {
-        logger.error('[MODYFIKUJ] ❌ Błąd wyboru klanu:', error);
+        logger.error('[MODYFIKUJ] ❌ Błąd wyboru fazy:', error);
         await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas wyboru klanu.',
+            content: '❌ Wystąpił błąd podczas wyboru fazy.',
             components: []
         });
     }
@@ -3278,7 +3312,7 @@ async function handleWynikiWeekSelect(interaction, sharedState, phase, view = 's
 
             const embed = new EmbedBuilder()
                 .setTitle(`📊 Wyniki - Faza 1`)
-                .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year} | **TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
+                .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
                 .setColor('#0099FF')
                 .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
                 .setTimestamp();
