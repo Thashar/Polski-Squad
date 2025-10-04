@@ -3204,13 +3204,14 @@ async function handleModyfikujModalSubmit(interaction, sharedState) {
 
         let selectedPhase, selectedRound, clan, weekKey, userId;
 
-        if (customIdParts[0].includes('phase2')) {
-            const phaseAndRound = customIdParts[0].split('|');
-            selectedPhase = phaseAndRound[0];
-            selectedRound = phaseAndRound[1];
-            clan = customIdParts[1];
-            weekKey = customIdParts[2];
-            userId = customIdParts[3];
+        logger.info(`[MODYFIKUJ] Modal customId parts: ${JSON.stringify(customIdParts)}`);
+
+        if (customIdParts[0] === 'phase2') {
+            selectedPhase = customIdParts[0];
+            selectedRound = customIdParts[1];
+            clan = customIdParts[2];
+            weekKey = customIdParts[3];
+            userId = customIdParts[4];
         } else {
             selectedPhase = customIdParts[0];
             selectedRound = null;
@@ -3218,6 +3219,8 @@ async function handleModyfikujModalSubmit(interaction, sharedState) {
             weekKey = customIdParts[2];
             userId = customIdParts[3];
         }
+
+        logger.info(`[MODYFIKUJ] Modal parsed: phase=${selectedPhase}, round=${selectedRound}, clan=${clan}, week=${weekKey}, userId=${userId}`);
 
         const [weekNumber, year] = weekKey.split('-').map(Number);
         const newScore = interaction.fields.getTextInputValue('new_score');
@@ -3324,14 +3327,15 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
 
         let selectedPhase, selectedRound, clan, weekKey, userId, newScore;
 
-        if (customIdParts[0].includes('phase2')) {
-            const phaseAndRound = customIdParts[0].split('|');
-            selectedPhase = phaseAndRound[0];
-            selectedRound = phaseAndRound[1];
-            clan = customIdParts[1];
-            weekKey = customIdParts[2];
-            userId = customIdParts[3];
-            newScore = customIdParts[4];
+        logger.info(`[MODYFIKUJ] Confirm customId parts: ${JSON.stringify(customIdParts)}`);
+
+        if (customIdParts[0] === 'phase2') {
+            selectedPhase = customIdParts[0];
+            selectedRound = customIdParts[1];
+            clan = customIdParts[2];
+            weekKey = customIdParts[3];
+            userId = customIdParts[4];
+            newScore = customIdParts[5];
         } else {
             selectedPhase = customIdParts[0];
             selectedRound = null;
@@ -3340,6 +3344,8 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
             userId = customIdParts[3];
             newScore = customIdParts[4];
         }
+
+        logger.info(`[MODYFIKUJ] Confirm parsed: phase=${selectedPhase}, round=${selectedRound}, clan=${clan}, week=${weekKey}, userId=${userId}, newScore=${newScore}`);
 
         const [weekNumber, year] = weekKey.split('-').map(Number);
         const newScoreNum = parseInt(newScore);
