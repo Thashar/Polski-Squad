@@ -518,7 +518,7 @@ class PhaseService {
     /**
      * Zapisuje wyniki do bazy danych
      */
-    async saveFinalResults(session, finalResults, guild) {
+    async saveFinalResults(session, finalResults, guild, createdBy) {
         const weekInfo = this.getCurrentWeekInfo();
 
         logger.info(`[PHASE1] 💾 Zapisywanie wyników dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
@@ -529,6 +529,7 @@ class PhaseService {
         // Zapisz nowe dane
         const members = await guild.members.fetch();
         const savedCount = [];
+        let isFirstSave = true;
 
         for (const [nick, score] of finalResults.entries()) {
             // Znajdź członka Discord
@@ -545,9 +546,11 @@ class PhaseService {
                     parseInt(score) || 0,
                     weekInfo.weekNumber,
                     weekInfo.year,
-                    session.clan
+                    session.clan,
+                    isFirstSave ? createdBy : null
                 );
                 savedCount.push(nick);
+                isFirstSave = false;
             } else {
                 logger.warn(`[PHASE1] ⚠️ Nie znaleziono członka Discord dla nicka: ${nick}`);
             }
@@ -718,7 +721,7 @@ class PhaseService {
     /**
      * Tworzy embed z ostrzeżeniem o istniejących danych
      */
-    async createOverwriteWarningEmbed(guildId, weekInfo, clan, phase = 1) {
+    async createOverwriteWarningEmbed(guildId, weekInfo, clan, phase = 1, guild = null) {
         let existingData;
 
         if (phase === 2) {
@@ -737,9 +740,23 @@ class PhaseService {
         const clanName = this.config.roleDisplayNames[clan] || clan;
 
         const fields = [
-            { name: '📅 Data zapisu', value: dateStr, inline: true },
-            { name: '👥 Liczba graczy', value: existingData.playerCount.toString(), inline: true }
+            { name: '📅 Data zapisu', value: dateStr, inline: true }
         ];
+
+        // Dodaj informacje o twórcy jeśli dostępne
+        if (existingData.createdBy && guild) {
+            try {
+                const creator = await guild.members.fetch(existingData.createdBy);
+                fields.push({ name: '👤 Dodane przez', value: creator.displayName, inline: true });
+            } catch (error) {
+                logger.warn(`[PHASE${phase}] Nie znaleziono użytkownika ${existingData.createdBy}`);
+            }
+        }
+
+        // Dodaj liczbę graczy tylko dla Fazy 1
+        if (phase === 1) {
+            fields.push({ name: '👥 Liczba graczy', value: existingData.playerCount.toString(), inline: true });
+        }
 
         // Dodaj sumę TOP30 tylko dla Fazy 1
         if (phase === 1) {

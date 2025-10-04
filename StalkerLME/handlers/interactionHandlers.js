@@ -1547,7 +1547,9 @@ async function handlePhase1Command(interaction, sharedState) {
             const warningEmbed = await phaseService.createOverwriteWarningEmbed(
                 interaction.guild.id,
                 weekInfo,
-                userClan
+                userClan,
+                1,
+                interaction.guild
             );
 
             if (warningEmbed) {
@@ -1903,7 +1905,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
 
     try {
         const finalResults = phaseService.getFinalResults(session);
-        const savedCount = await phaseService.saveFinalResults(session, finalResults, interaction.guild);
+        const savedCount = await phaseService.saveFinalResults(session, finalResults, interaction.guild, interaction.user.id);
 
         const weekInfo = phaseService.getCurrentWeekInfo();
         const stats = phaseService.calculateStatistics(finalResults);
@@ -2024,7 +2026,8 @@ async function handlePhase2Command(interaction, sharedState) {
                 interaction.guild.id,
                 weekInfo,
                 userClan,
-                2 // phase 2
+                2,
+                interaction.guild
             );
 
             if (warningEmbed) {
@@ -2328,7 +2331,8 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             weekInfo.year,
             session.clan,
             roundsData,
-            summaryPlayers
+            summaryPlayers,
+            interaction.user.id
         );
 
         const stats = phaseService.calculateStatistics(summedResults);
@@ -3405,14 +3409,15 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
                 );
             }
 
-            // Zapisz zaktualizowane dane
+            // Zapisz zaktualizowane dane (zachowaj oryginalnego creatora)
             await databaseService.savePhase2Results(
                 interaction.guild.id,
                 weekNumber,
                 year,
                 clan,
                 weekData.rounds,
-                weekData.summary.players
+                weekData.summary.players,
+                weekData.createdBy || interaction.user.id
             );
         } else {
             await databaseService.savePhase1Result(

@@ -325,7 +325,7 @@ class DatabaseService {
     /**
      * Zapisuje pojedynczy wynik gracza dla danego tygodnia i klanu
      */
-    async savePhase1Result(guildId, userId, displayName, score, weekNumber, year, clan) {
+    async savePhase1Result(guildId, userId, displayName, score, weekNumber, year, clan, createdBy = null) {
         const data = await this.loadPhase1Data();
         const weekKey = `${weekNumber}-${year}`;
 
@@ -337,9 +337,12 @@ class DatabaseService {
             data[guildId][weekKey] = {};
         }
 
+        const isNewEntry = !data[guildId][weekKey][clan];
+
         if (!data[guildId][weekKey][clan]) {
             data[guildId][weekKey][clan] = {
                 players: [],
+                createdBy: createdBy,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -390,6 +393,7 @@ class DatabaseService {
         return {
             playerCount: players.length,
             top30Sum: top30Sum,
+            createdBy: clanData.createdBy,
             createdAt: clanData.createdAt,
             updatedAt: clanData.updatedAt
         };
@@ -500,7 +504,7 @@ class DatabaseService {
         return false;
     }
 
-    async savePhase2Results(guildId, weekNumber, year, clan, roundsData, summaryPlayers) {
+    async savePhase2Results(guildId, weekNumber, year, clan, roundsData, summaryPlayers, createdBy) {
         const data = await this.loadPhase2Data();
         const weekKey = `${weekNumber}-${year}`;
 
@@ -517,6 +521,7 @@ class DatabaseService {
             summary: {
                 players: summaryPlayers
             },
+            createdBy: createdBy,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
@@ -578,7 +583,7 @@ class DatabaseService {
         }
 
         const clanData = data[guildId][weekKey][clan];
-        const players = clanData.players || [];
+        const players = clanData.summary?.players || clanData.players || [];
 
         const scores = players.map(p => p.score).sort((a, b) => b - a);
         const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
@@ -586,6 +591,7 @@ class DatabaseService {
         return {
             playerCount: players.length,
             top30Sum: top30Sum,
+            createdBy: clanData.createdBy,
             createdAt: clanData.createdAt,
             updatedAt: clanData.updatedAt
         };
