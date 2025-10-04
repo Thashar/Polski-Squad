@@ -2926,6 +2926,16 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         if (selectedPhase === 'phase2') {
             weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
 
+            if (!weekData) {
+                logger.error(`[MODYFIKUJ] Brak weekData dla Phase2: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}`);
+                await interaction.update({
+                    content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
             // Wybierz graczy z odpowiedniej rundy (tylko round1, round2, round3)
             if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
                 players = weekData.rounds[0].players;
@@ -2936,17 +2946,18 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
             }
         } else {
             weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
-            players = weekData.players;
-        }
 
-        if (!weekData) {
-            logger.error(`[MODYFIKUJ] Brak weekData dla: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}, phase=${selectedPhase}`);
-            await interaction.update({
-                content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
-                embeds: [],
-                components: []
-            });
-            return;
+            if (!weekData) {
+                logger.error(`[MODYFIKUJ] Brak weekData dla Phase1: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}`);
+                await interaction.update({
+                    content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
+            players = weekData.players;
         }
 
         if (!players || players.length === 0) {
