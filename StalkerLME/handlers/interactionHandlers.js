@@ -2836,12 +2836,23 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
         const [clan, weekKey, userId] = selectedValue.split('|');
         const [weekNumber, year] = weekKey.split('-').map(Number);
 
+        logger.info(`[MODYFIKUJ] Wybrano gracza: phase=${selectedPhase}, round=${selectedRound}, clan=${clan}, week=${weekNumber}/${year}, userId=${userId}`);
+
         // Pobierz dane gracza
         let weekData;
         let player;
 
         if (selectedPhase === 'phase2') {
             weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+            if (!weekData) {
+                logger.error(`[MODYFIKUJ] Brak weekData dla Phase2: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}`);
+                await interaction.reply({
+                    content: '❌ Nie znaleziono danych dla wybranego tygodnia.',
+                    flags: MessageFlags.Ephemeral
+                });
+                return;
+            }
 
             // Znajdź gracza w odpowiedniej rundzie (tylko round1, round2, round3)
             if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
@@ -2853,10 +2864,21 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
             }
         } else {
             weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+
+            if (!weekData || !weekData.players) {
+                logger.error(`[MODYFIKUJ] Brak weekData dla Phase1: guild=${interaction.guild.id}, week=${weekNumber}, year=${year}, clan=${clan}, weekData=${weekData}`);
+                await interaction.reply({
+                    content: '❌ Nie znaleziono danych dla wybranego tygodnia.',
+                    flags: MessageFlags.Ephemeral
+                });
+                return;
+            }
+
             player = weekData.players.find(p => p.userId === userId);
         }
 
         if (!player) {
+            logger.error(`[MODYFIKUJ] Nie znaleziono gracza: userId=${userId}, phase=${selectedPhase}, round=${selectedRound}, clan=${clan}, week=${weekNumber}/${year}`);
             await interaction.reply({
                 content: '❌ Nie znaleziono gracza.',
                 flags: MessageFlags.Ephemeral
