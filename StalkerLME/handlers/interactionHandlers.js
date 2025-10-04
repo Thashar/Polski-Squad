@@ -2855,12 +2855,20 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
             }
 
             // Znajdź gracza w odpowiedniej rundzie (tylko round1, round2, round3)
+            logger.info(`[MODYFIKUJ] weekData structure: rounds=${weekData.rounds ? 'exists' : 'null'}, roundsLength=${weekData.rounds?.length}`);
+
             if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
+                logger.info(`[MODYFIKUJ] Szukam w round1, players count: ${weekData.rounds[0].players?.length}`);
                 player = weekData.rounds[0].players.find(p => p.userId === userId);
+                logger.info(`[MODYFIKUJ] Znaleziono gracza w round1: ${player ? 'TAK' : 'NIE'}`);
             } else if (selectedRound === 'round2' && weekData.rounds && weekData.rounds[1]) {
+                logger.info(`[MODYFIKUJ] Szukam w round2, players count: ${weekData.rounds[1].players?.length}`);
                 player = weekData.rounds[1].players.find(p => p.userId === userId);
             } else if (selectedRound === 'round3' && weekData.rounds && weekData.rounds[2]) {
+                logger.info(`[MODYFIKUJ] Szukam w round3, players count: ${weekData.rounds[2].players?.length}`);
                 player = weekData.rounds[2].players.find(p => p.userId === userId);
+            } else {
+                logger.error(`[MODYFIKUJ] Nie można znaleźć rundy: selectedRound=${selectedRound}, weekData.rounds[0]=${weekData.rounds?.[0] ? 'exists' : 'null'}`);
             }
         } else {
             weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
