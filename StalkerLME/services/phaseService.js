@@ -792,9 +792,12 @@ class PhaseService {
      */
     startNextRound(session) {
         // Zapisz dane z aktualnej rundy
+        const finalResults = this.getFinalResults(session);
+        logger.info(`[PHASE2] 📊 Wyniki rundy ${session.currentRound}: ${finalResults.size} graczy`);
+
         const roundData = {
             round: session.currentRound,
-            results: this.getFinalResults(session)
+            results: finalResults
         };
         session.roundsData.push(roundData);
 
@@ -818,14 +821,19 @@ class PhaseService {
     sumPhase2Results(session) {
         const summedResults = new Map(); // nick → total score
 
+        logger.info(`[PHASE2] 🔢 Sumowanie wyników z ${session.roundsData.length} rund`);
+
         // Sumuj wyniki ze wszystkich rund
         for (const roundData of session.roundsData) {
+            logger.info(`[PHASE2] Runda ${roundData.round}: ${roundData.results.size} graczy`);
             for (const [nick, score] of roundData.results) {
                 const currentScore = summedResults.get(nick) || 0;
                 summedResults.set(nick, currentScore + score);
+                logger.debug(`[PHASE2] ${nick}: ${currentScore} + ${score} = ${currentScore + score}`);
             }
         }
 
+        logger.info(`[PHASE2] ✅ Suma wyników: ${summedResults.size} graczy`);
         return summedResults;
     }
 }

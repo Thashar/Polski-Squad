@@ -2155,7 +2155,12 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
 
     // Jeśli to przycisk rozwiązywania konfliktu
     if (interaction.customId.startsWith('phase2_resolve_')) {
-        const chosenValue = parseInt(interaction.customId.split('_')[2]);
+        const parts = interaction.customId.split('_');
+        const nick = parts[2];
+        const chosenValue = parseInt(parts[3]);
+
+        logger.info(`[PHASE2] Rozstrzygam konflikt dla nick="${nick}", value="${chosenValue}"`);
+
         const conflict = phaseService.getNextUnresolvedConflict(session);
 
         if (conflict) {
@@ -2195,6 +2200,14 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             });
             logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
         } else {
+            // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
+            const lastRoundData = {
+                round: session.currentRound,
+                results: phaseService.getFinalResults(session)
+            };
+            session.roundsData.push(lastRoundData);
+            logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3`);
+
             await showPhase2FinalSummary(interaction, session, phaseService);
         }
         return;
@@ -2232,6 +2245,14 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                 });
                 logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
             } else {
+                // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
+                const lastRoundData = {
+                    round: session.currentRound,
+                    results: phaseService.getFinalResults(session)
+                };
+                session.roundsData.push(lastRoundData);
+                logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3`);
+
                 await showPhase2FinalSummary(interaction, session, phaseService);
             }
         }
