@@ -825,8 +825,22 @@ class PhaseService {
 
         // Sumuj wyniki ze wszystkich rund
         for (const roundData of session.roundsData) {
+            if (!roundData.results) {
+                logger.error(`[PHASE2] ❌ Brak wyników dla rundy ${roundData.round}`);
+                continue;
+            }
+
+            if (!(roundData.results instanceof Map)) {
+                logger.error(`[PHASE2] ❌ Wyniki rundy ${roundData.round} nie są Mapą:`, typeof roundData.results);
+                continue;
+            }
+
             logger.info(`[PHASE2] Runda ${roundData.round}: ${roundData.results.size} graczy`);
             for (const [nick, score] of roundData.results) {
+                if (score === null || score === undefined || isNaN(score)) {
+                    logger.warn(`[PHASE2] ⚠️ Nieprawidłowy wynik dla ${nick} w rundzie ${roundData.round}: ${score}`);
+                    continue;
+                }
                 const currentScore = summedResults.get(nick) || 0;
                 summedResults.set(nick, currentScore + score);
                 logger.debug(`[PHASE2] ${nick}: ${currentScore} + ${score} = ${currentScore + score}`);
