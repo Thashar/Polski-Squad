@@ -426,6 +426,10 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
     } else if (interaction.customId.startsWith('wyniki_select_week_')) {
         const phase = interaction.customId.replace('wyniki_select_week_', '');
         await handleWynikiWeekSelect(interaction, sharedState, phase);
+    } else if (interaction.customId === 'modyfikuj_select_clan') {
+        await handleModyfikujClanSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_select_phase|')) {
+        await handleModyfikujPhaseSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_round|')) {
         await handleModyfikujRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_week_')) {
@@ -967,16 +971,7 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
-            .setDescription('Modyfikuj wynik gracza')
-            .addStringOption(option =>
-                option.setName('faza')
-                    .setDescription('Wybierz fazę')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: 'Faza 1', value: 'phase1' },
-                        { name: 'Faza 2', value: 'phase2' }
-                    )
-            ),
+            .setDescription('Modyfikuj wynik gracza'),
 
         new SlashCommandBuilder()
             .setName('faza2')
@@ -2403,57 +2398,40 @@ async function handleModyfikujCommand(interaction, sharedState) {
         return;
     }
 
-    const selectedPhase = interaction.options.getString('faza');
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     try {
         const clanName = config.roleDisplayNames[userClan];
-        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
 
-        // Dla Fazy 2 - pokaż wybór rundy
-        if (selectedPhase === 'phase2') {
-            const roundOptions = [
-                new StringSelectMenuOptionBuilder()
-                    .setLabel('Runda 1')
-                    .setValue('round1'),
-                new StringSelectMenuOptionBuilder()
-                    .setLabel('Runda 2')
-                    .setValue('round2'),
-                new StringSelectMenuOptionBuilder()
-                    .setLabel('Runda 3')
-                    .setValue('round3'),
-                new StringSelectMenuOptionBuilder()
-                    .setLabel('Suma')
-                    .setValue('summary')
-            ];
+        // Krok 1: Wybór klanu (tylko klan użytkownika)
+        const clanOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel(clanName)
+                .setValue(userClan)
+        ];
 
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId(`modyfikuj_select_round|${userClan}|${selectedPhase}`)
-                .setPlaceholder('Wybierz rundę')
-                .addOptions(roundOptions);
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('modyfikuj_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
 
-            const row = new ActionRowBuilder().addComponents(selectMenu);
+        const row = new ActionRowBuilder().addComponents(selectMenu);
 
-            const embed = new EmbedBuilder()
-                .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}`)
-                .setDescription(`**Klan:** ${clanName}\n**Krok 1/5:** Wybierz rundę do modyfikacji:`)
-                .setColor('#FF9900')
-                .setTimestamp();
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku')
+            .setDescription(`**Krok 1/5:** Wybierz klan (dostępny: **${clanName}**)`)
+            .setColor('#FF9900')
+            .setTimestamp();
 
-            await interaction.editReply({
-                embeds: [embed],
-                components: [row]
-            });
-        } else {
-            // Dla Fazy 1 - od razu pokaż wybór tygodnia
-            await showModyfikujWeekSelection(interaction, databaseService, config, userClan, selectedPhase);
-        }
+        await interaction.reply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
 
     } catch (error) {
         logger.error('[MODYFIKUJ] ❌ Błąd komendy /modyfikuj:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas uruchamiania komendy.'
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas uruchamiania komendy.',
+            flags: MessageFlags.Ephemeral
         });
     }
 }
@@ -2535,11 +2513,11 @@ async function showModyfikujWeekSelection(interaction, databaseService, config, 
 
     const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
     const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
-    const stepNumber = selectedPhase === 'phase2' ? '2/5' : '1/4';
+    const stepNumber = selectedPhase === 'phase2' ? '4/5' : '3/5';
 
     const embed = new EmbedBuilder()
         .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}${roundText}`)
-        .setDescription(`**Krok ${stepNumber}:** Wybierz tydzień dla klanu **${clanName}**\n\nTygodni: ${weeksForClan.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
+        .setDescription(`**Krok ${stepNumber}:** Wybierz tydzień\n**Klan:** ${clanName}\n\nTygodni: ${weeksForClan.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
         .setColor('#FF9900')
         .setTimestamp();
 
@@ -2547,6 +2525,52 @@ async function showModyfikujWeekSelection(interaction, databaseService, config, 
         embeds: [embed],
         components: components
     });
+}
+
+async function handleModyfikujClanSelect(interaction, sharedState) {
+    const { config } = sharedState;
+
+    await interaction.deferUpdate();
+
+    try {
+        const selectedClan = interaction.values[0];
+        const clanName = config.roleDisplayNames[selectedClan];
+
+        // Krok 2: Wybór fazy
+        const phaseOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 1')
+                .setValue('phase1'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 2')
+                .setValue('phase2')
+        ];
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`modyfikuj_select_phase|${selectedClan}`)
+            .setPlaceholder('Wybierz fazę')
+            .addOptions(phaseOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku')
+            .setDescription(`**Krok 2/5:** Wybierz fazę\n**Klan:** ${clanName}`)
+            .setColor('#FF9900')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd wyboru klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyboru klanu.',
+            components: []
+        });
+    }
 }
 
 async function handleModyfikujRoundSelect(interaction, sharedState) {
@@ -2585,88 +2609,42 @@ async function handleModyfikujPhaseSelect(interaction, sharedState, page = 0) {
 
         const clanName = config.roleDisplayNames[selectedClan];
 
-        // Pobierz dostępne tygodnie dla wybranego klanu i fazy
-        let allWeeks;
+        // Dla Fazy 2 - pokaż wybór rundy (bez opcji Suma)
         if (selectedPhase === 'phase2') {
-            allWeeks = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
-        } else {
-            allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-        }
+            const roundOptions = [
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('Runda 1')
+                    .setValue('round1'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('Runda 2')
+                    .setValue('round2'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('Runda 3')
+                    .setValue('round3')
+            ];
 
-        const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`modyfikuj_select_round|${selectedClan}|${selectedPhase}`)
+                .setPlaceholder('Wybierz rundę')
+                .addOptions(roundOptions);
 
-        if (weeksForClan.length === 0) {
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🔧 Modyfikacja wyniku - Faza 2')
+                .setDescription(`**Krok 3/5:** Wybierz rundę\n**Klan:** ${clanName}`)
+                .setColor('#FF9900')
+                .setTimestamp();
+
             await interaction.editReply({
-                content: `❌ Brak zapisanych wyników dla klanu **${clanName}**.`,
-                components: []
+                embeds: [embed],
+                components: [row]
             });
             return;
         }
 
-        // Paginacja tygodni
-        const weeksPerPage = 20;
-        const totalPages = Math.ceil(weeksForClan.length / weeksPerPage);
-        const currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        const startIndex = currentPage * weeksPerPage;
-        const endIndex = startIndex + weeksPerPage;
-        const weeksOnPage = weeksForClan.slice(startIndex, endIndex);
-
-        // Utwórz select menu z tygodniami na aktualnej stronie
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`modyfikuj_select_week_${selectedPhase}`)
-            .setPlaceholder('Wybierz tydzień')
-            .addOptions(
-                weeksOnPage.map(week => {
-                    const date = new Date(week.createdAt);
-                    const dateStr = date.toLocaleDateString('pl-PL', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric'
-                    });
-
-                    return new StringSelectMenuOptionBuilder()
-                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
-                        .setDescription(`Zapisano: ${dateStr}`)
-                        .setValue(`${selectedClan}|${week.weekNumber}-${week.year}`);
-                })
-            );
-
-        const components = [new ActionRowBuilder().addComponents(selectMenu)];
-
-        // Dodaj przyciski paginacji jeśli jest więcej niż 1 strona
-        if (totalPages > 1) {
-            const paginationRow = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`modyfikuj_week_prev|${selectedPhase}|${selectedClan}|${currentPage}`)
-                        .setLabel('◀ Poprzednia')
-                        .setStyle(ButtonStyle.Primary)
-                        .setDisabled(currentPage === 0),
-                    new ButtonBuilder()
-                        .setCustomId(`modyfikuj_week_info|${selectedPhase}|${selectedClan}|${currentPage}`)
-                        .setLabel(`Strona ${currentPage + 1}/${totalPages}`)
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true),
-                    new ButtonBuilder()
-                        .setCustomId(`modyfikuj_week_next|${selectedPhase}|${selectedClan}|${currentPage}`)
-                        .setLabel('Następna ▶')
-                        .setStyle(ButtonStyle.Primary)
-                        .setDisabled(currentPage === totalPages - 1)
-                );
-            components.push(paginationRow);
-        }
-
-        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
-        const embed = new EmbedBuilder()
-            .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}`)
-            .setDescription(`**Krok 2/4:** Wybierz tydzień dla klanu **${clanName}**\n\nTygodni: ${weeksForClan.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
-            .setColor('#FF9900')
-            .setTimestamp();
-
-        await interaction.editReply({
-            embeds: [embed],
-            components: components
-        });
+        // Dla Fazy 1 - pokaż wybór tygodnia
+        await showModyfikujWeekSelection(interaction, databaseService, config, selectedClan, selectedPhase, null, page);
 
     } catch (error) {
         logger.error('[MODYFIKUJ] ❌ Błąd wyboru fazy:', error);
@@ -2683,6 +2661,11 @@ async function handleModyfikujWeekSelect(interaction, sharedState, page = 0) {
     await interaction.deferUpdate();
 
     try {
+        // Parsuj customId: modyfikuj_select_week_phase1 lub modyfikuj_select_week_phase2|round1
+        const customIdParts = interaction.customId.replace('modyfikuj_select_week_', '').split('|');
+        const selectedPhase = customIdParts[0]; // phase1 lub phase2
+        const selectedRound = customIdParts[1] || null; // round1, round2, round3, summary lub null dla phase1
+
         const selectedValue = interaction.values[0];
         const [clan, weekKey] = selectedValue.split('|');
         const [weekNumber, year] = weekKey.split('-').map(Number);
@@ -2690,18 +2673,58 @@ async function handleModyfikujWeekSelect(interaction, sharedState, page = 0) {
         const clanName = config.roleDisplayNames[clan];
 
         // Pobierz wyniki dla wybranego tygodnia i klanu
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        let weekData;
+        let players;
 
-        if (!weekData || !weekData.players || weekData.players.length === 0) {
+        if (selectedPhase === 'phase2') {
+            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+            if (!weekData) {
+                await interaction.editReply({
+                    content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                    components: []
+                });
+                return;
+            }
+
+            // Wybierz graczy z odpowiedniej rundy (tylko round1, round2, round3 - bez summary)
+            if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
+                players = weekData.rounds[0].players;
+            } else if (selectedRound === 'round2' && weekData.rounds && weekData.rounds[1]) {
+                players = weekData.rounds[1].players;
+            } else if (selectedRound === 'round3' && weekData.rounds && weekData.rounds[2]) {
+                players = weekData.rounds[2].players;
+            } else {
+                await interaction.editReply({
+                    content: `❌ Brak danych dla wybranej rundy.`,
+                    components: []
+                });
+                return;
+            }
+        } else {
+            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+
+            if (!weekData || !weekData.players) {
+                await interaction.editReply({
+                    content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                    components: []
+                });
+                return;
+            }
+
+            players = weekData.players;
+        }
+
+        if (!players || players.length === 0) {
             await interaction.editReply({
-                content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                content: `❌ Brak graczy dla wybranego tygodnia.`,
                 components: []
             });
             return;
         }
 
         // Sortuj graczy alfabetycznie
-        const sortedPlayers = weekData.players.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        const sortedPlayers = [...players].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
         // Paginacja
         const playersPerPage = 20;
@@ -2711,9 +2734,10 @@ async function handleModyfikujWeekSelect(interaction, sharedState, page = 0) {
         const endIndex = startIndex + playersPerPage;
         const playersOnPage = sortedPlayers.slice(startIndex, endIndex);
 
-        // Utwórz select menu z graczami na aktualnej stronie
+        // Utwórz select menu z graczami
+        const customIdSuffix = selectedRound ? `${selectedPhase}|${selectedRound}` : selectedPhase;
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('modyfikuj_select_player')
+            .setCustomId(`modyfikuj_select_player_${customIdSuffix}`)
             .setPlaceholder('Wybierz gracza')
             .addOptions(
                 playersOnPage.map(player => {
@@ -2730,17 +2754,17 @@ async function handleModyfikujWeekSelect(interaction, sharedState, page = 0) {
             const paginationRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${currentPage}`)
+                        .setCustomId(`modyfikuj_page_prev|${customIdSuffix}|${clan}|${weekNumber}-${year}|${currentPage}`)
                         .setLabel('◀ Poprzednia')
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(currentPage === 0),
                     new ButtonBuilder()
-                        .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${currentPage}`)
+                        .setCustomId(`modyfikuj_page_info|${customIdSuffix}|${clan}|${weekNumber}-${year}|${currentPage}`)
                         .setLabel(`Strona ${currentPage + 1}/${totalPages}`)
                         .setStyle(ButtonStyle.Secondary)
                         .setDisabled(true),
                     new ButtonBuilder()
-                        .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${currentPage}`)
+                        .setCustomId(`modyfikuj_page_next|${customIdSuffix}|${clan}|${weekNumber}-${year}|${currentPage}`)
                         .setLabel('Następna ▶')
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(currentPage === totalPages - 1)
@@ -2748,9 +2772,13 @@ async function handleModyfikujWeekSelect(interaction, sharedState, page = 0) {
             components.push(paginationRow);
         }
 
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
+        const stepNumber = selectedPhase === 'phase2' ? '3/5' : '2/4';
+
         const embed = new EmbedBuilder()
-            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
-            .setDescription(`**Krok 3/4:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**)\n\nGraczy: ${sortedPlayers.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
+            .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}${roundText}`)
+            .setDescription(`**Krok ${stepNumber}:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**)\n\nGraczy: ${sortedPlayers.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
             .setColor('#FF9900')
             .setTimestamp();
 
@@ -2772,13 +2800,34 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
+        // Parsuj customId: modyfikuj_select_player_phase1 lub modyfikuj_select_player_phase2|round1
+        const customIdParts = interaction.customId.replace('modyfikuj_select_player_', '').split('|');
+        const selectedPhase = customIdParts[0];
+        const selectedRound = customIdParts[1] || null;
+
         const selectedValue = interaction.values[0];
         const [clan, weekKey, userId] = selectedValue.split('|');
         const [weekNumber, year] = weekKey.split('-').map(Number);
 
         // Pobierz dane gracza
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
-        const player = weekData.players.find(p => p.userId === userId);
+        let weekData;
+        let player;
+
+        if (selectedPhase === 'phase2') {
+            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+            // Znajdź gracza w odpowiedniej rundzie (tylko round1, round2, round3)
+            if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
+                player = weekData.rounds[0].players.find(p => p.userId === userId);
+            } else if (selectedRound === 'round2' && weekData.rounds && weekData.rounds[1]) {
+                player = weekData.rounds[1].players.find(p => p.userId === userId);
+            } else if (selectedRound === 'round3' && weekData.rounds && weekData.rounds[2]) {
+                player = weekData.rounds[2].players.find(p => p.userId === userId);
+            }
+        } else {
+            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+            player = weekData.players.find(p => p.userId === userId);
+        }
 
         if (!player) {
             await interaction.reply({
@@ -2789,8 +2838,9 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
         }
 
         // Pokaż modal do wprowadzenia nowego wyniku
+        const customIdSuffix = selectedRound ? `${selectedPhase}|${selectedRound}` : selectedPhase;
         const modal = new ModalBuilder()
-            .setCustomId(`modyfikuj_modal|${clan}|${weekNumber}-${year}|${userId}`)
+            .setCustomId(`modyfikuj_modal_${customIdSuffix}|${clan}|${weekNumber}-${year}|${userId}`)
             .setTitle('Modyfikuj wynik gracza');
 
         const scoreInput = new TextInputBuilder()
@@ -2825,6 +2875,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         const clan = parts[1];
         const weekKey = parts[2];
         const currentPage = parseInt(parts[3]);
+        const phaseAndRound = parts[4] || 'phase1'; // phase1 lub phase2|round1
 
         const [weekNumber, year] = weekKey.split('-').map(Number);
 
@@ -2838,10 +2889,32 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
 
         const clanName = config.roleDisplayNames[clan];
 
-        // Pobierz wyniki dla wybranego tygodnia i klanu
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        // Parsuj fazę i rundę
+        const phaseParts = phaseAndRound.split('|');
+        const selectedPhase = phaseParts[0];
+        const selectedRound = phaseParts[1] || null;
 
-        if (!weekData || !weekData.players || weekData.players.length === 0) {
+        // Pobierz wyniki dla wybranego tygodnia i klanu
+        let weekData;
+        let players;
+
+        if (selectedPhase === 'phase2') {
+            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+            // Wybierz graczy z odpowiedniej rundy (tylko round1, round2, round3)
+            if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
+                players = weekData.rounds[0].players;
+            } else if (selectedRound === 'round2' && weekData.rounds && weekData.rounds[1]) {
+                players = weekData.rounds[1].players;
+            } else if (selectedRound === 'round3' && weekData.rounds && weekData.rounds[2]) {
+                players = weekData.rounds[2].players;
+            }
+        } else {
+            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+            players = weekData.players;
+        }
+
+        if (!players || players.length === 0) {
             await interaction.update({
                 content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
                 embeds: [],
@@ -2851,7 +2924,7 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         }
 
         // Sortuj graczy alfabetycznie
-        const sortedPlayers = weekData.players.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        const sortedPlayers = [...players].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
         // Paginacja
         const playersPerPage = 20;
@@ -2862,8 +2935,9 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         const playersOnPage = sortedPlayers.slice(startIndex, endIndex);
 
         // Utwórz select menu z graczami na aktualnej stronie
+        const customIdSuffix = selectedRound ? `${selectedPhase}|${selectedRound}` : selectedPhase;
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('modyfikuj_select_player')
+            .setCustomId(`modyfikuj_select_player_${customIdSuffix}`)
             .setPlaceholder('Wybierz gracza')
             .addOptions(
                 playersOnPage.map(player => {
@@ -2879,26 +2953,30 @@ async function handleModyfikujPaginationButton(interaction, sharedState) {
         const paginationRow = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${validPage}`)
+                    .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${validPage}|${phaseAndRound}`)
                     .setLabel('◀ Poprzednia')
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(validPage === 0),
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${validPage}`)
+                    .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${validPage}|${phaseAndRound}`)
                     .setLabel(`Strona ${validPage + 1}/${totalPages}`)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(true),
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${validPage}`)
+                    .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${validPage}|${phaseAndRound}`)
                     .setLabel('Następna ▶')
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(validPage === totalPages - 1)
             );
         components.push(paginationRow);
 
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
+        const stepNumber = selectedPhase === 'phase2' ? '5/5' : '4/5';
+
         const embed = new EmbedBuilder()
-            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
-            .setDescription(`**Krok 3/4:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**)\n\nGraczy: ${sortedPlayers.length} | Strona ${validPage + 1}/${totalPages}`)
+            .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}${roundText}`)
+            .setDescription(`**Krok ${stepNumber}:** Wybierz gracza do modyfikacji\n**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n\nGraczy: ${sortedPlayers.length} | Strona ${validPage + 1}/${totalPages}`)
             .setColor('#FF9900')
             .setTimestamp();
 
@@ -3025,7 +3103,26 @@ async function handleModyfikujModalSubmit(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        const [_, clan, weekKey, userId] = interaction.customId.split('|');
+        // Parsuj customId: modyfikuj_modal_phase1|clan|week|userId lub modyfikuj_modal_phase2|round1|clan|week|userId
+        const customIdParts = interaction.customId.replace('modyfikuj_modal_', '').split('|');
+
+        let selectedPhase, selectedRound, clan, weekKey, userId;
+
+        if (customIdParts[0].includes('phase2')) {
+            const phaseAndRound = customIdParts[0].split('|');
+            selectedPhase = phaseAndRound[0];
+            selectedRound = phaseAndRound[1];
+            clan = customIdParts[1];
+            weekKey = customIdParts[2];
+            userId = customIdParts[3];
+        } else {
+            selectedPhase = customIdParts[0];
+            selectedRound = null;
+            clan = customIdParts[1];
+            weekKey = customIdParts[2];
+            userId = customIdParts[3];
+        }
+
         const [weekNumber, year] = weekKey.split('-').map(Number);
         const newScore = interaction.fields.getTextInputValue('new_score');
 
@@ -3041,8 +3138,24 @@ async function handleModyfikujModalSubmit(interaction, sharedState) {
         const newScoreNum = parseInt(newScore);
 
         // Pobierz dane gracza
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
-        const player = weekData.players.find(p => p.userId === userId);
+        let weekData;
+        let player;
+
+        if (selectedPhase === 'phase2') {
+            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+            // Znajdź gracza w odpowiedniej rundzie (tylko round1, round2, round3)
+            if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
+                player = weekData.rounds[0].players.find(p => p.userId === userId);
+            } else if (selectedRound === 'round2' && weekData.rounds && weekData.rounds[1]) {
+                player = weekData.rounds[1].players.find(p => p.userId === userId);
+            } else if (selectedRound === 'round3' && weekData.rounds && weekData.rounds[2]) {
+                player = weekData.rounds[2].players.find(p => p.userId === userId);
+            }
+        } else {
+            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+            player = weekData.players.find(p => p.userId === userId);
+        }
 
         if (!player) {
             await interaction.reply({
@@ -3053,10 +3166,12 @@ async function handleModyfikujModalSubmit(interaction, sharedState) {
         }
 
         const clanName = config.roleDisplayNames[clan];
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
 
         // Pokaż potwierdzenie
         const embed = new EmbedBuilder()
-            .setTitle('⚠️ Potwierdzenie zmiany wyniku')
+            .setTitle(`⚠️ Potwierdzenie zmiany wyniku - ${phaseTitle}${roundText}`)
             .setDescription(`Czy na pewno chcesz zmienić wynik dla **${player.displayName}**?`)
             .setColor('#FF9900')
             .addFields(
@@ -3067,10 +3182,11 @@ async function handleModyfikujModalSubmit(interaction, sharedState) {
             )
             .setTimestamp();
 
+        const customIdSuffix = selectedRound ? `${selectedPhase}|${selectedRound}` : selectedPhase;
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`modyfikuj_confirm|${clan}|${weekNumber}-${year}|${userId}|${newScoreNum}`)
+                    .setCustomId(`modyfikuj_confirm_${customIdSuffix}|${clan}|${weekNumber}-${year}|${userId}|${newScoreNum}`)
                     .setLabel('🟢 Zamień')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
@@ -3107,13 +3223,50 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
     }
 
     try {
-        const [_, clan, weekKey, userId, newScore] = interaction.customId.split('|');
+        // Parsuj customId: modyfikuj_confirm_phase1|clan|week|userId|score lub modyfikuj_confirm_phase2|round1|clan|week|userId|score
+        const customIdParts = interaction.customId.replace('modyfikuj_confirm_', '').split('|');
+
+        let selectedPhase, selectedRound, clan, weekKey, userId, newScore;
+
+        if (customIdParts[0].includes('phase2')) {
+            const phaseAndRound = customIdParts[0].split('|');
+            selectedPhase = phaseAndRound[0];
+            selectedRound = phaseAndRound[1];
+            clan = customIdParts[1];
+            weekKey = customIdParts[2];
+            userId = customIdParts[3];
+            newScore = customIdParts[4];
+        } else {
+            selectedPhase = customIdParts[0];
+            selectedRound = null;
+            clan = customIdParts[1];
+            weekKey = customIdParts[2];
+            userId = customIdParts[3];
+            newScore = customIdParts[4];
+        }
+
         const [weekNumber, year] = weekKey.split('-').map(Number);
         const newScoreNum = parseInt(newScore);
 
         // Pobierz dane gracza przed zmianą
-        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
-        const player = weekData.players.find(p => p.userId === userId);
+        let weekData;
+        let player;
+
+        if (selectedPhase === 'phase2') {
+            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+            // Znajdź gracza w odpowiedniej rundzie (tylko round1, round2, round3)
+            if (selectedRound === 'round1' && weekData.rounds && weekData.rounds[0]) {
+                player = weekData.rounds[0].players.find(p => p.userId === userId);
+            } else if (selectedRound === 'round2' && weekData.rounds && weekData.rounds[1]) {
+                player = weekData.rounds[1].players.find(p => p.userId === userId);
+            } else if (selectedRound === 'round3' && weekData.rounds && weekData.rounds[2]) {
+                player = weekData.rounds[2].players.find(p => p.userId === userId);
+            }
+        } else {
+            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+            player = weekData.players.find(p => p.userId === userId);
+        }
 
         if (!player) {
             await interaction.update({
@@ -3127,21 +3280,50 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
         const oldScore = player.score;
 
         // Zaktualizuj wynik
-        await databaseService.savePhase1Result(
-            interaction.guild.id,
-            userId,
-            player.displayName,
-            newScoreNum,
-            weekNumber,
-            year,
-            clan
-        );
+        if (selectedPhase === 'phase2') {
+            // Aktualizuj wynik w odpowiedniej rundzie (tylko round1, round2, round3)
+            if (selectedRound === 'round1') {
+                weekData.rounds[0].players = weekData.rounds[0].players.map(p =>
+                    p.userId === userId ? { ...p, score: newScoreNum } : p
+                );
+            } else if (selectedRound === 'round2') {
+                weekData.rounds[1].players = weekData.rounds[1].players.map(p =>
+                    p.userId === userId ? { ...p, score: newScoreNum } : p
+                );
+            } else if (selectedRound === 'round3') {
+                weekData.rounds[2].players = weekData.rounds[2].players.map(p =>
+                    p.userId === userId ? { ...p, score: newScoreNum } : p
+                );
+            }
+
+            // Zapisz zaktualizowane dane
+            await databaseService.savePhase2Results(
+                interaction.guild.id,
+                weekNumber,
+                year,
+                clan,
+                weekData.rounds,
+                weekData.summary.players
+            );
+        } else {
+            await databaseService.savePhase1Result(
+                interaction.guild.id,
+                userId,
+                player.displayName,
+                newScoreNum,
+                weekNumber,
+                year,
+                clan
+            );
+        }
 
         const clanName = config.roleDisplayNames[clan];
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
 
         // Potwierdzenie
         const embed = new EmbedBuilder()
-            .setTitle('✅ Wynik został zmieniony')
+            .setTitle(`✅ Wynik został zmieniony - ${phaseTitle}${roundText}`)
             .setDescription(`Pomyślnie zmieniono wynik dla **${player.displayName}**`)
             .setColor('#00FF00')
             .addFields(
