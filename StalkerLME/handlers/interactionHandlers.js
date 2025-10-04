@@ -2306,13 +2306,8 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     });
 
     try {
-        // Zapisz ostatnią rundę do roundsData
-        const lastRoundData = {
-            round: session.currentRound,
-            results: phaseService.getFinalResults(session)
-        };
-        session.roundsData.push(lastRoundData);
-
+        // Wyniki wszystkich rund są już w roundsData (dodane po rozwiązaniu konfliktów)
+        logger.info(`[PHASE2] 📊 Sumowanie wyników z ${session.roundsData.length} rund...`);
         const summedResults = phaseService.sumPhase2Results(session);
         const weekInfo = phaseService.getCurrentWeekInfo();
 
@@ -3475,6 +3470,23 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
                     p.userId === userId ? { ...p, score: newScoreNum } : p
                 );
             }
+
+            // Przelicz sumę wyników dla wszystkich graczy
+            const summedScores = new Map(); // userId -> total score
+            for (const round of weekData.rounds) {
+                for (const p of round.players) {
+                    const current = summedScores.get(p.userId) || 0;
+                    summedScores.set(p.userId, current + p.score);
+                }
+            }
+
+            // Zaktualizuj summary.players z nowymi sumami
+            weekData.summary.players = weekData.summary.players.map(p => ({
+                ...p,
+                score: summedScores.get(p.userId) || 0
+            }));
+
+            logger.info(`[MODYFIKUJ] Zaktualizowano sumę dla gracza ${userId}: ${summedScores.get(userId)}`);
 
             // Zapisz zaktualizowane dane (zachowaj oryginalnego creatora)
             await databaseService.savePhase2Results(
