@@ -190,11 +190,38 @@ class PhaseService {
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
 
+        // Wyczyść duże struktury danych z pamięci
+        if (session.processedImages) {
+            session.processedImages = [];
+        }
+        if (session.aggregatedResults) {
+            session.aggregatedResults.clear();
+        }
+        if (session.conflicts) {
+            session.conflicts = [];
+        }
+        if (session.resolvedConflicts) {
+            session.resolvedConflicts.clear();
+        }
+        if (session.roundsData) {
+            session.roundsData = [];
+        }
+        if (session.downloadedFiles) {
+            session.downloadedFiles = [];
+        }
+
         // Odblokuj przetwarzanie dla tego guild
         this.clearActiveProcessing(session.guildId);
 
         this.activeSessions.delete(sessionId);
-        logger.info(`[PHASE1] 🗑️ Usunięto sesję: ${sessionId}`);
+
+        // Wymuś garbage collection jeśli dostępne (tylko w trybie --expose-gc)
+        if (global.gc) {
+            global.gc();
+            logger.info(`[PHASE${session.phase || 1}] 🗑️ Usunięto sesję i wywołano garbage collection: ${sessionId}`);
+        } else {
+            logger.info(`[PHASE${session.phase || 1}] 🗑️ Usunięto sesję: ${sessionId}`);
+        }
     }
 
     /**
@@ -708,15 +735,21 @@ class PhaseService {
 
         const clanName = this.config.roleDisplayNames[clan] || clan;
 
+        const fields = [
+            { name: '📅 Data zapisu', value: dateStr, inline: true },
+            { name: '👥 Liczba graczy', value: existingData.playerCount.toString(), inline: true }
+        ];
+
+        // Dodaj sumę TOP30 tylko dla Fazy 1
+        if (phase === 1) {
+            fields.push({ name: '🏆 Suma top 30', value: `${existingData.top30Sum.toLocaleString('pl-PL')} pkt`, inline: true });
+        }
+
         const embed = new EmbedBuilder()
             .setTitle('⚠️ Dane już istnieją')
             .setDescription(`Dane Fazy ${phase} dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** (klan: **${clanName}**) już istnieją w bazie.`)
             .setColor('#FF6600')
-            .addFields(
-                { name: '📅 Data zapisu', value: dateStr, inline: true },
-                { name: '👥 Liczba graczy', value: existingData.playerCount.toString(), inline: true },
-                { name: '🏆 Suma top 30', value: `${existingData.top30Sum.toLocaleString('pl-PL')} pkt`, inline: true }
-            )
+            .addFields(...fields)
             .setTimestamp()
             .setFooter({ text: 'Czy chcesz nadpisać te dane?' });
 
