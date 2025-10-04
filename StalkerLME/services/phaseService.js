@@ -651,17 +651,24 @@ class PhaseService {
         const phaseTitle = phase === 2 ? 'Faza 2' : 'Faza 1';
         const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
 
+        const fields = [
+            { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
+            { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
+            { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true }
+        ];
+
+        // Dodaj sumę top 30 tylko dla Fazy 1
+        if (phase === 1) {
+            fields.push({ name: '🏆 Suma wyników top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false });
+        }
+
+        fields.push({ name: '🎯 Klan', value: clanName, inline: false });
+
         const embed = new EmbedBuilder()
             .setTitle(`📊 Podsumowanie ${phaseTitle} - Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
             .setDescription('Przeanalizowano wszystkie zdjęcia i rozstrzygnięto konflikty.')
             .setColor('#00FF00')
-            .addFields(
-                { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
-                { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
-                { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true },
-                { name: '🏆 Suma wyników top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false },
-                { name: '🎯 Klan', value: clanName, inline: false }
-            )
+            .addFields(...fields)
             .setTimestamp()
             .setFooter({ text: 'Czy zatwierdzić i zapisać dane?' });
 

@@ -500,6 +500,31 @@ class DatabaseService {
         return false;
     }
 
+    async savePhase2Results(guildId, weekNumber, year, clan, roundsData, summaryPlayers) {
+        const data = await this.loadPhase2Data();
+        const weekKey = `${weekNumber}-${year}`;
+
+        if (!data[guildId]) {
+            data[guildId] = {};
+        }
+
+        if (!data[guildId][weekKey]) {
+            data[guildId][weekKey] = {};
+        }
+
+        data[guildId][weekKey][clan] = {
+            rounds: roundsData,
+            summary: {
+                players: summaryPlayers
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        await this.savePhase2Data(data);
+        logger.info(`[PHASE2] 💾 Zapisano dane dla ${summaryPlayers.length} graczy (3 rundy + suma, klan: ${clan})`);
+    }
+
     async savePhase2Result(guildId, userId, displayName, score, weekNumber, year, clan) {
         const data = await this.loadPhase2Data();
         const weekKey = `${weekNumber}-${year}`;

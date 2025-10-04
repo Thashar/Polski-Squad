@@ -814,6 +814,8 @@ async function handleButton(interaction, sharedState) {
         await handleModyfikujWeekPaginationButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('wyniki_weeks_prev_') || interaction.customId.startsWith('wyniki_weeks_next_')) {
         await handleWynikiWeekPaginationButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('wyniki_phase2_view|')) {
+        await handleWynikiPhase2ViewButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_overwrite_')) {
         await handlePhase2OverwriteButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_complete_') || interaction.customId.startsWith('phase2_resolve_')) {
@@ -2250,9 +2252,42 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     });
 
     try {
+        // Zapisz ostatnią rundę do roundsData
+        const lastRoundData = {
+            round: session.currentRound,
+            results: phaseService.getFinalResults(session)
+        };
+        session.roundsData.push(lastRoundData);
+
         const summedResults = phaseService.sumPhase2Results(session);
         const weekInfo = phaseService.getCurrentWeekInfo();
 
+        // Przygotuj dane z każdej rundy
+        const roundsData = [];
+        for (const roundData of session.roundsData) {
+            const roundPlayers = [];
+            for (const [nick, score] of roundData.results) {
+                const member = interaction.guild.members.cache.find(m =>
+                    m.displayName.toLowerCase() === nick.toLowerCase() ||
+                    m.user.username.toLowerCase() === nick.toLowerCase()
+                );
+
+                if (member) {
+                    roundPlayers.push({
+                        userId: member.id,
+                        displayName: member.displayName,
+                        score: score
+                    });
+                }
+            }
+            roundsData.push({
+                round: roundData.round,
+                players: roundPlayers
+            });
+        }
+
+        // Przygotuj zsumowane wyniki
+        const summaryPlayers = [];
         for (const [nick, totalScore] of summedResults) {
             const member = interaction.guild.members.cache.find(m =>
                 m.displayName.toLowerCase() === nick.toLowerCase() ||
@@ -2260,17 +2295,23 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             );
 
             if (member) {
-                await databaseService.savePhase2Result(
-                    session.guildId,
-                    member.id,
-                    member.displayName,
-                    totalScore,
-                    weekInfo.weekNumber,
-                    weekInfo.year,
-                    session.clan
-                );
+                summaryPlayers.push({
+                    userId: member.id,
+                    displayName: member.displayName,
+                    score: totalScore
+                });
             }
         }
+
+        // Zapisz wszystko do bazy
+        await databaseService.savePhase2Results(
+            session.guildId,
+            weekInfo.weekNumber,
+            weekInfo.year,
+            session.clan,
+            roundsData,
+            summaryPlayers
+        );
 
         const stats = phaseService.calculateStatistics(summedResults);
         const clanName = sharedState.config.roleDisplayNames[session.clan] || session.clan;
@@ -2283,7 +2324,6 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
                 { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
                 { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
                 { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
-                { name: '🏆 Suma top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false },
                 { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()
@@ -3176,7 +3216,7 @@ async function handleWynikiWeekPaginationButton(interaction, sharedState) {
     }
 }
 
-async function handleWynikiWeekSelect(interaction, sharedState, phase) {
+async function handleWynikiWeekSelect(interaction, sharedState, phase, view = 'summary') {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -3196,7 +3236,7 @@ async function handleWynikiWeekSelect(interaction, sharedState, phase) {
             weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
         }
 
-        if (!weekData || !weekData.players || weekData.players.length === 0) {
+        if (!weekData) {
             await interaction.editReply({
                 content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
                 components: []
@@ -3204,38 +3244,50 @@ async function handleWynikiWeekSelect(interaction, sharedState, phase) {
             return;
         }
 
-        // Sortuj graczy według wyniku (malejąco)
-        const sortedPlayers = weekData.players.sort((a, b) => b.score - a.score);
+        // Dla Phase 2 - pokaż wyniki z możliwością przełączania między rundami
+        if (phase === 'phase2') {
+            await showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config);
+        } else {
+            // Phase 1 - standardowe wyświetlanie
+            if (!weekData.players || weekData.players.length === 0) {
+                await interaction.editReply({
+                    content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                    components: []
+                });
+                return;
+            }
 
-        // Znajdź maksymalny wynik do obliczania proporcji
-        const maxScore = sortedPlayers[0]?.score || 1;
+            const sortedPlayers = weekData.players.sort((a, b) => b.score - a.score);
+            const maxScore = sortedPlayers[0]?.score || 1;
 
-        // Utwórz wizualizację wyników
-        const resultsText = sortedPlayers.map((player, index) => {
-            const position = index + 1;
-            const barLength = 16; // Długość paska
-            const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
-            const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+            // Oblicz sumę TOP30
+            const top30Players = sortedPlayers.slice(0, 30);
+            const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
 
-            // Sprawdź czy to użytkownik wywołujący komendę
-            const isCaller = player.userId === interaction.user.id;
-            const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
+            const resultsText = sortedPlayers.map((player, index) => {
+                const position = index + 1;
+                const barLength = 16;
+                const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
+                const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
-            return `${progressBar} ${position}. ${displayName} - ${player.score}`;
-        }).join('\n');
+                const isCaller = player.userId === interaction.user.id;
+                const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
 
-        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
-        const embed = new EmbedBuilder()
-            .setTitle(`📊 Wyniki - ${phaseTitle}`)
-            .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
-            .setColor('#0099FF')
-            .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
-            .setTimestamp();
+                return `${progressBar} ${position}. ${displayName} - ${player.score}`;
+            }).join('\n');
 
-        await interaction.editReply({
-            embeds: [embed],
-            components: []
-        });
+            const embed = new EmbedBuilder()
+                .setTitle(`📊 Wyniki - Faza 1`)
+                .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year} | **TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
+                .setColor('#0099FF')
+                .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
+                .setTimestamp();
+
+            await interaction.editReply({
+                embeds: [embed],
+                components: []
+            });
+        }
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd wyświetlania wyników:', error);
@@ -3244,6 +3296,120 @@ async function handleWynikiWeekSelect(interaction, sharedState, phase) {
             components: []
         });
     }
+}
+
+async function handleWynikiPhase2ViewButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        // Format: wyniki_phase2_view|clanKey|weekNumber-year|view
+        const parts = interaction.customId.split('|');
+        const clan = parts[1];
+        const weekKey = parts[2];
+        const view = parts[3];
+
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        const weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+        if (!weekData) {
+            await interaction.update({
+                content: '❌ Brak danych.',
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        await showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config);
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd przełączania widoku Phase 2:', error);
+        await interaction.update({
+            content: '❌ Wystąpił błąd podczas przełączania widoku.',
+            embeds: [],
+            components: []
+        });
+    }
+}
+
+async function showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config) {
+    const clanName = config.roleDisplayNames[clan];
+
+    // Wybierz dane do wyświetlenia w zależności od widoku
+    let players;
+    let viewTitle;
+
+    if (view === 'round1' && weekData.rounds && weekData.rounds[0]) {
+        players = weekData.rounds[0].players;
+        viewTitle = 'Runda 1';
+    } else if (view === 'round2' && weekData.rounds && weekData.rounds[1]) {
+        players = weekData.rounds[1].players;
+        viewTitle = 'Runda 2';
+    } else if (view === 'round3' && weekData.rounds && weekData.rounds[2]) {
+        players = weekData.rounds[2].players;
+        viewTitle = 'Runda 3';
+    } else {
+        // Domyślnie pokaż sumę
+        players = weekData.summary ? weekData.summary.players : weekData.players;
+        viewTitle = 'Suma';
+    }
+
+    if (!players || players.length === 0) {
+        await interaction.editReply({
+            content: `❌ Brak danych dla wybranego widoku.`,
+            components: []
+        });
+        return;
+    }
+
+    const sortedPlayers = players.sort((a, b) => b.score - a.score);
+    const maxScore = sortedPlayers[0]?.score || 1;
+
+    const resultsText = sortedPlayers.map((player, index) => {
+        const position = index + 1;
+        const barLength = 16;
+        const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
+        const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+        const isCaller = player.userId === interaction.user.id;
+        const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
+
+        return `${progressBar} ${position}. ${displayName} - ${player.score}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+        .setTitle(`📊 Wyniki - Faza 2 - ${viewTitle}`)
+        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n\n${resultsText}`)
+        .setColor('#0099FF')
+        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
+        .setTimestamp();
+
+    // Przyciski nawigacji między rundami
+    const navRow = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`wyniki_phase2_view|${clan}|${weekNumber}-${year}|round1`)
+                .setLabel('Runda 1')
+                .setStyle(view === 'round1' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_phase2_view|${clan}|${weekNumber}-${year}|round2`)
+                .setLabel('Runda 2')
+                .setStyle(view === 'round2' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_phase2_view|${clan}|${weekNumber}-${year}|round3`)
+                .setLabel('Runda 3')
+                .setStyle(view === 'round3' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_phase2_view|${clan}|${weekNumber}-${year}|summary`)
+                .setLabel('Suma')
+                .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        );
+
+    await interaction.editReply({
+        embeds: [embed],
+        components: [navRow]
+    });
 }
 
 async function handleWynikiCommand(interaction, sharedState) {
