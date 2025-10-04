@@ -803,6 +803,10 @@ async function handleButton(interaction, sharedState) {
         await handlePhase1FinalConfirmButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_confirm|') || interaction.customId === 'modyfikuj_cancel') {
         await handleModyfikujConfirmButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_page_prev|') || interaction.customId.startsWith('modyfikuj_page_next|')) {
+        await handleModyfikujPaginationButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_week_prev|') || interaction.customId.startsWith('modyfikuj_week_next|')) {
+        await handleModyfikujWeekPaginationButton(interaction, sharedState);
     }
 }
 
@@ -1971,7 +1975,7 @@ async function handleModyfikujCommand(interaction, sharedState) {
     }
 }
 
-async function handleModyfikujClanSelect(interaction, sharedState) {
+async function handleModyfikujClanSelect(interaction, sharedState, page = 0) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -1980,7 +1984,7 @@ async function handleModyfikujClanSelect(interaction, sharedState) {
         const selectedClan = interaction.values[0];
         const clanName = config.roleDisplayNames[selectedClan];
 
-        // Pobierz dostępne tygodnie dla wybranego klanu
+        // Pobierz dostępne tygodnie dla wybranego klanu (już posortowane od najnowszych)
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
         const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
 
@@ -1992,12 +1996,20 @@ async function handleModyfikujClanSelect(interaction, sharedState) {
             return;
         }
 
-        // Utwórz select menu z tygodniami
+        // Paginacja tygodni
+        const weeksPerPage = 20;
+        const totalPages = Math.ceil(weeksForClan.length / weeksPerPage);
+        const currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        const startIndex = currentPage * weeksPerPage;
+        const endIndex = startIndex + weeksPerPage;
+        const weeksOnPage = weeksForClan.slice(startIndex, endIndex);
+
+        // Utwórz select menu z tygodniami na aktualnej stronie
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('modyfikuj_select_week')
             .setPlaceholder('Wybierz tydzień')
             .addOptions(
-                weeksForClan.slice(0, 25).map(week => {
+                weeksOnPage.map(week => {
                     const date = new Date(week.createdAt);
                     const dateStr = date.toLocaleDateString('pl-PL', {
                         day: '2-digit',
@@ -2012,17 +2024,40 @@ async function handleModyfikujClanSelect(interaction, sharedState) {
                 })
             );
 
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
+
+        // Dodaj przyciski paginacji jeśli jest więcej niż 1 strona
+        if (totalPages > 1) {
+            const paginationRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`modyfikuj_week_prev|${selectedClan}|${currentPage}`)
+                        .setLabel('◀ Poprzednia')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(currentPage === 0),
+                    new ButtonBuilder()
+                        .setCustomId(`modyfikuj_week_info|${selectedClan}|${currentPage}`)
+                        .setLabel(`Strona ${currentPage + 1}/${totalPages}`)
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true),
+                    new ButtonBuilder()
+                        .setCustomId(`modyfikuj_week_next|${selectedClan}|${currentPage}`)
+                        .setLabel('Następna ▶')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(currentPage === totalPages - 1)
+                );
+            components.push(paginationRow);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('🔧 Modyfikacja wyniku - Faza 1')
-            .setDescription(`**Krok 2/4:** Wybierz tydzień dla klanu **${clanName}**:`)
+            .setDescription(`**Krok 2/4:** Wybierz tydzień dla klanu **${clanName}**\n\nTygodni: ${weeksForClan.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
             .setColor('#FF9900')
             .setTimestamp();
 
         await interaction.editReply({
             embeds: [embed],
-            components: [row]
+            components: components
         });
 
     } catch (error) {
@@ -2034,7 +2069,7 @@ async function handleModyfikujClanSelect(interaction, sharedState) {
     }
 }
 
-async function handleModyfikujWeekSelect(interaction, sharedState) {
+async function handleModyfikujWeekSelect(interaction, sharedState, page = 0) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -2060,29 +2095,60 @@ async function handleModyfikujWeekSelect(interaction, sharedState) {
         // Sortuj graczy alfabetycznie
         const sortedPlayers = weekData.players.sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-        // Utwórz select menu z graczami (max 25)
+        // Paginacja
+        const playersPerPage = 20;
+        const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
+        const currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        const startIndex = currentPage * playersPerPage;
+        const endIndex = startIndex + playersPerPage;
+        const playersOnPage = sortedPlayers.slice(startIndex, endIndex);
+
+        // Utwórz select menu z graczami na aktualnej stronie
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('modyfikuj_select_player')
             .setPlaceholder('Wybierz gracza')
             .addOptions(
-                sortedPlayers.slice(0, 25).map(player => {
+                playersOnPage.map(player => {
                     return new StringSelectMenuOptionBuilder()
                         .setLabel(`${player.displayName} - ${player.score} pkt`)
                         .setValue(`${clan}|${weekNumber}-${year}|${player.userId}`);
                 })
             );
 
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
+
+        // Dodaj przyciski paginacji jeśli jest więcej niż 1 strona
+        if (totalPages > 1) {
+            const paginationRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${currentPage}`)
+                        .setLabel('◀ Poprzednia')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(currentPage === 0),
+                    new ButtonBuilder()
+                        .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${currentPage}`)
+                        .setLabel(`Strona ${currentPage + 1}/${totalPages}`)
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true),
+                    new ButtonBuilder()
+                        .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${currentPage}`)
+                        .setLabel('Następna ▶')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(currentPage === totalPages - 1)
+                );
+            components.push(paginationRow);
+        }
 
         const embed = new EmbedBuilder()
             .setTitle('🔧 Modyfikacja wyniku - Faza 1')
-            .setDescription(`**Krok 3/4:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**):`)
+            .setDescription(`**Krok 3/4:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**)\n\nGraczy: ${sortedPlayers.length}${totalPages > 1 ? ` | Strona ${currentPage + 1}/${totalPages}` : ''}`)
             .setColor('#FF9900')
             .setTimestamp();
 
         await interaction.editReply({
             embeds: [embed],
-            components: [row]
+            components: components
         });
 
     } catch (error) {
@@ -2138,6 +2204,211 @@ async function handleModyfikujPlayerSelect(interaction, sharedState) {
         await interaction.reply({
             content: '❌ Wystąpił błąd podczas wyboru gracza.',
             flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleModyfikujPaginationButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        const parts = interaction.customId.split('|');
+        const action = parts[0]; // modyfikuj_page_prev lub modyfikuj_page_next
+        const clan = parts[1];
+        const weekKey = parts[2];
+        const currentPage = parseInt(parts[3]);
+
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        // Oblicz nową stronę
+        let newPage = currentPage;
+        if (action === 'modyfikuj_page_prev') {
+            newPage = Math.max(0, currentPage - 1);
+        } else if (action === 'modyfikuj_page_next') {
+            newPage = currentPage + 1;
+        }
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Pobierz wyniki dla wybranego tygodnia i klanu
+        const weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+
+        if (!weekData || !weekData.players || weekData.players.length === 0) {
+            await interaction.update({
+                content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        // Sortuj graczy alfabetycznie
+        const sortedPlayers = weekData.players.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        // Paginacja
+        const playersPerPage = 20;
+        const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
+        const validPage = Math.max(0, Math.min(newPage, totalPages - 1));
+        const startIndex = validPage * playersPerPage;
+        const endIndex = startIndex + playersPerPage;
+        const playersOnPage = sortedPlayers.slice(startIndex, endIndex);
+
+        // Utwórz select menu z graczami na aktualnej stronie
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('modyfikuj_select_player')
+            .setPlaceholder('Wybierz gracza')
+            .addOptions(
+                playersOnPage.map(player => {
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`${player.displayName} - ${player.score} pkt`)
+                        .setValue(`${clan}|${weekNumber}-${year}|${player.userId}`);
+                })
+            );
+
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
+
+        // Dodaj przyciski paginacji
+        const paginationRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_page_prev|${clan}|${weekNumber}-${year}|${validPage}`)
+                    .setLabel('◀ Poprzednia')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(validPage === 0),
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_page_info|${clan}|${weekNumber}-${year}|${validPage}`)
+                    .setLabel(`Strona ${validPage + 1}/${totalPages}`)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_page_next|${clan}|${weekNumber}-${year}|${validPage}`)
+                    .setLabel('Następna ▶')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(validPage === totalPages - 1)
+            );
+        components.push(paginationRow);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
+            .setDescription(`**Krok 3/4:** Wybierz gracza do modyfikacji (Klan: **${clanName}**, Tydzień: **${weekNumber}/${year}**)\n\nGraczy: ${sortedPlayers.length} | Strona ${validPage + 1}/${totalPages}`)
+            .setColor('#FF9900')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [embed],
+            components: components
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd paginacji:', error);
+        await interaction.update({
+            content: '❌ Wystąpił błąd podczas zmiany strony.',
+            embeds: [],
+            components: []
+        });
+    }
+}
+
+async function handleModyfikujWeekPaginationButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        const parts = interaction.customId.split('|');
+        const action = parts[0]; // modyfikuj_week_prev lub modyfikuj_week_next
+        const clan = parts[1];
+        const currentPage = parseInt(parts[2]);
+
+        // Oblicz nową stronę
+        let newPage = currentPage;
+        if (action === 'modyfikuj_week_prev') {
+            newPage = Math.max(0, currentPage - 1);
+        } else if (action === 'modyfikuj_week_next') {
+            newPage = currentPage + 1;
+        }
+
+        const clanName = config.roleDisplayNames[clan];
+
+        // Pobierz dostępne tygodnie dla wybranego klanu
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const weeksForClan = allWeeks.filter(week => week.clans.includes(clan));
+
+        if (weeksForClan.length === 0) {
+            await interaction.update({
+                content: `❌ Brak zapisanych wyników dla klanu **${clanName}**.`,
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        // Paginacja tygodni
+        const weeksPerPage = 20;
+        const totalPages = Math.ceil(weeksForClan.length / weeksPerPage);
+        const validPage = Math.max(0, Math.min(newPage, totalPages - 1));
+        const startIndex = validPage * weeksPerPage;
+        const endIndex = startIndex + weeksPerPage;
+        const weeksOnPage = weeksForClan.slice(startIndex, endIndex);
+
+        // Utwórz select menu z tygodniami na aktualnej stronie
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('modyfikuj_select_week')
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(
+                weeksOnPage.map(week => {
+                    const date = new Date(week.createdAt);
+                    const dateStr = date.toLocaleDateString('pl-PL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                        .setDescription(`Zapisano: ${dateStr}`)
+                        .setValue(`${clan}|${week.weekNumber}-${week.year}`);
+                })
+            );
+
+        const components = [new ActionRowBuilder().addComponents(selectMenu)];
+
+        // Dodaj przyciski paginacji
+        const paginationRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_week_prev|${clan}|${validPage}`)
+                    .setLabel('◀ Poprzednia')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(validPage === 0),
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_week_info|${clan}|${validPage}`)
+                    .setLabel(`Strona ${validPage + 1}/${totalPages}`)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId(`modyfikuj_week_next|${clan}|${validPage}`)
+                    .setLabel('Następna ▶')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(validPage === totalPages - 1)
+            );
+        components.push(paginationRow);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔧 Modyfikacja wyniku - Faza 1')
+            .setDescription(`**Krok 2/4:** Wybierz tydzień dla klanu **${clanName}**\n\nTygodni: ${weeksForClan.length} | Strona ${validPage + 1}/${totalPages}`)
+            .setColor('#FF9900')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [embed],
+            components: components
+        });
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd paginacji tygodni:', error);
+        await interaction.update({
+            content: '❌ Wystąpił błąd podczas zmiany strony.',
+            embeds: [],
+            components: []
         });
     }
 }
