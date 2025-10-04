@@ -326,8 +326,11 @@ class PhaseService {
             };
             const icon = stageIcons[stage] || '⚙️';
 
+            const phaseTitle = session.phase === 2 ? 'Faza 2' : 'Faza 1';
+            const roundText = session.phase === 2 ? ` - Runda ${session.currentRound}/3` : '';
+
             const embed = new EmbedBuilder()
-                .setTitle('🔄 Przetwarzanie zdjęć - Faza 1')
+                .setTitle(`🔄 Przetwarzanie zdjęć - ${phaseTitle}${roundText}`)
                 .setDescription(`**Zdjęcie:** ${currentImage}/${totalImages}\n${icon} ${action}\n${progressBar} ${percent}%`)
                 .setColor('#FFA500')
                 .addFields(

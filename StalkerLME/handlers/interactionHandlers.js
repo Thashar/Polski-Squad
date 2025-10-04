@@ -2130,6 +2130,53 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         return;
     }
 
+    // Jeśli to przycisk rozwiązywania konfliktu
+    if (interaction.customId.startsWith('phase2_resolve_')) {
+        const chosenValue = parseInt(interaction.customId.split('_')[2]);
+        const conflict = phaseService.getNextUnresolvedConflict(session);
+
+        if (conflict) {
+            phaseService.resolveConflict(session, conflict.nick, chosenValue);
+            const nextConflict = phaseService.getNextUnresolvedConflict(session);
+
+            if (nextConflict) {
+                const conflictEmbed = phaseService.createConflictEmbed(
+                    nextConflict,
+                    session.resolvedConflicts.size + 1,
+                    session.conflicts.length
+                );
+                await interaction.update({
+                    embeds: [conflictEmbed.embed],
+                    components: [conflictEmbed.row]
+                });
+                return;
+            }
+        }
+
+        // Wszystkie konflikty rozwiązane - przejdź dalej
+        await interaction.update({
+            content: '✅ Wszystkie konflikty rozwiązane!',
+            embeds: [],
+            components: []
+        });
+
+        // Sprawdź czy to była ostatnia runda
+        if (session.currentRound < 3) {
+            phaseService.startNextRound(session);
+            const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+            await interaction.editReply({
+                content: '',
+                embeds: [awaitingEmbed],
+                components: []
+            });
+            logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
+        } else {
+            await showPhase2FinalSummary(interaction, session, phaseService);
+        }
+        return;
+    }
+
+    // Przycisk "Tak, gotowe" po dodaniu zdjęć
     await interaction.update({
         content: '🔄 Analizuję wyniki...',
         embeds: [],
@@ -2150,11 +2197,14 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                 components: [conflictEmbed.row]
             });
         } else {
+            // Brak konfliktów - przejdź do następnej rundy lub zakończ
             if (session.currentRound < 3) {
                 phaseService.startNextRound(session);
                 const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
                 await interaction.editReply({
-                    embeds: [awaitingEmbed]
+                    content: '',
+                    embeds: [awaitingEmbed],
+                    components: []
                 });
                 logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
             } else {
