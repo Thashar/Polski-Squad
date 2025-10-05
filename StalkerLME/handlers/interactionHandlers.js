@@ -2770,27 +2770,29 @@ async function handleDodajModalSubmit(interaction, sharedState) {
                 return;
             }
 
-            // Dodaj gracza do listy
-            weekData.players.push({
-                userId: nick,
-                displayName: nick,
-                score: scoreNum
-            });
-
-            // Przelicz TOP30
-            const sortedPlayers = [...weekData.players].sort((a, b) => b.score - a.score);
-            const top30 = sortedPlayers.slice(0, 30);
-            const top30Sum = top30.reduce((sum, p) => sum + p.score, 0);
-
-            // Zapisz dane
+            // Zapisz nowego gracza
             await databaseService.savePhase1Result(
                 interaction.guild.id,
+                nick, // userId
+                nick, // displayName
+                scoreNum, // score
                 parseInt(week),
                 parseInt(year),
                 clan,
-                weekData.players,
-                interaction.user.id
+                null // createdBy - nie nadpisujemy oryginalnego autora
             );
+
+            // Odśwież dane i przelicz TOP30
+            const updatedData = await databaseService.getPhase1Results(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan
+            );
+
+            const sortedPlayers = [...updatedData.players].sort((a, b) => b.score - a.score);
+            const top30 = sortedPlayers.slice(0, 30);
+            const top30Sum = top30.reduce((sum, p) => sum + p.score, 0);
 
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
@@ -2861,7 +2863,7 @@ async function handleDodajModalSubmit(interaction, sharedState) {
                 }
             }
 
-            // Zapisz dane
+            // Zapisz dane (zachowaj oryginalnego autora)
             await databaseService.savePhase2Results(
                 interaction.guild.id,
                 parseInt(week),
@@ -2869,7 +2871,7 @@ async function handleDodajModalSubmit(interaction, sharedState) {
                 clan,
                 weekData.rounds,
                 weekData.summary.players,
-                interaction.user.id
+                weekData.createdBy || interaction.user.id
             );
 
             const roundName = round === 'summary' ? 'Podsumowanie' :
