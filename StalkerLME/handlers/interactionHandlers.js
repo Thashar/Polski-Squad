@@ -1962,7 +1962,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
                 { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
                 { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
                 { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
-                { name: '🏆 Suma top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false },
+                { name: '🏆 Suma TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false },
                 { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()

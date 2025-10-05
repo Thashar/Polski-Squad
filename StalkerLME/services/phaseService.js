@@ -755,17 +755,19 @@ class PhaseService {
         const phaseTitle = phase === 2 ? 'Faza 2' : 'Faza 1';
         const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
 
-        const fields = [
-            { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
-            { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
-            { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true }
-        ];
+        const fields = [];
 
-        // Dodaj sumę top 30 tylko dla Fazy 1
+        // Dla Fazy 1 - pokaż wszystkie statystyki
         if (phase === 1) {
-            fields.push({ name: '🏆 Suma wyników top 30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false });
+            fields.push(
+                { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
+                { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
+                { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true },
+                { name: '🏆 Suma wyników TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
+            );
         }
 
+        // Dla obu faz dodaj klan
         fields.push({ name: '🎯 Klan', value: clanName, inline: false });
 
         const embed = new EmbedBuilder()
@@ -838,7 +840,7 @@ class PhaseService {
 
         // Dodaj sumę TOP30 tylko dla Fazy 1
         if (phase === 1) {
-            fields.push({ name: '🏆 Suma top 30', value: `${existingData.top30Sum.toLocaleString('pl-PL')} pkt`, inline: true });
+            fields.push({ name: '🏆 Suma TOP30', value: `${existingData.top30Sum.toLocaleString('pl-PL')} pkt`, inline: true });
         }
 
         const embed = new EmbedBuilder()
