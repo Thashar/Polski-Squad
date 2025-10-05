@@ -9,8 +9,13 @@ class DatabaseService {
         this.config = config;
         this.punishmentsFile = config.database.punishments;
         this.weeklyRemovalFile = config.database.weeklyRemoval;
+
+        // Stare pliki - zachowane dla kompatybilności i migracji
         this.phase1File = path.join(path.dirname(this.punishmentsFile), 'phase1_results.json');
         this.phase2File = path.join(path.dirname(this.punishmentsFile), 'phase2_results.json');
+
+        // Nowa struktura - osobne pliki dla każdego tygodnia
+        this.phasesBaseDir = path.join(path.dirname(this.punishmentsFile), 'phases');
     }
 
     async initializeDatabase() {
@@ -47,6 +52,45 @@ class DatabaseService {
             return false;
         }
     }
+
+    // =============== NOWE METODY POMOCNICZE DLA STRUKTURY PLIKÓW ===============
+
+    /**
+     * Zwraca ścieżkę do pliku dla konkretnego tygodnia i klanu
+     * Przykład: data/phases/guild_123456/phase1/2025/week-40_clan1.json
+     */
+    getPhaseFilePath(guildId, phase, weekNumber, year, clan) {
+        return path.join(
+            this.phasesBaseDir,
+            `guild_${guildId}`,
+            `phase${phase}`,
+            year.toString(),
+            `week-${weekNumber}_${clan}.json`
+        );
+    }
+
+    /**
+     * Zwraca ścieżkę do katalogu dla konkretnego roku
+     * Przykład: data/phases/guild_123456/phase1/2025/
+     */
+    getPhaseWeekDir(guildId, phase, year) {
+        return path.join(
+            this.phasesBaseDir,
+            `guild_${guildId}`,
+            `phase${phase}`,
+            year.toString()
+        );
+    }
+
+    /**
+     * Tworzy katalogi jeśli nie istnieją
+     */
+    async ensurePhaseDirectories(guildId, phase, year) {
+        const dir = this.getPhaseWeekDir(guildId, phase, year);
+        await fs.mkdir(dir, { recursive: true });
+    }
+
+    // =============== KONIEC NOWYCH METOD POMOCNICZYCH ===============
 
     async loadPunishments() {
         try {
@@ -281,66 +325,58 @@ class DatabaseService {
 
     /**
      * Sprawdza czy dane dla danego tygodnia już istnieją
-     * Struktura: { guildId: { "weekNumber-year": { clanKey: { players: [...], createdAt, updatedAt } } } }
+     * NOWA WERSJA - sprawdza czy plik istnieje
      */
     async checkPhase1DataExists(guildId, weekNumber, year, clan) {
-        const data = await this.loadPhase1Data();
-        const weekKey = `${weekNumber}-${year}`;
+        const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
-        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const data = JSON.parse(fileContent);
             return {
                 exists: true,
-                data: data[guildId][weekKey][clan]
+                data: data
             };
+        } catch {
+            return { exists: false };
         }
-
-        return { exists: false };
     }
 
     /**
      * Usuwa dane dla danego tygodnia i klanu
+     * NOWA WERSJA - usuwa plik
      */
     async deletePhase1DataForWeek(guildId, weekNumber, year, clan) {
         logger.info(`[PHASE1] 🗑️ Usuwanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
 
-        const data = await this.loadPhase1Data();
-        const weekKey = `${weekNumber}-${year}`;
+        const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
-        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
-            delete data[guildId][weekKey][clan];
-
-            // Jeśli to był ostatni klan w tym tygodniu, usuń cały tydzień
-            if (Object.keys(data[guildId][weekKey]).length === 0) {
-                delete data[guildId][weekKey];
-            }
-
-            await this.savePhase1Data(data);
+        try {
+            await fs.unlink(filePath);
             logger.info(`[PHASE1] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
             return true;
+        } catch (error) {
+            logger.warn(`[PHASE1] ⚠️ Nie można usunąć pliku (możliwe że nie istnieje): ${filePath}`);
+            return false;
         }
-
-        return false;
     }
 
     /**
      * Zapisuje pojedynczy wynik gracza dla danego tygodnia i klanu
+     * NOWA WERSJA - zapisuje do osobnego pliku
      */
     async savePhase1Result(guildId, userId, displayName, score, weekNumber, year, clan, createdBy = null) {
-        const data = await this.loadPhase1Data();
-        const weekKey = `${weekNumber}-${year}`;
+        await this.ensurePhaseDirectories(guildId, 1, year);
+        const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
-        if (!data[guildId]) {
-            data[guildId] = {};
-        }
-
-        if (!data[guildId][weekKey]) {
-            data[guildId][weekKey] = {};
-        }
-
-        const isNewEntry = !data[guildId][weekKey][clan];
-
-        if (!data[guildId][weekKey][clan]) {
-            data[guildId][weekKey][clan] = {
+        // Wczytaj istniejące dane lub utwórz nowe
+        let weekData;
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            weekData = JSON.parse(fileContent);
+        } catch (error) {
+            // Plik nie istnieje - utwórz nową strukturę
+            weekData = {
                 players: [],
                 createdBy: createdBy,
                 createdAt: new Date().toISOString(),
@@ -348,18 +384,18 @@ class DatabaseService {
             };
         }
 
-        // Sprawdź czy gracz już istnieje w tym tygodniu i klanie (aktualizuj jeśli tak)
-        const existingPlayerIndex = data[guildId][weekKey][clan].players.findIndex(p => p.userId === userId);
+        // Sprawdź czy gracz już istnieje (aktualizuj jeśli tak)
+        const existingPlayerIndex = weekData.players.findIndex(p => p.userId === userId);
 
         if (existingPlayerIndex !== -1) {
-            data[guildId][weekKey][clan].players[existingPlayerIndex] = {
+            weekData.players[existingPlayerIndex] = {
                 userId,
                 displayName,
                 score,
                 updatedAt: new Date().toISOString()
             };
         } else {
-            data[guildId][weekKey][clan].players.push({
+            weekData.players.push({
                 userId,
                 displayName,
                 score,
@@ -367,10 +403,11 @@ class DatabaseService {
             });
         }
 
-        data[guildId][weekKey][clan].updatedAt = new Date().toISOString();
+        weekData.updatedAt = new Date().toISOString();
 
-        await this.savePhase1Data(data);
-        logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan})`);
+        // Zapisz do pliku
+        await fs.writeFile(filePath, JSON.stringify(weekData, null, 2), 'utf8');
+        logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan}, tydzień: ${weekNumber}/${year})`);
     }
 
     /**
@@ -401,52 +438,96 @@ class DatabaseService {
 
     /**
      * Pobiera wszystkie wyniki dla danego tygodnia i klanu
+     * NOWA WERSJA - czyta z osobnego pliku
      */
     async getPhase1Results(guildId, weekNumber, year, clan) {
-        const data = await this.loadPhase1Data();
-        const weekKey = `${weekNumber}-${year}`;
+        const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
-        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            return JSON.parse(fileContent);
+        } catch (error) {
+            // Plik nie istnieje
             return null;
         }
-
-        return data[guildId][weekKey][clan];
     }
 
     /**
      * Pobiera listę wszystkich tygodni z danymi dla guild
+     * NOWA WERSJA - skanuje katalogi zamiast ładować cały plik
      */
     async getAvailableWeeks(guildId) {
-        const data = await this.loadPhase1Data();
+        const guildBaseDir = path.join(this.phasesBaseDir, `guild_${guildId}`, 'phase1');
 
-        if (!data[guildId]) {
+        try {
+            // Sprawdź czy katalog guild istnieje
+            await fs.access(guildBaseDir);
+        } catch {
             return [];
         }
 
-        const weeks = Object.keys(data[guildId]).map(weekKey => {
-            const [weekNumber, year] = weekKey.split('-');
-            const clans = Object.keys(data[guildId][weekKey]);
+        const weeksMap = new Map(); // weekKey -> { weekNumber, year, clans, createdAt }
 
-            // Znajdź najwcześniejszą datę utworzenia spośród klanów
-            const createdDates = clans.map(clan => data[guildId][weekKey][clan].createdAt);
-            const earliestDate = createdDates.sort()[0];
+        try {
+            // Odczytaj wszystkie lata
+            const years = await fs.readdir(guildBaseDir);
 
-            return {
-                weekNumber: parseInt(weekNumber),
-                year: parseInt(year),
-                weekKey: weekKey,
-                clans: clans,
-                createdAt: earliestDate
-            };
-        });
+            for (const yearDir of years) {
+                const yearPath = path.join(guildBaseDir, yearDir);
+                const stat = await fs.stat(yearPath);
 
-        // Sortuj od najnowszego
-        weeks.sort((a, b) => {
-            if (a.year !== b.year) return b.year - a.year;
-            return b.weekNumber - a.weekNumber;
-        });
+                if (!stat.isDirectory()) continue;
 
-        return weeks;
+                // Odczytaj wszystkie pliki w danym roku
+                const files = await fs.readdir(yearPath);
+
+                for (const filename of files) {
+                    // Parsuj nazwę pliku: week-40_clan1.json
+                    const match = filename.match(/^week-(\d+)_(.+)\.json$/);
+                    if (!match) continue;
+
+                    const weekNumber = parseInt(match[1]);
+                    const clan = match[2];
+                    const weekKey = `${weekNumber}-${yearDir}`;
+
+                    // Przeczytaj datę utworzenia z pliku
+                    const filePath = path.join(yearPath, filename);
+                    const fileContent = await fs.readFile(filePath, 'utf8');
+                    const weekData = JSON.parse(fileContent);
+
+                    if (!weeksMap.has(weekKey)) {
+                        weeksMap.set(weekKey, {
+                            weekNumber,
+                            year: parseInt(yearDir),
+                            weekKey,
+                            clans: [],
+                            createdAt: weekData.createdAt
+                        });
+                    }
+
+                    const weekInfo = weeksMap.get(weekKey);
+                    weekInfo.clans.push(clan);
+
+                    // Zachowaj najwcześniejszą datę
+                    if (weekData.createdAt < weekInfo.createdAt) {
+                        weekInfo.createdAt = weekData.createdAt;
+                    }
+                }
+            }
+
+            // Konwertuj Map na array i sortuj
+            const weeks = Array.from(weeksMap.values());
+            weeks.sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.weekNumber - a.weekNumber;
+            });
+
+            return weeks;
+
+        } catch (error) {
+            logger.error('[DB] ❌ Błąd odczytu dostępnych tygodni:', error);
+            return [];
+        }
     }
 
     // =============== PHASE 2 METHODS ===============
@@ -469,54 +550,53 @@ class DatabaseService {
         }
     }
 
+    /**
+     * Sprawdza czy dane Phase 2 istnieją
+     * NOWA WERSJA - sprawdza czy plik istnieje
+     */
     async checkPhase2DataExists(guildId, weekNumber, year, clan) {
-        const data = await this.loadPhase2Data();
-        const weekKey = `${weekNumber}-${year}`;
+        const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
-        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const data = JSON.parse(fileContent);
             return {
                 exists: true,
-                data: data[guildId][weekKey][clan]
+                data: data
             };
+        } catch {
+            return { exists: false };
         }
-
-        return { exists: false };
     }
 
+    /**
+     * Usuwa dane Phase 2 dla danego tygodnia i klanu
+     * NOWA WERSJA - usuwa plik
+     */
     async deletePhase2DataForWeek(guildId, weekNumber, year, clan) {
         logger.info(`[PHASE2] 🗑️ Usuwanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
 
-        const data = await this.loadPhase2Data();
-        const weekKey = `${weekNumber}-${year}`;
+        const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
-        if (data[guildId] && data[guildId][weekKey] && data[guildId][weekKey][clan]) {
-            delete data[guildId][weekKey][clan];
-
-            if (Object.keys(data[guildId][weekKey]).length === 0) {
-                delete data[guildId][weekKey];
-            }
-
-            await this.savePhase2Data(data);
+        try {
+            await fs.unlink(filePath);
             logger.info(`[PHASE2] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
             return true;
+        } catch (error) {
+            logger.warn(`[PHASE2] ⚠️ Nie można usunąć pliku (możliwe że nie istnieje): ${filePath}`);
+            return false;
         }
-
-        return false;
     }
 
+    /**
+     * Zapisuje kompletne wyniki Phase 2 (3 rundy + podsumowanie)
+     * NOWA WERSJA - zapisuje do osobnego pliku
+     */
     async savePhase2Results(guildId, weekNumber, year, clan, roundsData, summaryPlayers, createdBy) {
-        const data = await this.loadPhase2Data();
-        const weekKey = `${weekNumber}-${year}`;
+        await this.ensurePhaseDirectories(guildId, 2, year);
+        const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
-        if (!data[guildId]) {
-            data[guildId] = {};
-        }
-
-        if (!data[guildId][weekKey]) {
-            data[guildId][weekKey] = {};
-        }
-
-        data[guildId][weekKey][clan] = {
+        const weekData = {
             rounds: roundsData,
             summary: {
                 players: summaryPlayers
@@ -526,8 +606,8 @@ class DatabaseService {
             updatedAt: new Date().toISOString()
         };
 
-        await this.savePhase2Data(data);
-        logger.info(`[PHASE2] 💾 Zapisano dane dla ${summaryPlayers.length} graczy (3 rundy + suma, klan: ${clan})`);
+        await fs.writeFile(filePath, JSON.stringify(weekData, null, 2), 'utf8');
+        logger.info(`[PHASE2] 💾 Zapisano dane dla ${summaryPlayers.length} graczy (3 rundy + suma, klan: ${clan}, tydzień: ${weekNumber}/${year})`);
     }
 
     async savePhase2Result(guildId, userId, displayName, score, weekNumber, year, clan) {
@@ -597,46 +677,204 @@ class DatabaseService {
         };
     }
 
+    /**
+     * Pobiera wyniki Phase 2 dla danego tygodnia i klanu
+     * NOWA WERSJA - czyta z osobnego pliku
+     */
     async getPhase2Results(guildId, weekNumber, year, clan) {
-        const data = await this.loadPhase2Data();
-        const weekKey = `${weekNumber}-${year}`;
+        const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
-        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            return JSON.parse(fileContent);
+        } catch (error) {
+            // Plik nie istnieje
             return null;
         }
-
-        return data[guildId][weekKey][clan];
     }
 
+    /**
+     * Pobiera listę wszystkich tygodni Phase 2
+     * NOWA WERSJA - skanuje katalogi
+     */
     async getAvailableWeeksPhase2(guildId) {
-        const data = await this.loadPhase2Data();
+        const guildBaseDir = path.join(this.phasesBaseDir, `guild_${guildId}`, 'phase2');
 
-        if (!data[guildId]) {
+        try {
+            await fs.access(guildBaseDir);
+        } catch {
             return [];
         }
 
-        const weeks = Object.keys(data[guildId]).map(weekKey => {
-            const [weekNumber, year] = weekKey.split('-');
-            const clans = Object.keys(data[guildId][weekKey]);
+        const weeksMap = new Map();
 
-            const createdDates = clans.map(clan => data[guildId][weekKey][clan].createdAt);
-            const earliestDate = createdDates.sort()[0];
+        try {
+            const years = await fs.readdir(guildBaseDir);
+
+            for (const yearDir of years) {
+                const yearPath = path.join(guildBaseDir, yearDir);
+                const stat = await fs.stat(yearPath);
+
+                if (!stat.isDirectory()) continue;
+
+                const files = await fs.readdir(yearPath);
+
+                for (const filename of files) {
+                    const match = filename.match(/^week-(\d+)_(.+)\.json$/);
+                    if (!match) continue;
+
+                    const weekNumber = parseInt(match[1]);
+                    const clan = match[2];
+                    const weekKey = `${weekNumber}-${yearDir}`;
+
+                    const filePath = path.join(yearPath, filename);
+                    const fileContent = await fs.readFile(filePath, 'utf8');
+                    const weekData = JSON.parse(fileContent);
+
+                    if (!weeksMap.has(weekKey)) {
+                        weeksMap.set(weekKey, {
+                            weekNumber,
+                            year: parseInt(yearDir),
+                            weekKey,
+                            clans: [],
+                            createdAt: weekData.createdAt
+                        });
+                    }
+
+                    const weekInfo = weeksMap.get(weekKey);
+                    weekInfo.clans.push(clan);
+
+                    if (weekData.createdAt < weekInfo.createdAt) {
+                        weekInfo.createdAt = weekData.createdAt;
+                    }
+                }
+            }
+
+            const weeks = Array.from(weeksMap.values());
+            weeks.sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.weekNumber - a.weekNumber;
+            });
+
+            return weeks;
+
+        } catch (error) {
+            logger.error('[DB] ❌ Błąd odczytu dostępnych tygodni Phase2:', error);
+            return [];
+        }
+    }
+
+    // =============== MIGRACJA DANYCH ===============
+
+    /**
+     * Migruje dane ze starych plików (phase1_results.json, phase2_results.json)
+     * do nowej struktury (osobne pliki dla każdego tygodnia)
+     */
+    async migrateToSplitFiles() {
+        logger.info('[MIGRATION] 🚀 Rozpoczynam migrację danych do nowej struktury...');
+
+        let phase1Count = 0;
+        let phase2Count = 0;
+        let errors = 0;
+
+        try {
+            // === MIGRACJA PHASE 1 ===
+            logger.info('[MIGRATION] 📦 Migracja Phase 1...');
+
+            if (await this.fileExists(this.phase1File)) {
+                const phase1Data = await this.loadPhase1Data();
+
+                for (const [guildId, guildData] of Object.entries(phase1Data)) {
+                    for (const [weekKey, weekData] of Object.entries(guildData)) {
+                        const [weekNumber, year] = weekKey.split('-');
+
+                        for (const [clan, clanData] of Object.entries(weekData)) {
+                            try {
+                                // Utwórz katalogi
+                                await this.ensurePhaseDirectories(guildId, 1, parseInt(year));
+
+                                // Zapisz do nowego pliku
+                                const filePath = this.getPhaseFilePath(guildId, 1, parseInt(weekNumber), parseInt(year), clan);
+                                await fs.writeFile(filePath, JSON.stringify(clanData, null, 2), 'utf8');
+
+                                phase1Count++;
+                                logger.info(`[MIGRATION] ✅ Phase1: ${guildId}/${weekKey}/${clan}`);
+                            } catch (error) {
+                                logger.error(`[MIGRATION] ❌ Błąd migracji Phase1 ${guildId}/${weekKey}/${clan}:`, error);
+                                errors++;
+                            }
+                        }
+                    }
+                }
+
+                // Utwórz backup starego pliku
+                const backupPath = this.phase1File + '.backup';
+                await fs.copyFile(this.phase1File, backupPath);
+                logger.info(`[MIGRATION] 💾 Utworzono backup: ${backupPath}`);
+            } else {
+                logger.info('[MIGRATION] ℹ️  Plik phase1_results.json nie istnieje, pomijam');
+            }
+
+            // === MIGRACJA PHASE 2 ===
+            logger.info('[MIGRATION] 📦 Migracja Phase 2...');
+
+            if (await this.fileExists(this.phase2File)) {
+                const phase2Data = await this.loadPhase2Data();
+
+                for (const [guildId, guildData] of Object.entries(phase2Data)) {
+                    for (const [weekKey, weekData] of Object.entries(guildData)) {
+                        const [weekNumber, year] = weekKey.split('-');
+
+                        for (const [clan, clanData] of Object.entries(weekData)) {
+                            try {
+                                await this.ensurePhaseDirectories(guildId, 2, parseInt(year));
+
+                                const filePath = this.getPhaseFilePath(guildId, 2, parseInt(weekNumber), parseInt(year), clan);
+                                await fs.writeFile(filePath, JSON.stringify(clanData, null, 2), 'utf8');
+
+                                phase2Count++;
+                                logger.info(`[MIGRATION] ✅ Phase2: ${guildId}/${weekKey}/${clan}`);
+                            } catch (error) {
+                                logger.error(`[MIGRATION] ❌ Błąd migracji Phase2 ${guildId}/${weekKey}/${clan}:`, error);
+                                errors++;
+                            }
+                        }
+                    }
+                }
+
+                // Utwórz backup starego pliku
+                const backupPath = this.phase2File + '.backup';
+                await fs.copyFile(this.phase2File, backupPath);
+                logger.info(`[MIGRATION] 💾 Utworzono backup: ${backupPath}`);
+            } else {
+                logger.info('[MIGRATION] ℹ️  Plik phase2_results.json nie istnieje, pomijam');
+            }
+
+            // === PODSUMOWANIE ===
+            logger.info('[MIGRATION] ');
+            logger.info('[MIGRATION] 📊 PODSUMOWANIE MIGRACJI:');
+            logger.info(`[MIGRATION] ✅ Phase 1: ${phase1Count} plików`);
+            logger.info(`[MIGRATION] ✅ Phase 2: ${phase2Count} plików`);
+            logger.info(`[MIGRATION] ❌ Błędy: ${errors}`);
+            logger.info('[MIGRATION] ');
+            logger.info('[MIGRATION] 🎉 Migracja zakończona!');
+            logger.info('[MIGRATION] ℹ️  Stare pliki zachowane jako .backup');
+            logger.info('[MIGRATION] ℹ️  Możesz je usunąć po sprawdzeniu że wszystko działa');
 
             return {
-                weekNumber: parseInt(weekNumber),
-                year: parseInt(year),
-                weekKey: weekKey,
-                clans: clans,
-                createdAt: earliestDate
+                success: true,
+                phase1Count,
+                phase2Count,
+                errors
             };
-        });
 
-        weeks.sort((a, b) => {
-            if (a.year !== b.year) return b.year - a.year;
-            return b.weekNumber - a.weekNumber;
-        });
-
-        return weeks;
+        } catch (error) {
+            logger.error('[MIGRATION] ❌ Krytyczny błąd migracji:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 }
 

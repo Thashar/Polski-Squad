@@ -55,12 +55,41 @@ const sharedState = {
 
 client.once(Events.ClientReady, async () => {
     logger.success('✅ StalkerLME gotowy - kary za bossów (OCR), urlopy');
-    
+
     // Inicjalizacja serwisów
     await databaseService.initializeDatabase();
     await ocrService.initializeOCR();
     await messageCleanupService.init();
-    
+
+    // Automatyczna migracja danych (jeśli potrzebna)
+    logger.info('[STARTUP] 🔍 Sprawdzanie czy wymagana jest migracja danych...');
+    try {
+        const oldPhase1Exists = await databaseService.fileExists(databaseService.phase1File);
+        const oldPhase2Exists = await databaseService.fileExists(databaseService.phase2File);
+        const backupPhase1Exists = await databaseService.fileExists(databaseService.phase1File + '.backup');
+        const backupPhase2Exists = await databaseService.fileExists(databaseService.phase2File + '.backup');
+
+        // Migruj jeśli istnieją stare pliki i nie ma backupów (oznacza że nie było migracji)
+        if ((oldPhase1Exists || oldPhase2Exists) && !backupPhase1Exists && !backupPhase2Exists) {
+            logger.info('[STARTUP] 📦 Wykryto stare pliki - rozpoczynam automatyczną migrację...');
+            const migrationResult = await databaseService.migrateToSplitFiles();
+
+            if (migrationResult.success) {
+                logger.success('[STARTUP] ✅ Migracja zakończona pomyślnie!');
+                logger.info(`[STARTUP] 📊 Phase 1: ${migrationResult.phase1Count} plików`);
+                logger.info(`[STARTUP] 📊 Phase 2: ${migrationResult.phase2Count} plików`);
+            } else {
+                logger.error('[STARTUP] ❌ Błąd migracji:', migrationResult.error);
+            }
+        } else if (backupPhase1Exists || backupPhase2Exists) {
+            logger.info('[STARTUP] ✅ Migracja już przeprowadzona (wykryto pliki .backup)');
+        } else {
+            logger.info('[STARTUP] ✅ Nowa instalacja - używam nowej struktury plików');
+        }
+    } catch (error) {
+        logger.error('[STARTUP] ❌ Błąd podczas sprawdzania migracji:', error);
+    }
+
     // Rejestracja komend slash
     await registerSlashCommands(client);
     
