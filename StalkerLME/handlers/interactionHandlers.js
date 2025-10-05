@@ -4249,21 +4249,11 @@ async function handleWynikiViewButton(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        // Format: wyniki_view|clanKey|weekNumber-year|view|userId
+        // Format: wyniki_view|clanKey|weekNumber-year|view
         const parts = interaction.customId.split('|');
         const clan = parts[1];
         const weekKey = parts[2];
         const view = parts[3];
-        const ownerId = parts[4];
-
-        // Sprawdź czy użytkownik który kliknął to właściciel
-        if (interaction.user.id !== ownerId) {
-            await interaction.reply({
-                content: '❌ Tylko osoba która wywołała komendę może zmieniać widok.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
 
         const [weekNumber, year] = weekKey.split('-').map(Number);
 
@@ -4497,31 +4487,31 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
         .setTimestamp();
 
-    // Przyciski nawigacji między fazami (dodaj userId do customId)
+    // Przyciski nawigacji między fazami
     const navRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|phase1|${interaction.user.id}`)
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|phase1`)
                 .setLabel('Faza 1')
                 .setStyle(view === 'phase1' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(!weekDataPhase1),
             new ButtonBuilder()
-                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round1|${interaction.user.id}`)
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round1`)
                 .setLabel('Runda 1')
                 .setStyle(view === 'round1' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(!weekDataPhase2?.rounds?.[0]),
             new ButtonBuilder()
-                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round2|${interaction.user.id}`)
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round2`)
                 .setLabel('Runda 2')
                 .setStyle(view === 'round2' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(!weekDataPhase2?.rounds?.[1]),
             new ButtonBuilder()
-                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round3|${interaction.user.id}`)
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round3`)
                 .setLabel('Runda 3')
                 .setStyle(view === 'round3' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(!weekDataPhase2?.rounds?.[2]),
             new ButtonBuilder()
-                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|summary|${interaction.user.id}`)
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|summary`)
                 .setLabel('Suma Faza 2')
                 .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(!weekDataPhase2)
