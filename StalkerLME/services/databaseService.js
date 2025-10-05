@@ -544,6 +544,82 @@ class DatabaseService {
         }
     }
 
+    /**
+     * Pobiera najwyższy historyczny wynik gracza przed określonym tygodniem
+     * @param {string} guildId - ID serwera
+     * @param {string} userId - ID użytkownika
+     * @param {number} beforeWeekNumber - Numer tygodnia (wyłącznie, nie włączamy tego tygodnia)
+     * @param {number} beforeYear - Rok tygodnia
+     * @param {string} clan - Klan
+     * @returns {number|null} - Najwyższy wynik lub null jeśli nie znaleziono
+     */
+    async getPlayerHistoricalBestScore(guildId, userId, beforeWeekNumber, beforeYear, clan) {
+        const guildBaseDir = path.join(this.phasesBaseDir, `guild_${guildId}`, 'phase1');
+
+        try {
+            await fs.access(guildBaseDir);
+        } catch {
+            return null;
+        }
+
+        let bestScore = null;
+
+        try {
+            // Odczytaj wszystkie lata
+            const years = await fs.readdir(guildBaseDir);
+
+            for (const yearDir of years) {
+                const year = parseInt(yearDir);
+                const yearPath = path.join(guildBaseDir, yearDir);
+                const stat = await fs.stat(yearPath);
+
+                if (!stat.isDirectory()) continue;
+
+                // Odczytaj wszystkie pliki w danym roku
+                const files = await fs.readdir(yearPath);
+
+                for (const filename of files) {
+                    // Parsuj nazwę pliku: week-40_clan1.json
+                    const match = filename.match(/^week-(\d+)_(.+)\.json$/);
+                    if (!match) continue;
+
+                    const weekNumber = parseInt(match[1]);
+                    const fileClan = match[2];
+
+                    // Pomiń jeśli to nie ten sam klan
+                    if (fileClan !== clan) continue;
+
+                    // Sprawdź czy ten tydzień jest PRZED określonym tygodniem
+                    const isBeforeTarget = (year < beforeYear) ||
+                                          (year === beforeYear && weekNumber < beforeWeekNumber);
+
+                    if (!isBeforeTarget) continue;
+
+                    // Przeczytaj plik i znajdź wynik gracza
+                    const filePath = path.join(yearPath, filename);
+                    const fileContent = await fs.readFile(filePath, 'utf8');
+                    const weekData = JSON.parse(fileContent);
+
+                    if (!weekData.players) continue;
+
+                    // Znajdź gracza w tym tygodniu
+                    const player = weekData.players.find(p => p.userId === userId);
+                    if (player && player.score !== undefined) {
+                        if (bestScore === null || player.score > bestScore) {
+                            bestScore = player.score;
+                        }
+                    }
+                }
+            }
+
+            return bestScore;
+
+        } catch (error) {
+            logger.error('[DB] ❌ Błąd odczytu historycznego najwyższego wyniku:', error);
+            return null;
+        }
+    }
+
     // =============== PHASE 2 METHODS ===============
 
     async loadPhase2Data() {

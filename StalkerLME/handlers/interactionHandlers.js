@@ -2521,17 +2521,12 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
 async function showPhase2RoundSummary(interaction, session, phaseService) {
     logger.info(`[PHASE2] 📋 Tworzenie podsumowania rundy ${session.currentRound}...`);
 
-    const finalResults = phaseService.getFinalResults(session);
-    const stats = phaseService.calculateStatistics(finalResults);
+    const clanName = session.clan ? phaseService.config.roleDisplayNames[session.clan] : 'nieznany';
 
     const embed = new EmbedBuilder()
         .setTitle(`✅ Runda ${session.currentRound}/3 - Podsumowanie`)
         .setColor('#00FF00')
-        .addFields(
-            { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
-            { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
-            { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true }
-        )
+        .setDescription(`🎯 Analizowany klan: **${clanName}**`)
         .setTimestamp();
 
     const row = new ActionRowBuilder()
@@ -4455,12 +4450,33 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
     const maxScore = sortedPlayers[0]?.score || 1;
 
-    // Dla Fazy 1 oblicz TOP30
+    // Dla Fazy 1 oblicz TOP30 i pobierz historyczne rekordy
     let descriptionExtra = '';
+    let playerHistoricalRecords = new Map(); // userId -> bestScore
+
     if (view === 'phase1') {
         const top30Players = sortedPlayers.slice(0, 30);
         const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
         descriptionExtra = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n`;
+
+        // Pobierz historyczne rekordy dla wszystkich graczy
+        const { databaseService } = interaction.client;
+        if (databaseService) {
+            for (const player of sortedPlayers) {
+                if (player.userId) {
+                    const historicalBest = await databaseService.getPlayerHistoricalBestScore(
+                        interaction.guild.id,
+                        player.userId,
+                        weekNumber,
+                        year,
+                        clan
+                    );
+                    if (historicalBest !== null) {
+                        playerHistoricalRecords.set(player.userId, historicalBest);
+                    }
+                }
+            }
+        }
     }
 
     const resultsText = sortedPlayers.map((player, index) => {
@@ -4472,7 +4488,27 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         const isCaller = player.userId === interaction.user.id;
         const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
 
-        return `${progressBar} ${position}. ${displayName} - ${player.score}`;
+        // Dla Fazy 1 dodaj progres względem historycznego rekordu
+        let progressText = '';
+        if (view === 'phase1' && player.userId && playerHistoricalRecords.has(player.userId)) {
+            const historicalBest = playerHistoricalRecords.get(player.userId);
+            const difference = player.score - historicalBest;
+
+            if (difference > 0) {
+                // Nowy rekord - użyj indeksu górnego (superscript) dla całej liczby
+                const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺' };
+                const superscriptNumber = ('+' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                progressText = ` ${superscriptNumber}`;
+            } else if (difference < 0) {
+                // Poniżej rekordu - użyj indeksu dolnego (subscript) dla całej liczby
+                const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '-': '₋' };
+                const subscriptNumber = ('-' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                progressText = ` ${subscriptNumber}`;
+            }
+            // Jeśli difference === 0, nie pokazuj progresu (wyrównał rekord)
+        }
+
+        return `${progressBar} ${position}. ${displayName} - ${player.score}${progressText}`;
     }).join('\n');
 
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
