@@ -690,7 +690,7 @@ class PhaseService {
             title = `📸 Faza 2 - Runda ${round}/3 - Prześlij zdjęcia wyników`;
         }
 
-        return new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle(title)
             .setDescription(
                 `📅 **Tydzień:** ${weekNumber}/${year}\n\n` +
@@ -705,6 +705,17 @@ class PhaseService {
             .setColor('#0099FF')
             .setTimestamp()
             .setFooter({ text: 'Prześlij zdjęcia zwykłą wiadomością na tym kanale' });
+
+        const customIdPrefix = phase === 2 ? 'phase2' : 'phase1';
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`${customIdPrefix}_cancel_session`)
+                    .setLabel('❌ Anuluj')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+        return { embed, row };
     }
 
     /**

@@ -425,12 +425,10 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
             logger.error('[REMINDER] ❌ Błąd wysyłania przypomnienia:', error);
             await interaction.editReply({ content: messages.errors.unknownError });
         }
-    } else if (interaction.customId.startsWith('wyniki_select_clan_')) {
-        const phase = interaction.customId.replace('wyniki_select_clan_', '');
-        await handleWynikiClanSelect(interaction, sharedState, phase);
-    } else if (interaction.customId.startsWith('wyniki_select_week_')) {
-        const phase = interaction.customId.replace('wyniki_select_week_', '');
-        await handleWynikiWeekSelect(interaction, sharedState, phase);
+    } else if (interaction.customId === 'wyniki_select_clan') {
+        await handleWynikiClanSelect(interaction, sharedState);
+    } else if (interaction.customId === 'wyniki_select_week') {
+        await handleWynikiWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_clan|')) {
         await handleModyfikujClanSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_round|')) {
@@ -808,8 +806,8 @@ async function handleButton(interaction, sharedState) {
     } else if (interaction.customId === 'phase1_overwrite_yes' || interaction.customId === 'phase1_overwrite_no') {
         // Obsługa przycisków nadpisywania danych Phase 1
         await handlePhase1OverwriteButton(interaction, sharedState);
-    } else if (interaction.customId === 'phase1_complete_yes' || interaction.customId === 'phase1_complete_no') {
-        // Obsługa przycisków potwierdzenia zakończenia dodawania zdjęć
+    } else if (interaction.customId === 'phase1_complete_yes' || interaction.customId === 'phase1_complete_no' || interaction.customId === 'phase1_cancel_session') {
+        // Obsługa przycisków potwierdzenia zakończenia dodawania zdjęć i anulowania
         await handlePhase1CompleteButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase1_resolve_')) {
         // Obsługa przycisków rozstrzygania konfliktów
@@ -823,13 +821,15 @@ async function handleButton(interaction, sharedState) {
         await handleModyfikujPaginationButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_week_prev|') || interaction.customId.startsWith('modyfikuj_week_next|')) {
         await handleModyfikujWeekPaginationButton(interaction, sharedState);
-    } else if (interaction.customId.startsWith('wyniki_weeks_prev_') || interaction.customId.startsWith('wyniki_weeks_next_')) {
+    } else if (interaction.customId.startsWith('wyniki_weeks_prev|') || interaction.customId.startsWith('wyniki_weeks_next|')) {
         await handleWynikiWeekPaginationButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('wyniki_phase2_view|')) {
         await handleWynikiPhase2ViewButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('wyniki_view|')) {
+        await handleWynikiViewButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_overwrite_')) {
         await handlePhase2OverwriteButton(interaction, sharedState);
-    } else if (interaction.customId.startsWith('phase2_complete_') || interaction.customId.startsWith('phase2_resolve_')) {
+    } else if (interaction.customId.startsWith('phase2_complete_') || interaction.customId.startsWith('phase2_resolve_') || interaction.customId === 'phase2_cancel_session') {
         await handlePhase2CompleteButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_confirm_save' || interaction.customId === 'phase2_cancel_save') {
         await handlePhase2FinalConfirmButton(interaction, sharedState);
@@ -967,16 +967,7 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('wyniki')
-            .setDescription('Wyświetl wyniki dla wybranej fazy')
-            .addStringOption(option =>
-                option.setName('faza')
-                    .setDescription('Wybierz fazę')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: 'Faza 1', value: 'phase1' },
-                        { name: 'Faza 2', value: 'phase2' }
-                    )
-            ),
+            .setDescription('Wyświetl wyniki dla wszystkich faz'),
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
@@ -1620,7 +1611,8 @@ async function handlePhase1Command(interaction, sharedState) {
         // Pokaż embed z prośbą o zdjęcia (PUBLICZNY)
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
         await interaction.editReply({
-            embeds: [awaitingEmbed]
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
 
         logger.info(`[PHASE1] ✅ Sesja utworzona, czekam na zdjęcia od ${interaction.user.tag}`);
@@ -1763,8 +1755,8 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
 
     const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
     await interaction.update({
-        embeds: [awaitingEmbed],
-        components: []
+        embeds: [awaitingEmbed.embed],
+        components: [awaitingEmbed.row]
     });
 
     logger.info(`[PHASE1] ✅ Sesja utworzona (nadpisywanie), czekam na zdjęcia od ${interaction.user.tag}`);
@@ -1791,6 +1783,20 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
         return;
     }
 
+    if (interaction.customId === 'phase1_cancel_session') {
+        // Anuluj sesję
+        await phaseService.cleanupSession(session.sessionId);
+
+        await interaction.update({
+            content: '❌ Sesja anulowana.',
+            embeds: [],
+            components: []
+        });
+
+        logger.info(`[PHASE1] ❌ Sesja anulowana przez użytkownika: ${interaction.user.tag}`);
+        return;
+    }
+
     if (interaction.customId === 'phase1_complete_no') {
         // Dodaj więcej zdjęć
         session.stage = 'awaiting_images';
@@ -1798,8 +1804,8 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
 
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
         await interaction.update({
-            embeds: [awaitingEmbed],
-            components: []
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
 
         logger.info(`[PHASE1] ➕ Użytkownik chce dodać więcej zdjęć`);
@@ -2115,7 +2121,8 @@ async function handlePhase2Command(interaction, sharedState) {
         // Pokaż embed z prośbą o zdjęcia dla rundy 1 (PUBLICZNY)
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
         await interaction.editReply({
-            embeds: [awaitingEmbed]
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
 
         logger.info(`[PHASE2] ✅ Sesja utworzona, czekam na zdjęcia z rundy 1/3 od ${interaction.user.tag}`);
@@ -2179,8 +2186,8 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
 
     const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
     await interaction.update({
-        embeds: [awaitingEmbed],
-        components: []
+        embeds: [awaitingEmbed.embed],
+        components: [awaitingEmbed.row]
     });
 
     logger.info(`[PHASE2] ✅ Sesja utworzona (nadpisywanie), czekam na zdjęcia od ${interaction.user.tag}`);
@@ -2199,14 +2206,28 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         return;
     }
 
+    if (interaction.customId === 'phase2_cancel_session') {
+        // Anuluj sesję
+        await phaseService.cleanupSession(session.sessionId);
+
+        await interaction.update({
+            content: '❌ Sesja anulowana.',
+            embeds: [],
+            components: []
+        });
+
+        logger.info(`[PHASE2] ❌ Sesja anulowana przez użytkownika: ${interaction.user.tag}`);
+        return;
+    }
+
     if (interaction.customId === 'phase2_complete_no') {
         session.stage = 'awaiting_images';
         phaseService.refreshSessionTimeout(session.sessionId);
 
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
         await interaction.update({
-            embeds: [awaitingEmbed],
-            components: []
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
         return;
     }
@@ -2466,8 +2487,8 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
         await interaction.update({
             content: '',
-            embeds: [awaitingEmbed],
-            components: []
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
         logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
     } else {
@@ -4010,7 +4031,7 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
 
 // =============== WYNIKI HANDLERS ===============
 
-async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0) {
+async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -4019,20 +4040,57 @@ async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0)
         const selectedClan = interaction.values[0];
         const clanName = config.roleDisplayNames[selectedClan];
 
-        // Pobierz dostępne tygodnie dla wybranego klanu (w zależności od fazy)
-        let allWeeks;
-        if (phase === 'phase2') {
-            allWeeks = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
-        } else {
-            allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        // Pobierz dostępne tygodnie dla wybranego klanu z obu faz
+        const allWeeksPhase1 = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const allWeeksPhase2 = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
+
+        const weeksForClanPhase1 = allWeeksPhase1.filter(week => week.clans.includes(selectedClan));
+        const weeksForClanPhase2 = allWeeksPhase2.filter(week => week.clans.includes(selectedClan));
+
+        // Połącz tygodnie z obu faz i posortuj po numerze tygodnia (malejąco)
+        const combinedWeeks = [];
+
+        // Znajdź wszystkie unikalne tygodnie
+        const uniqueWeeks = new Map();
+
+        for (const week of weeksForClanPhase1) {
+            const key = `${week.weekNumber}-${week.year}`;
+            if (!uniqueWeeks.has(key)) {
+                uniqueWeeks.set(key, {
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    hasPhase1: true,
+                    hasPhase2: false,
+                    createdAt: week.createdAt
+                });
+            } else {
+                uniqueWeeks.get(key).hasPhase1 = true;
+            }
         }
 
-        const weeksForClan = allWeeks.filter(week => week.clans.includes(selectedClan));
+        for (const week of weeksForClanPhase2) {
+            const key = `${week.weekNumber}-${week.year}`;
+            if (!uniqueWeeks.has(key)) {
+                uniqueWeeks.set(key, {
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    hasPhase1: false,
+                    hasPhase2: true,
+                    createdAt: week.createdAt
+                });
+            } else {
+                uniqueWeeks.get(key).hasPhase2 = true;
+            }
+        }
+
+        const weeksForClan = Array.from(uniqueWeeks.values()).sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
 
         if (weeksForClan.length === 0) {
-            const commandName = phase === 'phase2' ? '/faza2' : '/faza1';
             await interaction.editReply({
-                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`${commandName}\` aby rozpocząć zbieranie danych.`,
+                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`/faza1\` lub \`/faza2\` aby rozpocząć zbieranie danych.`,
                 components: []
             });
             return;
@@ -4047,7 +4105,7 @@ async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0)
 
         // Utwórz select menu z tygodniami
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`wyniki_select_week_${phase}`)
+            .setCustomId('wyniki_select_week')
             .setPlaceholder('Wybierz tydzień')
             .addOptions(
                 weeksOnPage.map(week => {
@@ -4058,8 +4116,13 @@ async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0)
                         year: 'numeric'
                     });
 
+                    const phases = [];
+                    if (week.hasPhase1) phases.push('F1');
+                    if (week.hasPhase2) phases.push('F2');
+                    const phasesLabel = phases.join(', ');
+
                     return new StringSelectMenuOptionBuilder()
-                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                        .setLabel(`Tydzień ${week.weekNumber}/${week.year} (${phasesLabel})`)
                         .setDescription(`Zapisano: ${dateStr}`)
                         .setValue(`${selectedClan}|${week.weekNumber}-${week.year}`);
                 })
@@ -4072,13 +4135,13 @@ async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0)
             const navRow = new ActionRowBuilder();
 
             const prevButton = new ButtonBuilder()
-                .setCustomId(`wyniki_weeks_prev_${phase}|${selectedClan}|${page}`)
+                .setCustomId(`wyniki_weeks_prev|${selectedClan}|${page}`)
                 .setLabel('◀ Poprzednia')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page === 0);
 
             const nextButton = new ButtonBuilder()
-                .setCustomId(`wyniki_weeks_next_${phase}|${selectedClan}|${page}`)
+                .setCustomId(`wyniki_weeks_next|${selectedClan}|${page}`)
                 .setLabel('Następna ▶')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages - 1);
@@ -4087,9 +4150,8 @@ async function handleWynikiClanSelect(interaction, sharedState, phase, page = 0)
             components.push(navRow);
         }
 
-        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Wyniki - ${phaseTitle}`)
+            .setTitle('📊 Wyniki - Wszystkie Fazy')
             .setDescription(`**Krok 2/2:** Wybierz tydzień dla klanu **${clanName}**:`)
             .setColor('#0099FF')
             .setFooter({ text: `Strona ${page + 1}/${totalPages} | Łącznie tygodni: ${weeksForClan.length}` })
@@ -4113,108 +4175,29 @@ async function handleWynikiWeekPaginationButton(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        // Format customId: wyniki_weeks_prev_phase1|clanKey|page lub wyniki_weeks_next_phase2|clanKey|page
+        // Format customId: wyniki_weeks_prev|clanKey|page lub wyniki_weeks_next|clanKey|page
         const customIdParts = interaction.customId.split('|');
-        const actionAndPhase = customIdParts[0]; // np. "wyniki_weeks_prev_phase1"
+        const action = customIdParts[0]; // np. "wyniki_weeks_prev"
         const clan = customIdParts[1];
         const currentPage = parseInt(customIdParts[2]);
 
-        // Wyciągnij phase z customId
-        const phase = actionAndPhase.includes('phase2') ? 'phase2' : 'phase1';
-        const action = actionAndPhase.startsWith('wyniki_weeks_prev_') ? 'prev' : 'next';
-
         // Oblicz nową stronę
         let newPage = currentPage;
-        if (action === 'prev') {
+        if (action === 'wyniki_weeks_prev') {
             newPage = Math.max(0, currentPage - 1);
-        } else if (action === 'next') {
+        } else if (action === 'wyniki_weeks_next') {
             newPage = currentPage + 1;
         }
 
-        const clanName = config.roleDisplayNames[clan];
+        // Wywołaj ponownie handleWynikiClanSelect z nową stroną
+        // Musimy przygotować mock interaction z values
+        const mockInteraction = {
+            ...interaction,
+            values: [clan],
+            deferUpdate: async () => {} // Mock - już jest deferred
+        };
 
-        // Pobierz dostępne tygodnie dla wybranego klanu (w zależności od fazy)
-        let allWeeks;
-        if (phase === 'phase2') {
-            allWeeks = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
-        } else {
-            allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-        }
-
-        const weeksForClan = allWeeks.filter(week => week.clans.includes(clan));
-
-        if (weeksForClan.length === 0) {
-            const commandName = phase === 'phase2' ? '/faza2' : '/faza1';
-            await interaction.update({
-                content: `📊 Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`${commandName}\` aby rozpocząć zbieranie danych.`,
-                embeds: [],
-                components: []
-            });
-            return;
-        }
-
-        // Paginacja: 20 tygodni na stronę
-        const weeksPerPage = 20;
-        const totalPages = Math.ceil(weeksForClan.length / weeksPerPage);
-        const validPage = Math.max(0, Math.min(newPage, totalPages - 1));
-        const startIndex = validPage * weeksPerPage;
-        const endIndex = Math.min(startIndex + weeksPerPage, weeksForClan.length);
-        const weeksOnPage = weeksForClan.slice(startIndex, endIndex);
-
-        // Utwórz select menu z tygodniami
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`wyniki_select_week_${phase}`)
-            .setPlaceholder('Wybierz tydzień')
-            .addOptions(
-                weeksOnPage.map(week => {
-                    const date = new Date(week.createdAt);
-                    const dateStr = date.toLocaleDateString('pl-PL', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric'
-                    });
-
-                    return new StringSelectMenuOptionBuilder()
-                        .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
-                        .setDescription(`Zapisano: ${dateStr}`)
-                        .setValue(`${clan}|${week.weekNumber}-${week.year}`);
-                })
-            );
-
-        const components = [new ActionRowBuilder().addComponents(selectMenu)];
-
-        // Dodaj przyciski nawigacji jeśli jest więcej niż jedna strona
-        if (totalPages > 1) {
-            const navRow = new ActionRowBuilder();
-
-            const prevButton = new ButtonBuilder()
-                .setCustomId(`wyniki_weeks_prev_${phase}|${clan}|${validPage}`)
-                .setLabel('◀ Poprzednia')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(validPage === 0);
-
-            const nextButton = new ButtonBuilder()
-                .setCustomId(`wyniki_weeks_next_${phase}|${clan}|${validPage}`)
-                .setLabel('Następna ▶')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(validPage >= totalPages - 1);
-
-            navRow.addComponents(prevButton, nextButton);
-            components.push(navRow);
-        }
-
-        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
-        const embed = new EmbedBuilder()
-            .setTitle(`📊 Wyniki - ${phaseTitle}`)
-            .setDescription(`**Krok 2/2:** Wybierz tydzień dla klanu **${clanName}**:`)
-            .setColor('#0099FF')
-            .setFooter({ text: `Strona ${validPage + 1}/${totalPages} | Łącznie tygodni: ${weeksForClan.length}` })
-            .setTimestamp();
-
-        await interaction.update({
-            embeds: [embed],
-            components: components
-        });
+        await handleWynikiClanSelect(mockInteraction, sharedState, newPage);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd paginacji tygodni:', error);
@@ -4226,7 +4209,7 @@ async function handleWynikiWeekPaginationButton(interaction, sharedState) {
     }
 }
 
-async function handleWynikiWeekSelect(interaction, sharedState, phase, view = 'summary') {
+async function handleWynikiWeekSelect(interaction, sharedState, view = 'phase1') {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
@@ -4238,15 +4221,11 @@ async function handleWynikiWeekSelect(interaction, sharedState, phase, view = 's
 
         const clanName = config.roleDisplayNames[clan];
 
-        // Pobierz wyniki dla wybranego tygodnia i klanu (w zależności od fazy)
-        let weekData;
-        if (phase === 'phase2') {
-            weekData = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
-        } else {
-            weekData = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
-        }
+        // Pobierz dane z obu faz
+        const weekDataPhase1 = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        const weekDataPhase2 = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
 
-        if (!weekData) {
+        if (!weekDataPhase1 && !weekDataPhase2) {
             await interaction.editReply({
                 content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
                 components: []
@@ -4254,55 +4233,50 @@ async function handleWynikiWeekSelect(interaction, sharedState, phase, view = 's
             return;
         }
 
-        // Dla Phase 2 - pokaż wyniki z możliwością przełączania między rundami
-        if (phase === 'phase2') {
-            await showPhase2Results(interaction, weekData, clan, weekNumber, year, view, config);
-        } else {
-            // Phase 1 - standardowe wyświetlanie
-            if (!weekData.players || weekData.players.length === 0) {
-                await interaction.editReply({
-                    content: `❌ Brak danych dla wybranego tygodnia i klanu **${clanName}**.`,
-                    components: []
-                });
-                return;
-            }
-
-            const sortedPlayers = weekData.players.sort((a, b) => b.score - a.score);
-            const maxScore = sortedPlayers[0]?.score || 1;
-
-            // Oblicz sumę TOP30
-            const top30Players = sortedPlayers.slice(0, 30);
-            const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
-
-            const resultsText = sortedPlayers.map((player, index) => {
-                const position = index + 1;
-                const barLength = 16;
-                const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
-                const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
-
-                const isCaller = player.userId === interaction.user.id;
-                const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
-
-                return `${progressBar} ${position}. ${displayName} - ${player.score}`;
-            }).join('\n');
-
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 Wyniki - Faza 1`)
-                .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText.length > 0 ? resultsText : 'Brak wyników'}`)
-                .setColor('#0099FF')
-                .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
-                .setTimestamp();
-
-            await interaction.editReply({
-                embeds: [embed],
-                components: []
-            });
-        }
+        // Wyświetl wyniki w zależności od wybranego widoku (domyślnie Faza 1)
+        await showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd wyświetlania wyników:', error);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas wyświetlania wyników.',
+            components: []
+        });
+    }
+}
+
+async function handleWynikiViewButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        // Format: wyniki_view|clanKey|weekNumber-year|view
+        const parts = interaction.customId.split('|');
+        const clan = parts[1];
+        const weekKey = parts[2];
+        const view = parts[3];
+
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        // Pobierz dane z obu faz
+        const weekDataPhase1 = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        const weekDataPhase2 = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+        if (!weekDataPhase1 && !weekDataPhase2) {
+            await interaction.update({
+                content: '❌ Brak danych.',
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+
+        await showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, true);
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd przełączania widoku:', error);
+        await interaction.update({
+            content: '❌ Wystąpił błąd podczas przełączania widoku.',
+            embeds: [],
             components: []
         });
     }
@@ -4425,14 +4399,133 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     });
 }
 
+async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, isUpdate = false) {
+    const clanName = config.roleDisplayNames[clan];
+
+    // Wybierz dane do wyświetlenia w zależności od widoku
+    let players;
+    let viewTitle;
+    let weekData;
+
+    if (view === 'phase1' && weekDataPhase1) {
+        players = weekDataPhase1.players;
+        viewTitle = 'Faza 1';
+        weekData = weekDataPhase1;
+    } else if (view === 'round1' && weekDataPhase2?.rounds?.[0]) {
+        players = weekDataPhase2.rounds[0].players;
+        viewTitle = 'Runda 1';
+        weekData = weekDataPhase2;
+    } else if (view === 'round2' && weekDataPhase2?.rounds?.[1]) {
+        players = weekDataPhase2.rounds[1].players;
+        viewTitle = 'Runda 2';
+        weekData = weekDataPhase2;
+    } else if (view === 'round3' && weekDataPhase2?.rounds?.[2]) {
+        players = weekDataPhase2.rounds[2].players;
+        viewTitle = 'Runda 3';
+        weekData = weekDataPhase2;
+    } else if (view === 'summary' && weekDataPhase2) {
+        players = weekDataPhase2.summary ? weekDataPhase2.summary.players : weekDataPhase2.players;
+        viewTitle = 'Suma';
+        weekData = weekDataPhase2;
+    } else {
+        // Fallback - pokaż pierwszą dostępną fazę
+        if (weekDataPhase1) {
+            players = weekDataPhase1.players;
+            viewTitle = 'Faza 1';
+            weekData = weekDataPhase1;
+            view = 'phase1';
+        } else if (weekDataPhase2) {
+            players = weekDataPhase2.summary ? weekDataPhase2.summary.players : weekDataPhase2.players;
+            viewTitle = 'Suma';
+            weekData = weekDataPhase2;
+            view = 'summary';
+        }
+    }
+
+    if (!players || players.length === 0) {
+        const replyMethod = isUpdate ? 'update' : 'editReply';
+        await interaction[replyMethod]({
+            content: `❌ Brak danych dla wybranego widoku.`,
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+    const maxScore = sortedPlayers[0]?.score || 1;
+
+    // Dla Fazy 1 oblicz TOP30
+    let descriptionExtra = '';
+    if (view === 'phase1') {
+        const top30Players = sortedPlayers.slice(0, 30);
+        const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
+        descriptionExtra = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n`;
+    }
+
+    const resultsText = sortedPlayers.map((player, index) => {
+        const position = index + 1;
+        const barLength = 16;
+        const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
+        const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+        const isCaller = player.userId === interaction.user.id;
+        const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
+
+        return `${progressBar} ${position}. ${displayName} - ${player.score}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+        .setTitle(`📊 Wyniki - ${viewTitle}`)
+        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}`)
+        .setColor('#0099FF')
+        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
+        .setTimestamp();
+
+    // Przyciski nawigacji między fazami
+    const navRow = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|phase1`)
+                .setLabel('Faza 1')
+                .setStyle(view === 'phase1' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(!weekDataPhase1),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round1`)
+                .setLabel('Runda 1')
+                .setStyle(view === 'round1' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(!weekDataPhase2?.rounds?.[0]),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round2`)
+                .setLabel('Runda 2')
+                .setStyle(view === 'round2' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(!weekDataPhase2?.rounds?.[1]),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|round3`)
+                .setLabel('Runda 3')
+                .setStyle(view === 'round3' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(!weekDataPhase2?.rounds?.[2]),
+            new ButtonBuilder()
+                .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|summary`)
+                .setLabel('Suma')
+                .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(!weekDataPhase2)
+        );
+
+    const replyMethod = isUpdate ? 'update' : 'editReply';
+    await interaction[replyMethod]({
+        embeds: [embed],
+        components: [navRow]
+    });
+}
+
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
-    const phase = interaction.options.getString('faza');
 
     await interaction.deferReply();
 
     try {
-        // Utwórz select menu z klanami
+        // Utwórz select menu z klanami (bez parametru phase)
         const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
             return new StringSelectMenuOptionBuilder()
                 .setLabel(config.roleDisplayNames[clanKey])
@@ -4440,15 +4533,14 @@ async function handleWynikiCommand(interaction, sharedState) {
         });
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`wyniki_select_clan_${phase}`)
+            .setCustomId('wyniki_select_clan')
             .setPlaceholder('Wybierz klan')
             .addOptions(clanOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
-        const phaseTitle = phase === 'phase1' ? 'Faza 1' : 'Faza 2';
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Wyniki - ${phaseTitle}`)
+            .setTitle('📊 Wyniki - Wszystkie Fazy')
             .setDescription('**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:')
             .setColor('#0099FF')
             .setTimestamp();
