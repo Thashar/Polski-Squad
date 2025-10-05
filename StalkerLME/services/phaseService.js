@@ -521,10 +521,10 @@ class PhaseService {
     async saveFinalResults(session, finalResults, guild, createdBy) {
         const weekInfo = this.getCurrentWeekInfo();
 
-        logger.info(`[PHASE1] 💾 Zapisywanie wyników dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
+        logger.info(`[PHASE1] 💾 Zapisywanie wyników dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}, klan: ${session.clan}`);
 
         // Usuń stare dane jeśli istnieją
-        await this.databaseService.deletePhase1DataForWeek(session.guildId, weekInfo.weekNumber, weekInfo.year);
+        await this.databaseService.deletePhase1DataForWeek(session.guildId, weekInfo.weekNumber, weekInfo.year, session.clan);
 
         // Zapisz nowe dane
         const members = await guild.members.fetch();
