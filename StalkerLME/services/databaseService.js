@@ -371,9 +371,13 @@ class DatabaseService {
 
         // Wczytaj istniejące dane lub utwórz nowe
         let weekData;
+        let isNewFile = false;
+        let isOverwriting = false;
+
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
             weekData = JSON.parse(fileContent);
+            isOverwriting = true;
         } catch (error) {
             // Plik nie istnieje - utwórz nową strukturę
             weekData = {
@@ -382,6 +386,14 @@ class DatabaseService {
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
+            isNewFile = true;
+        }
+
+        // Jeśli nadpisujemy plik, wyświetl informację
+        if (isOverwriting && weekData.players.length === 0) {
+            logger.warn(`[PHASE1] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
+        } else if (isOverwriting) {
+            logger.warn(`[PHASE1] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan} (poprzednio: ${weekData.players.length} graczy)`);
         }
 
         // Sprawdź czy gracz już istnieje (aktualizuj jeśli tak)
@@ -414,26 +426,28 @@ class DatabaseService {
      * Pobiera podsumowanie danych dla danego tygodnia i klanu
      */
     async getPhase1Summary(guildId, weekNumber, year, clan) {
-        const data = await this.loadPhase1Data();
-        const weekKey = `${weekNumber}-${year}`;
+        // NOWA WERSJA - czyta z osobnego pliku
+        const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
-        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const clanData = JSON.parse(fileContent);
+            const players = clanData.players || [];
+
+            const scores = players.map(p => p.score).sort((a, b) => b - a);
+            const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
+
+            return {
+                playerCount: players.length,
+                top30Sum: top30Sum,
+                createdBy: clanData.createdBy,
+                createdAt: clanData.createdAt,
+                updatedAt: clanData.updatedAt
+            };
+        } catch (error) {
+            // Plik nie istnieje
             return null;
         }
-
-        const clanData = data[guildId][weekKey][clan];
-        const players = clanData.players || [];
-
-        const scores = players.map(p => p.score).sort((a, b) => b - a);
-        const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
-
-        return {
-            playerCount: players.length,
-            top30Sum: top30Sum,
-            createdBy: clanData.createdBy,
-            createdAt: clanData.createdAt,
-            updatedAt: clanData.updatedAt
-        };
     }
 
     /**
@@ -596,6 +610,16 @@ class DatabaseService {
         await this.ensurePhaseDirectories(guildId, 2, year);
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
+        // Sprawdź czy plik już istnieje
+        let isOverwriting = false;
+        try {
+            await fs.access(filePath);
+            isOverwriting = true;
+            logger.warn(`[PHASE2] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
+        } catch (error) {
+            // Plik nie istnieje - to jest nowy zapis
+        }
+
         const weekData = {
             rounds: roundsData,
             summary: {
@@ -655,26 +679,28 @@ class DatabaseService {
     }
 
     async getPhase2Summary(guildId, weekNumber, year, clan) {
-        const data = await this.loadPhase2Data();
-        const weekKey = `${weekNumber}-${year}`;
+        // NOWA WERSJA - czyta z osobnego pliku
+        const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
-        if (!data[guildId] || !data[guildId][weekKey] || !data[guildId][weekKey][clan]) {
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const clanData = JSON.parse(fileContent);
+            const players = clanData.summary?.players || clanData.players || [];
+
+            const scores = players.map(p => p.score).sort((a, b) => b - a);
+            const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
+
+            return {
+                playerCount: players.length,
+                top30Sum: top30Sum,
+                createdBy: clanData.createdBy,
+                createdAt: clanData.createdAt,
+                updatedAt: clanData.updatedAt
+            };
+        } catch (error) {
+            // Plik nie istnieje
             return null;
         }
-
-        const clanData = data[guildId][weekKey][clan];
-        const players = clanData.summary?.players || clanData.players || [];
-
-        const scores = players.map(p => p.score).sort((a, b) => b - a);
-        const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
-
-        return {
-            playerCount: players.length,
-            top30Sum: top30Sum,
-            createdBy: clanData.createdBy,
-            createdAt: clanData.createdAt,
-            updatedAt: clanData.updatedAt
-        };
     }
 
     /**

@@ -682,6 +682,9 @@ class PhaseService {
         const expiryTime = Date.now() + (15 * 60 * 1000); // 15 minut od teraz
         const expiryTimestamp = Math.floor(expiryTime / 1000);
 
+        // Pobierz informacje o aktualnym tygodniu
+        const { weekNumber, year } = this.getCurrentWeekInfo();
+
         let title = `📸 Faza ${phase} - Prześlij zdjęcia wyników`;
         if (phase === 2 && round) {
             title = `📸 Faza 2 - Runda ${round}/3 - Prześlij zdjęcia wyników`;
@@ -690,6 +693,7 @@ class PhaseService {
         return new EmbedBuilder()
             .setTitle(title)
             .setDescription(
+                `📅 **Tydzień:** ${weekNumber}/${year}\n\n` +
                 '**⚠️ WAŻNE - Zasady robienia screenów:**\n' +
                 '• Rób screeny **prosto i starannie**\n' +
                 '• Im więcej screenów (do 10), tym lepsza jakość odczytu\n' +
