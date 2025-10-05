@@ -222,8 +222,11 @@ class PhaseService {
         const session = this.activeSessions.get(sessionId);
         if (!session) return;
 
+        logger.info(`[PHASE${session.phase || 1}] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
+
         if (session.timeout) {
             clearTimeout(session.timeout);
+            session.timeout = null;
         }
 
         // Usuń pliki z temp
@@ -231,35 +234,42 @@ class PhaseService {
 
         // Wyczyść duże struktury danych z pamięci
         if (session.processedImages) {
-            session.processedImages = [];
+            session.processedImages.length = 0;
+            session.processedImages = null;
         }
         if (session.aggregatedResults) {
             session.aggregatedResults.clear();
+            session.aggregatedResults = null;
         }
         if (session.conflicts) {
-            session.conflicts = [];
+            session.conflicts.length = 0;
+            session.conflicts = null;
         }
         if (session.resolvedConflicts) {
             session.resolvedConflicts.clear();
+            session.resolvedConflicts = null;
         }
         if (session.roundsData) {
-            session.roundsData = [];
+            session.roundsData.length = 0;
+            session.roundsData = null;
         }
         if (session.downloadedFiles) {
-            session.downloadedFiles = [];
+            session.downloadedFiles.length = 0;
+            session.downloadedFiles = null;
         }
 
         // Odblokuj przetwarzanie dla tego guild
-        this.clearActiveProcessing(session.guildId);
+        await this.clearActiveProcessing(session.guildId);
 
+        // Usuń sesję z mapy
         this.activeSessions.delete(sessionId);
 
         // Wymuś garbage collection jeśli dostępne (tylko w trybie --expose-gc)
         if (global.gc) {
             global.gc();
-            logger.info(`[PHASE${session.phase || 1}] 🗑️ Usunięto sesję i wywołano garbage collection: ${sessionId}`);
+            logger.info(`[PHASE${session.phase || 1}] 🗑️ Sesja wyczyszczona, GC wywołany: ${sessionId}`);
         } else {
-            logger.info(`[PHASE${session.phase || 1}] 🗑️ Usunięto sesję: ${sessionId}`);
+            logger.info(`[PHASE${session.phase || 1}] 🗑️ Sesja wyczyszczona: ${sessionId}`);
         }
     }
 

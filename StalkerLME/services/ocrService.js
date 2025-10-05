@@ -28,15 +28,18 @@ class OCRService {
     }
 
     async processImage(attachment) {
+        let buffer = null;
+        let processedBuffer = null;
+
         try {
             logger.info('Rozpoczęcie analizy OCR');
             logger.info(`📷 Przetwarzanie obrazu: ${attachment.url}`);
 
             const response = await fetch(attachment.url);
             const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
+            buffer = Buffer.from(arrayBuffer);
 
-            const processedBuffer = await this.processImageWithSharp(buffer);
+            processedBuffer = await this.processImageWithSharp(buffer);
 
             logger.info('Uruchamianie OCR');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
@@ -49,11 +52,19 @@ class OCRService {
                 logger.info(`${index + 1}: ${line.trim()}`);
             });
 
+            // Zwolnij pamięć
+            buffer = null;
+            processedBuffer = null;
+
             return text;
         } catch (error) {
             logger.error('Błąd OCR');
             logger.error('❌ Błąd podczas przetwarzania obrazu:', error);
             throw error;
+        } finally {
+            // Wymuś zwolnienie bufora z pamięci
+            buffer = null;
+            processedBuffer = null;
         }
     }
 
@@ -61,14 +72,17 @@ class OCRService {
      * Przetwarza obraz z pliku lokalnego (dla Phase 1)
      */
     async processImageFromFile(filepath) {
+        let imageBuffer = null;
+        let processedBuffer = null;
+
         try {
             logger.info(`[PHASE1] 📂 Przetwarzanie pliku: ${filepath}`);
 
             // Wczytaj plik z dysku
             const fs = require('fs').promises;
-            const imageBuffer = await fs.readFile(filepath);
+            imageBuffer = await fs.readFile(filepath);
 
-            const processedBuffer = await this.processImageWithSharp(imageBuffer);
+            processedBuffer = await this.processImageWithSharp(imageBuffer);
 
             logger.info('[PHASE1] 🔄 Uruchamianie OCR na pliku...');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
@@ -81,10 +95,18 @@ class OCRService {
                 logger.info(`${index + 1}: ${line.trim()}`);
             });
 
+            // Zwolnij pamięć
+            imageBuffer = null;
+            processedBuffer = null;
+
             return text;
         } catch (error) {
             logger.error('[PHASE1] ❌ Błąd podczas przetwarzania pliku:', error);
             throw error;
+        } finally {
+            // Wymuś zwolnienie bufora z pamięci
+            imageBuffer = null;
+            processedBuffer = null;
         }
     }
 
