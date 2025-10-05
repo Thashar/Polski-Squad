@@ -645,11 +645,17 @@ class PhaseService {
 
     /**
      * Pobiera informacje o bieżącym tygodniu (ISO week)
+     * MODYFIKACJA: Tydzień zaczyna się we wtorek zamiast w poniedziałek
      */
     getCurrentWeekInfo() {
         const now = new Date();
-        const year = now.getFullYear();
-        const weekNumber = this.getISOWeek(now);
+
+        // Jeśli jest poniedziałek, użyj numeru tygodnia z poprzedniej niedzieli
+        const dayOfWeek = now.getDay();
+        const dateForWeek = dayOfWeek === 1 ? new Date(now.getTime() - 24 * 60 * 60 * 1000) : now;
+
+        const year = dateForWeek.getFullYear();
+        const weekNumber = this.getISOWeek(dateForWeek);
 
         return { weekNumber, year };
     }
