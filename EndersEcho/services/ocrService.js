@@ -174,10 +174,19 @@ class OCRService {
      */
     fixScoreFormat(scoreText) {
         let fixedScore = scoreText;
-        
+
         // Zamień TT na 1T - jeśli wynik kończy się na TT, zamień pierwsze T na 1
         fixedScore = fixedScore.replace(/TT$/i, '1T');
-        
+
+        // NORMALIZACJA: Zamień .X0 na .XQ (gdy są dwie cyfry po kropce i ostatnia to 0)
+        // Przykład: 224.20 -> 224.2Q
+        if (/\.\d0$/.test(fixedScore)) {
+            fixedScore = fixedScore.replace(/(\.\d)0$/, '$1Q');
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+                logger.info('Zastąpiono końcowe 0 po kropce na Q (np. .20 -> .2Q)');
+            }
+        }
+
         // Zamień 7 na końcu na T (jeśli nie ma już jednostki)
         // Sprawdź czy wynik kończy się cyfrą 7 i nie ma jednostki K/M/B/T/Q/S
         if (/7$/.test(fixedScore) && !/[KMBTQS]$/i.test(fixedScore)) {
@@ -186,7 +195,7 @@ class OCRService {
                 logger.info('Zastąpiono końcową cyfrę 7 na literę T');
             }
         }
-        
+
         // Zamień 0 na końcu na Q (jeśli nie ma już jednostki M/B/T/Q/Qi)
         // Sprawdź czy wynik kończy się cyfrą 0 i nie ma jednostki M/B/T/Q/Qi
         if (/0$/.test(fixedScore) && !/(?:Qi|[MBTQ])$/i.test(fixedScore)) {
@@ -195,12 +204,12 @@ class OCRService {
                 logger.info('Zastąpiono końcową cyfrę 0 na literę Q');
             }
         }
-        
+
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
             logger.info('Oryginalny wynik:', scoreText);
             logger.info('Poprawiony wynik:', fixedScore);
         }
-        
+
         return fixedScore;
     }
 
