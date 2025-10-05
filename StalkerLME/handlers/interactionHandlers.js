@@ -4495,15 +4495,15 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             const difference = player.score - historicalBest;
 
             if (difference > 0) {
-                // Nowy rekord - użyj indeksu górnego (superscript) dla całej liczby
-                const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺' };
-                const superscriptNumber = ('+' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                progressText = ` ${superscriptNumber}`;
+                // Nowy rekord - użyj indeksu górnego (superscript) dla całej liczby z trójkątem
+                const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                progressText = ` ▲${superscriptNumber}`;
             } else if (difference < 0) {
-                // Poniżej rekordu - użyj indeksu dolnego (subscript) dla całej liczby
-                const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '-': '₋' };
-                const subscriptNumber = ('-' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                progressText = ` ${subscriptNumber}`;
+                // Poniżej rekordu - użyj indeksu dolnego (subscript) dla całej liczby z trójkątem
+                const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                progressText = ` ▼${subscriptNumber}`;
             }
             // Jeśli difference === 0, nie pokazuj progresu (wyrównał rekord)
         }
