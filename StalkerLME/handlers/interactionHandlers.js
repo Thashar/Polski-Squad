@@ -80,6 +80,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'modyfikuj':
             await handleModyfikujCommand(interaction, sharedState);
             break;
+        case 'dodaj':
+            await handleDodajCommand(interaction, sharedState);
+            break;
         case 'faza2':
             await handlePhase2Command(interaction, sharedState);
             break;
@@ -436,6 +439,10 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleModyfikujWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_player_')) {
         await handleModyfikujPlayerSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('dodaj_select_week|')) {
+        await handleDodajWeekSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('dodaj_select_round|')) {
+        await handleDodajRoundSelect(interaction, sharedState);
     }
 }
 
@@ -985,6 +992,19 @@ async function registerSlashCommands(client) {
             ),
 
         new SlashCommandBuilder()
+            .setName('dodaj')
+            .setDescription('Dodaj nowego gracza do istniejących wyników')
+            .addStringOption(option =>
+                option.setName('faza')
+                    .setDescription('Wybierz fazę')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Faza 1', value: 'phase1' },
+                        { name: 'Faza 2', value: 'phase2' }
+                    )
+            ),
+
+        new SlashCommandBuilder()
             .setName('faza2')
             .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 2 (3 rundy)')
     ];
@@ -1486,6 +1506,8 @@ async function handleModalSubmit(interaction, sharedState) {
         await handleDecodeModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_modal_')) {
         await handleModyfikujModalSubmit(interaction, sharedState);
+    } else if (interaction.customId.startsWith('dodaj_modal|')) {
+        await handleDodajModalSubmit(interaction, sharedState);
     }
 }
 
@@ -2515,6 +2537,370 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
     }
 
     logger.info(`[PHASE2] ✅ Podsumowanie rundy ${session.currentRound} wysłane`);
+}
+
+// =============== DODAJ HANDLERS ===============
+
+async function handleDodajWeekSelect(interaction, sharedState) {
+    const { config } = sharedState;
+    const [prefix, phase, clan] = interaction.customId.split('|');
+    const selectedWeek = interaction.values[0];
+
+    // Jeśli Faza 2, pokaż wybór rundy
+    if (phase === 'phase2') {
+        const roundOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Runda 1')
+                .setValue('round1')
+                .setDescription('Dodaj do rundy 1'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Runda 2')
+                .setValue('round2')
+                .setDescription('Dodaj do rundy 2'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Runda 3')
+                .setValue('round3')
+                .setDescription('Dodaj do rundy 3'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Podsumowanie (suma)')
+                .setValue('summary')
+                .setDescription('Dodaj do zestawienia końcowego')
+        ];
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`dodaj_select_round|${phase}|${clan}|${selectedWeek}`)
+            .setPlaceholder('Wybierz rundę')
+            .addOptions(roundOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('➕ Dodaj gracza - Faza 2')
+            .setDescription(`**Krok 2/3:** Wybierz rundę\n\nTydzień: **${selectedWeek}**\nKlan: **${config.roleDisplayNames[clan]}**`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [embed],
+            components: [row]
+        });
+    } else {
+        // Faza 1 - pokaż od razu modal
+        const modal = new ModalBuilder()
+            .setCustomId(`dodaj_modal|${phase}|${clan}|${selectedWeek}|none`)
+            .setTitle('Dodaj gracza - Faza 1');
+
+        const nickInput = new TextInputBuilder()
+            .setCustomId('nick')
+            .setLabel('Nick gracza')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Wpisz nick gracza')
+            .setRequired(true);
+
+        const scoreInput = new TextInputBuilder()
+            .setCustomId('score')
+            .setLabel('Wynik')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Wpisz wynik (liczba)')
+            .setRequired(true);
+
+        const row1 = new ActionRowBuilder().addComponents(nickInput);
+        const row2 = new ActionRowBuilder().addComponents(scoreInput);
+
+        modal.addComponents(row1, row2);
+
+        await interaction.showModal(modal);
+    }
+}
+
+async function handleDodajRoundSelect(interaction, sharedState) {
+    const { config } = sharedState;
+    const [prefix, phase, clan, weekNumber] = interaction.customId.split('|');
+    const selectedRound = interaction.values[0];
+
+    // Pokaż modal z nickiem i wynikiem
+    const modal = new ModalBuilder()
+        .setCustomId(`dodaj_modal|${phase}|${clan}|${weekNumber}|${selectedRound}`)
+        .setTitle('Dodaj gracza - Faza 2');
+
+    const nickInput = new TextInputBuilder()
+        .setCustomId('nick')
+        .setLabel('Nick gracza')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz nick gracza')
+        .setRequired(true);
+
+    const scoreInput = new TextInputBuilder()
+        .setCustomId('score')
+        .setLabel('Wynik')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz wynik (liczba)')
+        .setRequired(true);
+
+    const row1 = new ActionRowBuilder().addComponents(nickInput);
+    const row2 = new ActionRowBuilder().addComponents(scoreInput);
+
+    modal.addComponents(row1, row2);
+
+    await interaction.showModal(modal);
+}
+
+async function handleDodajCommand(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    // Sprawdź uprawnienia (admin lub allowedPunishRoles)
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Wykryj klan użytkownika
+    const targetRoleIds = Object.entries(config.targetRoles);
+    let userClan = null;
+
+    for (const [clanKey, roleId] of targetRoleIds) {
+        if (interaction.member.roles.cache.has(roleId)) {
+            userClan = clanKey;
+            break;
+        }
+    }
+
+    if (!userClan) {
+        await interaction.reply({
+            content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról klanowych aby dodawać wyniki.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    const selectedPhase = interaction.options.getString('faza');
+
+    try {
+        const clanName = config.roleDisplayNames[userClan];
+
+        // Pobierz dostępne tygodnie dla tego klanu
+        const availableWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const weeksForClan = availableWeeks.filter(week => week.clans.includes(userClan));
+
+        if (weeksForClan.length === 0) {
+            await interaction.reply({
+                content: `❌ Brak zapisanych wyników dla klanu ${clanName}. Najpierw użyj \`/faza1\` lub \`/faza2\` aby dodać wyniki.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Twórz select menu z tygodniami
+        const weekOptions = weeksForClan.slice(0, 25).map(week => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                .setValue(`${week.weekNumber}-${week.year}`)
+                .setDescription(`${week.clans.map(c => config.roleDisplayNames[c]).join(', ')}`);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`dodaj_select_week|${selectedPhase}|${userClan}`)
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(weekOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const embed = new EmbedBuilder()
+            .setTitle(`➕ Dodaj gracza - ${phaseTitle}`)
+            .setDescription(`**Krok 1/3:** Wybierz tydzień (klan: **${clanName}**)`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.reply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+        logger.error('[DODAJ] ❌ Błąd komendy /dodaj:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas inicjalizacji komendy.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleDodajModalSubmit(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+    const [prefix, phase, clan, weekNumber, round] = interaction.customId.split('|');
+
+    const nick = interaction.fields.getTextInputValue('nick');
+    const scoreInput = interaction.fields.getTextInputValue('score');
+    const scoreNum = parseInt(scoreInput);
+
+    if (isNaN(scoreNum)) {
+        await interaction.reply({
+            content: '❌ Wynik musi być liczbą.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        const [week, year] = weekNumber.split('-');
+
+        if (phase === 'phase1') {
+            // Dodaj gracza do Fazy 1
+            const weekData = await databaseService.getPhase1DataForWeek(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan
+            );
+
+            if (!weekData) {
+                await interaction.editReply({
+                    content: '❌ Nie znaleziono danych dla tego tygodnia.'
+                });
+                return;
+            }
+
+            // Dodaj gracza do listy
+            weekData.players.push({
+                userId: nick,
+                displayName: nick,
+                score: scoreNum
+            });
+
+            // Przelicz TOP30
+            const sortedPlayers = [...weekData.players].sort((a, b) => b.score - a.score);
+            const top30 = sortedPlayers.slice(0, 30);
+            const top30Sum = top30.reduce((sum, p) => sum + p.score, 0);
+
+            // Zapisz dane
+            await databaseService.savePhase1Result(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan,
+                weekData.players,
+                interaction.user.id
+            );
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Gracz dodany - Faza 1')
+                    .setDescription(`Dodano gracza **${nick}** z wynikiem **${scoreNum}**`)
+                    .addFields(
+                        { name: 'Tydzień', value: `${week}/${year}`, inline: true },
+                        { name: 'Klan', value: config.roleDisplayNames[clan], inline: true },
+                        { name: 'TOP30 (suma)', value: top30Sum.toString(), inline: true }
+                    )
+                    .setColor('#00FF00')
+                    .setTimestamp()
+                ]
+            });
+
+        } else if (phase === 'phase2') {
+            // Dodaj gracza do Fazy 2
+            const weekData = await databaseService.getPhase2DataForWeek(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan
+            );
+
+            if (!weekData) {
+                await interaction.editReply({
+                    content: '❌ Nie znaleziono danych dla tego tygodnia.'
+                });
+                return;
+            }
+
+            if (round === 'summary') {
+                // Dodaj do podsumowania
+                weekData.summary.players.push({
+                    userId: nick,
+                    displayName: nick,
+                    score: scoreNum
+                });
+            } else {
+                // Dodaj do konkretnej rundy
+                const roundIndex = round === 'round1' ? 0 : round === 'round2' ? 1 : 2;
+
+                weekData.rounds[roundIndex].players.push({
+                    userId: nick,
+                    displayName: nick,
+                    score: scoreNum
+                });
+
+                // Przelicz sumę wyników dla tego gracza we wszystkich rundach
+                let totalScore = 0;
+                for (const r of weekData.rounds) {
+                    const playerInRound = r.players.find(p => p.userId === nick);
+                    if (playerInRound) {
+                        totalScore += playerInRound.score;
+                    }
+                }
+
+                // Zaktualizuj podsumowanie
+                const playerInSummary = weekData.summary.players.find(p => p.userId === nick);
+                if (playerInSummary) {
+                    playerInSummary.score = totalScore;
+                } else {
+                    weekData.summary.players.push({
+                        userId: nick,
+                        displayName: nick,
+                        score: totalScore
+                    });
+                }
+            }
+
+            // Zapisz dane
+            await databaseService.savePhase2Results(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan,
+                weekData.rounds,
+                weekData.summary.players,
+                interaction.user.id
+            );
+
+            const roundName = round === 'summary' ? 'Podsumowanie' :
+                              round === 'round1' ? 'Runda 1' :
+                              round === 'round2' ? 'Runda 2' : 'Runda 3';
+
+            // Policz sumę dla podsumowania
+            const summarySum = weekData.summary.players.reduce((sum, p) => sum + p.score, 0);
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Gracz dodany - Faza 2')
+                    .setDescription(`Dodano gracza **${nick}** z wynikiem **${scoreNum}**`)
+                    .addFields(
+                        { name: 'Tydzień', value: `${week}/${year}`, inline: true },
+                        { name: 'Klan', value: config.roleDisplayNames[clan], inline: true },
+                        { name: 'Runda', value: roundName, inline: true },
+                        { name: 'Suma (podsumowanie)', value: summarySum.toString(), inline: false }
+                    )
+                    .setColor('#00FF00')
+                    .setTimestamp()
+                ]
+            });
+        }
+
+    } catch (error) {
+        logger.error('[DODAJ] ❌ Błąd dodawania gracza:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas dodawania gracza.'
+        });
+    }
 }
 
 // =============== MODYFIKUJ HANDLERS ===============
