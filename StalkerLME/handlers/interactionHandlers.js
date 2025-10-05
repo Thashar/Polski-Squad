@@ -1537,6 +1537,22 @@ async function handlePhase1Command(interaction, sharedState) {
             return;
         }
 
+        // Sprawdź czy ktoś już przetwarza dane
+        if (phaseService.isProcessingActive(interaction.guild.id)) {
+            const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+            phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('⏳ Kolejka zajęta')
+                    .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostaniesz powiadomiony na priv** gdy kolejka się zwolni.`)
+                    .setColor('#FFA500')
+                    .setTimestamp()
+                ]
+            });
+            return;
+        }
+
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
         const existingData = await databaseService.checkPhase1DataExists(
@@ -2011,6 +2027,22 @@ async function handlePhase2Command(interaction, sharedState) {
             await interaction.editReply({
                 content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról: ' +
                     Object.values(config.roleDisplayNames).join(', ')
+            });
+            return;
+        }
+
+        // Sprawdź czy ktoś już przetwarza dane
+        if (phaseService.isProcessingActive(interaction.guild.id)) {
+            const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+            phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('⏳ Kolejka zajęta')
+                    .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostaniesz powiadomiony na priv** gdy kolejka się zwolni.`)
+                    .setColor('#FFA500')
+                    .setTimestamp()
+                ]
             });
             return;
         }

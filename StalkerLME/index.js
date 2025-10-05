@@ -34,7 +34,7 @@ const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
 const PhaseService = require('./services/phaseService');
-const phaseService = new PhaseService(config, databaseService, ocrService);
+const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
 // Obiekt zawierający wszystkie współdzielone stany
 // Ustaw globalny dostęp do klienta dla messageCleanupService

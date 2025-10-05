@@ -7,13 +7,15 @@ const https = require('https');
 const logger = createBotLogger('StalkerLME');
 
 class PhaseService {
-    constructor(config, databaseService, ocrService) {
+    constructor(config, databaseService, ocrService, client) {
         this.config = config;
         this.databaseService = databaseService;
         this.ocrService = ocrService;
+        this.client = client;
         this.activeSessions = new Map(); // sessionId → session data
         this.tempDir = path.join(__dirname, '..', 'temp', 'phase1');
         this.activeProcessing = new Map(); // guildId → userId (kto obecnie przetwarza)
+        this.waitingQueue = new Map(); // guildId → Set<userId> (kto czeka na zwolnienie)
     }
 
     /**
@@ -39,11 +41,48 @@ class PhaseService {
     }
 
     /**
-     * Usuwa aktywne przetwarzanie
+     * Dodaje użytkownika do kolejki czekających
      */
-    clearActiveProcessing(guildId) {
+    addToWaitingQueue(guildId, userId) {
+        if (!this.waitingQueue.has(guildId)) {
+            this.waitingQueue.set(guildId, new Set());
+        }
+        this.waitingQueue.get(guildId).add(userId);
+        logger.info(`[QUEUE] ➕ Użytkownik ${userId} dodany do kolejki oczekujących dla guild ${guildId}`);
+    }
+
+    /**
+     * Usuwa aktywne przetwarzanie i powiadamia czekających
+     */
+    async clearActiveProcessing(guildId) {
         this.activeProcessing.delete(guildId);
-        logger.info(`[PHASE1] 🔓 Odblokowano przetwarzanie dla guild ${guildId}`);
+        logger.info(`[PHASE] 🔓 Odblokowano przetwarzanie dla guild ${guildId}`);
+
+        // Powiadom czekających użytkowników
+        if (this.waitingQueue.has(guildId)) {
+            const waiting = this.waitingQueue.get(guildId);
+            logger.info(`[QUEUE] 📢 Powiadamianie ${waiting.size} czekających użytkowników`);
+
+            for (const userId of waiting) {
+                try {
+                    const user = await this.client.users.fetch(userId);
+                    await user.send({
+                        embeds: [new EmbedBuilder()
+                            .setTitle('✅ Kolejka zwolniona!')
+                            .setDescription('Komendy `/faza1` i `/faza2` są teraz dostępne. Możesz ich użyć.')
+                            .setColor('#00FF00')
+                            .setTimestamp()
+                        ]
+                    });
+                    logger.info(`[QUEUE] ✅ Powiadomiono użytkownika ${userId}`);
+                } catch (error) {
+                    logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId}:`, error.message);
+                }
+            }
+
+            // Wyczyść kolejkę po powiadomieniu
+            this.waitingQueue.delete(guildId);
+        }
     }
 
     /**
@@ -368,11 +407,45 @@ class PhaseService {
                 .setTimestamp()
                 .setFooter({ text: 'Przetwarzanie...' });
 
-            await session.publicInteraction.editReply({
-                embeds: [embed]
-            });
+            // Spróbuj zaktualizować przez editReply
+            try {
+                await session.publicInteraction.editReply({
+                    embeds: [embed]
+                });
+            } catch (editError) {
+                // Interakcja wygasła - anuluj sesję i odblokuj kolejkę
+                if (editError.code === 10015 || editError.message?.includes('Unknown Webhook') || editError.message?.includes('Invalid Webhook Token')) {
+                    logger.warn('[PHASE] ⏰ Interakcja wygasła, anuluję sesję i odblokowuję kolejkę');
+
+                    // Wyślij informację do kanału
+                    try {
+                        const channel = await this.client.channels.fetch(session.channelId);
+                        if (channel) {
+                            await channel.send({
+                                content: `❌ <@${session.userId}> Sesja wygasła z powodu braku aktywności. Spróbuj ponownie.`,
+                                embeds: [new EmbedBuilder()
+                                    .setTitle('⏰ Sesja wygasła')
+                                    .setDescription('Interakcja Discord wygasła (max 15 minut). Dane nie zostały zapisane.')
+                                    .setColor('#FF0000')
+                                    .setTimestamp()
+                                ]
+                            });
+                        }
+                    } catch (channelError) {
+                        logger.error('[PHASE] Nie udało się wysłać informacji o wygaśnięciu sesji:', channelError.message);
+                    }
+
+                    // Wyczyść sesję i odblokuj przetwarzanie
+                    await this.cleanupSession(session.sessionId);
+                    this.clearActiveProcessing(session.guildId);
+
+                    return; // Przerwij przetwarzanie
+                } else {
+                    throw editError;
+                }
+            }
         } catch (error) {
-            logger.error('[PHASE1] ❌ Błąd aktualizacji postępu:', error);
+            logger.error('[PHASE] ❌ Błąd aktualizacji postępu:', error.message);
         }
     }
 
@@ -590,7 +663,7 @@ class PhaseService {
      * Tworzy embed z prośbą o zdjęcia
      */
     createAwaitingImagesEmbed(phase = 1, round = null) {
-        const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minut od teraz
+        const expiryTime = Date.now() + (15 * 60 * 1000); // 15 minut od teraz
         const expiryTimestamp = Math.floor(expiryTime / 1000);
 
         let title = `📸 Faza ${phase} - Prześlij zdjęcia wyników`;
