@@ -4479,6 +4479,14 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         }
     }
 
+    // Najpierw znajdź najdłuższą nazwę i najwyższy wynik dla wyrównania
+    const maxNameLength = Math.max(...sortedPlayers.map(p => {
+        const isCaller = p.userId === interaction.user.id;
+        // Długość bold markdown (**) to 4 znaki dodatkowe
+        return isCaller ? p.displayName.length + 4 : p.displayName.length;
+    }));
+    const maxScoreLength = Math.max(...sortedPlayers.map(p => String(p.score).length));
+
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
         const barLength = 16;
@@ -4488,6 +4496,14 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         const isCaller = player.userId === interaction.user.id;
         const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
 
+        // Oblicz wyrównanie dla nazwy
+        const nameLength = isCaller ? player.displayName.length + 4 : player.displayName.length;
+        const namePadding = ' '.repeat(maxNameLength - nameLength);
+
+        // Oblicz wyrównanie dla wyniku
+        const scoreStr = String(player.score);
+        const scorePadding = ' '.repeat(maxScoreLength - scoreStr.length);
+
         // Dla Fazy 1 dodaj progres względem historycznego rekordu
         let progressText = '';
         if (view === 'phase1' && player.userId && playerHistoricalRecords.has(player.userId)) {
@@ -4495,20 +4511,16 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             const difference = player.score - historicalBest;
 
             if (difference > 0) {
-                // Nowy rekord - użyj indeksu górnego (superscript) dla całej liczby z trójkątem
-                const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
-                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                progressText = ` ▲${superscriptNumber}`;
+                // Nowy rekord - trójkąt w górę
+                progressText = `    ▲${difference}`;
             } else if (difference < 0) {
-                // Poniżej rekordu - użyj indeksu dolnego (subscript) dla całej liczby z trójkątem
-                const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
-                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                progressText = ` ▼${subscriptNumber}`;
+                // Poniżej rekordu - trójkąt w dół
+                progressText = `    ▼${Math.abs(difference)}`;
             }
             // Jeśli difference === 0, nie pokazuj progresu (wyrównał rekord)
         }
 
-        return `${progressBar} ${position}. ${displayName} - ${player.score}${progressText}`;
+        return `${progressBar} ${position}. ${displayName}${namePadding} - ${scorePadding}${player.score}${progressText}`;
     }).join('\n');
 
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
