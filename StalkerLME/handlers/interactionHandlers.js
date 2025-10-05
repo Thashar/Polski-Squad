@@ -2756,7 +2756,7 @@ async function handleDodajModalSubmit(interaction, sharedState) {
 
         if (phase === 'phase1') {
             // Dodaj gracza do Fazy 1
-            const weekData = await databaseService.getPhase1DataForWeek(
+            const weekData = await databaseService.getPhase1Results(
                 interaction.guild.id,
                 parseInt(week),
                 parseInt(year),
@@ -2808,7 +2808,7 @@ async function handleDodajModalSubmit(interaction, sharedState) {
 
         } else if (phase === 'phase2') {
             // Dodaj gracza do Fazy 2
-            const weekData = await databaseService.getPhase2DataForWeek(
+            const weekData = await databaseService.getPhase2Results(
                 interaction.guild.id,
                 parseInt(week),
                 parseInt(year),
