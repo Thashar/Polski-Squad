@@ -4479,6 +4479,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         }
     }
 
+    // Przechowuj informacje o progresie dla każdego gracza (do TOP3)
+    const playerProgressData = [];
+
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
         const barLength = 16;
@@ -4490,9 +4493,10 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
         // Dla Fazy 1 dodaj progres względem historycznego rekordu
         let progressText = '';
+        let difference = 0;
         if (view === 'phase1' && player.userId && playerHistoricalRecords.has(player.userId)) {
             const historicalBest = playerHistoricalRecords.get(player.userId);
-            const difference = player.score - historicalBest;
+            difference = player.score - historicalBest;
 
             if (difference > 0) {
                 // Nowy rekord - użyj indeksu górnego (superscript) z trójkątem
@@ -4505,11 +4509,51 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
                 progressText = ` ▼${subscriptNumber}`;
             }
-            // Jeśli difference === 0, nie pokazuj progresu (wyrównał rekord)
+
+            // Zapisz dane do TOP3
+            playerProgressData.push({
+                displayName: player.displayName,
+                difference: difference
+            });
         }
 
         return `${progressBar} ${position}. ${displayName} - ${player.score}${progressText}`;
     }).join('\n');
+
+    // Dla Fazy 1: oblicz TOP3 progresów i regresów
+    let top3Section = '';
+    if (view === 'phase1' && playerProgressData.length > 0) {
+        // TOP3 najlepsze progresy (największe dodatnie wartości)
+        const topProgress = [...playerProgressData]
+            .filter(p => p.difference > 0)
+            .sort((a, b) => b.difference - a.difference)
+            .slice(0, 3);
+
+        // TOP3 największe regresy (największe ujemne wartości)
+        const topRegress = [...playerProgressData]
+            .filter(p => p.difference < 0)
+            .sort((a, b) => a.difference - b.difference)
+            .slice(0, 3);
+
+        if (topProgress.length > 0 || topRegress.length > 0) {
+            top3Section = '\n\n';
+
+            if (topProgress.length > 0) {
+                top3Section += '**🏆 TOP3 Progres:**\n';
+                topProgress.forEach((p, idx) => {
+                    top3Section += `${idx + 1}. ${p.displayName} (+${p.difference})\n`;
+                });
+            }
+
+            if (topRegress.length > 0) {
+                if (topProgress.length > 0) top3Section += '\n';
+                top3Section += '**💀 TOP3 Regres:**\n';
+                topRegress.forEach((p, idx) => {
+                    top3Section += `${idx + 1}. ${p.displayName} (${p.difference})\n`;
+                });
+            }
+        }
+    }
 
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
     const messageCleanupService = interaction.client.messageCleanupService;
@@ -4518,7 +4562,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - ${viewTitle}`)
-        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>`)
+        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}${top3Section}\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>`)
         .setColor('#0099FF')
         .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
         .setTimestamp();
