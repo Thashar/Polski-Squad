@@ -4475,9 +4475,33 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         return `${progressBar} ${position}. ${displayName} - ${player.score}`;
     }).join('\n');
 
+    // Oblicz timestamp usunięcia (15 minut od teraz dla nowych, lub pobierz istniejący dla update)
+    const messageCleanupService = interaction.client.messageCleanupService;
+    let deleteAt;
+    let deleteTimestamp;
+
+    if (isUpdate && messageCleanupService) {
+        // Dla update pobierz oryginalny czas usunięcia z scheduled messages
+        const messageId = interaction.message.id;
+        const scheduledMessage = messageCleanupService.scheduledMessages.find(msg => msg.messageId === messageId);
+
+        if (scheduledMessage) {
+            deleteAt = scheduledMessage.deleteAt;
+            deleteTimestamp = Math.floor(deleteAt / 1000);
+        } else {
+            // Jeśli nie znaleziono scheduled message, ustaw nowy czas (fallback)
+            deleteAt = Date.now() + (15 * 60 * 1000);
+            deleteTimestamp = Math.floor(deleteAt / 1000);
+        }
+    } else {
+        // Dla nowych wiadomości ustaw 15 minut od teraz
+        deleteAt = Date.now() + (15 * 60 * 1000);
+        deleteTimestamp = Math.floor(deleteAt / 1000);
+    }
+
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - ${viewTitle}`)
-        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}`)
+        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>`)
         .setColor('#0099FF')
         .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
         .setTimestamp();
@@ -4513,10 +4537,26 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         );
 
     const replyMethod = isUpdate ? 'update' : 'editReply';
-    await interaction[replyMethod]({
+    const response = await interaction[replyMethod]({
         embeds: [embed],
         components: [navRow]
     });
+
+    // Zaplanuj usunięcie wiadomości po 15 minutach (tylko dla nowych wiadomości)
+    // Dla update, message jest w interaction.message
+    // Dla editReply, message jest w response
+    const messageToSchedule = isUpdate ? interaction.message : response;
+
+    if (messageToSchedule && messageCleanupService && !isUpdate) {
+        // Tylko dla nowych wiadomości (editReply) dodaj scheduled deletion
+        // Dla update nie robimy nic - zachowujemy oryginalny czas usunięcia
+        await messageCleanupService.scheduleMessageDeletion(
+            messageToSchedule.id,
+            messageToSchedule.channelId,
+            deleteAt,
+            interaction.user.id
+        );
+    }
 }
 
 async function handleWynikiCommand(interaction, sharedState) {

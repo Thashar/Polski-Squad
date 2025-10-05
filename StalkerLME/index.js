@@ -40,6 +40,9 @@ const phaseService = new PhaseService(config, databaseService, ocrService, clien
 // Ustaw globalny dostęp do klienta dla messageCleanupService
 global.stalkerLMEClient = client;
 
+// Dodaj messageCleanupService do klienta dla łatwego dostępu w handlerach
+client.messageCleanupService = messageCleanupService;
+
 const sharedState = {
     client,
     config,
