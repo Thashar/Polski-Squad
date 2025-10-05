@@ -826,6 +826,8 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2CompleteButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_confirm_save' || interaction.customId === 'phase2_cancel_save') {
         await handlePhase2FinalConfirmButton(interaction, sharedState);
+    } else if (interaction.customId === 'phase2_round_continue') {
+        await handlePhase2RoundContinue(interaction, sharedState);
     }
 }
 
@@ -2184,44 +2186,11 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             }
         }
 
-        // Wszystkie konflikty rozwiązane - przejdź dalej
+        // Wszystkie konflikty rozwiązane - pokaż podsumowanie rundy
         logger.info(`[PHASE2] ✅ Wszystkie konflikty rozwiązane!`);
 
-        // Sprawdź czy to była ostatnia runda
-        if (session.currentRound < 3) {
-            phaseService.startNextRound(session);
-            const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
-            await interaction.update({
-                content: '',
-                embeds: [awaitingEmbed],
-                components: []
-            });
-            logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
-        } else {
-            // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
-            logger.info(`[PHASE2] 💾 Zapisywanie wyników rundy 3 przed podsumowaniem...`);
-            const lastRoundData = {
-                round: session.currentRound,
-                results: phaseService.getFinalResults(session)
-            };
-            logger.info(`[PHASE2] 📊 Wyniki rundy 3: ${lastRoundData.results.size} graczy`);
-            session.roundsData.push(lastRoundData);
-            logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3. Łącznie ${session.roundsData.length} rund w roundsData`);
-
-            // Użyj update() zamiast editReply() bo to przycisk
-            await interaction.update({
-                content: '✅ Wszystkie konflikty rozwiązane! Przygotowuję podsumowanie...',
-                embeds: [],
-                components: []
-            });
-
-            try {
-                await showPhase2FinalSummary(interaction, session, phaseService);
-            } catch (error) {
-                logger.error(`[PHASE2] ❌ Błąd podczas wyświetlania podsumowania:`, error);
-                throw error;
-            }
-        }
+        // Pokaż podsumowanie rundy (działa dla rund 1, 2 i 3)
+        await showPhase2RoundSummary(interaction, session, phaseService);
         return;
     }
 
@@ -2246,27 +2215,8 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                 components: [conflictEmbed.row]
             });
         } else {
-            // Brak konfliktów - przejdź do następnej rundy lub zakończ
-            if (session.currentRound < 3) {
-                phaseService.startNextRound(session);
-                const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
-                await interaction.editReply({
-                    content: '',
-                    embeds: [awaitingEmbed],
-                    components: []
-                });
-                logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
-            } else {
-                // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
-                const lastRoundData = {
-                    round: session.currentRound,
-                    results: phaseService.getFinalResults(session)
-                };
-                session.roundsData.push(lastRoundData);
-                logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3`);
-
-                await showPhase2FinalSummary(interaction, session, phaseService);
-            }
+            // Brak konfliktów - pokaż podsumowanie rundy
+            await showPhase2RoundSummary(interaction, session, phaseService);
         }
     } catch (error) {
         logger.error('[PHASE2] ❌ Błąd analizy:', error);
@@ -2440,6 +2390,99 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
         logger.error(`[PHASE2] ❌ Error stack:`, error.stack);
         throw error;
     }
+}
+
+async function handlePhase2RoundContinue(interaction, sharedState) {
+    const { phaseService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session || session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie masz uprawnień.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Sprawdź czy to była ostatnia runda
+    if (session.currentRound < 3) {
+        // Zapisz wyniki bieżącej rundy i przejdź do następnej
+        phaseService.startNextRound(session);
+        const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+        await interaction.update({
+            content: '',
+            embeds: [awaitingEmbed],
+            components: []
+        });
+        logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
+    } else {
+        // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
+        logger.info(`[PHASE2] 💾 Zapisywanie wyników rundy 3 przed podsumowaniem...`);
+        const lastRoundData = {
+            round: session.currentRound,
+            results: phaseService.getFinalResults(session)
+        };
+        logger.info(`[PHASE2] 📊 Wyniki rundy 3: ${lastRoundData.results.size} graczy`);
+        session.roundsData.push(lastRoundData);
+        logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3. Łącznie ${session.roundsData.length} rund w roundsData`);
+
+        // Pokaż finalne podsumowanie
+        await interaction.update({
+            content: '✅ Wszystkie rundy zakończone! Przygotowuję finalne podsumowanie...',
+            embeds: [],
+            components: []
+        });
+
+        try {
+            await showPhase2FinalSummary(interaction, session, phaseService);
+        } catch (error) {
+            logger.error(`[PHASE2] ❌ Błąd podczas wyświetlania podsumowania:`, error);
+            throw error;
+        }
+    }
+}
+
+async function showPhase2RoundSummary(interaction, session, phaseService) {
+    logger.info(`[PHASE2] 📋 Tworzenie podsumowania rundy ${session.currentRound}...`);
+
+    const finalResults = phaseService.getFinalResults(session);
+    const stats = phaseService.calculateStatistics(finalResults);
+
+    const embed = new EmbedBuilder()
+        .setTitle(`✅ Runda ${session.currentRound}/3 - Podsumowanie`)
+        .setColor('#00FF00')
+        .addFields(
+            { name: '✅ Unikalnych nicków', value: stats.uniqueNicks.toString(), inline: true },
+            { name: '📈 Wynik powyżej 0', value: `${stats.aboveZero} osób`, inline: true },
+            { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true }
+        )
+        .setTimestamp();
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('phase2_round_continue')
+                .setLabel(session.currentRound < 3 ? '✅ Przejdź do następnej rundy' : '✅ Pokaż finalne podsumowanie')
+                .setStyle(ButtonStyle.Success)
+        );
+
+    // Użyj odpowiedniej metody w zależności od stanu interakcji
+    if (interaction.replied || interaction.deferred) {
+        await interaction.editReply({
+            content: '',
+            embeds: [embed],
+            components: [row]
+        });
+    } else {
+        await interaction.update({
+            content: '',
+            embeds: [embed],
+            components: [row]
+        });
+    }
+
+    logger.info(`[PHASE2] ✅ Podsumowanie rundy ${session.currentRound} wysłane`);
 }
 
 // =============== MODYFIKUJ HANDLERS ===============
