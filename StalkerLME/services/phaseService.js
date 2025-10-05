@@ -799,7 +799,7 @@ class PhaseService {
         }
 
         // Dla obu faz dodaj klan
-        fields.push({ name: '🎯 Klan', value: clanName, inline: false });
+        fields.push({ name: '🎯 Analizowany klan', value: clanName, inline: false });
 
         const embed = new EmbedBuilder()
             .setTitle(`📊 Podsumowanie ${phaseTitle} - Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
