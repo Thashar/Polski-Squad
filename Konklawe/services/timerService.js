@@ -570,8 +570,27 @@ class TimerService {
                     logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi po restarcie:', error);
                 }
             } else {
+                // Ustaw timer na pozostały czas do wysłania przypomnienia
                 const remainingTime = this.gameService.EXISTING_HINT_REMINDER_TIME - timeSinceLastHint;
-                setTimeout(async () => await this.setHintReminderTimer(), remainingTime);
+                setTimeout(async () => {
+                    try {
+                        const guild = this.client.guilds.cache.first();
+                        const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
+                        if (guild && triggerChannel && triggerChannel.isTextBased()) {
+                            const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
+                            if (membersWithRole.size > 0) {
+                                const papalMember = membersWithRole.first();
+                                const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
+                                const timeText = formatTimeDifference(timeSinceLastHint);
+                                await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
+                                // Ustaw kolejny timer
+                                await this.setHintReminderTimer();
+                            }
+                        }
+                    } catch (error) {
+                        logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi:', error);
+                    }
+                }, remainingTime);
             }
 
             // Timer 24h dla usunięcia roli za brak nowej podpowiedzi
@@ -601,10 +620,8 @@ class TimerService {
                     }
                 }
             } else {
-                const remainingTime = this.gameService.HINT_TIMEOUT_TIME - timeSinceLastHint;
-                setTimeout(async () => {
-                    await this.setHintTimeoutTimer();
-                }, remainingTime);
+                // Ustaw timer 24h bezpośrednio na pozostały czas
+                await this.setHintTimeoutTimer();
             }
         }
         
