@@ -4475,29 +4475,10 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         return `${progressBar} ${position}. ${displayName} - ${player.score}`;
     }).join('\n');
 
-    // Oblicz timestamp usunięcia (15 minut od teraz dla nowych, lub pobierz istniejący dla update)
+    // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
     const messageCleanupService = interaction.client.messageCleanupService;
-    let deleteAt;
-    let deleteTimestamp;
-
-    if (isUpdate && messageCleanupService) {
-        // Dla update pobierz oryginalny czas usunięcia z scheduled messages
-        const messageId = interaction.message.id;
-        const scheduledMessage = messageCleanupService.scheduledMessages.find(msg => msg.messageId === messageId);
-
-        if (scheduledMessage) {
-            deleteAt = scheduledMessage.deleteAt;
-            deleteTimestamp = Math.floor(deleteAt / 1000);
-        } else {
-            // Jeśli nie znaleziono scheduled message, ustaw nowy czas (fallback)
-            deleteAt = Date.now() + (15 * 60 * 1000);
-            deleteTimestamp = Math.floor(deleteAt / 1000);
-        }
-    } else {
-        // Dla nowych wiadomości ustaw 15 minut od teraz
-        deleteAt = Date.now() + (15 * 60 * 1000);
-        deleteTimestamp = Math.floor(deleteAt / 1000);
-    }
+    const deleteAt = Date.now() + (15 * 60 * 1000);
+    const deleteTimestamp = Math.floor(deleteAt / 1000);
 
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - ${viewTitle}`)
@@ -4531,7 +4512,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .setDisabled(!weekDataPhase2?.rounds?.[2]),
             new ButtonBuilder()
                 .setCustomId(`wyniki_view|${clan}|${weekNumber}-${year}|summary`)
-                .setLabel('Suma')
+                .setLabel('Suma Faza 2')
                 .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(!weekDataPhase2)
         );
@@ -4542,14 +4523,18 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         components: [navRow]
     });
 
-    // Zaplanuj usunięcie wiadomości po 15 minutach (tylko dla nowych wiadomości)
+    // Zaplanuj usunięcie wiadomości po 15 minutach (resetuj timer przy każdym kliknięciu)
     // Dla update, message jest w interaction.message
     // Dla editReply, message jest w response
     const messageToSchedule = isUpdate ? interaction.message : response;
 
-    if (messageToSchedule && messageCleanupService && !isUpdate) {
-        // Tylko dla nowych wiadomości (editReply) dodaj scheduled deletion
-        // Dla update nie robimy nic - zachowujemy oryginalny czas usunięcia
+    if (messageToSchedule && messageCleanupService) {
+        // Usuń stary scheduled deletion jeśli istnieje
+        if (isUpdate) {
+            await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
+        }
+
+        // Dodaj nowy scheduled deletion z nowym czasem (15 minut od teraz)
         await messageCleanupService.scheduleMessageDeletion(
             messageToSchedule.id,
             messageToSchedule.channelId,
