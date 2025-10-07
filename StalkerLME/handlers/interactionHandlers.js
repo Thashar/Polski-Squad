@@ -4699,7 +4699,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 });
 
                 if (totalProgressSum > 0) {
-                    top3Section += `**Suma progresów:** +${totalProgressSum.toLocaleString('pl-PL')} pkt\n`;
+                    top3Section += `**Suma progresu:** +${totalProgressSum.toLocaleString('pl-PL')} pkt\n`;
                 }
             }
 
@@ -4711,7 +4711,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 });
 
                 if (totalRegressSum > 0) {
-                    top3Section += `**Suma regresów:** -${totalRegressSum.toLocaleString('pl-PL')} pkt\n`;
+                    top3Section += `**Suma regresu:** -${totalRegressSum.toLocaleString('pl-PL')} pkt\n`;
                 }
             }
         }
