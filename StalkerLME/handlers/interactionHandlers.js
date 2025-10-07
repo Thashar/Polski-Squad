@@ -2578,11 +2578,7 @@ async function handleDodajWeekSelect(interaction, sharedState) {
             new StringSelectMenuOptionBuilder()
                 .setLabel('Runda 3')
                 .setValue('round3')
-                .setDescription('Dodaj do rundy 3'),
-            new StringSelectMenuOptionBuilder()
-                .setLabel('Podsumowanie (suma)')
-                .setValue('summary')
-                .setDescription('Dodaj do zestawienia końcowego')
+                .setDescription('Dodaj do rundy 3')
         ];
 
         const selectMenu = new StringSelectMenuBuilder()
