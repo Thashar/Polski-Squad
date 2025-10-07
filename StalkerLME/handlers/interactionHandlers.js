@@ -4655,7 +4655,8 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             playerProgressData.push({
                 displayName: player.displayName,
                 difference: difference,
-                userId: player.userId
+                userId: player.userId,
+                score: player.score
             });
         }
 
@@ -4671,9 +4672,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             .sort((a, b) => b.difference - a.difference)
             .slice(0, 3);
 
-        // TOP3 największe regresy (największe ujemne wartości)
+        // TOP3 największe regresy (największe ujemne wartości) - wykluczamy osoby z wynikiem 0
         const topRegress = [...playerProgressData]
-            .filter(p => p.difference < 0)
+            .filter(p => p.difference < 0 && p.score > 0)
             .sort((a, b) => a.difference - b.difference)
             .slice(0, 3);
 
