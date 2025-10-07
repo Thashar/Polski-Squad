@@ -42,8 +42,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode i /ocr-debug
-    const publicCommands = ['decode', 'ocr-debug'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode i /wyniki
+    const publicCommands = ['decode', 'wyniki'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;

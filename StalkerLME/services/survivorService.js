@@ -1027,17 +1027,7 @@ class SurvivorService {
         this.addPetsFields(page7, buildData);
 
         // Dodaj footer z czasem wygaśnięcia do wszystkich stron (15 minut, czas polski)
-        const expirationTime = new Date();
-        expirationTime.setMinutes(expirationTime.getMinutes() + 15); // +15 minut
-
-        // Konwertuj na polską strefę czasową (UTC+1/UTC+2 w zależności od DST)
-        const polishTime = expirationTime.toLocaleTimeString('pl-PL', {
-            timeZone: 'Europe/Warsaw',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-
-        const expirationText = `Analiza zostanie usunięta o ${polishTime}`;
+        const expirationText = `Analiza zostanie usunięta za 15 min`;
 
         page0.setFooter({ text: `Start • ${expirationText}` });
         page1.setFooter({ text: `Ekwipunek • ${expirationText}` });
