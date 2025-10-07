@@ -796,6 +796,11 @@ class PhaseService {
                 { name: '⭕ Wynik równy 0', value: `${stats.zeroCount} osób`, inline: true },
                 { name: '🏆 Suma wyników TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
             );
+        } else if (phase === 2) {
+            // Dla Fazy 2 - pokaż tylko TOP30
+            fields.push(
+                { name: '🏆 Suma wyników TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
+            );
         }
 
         // Dla obu faz dodaj klan

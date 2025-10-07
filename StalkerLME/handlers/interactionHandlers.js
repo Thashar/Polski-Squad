@@ -2523,12 +2523,18 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
 async function showPhase2RoundSummary(interaction, session, phaseService) {
     logger.info(`[PHASE2] 📋 Tworzenie podsumowania rundy ${session.currentRound}...`);
 
-    const clanName = session.clan ? phaseService.config.roleDisplayNames[session.clan] : 'nieznany';
+    // Oblicz statystyki dla tej rundy
+    const finalResults = phaseService.getFinalResults(session);
+    const stats = phaseService.calculateStatistics(finalResults);
 
     const embed = new EmbedBuilder()
         .setTitle(`✅ Runda ${session.currentRound}/3 - Podsumowanie`)
         .setColor('#00FF00')
-        .setDescription(`🎯 Analizowany klan: **${clanName}**`)
+        .addFields(
+            { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
+            { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
+            { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true }
+        )
         .setTimestamp();
 
     const row = new ActionRowBuilder()
@@ -4644,8 +4650,8 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
                 const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
                 progressText = ` ▲${superscriptNumber}`;
-            } else if (difference < 0) {
-                // Poniżej rekordu - użyj indeksu dolnego (subscript) z trójkątem
+            } else if (difference < 0 && player.score > 0) {
+                // Poniżej rekordu - użyj indeksu dolnego (subscript) z trójkątem - tylko jeśli wynik > 0
                 const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
                 const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
                 progressText = ` ▼${subscriptNumber}`;
@@ -4687,7 +4693,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .reduce((sum, p) => sum + p.difference, 0);
 
             const totalRegressSum = playerProgressData
-                .filter(p => p.difference < 0)
+                .filter(p => p.difference < 0 && p.score > 0)
                 .reduce((sum, p) => sum + Math.abs(p.difference), 0);
 
             if (topProgress.length > 0) {
