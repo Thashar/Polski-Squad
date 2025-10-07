@@ -4592,9 +4592,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                         const top30Difference = top30Sum - previousTop30Sum;
 
                         if (top30Difference > 0) {
-                            top30ProgressText = `\n📈 Progres: +${top30Difference.toLocaleString('pl-PL')} pkt`;
+                            top30ProgressText = `\n**Progres:** +${top30Difference.toLocaleString('pl-PL')} pkt`;
                         } else if (top30Difference < 0) {
-                            top30ProgressText = `\n📉 Regres: ${top30Difference.toLocaleString('pl-PL')} pkt`;
+                            top30ProgressText = `\n**Regres:** ${top30Difference.toLocaleString('pl-PL')} pkt`;
                         }
                     }
                 }
@@ -4683,11 +4683,24 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         if (topProgress.length > 0 || topRegress.length > 0) {
             top3Section = '\n\n';
 
+            // Oblicz sumę wszystkich progresów i regresów
+            const totalProgressSum = playerProgressData
+                .filter(p => p.difference > 0)
+                .reduce((sum, p) => sum + p.difference, 0);
+
+            const totalRegressSum = playerProgressData
+                .filter(p => p.difference < 0)
+                .reduce((sum, p) => sum + Math.abs(p.difference), 0);
+
             if (topProgress.length > 0) {
                 top3Section += '**🏆 TOP3 Progres:**\n';
                 topProgress.forEach((p, idx) => {
                     top3Section += `${idx + 1}. ${p.displayName} (+${p.difference})\n`;
                 });
+
+                if (totalProgressSum > 0) {
+                    top3Section += `**Suma progresów:** +${totalProgressSum.toLocaleString('pl-PL')} pkt\n`;
+                }
             }
 
             if (topRegress.length > 0) {
@@ -4696,6 +4709,10 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 topRegress.forEach((p, idx) => {
                     top3Section += `${idx + 1}. ${p.displayName} (${p.difference})\n`;
                 });
+
+                if (totalRegressSum > 0) {
+                    top3Section += `**Suma regresów:** -${totalRegressSum.toLocaleString('pl-PL')} pkt\n`;
+                }
             }
         }
     }
