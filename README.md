@@ -28,9 +28,9 @@ Polski Squad to modularny system zarządzania serwerem Discord zawierający **9 
 ## 🤖 Kolekcja Botów
 
 ### 🎯 Rekruter Bot - *System Rekrutacji*
-Wieloetapowy proces rekrutacji z analizą OCR statystyk postaci i automatycznym przypisywaniem do klanów (100K-599K: Clan0, 600K-799K: Clan1, 800K-999K: Clan2, 1000K+: Main). Śledzenie boostów serwera i monitorowanie użytkowników.
+Wieloetapowy proces rekrutacji z analizą OCR statystyk postaci i automatycznym przypisywaniem do klanów (100K-599K: Clan0, 600K-799K: Clan1, 800K-1.19M: Clan2, 1.2M+: Main). Śledzenie boostów serwera i monitorowanie użytkowników bez ról.
 
-**Główne Komendy:** `/ocr-debug`, `/nick`
+**Główne Komendy:** `/nick`
 
 ---
 
@@ -42,30 +42,30 @@ System wątków treningowych tworzonych przez reakcję emoji. Automatyczna archi
 ---
 
 ### ⚔️ StalkerLME Bot - *System Kar*
-Wykrywanie graczy z 0 obrażeń w walkach z bossami przez OCR. System punktowy (2+: kara, 3+: ban loterii). Zarządzanie urlopami, cotygodniowe czyszczenie punktów. Dekoder buildów Survivor.io i system faz Lunar Expedition.
+Zbiera wyniki z rozgrywek klanowych (Lunar Expedition) przez OCR - Faza 1 (screeny całej listy uczestników) i Faza 2 (3 rundy walki z bossem). Wykrywa graczy z 0 obrażeń. System punktowy (2+: kara, 3+: ban loterii). Zarządzanie urlopami, cotygodniowe czyszczenie punktów. Dekoder buildów Survivor.io.
 
-**Główne Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/wyniki`
+**Główne Komendy:** `/decode`, `/faza1`, `/faza2`, `/wyniki`
 
 ---
 
 ### 🤖 Muteusz Bot - *Kompleksowa Moderacja*
-Auto-moderacja (spam, wulgaryzmy, zaproszenia). Cache mediów do 100MB. Zarządzanie rolami ekskluzyw nymi. Śledzenie naruszeń. Koordynacja z Rekruterem do czyszczenia użytkowników.
+Auto-moderacja (spam, wulgaryzmy, zaproszenia). Cache mediów do 100MB. Zarządzanie rolami ekskluzywnymi. Śledzenie naruszeń. Koordynacja z Rekruterem do czyszczenia użytkowników.
 
-**Główne Komendy:** `/remove-roles`, `/special-roles`, `/violations`
+**Główne Komendy:** `/special-roles`, `/violations`
 
 ---
 
 ### 🏆 EndersEcho Bot - *Rankingi Bossów*
 System rankingów z analizą OCR wyników walk. 5-poziomowe role TOP (1, 2-3, 4-10, 11-30). Wsparcie jednostek K/M/B/T/Q/Qi. Historia z timestampami i nazwami bossów.
 
-**Główne Komendy:** `/update`, `/ranking`, `/remove`
+**Główne Komendy:** `/update`, `/ranking`
 
 ---
 
 ### 🎯 Kontroler Bot - *Weryfikacja + Loteria*
-Dwukanałowe monitorowanie OCR (CX: 1500+, Daily: 910+). Zaawansowana loteria z planowaniem datowym, wsparciem multi-klan, ostrzeżeniami i historią. Automatyczne filtrowanie zablokowanych użytkowników.
+Dwukanałowe monitorowanie OCR (CX: 1500+, Daily: 910+). Zaawansowana loteria z planowaniem datowym, wsparciem multi-klan, ostrzeżeniami i historią. Automatyczne filtrowanie zablokowanych użytkowników. System oligopoly dla zapisów na wojny klanowe.
 
-**Główne Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`
+**Główne Komendy:** `/lottery-list`, `/lottery-history`, `/oligopoly`
 
 ---
 
@@ -79,14 +79,14 @@ Interaktywna gra hasłowa z domyślnym "Konklawe". System osiągnięć (medal Vi
 ### 🎉 Wydarzynier Bot - *Zarządzanie Wydarzeniami*
 System lobby party (7 graczy max). Organizacja przez wątki z kontrolą członków. Subskrypcje ról do powiadomień. Usługi bazaru z przypinaniem. System repozycjonowania ogłoszeń.
 
-**Główne Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`
+**Główne Komendy:** `/party`
 
 ---
 
 ### 🎮 Gary Bot - *Analiza Survivor.io*
 Analiza Lunar Mine Expedition (4 gildie). Inteligentne wyszukiwanie z fuzzy matching. Integracja API garrytools.com. Cache top 500 gildii. Wsparcie proxy z Webshare API. Publiczna paginacja.
 
-**Główne Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`
+**Główne Komendy:** `/search`, `/player`, `/ee`
 
 ---
 
