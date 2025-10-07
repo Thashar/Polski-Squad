@@ -4716,7 +4716,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 topRegress.forEach((p, idx) => {
                     const isCaller = p.userId === interaction.user.id;
                     const displayName = isCaller ? `**${p.displayName}**` : p.displayName;
-                    const emoji = isCaller ? ' <a:X_Uwaga:1297531538186965003>' : '';
+                    const emoji = isCaller ? ' <:PFrogLaczek:1425166409461268510>' : '';
                     top3Section += `${idx + 1}. ${displayName} (${p.difference})${emoji}\n`;
                 });
 
