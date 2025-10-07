@@ -4789,6 +4789,20 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
+    // Sprawdź czy kanał jest dozwolony
+    const allowedChannels = [
+        ...Object.values(config.warningChannels),
+        '1348200849242984478'
+    ];
+
+    if (!allowedChannels.includes(interaction.channelId)) {
+        await interaction.reply({
+            content: '❌ Komenda `/wyniki` jest dostępna tylko na określonych kanałach.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
     await interaction.deferReply();
 
     try {
