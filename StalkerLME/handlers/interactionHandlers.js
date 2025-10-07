@@ -4554,10 +4554,58 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     if (view === 'phase1') {
         const top30Players = sortedPlayers.slice(0, 30);
         const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
-        descriptionExtra = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n`;
+
+        // Pobierz TOP30 z poprzedniego tygodnia
+        const { databaseService } = interaction.client;
+        let top30ProgressText = '';
+
+        if (databaseService) {
+            try {
+                // Znajdź poprzedni tydzień
+                const availableWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+                const weeksForClan = availableWeeks
+                    .filter(w => w.clans.includes(clan))
+                    .sort((a, b) => {
+                        if (a.year !== b.year) return b.year - a.year;
+                        return b.weekNumber - a.weekNumber;
+                    });
+
+                // Znajdź poprzedni tydzień przed aktualnym
+                const currentWeekIndex = weeksForClan.findIndex(w =>
+                    w.weekNumber === weekNumber && w.year === year
+                );
+
+                if (currentWeekIndex !== -1 && currentWeekIndex < weeksForClan.length - 1) {
+                    const previousWeek = weeksForClan[currentWeekIndex + 1];
+                    const previousWeekData = await databaseService.getPhase1Results(
+                        interaction.guild.id,
+                        previousWeek.weekNumber,
+                        previousWeek.year,
+                        clan
+                    );
+
+                    if (previousWeekData && previousWeekData.players) {
+                        const previousTop30 = [...previousWeekData.players]
+                            .sort((a, b) => b.score - a.score)
+                            .slice(0, 30);
+                        const previousTop30Sum = previousTop30.reduce((sum, p) => sum + p.score, 0);
+                        const top30Difference = top30Sum - previousTop30Sum;
+
+                        if (top30Difference > 0) {
+                            top30ProgressText = ` • 📈 Progres: +${top30Difference.toLocaleString('pl-PL')} pkt`;
+                        } else if (top30Difference < 0) {
+                            top30ProgressText = ` • 📉 Regres: ${top30Difference.toLocaleString('pl-PL')} pkt`;
+                        }
+                    }
+                }
+            } catch (error) {
+                logger.error('[WYNIKI] Błąd pobierania TOP30 z poprzedniego tygodnia:', error);
+            }
+        }
+
+        descriptionExtra = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt${top30ProgressText}\n`;
 
         // Pobierz historyczne rekordy dla wszystkich graczy
-        const { databaseService } = interaction.client;
         if (databaseService) {
             for (const player of sortedPlayers) {
                 if (player.userId) {
