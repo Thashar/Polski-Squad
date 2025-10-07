@@ -441,6 +441,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_round|')) {
         await handleDodajRoundSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('dodaj_select_user|')) {
+        await handleDodajUserSelect(interaction, sharedState);
     }
 }
 
@@ -2601,50 +2603,143 @@ async function handleDodajWeekSelect(interaction, sharedState) {
             components: [row]
         });
     } else {
-        // Faza 1 - pokaż od razu modal
-        const modal = new ModalBuilder()
-            .setCustomId(`dodaj_modal|${phase}|${clan}|${selectedWeek}|none`)
-            .setTitle('Dodaj gracza - Faza 1');
-
-        const nickInput = new TextInputBuilder()
-            .setCustomId('nick')
-            .setLabel('Nick gracza')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Wpisz nick gracza')
-            .setRequired(true);
-
-        const scoreInput = new TextInputBuilder()
-            .setCustomId('score')
-            .setLabel('Wynik')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Wpisz wynik (liczba)')
-            .setRequired(true);
-
-        const row1 = new ActionRowBuilder().addComponents(nickInput);
-        const row2 = new ActionRowBuilder().addComponents(scoreInput);
-
-        modal.addComponents(row1, row2);
-
-        await interaction.showModal(modal);
+        // Faza 1 - pokaż select menu z użytkownikami z odpowiednią rolą
+        await showUserSelectMenu(interaction, sharedState, phase, clan, selectedWeek, 'none');
     }
 }
 
 async function handleDodajRoundSelect(interaction, sharedState) {
-    const { config } = sharedState;
     const [prefix, phase, clan, weekNumber] = interaction.customId.split('|');
     const selectedRound = interaction.values[0];
 
-    // Pokaż modal z nickiem i wynikiem
-    const modal = new ModalBuilder()
-        .setCustomId(`dodaj_modal|${phase}|${clan}|${weekNumber}|${selectedRound}`)
-        .setTitle('Dodaj gracza - Faza 2');
+    // Pokaż select menu z użytkownikami z odpowiednią rolą
+    await showUserSelectMenu(interaction, sharedState, phase, clan, weekNumber, selectedRound);
+}
 
-    const nickInput = new TextInputBuilder()
-        .setCustomId('nick')
-        .setLabel('Nick gracza')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Wpisz nick gracza')
-        .setRequired(true);
+async function showUserSelectMenu(interaction, sharedState, phase, clan, weekNumber, round) {
+    const { config, databaseService } = sharedState;
+
+    // Pobierz role ID dla wybranego klanu
+    const clanRoleId = config.targetRoles[clan];
+
+    if (!clanRoleId) {
+        await interaction.update({
+            content: '❌ Nie znaleziono roli dla tego klanu.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    // Pobierz dane z bazy dla tego tygodnia
+    const [week, year] = weekNumber.split('-');
+    let existingPlayerIds = new Set();
+
+    try {
+        if (phase === 'phase1') {
+            const weekData = await databaseService.getPhase1Results(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan
+            );
+            if (weekData && weekData.players) {
+                weekData.players.forEach(p => existingPlayerIds.add(p.userId));
+            }
+        } else if (phase === 'phase2') {
+            const weekData = await databaseService.getPhase2Results(
+                interaction.guild.id,
+                parseInt(week),
+                parseInt(year),
+                clan
+            );
+            if (weekData) {
+                if (round === 'summary' && weekData.summary) {
+                    weekData.summary.players.forEach(p => existingPlayerIds.add(p.userId));
+                } else if (round !== 'summary' && weekData.rounds) {
+                    const roundIndex = round === 'round1' ? 0 : round === 'round2' ? 1 : 2;
+                    if (weekData.rounds[roundIndex]) {
+                        weekData.rounds[roundIndex].players.forEach(p => existingPlayerIds.add(p.userId));
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        logger.error('[DODAJ] Błąd pobierania istniejących graczy:', error);
+    }
+
+    // Pobierz wszystkich członków serwera z odpowiednią rolą
+    await interaction.guild.members.fetch();
+    const membersWithRole = interaction.guild.members.cache.filter(member =>
+        member.roles.cache.has(clanRoleId) && !existingPlayerIds.has(member.id)
+    );
+
+    if (membersWithRole.size === 0) {
+        await interaction.update({
+            content: '❌ Nie znaleziono użytkowników do dodania. Wszyscy członkowie klanu mają już wyniki.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    // Sortuj alfabetycznie po displayName
+    const sortedMembers = Array.from(membersWithRole.values())
+        .sort((a, b) => a.displayName.localeCompare(b.displayName))
+        .slice(0, 25); // Discord limit: max 25 opcji
+
+    // Utwórz opcje select menu
+    const userOptions = sortedMembers.map(member =>
+        new StringSelectMenuOptionBuilder()
+            .setLabel(member.displayName)
+            .setValue(member.id)
+            .setDescription(`@${member.user.username}`)
+    );
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId(`dodaj_select_user|${phase}|${clan}|${weekNumber}|${round}`)
+        .setPlaceholder('Wybierz użytkownika')
+        .addOptions(userOptions);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    const phaseTitle = phase === 'phase2' ? 'Faza 2' : 'Faza 1';
+    const roundText = round !== 'none' && round !== 'summary'
+        ? `, ${round === 'round1' ? 'Runda 1' : round === 'round2' ? 'Runda 2' : 'Runda 3'}`
+        : round === 'summary' ? ', Podsumowanie' : '';
+
+    const embed = new EmbedBuilder()
+        .setTitle(`➕ Dodaj gracza - ${phaseTitle}${roundText}`)
+        .setDescription(`**Wybierz użytkownika:**\n\nTydzień: **${weekNumber}**\nKlan: **${config.roleDisplayNames[clan]}**\n\nDostępnych użytkowników: **${sortedMembers.length}**`)
+        .setColor('#00FF00')
+        .setTimestamp();
+
+    await interaction.update({
+        embeds: [embed],
+        components: [row]
+    });
+}
+
+async function handleDodajUserSelect(interaction, sharedState) {
+    const [prefix, phase, clan, weekNumber, round] = interaction.customId.split('|');
+    const selectedUserId = interaction.values[0];
+
+    // Pobierz wybranego użytkownika
+    const selectedMember = await interaction.guild.members.fetch(selectedUserId);
+
+    if (!selectedMember) {
+        await interaction.update({
+            content: '❌ Nie znaleziono wybranego użytkownika.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+
+    // Pokaż modal tylko z polem na wynik
+    const modal = new ModalBuilder()
+        .setCustomId(`dodaj_modal|${phase}|${clan}|${weekNumber}|${round}|${selectedUserId}`)
+        .setTitle(`Dodaj wynik dla ${selectedMember.displayName}`);
 
     const scoreInput = new TextInputBuilder()
         .setCustomId('score')
@@ -2653,10 +2748,8 @@ async function handleDodajRoundSelect(interaction, sharedState) {
         .setPlaceholder('Wpisz wynik (liczba)')
         .setRequired(true);
 
-    const row1 = new ActionRowBuilder().addComponents(nickInput);
-    const row2 = new ActionRowBuilder().addComponents(scoreInput);
-
-    modal.addComponents(row1, row2);
+    const row = new ActionRowBuilder().addComponents(scoreInput);
+    modal.addComponents(row);
 
     await interaction.showModal(modal);
 }
@@ -2751,9 +2844,9 @@ async function handleDodajCommand(interaction, sharedState) {
 
 async function handleDodajModalSubmit(interaction, sharedState) {
     const { config, databaseService } = sharedState;
-    const [prefix, phase, clan, weekNumber, round] = interaction.customId.split('|');
+    const customIdParts = interaction.customId.split('|');
+    const [prefix, phase, clan, weekNumber, round, userId] = customIdParts;
 
-    const nick = interaction.fields.getTextInputValue('nick');
     const scoreInput = interaction.fields.getTextInputValue('score');
     const scoreNum = parseInt(scoreInput);
 
@@ -2768,6 +2861,10 @@ async function handleDodajModalSubmit(interaction, sharedState) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
+        // Pobierz informacje o użytkowniku
+        const member = await interaction.guild.members.fetch(userId);
+        const displayName = member.displayName;
+
         const [week, year] = weekNumber.split('-');
 
         if (phase === 'phase1') {
@@ -2789,8 +2886,8 @@ async function handleDodajModalSubmit(interaction, sharedState) {
             // Zapisz nowego gracza
             await databaseService.savePhase1Result(
                 interaction.guild.id,
-                nick, // userId
-                nick, // displayName
+                userId, // userId
+                displayName, // displayName
                 scoreNum, // score
                 parseInt(week),
                 parseInt(year),
@@ -2813,7 +2910,7 @@ async function handleDodajModalSubmit(interaction, sharedState) {
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
                     .setTitle('✅ Gracz dodany - Faza 1')
-                    .setDescription(`Dodano gracza **${nick}** z wynikiem **${scoreNum}**`)
+                    .setDescription(`Dodano gracza **${displayName}** z wynikiem **${scoreNum}**`)
                     .addFields(
                         { name: 'Tydzień', value: `${week}/${year}`, inline: true },
                         { name: 'Klan', value: config.roleDisplayNames[clan], inline: true },
@@ -2843,8 +2940,8 @@ async function handleDodajModalSubmit(interaction, sharedState) {
             if (round === 'summary') {
                 // Dodaj do podsumowania
                 weekData.summary.players.push({
-                    userId: nick,
-                    displayName: nick,
+                    userId: userId,
+                    displayName: displayName,
                     score: scoreNum
                 });
             } else {
@@ -2852,28 +2949,28 @@ async function handleDodajModalSubmit(interaction, sharedState) {
                 const roundIndex = round === 'round1' ? 0 : round === 'round2' ? 1 : 2;
 
                 weekData.rounds[roundIndex].players.push({
-                    userId: nick,
-                    displayName: nick,
+                    userId: userId,
+                    displayName: displayName,
                     score: scoreNum
                 });
 
                 // Przelicz sumę wyników dla tego gracza we wszystkich rundach
                 let totalScore = 0;
                 for (const r of weekData.rounds) {
-                    const playerInRound = r.players.find(p => p.userId === nick);
+                    const playerInRound = r.players.find(p => p.userId === userId);
                     if (playerInRound) {
                         totalScore += playerInRound.score;
                     }
                 }
 
                 // Zaktualizuj podsumowanie
-                const playerInSummary = weekData.summary.players.find(p => p.userId === nick);
+                const playerInSummary = weekData.summary.players.find(p => p.userId === userId);
                 if (playerInSummary) {
                     playerInSummary.score = totalScore;
                 } else {
                     weekData.summary.players.push({
-                        userId: nick,
-                        displayName: nick,
+                        userId: userId,
+                        displayName: displayName,
                         score: totalScore
                     });
                 }
@@ -2900,7 +2997,7 @@ async function handleDodajModalSubmit(interaction, sharedState) {
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
                     .setTitle('✅ Gracz dodany - Faza 2')
-                    .setDescription(`Dodano gracza **${nick}** z wynikiem **${scoreNum}**`)
+                    .setDescription(`Dodano gracza **${displayName}** z wynikiem **${scoreNum}**`)
                     .addFields(
                         { name: 'Tydzień', value: `${week}/${year}`, inline: true },
                         { name: 'Klan', value: config.roleDisplayNames[clan], inline: true },
