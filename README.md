@@ -10,6 +10,8 @@
 
 Kolekcja Botów Polski Squad to modularny system zarządzania serwerem Discord zawierający **9 wyspecjalizowanych botów** z **scentralizowanym logowaniem**, **wspólnymi narzędziami** i **zaawansowanymi możliwościami OCR**. Każdy bot obsługuje określone funkcje serwera, zachowując płynną integrację i koordynację między botami.
 
+**Ostatnia aktualizacja dokumentacji:** Styczeń 2025
+
 ### ✨ Kluczowe Funkcje
 
 - 🎯 **Architektura Modularna** - 9 wyspecjalizowanych botów do określonych funkcji serwera
@@ -33,6 +35,7 @@ Kolekcja Botów Polski Squad to modularny system zarządzania serwerem Discord z
 - 🔄 **Cache'owane Rankingi** - Top 500 gildii z 6-godzinnymi cyklami odświeżania
 - 🛡️ **Wsparcie Proxy** - Różnorodność sieci z monitorowaniem zdrowia i automatycznym failover
 - 📄 **Publiczna Paginacja** - Interaktywne strony które każdy może nawigować (20 członków/strona)
+- 🎨 **Niestandardowe Emoji** - Wsparcie dla emoji serwerowych w embedach
 
 **Komendy:**
 - `/lunarmine` - Analizuj 4 gildie podczas ekspedycji Lunar Mine (Admin)
@@ -42,6 +45,7 @@ Kolekcja Botów Polski Squad to modularny system zarządzania serwerem Discord z
 - `/ee <nazwa>` - Wyszukiwanie graczy EndersEcho
 - `/refresh` - Ręczne odświeżenie danych rankingu (Admin)
 - `/proxy-test` - Test wszystkich skonfigurowanych proxy (Admin)
+- `/proxy-stats` - Statystyki konfiguracji proxy (Admin)
 
 ---
 
@@ -395,8 +399,8 @@ Dostęp do logów w:
 #### Przetworzone Obrazy
 Obrazy przetworzone OCR są automatycznie zapisywane w:
 - **Katalog**: `processed_ocr/` (współdzielony przez wszystkie boty)
-- **Nazewnictwo**: `[NAZWA_BOTA][ rrrr-mm-dd hh:mm:ss ][]`
-- **Auto-rotacja**: Max 400 plików z inteligentnym czyszczeniem
+- **Nazewnictwo**: `[NAZWA_BOTA][ rrrr-mm-dd hh:mm:ss ][]` lub `[KONTROLER][ rrrr-mm-dd hh:mm:ss ][daily/cx]`
+- **Auto-rotacja**: Max 400 plików z inteligentnym czyszczeniem (100 per typ bota)
 
 ---
 
@@ -512,8 +516,9 @@ Ten projekt jest licencjonowany na licencji MIT - zobacz plik [LICENSE](LICENSE)
 - **OCR Nie Działa** - Sprawdź jakość i format obrazu
 - **Problemy z Pamięcią** - Monitoruj rotację przechowywania przetworzonych obrazów
 - **Limity API** - Przejrzyj ograniczenie częstotliwości w logach
-- **Konflikt Nicków** - Sprawdź system nickname manager w shared_data/
+- **Konflikt Nicków** - Sprawdź system nickname manager w `shared_data/`
 - **Błędy Proxy** - Testuj konfigurację proxy Gary bot z `/proxy-test`
+- **Błędy Loggera** - Upewnij się że wszystkie pliki używają `createBotLogger()` zamiast `console.log()`
 
 ### Funkcje Specificzne dla Botów
 - **Rekruter**: Sprawdź walidację kwalifikacji klanów w OCR pipeline
