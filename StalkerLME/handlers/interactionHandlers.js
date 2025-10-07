@@ -4592,9 +4592,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                         const top30Difference = top30Sum - previousTop30Sum;
 
                         if (top30Difference > 0) {
-                            top30ProgressText = ` • 📈 Progres: +${top30Difference.toLocaleString('pl-PL')} pkt`;
+                            top30ProgressText = `\n📈 Progres: +${top30Difference.toLocaleString('pl-PL')} pkt`;
                         } else if (top30Difference < 0) {
-                            top30ProgressText = ` • 📉 Regres: ${top30Difference.toLocaleString('pl-PL')} pkt`;
+                            top30ProgressText = `\n📉 Regres: ${top30Difference.toLocaleString('pl-PL')} pkt`;
                         }
                     }
                 }
