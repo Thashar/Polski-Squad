@@ -209,20 +209,6 @@ Każdy bot wymaga własnych zmiennych w pliku `.env`. Zobacz szczegóły w [CLAU
 
 ---
 
-## 🆘 Wsparcie
-
-### Dokumentacja
-- **[CLAUDE.md](CLAUDE.md)** - Szczegółowa dokumentacja deweloperska
-- **Config Files** - `NazwaBota/config/config.js`
-
-### Typowe Problemy
-- **Uprawnienia** - Sprawdź uprawnienia botów Discord
-- **OCR** - Sprawdź jakość obrazu
-- **Proxy (Gary)** - Testuj `/proxy-test`
-- **Logger** - Używaj `createBotLogger()` zamiast `console.log()`
-
----
-
 <div align="center">
 
 **Polski Squad Discord Bot Collection**
