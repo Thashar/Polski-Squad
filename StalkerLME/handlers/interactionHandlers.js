@@ -4645,7 +4645,8 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             const historicalBest = playerHistoricalRecords.get(player.userId);
             difference = player.score - historicalBest;
 
-            if (difference > 0) {
+            // Pokazuj strzałki tylko jeśli historyczny rekord > 0
+            if (difference > 0 && historicalBest > 0) {
                 // Nowy rekord - użyj indeksu górnego (superscript) z trójkątem
                 const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
                 const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
@@ -4657,13 +4658,15 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 progressText = ` ▼${subscriptNumber}`;
             }
 
-            // Zapisz dane do TOP3
-            playerProgressData.push({
-                displayName: player.displayName,
-                difference: difference,
-                userId: player.userId,
-                score: player.score
-            });
+            // Zapisz dane do TOP3 tylko jeśli historyczny rekord > 0
+            if (historicalBest > 0) {
+                playerProgressData.push({
+                    displayName: player.displayName,
+                    difference: difference,
+                    userId: player.userId,
+                    score: player.score
+                });
+            }
         }
 
         return `${progressBar} ${position}. ${displayName} - ${player.score}${progressText}`;
