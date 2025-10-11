@@ -513,11 +513,21 @@ class PhaseService {
                     .map(([value, count]) => ({ value, count }))
                     .sort((a, b) => b.count - a.count); // Sortuj po liczbie wystąpień
 
-                session.conflicts.push({ nick, values });
+                // Autoakceptacja: jeśli najczęstsza wartość występuje 2+ razy i jest tylko jedna taka wartość
+                const valuesWithTwoOrMore = values.filter(v => v.count >= 2);
+
+                if (valuesWithTwoOrMore.length === 1) {
+                    // Tylko jedna wartość występuje 2+ razy - autoakceptuj ją
+                    logger.info(`[PHASE1] ✅ Autoakceptacja dla "${nick}": ${valuesWithTwoOrMore[0].value} (${valuesWithTwoOrMore[0].count}x)`);
+                    session.resolvedConflicts.set(nick, valuesWithTwoOrMore[0].value);
+                } else {
+                    // Więcej niż jedna wartość występuje 2+ razy lub żadna nie występuje 2+ razy - wymagaj wyboru
+                    session.conflicts.push({ nick, values });
+                }
             }
         }
 
-        logger.info(`[PHASE1] ❓ Zidentyfikowano ${session.conflicts.length} konfliktów`);
+        logger.info(`[PHASE1] ❓ Zidentyfikowano ${session.conflicts.length} konfliktów wymagających wyboru`);
         return session.conflicts;
     }
 
