@@ -2393,14 +2393,22 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         const stats = phaseService.calculateStatistics(summedResults);
         const clanName = sharedState.config.roleDisplayNames[session.clan] || session.clan;
 
+        // Oblicz sumę zer z wszystkich 3 rund
+        let totalZeroCount = 0;
+        for (const roundData of session.roundsData) {
+            for (const [nick, score] of roundData.results) {
+                if (score === 0) {
+                    totalZeroCount++;
+                }
+            }
+        }
+
         const publicEmbed = new EmbedBuilder()
             .setTitle('✅ Faza 2 - Dane zapisane pomyślnie')
             .setDescription(`Wyniki dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** zostały zapisane.`)
             .setColor('#00FF00')
             .addFields(
-                { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
-                { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
-                { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
+                { name: '⭕ Wynik = 0 (suma z 3 rund)', value: `${totalZeroCount} wystąpień`, inline: false },
                 { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()
@@ -2428,6 +2436,17 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
 
         logger.info(`[PHASE2] 📊 Obliczam statystyki...`);
         const stats = phaseService.calculateStatistics(summedResults);
+
+        // Oblicz sumę zer z wszystkich 3 rund
+        let totalZeroCount = 0;
+        for (const roundData of session.roundsData) {
+            for (const [nick, score] of roundData.results) {
+                if (score === 0) {
+                    totalZeroCount++;
+                }
+            }
+        }
+        stats.totalZeroCount = totalZeroCount;
 
         logger.info(`[PHASE2] 📅 Pobieram informacje o tygodniu...`);
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -2527,6 +2546,14 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
     const finalResults = phaseService.getFinalResults(session);
     const stats = phaseService.calculateStatistics(finalResults);
 
+    // Zbierz nicki graczy z wynikiem 0
+    const playersWithZero = [];
+    for (const [nick, score] of finalResults) {
+        if (score === 0) {
+            playersWithZero.push(nick);
+        }
+    }
+
     const embed = new EmbedBuilder()
         .setTitle(`✅ Runda ${session.currentRound}/3 - Podsumowanie`)
         .setColor('#00FF00')
@@ -2536,6 +2563,12 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
             { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true }
         )
         .setTimestamp();
+
+    // Dodaj listę graczy z zerem jeśli są
+    if (playersWithZero.length > 0) {
+        const zeroList = playersWithZero.join(', ');
+        embed.addFields({ name: '📋 Gracze z wynikiem 0', value: zeroList, inline: false });
+    }
 
     const row = new ActionRowBuilder()
         .addComponents(

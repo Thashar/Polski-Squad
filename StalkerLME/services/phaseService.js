@@ -807,10 +807,12 @@ class PhaseService {
                 { name: '🏆 Suma wyników TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
             );
         } else if (phase === 2) {
-            // Dla Fazy 2 - pokaż tylko TOP30
-            fields.push(
-                { name: '🏆 Suma wyników TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
-            );
+            // Dla Fazy 2 - pokaż sumę zer z 3 rund
+            if (stats.totalZeroCount !== undefined) {
+                fields.push(
+                    { name: '⭕ Wynik = 0 (suma z 3 rund)', value: `${stats.totalZeroCount} wystąpień`, inline: false }
+                );
+            }
         }
 
         // Dla obu faz dodaj klan
