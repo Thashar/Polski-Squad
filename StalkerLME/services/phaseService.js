@@ -253,6 +253,57 @@ class PhaseService {
     }
 
     /**
+     * Pobiera informacje o kolejce dla użytkownika (do wyświetlenia w kanale)
+     */
+    async getQueueInfo(guildId, userId) {
+        const activeUserId = this.activeProcessing.get(guildId);
+        const queue = this.waitingQueue.get(guildId) || [];
+        const userIndex = queue.findIndex(item => item.userId === userId);
+        const position = userIndex + 1;
+
+        let description = '';
+
+        // Informacja o osobie obecnie używającej
+        if (activeUserId) {
+            try {
+                const activeUser = await this.client.users.fetch(activeUserId);
+                description += `🔒 **Obecnie używa:** ${activeUser.username}\n\n`;
+            } catch (err) {
+                description += `🔒 **System jest obecnie zajęty**\n\n`;
+            }
+        }
+
+        // Pozycja użytkownika
+        description += `📋 **Twoja pozycja w kolejce:** ${position}\n`;
+        description += `👥 **Łącznie osób w kolejce:** ${queue.length}\n\n`;
+
+        // Lista osób przed użytkownikiem
+        const peopleAhead = queue.slice(0, userIndex);
+        if (peopleAhead.length > 0) {
+            description += `**Osoby przed Tobą:**\n`;
+            const displayLimit = Math.min(peopleAhead.length, 3);
+
+            for (let i = 0; i < displayLimit; i++) {
+                try {
+                    const person = await this.client.users.fetch(peopleAhead[i].userId);
+                    description += `${i + 1}. ${person.username}\n`;
+                } catch (err) {
+                    description += `${i + 1}. *Użytkownik*\n`;
+                }
+            }
+
+            if (peopleAhead.length > 3) {
+                description += `... i ${peopleAhead.length - 3} innych\n`;
+            }
+            description += `\n`;
+        }
+
+        description += `✅ **Dostaniesz powiadomienie na priv** gdy będzie Twoja kolej.`;
+
+        return { description, position, queueLength: queue.length };
+    }
+
+    /**
      * Usuwa użytkownika z kolejki po użyciu komendy
      */
     removeFromQueue(guildId, userId) {

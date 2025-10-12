@@ -1561,10 +1561,13 @@ async function handlePhase1Command(interaction, sharedState) {
                 // Użytkownik nie ma rezerwacji - dodaj do kolejki
                 await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
 
+                // Pobierz informacje o kolejce
+                const queueInfo = await phaseService.getQueueInfo(interaction.guild.id, interaction.user.id);
+
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('⏳ Kolejka zajęta')
-                        .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostałeś dodany do kolejki i dostaniesz powiadomienie na priv** gdy będzie Twoja kolej.`)
+                        .setDescription(queueInfo.description)
                         .setColor('#FFA500')
                         .setTimestamp()
                     ]
@@ -2097,10 +2100,13 @@ async function handlePhase2Command(interaction, sharedState) {
                 // Użytkownik nie ma rezerwacji - dodaj do kolejki
                 await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
 
+                // Pobierz informacje o kolejce
+                const queueInfo = await phaseService.getQueueInfo(interaction.guild.id, interaction.user.id);
+
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('⏳ Kolejka zajęta')
-                        .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostałeś dodany do kolejki i dostaniesz powiadomienie na priv** gdy będzie Twoja kolej.`)
+                        .setDescription(queueInfo.description)
                         .setColor('#FFA500')
                         .setTimestamp()
                     ]
