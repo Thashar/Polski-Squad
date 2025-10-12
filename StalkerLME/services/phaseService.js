@@ -15,7 +15,8 @@ class PhaseService {
         this.activeSessions = new Map(); // sessionId → session data
         this.tempDir = path.join(__dirname, '..', 'temp', 'phase1');
         this.activeProcessing = new Map(); // guildId → userId (kto obecnie przetwarza)
-        this.waitingQueue = new Map(); // guildId → Set<userId> (kto czeka na zwolnienie)
+        this.waitingQueue = new Map(); // guildId → [{userId, addedAt}] (uporządkowana kolejka FIFO)
+        this.queueReservation = new Map(); // guildId → {userId, expiresAt, timeout} (rezerwacja dla pierwszej osoby)
     }
 
     /**
@@ -43,12 +44,26 @@ class PhaseService {
     /**
      * Dodaje użytkownika do kolejki czekających
      */
-    addToWaitingQueue(guildId, userId) {
+    async addToWaitingQueue(guildId, userId) {
         if (!this.waitingQueue.has(guildId)) {
-            this.waitingQueue.set(guildId, new Set());
+            this.waitingQueue.set(guildId, []);
         }
-        this.waitingQueue.get(guildId).add(userId);
-        logger.info(`[QUEUE] ➕ Użytkownik ${userId} dodany do kolejki oczekujących dla guild ${guildId}`);
+
+        const queue = this.waitingQueue.get(guildId);
+
+        // Sprawdź czy użytkownik już jest w kolejce
+        if (queue.find(item => item.userId === userId)) {
+            logger.warn(`[QUEUE] ⚠️ Użytkownik ${userId} jest już w kolejce dla guild ${guildId}`);
+            return;
+        }
+
+        queue.push({ userId, addedAt: Date.now() });
+        const position = queue.length;
+
+        logger.info(`[QUEUE] ➕ Użytkownik ${userId} dodany do kolejki (pozycja: ${position}) dla guild ${guildId}`);
+
+        // Powiadom użytkownika o jego pozycji w kolejce
+        await this.notifyQueuePosition(guildId, userId, position);
     }
 
     /**
@@ -58,30 +73,214 @@ class PhaseService {
         this.activeProcessing.delete(guildId);
         logger.info(`[PHASE] 🔓 Odblokowano przetwarzanie dla guild ${guildId}`);
 
-        // Powiadom czekających użytkowników
+        // Sprawdź czy są osoby w kolejce
         if (this.waitingQueue.has(guildId)) {
-            const waiting = this.waitingQueue.get(guildId);
-            logger.info(`[QUEUE] 📢 Powiadamianie ${waiting.size} czekających użytkowników`);
+            const queue = this.waitingQueue.get(guildId);
 
-            for (const userId of waiting) {
+            if (queue.length > 0) {
+                // Pobierz pierwszą osobę z kolejki
+                const nextPerson = queue[0];
+                logger.info(`[QUEUE] 📢 Następna osoba w kolejce: ${nextPerson.userId}`);
+
+                // Stwórz rezerwację na 5 minut
+                await this.createQueueReservation(guildId, nextPerson.userId);
+
+                // Powiadom pozostałe osoby w kolejce o zmianie pozycji
+                for (let i = 1; i < queue.length; i++) {
+                    await this.notifyQueuePosition(guildId, queue[i].userId, i);
+                }
+            } else {
+                // Brak osób w kolejce - wyczyść
+                this.waitingQueue.delete(guildId);
+            }
+        }
+    }
+
+    /**
+     * Tworzy rezerwację dla pierwszej osoby w kolejce (5 min)
+     */
+    async createQueueReservation(guildId, userId) {
+        // Wyczyść poprzednią rezerwację jeśli istnieje
+        if (this.queueReservation.has(guildId)) {
+            const oldReservation = this.queueReservation.get(guildId);
+            if (oldReservation.timeout) {
+                clearTimeout(oldReservation.timeout);
+            }
+        }
+
+        const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minut
+
+        // Timeout który usuwa rezerwację i powiadamia następną osobę
+        const timeout = setTimeout(async () => {
+            logger.warn(`[QUEUE] ⏰ Rezerwacja wygasła dla użytkownika ${userId}`);
+            await this.expireReservation(guildId, userId);
+        }, 5 * 60 * 1000);
+
+        this.queueReservation.set(guildId, { userId, expiresAt, timeout });
+
+        // Powiadom użytkownika że może użyć komendy
+        try {
+            const user = await this.client.users.fetch(userId);
+            const expiryTimestamp = Math.floor(expiresAt / 1000);
+            await user.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Twoja kolej!')
+                    .setDescription(`Możesz teraz użyć komendy \`/faza1\` lub \`/faza2\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 5 minut, Twoja kolej przepadnie.**`)
+                    .setColor('#00FF00')
+                    .setTimestamp()
+                ]
+            });
+            logger.info(`[QUEUE] ✅ Powiadomiono użytkownika ${userId} o jego kolejce`);
+        } catch (error) {
+            logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId}:`, error.message);
+        }
+    }
+
+    /**
+     * Wygasa rezerwację i przechodzi do następnej osoby
+     */
+    async expireReservation(guildId, userId) {
+        // Usuń rezerwację
+        this.queueReservation.delete(guildId);
+
+        // Usuń użytkownika z kolejki
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+            const index = queue.findIndex(item => item.userId === userId);
+
+            if (index !== -1) {
+                queue.splice(index, 1);
+                logger.info(`[QUEUE] ➖ Użytkownik ${userId} usunięty z kolejki (timeout)`);
+
+                // Powiadom użytkownika że stracił kolejkę
                 try {
                     const user = await this.client.users.fetch(userId);
                     await user.send({
                         embeds: [new EmbedBuilder()
-                            .setTitle('✅ Kolejka zwolniona!')
-                            .setDescription('Komendy `/faza1` i `/faza2` są teraz dostępne. Możesz ich użyć.')
-                            .setColor('#00FF00')
+                            .setTitle('⏰ Czas minął')
+                            .setDescription('Nie użyłeś komendy w ciągu 5 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
+                            .setColor('#FF0000')
                             .setTimestamp()
                         ]
                     });
-                    logger.info(`[QUEUE] ✅ Powiadomiono użytkownika ${userId}`);
                 } catch (error) {
-                    logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId}:`, error.message);
+                    logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId} o wygaśnięciu:`, error.message);
                 }
             }
 
-            // Wyczyść kolejkę po powiadomieniu
-            this.waitingQueue.delete(guildId);
+            // Powiadom następną osobę jeśli jest
+            if (queue.length > 0) {
+                const nextPerson = queue[0];
+                await this.createQueueReservation(guildId, nextPerson.userId);
+
+                // Powiadom pozostałe osoby o zmianie pozycji
+                for (let i = 1; i < queue.length; i++) {
+                    await this.notifyQueuePosition(guildId, queue[i].userId, i);
+                }
+            } else {
+                this.waitingQueue.delete(guildId);
+            }
+        }
+    }
+
+    /**
+     * Powiadamia użytkownika o jego pozycji w kolejce
+     */
+    async notifyQueuePosition(guildId, userId, position) {
+        try {
+            const user = await this.client.users.fetch(userId);
+            const activeUserId = this.activeProcessing.get(guildId);
+
+            let description = `Twoja pozycja w kolejce: **${position}**\n\n`;
+
+            if (activeUserId) {
+                try {
+                    const activeUser = await this.client.users.fetch(activeUserId);
+                    description += `🔒 Obecnie używa: **${activeUser.username}**\n`;
+                } catch (err) {
+                    description += `🔒 Obecnie system jest zajęty\n`;
+                }
+            }
+
+            // Dodaj informację o osobach przed użytkownikiem
+            if (this.waitingQueue.has(guildId)) {
+                const queue = this.waitingQueue.get(guildId);
+                const peopleAhead = queue.slice(0, position - 1);
+
+                if (peopleAhead.length > 0) {
+                    description += `\n👥 Przed Tobą w kolejce:\n`;
+                    for (let i = 0; i < Math.min(peopleAhead.length, 3); i++) {
+                        try {
+                            const person = await this.client.users.fetch(peopleAhead[i].userId);
+                            description += `${i + 1}. **${person.username}**\n`;
+                        } catch (err) {
+                            description += `${i + 1}. *Użytkownik*\n`;
+                        }
+                    }
+
+                    if (peopleAhead.length > 3) {
+                        description += `... i ${peopleAhead.length - 3} innych\n`;
+                    }
+                }
+            }
+
+            description += `\n✅ Dostaniesz powiadomienie, gdy będzie Twoja kolej.`;
+
+            await user.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('📋 Jesteś w kolejce')
+                    .setDescription(description)
+                    .setColor('#FFA500')
+                    .setTimestamp()
+                ]
+            });
+
+            logger.info(`[QUEUE] 📬 Powiadomiono użytkownika ${userId} o pozycji ${position}`);
+        } catch (error) {
+            logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId} o pozycji:`, error.message);
+        }
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma rezerwację
+     */
+    hasReservation(guildId, userId) {
+        if (!this.queueReservation.has(guildId)) {
+            return false;
+        }
+        const reservation = this.queueReservation.get(guildId);
+        return reservation.userId === userId && reservation.expiresAt > Date.now();
+    }
+
+    /**
+     * Usuwa użytkownika z kolejki po użyciu komendy
+     */
+    removeFromQueue(guildId, userId) {
+        // Wyczyść rezerwację
+        if (this.queueReservation.has(guildId)) {
+            const reservation = this.queueReservation.get(guildId);
+            if (reservation.userId === userId) {
+                if (reservation.timeout) {
+                    clearTimeout(reservation.timeout);
+                }
+                this.queueReservation.delete(guildId);
+                logger.info(`[QUEUE] ✅ Usunięto rezerwację dla użytkownika ${userId}`);
+            }
+        }
+
+        // Usuń z kolejki
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+            const index = queue.findIndex(item => item.userId === userId);
+
+            if (index !== -1) {
+                queue.splice(index, 1);
+                logger.info(`[QUEUE] ➖ Użytkownik ${userId} usunięty z kolejki (rozpoczął używanie)`);
+            }
+
+            if (queue.length === 0) {
+                this.waitingQueue.delete(guildId);
+            }
         }
     }
 

@@ -1555,18 +1555,29 @@ async function handlePhase1Command(interaction, sharedState) {
         // Sprawdź czy ktoś już przetwarza dane
         if (phaseService.isProcessingActive(interaction.guild.id)) {
             const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
-            phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
 
-            await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setTitle('⏳ Kolejka zajęta')
-                    .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostaniesz powiadomiony na priv** gdy kolejka się zwolni.`)
-                    .setColor('#FFA500')
-                    .setTimestamp()
-                ]
-            });
-            return;
+            // Sprawdź czy użytkownik ma rezerwację
+            if (!phaseService.hasReservation(interaction.guild.id, interaction.user.id)) {
+                // Użytkownik nie ma rezerwacji - dodaj do kolejki
+                await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('⏳ Kolejka zajęta')
+                        .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostałeś dodany do kolejki i dostaniesz powiadomienie na priv** gdy będzie Twoja kolej.`)
+                        .setColor('#FFA500')
+                        .setTimestamp()
+                    ]
+                });
+                return;
+            }
+
+            // Użytkownik ma rezerwację ale ktoś inny jeszcze używa - to nie powinno się zdarzyć
+            logger.warn(`[PHASE] ⚠️ Użytkownik ${interaction.user.id} ma rezerwację ale ktoś inny (${activeUserId}) nadal przetwarza`);
         }
+
+        // Jeśli użytkownik ma rezerwację, usuń go z kolejki
+        phaseService.removeFromQueue(interaction.guild.id, interaction.user.id);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -1786,8 +1797,9 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase1_cancel_session') {
-        // Anuluj sesję
+        // Anuluj sesję i zwolnij kolejkę
         await phaseService.cleanupSession(session.sessionId);
+        await phaseService.clearActiveProcessing(interaction.guild.id);
 
         await interaction.update({
             content: '❌ Sesja anulowana.',
@@ -1935,8 +1947,9 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase1_cancel_save') {
-        // Anuluj - usuń pliki temp
+        // Anuluj - usuń pliki temp i zwolnij kolejkę
         await phaseService.cleanupSession(session.sessionId);
+        await phaseService.clearActiveProcessing(interaction.guild.id);
 
         await interaction.update({
             content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
@@ -2078,18 +2091,29 @@ async function handlePhase2Command(interaction, sharedState) {
         // Sprawdź czy ktoś już przetwarza dane
         if (phaseService.isProcessingActive(interaction.guild.id)) {
             const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
-            phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
 
-            await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setTitle('⏳ Kolejka zajęta')
-                    .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostaniesz powiadomiony na priv** gdy kolejka się zwolni.`)
-                    .setColor('#FFA500')
-                    .setTimestamp()
-                ]
-            });
-            return;
+            // Sprawdź czy użytkownik ma rezerwację
+            if (!phaseService.hasReservation(interaction.guild.id, interaction.user.id)) {
+                // Użytkownik nie ma rezerwacji - dodaj do kolejki
+                await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('⏳ Kolejka zajęta')
+                        .setDescription(`Komendy \`/faza1\` i \`/faza2\` są obecnie używane przez <@${activeUserId}>.\n\n✅ **Zostałeś dodany do kolejki i dostaniesz powiadomienie na priv** gdy będzie Twoja kolej.`)
+                        .setColor('#FFA500')
+                        .setTimestamp()
+                    ]
+                });
+                return;
+            }
+
+            // Użytkownik ma rezerwację ale ktoś inny jeszcze używa - to nie powinno się zdarzyć
+            logger.warn(`[PHASE] ⚠️ Użytkownik ${interaction.user.id} ma rezerwację ale ktoś inny (${activeUserId}) nadal przetwarza`);
         }
+
+        // Jeśli użytkownik ma rezerwację, usuń go z kolejki
+        phaseService.removeFromQueue(interaction.guild.id, interaction.user.id);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -2223,8 +2247,9 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase2_cancel_session') {
-        // Anuluj sesję
+        // Anuluj sesję i zwolnij kolejkę
         await phaseService.cleanupSession(session.sessionId);
+        await phaseService.clearActiveProcessing(interaction.guild.id);
 
         await interaction.update({
             content: '❌ Sesja anulowana.',
@@ -2331,12 +2356,15 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase2_cancel_save') {
+        // Anuluj zapis i zwolnij kolejkę
+        await phaseService.cleanupSession(session.sessionId);
+        await phaseService.clearActiveProcessing(interaction.guild.id);
+
         await interaction.update({
             content: '❌ Anulowano zapis danych.',
             embeds: [],
             components: []
         });
-        phaseService.cleanupSession(session.sessionId);
         return;
     }
 
