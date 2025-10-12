@@ -1961,6 +1961,14 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         const stats = phaseService.calculateStatistics(finalResults);
         const clanName = sharedState.config.roleDisplayNames[session.clan] || session.clan;
 
+        // Zbierz nicki graczy z wynikiem 0
+        const playersWithZero = [];
+        for (const [nick, score] of finalResults) {
+            if (score === 0) {
+                playersWithZero.push(nick);
+            }
+        }
+
         // Publiczny raport (wszystko widoczne dla wszystkich)
         const publicEmbed = new EmbedBuilder()
             .setTitle('✅ Faza 1 - Dane zapisane pomyślnie')
@@ -1975,6 +1983,12 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             )
             .setTimestamp()
             .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
+
+        // Dodaj listę graczy z zerem jeśli są
+        if (playersWithZero.length > 0) {
+            const zeroList = playersWithZero.join(', ');
+            publicEmbed.addFields({ name: '📋 Gracze z wynikiem 0', value: zeroList, inline: false });
+        }
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
 
@@ -2560,7 +2574,8 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
         .addFields(
             { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
             { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
-            { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true }
+            { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
+            { name: '🏆 Suma TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false }
         )
         .setTimestamp();
 
