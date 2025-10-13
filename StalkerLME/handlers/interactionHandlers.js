@@ -1519,16 +1519,6 @@ async function handlePhase1Command(interaction, sharedState) {
         return;
     }
 
-    // Sprawdź czy ktoś już przetwarza
-    if (phaseService.isProcessingActive(interaction.guild.id)) {
-        const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
-        await interaction.reply({
-            content: `⏳ Trwa już przetwarzanie Fazy 1 przez <@${activeUserId}>.\n\nProszę poczekać na zakończenie obecnego procesu.`,
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
     await interaction.deferReply();
 
     try {
@@ -2053,16 +2043,6 @@ async function handlePhase2Command(interaction, sharedState) {
     if (!isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    // Sprawdź czy ktoś już przetwarza
-    if (phaseService.isProcessingActive(interaction.guild.id)) {
-        const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
-        await interaction.reply({
-            content: `⏳ Trwa już przetwarzanie przez <@${activeUserId}>.\n\nProszę poczekać na zakończenie obecnego procesu.`,
             flags: MessageFlags.Ephemeral
         });
         return;
