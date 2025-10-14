@@ -1537,7 +1537,7 @@ class LotteryService {
             maxHoursBeforeDraw = 25; // 25 godzin przed losowaniem
         } else if (targetRoleId === this.config.channels.cx.requiredRoleId) {
             channelType = 'CX';
-            maxHoursBeforeDraw = 193; // 193 godziny (około 8 dni) przed losowaniem
+            maxHoursBeforeDraw = 313; // 313 godzin (13 dni) przed losowaniem
         } else {
             return {
                 isAllowed: false,
