@@ -98,12 +98,12 @@ function onUncaughtException(error) {
  */
 function onShutdown(signal) {
     logger.warn(`Otrzymano sygnał ${signal}. Zamykanie bota...`);
-    
+
     // Zatrzymaj serwis loterii
     if (lotteryService) {
         lotteryService.stop();
     }
-    
+
     client.destroy();
     process.exit(0);
 }

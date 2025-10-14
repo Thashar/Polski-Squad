@@ -25,7 +25,7 @@ module.exports = {
     token: process.env.KONTROLER_TOKEN,
     clientId: process.env.KONTROLER_CLIENT_ID,
     guildId: process.env.KONTROLER_GUILD_ID,
-    
+
     // Rola blokująca udział w loteriach
     blockedRole: '1392812250263195718',
     
