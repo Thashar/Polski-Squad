@@ -5075,17 +5075,41 @@ async function handleWynikiCommand(interaction, sharedState) {
     // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
     const currentChannelId = interaction.channelId;
 
-    // Spróbuj pobrać pełny obiekt kanału z guild
+    // Spróbuj pobrać pełny obiekt kanału
     let channel = interaction.channel;
     let parentChannelId = null;
 
-    // Jeśli channel nie ma pełnych danych, pobierz z guild.channels
+    // Jeśli channel nie ma pełnych danych, spróbuj różnych metod
     if (!channel || !channel.type) {
         try {
-            channel = await interaction.guild.channels.fetch(currentChannelId);
-            logger.info(`[WYNIKI] Pobrano pełny obiekt kanału z guild`);
+            // Najpierw sprawdź cache
+            channel = interaction.guild.channels.cache.get(currentChannelId);
+
+            if (!channel) {
+                // Spróbuj pobrać jako zwykły kanał
+                try {
+                    channel = await interaction.guild.channels.fetch(currentChannelId);
+                    logger.info(`[WYNIKI] Pobrano kanał z fetch`);
+                } catch (fetchError) {
+                    // Może to być wątek - wątki są w parent channel
+                    // Przeszukaj wszystkie kanały i ich wątki
+                    logger.info(`[WYNIKI] Szukam w wątkach...`);
+                    for (const [channelId, chan] of interaction.guild.channels.cache) {
+                        if (chan.threads) {
+                            const thread = chan.threads.cache.get(currentChannelId);
+                            if (thread) {
+                                channel = thread;
+                                logger.info(`[WYNIKI] Znaleziono wątek w kanale ${channelId}`);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                logger.info(`[WYNIKI] Pobrano kanał z cache`);
+            }
         } catch (error) {
-            logger.error(`[WYNIKI] Błąd pobierania kanału:`, error);
+            logger.error(`[WYNIKI] Błąd pobierania kanału:`, error.message);
         }
     }
 
@@ -5110,17 +5134,32 @@ async function handleWynikiCommand(interaction, sharedState) {
     const allowedChannels = [
         ...Object.values(config.warningChannels),
         '1348200849242984478',
-        ...specialChannels
+        ...specialChannels,
+        // Dodatkowe wątki (jeśli parentId nie działa)
+        '1346401063858606092'  // Twój wątek
     ];
 
+    // Fallback: jeśli parentId nie działa, sprawdź tylko currentChannelId
+    // Dla wątków które nie zwracają parentId, użytkownik musi użyć komendy bezpośrednio w wątku
     const isAllowedChannel = allowedChannels.includes(currentChannelId) ||
                             (parentChannelId && allowedChannels.includes(parentChannelId));
 
     if (!isAllowedChannel) {
-        await interaction.reply({
-            content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.\nKanał: ${currentChannelId}, Parent: ${parentChannelId || 'brak'}`,
-            flags: MessageFlags.Ephemeral
-        });
+        // Jeśli to admin/moderator, pozwól mu dodać ten kanał/wątek tymczasowo
+        const isAdmin = interaction.member.permissions.has('Administrator');
+        const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+        if (isAdmin || hasPunishRole) {
+            await interaction.reply({
+                content: `⚠️ Ten kanał/wątek nie jest na liście dozwolonych.\n\n**ID kanału:** ${currentChannelId}\n**Parent ID:** ${parentChannelId || 'brak'}\n\nCzy chcesz dodać ten kanał do listy dozwolonych? Użyj ID: \`${currentChannelId}\`\n\nAby dodać ten wątek, musisz ręcznie dodać jego ID do kodu.\n\nMożesz też użyć komendy bezpośrednio na głównym kanale (nie w wątku).`,
+                flags: MessageFlags.Ephemeral
+            });
+        } else {
+            await interaction.reply({
+                content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
         return;
     }
 
