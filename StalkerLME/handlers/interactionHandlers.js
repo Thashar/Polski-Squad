@@ -5,6 +5,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('StalkerLME');
 
 const confirmationData = new Map();
+const wynikiAttachments = new Map(); // Przechowuje załączniki (zdjęcia/filmy) dla /wyniki per użytkownik+kanał
 
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
@@ -969,7 +970,57 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('wyniki')
-            .setDescription('Wyświetl wyniki dla wszystkich faz'),
+            .setDescription('Wyświetl wyniki dla wszystkich faz')
+            .addAttachmentOption(option =>
+                option.setName('plik1')
+                    .setDescription('Opcjonalny plik #1 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik2')
+                    .setDescription('Opcjonalny plik #2 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik3')
+                    .setDescription('Opcjonalny plik #3 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik4')
+                    .setDescription('Opcjonalny plik #4 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik5')
+                    .setDescription('Opcjonalny plik #5 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik6')
+                    .setDescription('Opcjonalny plik #6 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik7')
+                    .setDescription('Opcjonalny plik #7 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik8')
+                    .setDescription('Opcjonalny plik #8 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik9')
+                    .setDescription('Opcjonalny plik #9 (zdjęcie lub film)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('plik10')
+                    .setDescription('Opcjonalny plik #10 (zdjęcie lub film)')
+                    .setRequired(false)
+            ),
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
@@ -2658,7 +2709,7 @@ async function handleDodajWeekSelect(interaction, sharedState) {
 
         const embed = new EmbedBuilder()
             .setTitle('➕ Dodaj gracza - Faza 2')
-            .setDescription(`**Krok 2/3:** Wybierz rundę\n\nTydzień: **${selectedWeek}**\nKlan: **${config.roleDisplayNames[clan]}**`)
+            .setDescription(`**Krok 2/3:** Wybierz rundę\n**Tydzień:** ${selectedWeek}\n**Klan:** ${config.roleDisplayNames[clan]}`)
             .setColor('#00FF00')
             .setTimestamp();
 
@@ -2771,10 +2822,11 @@ async function showUserSelectMenu(interaction, sharedState, phase, clan, weekNum
     const roundText = round !== 'none' && round !== 'summary'
         ? `, ${round === 'round1' ? 'Runda 1' : round === 'round2' ? 'Runda 2' : 'Runda 3'}`
         : round === 'summary' ? ', Podsumowanie' : '';
+    const stepNumber = phase === 'phase2' ? '3/3' : '2/2';
 
     const embed = new EmbedBuilder()
         .setTitle(`➕ Dodaj gracza - ${phaseTitle}${roundText}`)
-        .setDescription(`**Wybierz użytkownika:**\n\nTydzień: **${weekNumber}**\nKlan: **${config.roleDisplayNames[clan]}**\n\nDostępnych użytkowników: **${sortedMembers.length}**`)
+        .setDescription(`**Krok ${stepNumber}:** Wybierz użytkownika\n**Tydzień:** ${weekNumber}\n**Klan:** ${config.roleDisplayNames[clan]}\n\nDostępnych użytkowników: **${sortedMembers.length}**`)
         .setColor('#00FF00')
         .setTimestamp();
 
@@ -2885,9 +2937,10 @@ async function handleDodajCommand(interaction, sharedState) {
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const totalSteps = selectedPhase === 'phase2' ? '3' : '2';
         const embed = new EmbedBuilder()
             .setTitle(`➕ Dodaj gracza - ${phaseTitle}`)
-            .setDescription(`**Krok 1/3:** Wybierz tydzień (klan: **${clanName}**)`)
+            .setDescription(`**Krok 1/${totalSteps}:** Wybierz tydzień\n**Klan:** ${clanName}`)
             .setColor('#00FF00')
             .setTimestamp();
 
@@ -3121,38 +3174,14 @@ async function handleModyfikujCommand(interaction, sharedState) {
     const selectedPhase = interaction.options.getString('faza');
 
     try {
-        const clanName = config.roleDisplayNames[userClan];
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        // Krok 1: Wybór klanu (tylko klan użytkownika)
-        const clanOptions = [
-            new StringSelectMenuOptionBuilder()
-                .setLabel(clanName)
-                .setValue(userClan)
-        ];
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`modyfikuj_select_clan|${selectedPhase}`)
-            .setPlaceholder('Wybierz klan')
-            .addOptions(clanOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-
-        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
-        const embed = new EmbedBuilder()
-            .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}`)
-            .setDescription(`**Krok 1/4:** Wybierz klan (dostępny: **${clanName}**)`)
-            .setColor('#FF9900')
-            .setTimestamp();
-
-        await interaction.reply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
-        });
+        // Pomiń wybór klanu i przejdź bezpośrednio do wyboru tygodnia
+        await showModyfikujWeekSelection(interaction, databaseService, config, userClan, selectedPhase, null, 0);
 
     } catch (error) {
         logger.error('[MODYFIKUJ] ❌ Błąd komendy /modyfikuj:', error);
-        await interaction.reply({
+        await interaction.editReply({
             content: '❌ Wystąpił błąd podczas uruchamiania komendy.',
             flags: MessageFlags.Ephemeral
         });
@@ -3236,7 +3265,7 @@ async function showModyfikujWeekSelection(interaction, databaseService, config, 
 
     const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
     const roundText = selectedRound ? ` - ${selectedRound === 'round1' ? 'Runda 1' : selectedRound === 'round2' ? 'Runda 2' : selectedRound === 'round3' ? 'Runda 3' : 'Suma'}` : '';
-    const stepNumber = selectedPhase === 'phase2' ? (selectedRound ? '4/4' : '2/4') : '2/3';
+    const stepNumber = selectedPhase === 'phase2' ? (selectedRound ? '3/3' : '1/3') : '1/2';
 
     const embed = new EmbedBuilder()
         .setTitle(`🔧 Modyfikacja wyniku - ${phaseTitle}${roundText}`)
@@ -4390,7 +4419,8 @@ async function handleWynikiWeekSelect(interaction, sharedState, view = 'phase1')
         }
 
         // Wyświetl wyniki w zależności od wybranego widoku (domyślnie Faza 1)
-        await showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config);
+        // useFollowUp = true dla publicznej wiadomości
+        await showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, false, true);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd wyświetlania wyników:', error);
@@ -4555,7 +4585,7 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     });
 }
 
-async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, isUpdate = false) {
+async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, isUpdate = false, useFollowUp = false) {
     const clanName = config.roleDisplayNames[clan];
 
     // Wybierz dane do wyświetlenia w zależności od widoku
@@ -4846,16 +4876,44 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .setDisabled(!weekDataPhase2)
         );
 
-    const replyMethod = isUpdate ? 'update' : 'editReply';
-    const response = await interaction[replyMethod]({
+    // Sprawdź czy są załączniki do wysłania (tylko dla nie-update i tylko raz)
+    const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
+    const savedAttachments = wynikiAttachments.get(attachmentKey);
+    const shouldSendAttachments = !isUpdate && savedAttachments && savedAttachments.length > 0;
+
+    const replyOptions = {
         embeds: [embed],
         components: [navRow]
-    });
+    };
+
+    // Dodaj załączniki tylko przy pierwszym wysłaniu (nie przy update z przycisków)
+    if (shouldSendAttachments) {
+        replyOptions.content = savedAttachments.map(url => url).join('\n');
+        // Usuń załączniki po użyciu
+        wynikiAttachments.delete(attachmentKey);
+    }
+
+    let response;
+    if (useFollowUp) {
+        // Dla /wyniki - wyślij publiczną wiadomość
+        await interaction.editReply({
+            content: '✅ Wyniki zostały wysłane publicznie poniżej.',
+            embeds: [],
+            components: []
+        });
+        response = await interaction.followUp(replyOptions);
+    } else if (isUpdate) {
+        // Dla przycisków nawigacji
+        response = await interaction.update(replyOptions);
+    } else {
+        // Dla innych komend (widoczne tylko dla wywołującego)
+        response = await interaction.editReply(replyOptions);
+    }
 
     // Zaplanuj usunięcie wiadomości po 15 minutach (resetuj timer przy każdym kliknięciu)
     // Dla update, message jest w interaction.message
-    // Dla editReply, message jest w response
-    const messageToSchedule = isUpdate ? interaction.message : response;
+    // Dla followUp/editReply, message jest w response
+    const messageToSchedule = (isUpdate || useFollowUp) ? (isUpdate ? interaction.message : response) : response;
 
     if (messageToSchedule && messageCleanupService && shouldAutoDelete) {
         // Usuń stary scheduled deletion jeśli istnieje
@@ -4895,7 +4953,36 @@ async function handleWynikiCommand(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply();
+    // Kanały, na których można załączać pliki (zdjęcia i filmy)
+    const channelsWithAttachments = [
+        '1185510890930458705',
+        '1200055492458856458',
+        '1200414388327292938',
+        '1262792522497921084'
+    ];
+
+    // Zbierz załączniki jeśli kanał to pozwala
+    const attachments = [];
+    if (channelsWithAttachments.includes(interaction.channelId)) {
+        for (let i = 1; i <= 10; i++) {
+            const attachment = interaction.options.getAttachment(`plik${i}`);
+            if (attachment) {
+                attachments.push(attachment.url);
+            }
+        }
+    }
+
+    // Zapisz załączniki w mapie (klucz: userId + channelId)
+    const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
+    if (attachments.length > 0) {
+        wynikiAttachments.set(attachmentKey, attachments);
+        // Usuń po 30 minutach (timeout)
+        setTimeout(() => {
+            wynikiAttachments.delete(attachmentKey);
+        }, 30 * 60 * 1000);
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Utwórz select menu z klanami (bez parametru phase)
@@ -4920,7 +5007,8 @@ async function handleWynikiCommand(interaction, sharedState) {
 
         await interaction.editReply({
             embeds: [embed],
-            components: [row]
+            components: [row],
+            flags: MessageFlags.Ephemeral
         });
 
     } catch (error) {
