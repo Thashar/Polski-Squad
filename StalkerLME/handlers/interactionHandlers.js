@@ -5,8 +5,6 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('StalkerLME');
 
 const confirmationData = new Map();
-const wynikiAttachments = new Map(); // Przechowuje załączniki (zdjęcia/filmy) dla /wyniki per użytkownik+kanał
-const wynikiAwaitingFiles = new Map(); // Przechowuje informację o użytkownikach oczekujących na przesłanie plików (zawiera też oryginalną interakcję)
 
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
@@ -4877,68 +4875,10 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .setDisabled(!weekDataPhase2)
         );
 
-    // Sprawdź czy są załączniki do wysłania (tylko dla nie-update i tylko raz)
-    const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
-    const savedAttachments = wynikiAttachments.get(attachmentKey);
-    const shouldSendAttachments = !isUpdate && savedAttachments && savedAttachments.length > 0;
-
     const replyOptions = {
         embeds: [embed],
         components: [navRow]
     };
-
-    // Pobierz pliki i dodaj jako załączniki Discord
-    let downloadedFiles = [];
-    if (shouldSendAttachments) {
-        const { AttachmentBuilder } = require('discord.js');
-        const https = require('https');
-        const http = require('http');
-        const fs = require('fs');
-        const path = require('path');
-        const os = require('os');
-
-        try {
-            for (const attachment of savedAttachments) {
-                // Pobierz plik
-                const tempDir = os.tmpdir();
-                const fileName = attachment.name || `file_${Date.now()}_${Math.random().toString(36).substring(7)}${path.extname(attachment.url)}`;
-                const filePath = path.join(tempDir, fileName);
-
-                await new Promise((resolve, reject) => {
-                    const protocol = attachment.url.startsWith('https') ? https : http;
-                    const file = fs.createWriteStream(filePath);
-
-                    protocol.get(attachment.url, (response) => {
-                        response.pipe(file);
-                        file.on('finish', () => {
-                            file.close();
-                            resolve();
-                        });
-                    }).on('error', (err) => {
-                        fs.unlink(filePath, () => {});
-                        reject(err);
-                    });
-                });
-
-                // Dodaj do listy pobranych plików
-                downloadedFiles.push({
-                    path: filePath,
-                    name: fileName
-                });
-            }
-
-            // Dodaj załączniki do Discord
-            replyOptions.files = downloadedFiles.map(file =>
-                new AttachmentBuilder(file.path).setName(file.name)
-            );
-
-            // Usuń załączniki z mapy po użyciu
-            wynikiAttachments.delete(attachmentKey);
-        } catch (error) {
-            logger.error('[WYNIKI] ❌ Błąd pobierania załączników:', error);
-            // W przypadku błędu, wyślij bez załączników
-        }
-    }
 
     let response;
     if (useFollowUp) {
@@ -4955,17 +4895,6 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     } else {
         // Dla innych komend (widoczne tylko dla wywołującego)
         response = await interaction.editReply(replyOptions);
-    }
-
-    // Usuń pobrane pliki z dysku
-    if (downloadedFiles.length > 0) {
-        for (const file of downloadedFiles) {
-            try {
-                fs.unlinkSync(file.path);
-            } catch (err) {
-                logger.error('[WYNIKI] ❌ Błąd usuwania pliku tymczasowego:', err);
-            }
-        }
     }
 
     // Zaplanuj usunięcie wiadomości po 15 minutach (resetuj timer przy każdym kliknięciu)
@@ -4997,193 +4926,17 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
-    // Specjalne kanały z załącznikami i bez auto-usuwania
-    const specialChannels = [
-        '1185510890930458705',
-        '1200055492458856458',
-        '1200414388327292938',
-        '1262792522497921084'
-    ];
-
-    // Specjalne wątki (gdy parentId nie działa) - również z załącznikami
-    const specialThreads = [
-        '1346401063858606092'  // Wątek w jednym ze specjalnych kanałów
-    ];
-
-    // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
-    const currentChannelId = interaction.channelId;
-
-    // Spróbuj pobrać pełny obiekt kanału
-    let channel = interaction.channel;
-    let parentChannelId = null;
-
-    // Jeśli channel nie ma pełnych danych, spróbuj różnych metod
-    if (!channel || !channel.type) {
-        try {
-            // Najpierw sprawdź cache
-            channel = interaction.guild.channels.cache.get(currentChannelId);
-
-            if (!channel) {
-                // Spróbuj pobrać jako zwykły kanał
-                try {
-                    channel = await interaction.guild.channels.fetch(currentChannelId);
-                    logger.info(`[WYNIKI] Pobrano kanał z fetch`);
-                } catch (fetchError) {
-                    // Może to być wątek - wątki są w parent channel
-                    // Przeszukaj wszystkie kanały i ich wątki
-                    logger.info(`[WYNIKI] Szukam w wątkach...`);
-                    for (const [channelId, chan] of interaction.guild.channels.cache) {
-                        if (chan.threads) {
-                            const thread = chan.threads.cache.get(currentChannelId);
-                            if (thread) {
-                                channel = thread;
-                                logger.info(`[WYNIKI] Znaleziono wątek w kanale ${channelId}`);
-                                break;
-                            }
-                        }
-                    }
-                }
-            } else {
-                logger.info(`[WYNIKI] Pobrano kanał z cache`);
-            }
-        } catch (error) {
-            logger.error(`[WYNIKI] Błąd pobierania kanału:`, error.message);
-        }
-    }
-
-    // Dla wątków sprawdź parentId
-    if (channel) {
-        parentChannelId = channel.parentId || channel.parent?.id || null;
-    }
-
-    // Lista dozwolonych kanałów - zawiera kanały klanowe + specjalne kanały + specjalne wątki
+    // Sprawdź czy kanał jest dozwolony
     const allowedChannels = [
         ...Object.values(config.warningChannels),
-        '1348200849242984478',
-        ...specialChannels,
-        ...specialThreads
+        '1348200849242984478'
     ];
 
-    // Fallback: jeśli parentId nie działa, sprawdź tylko currentChannelId
-    const isAllowedChannel = allowedChannels.includes(currentChannelId) ||
-                            (parentChannelId && allowedChannels.includes(parentChannelId));
-
-    if (!isAllowedChannel) {
-        // Jeśli to admin/moderator, pozwól mu dodać ten kanał/wątek tymczasowo
-        const isAdmin = interaction.member.permissions.has('Administrator');
-        const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
-
-        if (isAdmin || hasPunishRole) {
-            await interaction.reply({
-                content: `⚠️ Ten kanał/wątek nie jest na liście dozwolonych.\n\n**ID kanału:** ${currentChannelId}\n**Parent ID:** ${parentChannelId || 'brak'}\n\nCzy chcesz dodać ten kanał do listy dozwolonych? Użyj ID: \`${currentChannelId}\`\n\nAby dodać ten wątek, musisz ręcznie dodać jego ID do kodu.\n\nMożesz też użyć komendy bezpośrednio na głównym kanale (nie w wątku).`,
-                flags: MessageFlags.Ephemeral
-            });
-        } else {
-            await interaction.reply({
-                content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`,
-                flags: MessageFlags.Ephemeral
-            });
-        }
-        return;
-    }
-
-    // Sprawdź uprawnienia i czy to specjalny kanał (lub wątek w specjalnym kanale)
-    const isSpecialChannel = specialChannels.includes(currentChannelId) ||
-                            (parentChannelId && specialChannels.includes(parentChannelId)) ||
-                            specialThreads.includes(currentChannelId);
-
-    const isAdmin = interaction.member.permissions.has('Administrator');
-    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
-    const canAttachFiles = isAdmin || hasPunishRole;
-
-    // Zapytaj o załączniki dla moderatorów/adminów na specjalnych kanałach
-    if (isSpecialChannel && canAttachFiles) {
+    if (!allowedChannels.includes(interaction.channelId)) {
         await interaction.reply({
-            content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
-                     '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
-                     '❌ **NIE** - Napisz `nie` lub `skip` aby pominąć\n\n' +
-                     '💡 Możesz przesłać do 10 plików naraz.',
+            content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
         });
-
-        // Zapisz informację że oczekujemy na pliki od tego użytkownika (wraz z interakcją)
-        const awaitKey = `${interaction.user.id}_${interaction.channelId}`;
-        wynikiAwaitingFiles.set(awaitKey, {
-            userId: interaction.user.id,
-            channelId: interaction.channelId,
-            timestamp: Date.now(),
-            interaction: interaction
-        });
-
-        // Utwórz message collector który będzie zbierał wiadomości od tego użytkownika
-        const channel = interaction.channel;
-        const filter = (m) => m.author.id === interaction.user.id;
-        const collector = channel.createMessageCollector({
-            filter,
-            time: 2 * 60 * 1000 // 2 minuty, bez limitu wiadomości
-        });
-
-        collector.on('collect', async (message) => {
-
-            // Sprawdź czy to odpowiedź "nie" lub "skip"
-            const messageContent = message.content.toLowerCase().trim();
-            if (messageContent === 'nie' || messageContent === 'skip' || messageContent === 'n' || messageContent === 'no') {
-                wynikiAwaitingFiles.delete(awaitKey);
-                collector.stop('declined');
-
-                // Usuń wiadomość użytkownika
-                try {
-                    await message.delete();
-                } catch (e) {}
-
-                // Kontynuuj normalny przepływ /wyniki bez załączników
-                await handleWynikiContinue(interaction.user.id, interaction.channelId, message.guild, sharedState);
-                return;
-            }
-
-            // Sprawdź czy są załączniki
-            if (message.attachments.size > 0) {
-                // Ogranicz do 10 załączników
-                const attachmentsArray = Array.from(message.attachments.values()).slice(0, 10);
-
-                // Zapisz załączniki
-                const attachmentObjects = attachmentsArray.map(att => ({
-                    url: att.url,
-                    name: att.name,
-                    contentType: att.contentType
-                }));
-
-                wynikiAttachments.set(awaitKey, attachmentObjects);
-                wynikiAwaitingFiles.delete(awaitKey);
-                collector.stop('success');
-
-                // Usuń wiadomość użytkownika z załącznikami
-                try {
-                    await message.delete();
-                } catch (e) {}
-
-                // Kontynuuj normalny przepływ /wyniki z załącznikami
-                await handleWynikiContinue(interaction.user.id, interaction.channelId, message.guild, sharedState);
-            } else {
-                // Wiadomość bez załączników i nie jest "nie/skip" - usuń ją i czekaj dalej
-                try {
-                    await message.delete();
-                } catch (e) {}
-                // NIE zatrzymuj collectora - czekaj na następną wiadomość
-            }
-        });
-
-        collector.on('end', (collected, reason) => {
-
-            if (reason === 'time') {
-                wynikiAwaitingFiles.delete(awaitKey);
-                interaction.followUp({
-                    content: '⏱️ Czas na przesłanie plików minął. Użyj `/wyniki` ponownie.',
-                    flags: MessageFlags.Ephemeral
-                }).catch(() => {});
-            }
-        });
-
         return;
     }
 
@@ -5224,65 +4977,9 @@ async function handleWynikiCommand(interaction, sharedState) {
     }
 }
 
-// Funkcja do kontynuowania przepływu /wyniki po przesłaniu plików (lub rezygnacji)
-async function handleWynikiContinue(userId, channelId, guild, sharedState) {
-    const { config } = sharedState;
-
-    try {
-        // Pobierz zapisaną interakcję
-        const awaitKey = `${userId}_${channelId}`;
-        const awaitData = wynikiAwaitingFiles.get(awaitKey) || {};
-        const interaction = awaitData.interaction;
-
-        if (!interaction) {
-            logger.error('[WYNIKI] ❌ Brak zapisanej interakcji');
-            return;
-        }
-
-        // Utwórz select menu z klanami
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
-            return new StringSelectMenuOptionBuilder()
-                .setLabel(config.roleDisplayNames[clanKey])
-                .setValue(clanKey);
-        });
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('wyniki_select_clan')
-            .setPlaceholder('Wybierz klan')
-            .addOptions(clanOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-
-        // Sprawdź czy są załączniki
-        const savedAttachments = wynikiAttachments.get(awaitKey);
-        const attachmentInfo = savedAttachments && savedAttachments.length > 0
-            ? `\n\n📎 Załączniki: ${savedAttachments.length} plik(ów)`
-            : '';
-
-        const embed = new EmbedBuilder()
-            .setTitle('📊 Wyniki - Wszystkie Fazy')
-            .setDescription(`**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:${attachmentInfo}`)
-            .setColor('#0099FF')
-            .setTimestamp();
-
-        // Wyślij followUp do oryginalnej interakcji (ephemeral)
-        await interaction.followUp({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
-        });
-
-    } catch (error) {
-        logger.error('[WYNIKI] ❌ Błąd kontynuowania przepływu wyniki:', error);
-    }
-}
-
 module.exports = {
     handleInteraction,
     registerSlashCommands,
     unregisterCommand,
-    confirmationData,
-    wynikiAwaitingFiles,
-    wynikiAttachments,
-    handleWynikiContinue
+    confirmationData
 };
