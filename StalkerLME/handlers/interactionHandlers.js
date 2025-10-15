@@ -5079,18 +5079,18 @@ async function handleWynikiCommand(interaction, sharedState) {
     // Dla wątków sprawdź różne właściwości
     let parentChannelId = null;
     if (channel) {
-        // Najpierw sprawdź parentId (nowsze API)
-        if (channel.parentId) {
-            parentChannelId = channel.parentId;
-        }
-        // Potem parent?.id (starsze API)
-        else if (channel.parent?.id) {
-            parentChannelId = channel.parent.id;
-        }
-        // Dla wątków typu ThreadChannel
-        else if (channel.isThread && channel.isThread()) {
-            parentChannelId = channel.parentId || channel.parent?.id;
-        }
+        // Debugowanie - wypisz wszystkie właściwości
+        logger.info(`[WYNIKI DEBUG] Channel properties:`, {
+            id: channel.id,
+            type: channel.type,
+            parentId: channel.parentId,
+            parent: channel.parent?.id,
+            isThread: typeof channel.isThread === 'function' ? channel.isThread() : channel.isThread,
+            ownerId: channel.ownerId
+        });
+
+        // Sprawdź parentId
+        parentChannelId = channel.parentId || channel.parent?.id || null;
     }
 
     logger.info(`[WYNIKI] Kanał: ${currentChannelId}, Parent: ${parentChannelId}, Typ: ${channel?.type}`);
