@@ -4792,14 +4792,26 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         }
     }
 
+    // Kanały, na których wiadomości z /wyniki nie będą automatycznie usuwane
+    const permanentChannels = [
+        '1185510890930458705',
+        '1200055492458856458',
+        '1200414388327292938',
+        '1262792522497921084'
+    ];
+
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
     const messageCleanupService = interaction.client.messageCleanupService;
-    const deleteAt = Date.now() + (15 * 60 * 1000);
-    const deleteTimestamp = Math.floor(deleteAt / 1000);
+    const shouldAutoDelete = !permanentChannels.includes(interaction.channelId);
+    const deleteAt = shouldAutoDelete ? Date.now() + (15 * 60 * 1000) : null;
+    const deleteTimestamp = deleteAt ? Math.floor(deleteAt / 1000) : null;
+
+    // Opis z informacją o wygaśnięciu (lub jej braku)
+    const expiryInfo = shouldAutoDelete ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
 
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - ${viewTitle}`)
-        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}${top3Section}\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>`)
+        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}${top3Section}${expiryInfo}`)
         .setColor('#0099FF')
         .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
         .setTimestamp();
@@ -4845,7 +4857,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     // Dla editReply, message jest w response
     const messageToSchedule = isUpdate ? interaction.message : response;
 
-    if (messageToSchedule && messageCleanupService) {
+    if (messageToSchedule && messageCleanupService && shouldAutoDelete) {
         // Usuń stary scheduled deletion jeśli istnieje
         if (isUpdate) {
             await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
@@ -4858,6 +4870,11 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             deleteAt,
             interaction.user.id
         );
+    } else if (messageToSchedule && messageCleanupService && !shouldAutoDelete) {
+        // Jeśli kanał jest na liście permanentnych, usuń zaplanowane usunięcie (jeśli istnieje)
+        if (isUpdate) {
+            await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
+        }
     }
 }
 
