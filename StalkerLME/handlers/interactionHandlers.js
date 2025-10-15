@@ -487,10 +487,41 @@ async function handleButton(interaction, sharedState) {
 
         // Aktualizuj dane paginacji
         paginationData.currentPage = newPage;
+
+        // Odśwież timestamp - resetuj timer do 15 minut od teraz
+        const newTimestamp = Date.now();
+        paginationData.timestamp = newTimestamp;
+        const deleteAt = newTimestamp + (15 * 60 * 1000);
+
         const navigationButtons = survivorService.createNavigationButtons(newPage);
 
+        // Zaktualizuj footer WSZYSTKICH embedów z nowym timestampem i oglądającym
+        const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
+        const deleteTimestamp = Math.floor(deleteAt / 1000);
+
+        // Zaktualizuj wszystkie embedy w paginacji
+        paginationData.embeds.forEach((embed, index) => {
+            const currentFooter = embed.data.footer?.text || '';
+            const pageName = currentFooter.split(' • ')[0];
+            const newFooterText = `${pageName} • Analiza zostanie usunięta <t:${deleteTimestamp}:R> • Ogląda ${viewerDisplayName}`;
+            embed.setFooter({ text: newFooterText }).setTimestamp();
+        });
+
+        const currentEmbed = paginationData.embeds[newPage];
+
+        // Zaktualizuj zaplanowane usunięcie wiadomości
+        if (sharedState.messageCleanupService) {
+            await sharedState.messageCleanupService.removeScheduledMessage(interaction.message.id);
+            await sharedState.messageCleanupService.scheduleMessageDeletion(
+                interaction.message.id,
+                interaction.message.channelId,
+                deleteAt,
+                paginationData.userId
+            );
+        }
+
         await interaction.update({
-            embeds: [paginationData.embeds[newPage]],
+            embeds: [currentEmbed],
             components: navigationButtons
         });
         return;
@@ -1713,7 +1744,8 @@ async function handleDecodeModalSubmit(interaction, sharedState) {
         }
 
         const userDisplayName = interaction.member?.displayName || interaction.user.username;
-        const embeds = await survivorService.createBuildEmbeds(buildData.data, userDisplayName, code);
+        const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
+        const embeds = await survivorService.createBuildEmbeds(buildData.data, userDisplayName, code, viewerDisplayName);
         const navigationButtons = survivorService.createNavigationButtons(0);
         const response = await interaction.editReply({
             embeds: [embeds[0]], // Rozpocznij od pierwszej strony
