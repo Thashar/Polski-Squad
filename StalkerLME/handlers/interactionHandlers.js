@@ -4929,11 +4929,57 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         components: [navRow]
     };
 
-    // Dodaj załączniki tylko przy pierwszym wysłaniu (nie przy update z przycisków)
+    // Pobierz pliki i dodaj jako załączniki Discord
+    let downloadedFiles = [];
     if (shouldSendAttachments) {
-        replyOptions.content = savedAttachments.map(url => url).join('\n');
-        // Usuń załączniki po użyciu
-        wynikiAttachments.delete(attachmentKey);
+        const { AttachmentBuilder } = require('discord.js');
+        const https = require('https');
+        const http = require('http');
+        const fs = require('fs');
+        const path = require('path');
+        const os = require('os');
+
+        try {
+            for (const attachment of savedAttachments) {
+                // Pobierz plik
+                const tempDir = os.tmpdir();
+                const fileName = attachment.name || `file_${Date.now()}_${Math.random().toString(36).substring(7)}${path.extname(attachment.url)}`;
+                const filePath = path.join(tempDir, fileName);
+
+                await new Promise((resolve, reject) => {
+                    const protocol = attachment.url.startsWith('https') ? https : http;
+                    const file = fs.createWriteStream(filePath);
+
+                    protocol.get(attachment.url, (response) => {
+                        response.pipe(file);
+                        file.on('finish', () => {
+                            file.close();
+                            resolve();
+                        });
+                    }).on('error', (err) => {
+                        fs.unlink(filePath, () => {});
+                        reject(err);
+                    });
+                });
+
+                // Dodaj do listy pobranych plików
+                downloadedFiles.push({
+                    path: filePath,
+                    name: fileName
+                });
+            }
+
+            // Dodaj załączniki do Discord
+            replyOptions.files = downloadedFiles.map(file =>
+                new AttachmentBuilder(file.path).setName(file.name)
+            );
+
+            // Usuń załączniki z mapy po użyciu
+            wynikiAttachments.delete(attachmentKey);
+        } catch (error) {
+            logger.error('[WYNIKI] ❌ Błąd pobierania załączników:', error);
+            // W przypadku błędu, wyślij bez załączników
+        }
     }
 
     let response;
@@ -4951,6 +4997,17 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     } else {
         // Dla innych komend (widoczne tylko dla wywołującego)
         response = await interaction.editReply(replyOptions);
+    }
+
+    // Usuń pobrane pliki z dysku
+    if (downloadedFiles.length > 0) {
+        for (const file of downloadedFiles) {
+            try {
+                fs.unlinkSync(file.path);
+            } catch (err) {
+                logger.error('[WYNIKI] ❌ Błąd usuwania pliku tymczasowego:', err);
+            }
+        }
     }
 
     // Zaplanuj usunięcie wiadomości po 15 minutach (resetuj timer przy każdym kliknięciu)
@@ -5011,24 +5068,45 @@ async function handleWynikiCommand(interaction, sharedState) {
         return;
     }
 
-    // Zbierz załączniki jeśli kanał lub jego parent jest w specialChannels
-    const attachments = [];
+    // Sprawdź uprawnienia dla załączników (tylko admin lub moderatorzy)
     const isSpecialChannel = specialChannels.includes(currentChannelId) ||
                             (parentChannelId && specialChannels.includes(parentChannelId));
 
-    if (isSpecialChannel) {
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+    const canAttachFiles = isAdmin || hasPunishRole;
+
+    // Zbierz załączniki jeśli kanał jest specjalny i użytkownik ma uprawnienia
+    const attachmentObjects = [];
+    if (isSpecialChannel && canAttachFiles) {
         for (let i = 1; i <= 10; i++) {
             const attachment = interaction.options.getAttachment(`plik${i}`);
             if (attachment) {
-                attachments.push(attachment.url);
+                attachmentObjects.push(attachment);
             }
+        }
+    } else if (isSpecialChannel && !canAttachFiles) {
+        // Sprawdź czy użytkownik próbował dodać załączniki bez uprawnień
+        let hasAttachments = false;
+        for (let i = 1; i <= 10; i++) {
+            if (interaction.options.getAttachment(`plik${i}`)) {
+                hasAttachments = true;
+                break;
+            }
+        }
+        if (hasAttachments) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do załączania plików. Wymagane: **Administrator** lub rola moderatora.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
         }
     }
 
-    // Zapisz załączniki w mapie (klucz: userId + channelId)
+    // Zapisz obiekty załączników w mapie (klucz: userId + channelId)
     const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
-    if (attachments.length > 0) {
-        wynikiAttachments.set(attachmentKey, attachments);
+    if (attachmentObjects.length > 0) {
+        wynikiAttachments.set(attachmentKey, attachmentObjects);
         // Usuń po 30 minutach (timeout)
         setTimeout(() => {
             wynikiAttachments.delete(attachmentKey);
