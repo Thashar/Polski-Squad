@@ -5078,15 +5078,17 @@ async function handleWynikiCommand(interaction, sharedState) {
     ];
 
     logger.info(`[WYNIKI DEBUG] allowedChannels zawiera: ${allowedChannels.length} kanałów`);
-    logger.info(`[WYNIKI DEBUG] specialThreads:`, specialThreads);
-    logger.info(`[WYNIKI DEBUG] currentChannelId w allowedChannels:`, allowedChannels.includes(currentChannelId));
+    logger.info(`[WYNIKI DEBUG] specialThreads: ${JSON.stringify(specialThreads)}`);
+    logger.info(`[WYNIKI DEBUG] specialChannels: ${JSON.stringify(specialChannels)}`);
+    logger.info(`[WYNIKI DEBUG] currentChannelId: ${currentChannelId}`);
+    logger.info(`[WYNIKI DEBUG] currentChannelId w allowedChannels: ${allowedChannels.includes(currentChannelId)}`);
 
     // Fallback: jeśli parentId nie działa, sprawdź tylko currentChannelId
     // Dla wątków które nie zwracają parentId, użytkownik musi użyć komendy bezpośrednio w wątku
     const isAllowedChannel = allowedChannels.includes(currentChannelId) ||
                             (parentChannelId && allowedChannels.includes(parentChannelId));
 
-    logger.info(`[WYNIKI DEBUG] isAllowedChannel:`, isAllowedChannel);
+    logger.info(`[WYNIKI DEBUG] isAllowedChannel: ${isAllowedChannel}`);
 
     if (!isAllowedChannel) {
         // Jeśli to admin/moderator, pozwól mu dodać ten kanał/wątek tymczasowo
