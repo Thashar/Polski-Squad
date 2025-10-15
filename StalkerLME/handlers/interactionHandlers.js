@@ -4819,11 +4819,17 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         '1262792522497921084'
     ];
 
+    // Specjalne wątki (bez auto-usuwania)
+    const permanentThreads = [
+        '1346401063858606092'  // Wątek w specjalnym kanale
+    ];
+
     // Sprawdź czy to specjalny kanał lub wątek w specjalnym kanale
     const currentChannelId = interaction.channelId;
     const parentChannelId = interaction.channel?.parentId || interaction.channel?.parent?.id;
     const isPermanentChannel = permanentChannels.includes(currentChannelId) ||
-                               (parentChannelId && permanentChannels.includes(parentChannelId));
+                               (parentChannelId && permanentChannels.includes(parentChannelId)) ||
+                               permanentThreads.includes(currentChannelId);
 
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
     const messageCleanupService = interaction.client.messageCleanupService;
@@ -4831,8 +4837,8 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     const deleteAt = shouldAutoDelete ? Date.now() + (15 * 60 * 1000) : null;
     const deleteTimestamp = deleteAt ? Math.floor(deleteAt / 1000) : null;
 
-    // Opis z informacją o wygaśnięciu (lub jej braku)
-    const expiryInfo = shouldAutoDelete ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
+    // Opis z informacją o wygaśnięciu - NIE pokazuj na specjalnych kanałach/wątkach
+    const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
 
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - ${viewTitle}`)
@@ -5072,6 +5078,11 @@ async function handleWynikiCommand(interaction, sharedState) {
         '1262792522497921084'
     ];
 
+    // Specjalne wątki (gdy parentId nie działa) - również z załącznikami
+    const specialThreads = [
+        '1346401063858606092'  // Wątek w jednym ze specjalnych kanałów
+    ];
+
     // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
     const currentChannelId = interaction.channelId;
 
@@ -5135,8 +5146,7 @@ async function handleWynikiCommand(interaction, sharedState) {
         ...Object.values(config.warningChannels),
         '1348200849242984478',
         ...specialChannels,
-        // Dodatkowe wątki (jeśli parentId nie działa)
-        '1346401063858606092'  // Twój wątek
+        ...specialThreads
     ];
 
     // Fallback: jeśli parentId nie działa, sprawdź tylko currentChannelId
@@ -5163,9 +5173,10 @@ async function handleWynikiCommand(interaction, sharedState) {
         return;
     }
 
-    // Sprawdź uprawnienia i czy to specjalny kanał
+    // Sprawdź uprawnienia i czy to specjalny kanał (lub wątek w specjalnym kanale)
     const isSpecialChannel = specialChannels.includes(currentChannelId) ||
-                            (parentChannelId && specialChannels.includes(parentChannelId));
+                            (parentChannelId && specialChannels.includes(parentChannelId)) ||
+                            specialThreads.includes(currentChannelId);
 
     const isAdmin = interaction.member.permissions.has('Administrator');
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
