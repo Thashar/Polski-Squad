@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Partials } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
@@ -22,6 +22,10 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.MessageContent
+    ],
+    partials: [
+        Partials.Channel,  // Potrzebne do odbierania wiadomości w wątkach
+        Partials.Message
     ]
 });
 
