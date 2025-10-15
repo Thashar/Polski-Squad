@@ -1029,16 +1029,16 @@ class SurvivorService {
         // Dodaj footer z czasem wygaśnięcia i informacją o oglądającym
         const deleteTimestamp = Math.floor((Date.now() + 15 * 60 * 1000) / 1000);
         const viewerText = viewerDisplayName ? ` • Ogląda ${viewerDisplayName}` : '';
-        const expirationText = `Analiza zostanie usunięta <t:${deleteTimestamp}:R>${viewerText}`;
+        const expirationText = `Analiza zostanie usunięta o <t:${deleteTimestamp}:t>${viewerText}`;
 
-        page0.setFooter({ text: `Start • ${expirationText}` }).setTimestamp();
-        page1.setFooter({ text: `Ekwipunek • ${expirationText}` }).setTimestamp();
-        page2.setFooter({ text: `Tech Party • ${expirationText}` }).setTimestamp();
-        page3.setFooter({ text: `Survivor • ${expirationText}` }).setTimestamp();
-        page4.setFooter({ text: `Legend Colls • ${expirationText}` }).setTimestamp();
-        page5.setFooter({ text: `Epic Colls • ${expirationText}` }).setTimestamp();
-        page6.setFooter({ text: `Custom Colls • ${expirationText}` }).setTimestamp();
-        page7.setFooter({ text: `Pets • ${expirationText}` }).setTimestamp();
+        page0.setFooter({ text: `Start • ${expirationText}` });
+        page1.setFooter({ text: `Ekwipunek • ${expirationText}` });
+        page2.setFooter({ text: `Tech Party • ${expirationText}` });
+        page3.setFooter({ text: `Survivor • ${expirationText}` });
+        page4.setFooter({ text: `Legend Colls • ${expirationText}` });
+        page5.setFooter({ text: `Epic Colls • ${expirationText}` });
+        page6.setFooter({ text: `Custom Colls • ${expirationText}` });
+        page7.setFooter({ text: `Pets • ${expirationText}` });
 
         return [page0, page1, page2, page3, page4, page5, page6, page7];
     }

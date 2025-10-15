@@ -503,8 +503,8 @@ async function handleButton(interaction, sharedState) {
         paginationData.embeds.forEach((embed, index) => {
             const currentFooter = embed.data.footer?.text || '';
             const pageName = currentFooter.split(' • ')[0];
-            const newFooterText = `${pageName} • Analiza zostanie usunięta <t:${deleteTimestamp}:R> • Ogląda ${viewerDisplayName}`;
-            embed.setFooter({ text: newFooterText }).setTimestamp();
+            const newFooterText = `${pageName} • Analiza zostanie usunięta o <t:${deleteTimestamp}:t> • Ogląda ${viewerDisplayName}`;
+            embed.setFooter({ text: newFooterText });
         });
 
         const currentEmbed = paginationData.embeds[newPage];
@@ -4974,7 +4974,12 @@ async function handleWynikiCommand(interaction, sharedState) {
     // Sprawdź czy kanał jest dozwolony
     const allowedChannels = [
         ...Object.values(config.warningChannels),
-        '1348200849242984478'
+        '1348200849242984478',
+        // Dodatkowe specjalne kanały (z załącznikami i bez auto-usuwania)
+        '1185510890930458705',
+        '1200055492458856458',
+        '1200414388327292938',
+        '1262792522497921084'
     ];
 
     if (!allowedChannels.includes(interaction.channelId)) {
