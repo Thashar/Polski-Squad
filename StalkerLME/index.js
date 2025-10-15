@@ -134,6 +134,8 @@ client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
 
+    logger.info(`[MESSAGE DEBUG] Otrzymano wiadomość od ${message.author.tag}, channelId: ${message.channelId}, attachments: ${message.attachments.size}`);
+
     try {
         await vacationService.handleVacationMessage(message);
     } catch (error) {
