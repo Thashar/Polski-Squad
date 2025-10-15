@@ -5074,7 +5074,26 @@ async function handleWynikiCommand(interaction, sharedState) {
 
     // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
     const currentChannelId = interaction.channelId;
-    const parentChannelId = interaction.channel?.parentId || interaction.channel?.parent?.id;
+    const channel = interaction.channel;
+
+    // Dla wątków sprawdź różne właściwości
+    let parentChannelId = null;
+    if (channel) {
+        // Najpierw sprawdź parentId (nowsze API)
+        if (channel.parentId) {
+            parentChannelId = channel.parentId;
+        }
+        // Potem parent?.id (starsze API)
+        else if (channel.parent?.id) {
+            parentChannelId = channel.parent.id;
+        }
+        // Dla wątków typu ThreadChannel
+        else if (channel.isThread && channel.isThread()) {
+            parentChannelId = channel.parentId || channel.parent?.id;
+        }
+    }
+
+    logger.info(`[WYNIKI] Kanał: ${currentChannelId}, Parent: ${parentChannelId}, Typ: ${channel?.type}`);
 
     const allowedChannels = [
         ...Object.values(config.warningChannels),
@@ -5087,7 +5106,7 @@ async function handleWynikiCommand(interaction, sharedState) {
 
     if (!isAllowedChannel) {
         await interaction.reply({
-            content: '❌ Komenda `/wyniki` jest dostępna tylko na określonych kanałach.',
+            content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.\nKanał: ${currentChannelId}, Parent: ${parentChannelId || 'brak'}`,
             flags: MessageFlags.Ephemeral
         });
         return;
