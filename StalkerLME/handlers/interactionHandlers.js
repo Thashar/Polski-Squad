@@ -5074,10 +5074,22 @@ async function handleWynikiCommand(interaction, sharedState) {
 
     // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
     const currentChannelId = interaction.channelId;
-    const channel = interaction.channel;
+
+    // Spróbuj pobrać pełny obiekt kanału z guild
+    let channel = interaction.channel;
+    let parentChannelId = null;
+
+    // Jeśli channel nie ma pełnych danych, pobierz z guild.channels
+    if (!channel || !channel.type) {
+        try {
+            channel = await interaction.guild.channels.fetch(currentChannelId);
+            logger.info(`[WYNIKI] Pobrano pełny obiekt kanału z guild`);
+        } catch (error) {
+            logger.error(`[WYNIKI] Błąd pobierania kanału:`, error);
+        }
+    }
 
     // Dla wątków sprawdź różne właściwości
-    let parentChannelId = null;
     if (channel) {
         // Debugowanie - wypisz wszystkie właściwości
         logger.info(`[WYNIKI DEBUG] Channel properties:`, {
