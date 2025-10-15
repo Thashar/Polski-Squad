@@ -4995,6 +4995,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 }
 
 async function handleWynikiCommand(interaction, sharedState) {
+    logger.info(`[WYNIKI DEBUG] ========== START handleWynikiCommand ==========`);
+    logger.info(`[WYNIKI DEBUG] Interaction ID: ${interaction.id}`);
+
     const { config } = sharedState;
 
     // Specjalne kanały z załącznikami i bez auto-usuwania
@@ -5126,13 +5129,22 @@ async function handleWynikiCommand(interaction, sharedState) {
     // Zapytaj o załączniki dla moderatorów/adminów na specjalnych kanałach
     if (isSpecialChannel && canAttachFiles) {
         logger.info(`[WYNIKI DEBUG] Wchodzę do bloku prompt o załączniki...`);
-        await interaction.reply({
-            content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
-                     '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
-                     '❌ **NIE** - Napisz `nie` lub `skip` aby pominąć\n\n' +
-                     '💡 Możesz przesłać do 10 plików naraz.',
-            flags: MessageFlags.Ephemeral
-        });
+
+        try {
+            await interaction.reply({
+                content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
+                         '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
+                         '❌ **NIE** - Napisz `nie` lub `skip` aby pominąć\n\n' +
+                         '💡 Możesz przesłać do 10 plików naraz.',
+                flags: MessageFlags.Ephemeral
+            });
+            logger.info(`[WYNIKI DEBUG] Reply wysłany pomyślnie!`);
+        } catch (replyError) {
+            logger.error(`[WYNIKI DEBUG] ❌ Błąd podczas reply:`, replyError.message);
+            logger.error(`[WYNIKI DEBUG] ❌ Stack:`, replyError.stack);
+            logger.error(`[WYNIKI DEBUG] ❌ interaction.replied: ${interaction.replied}, interaction.deferred: ${interaction.deferred}`);
+            throw replyError;
+        }
 
         // Zapisz informację że oczekujemy na pliki od tego użytkownika (wraz z interakcją)
         const awaitKey = `${interaction.user.id}_${interaction.channelId}`;
