@@ -4869,9 +4869,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
     // Sprawdź czy to specjalny kanał lub wątek w specjalnym kanale
     const currentChannelId = interaction.channelId;
-    const parentChannelId = interaction.channel?.parent?.id;
+    const parentChannelId = interaction.channel?.parentId || interaction.channel?.parent?.id;
     const isPermanentChannel = permanentChannels.includes(currentChannelId) ||
-                               permanentChannels.includes(parentChannelId);
+                               (parentChannelId && permanentChannels.includes(parentChannelId));
 
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
     const messageCleanupService = interaction.client.messageCleanupService;
@@ -4992,7 +4992,7 @@ async function handleWynikiCommand(interaction, sharedState) {
 
     // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
     const currentChannelId = interaction.channelId;
-    const parentChannelId = interaction.channel?.parent?.id;
+    const parentChannelId = interaction.channel?.parentId || interaction.channel?.parent?.id;
 
     const allowedChannels = [
         ...Object.values(config.warningChannels),
@@ -5001,7 +5001,7 @@ async function handleWynikiCommand(interaction, sharedState) {
     ];
 
     const isAllowedChannel = allowedChannels.includes(currentChannelId) ||
-                            allowedChannels.includes(parentChannelId);
+                            (parentChannelId && allowedChannels.includes(parentChannelId));
 
     if (!isAllowedChannel) {
         await interaction.reply({
@@ -5014,7 +5014,7 @@ async function handleWynikiCommand(interaction, sharedState) {
     // Zbierz załączniki jeśli kanał lub jego parent jest w specialChannels
     const attachments = [];
     const isSpecialChannel = specialChannels.includes(currentChannelId) ||
-                            specialChannels.includes(parentChannelId);
+                            (parentChannelId && specialChannels.includes(parentChannelId));
 
     if (isSpecialChannel) {
         for (let i = 1; i <= 10; i++) {
