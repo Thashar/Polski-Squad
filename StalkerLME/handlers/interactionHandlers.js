@@ -5114,12 +5114,18 @@ async function handleWynikiCommand(interaction, sharedState) {
                             (parentChannelId && specialChannels.includes(parentChannelId)) ||
                             specialThreads.includes(currentChannelId);
 
+    logger.info(`[WYNIKI DEBUG] isSpecialChannel: ${isSpecialChannel}`);
+
     const isAdmin = interaction.member.permissions.has('Administrator');
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
     const canAttachFiles = isAdmin || hasPunishRole;
 
+    logger.info(`[WYNIKI DEBUG] canAttachFiles: ${canAttachFiles}`);
+    logger.info(`[WYNIKI DEBUG] Czy interaction już acknowledged?: ${interaction.replied || interaction.deferred}`);
+
     // Zapytaj o załączniki dla moderatorów/adminów na specjalnych kanałach
     if (isSpecialChannel && canAttachFiles) {
+        logger.info(`[WYNIKI DEBUG] Wchodzę do bloku prompt o załączniki...`);
         await interaction.reply({
             content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
                      '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
