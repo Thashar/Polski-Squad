@@ -5184,10 +5184,15 @@ async function handleWynikiContinue(userId, channelId, guild, sharedState) {
     const { config } = sharedState;
 
     try {
+        logger.info(`[WYNIKI] handleWynikiContinue - Start, userId: ${userId}, channelId: ${channelId}`);
+
         // Pobierz zapisaną interakcję
         const awaitKey = `${userId}_${channelId}`;
         const awaitData = wynikiAwaitingFiles.get(awaitKey) || {};
         const interaction = awaitData.interaction;
+
+        logger.info(`[WYNIKI] Znaleziono awaitData:`, !!awaitData);
+        logger.info(`[WYNIKI] Znaleziono interakcję:`, !!interaction);
 
         if (!interaction) {
             logger.error('[WYNIKI] ❌ Brak zapisanej interakcji');
@@ -5221,6 +5226,8 @@ async function handleWynikiContinue(userId, channelId, guild, sharedState) {
             .setTimestamp();
 
         // Wyślij followUp do oryginalnej interakcji (ephemeral)
+        logger.info(`[WYNIKI] Wysyłam followUp z menu wyboru klanu...`);
+
         await interaction.followUp({
             embeds: [embed],
             components: [row],
@@ -5231,6 +5238,7 @@ async function handleWynikiContinue(userId, channelId, guild, sharedState) {
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd kontynuowania przepływu wyniki:', error);
+        logger.error('[WYNIKI] ❌ Stack trace:', error.stack);
     }
 }
 

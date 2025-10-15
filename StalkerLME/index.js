@@ -219,8 +219,11 @@ client.on(Events.MessageCreate, async (message) => {
         const { wynikiAwaitingFiles, wynikiAttachments } = require('./handlers/interactionHandlers');
         const awaitKey = `${message.author.id}_${message.channelId}`;
 
+        logger.info(`[WYNIKI DEBUG] Sprawdzam czy oczekuję na pliki: ${wynikiAwaitingFiles.has(awaitKey)}, awaitKey: ${awaitKey}`);
+
         if (wynikiAwaitingFiles.has(awaitKey)) {
             const awaitData = wynikiAwaitingFiles.get(awaitKey);
+            logger.info(`[WYNIKI DEBUG] Znaleziono oczekiwanie na pliki, załączników: ${message.attachments.size}`);
 
             // Sprawdź czy to odpowiedź "nie" lub "skip"
             const messageContent = message.content.toLowerCase().trim();
@@ -263,12 +266,15 @@ client.on(Events.MessageCreate, async (message) => {
                 logger.info(`[WYNIKI] ✅ Zapisano ${attachmentObjects.length} załączników`);
 
                 // Kontynuuj normalny przepływ /wyniki z załącznikami
+                logger.info(`[WYNIKI DEBUG] Wywołuję handleWynikiContinue...`);
                 const { handleWynikiContinue } = require('./handlers/interactionHandlers');
                 await handleWynikiContinue(message.author.id, message.channelId, message.guild, sharedState);
+                logger.info(`[WYNIKI DEBUG] handleWynikiContinue zakończony`);
             }
         }
     } catch (error) {
         logger.error(`[WYNIKI] ❌ Błąd podczas obsługi załączników: ${error.message}`);
+        logger.error(`[WYNIKI] ❌ Stack trace:`, error.stack);
     }
 });
 
