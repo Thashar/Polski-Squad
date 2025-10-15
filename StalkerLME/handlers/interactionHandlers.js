@@ -5069,11 +5069,12 @@ async function handleWynikiCommand(interaction, sharedState) {
 
     logger.info(`[WYNIKI] Kanał: ${currentChannelId}, Parent: ${parentChannelId}, Typ: ${channel?.type}`);
 
+    // Lista dozwolonych kanałów - zawiera kanały klanowe + specjalne kanały + specjalne wątki
     const allowedChannels = [
         ...Object.values(config.warningChannels),
         '1348200849242984478',
         ...specialChannels,
-        ...specialThreads
+        ...specialThreads  // Dodajemy też specjalne wątki do allowedChannels
     ];
 
     // Fallback: jeśli parentId nie działa, sprawdź tylko currentChannelId
