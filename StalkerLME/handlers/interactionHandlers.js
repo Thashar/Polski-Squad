@@ -6,6 +6,7 @@ const logger = createBotLogger('StalkerLME');
 
 const confirmationData = new Map();
 const wynikiAttachments = new Map(); // Przechowuje załączniki (zdjęcia/filmy) dla /wyniki per użytkownik+kanał
+const wynikiAwaitingFiles = new Map(); // Przechowuje informację o użytkownikach oczekujących na przesłanie plików (zawiera też oryginalną interakcję)
 
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
@@ -1534,8 +1535,7 @@ async function handleDecodeCommand(interaction, sharedState) {
 async function handleModalSubmit(interaction, sharedState) {
     if (interaction.customId === 'decode_modal') {
         await handleDecodeModalSubmit(interaction, sharedState);
-    } else if (interaction.customId === 'wyniki_attachments_modal') {
-        await handleWynikiAttachmentsModalSubmit(interaction, sharedState);
+    // Modal wyniki_attachments_modal został usunięty - teraz używamy przesyłania plików bezpośrednio
     } else if (interaction.customId.startsWith('modyfikuj_modal_')) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
@@ -4994,79 +4994,6 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     }
 }
 
-async function handleWynikiAttachmentsModalSubmit(interaction, sharedState) {
-    const { config } = sharedState;
-
-    // Pobierz linki do załączników z modala
-    const attachmentUrlsInput = interaction.fields.getTextInputValue('attachment_urls');
-
-    // Parsuj linki (po jednym w linii)
-    const attachmentUrls = attachmentUrlsInput
-        .split('\n')
-        .map(url => url.trim())
-        .filter(url => url.length > 0 && url.startsWith('http'));
-
-    // Przekształć URL-e na obiekty attachment-like
-    const attachmentObjects = attachmentUrls.map((url, index) => {
-        const filename = url.split('/').pop().split('?')[0] || `file_${index + 1}`;
-        return {
-            url: url,
-            name: filename
-        };
-    });
-
-    // Zapisz załączniki w mapie
-    const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
-    if (attachmentObjects.length > 0) {
-        wynikiAttachments.set(attachmentKey, attachmentObjects);
-        // Usuń po 30 minutach (timeout)
-        setTimeout(() => {
-            wynikiAttachments.delete(attachmentKey);
-        }, 30 * 60 * 1000);
-    }
-
-    // Teraz kontynuuj normalny przepływ /wyniki
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    try {
-        // Utwórz select menu z klanami
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
-            return new StringSelectMenuOptionBuilder()
-                .setLabel(config.roleDisplayNames[clanKey])
-                .setValue(clanKey);
-        });
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('wyniki_select_clan')
-            .setPlaceholder('Wybierz klan')
-            .addOptions(clanOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-
-        const attachmentInfo = attachmentObjects.length > 0
-            ? `\n\n📎 Załączniki: ${attachmentObjects.length} plik(ów)`
-            : '';
-
-        const embed = new EmbedBuilder()
-            .setTitle('📊 Wyniki - Wszystkie Fazy')
-            .setDescription(`**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:${attachmentInfo}`)
-            .setColor('#0099FF')
-            .setTimestamp();
-
-        await interaction.editReply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
-        });
-
-    } catch (error) {
-        logger.error('[WYNIKI] ❌ Błąd pobierania wyników:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas pobierania wyników.'
-        });
-    }
-}
-
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
@@ -5182,24 +5109,36 @@ async function handleWynikiCommand(interaction, sharedState) {
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
     const canAttachFiles = isAdmin || hasPunishRole;
 
-    // Pokaż modal z załącznikami dla moderatorów/adminów na specjalnych kanałach
+    // Zapytaj o załączniki dla moderatorów/adminów na specjalnych kanałach
     if (isSpecialChannel && canAttachFiles) {
-        const modal = new ModalBuilder()
-            .setCustomId('wyniki_attachments_modal')
-            .setTitle('Opcjonalne załączniki do wyników');
+        await interaction.reply({
+            content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
+                     '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
+                     '❌ **NIE** - Napisz `nie` lub `skip` aby pominąć\n\n' +
+                     '💡 Możesz przesłać do 10 plików naraz.',
+            flags: MessageFlags.Ephemeral
+        });
 
-        const attachmentsInput = new TextInputBuilder()
-            .setCustomId('attachment_urls')
-            .setLabel('Linki do plików (po jednym w linii)')
-            .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('https://cdn.discordapp.com/attachments/...\nhttps://cdn.discordapp.com/attachments/...')
-            .setRequired(false)
-            .setMaxLength(2000);
+        // Zapisz informację że oczekujemy na pliki od tego użytkownika (wraz z interakcją)
+        const awaitKey = `${interaction.user.id}_${interaction.channelId}`;
+        wynikiAwaitingFiles.set(awaitKey, {
+            userId: interaction.user.id,
+            channelId: interaction.channelId,
+            timestamp: Date.now(),
+            interaction: interaction
+        });
 
-        const actionRow = new ActionRowBuilder().addComponents(attachmentsInput);
-        modal.addComponents(actionRow);
+        // Timeout - usuń po 2 minutach
+        setTimeout(() => {
+            if (wynikiAwaitingFiles.has(awaitKey)) {
+                wynikiAwaitingFiles.delete(awaitKey);
+                interaction.followUp({
+                    content: '⏱️ Czas na przesłanie plików minął. Użyj `/wyniki` ponownie.',
+                    flags: MessageFlags.Ephemeral
+                }).catch(() => {});
+            }
+        }, 2 * 60 * 1000);
 
-        await interaction.showModal(modal);
         return;
     }
 
@@ -5240,9 +5179,67 @@ async function handleWynikiCommand(interaction, sharedState) {
     }
 }
 
+// Funkcja do kontynuowania przepływu /wyniki po przesłaniu plików (lub rezygnacji)
+async function handleWynikiContinue(userId, channelId, guild, sharedState) {
+    const { config } = sharedState;
+
+    try {
+        // Pobierz zapisaną interakcję
+        const awaitKey = `${userId}_${channelId}`;
+        const awaitData = wynikiAwaitingFiles.get(awaitKey) || {};
+        const interaction = awaitData.interaction;
+
+        if (!interaction) {
+            logger.error('[WYNIKI] ❌ Brak zapisanej interakcji');
+            return;
+        }
+
+        // Utwórz select menu z klanami
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('wyniki_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        // Sprawdź czy są załączniki
+        const savedAttachments = wynikiAttachments.get(awaitKey);
+        const attachmentInfo = savedAttachments && savedAttachments.length > 0
+            ? `\n\n📎 Załączniki: ${savedAttachments.length} plik(ów)`
+            : '';
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Wyniki - Wszystkie Fazy')
+            .setDescription(`**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:${attachmentInfo}`)
+            .setColor('#0099FF')
+            .setTimestamp();
+
+        // Wyślij followUp do oryginalnej interakcji (ephemeral)
+        await interaction.followUp({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
+
+        logger.info(`[WYNIKI] ✅ Wysłano menu wyboru klanu do użytkownika`);
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd kontynuowania przepływu wyniki:', error);
+    }
+}
+
 module.exports = {
     handleInteraction,
     registerSlashCommands,
     unregisterCommand,
-    confirmationData
+    confirmationData,
+    wynikiAwaitingFiles,
+    wynikiAttachments,
+    handleWynikiContinue
 };
