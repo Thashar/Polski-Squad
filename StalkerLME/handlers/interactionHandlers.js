@@ -1006,57 +1006,7 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('wyniki')
-            .setDescription('Wyświetl wyniki dla wszystkich faz')
-            .addAttachmentOption(option =>
-                option.setName('plik1')
-                    .setDescription('Opcjonalny plik #1 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik2')
-                    .setDescription('Opcjonalny plik #2 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik3')
-                    .setDescription('Opcjonalny plik #3 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik4')
-                    .setDescription('Opcjonalny plik #4 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik5')
-                    .setDescription('Opcjonalny plik #5 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik6')
-                    .setDescription('Opcjonalny plik #6 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik7')
-                    .setDescription('Opcjonalny plik #7 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik8')
-                    .setDescription('Opcjonalny plik #8 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik9')
-                    .setDescription('Opcjonalny plik #9 (zdjęcie lub film)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('plik10')
-                    .setDescription('Opcjonalny plik #10 (zdjęcie lub film)')
-                    .setRequired(false)
-            ),
+            .setDescription('Wyświetl wyniki dla wszystkich faz'),
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
@@ -1584,6 +1534,8 @@ async function handleDecodeCommand(interaction, sharedState) {
 async function handleModalSubmit(interaction, sharedState) {
     if (interaction.customId === 'decode_modal') {
         await handleDecodeModalSubmit(interaction, sharedState);
+    } else if (interaction.customId === 'wyniki_attachments_modal') {
+        await handleWynikiAttachmentsModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_modal_')) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
@@ -5036,6 +4988,79 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     }
 }
 
+async function handleWynikiAttachmentsModalSubmit(interaction, sharedState) {
+    const { config } = sharedState;
+
+    // Pobierz linki do załączników z modala
+    const attachmentUrlsInput = interaction.fields.getTextInputValue('attachment_urls');
+
+    // Parsuj linki (po jednym w linii)
+    const attachmentUrls = attachmentUrlsInput
+        .split('\n')
+        .map(url => url.trim())
+        .filter(url => url.length > 0 && url.startsWith('http'));
+
+    // Przekształć URL-e na obiekty attachment-like
+    const attachmentObjects = attachmentUrls.map((url, index) => {
+        const filename = url.split('/').pop().split('?')[0] || `file_${index + 1}`;
+        return {
+            url: url,
+            name: filename
+        };
+    });
+
+    // Zapisz załączniki w mapie
+    const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
+    if (attachmentObjects.length > 0) {
+        wynikiAttachments.set(attachmentKey, attachmentObjects);
+        // Usuń po 30 minutach (timeout)
+        setTimeout(() => {
+            wynikiAttachments.delete(attachmentKey);
+        }, 30 * 60 * 1000);
+    }
+
+    // Teraz kontynuuj normalny przepływ /wyniki
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        // Utwórz select menu z klanami
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('wyniki_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const attachmentInfo = attachmentObjects.length > 0
+            ? `\n\n📎 Załączniki: ${attachmentObjects.length} plik(ów)`
+            : '';
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Wyniki - Wszystkie Fazy')
+            .setDescription(`**Krok 1/2:** Wybierz klan, dla którego chcesz zobaczyć wyniki:${attachmentInfo}`)
+            .setColor('#0099FF')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd pobierania wyników:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania wyników.'
+        });
+    }
+}
+
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
@@ -5068,7 +5093,7 @@ async function handleWynikiCommand(interaction, sharedState) {
         return;
     }
 
-    // Sprawdź uprawnienia dla załączników (tylko admin lub moderatorzy)
+    // Sprawdź uprawnienia i czy to specjalny kanał
     const isSpecialChannel = specialChannels.includes(currentChannelId) ||
                             (parentChannelId && specialChannels.includes(parentChannelId));
 
@@ -5076,41 +5101,25 @@ async function handleWynikiCommand(interaction, sharedState) {
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
     const canAttachFiles = isAdmin || hasPunishRole;
 
-    // Zbierz załączniki jeśli kanał jest specjalny i użytkownik ma uprawnienia
-    const attachmentObjects = [];
+    // Pokaż modal z załącznikami dla moderatorów/adminów na specjalnych kanałach
     if (isSpecialChannel && canAttachFiles) {
-        for (let i = 1; i <= 10; i++) {
-            const attachment = interaction.options.getAttachment(`plik${i}`);
-            if (attachment) {
-                attachmentObjects.push(attachment);
-            }
-        }
-    } else if (isSpecialChannel && !canAttachFiles) {
-        // Sprawdź czy użytkownik próbował dodać załączniki bez uprawnień
-        let hasAttachments = false;
-        for (let i = 1; i <= 10; i++) {
-            if (interaction.options.getAttachment(`plik${i}`)) {
-                hasAttachments = true;
-                break;
-            }
-        }
-        if (hasAttachments) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do załączania plików. Wymagane: **Administrator** lub rola moderatora.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-    }
+        const modal = new ModalBuilder()
+            .setCustomId('wyniki_attachments_modal')
+            .setTitle('Opcjonalne załączniki do wyników');
 
-    // Zapisz obiekty załączników w mapie (klucz: userId + channelId)
-    const attachmentKey = `${interaction.user.id}_${interaction.channelId}`;
-    if (attachmentObjects.length > 0) {
-        wynikiAttachments.set(attachmentKey, attachmentObjects);
-        // Usuń po 30 minutach (timeout)
-        setTimeout(() => {
-            wynikiAttachments.delete(attachmentKey);
-        }, 30 * 60 * 1000);
+        const attachmentsInput = new TextInputBuilder()
+            .setCustomId('attachment_urls')
+            .setLabel('Linki do plików (po jednym w linii)')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('https://cdn.discordapp.com/attachments/...\nhttps://cdn.discordapp.com/attachments/...')
+            .setRequired(false)
+            .setMaxLength(2000);
+
+        const actionRow = new ActionRowBuilder().addComponents(attachmentsInput);
+        modal.addComponents(actionRow);
+
+        await interaction.showModal(modal);
+        return;
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
