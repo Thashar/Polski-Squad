@@ -4995,9 +4995,6 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 }
 
 async function handleWynikiCommand(interaction, sharedState) {
-    logger.info(`[WYNIKI DEBUG] ========== START handleWynikiCommand ==========`);
-    logger.info(`[WYNIKI DEBUG] Interaction ID: ${interaction.id}`);
-
     const { config } = sharedState;
 
     // Specjalne kanały z załącznikami i bez auto-usuwania
@@ -5054,44 +5051,22 @@ async function handleWynikiCommand(interaction, sharedState) {
         }
     }
 
-    // Dla wątków sprawdź różne właściwości
+    // Dla wątków sprawdź parentId
     if (channel) {
-        // Debugowanie - wypisz wszystkie właściwości
-        logger.info(`[WYNIKI DEBUG] Channel properties:`, {
-            id: channel.id,
-            type: channel.type,
-            parentId: channel.parentId,
-            parent: channel.parent?.id,
-            isThread: typeof channel.isThread === 'function' ? channel.isThread() : channel.isThread,
-            ownerId: channel.ownerId
-        });
-
-        // Sprawdź parentId
         parentChannelId = channel.parentId || channel.parent?.id || null;
     }
-
-    logger.info(`[WYNIKI] Kanał: ${currentChannelId}, Parent: ${parentChannelId}, Typ: ${channel?.type}`);
 
     // Lista dozwolonych kanałów - zawiera kanały klanowe + specjalne kanały + specjalne wątki
     const allowedChannels = [
         ...Object.values(config.warningChannels),
         '1348200849242984478',
         ...specialChannels,
-        ...specialThreads  // Dodajemy też specjalne wątki do allowedChannels
+        ...specialThreads
     ];
 
-    logger.info(`[WYNIKI DEBUG] allowedChannels zawiera: ${allowedChannels.length} kanałów`);
-    logger.info(`[WYNIKI DEBUG] specialThreads: ${JSON.stringify(specialThreads)}`);
-    logger.info(`[WYNIKI DEBUG] specialChannels: ${JSON.stringify(specialChannels)}`);
-    logger.info(`[WYNIKI DEBUG] currentChannelId: ${currentChannelId}`);
-    logger.info(`[WYNIKI DEBUG] currentChannelId w allowedChannels: ${allowedChannels.includes(currentChannelId)}`);
-
     // Fallback: jeśli parentId nie działa, sprawdź tylko currentChannelId
-    // Dla wątków które nie zwracają parentId, użytkownik musi użyć komendy bezpośrednio w wątku
     const isAllowedChannel = allowedChannels.includes(currentChannelId) ||
                             (parentChannelId && allowedChannels.includes(parentChannelId));
-
-    logger.info(`[WYNIKI DEBUG] isAllowedChannel: ${isAllowedChannel}`);
 
     if (!isAllowedChannel) {
         // Jeśli to admin/moderator, pozwól mu dodać ten kanał/wątek tymczasowo
@@ -5117,34 +5092,19 @@ async function handleWynikiCommand(interaction, sharedState) {
                             (parentChannelId && specialChannels.includes(parentChannelId)) ||
                             specialThreads.includes(currentChannelId);
 
-    logger.info(`[WYNIKI DEBUG] isSpecialChannel: ${isSpecialChannel}`);
-
     const isAdmin = interaction.member.permissions.has('Administrator');
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
     const canAttachFiles = isAdmin || hasPunishRole;
 
-    logger.info(`[WYNIKI DEBUG] canAttachFiles: ${canAttachFiles}`);
-    logger.info(`[WYNIKI DEBUG] Czy interaction już acknowledged?: ${interaction.replied || interaction.deferred}`);
-
     // Zapytaj o załączniki dla moderatorów/adminów na specjalnych kanałach
     if (isSpecialChannel && canAttachFiles) {
-        logger.info(`[WYNIKI DEBUG] Wchodzę do bloku prompt o załączniki...`);
-
-        try {
-            await interaction.reply({
-                content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
-                         '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
-                         '❌ **NIE** - Napisz `nie` lub `skip` aby pominąć\n\n' +
-                         '💡 Możesz przesłać do 10 plików naraz.',
-                flags: MessageFlags.Ephemeral
-            });
-            logger.info(`[WYNIKI DEBUG] Reply wysłany pomyślnie!`);
-        } catch (replyError) {
-            logger.error(`[WYNIKI DEBUG] ❌ Błąd podczas reply:`, replyError.message);
-            logger.error(`[WYNIKI DEBUG] ❌ Stack:`, replyError.stack);
-            logger.error(`[WYNIKI DEBUG] ❌ interaction.replied: ${interaction.replied}, interaction.deferred: ${interaction.deferred}`);
-            throw replyError;
-        }
+        await interaction.reply({
+            content: '📎 **Chcesz dodać załączniki (zdjęcia/filmy) do wyników?**\n\n' +
+                     '✅ **TAK** - Wyślij teraz pliki w tej rozmowie (masz 2 minuty)\n' +
+                     '❌ **NIE** - Napisz `nie` lub `skip` aby pominąć\n\n' +
+                     '💡 Możesz przesłać do 10 plików naraz.',
+            flags: MessageFlags.Ephemeral
+        });
 
         // Zapisz informację że oczekujemy na pliki od tego użytkownika (wraz z interakcją)
         const awaitKey = `${interaction.user.id}_${interaction.channelId}`;
@@ -5160,14 +5120,10 @@ async function handleWynikiCommand(interaction, sharedState) {
         const filter = (m) => m.author.id === interaction.user.id;
         const collector = channel.createMessageCollector({
             filter,
-            time: 2 * 60 * 1000, // 2 minuty
-            max: 1 // Tylko jedna wiadomość
+            time: 2 * 60 * 1000 // 2 minuty, bez limitu wiadomości
         });
 
-        logger.info(`[WYNIKI] 📡 Uruchomiono collector dla użytkownika ${interaction.user.tag}`);
-
         collector.on('collect', async (message) => {
-            logger.info(`[WYNIKI] 📨 Collector zebrał wiadomość od ${message.author.tag}`);
 
             // Sprawdź czy to odpowiedź "nie" lub "skip"
             const messageContent = message.content.toLowerCase().trim();
@@ -5187,8 +5143,6 @@ async function handleWynikiCommand(interaction, sharedState) {
 
             // Sprawdź czy są załączniki
             if (message.attachments.size > 0) {
-                logger.info(`[WYNIKI] 📎 Otrzymano ${message.attachments.size} załączników od ${message.author.tag}`);
-
                 // Ogranicz do 10 załączników
                 const attachmentsArray = Array.from(message.attachments.values()).slice(0, 10);
 
@@ -5208,18 +5162,18 @@ async function handleWynikiCommand(interaction, sharedState) {
                     await message.delete();
                 } catch (e) {}
 
-                logger.info(`[WYNIKI] ✅ Zapisano ${attachmentObjects.length} załączników`);
-
                 // Kontynuuj normalny przepływ /wyniki z załącznikami
                 await handleWynikiContinue(interaction.user.id, interaction.channelId, message.guild, sharedState);
             } else {
-                // Wiadomość bez załączników i nie jest "nie/skip" - ignoruj
-                logger.info(`[WYNIKI] ⚠️ Otrzymano wiadomość bez załączników, ignoruję`);
+                // Wiadomość bez załączników i nie jest "nie/skip" - usuń ją i czekaj dalej
+                try {
+                    await message.delete();
+                } catch (e) {}
+                // NIE zatrzymuj collectora - czekaj na następną wiadomość
             }
         });
 
         collector.on('end', (collected, reason) => {
-            logger.info(`[WYNIKI] 🛑 Collector zakończony, powód: ${reason}, zebrano: ${collected.size} wiadomości`);
 
             if (reason === 'time') {
                 wynikiAwaitingFiles.delete(awaitKey);
@@ -5275,15 +5229,10 @@ async function handleWynikiContinue(userId, channelId, guild, sharedState) {
     const { config } = sharedState;
 
     try {
-        logger.info(`[WYNIKI] handleWynikiContinue - Start, userId: ${userId}, channelId: ${channelId}`);
-
         // Pobierz zapisaną interakcję
         const awaitKey = `${userId}_${channelId}`;
         const awaitData = wynikiAwaitingFiles.get(awaitKey) || {};
         const interaction = awaitData.interaction;
-
-        logger.info(`[WYNIKI] Znaleziono awaitData:`, !!awaitData);
-        logger.info(`[WYNIKI] Znaleziono interakcję:`, !!interaction);
 
         if (!interaction) {
             logger.error('[WYNIKI] ❌ Brak zapisanej interakcji');
@@ -5317,19 +5266,14 @@ async function handleWynikiContinue(userId, channelId, guild, sharedState) {
             .setTimestamp();
 
         // Wyślij followUp do oryginalnej interakcji (ephemeral)
-        logger.info(`[WYNIKI] Wysyłam followUp z menu wyboru klanu...`);
-
         await interaction.followUp({
             embeds: [embed],
             components: [row],
             flags: MessageFlags.Ephemeral
         });
 
-        logger.info(`[WYNIKI] ✅ Wysłano menu wyboru klanu do użytkownika`);
-
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd kontynuowania przepływu wyniki:', error);
-        logger.error('[WYNIKI] ❌ Stack trace:', error.stack);
     }
 }
 

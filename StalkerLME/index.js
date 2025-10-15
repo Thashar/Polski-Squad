@@ -138,8 +138,6 @@ client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
 
-    logger.info(`[MESSAGE DEBUG] Otrzymano wiadomość od ${message.author.tag}, channelId: ${message.channelId}, attachments: ${message.attachments.size}`);
-
     try {
         await vacationService.handleVacationMessage(message);
     } catch (error) {
@@ -220,68 +218,8 @@ client.on(Events.MessageCreate, async (message) => {
         logger.error(`[PHASE1] ❌ Błąd podczas obsługi wiadomości Phase 1: ${error.message}`);
     }
 
-    // Obsługa przesyłania plików dla /wyniki
-    try {
-        const { wynikiAwaitingFiles, wynikiAttachments } = require('./handlers/interactionHandlers');
-        const awaitKey = `${message.author.id}_${message.channelId}`;
-
-        logger.info(`[WYNIKI DEBUG] Sprawdzam czy oczekuję na pliki: ${wynikiAwaitingFiles.has(awaitKey)}, awaitKey: ${awaitKey}`);
-
-        if (wynikiAwaitingFiles.has(awaitKey)) {
-            const awaitData = wynikiAwaitingFiles.get(awaitKey);
-            logger.info(`[WYNIKI DEBUG] Znaleziono oczekiwanie na pliki, załączników: ${message.attachments.size}`);
-
-            // Sprawdź czy to odpowiedź "nie" lub "skip"
-            const messageContent = message.content.toLowerCase().trim();
-            if (messageContent === 'nie' || messageContent === 'skip' || messageContent === 'n' || messageContent === 'no') {
-                wynikiAwaitingFiles.delete(awaitKey);
-
-                // Usuń wiadomość użytkownika
-                try {
-                    await message.delete();
-                } catch (e) {}
-
-                // Kontynuuj normalny przepływ /wyniki bez załączników
-                const { handleWynikiContinue } = require('./handlers/interactionHandlers');
-                await handleWynikiContinue(message.author.id, message.channelId, message.guild, sharedState);
-                return;
-            }
-
-            // Sprawdź czy są załączniki
-            if (message.attachments.size > 0) {
-                logger.info(`[WYNIKI] 📎 Otrzymano ${message.attachments.size} załączników od ${message.author.tag}`);
-
-                // Ogranicz do 10 załączników
-                const attachmentsArray = Array.from(message.attachments.values()).slice(0, 10);
-
-                // Zapisz załączniki
-                const attachmentObjects = attachmentsArray.map(att => ({
-                    url: att.url,
-                    name: att.name,
-                    contentType: att.contentType
-                }));
-
-                wynikiAttachments.set(awaitKey, attachmentObjects);
-                wynikiAwaitingFiles.delete(awaitKey);
-
-                // Usuń wiadomość użytkownika z załącznikami
-                try {
-                    await message.delete();
-                } catch (e) {}
-
-                logger.info(`[WYNIKI] ✅ Zapisano ${attachmentObjects.length} załączników`);
-
-                // Kontynuuj normalny przepływ /wyniki z załącznikami
-                logger.info(`[WYNIKI DEBUG] Wywołuję handleWynikiContinue...`);
-                const { handleWynikiContinue } = require('./handlers/interactionHandlers');
-                await handleWynikiContinue(message.author.id, message.channelId, message.guild, sharedState);
-                logger.info(`[WYNIKI DEBUG] handleWynikiContinue zakończony`);
-            }
-        }
-    } catch (error) {
-        logger.error(`[WYNIKI] ❌ Błąd podczas obsługi załączników: ${error.message}`);
-        logger.error(`[WYNIKI] ❌ Stack trace:`, error.stack);
-    }
+    // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
+    // Ten blok kodu nie jest już używany, ale zostawiam dla referencji w przypadku problemów
 });
 
 // Obsługa błędów
