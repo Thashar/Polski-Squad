@@ -1027,9 +1027,13 @@ class SurvivorService {
         this.addPetsFields(page7, buildData);
 
         // Dodaj footer z czasem wygaśnięcia i informacją o oglądającym
-        const deleteTimestamp = Math.floor((Date.now() + 15 * 60 * 1000) / 1000);
+        const deleteTime = new Date(Date.now() + 15 * 60 * 1000);
+        const hours = deleteTime.getHours().toString().padStart(2, '0');
+        const minutes = deleteTime.getMinutes().toString().padStart(2, '0');
+        const timeString = `${hours}:${minutes}`;
+
         const viewerText = viewerDisplayName ? ` • Ogląda ${viewerDisplayName}` : '';
-        const expirationText = `Analiza zostanie usunięta o <t:${deleteTimestamp}:t>${viewerText}`;
+        const expirationText = `Analiza zostanie usunięta o ${timeString}${viewerText}`;
 
         page0.setFooter({ text: `Start • ${expirationText}` });
         page1.setFooter({ text: `Ekwipunek • ${expirationText}` });

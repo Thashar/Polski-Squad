@@ -497,13 +497,18 @@ async function handleButton(interaction, sharedState) {
 
         // Zaktualizuj footer WSZYSTKICH embedów z nowym timestampem i oglądającym
         const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
-        const deleteTimestamp = Math.floor(deleteAt / 1000);
+
+        // Oblicz dokładną godzinę usunięcia
+        const deleteTime = new Date(deleteAt);
+        const hours = deleteTime.getHours().toString().padStart(2, '0');
+        const minutes = deleteTime.getMinutes().toString().padStart(2, '0');
+        const timeString = `${hours}:${minutes}`;
 
         // Zaktualizuj wszystkie embedy w paginacji
         paginationData.embeds.forEach((embed, index) => {
             const currentFooter = embed.data.footer?.text || '';
             const pageName = currentFooter.split(' • ')[0];
-            const newFooterText = `${pageName} • Analiza zostanie usunięta o <t:${deleteTimestamp}:t> • Ogląda ${viewerDisplayName}`;
+            const newFooterText = `${pageName} • Analiza zostanie usunięta o ${timeString} • Ogląda ${viewerDisplayName}`;
             embed.setFooter({ text: newFooterText });
         });
 
@@ -4862,9 +4867,15 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         '1262792522497921084'
     ];
 
+    // Sprawdź czy to specjalny kanał lub wątek w specjalnym kanale
+    const currentChannelId = interaction.channelId;
+    const parentChannelId = interaction.channel?.parent?.id;
+    const isPermanentChannel = permanentChannels.includes(currentChannelId) ||
+                               permanentChannels.includes(parentChannelId);
+
     // Oblicz timestamp usunięcia (15 minut od teraz - zawsze resetuj przy każdym kliknięciu)
     const messageCleanupService = interaction.client.messageCleanupService;
-    const shouldAutoDelete = !permanentChannels.includes(interaction.channelId);
+    const shouldAutoDelete = !isPermanentChannel;
     const deleteAt = shouldAutoDelete ? Date.now() + (15 * 60 * 1000) : null;
     const deleteTimestamp = deleteAt ? Math.floor(deleteAt / 1000) : null;
 
@@ -4971,18 +4982,28 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
-    // Sprawdź czy kanał jest dozwolony
-    const allowedChannels = [
-        ...Object.values(config.warningChannels),
-        '1348200849242984478',
-        // Dodatkowe specjalne kanały (z załącznikami i bez auto-usuwania)
+    // Specjalne kanały z załącznikami i bez auto-usuwania
+    const specialChannels = [
         '1185510890930458705',
         '1200055492458856458',
         '1200414388327292938',
         '1262792522497921084'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId)) {
+    // Sprawdź czy kanał jest dozwolony (lub wątek w dozwolonym kanale)
+    const currentChannelId = interaction.channelId;
+    const parentChannelId = interaction.channel?.parent?.id;
+
+    const allowedChannels = [
+        ...Object.values(config.warningChannels),
+        '1348200849242984478',
+        ...specialChannels
+    ];
+
+    const isAllowedChannel = allowedChannels.includes(currentChannelId) ||
+                            allowedChannels.includes(parentChannelId);
+
+    if (!isAllowedChannel) {
         await interaction.reply({
             content: '❌ Komenda `/wyniki` jest dostępna tylko na określonych kanałach.',
             flags: MessageFlags.Ephemeral
@@ -4990,17 +5011,12 @@ async function handleWynikiCommand(interaction, sharedState) {
         return;
     }
 
-    // Kanały, na których można załączać pliki (zdjęcia i filmy)
-    const channelsWithAttachments = [
-        '1185510890930458705',
-        '1200055492458856458',
-        '1200414388327292938',
-        '1262792522497921084'
-    ];
-
-    // Zbierz załączniki jeśli kanał to pozwala
+    // Zbierz załączniki jeśli kanał lub jego parent jest w specialChannels
     const attachments = [];
-    if (channelsWithAttachments.includes(interaction.channelId)) {
+    const isSpecialChannel = specialChannels.includes(currentChannelId) ||
+                            specialChannels.includes(parentChannelId);
+
+    if (isSpecialChannel) {
         for (let i = 1; i <= 10; i++) {
             const attachment = interaction.options.getAttachment(`plik${i}`);
             if (attachment) {
