@@ -1728,7 +1728,24 @@ async function handleOligopolyCommand(interaction, config) {
  * Obsługuje komendę /oligopoly-review
  */
 async function handleOligopolyReviewCommand(interaction, config) {
-    // Komenda dostępna dla wszystkich użytkowników - usunięto sprawdzanie uprawnień
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = [
+        '1194249987677229186', // Main clan
+        '1196805078162616480', // Clan 2
+        '1210265548584132648', // Clan 1
+        '1262793135860355254'  // Clan 0
+    ];
+
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do tej komendy. Wymagana jest rola klanowa.',
+            ephemeral: true
+        });
+        return;
+    }
 
     const klan = interaction.options.getString('klan');
 

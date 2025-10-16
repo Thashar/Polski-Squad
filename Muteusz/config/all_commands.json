@@ -230,7 +230,7 @@
           "name": "/oligopoly-review",
           "description": "Przegląda listę wszystkich ID w systemie Oligopoly",
           "usage": "/oligopoly-review",
-          "requiredPermission": "public"
+          "requiredPermission": "clan_member"
         },
         {
           "name": "/oligopoly-clear",
