@@ -243,7 +243,11 @@ class InteractionHandler {
                     option.setName('na_ile')
                         .setDescription('Na ile czasu timeout (np. 1h30m). Wymagane tylko gdy timeout=true')
                         .setRequired(false)
-                )
+                ),
+
+            new SlashCommandBuilder()
+                .setName('komendy')
+                .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów')
         ];
         
         try {
@@ -317,6 +321,9 @@ class InteractionHandler {
                     break;
                 case 'block-word':
                     await this.handleBlockWordCommand(interaction);
+                    break;
+                case 'komendy':
+                    await this.handleKomendyCommand(interaction);
                     break;
             }
         } else if (interaction.isButton()) {
@@ -2551,6 +2558,174 @@ class InteractionHandler {
             error: null,
             formatted: formatted
         };
+    }
+
+    /**
+     * Obsługuje komendę /komendy - wyświetla listę komend dostępnych dla użytkownika
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleKomendyCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /komendy`, interaction);
+
+        try {
+            // Wczytaj dane wszystkich komend
+            const fs = require('fs');
+            const path = require('path');
+            const commandsDataPath = path.join(__dirname, '../data/all_commands.json');
+
+            if (!fs.existsSync(commandsDataPath)) {
+                await interaction.reply({
+                    content: '❌ Nie znaleziono pliku z danymi komend.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const commandsData = JSON.parse(fs.readFileSync(commandsDataPath, 'utf8'));
+
+            // Sprawdź uprawnienia użytkownika
+            const member = interaction.member;
+            const isAdmin = member.permissions.has('Administrator') || member.permissions.has('ModerateMembers');
+
+            // Sprawdź role moderatora (z StalkerLME config)
+            const moderatorRoleIds = [
+                '1204431982800965742', // Rola moderatora 1
+                '1170351946782609479', // Rola moderatora 2
+                '1170351940193644664', // Rola moderatora 3
+                '1170351936729755728'  // Rola moderatora 4
+            ];
+            const isModerator = moderatorRoleIds.some(roleId => member.roles.cache.has(roleId));
+
+            // Sprawdź role klanowe
+            const clanRoleIds = [
+                '1194249987677229186', // Main clan
+                '1196805078162616480', // Clan 2
+                '1210265548584132648', // Clan 1
+                '1262793135860355254'  // Clan 0
+            ];
+            const hasClanRole = clanRoleIds.some(roleId => member.roles.cache.has(roleId));
+
+            // Sprawdź specjalne role
+            const virtuttiRoleId = '1387383527653376081'; // Medal Virtutti Papajlari
+            const hasVirtuttiRole = member.roles.cache.has(virtuttiRoleId);
+
+            // Utwórz embed z listą komend
+            const embed = new EmbedBuilder()
+                .setTitle('📋 Lista Komend - Polski Squad Bots')
+                .setColor(isAdmin ? 0xFF0000 : (isModerator ? 0xFFA500 : (hasClanRole ? 0x00FF00 : 0x0099FF)))
+                .setDescription('Poniżej znajdziesz listę wszystkich dostępnych komend dla Ciebie.')
+                .setFooter({ text: `Twoje uprawnienia: ${isAdmin ? 'Administrator' : (isModerator ? 'Moderator' : (hasClanRole ? 'Członek Klanu' : 'Użytkownik'))}` })
+                .setTimestamp();
+
+            // Filtruj i dodaj boty
+            let commandCount = 0;
+            for (const bot of commandsData.bots) {
+                // Jeśli bot nie ma żadnych komend, pomiń
+                if (bot.commands.length === 0) {
+                    continue;
+                }
+
+                // Filtruj komendy według uprawnień
+                const availableCommands = bot.commands.filter(cmd => {
+                    switch (cmd.requiredPermission) {
+                        case 'administrator':
+                            return isAdmin;
+                        case 'moderator':
+                            return isAdmin || isModerator;
+                        case 'clan_member':
+                            return hasClanRole || isModerator || isAdmin;
+                        case 'special_role':
+                            return true; // Specjalne role są sprawdzane indywidualnie
+                        case 'achievement_role':
+                            return hasVirtuttiRole || isAdmin;
+                        case 'public':
+                            return true;
+                        default:
+                            return false;
+                    }
+                });
+
+                // Jeśli użytkownik nie ma dostępu do żadnej komendy tego bota, pomiń
+                if (availableCommands.length === 0) {
+                    continue;
+                }
+
+                // Dodaj sekcję bota
+                let botSection = `**${bot.description}**\n\n`;
+
+                for (const cmd of availableCommands) {
+                    const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
+                    botSection += `${permIcon} \`${cmd.name}\`\n`;
+                    botSection += `└─ ${cmd.description}\n`;
+                    botSection += `└─ *Użycie:* \`${cmd.usage}\`\n\n`;
+                    commandCount++;
+                }
+
+                // Discord ma limit 1024 znaków na field
+                // Jeśli sekcja jest zbyt długa, podziel na kilka fields
+                const maxFieldLength = 1024;
+                if (botSection.length <= maxFieldLength) {
+                    embed.addFields({
+                        name: `🤖 ${bot.name}`,
+                        value: botSection.trim(),
+                        inline: false
+                    });
+                } else {
+                    // Podziel na mniejsze części
+                    const commands = availableCommands;
+                    let currentSection = `**${bot.description}**\n\n`;
+                    let partNumber = 1;
+
+                    for (const cmd of commands) {
+                        const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
+                        const cmdText = `${permIcon} \`${cmd.name}\`\n└─ ${cmd.description}\n└─ *Użycie:* \`${cmd.usage}\`\n\n`;
+
+                        if ((currentSection + cmdText).length > maxFieldLength) {
+                            embed.addFields({
+                                name: `🤖 ${bot.name} (${partNumber})`,
+                                value: currentSection.trim(),
+                                inline: false
+                            });
+                            currentSection = cmdText;
+                            partNumber++;
+                        } else {
+                            currentSection += cmdText;
+                        }
+                    }
+
+                    // Dodaj ostatnią część
+                    if (currentSection.trim().length > 0) {
+                        embed.addFields({
+                            name: `🤖 ${bot.name}${partNumber > 1 ? ` (${partNumber})` : ''}`,
+                            value: currentSection.trim(),
+                            inline: false
+                        });
+                    }
+                }
+            }
+
+            // Jeśli użytkownik nie ma dostępu do żadnej komendy
+            if (commandCount === 0) {
+                embed.setDescription('❌ Nie masz dostępu do żadnych komend.\n\nAby uzyskać dostęp do komend, dołącz do jednego z klanów lub zdobądź odpowiednie uprawnienia.');
+            } else {
+                embed.setDescription(`Poniżej znajdziesz listę **${commandCount}** komend dostępnych dla Ciebie.`);
+            }
+
+            // Wyślij ephemeral message
+            await interaction.reply({
+                embeds: [embed],
+                ephemeral: true
+            });
+
+            await this.logService.logMessage('success', `Wysłano listę komend dla ${interaction.user.tag} (${commandCount} komend)`, interaction);
+
+        } catch (error) {
+            await this.logService.logMessage('error', `Błąd podczas obsługi komendy /komendy: ${error.message}`, interaction);
+            await interaction.reply({
+                content: `❌ Wystąpił błąd podczas generowania listy komend: ${error.message}`,
+                ephemeral: true
+            });
+        }
     }
 }
 
