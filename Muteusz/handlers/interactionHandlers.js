@@ -2619,6 +2619,8 @@ class InteractionHandler {
                 });
 
                 if (availableCommands.length > 0) {
+                    // Sortuj komendy alfabetycznie po nazwie
+                    availableCommands.sort((a, b) => a.name.localeCompare(b.name));
                     availableBots.push({ ...bot, availableCommands });
                     totalCommandCount += availableCommands.length;
                 }
@@ -2636,18 +2638,30 @@ class InteractionHandler {
                 return;
             }
 
-            // Ikony botów (emoji lub URL)
-            const botIcons = {
-                'Muteusz': 'https://i.imgur.com/YourMuteuszIcon.png',
-                'Rekruter': 'https://i.imgur.com/YourRekruterIcon.png',
-                'Gary': 'https://i.imgur.com/YourGaryIcon.png',
-                'Kontroler': 'https://i.imgur.com/YourKontrolerIcon.png',
-                'StalkerLME': 'https://i.imgur.com/YourStalkerIcon.png',
-                'Szkolenia': 'https://i.imgur.com/YourSzkoleniaIcon.png',
-                'Wydarzynier': 'https://i.imgur.com/YourWydarzymierIcon.png',
-                'Konklawe': 'https://i.imgur.com/YourKonklaweIcon.png',
-                'EndersEcho': 'https://i.imgur.com/YourEndersEchoIcon.png'
+            // ID botów do pobierania awatarów
+            const botIds = {
+                'Muteusz': '1378427475779915866',
+                'Rekruter': '1383838374795935914',
+                'Gary': '1414880986872811562',
+                'Kontroler': '1378061337548034158',
+                'StalkerLME': '1391011355376488570',
+                'Szkolenia': '1377967442805915758',
+                'Wydarzynier': '1400198466180743408',
+                'Konklawe': '1377388570196836382',
+                'EndersEcho': '1378450734919712839'
             };
+
+            // Pobierz awatary botów
+            const botIcons = {};
+            for (const [botName, botId] of Object.entries(botIds)) {
+                try {
+                    const bot = await interaction.client.users.fetch(botId);
+                    botIcons[botName] = bot.displayAvatarURL({ size: 256, extension: 'png' });
+                } catch (error) {
+                    // Jeśli nie można pobrać awatara, użyj domyślnego
+                    botIcons[botName] = null;
+                }
+            }
 
             // Funkcja do tworzenia embeda dla konkretnego bota
             const createBotEmbed = (botIndex) => {
@@ -2669,8 +2683,7 @@ class InteractionHandler {
                 for (const cmd of bot.availableCommands) {
                     const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
                     commandsList += `${permIcon} \`${cmd.name}\`\n`;
-                    commandsList += `└─ ${cmd.description}\n`;
-                    commandsList += `└─ *Użycie:* \`${cmd.usage}\`\n\n`;
+                    commandsList += `└─ ${cmd.description}\n\n`;
                 }
 
                 // Discord limit: 1024 znaki na field, 6000 na cały embed
@@ -2689,7 +2702,7 @@ class InteractionHandler {
 
                     for (const cmd of commands) {
                         const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
-                        const cmdText = `${permIcon} \`${cmd.name}\`\n└─ ${cmd.description}\n└─ *Użycie:* \`${cmd.usage}\`\n\n`;
+                        const cmdText = `${permIcon} \`${cmd.name}\`\n└─ ${cmd.description}\n\n`;
 
                         if ((currentSection + cmdText).length > maxFieldLength) {
                             embed.addFields({
@@ -2713,75 +2726,56 @@ class InteractionHandler {
                     }
                 }
 
+                // Dodaj legendę ikon uprawnień na dole
+                const permissionsLegend = '\n\n**Legenda uprawnień:**\n' +
+                    `${commandsData.permissionLevels.administrator?.icon || '🔧'} Administrator • ` +
+                    `${commandsData.permissionLevels.moderator?.icon || '🛡️'} Moderator • ` +
+                    `${commandsData.permissionLevels.clan_member?.icon || '⚔️'} Członek Klanu\n` +
+                    `${commandsData.permissionLevels.achievement_role?.icon || '🏅'} Osiągnięcie • ` +
+                    `${commandsData.permissionLevels.special_role?.icon || '👑'} Specjalna Rola • ` +
+                    `${commandsData.permissionLevels.public?.icon || '👤'} Publiczne`;
+
+                embed.addFields({
+                    name: '\u200B',
+                    value: permissionsLegend,
+                    inline: false
+                });
+
                 return embed;
             };
 
-            // Funkcja do tworzenia przycisków nawigacji
+            // Funkcja do tworzenia przycisków nawigacji (wszystkie boty, bez prev/next)
             const createButtons = (currentBotIndex) => {
+                const totalBots = availableBots.length;
+
+                // Discord pozwala max 5 przycisków w jednym ActionRow
+                // Jeśli botów jest więcej niż 5, musimy użyć 2 rzędów
+                const buttonRows = [];
                 const buttons = [];
 
-                // Przycisk "Poprzedni"
-                buttons.push(
-                    new ButtonBuilder()
-                        .setCustomId(`komendy_prev_${interaction.user.id}`)
-                        .setLabel('◀️ Poprzedni')
-                        .setStyle(ButtonStyle.Primary)
-                        .setDisabled(currentBotIndex === 0)
-                );
-
-                // Przyciski dla każdego bota (max 3 w środku)
-                const totalBots = availableBots.length;
-                if (totalBots <= 3) {
-                    // Jeśli 3 lub mniej botów, pokaż wszystkie
-                    for (let i = 0; i < totalBots; i++) {
-                        buttons.push(
-                            new ButtonBuilder()
-                                .setCustomId(`komendy_bot_${i}_${interaction.user.id}`)
-                                .setLabel(`${i + 1}. ${availableBots[i].name}`)
-                                .setStyle(i === currentBotIndex ? ButtonStyle.Success : ButtonStyle.Secondary)
-                                .setDisabled(i === currentBotIndex)
-                        );
-                    }
-                } else {
-                    // Pokaż aktualny + sąsiednie
-                    const showIndices = new Set([currentBotIndex]);
-                    if (currentBotIndex > 0) showIndices.add(currentBotIndex - 1);
-                    if (currentBotIndex < totalBots - 1) showIndices.add(currentBotIndex + 1);
-
-                    // Zawsze pokaż pierwszy i ostatni
-                    showIndices.add(0);
-                    showIndices.add(totalBots - 1);
-
-                    const sortedIndices = Array.from(showIndices).sort((a, b) => a - b);
-
-                    for (let i = 0; i < sortedIndices.length && buttons.length < 4; i++) {
-                        const idx = sortedIndices[i];
-                        buttons.push(
-                            new ButtonBuilder()
-                                .setCustomId(`komendy_bot_${idx}_${interaction.user.id}`)
-                                .setLabel(`${idx + 1}. ${availableBots[idx].name}`)
-                                .setStyle(idx === currentBotIndex ? ButtonStyle.Success : ButtonStyle.Secondary)
-                                .setDisabled(idx === currentBotIndex)
-                        );
-                    }
+                for (let i = 0; i < totalBots; i++) {
+                    buttons.push(
+                        new ButtonBuilder()
+                            .setCustomId(`komendy_bot_${i}_${interaction.user.id}`)
+                            .setLabel(availableBots[i].name)
+                            .setStyle(i === currentBotIndex ? ButtonStyle.Success : ButtonStyle.Secondary)
+                            .setDisabled(i === currentBotIndex)
+                    );
                 }
 
-                // Przycisk "Następny"
-                buttons.push(
-                    new ButtonBuilder()
-                        .setCustomId(`komendy_next_${interaction.user.id}`)
-                        .setLabel('Następny ▶️')
-                        .setStyle(ButtonStyle.Primary)
-                        .setDisabled(currentBotIndex === availableBots.length - 1)
-                );
+                // Podziel przyciski na rzędy (max 5 na rząd)
+                for (let i = 0; i < buttons.length; i += 5) {
+                    const rowButtons = buttons.slice(i, i + 5);
+                    buttonRows.push(new ActionRowBuilder().addComponents(rowButtons));
+                }
 
-                return new ActionRowBuilder().addComponents(buttons);
+                return buttonRows;
             };
 
             // Wyślij pierwszy bot (Muteusz)
             await interaction.reply({
                 embeds: [createBotEmbed(0)],
-                components: [createButtons(0)],
+                components: createButtons(0),
                 flags: MessageFlags.Ephemeral
             });
 
@@ -2799,17 +2793,13 @@ class InteractionHandler {
                 const parts = i.customId.split('_');
                 const action = parts[1];
 
-                if (action === 'prev') {
-                    currentBotIndex = Math.max(0, currentBotIndex - 1);
-                } else if (action === 'next') {
-                    currentBotIndex = Math.min(availableBots.length - 1, currentBotIndex + 1);
-                } else if (action === 'bot') {
+                if (action === 'bot') {
                     currentBotIndex = parseInt(parts[2]);
                 }
 
                 await i.update({
                     embeds: [createBotEmbed(currentBotIndex)],
-                    components: [createButtons(currentBotIndex)]
+                    components: createButtons(currentBotIndex)
                 });
             });
 
