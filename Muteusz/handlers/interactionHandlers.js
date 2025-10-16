@@ -2690,7 +2690,7 @@ class InteractionHandler {
                 const maxFieldLength = 1024;
                 if (commandsList.length <= maxFieldLength) {
                     embed.addFields({
-                        name: '📜 Dostępne Komendy',
+                        name: '\u200B',
                         value: commandsList.trim(),
                         inline: false
                     });
@@ -2698,7 +2698,6 @@ class InteractionHandler {
                     // Podziel na części
                     const commands = bot.availableCommands;
                     let currentSection = '';
-                    let partNumber = 1;
 
                     for (const cmd of commands) {
                         const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
@@ -2706,12 +2705,11 @@ class InteractionHandler {
 
                         if ((currentSection + cmdText).length > maxFieldLength) {
                             embed.addFields({
-                                name: `📜 Dostępne Komendy (część ${partNumber})`,
+                                name: '\u200B',
                                 value: currentSection.trim(),
                                 inline: false
                             });
                             currentSection = cmdText;
-                            partNumber++;
                         } else {
                             currentSection += cmdText;
                         }
@@ -2719,7 +2717,7 @@ class InteractionHandler {
 
                     if (currentSection.trim().length > 0) {
                         embed.addFields({
-                            name: `📜 Dostępne Komendy${partNumber > 1 ? ` (część ${partNumber})` : ''}`,
+                            name: '\u200B',
                             value: currentSection.trim(),
                             inline: false
                         });
