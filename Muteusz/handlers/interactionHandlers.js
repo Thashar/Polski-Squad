@@ -2584,7 +2584,7 @@ class InteractionHandler {
 
             // Sprawdź uprawnienia użytkownika
             const member = interaction.member;
-            const isAdmin = member.permissions.has('Administrator') || member.permissions.has('ModerateMembers');
+            const isAdmin = member.permissions.has('Administrator');
 
             const moderatorRoleIds = ['1204431982800965742', '1170351946782609479', '1170351940193644664', '1170351936729755728'];
             const isModerator = moderatorRoleIds.some(roleId => member.roles.cache.has(roleId));
@@ -2611,7 +2611,7 @@ class InteractionHandler {
                         case 'administrator':
                             return isAdmin;
                         case 'moderator':
-                            return isModerator;
+                            return isModerator || isAdmin;
                         case 'clan_member':
                             return hasClanRole || isModerator || isAdmin;
                         case 'achievement_role':
