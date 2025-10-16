@@ -2608,13 +2608,20 @@ class InteractionHandler {
 
                 const availableCommands = bot.commands.filter(cmd => {
                     switch (cmd.requiredPermission) {
-                        case 'administrator': return isAdmin;
-                        case 'moderator': return isModerator && !isAdmin;
-                        case 'clan_member': return hasClanRole && !isModerator && !isAdmin;
-                        case 'achievement_role': return hasVirtuttiRole && !isAdmin;
-                        case 'special_role': return hasSpecialRole && !isAdmin;
-                        case 'public': return !hasClanRole && !isModerator && !isAdmin && !hasVirtuttiRole && !hasSpecialRole;
-                        default: return false;
+                        case 'administrator':
+                            return isAdmin;
+                        case 'moderator':
+                            return isModerator;
+                        case 'clan_member':
+                            return hasClanRole || isModerator || isAdmin;
+                        case 'achievement_role':
+                            return hasVirtuttiRole || isAdmin;
+                        case 'special_role':
+                            return false; // Brak implementacji specjalnych ról
+                        case 'public':
+                            return true;
+                        default:
+                            return false;
                     }
                 });
 
