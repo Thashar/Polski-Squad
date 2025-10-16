@@ -2572,7 +2572,7 @@ class InteractionHandler {
             const fs = require('fs');
             const path = require('path');
             const { MessageFlags } = require('discord.js');
-            const commandsDataPath = path.join(__dirname, '../data/all_commands.json');
+            const commandsDataPath = './Muteusz/config/all_commands.json';
 
             if (!fs.existsSync(commandsDataPath)) {
                 await interaction.reply({

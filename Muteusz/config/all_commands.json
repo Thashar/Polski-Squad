@@ -1,0 +1,479 @@
+{
+  "bots": [
+    {
+      "name": "Muteusz",
+      "description": "Bot do moderacji, zarządzania rolami i uciszania użytkowników",
+      "commands": [
+        {
+          "name": "/remove-roles",
+          "description": "Usuwa wybraną rolę wszystkim użytkownikom na serwerze",
+          "usage": "/remove-roles rola:[wybierz rolę]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/add-special-role",
+          "description": "Dodaje rolę do listy ról specjalnych do automatycznego zarządzania",
+          "usage": "/add-special-role rola:[wybierz rolę]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/remove-special-role",
+          "description": "Usuwa rolę z listy ról specjalnych",
+          "usage": "/remove-special-role rola:[wybierz rolę]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/list-special-roles",
+          "description": "Wyświetla listę wszystkich ról specjalnych i informacje o nich",
+          "usage": "/list-special-roles",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/special-roles",
+          "description": "Wyświetla wszystkie role specjalne na serwerze w przejrzysty sposób",
+          "usage": "/special-roles",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/clean",
+          "description": "Usuwa wiadomości na kanale (max 100, z filtrem użytkownika i czasu)",
+          "usage": "/clean [użytkownik:@user] [ilość:1-100] [czas:np. 2h30m]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/mute",
+          "description": "Ucisza użytkownika na określony czas lub na stałe",
+          "usage": "/mute użytkownik:@user czas:[np. 1h, 30m, permanent] [powód:tekst]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/unmute",
+          "description": "Odcisza użytkownika",
+          "usage": "/unmute użytkownik:@user",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/kick",
+          "description": "Wyrzuca użytkownika z serwera",
+          "usage": "/kick użytkownik:@user [powód:tekst]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/ban",
+          "description": "Banuje użytkownika na serwerze",
+          "usage": "/ban użytkownik:@user [powód:tekst] [dni_histori:1-7]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/unban",
+          "description": "Odbanowuje użytkownika",
+          "usage": "/unban user_id:[ID użytkownika]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/warn",
+          "description": "Nakłada ostrzeżenie na użytkownika",
+          "usage": "/warn użytkownik:@user powód:[tekst]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/violations",
+          "description": "Wyświetla wszystkie ostrzeżenia użytkownika",
+          "usage": "/violations użytkownik:@user",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/test-kick",
+          "description": "Testuje system kickowania użytkowników bez ról",
+          "usage": "/test-kick",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/block-ss",
+          "description": "Blokuje wysyłanie screenshotów na określonym kanale przez określony czas",
+          "usage": "/block-ss czas:[gg:mm dd.mm.rrrr] kanał:[#kanał]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/block-word",
+          "description": "Blokuje określone słowo i nakłada karę za jego użycie",
+          "usage": "/block-word słowo:[tekst] czas:[gg:mm dd.mm.rrrr] timeout:[true/false] inside:[true/false] [na_ile:1h30m]",
+          "requiredPermission": "administrator"
+        }
+      ]
+    },
+    {
+      "name": "Rekruter",
+      "description": "Bot do rekrutacji użytkowników z OCR analizą screenshotów i przypisywaniem do klanów",
+      "commands": [
+        {
+          "name": "/ocr-debug",
+          "description": "Przełącza szczegółowe logowanie OCR (włącz/wyłącz)",
+          "usage": "/ocr-debug",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/nick",
+          "description": "Zmienia nick użytkownika na serwerze",
+          "usage": "/nick użytkownik:@user nowy_nick:[tekst]",
+          "requiredPermission": "administrator"
+        }
+      ]
+    },
+    {
+      "name": "Gary",
+      "description": "Bot do analizy gildii w Lunar Mine Expedition, wyszukiwania graczy i zarządzania proxy",
+      "commands": [
+        {
+          "name": "/lunarmine",
+          "description": "Analizuje 4 gildie podczas ekspedycji Lunar Mine (modal z 4 polami ID)",
+          "usage": "/lunarmine → wypełnij formularz z ID gildii",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/refresh",
+          "description": "Odświeża dane rankingów z API Survivor.io",
+          "usage": "/refresh",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/analyse",
+          "description": "Analizuje pojedynczą gildię po ID",
+          "usage": "/analyse → podaj ID gildii w formularzu",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/proxy-test",
+          "description": "Testuje wszystkie dostępne proxy w systemie",
+          "usage": "/proxy-test",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/proxy-stats",
+          "description": "Wyświetla statystyki proxy i aktualną konfigurację",
+          "usage": "/proxy-stats",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/proxy-refresh",
+          "description": "Odświeża listę proxy z Webshare API",
+          "usage": "/proxy-refresh",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/search",
+          "description": "Wyszukuje gildie po nazwie (przeszukuje top gildie)",
+          "usage": "/search → wpisz nazwę gildii w formularzu",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/player",
+          "description": "Wyszukuje gracza po nazwie w rankingach",
+          "usage": "/player → wpisz nick gracza w formularzu",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/ee",
+          "description": "Wyszukuje gracza EndersEcho w rankingach",
+          "usage": "/ee → wpisz nick gracza w formularzu",
+          "requiredPermission": "public"
+        }
+      ]
+    },
+    {
+      "name": "Kontroler",
+      "description": "Bot do weryfikacji OCR screenshotów CX/Daily oraz systemu zaawansowanych loterii",
+      "commands": [
+        {
+          "name": "/ocr-debug",
+          "description": "Przełącza szczegółowe logowanie OCR",
+          "usage": "/ocr-debug",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/lottery",
+          "description": "Tworzy nową loterię dla klanu (CX/Daily, single/weekly/monthly)",
+          "usage": "/lottery rola:[rola] klan:[server/main/0/1/2] częstotliwość:[0-365] data:[dd.mm.rrrr] godzina:[HH:MM] ilość:[1-20] kanał:[ID]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/lottery-reroll",
+          "description": "Ponownie losuje zwycięzców wybranej loterii",
+          "usage": "/lottery-reroll → wybierz loterię z listy",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/lottery-remove",
+          "description": "Usuwa wybraną loterię z systemu",
+          "usage": "/lottery-remove → wybierz loterię z listy",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/lottery-history",
+          "description": "Wyświetla historię wszystkich loterii",
+          "usage": "/lottery-history",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/lottery-debug",
+          "description": "Debug systemu loterii (testowanie cron jobów)",
+          "usage": "/lottery-debug",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/oligopoly",
+          "description": "Dodaje swoje ID do systemu Oligopoly (wymaga roli klanowej)",
+          "usage": "/oligopoly id:[twoje ID w grze]",
+          "requiredPermission": "clan_member"
+        },
+        {
+          "name": "/oligopoly-review",
+          "description": "Przegląda listę wszystkich ID w systemie Oligopoly",
+          "usage": "/oligopoly-review",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/oligopoly-clear",
+          "description": "Czyści wszystkie wpisy w systemie Oligopoly",
+          "usage": "/oligopoly-clear",
+          "requiredPermission": "administrator"
+        }
+      ]
+    },
+    {
+      "name": "StalkerLME",
+      "description": "Bot do systemu kar za nieudział w Lunar Expedition, zbierania wyników faz i dekodowania buildów",
+      "commands": [
+        {
+          "name": "/punish",
+          "description": "Analizuje screenshot i nadaje kary graczom z 0 punktami (OCR)",
+          "usage": "/punish załącznik:[screenshot] → bot analizuje i nakłada punkty kar",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/remind",
+          "description": "Wysyła przypomnienia zamiast kar (alternatywa dla /punish)",
+          "usage": "/remind załącznik:[screenshot]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/punishment",
+          "description": "Wyświetla ranking punktów kar wszystkich graczy",
+          "usage": "/punishment",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/points",
+          "description": "Zarządza punktami kary gracza (dodaj/usuń/ustaw/wyczyść)",
+          "usage": "/points użytkownik:@user akcja:[add/remove/set/clear] [wartość:liczba]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/debug-roles",
+          "description": "Debug ról dla graczy (sprawdzanie uprawnień)",
+          "usage": "/debug-roles użytkownik:@user",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/ocr-debug",
+          "description": "Przełącza szczegółowe logowanie OCR",
+          "usage": "/ocr-debug",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/faza1",
+          "description": "Zbiera wyniki Fazy 1 ekspedycji (OCR screenshot z listą uczestników)",
+          "usage": "/faza1 załącznik:[screenshot]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/faza2",
+          "description": "Zbiera wyniki Fazy 2 ekspedycji (3 rundy bossów, OCR)",
+          "usage": "/faza2 załącznik:[screenshot rundy 1] → następnie dodaj rundę 2 i 3",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/wyniki",
+          "description": "Wyświetla wyniki wszystkich faz ekspedycji",
+          "usage": "/wyniki",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/modyfikuj",
+          "description": "Modyfikuje wyniki faz ekspedycji",
+          "usage": "/modyfikuj użytkownik:@user faza:[1/2] [wartość:liczba]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/dodaj",
+          "description": "Dodaje wyniki faz ekspedycji dla użytkownika",
+          "usage": "/dodaj użytkownik:@user faza:[1/2] wartość:[liczba]",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/decode",
+          "description": "Dekoduje link buildu z gry Survivor.io",
+          "usage": "/decode link:[https://... lub short code]",
+          "requiredPermission": "public"
+        }
+      ]
+    },
+    {
+      "name": "Szkolenia",
+      "description": "Bot do automatycznego zarządzania wątkami treningowymi (bez slash commands, działa na reakcje)",
+      "commands": []
+    },
+    {
+      "name": "Wydarzynier",
+      "description": "Bot do tworzenia party lobby dla graczy i zarządzania bazarami",
+      "commands": [
+        {
+          "name": "/party",
+          "description": "Tworzy nowe lobby party do zbierania graczy na wspólną grę",
+          "usage": "/party",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/bazar",
+          "description": "Tworzy kategorię i kanały bazaru do handlu",
+          "usage": "/bazar",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/bazar-off",
+          "description": "Usuwa kategorię i kanały bazaru",
+          "usage": "/bazar-off",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/party-access",
+          "description": "Tworzy wiadomość z przyciskiem do roli powiadomień o party",
+          "usage": "/party-access",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/party-kick",
+          "description": "Usuwa gracza z twojego party lobby",
+          "usage": "/party-kick użytkownik:@user",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/party-close",
+          "description": "Zamyka i usuwa twoje party lobby",
+          "usage": "/party-close",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/party-add",
+          "description": "Dodaje użytkownika bezpośrednio do twojego party lobby",
+          "usage": "/party-add użytkownik:@user",
+          "requiredPermission": "public"
+        }
+      ]
+    },
+    {
+      "name": "Konklawe",
+      "description": "Bot do gry w odgadywanie haseł, system osiągnięć, błogosławieństw i klątw",
+      "commands": [
+        {
+          "name": "/podpowiedz",
+          "description": "Dodaj nową podpowiedź do aktualnego hasła (tylko dla osób z rolą Papieską)",
+          "usage": "/podpowiedz treść:[tekst podpowiedzi]",
+          "requiredPermission": "special_role"
+        },
+        {
+          "name": "/podpowiedzi",
+          "description": "Wyświetla wszystkie podpowiedzi do aktualnego hasła",
+          "usage": "/podpowiedzi",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/statystyki",
+          "description": "Interaktywne statystyki gracza (odgadnięte hasła, podpowiedzi, osiągnięcia)",
+          "usage": "/statystyki [użytkownik:@user]",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/blessing",
+          "description": "Błogosław innego gracza (22 warianty, tylko Medal Virtutti Papajlari, cooldown 10min)",
+          "usage": "/blessing użytkownik:@user",
+          "requiredPermission": "achievement_role"
+        },
+        {
+          "name": "/virtue-check",
+          "description": "Sprawdź cnoty gracza (10 cnót z poradami, tylko Medal Virtutti)",
+          "usage": "/virtue-check użytkownik:@user",
+          "requiredPermission": "achievement_role"
+        },
+        {
+          "name": "/curse",
+          "description": "Rzuć klątwę na innego użytkownika (7 typów klątw, tylko Medal Virtutti, cooldown 10min)",
+          "usage": "/curse użytkownik:@user",
+          "requiredPermission": "achievement_role"
+        }
+      ]
+    },
+    {
+      "name": "EndersEcho",
+      "description": "Bot do rankingu wyników bossów z automatycznym przypisywaniem ról TOP",
+      "commands": [
+        {
+          "name": "/ranking",
+          "description": "Wyświetla prywatny ranking wyników bossów (paginacja 10/stronę)",
+          "usage": "/ranking",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/update",
+          "description": "Aktualizuje swój wynik w rankingu (OCR screenshot)",
+          "usage": "/update załącznik:[screenshot z wynikiem]",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/remove",
+          "description": "Usuwa gracza z rankingu (admin only)",
+          "usage": "/remove użytkownik:@user",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/ocr-debug",
+          "description": "Przełącza szczegółowe logowanie OCR",
+          "usage": "/ocr-debug",
+          "requiredPermission": "administrator"
+        }
+      ]
+    }
+  ],
+  "permissionLevels": {
+    "administrator": {
+      "displayName": "Administrator",
+      "description": "Wymaga uprawnienia Administrator lub ModerateMembers",
+      "icon": "🔧"
+    },
+    "moderator": {
+      "displayName": "Moderator",
+      "description": "Wymaga uprawnienia ModerateMembers lub specjalnych ról moderatorskich",
+      "icon": "🛡️"
+    },
+    "clan_member": {
+      "displayName": "Członek Klanu",
+      "description": "Wymaga roli jednego z klanów (Polski Squad, PolskiSquad⁰¹²)",
+      "icon": "⚔️"
+    },
+    "special_role": {
+      "displayName": "Specjalna Rola",
+      "description": "Wymaga specjalnej roli (np. Papieska w Konklawe)",
+      "icon": "👑"
+    },
+    "achievement_role": {
+      "displayName": "Osiągnięcie",
+      "description": "Wymaga osiągnięcia Medal Virtutti Papajlari (30+ poprawnych odpowiedzi)",
+      "icon": "🏅"
+    },
+    "public": {
+      "displayName": "Publiczne",
+      "description": "Dostępne dla wszystkich użytkowników",
+      "icon": "👤"
+    }
+  }
+}
