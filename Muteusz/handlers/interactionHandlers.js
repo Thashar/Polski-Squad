@@ -2586,7 +2586,7 @@ class InteractionHandler {
             const member = interaction.member;
             const isAdmin = member.permissions.has('Administrator');
 
-            const moderatorRoleIds = ['1204431982800965742', '1170351946782609479', '1170351940193644664', '1170351936729755728'];
+            const moderatorRoleIds = ['1196911721588199464', '1196586785413795850', '1170332302715396106'];
             const isModerator = moderatorRoleIds.some(roleId => member.roles.cache.has(roleId));
 
             const clanRoleIds = ['1194249987677229186', '1196805078162616480', '1210265548584132648', '1262793135860355254'];
