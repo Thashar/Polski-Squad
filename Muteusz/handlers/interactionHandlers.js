@@ -2561,16 +2561,14 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /komendy - wyświetla listę komend dostępnych dla użytkownika z paginacją
+     * Obsługuje komendę /komendy - wyświetla listę komend z nawigacją po botach (1 bot = 1 strona)
      * @param {CommandInteraction} interaction - Interakcja komendy
      */
     async handleKomendyCommand(interaction) {
         await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /komendy`, interaction);
 
         try {
-            // Wczytaj dane wszystkich komend
             const fs = require('fs');
-            const path = require('path');
             const { MessageFlags } = require('discord.js');
             const commandsDataPath = './Muteusz/config/all_commands.json';
 
@@ -2588,62 +2586,40 @@ class InteractionHandler {
             const member = interaction.member;
             const isAdmin = member.permissions.has('Administrator') || member.permissions.has('ModerateMembers');
 
-            // Sprawdź role moderatora (z StalkerLME config)
-            const moderatorRoleIds = [
-                '1204431982800965742', // Rola moderatora 1
-                '1170351946782609479', // Rola moderatora 2
-                '1170351940193644664', // Rola moderatora 3
-                '1170351936729755728'  // Rola moderatora 4
-            ];
+            const moderatorRoleIds = ['1204431982800965742', '1170351946782609479', '1170351940193644664', '1170351936729755728'];
             const isModerator = moderatorRoleIds.some(roleId => member.roles.cache.has(roleId));
 
-            // Sprawdź role klanowe
-            const clanRoleIds = [
-                '1194249987677229186', // Main clan
-                '1196805078162616480', // Clan 2
-                '1210265548584132648', // Clan 1
-                '1262793135860355254'  // Clan 0
-            ];
+            const clanRoleIds = ['1194249987677229186', '1196805078162616480', '1210265548584132648', '1262793135860355254'];
             const hasClanRole = clanRoleIds.some(roleId => member.roles.cache.has(roleId));
 
-            // Sprawdź specjalne role
-            const virtuttiRoleId = '1387383527653376081'; // Medal Virtutti Papajlari
+            const virtuttiRoleId = '1387383527653376081';
             const hasVirtuttiRole = member.roles.cache.has(virtuttiRoleId);
 
-            // Zbierz wszystkie boty z komendami
+            // Kolejność botów - Muteusz na pierwszym miejscu
+            const botOrder = ['Muteusz', 'Rekruter', 'Gary', 'Kontroler', 'StalkerLME', 'Szkolenia', 'Wydarzynier', 'Konklawe', 'EndersEcho'];
+
+            // Filtruj i sortuj boty według uprawnień
             const availableBots = [];
             let totalCommandCount = 0;
 
-            for (const bot of commandsData.bots) {
-                if (bot.commands.length === 0) {
-                    continue;
-                }
+            for (const botName of botOrder) {
+                const bot = commandsData.bots.find(b => b.name === botName);
+                if (!bot || bot.commands.length === 0) continue;
 
-                // Filtruj komendy według uprawnień
                 const availableCommands = bot.commands.filter(cmd => {
                     switch (cmd.requiredPermission) {
-                        case 'administrator':
-                            return isAdmin;
-                        case 'moderator':
-                            return isAdmin || isModerator;
-                        case 'clan_member':
-                            return hasClanRole || isModerator || isAdmin;
-                        case 'special_role':
-                            return true;
-                        case 'achievement_role':
-                            return hasVirtuttiRole || isAdmin;
-                        case 'public':
-                            return true;
-                        default:
-                            return false;
+                        case 'administrator': return isAdmin;
+                        case 'moderator': return isAdmin || isModerator;
+                        case 'clan_member': return hasClanRole || isModerator || isAdmin;
+                        case 'special_role': return true;
+                        case 'achievement_role': return hasVirtuttiRole || isAdmin;
+                        case 'public': return true;
+                        default: return false;
                     }
                 });
 
                 if (availableCommands.length > 0) {
-                    availableBots.push({
-                        ...bot,
-                        availableCommands
-                    });
+                    availableBots.push({ ...bot, availableCommands });
                     totalCommandCount += availableCommands.length;
                 }
             }
@@ -2656,197 +2632,189 @@ class InteractionHandler {
                     .setFooter({ text: 'Twoje uprawnienia: Użytkownik' })
                     .setTimestamp();
 
-                await interaction.reply({
-                    embeds: [embed],
-                    flags: MessageFlags.Ephemeral
-                });
+                await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
                 return;
             }
 
-            // Utwórz strony (max 6000 znaków na embed, max 25 fields)
-            const pages = [];
-            const maxEmbedLength = 5500; // Bezpieczny limit
-            const maxFieldsPerPage = 25;
-
-            let currentPage = {
-                bots: [],
-                charCount: 0,
-                fieldCount: 0
+            // Ikony botów (emoji lub URL)
+            const botIcons = {
+                'Muteusz': 'https://i.imgur.com/YourMuteuszIcon.png',
+                'Rekruter': 'https://i.imgur.com/YourRekruterIcon.png',
+                'Gary': 'https://i.imgur.com/YourGaryIcon.png',
+                'Kontroler': 'https://i.imgur.com/YourKontrolerIcon.png',
+                'StalkerLME': 'https://i.imgur.com/YourStalkerIcon.png',
+                'Szkolenia': 'https://i.imgur.com/YourSzkoleniaIcon.png',
+                'Wydarzynier': 'https://i.imgur.com/YourWydarzymierIcon.png',
+                'Konklawe': 'https://i.imgur.com/YourKonklaweIcon.png',
+                'EndersEcho': 'https://i.imgur.com/YourEndersEchoIcon.png'
             };
 
-            for (const bot of availableBots) {
-                // Policz ile znaków zajmie ten bot
-                let botCharCount = bot.description.length + 50; // nazwa + padding
-                for (const cmd of bot.availableCommands) {
-                    const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
-                    botCharCount += permIcon.length + cmd.name.length + cmd.description.length + cmd.usage.length + 50;
-                }
-
-                // Jeśli dodanie tego bota przekroczy limit, rozpocznij nową stronę
-                if (currentPage.bots.length > 0 &&
-                    (currentPage.charCount + botCharCount > maxEmbedLength ||
-                     currentPage.fieldCount + 1 > maxFieldsPerPage)) {
-                    pages.push(currentPage);
-                    currentPage = {
-                        bots: [],
-                        charCount: 0,
-                        fieldCount: 0
-                    };
-                }
-
-                currentPage.bots.push(bot);
-                currentPage.charCount += botCharCount;
-                currentPage.fieldCount += 1;
-            }
-
-            // Dodaj ostatnią stronę
-            if (currentPage.bots.length > 0) {
-                pages.push(currentPage);
-            }
-
-            // Funkcja do tworzenia embeda dla strony
-            const createPageEmbed = (pageIndex) => {
-                const page = pages[pageIndex];
+            // Funkcja do tworzenia embeda dla konkretnego bota
+            const createBotEmbed = (botIndex) => {
+                const bot = availableBots[botIndex];
                 const embed = new EmbedBuilder()
-                    .setTitle('📋 Lista Komend - Polski Squad Bots')
+                    .setTitle(`📋 ${bot.name} - Komendy`)
                     .setColor(isAdmin ? 0xFF0000 : (isModerator ? 0xFFA500 : (hasClanRole ? 0x00FF00 : 0x0099FF)))
-                    .setDescription(`Poniżej znajdziesz listę **${totalCommandCount}** komend dostępnych dla Ciebie.`)
-                    .setFooter({ text: `Twoje uprawnienia: ${isAdmin ? 'Administrator' : (isModerator ? 'Moderator' : (hasClanRole ? 'Członek Klanu' : 'Użytkownik'))} • Strona ${pageIndex + 1}/${pages.length}` })
+                    .setDescription(`**${bot.description}**\n\n${bot.availableCommands.length} komend dostępnych dla Ciebie.`)
+                    .setFooter({ text: `${isAdmin ? 'Administrator' : (isModerator ? 'Moderator' : (hasClanRole ? 'Członek Klanu' : 'Użytkownik'))} • Bot ${botIndex + 1}/${availableBots.length} • Łącznie: ${totalCommandCount} komend` })
                     .setTimestamp();
 
-                for (const bot of page.bots) {
-                    let botSection = `**${bot.description}**\n\n`;
+                // Dodaj thumbnail jeśli bot ma ikonę
+                if (botIcons[bot.name]) {
+                    embed.setThumbnail(botIcons[bot.name]);
+                }
 
-                    for (const cmd of bot.availableCommands) {
+                // Dodaj komendy
+                let commandsList = '';
+                for (const cmd of bot.availableCommands) {
+                    const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
+                    commandsList += `${permIcon} \`${cmd.name}\`\n`;
+                    commandsList += `└─ ${cmd.description}\n`;
+                    commandsList += `└─ *Użycie:* \`${cmd.usage}\`\n\n`;
+                }
+
+                // Discord limit: 1024 znaki na field, 6000 na cały embed
+                const maxFieldLength = 1024;
+                if (commandsList.length <= maxFieldLength) {
+                    embed.addFields({
+                        name: '📜 Dostępne Komendy',
+                        value: commandsList.trim(),
+                        inline: false
+                    });
+                } else {
+                    // Podziel na części
+                    const commands = bot.availableCommands;
+                    let currentSection = '';
+                    let partNumber = 1;
+
+                    for (const cmd of commands) {
                         const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
-                        botSection += `${permIcon} \`${cmd.name}\`\n`;
-                        botSection += `└─ ${cmd.description}\n`;
-                        botSection += `└─ *Użycie:* \`${cmd.usage}\`\n\n`;
-                    }
+                        const cmdText = `${permIcon} \`${cmd.name}\`\n└─ ${cmd.description}\n└─ *Użycie:* \`${cmd.usage}\`\n\n`;
 
-                    // Jeśli field jest zbyt długi, podziel go
-                    const maxFieldLength = 1024;
-                    if (botSection.length <= maxFieldLength) {
-                        embed.addFields({
-                            name: `🤖 ${bot.name}`,
-                            value: botSection.trim(),
-                            inline: false
-                        });
-                    } else {
-                        // Podziel na mniejsze części
-                        let currentSection = `**${bot.description}**\n\n`;
-                        let partNumber = 1;
-
-                        for (const cmd of bot.availableCommands) {
-                            const permIcon = commandsData.permissionLevels[cmd.requiredPermission]?.icon || '📌';
-                            const cmdText = `${permIcon} \`${cmd.name}\`\n└─ ${cmd.description}\n└─ *Użycie:* \`${cmd.usage}\`\n\n`;
-
-                            if ((currentSection + cmdText).length > maxFieldLength) {
-                                embed.addFields({
-                                    name: `🤖 ${bot.name} (${partNumber})`,
-                                    value: currentSection.trim(),
-                                    inline: false
-                                });
-                                currentSection = cmdText;
-                                partNumber++;
-                            } else {
-                                currentSection += cmdText;
-                            }
-                        }
-
-                        if (currentSection.trim().length > 0) {
+                        if ((currentSection + cmdText).length > maxFieldLength) {
                             embed.addFields({
-                                name: `🤖 ${bot.name}${partNumber > 1 ? ` (${partNumber})` : ''}`,
+                                name: `📜 Dostępne Komendy (część ${partNumber})`,
                                 value: currentSection.trim(),
                                 inline: false
                             });
+                            currentSection = cmdText;
+                            partNumber++;
+                        } else {
+                            currentSection += cmdText;
                         }
+                    }
+
+                    if (currentSection.trim().length > 0) {
+                        embed.addFields({
+                            name: `📜 Dostępne Komendy${partNumber > 1 ? ` (część ${partNumber})` : ''}`,
+                            value: currentSection.trim(),
+                            inline: false
+                        });
                     }
                 }
 
                 return embed;
             };
 
-            // Jeśli jest tylko jedna strona, wyślij bez przycisków
-            if (pages.length === 1) {
-                await interaction.reply({
-                    embeds: [createPageEmbed(0)],
-                    flags: MessageFlags.Ephemeral
-                });
-                await this.logService.logMessage('success', `Wysłano listę komend dla ${interaction.user.tag} (${totalCommandCount} komend, 1 strona)`, interaction);
-                return;
-            }
+            // Funkcja do tworzenia przycisków nawigacji
+            const createButtons = (currentBotIndex) => {
+                const buttons = [];
 
-            // Utwórz przyciski paginacji
-            const createButtons = (currentPage) => {
-                return new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`komendy_first_${interaction.user.id}`)
-                            .setLabel('⏮️ Pierwsza')
-                            .setStyle(ButtonStyle.Secondary)
-                            .setDisabled(currentPage === 0),
-                        new ButtonBuilder()
-                            .setCustomId(`komendy_prev_${interaction.user.id}`)
-                            .setLabel('◀️ Poprzednia')
-                            .setStyle(ButtonStyle.Primary)
-                            .setDisabled(currentPage === 0),
-                        new ButtonBuilder()
-                            .setCustomId(`komendy_next_${interaction.user.id}`)
-                            .setLabel('Następna ▶️')
-                            .setStyle(ButtonStyle.Primary)
-                            .setDisabled(currentPage === pages.length - 1),
-                        new ButtonBuilder()
-                            .setCustomId(`komendy_last_${interaction.user.id}`)
-                            .setLabel('Ostatnia ⏭️')
-                            .setStyle(ButtonStyle.Secondary)
-                            .setDisabled(currentPage === pages.length - 1)
-                    );
+                // Przycisk "Poprzedni"
+                buttons.push(
+                    new ButtonBuilder()
+                        .setCustomId(`komendy_prev_${interaction.user.id}`)
+                        .setLabel('◀️ Poprzedni')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(currentBotIndex === 0)
+                );
+
+                // Przyciski dla każdego bota (max 3 w środku)
+                const totalBots = availableBots.length;
+                if (totalBots <= 3) {
+                    // Jeśli 3 lub mniej botów, pokaż wszystkie
+                    for (let i = 0; i < totalBots; i++) {
+                        buttons.push(
+                            new ButtonBuilder()
+                                .setCustomId(`komendy_bot_${i}_${interaction.user.id}`)
+                                .setLabel(`${i + 1}. ${availableBots[i].name}`)
+                                .setStyle(i === currentBotIndex ? ButtonStyle.Success : ButtonStyle.Secondary)
+                                .setDisabled(i === currentBotIndex)
+                        );
+                    }
+                } else {
+                    // Pokaż aktualny + sąsiednie
+                    const showIndices = new Set([currentBotIndex]);
+                    if (currentBotIndex > 0) showIndices.add(currentBotIndex - 1);
+                    if (currentBotIndex < totalBots - 1) showIndices.add(currentBotIndex + 1);
+
+                    // Zawsze pokaż pierwszy i ostatni
+                    showIndices.add(0);
+                    showIndices.add(totalBots - 1);
+
+                    const sortedIndices = Array.from(showIndices).sort((a, b) => a - b);
+
+                    for (let i = 0; i < sortedIndices.length && buttons.length < 4; i++) {
+                        const idx = sortedIndices[i];
+                        buttons.push(
+                            new ButtonBuilder()
+                                .setCustomId(`komendy_bot_${idx}_${interaction.user.id}`)
+                                .setLabel(`${idx + 1}. ${availableBots[idx].name}`)
+                                .setStyle(idx === currentBotIndex ? ButtonStyle.Success : ButtonStyle.Secondary)
+                                .setDisabled(idx === currentBotIndex)
+                        );
+                    }
+                }
+
+                // Przycisk "Następny"
+                buttons.push(
+                    new ButtonBuilder()
+                        .setCustomId(`komendy_next_${interaction.user.id}`)
+                        .setLabel('Następny ▶️')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(currentBotIndex === availableBots.length - 1)
+                );
+
+                return new ActionRowBuilder().addComponents(buttons);
             };
 
-            // Wyślij pierwszą stronę
+            // Wyślij pierwszy bot (Muteusz)
             await interaction.reply({
-                embeds: [createPageEmbed(0)],
+                embeds: [createBotEmbed(0)],
                 components: [createButtons(0)],
                 flags: MessageFlags.Ephemeral
             });
 
-            await this.logService.logMessage('success', `Wysłano listę komend dla ${interaction.user.tag} (${totalCommandCount} komend, ${pages.length} stron)`, interaction);
+            await this.logService.logMessage('success', `Wysłano listę komend dla ${interaction.user.tag} (${totalCommandCount} komend, ${availableBots.length} botów)`, interaction);
 
-            // Obsługa przycisków paginacji
+            // Obsługa przycisków
             const collector = interaction.channel.createMessageComponentCollector({
                 filter: i => i.user.id === interaction.user.id && i.customId.startsWith('komendy_'),
                 time: 600000 // 10 minut
             });
 
-            let currentPageIndex = 0;
+            let currentBotIndex = 0;
 
             collector.on('collect', async i => {
-                const action = i.customId.split('_')[1];
+                const parts = i.customId.split('_');
+                const action = parts[1];
 
-                switch (action) {
-                    case 'first':
-                        currentPageIndex = 0;
-                        break;
-                    case 'prev':
-                        currentPageIndex = Math.max(0, currentPageIndex - 1);
-                        break;
-                    case 'next':
-                        currentPageIndex = Math.min(pages.length - 1, currentPageIndex + 1);
-                        break;
-                    case 'last':
-                        currentPageIndex = pages.length - 1;
-                        break;
+                if (action === 'prev') {
+                    currentBotIndex = Math.max(0, currentBotIndex - 1);
+                } else if (action === 'next') {
+                    currentBotIndex = Math.min(availableBots.length - 1, currentBotIndex + 1);
+                } else if (action === 'bot') {
+                    currentBotIndex = parseInt(parts[2]);
                 }
 
                 await i.update({
-                    embeds: [createPageEmbed(currentPageIndex)],
-                    components: [createButtons(currentPageIndex)]
+                    embeds: [createBotEmbed(currentBotIndex)],
+                    components: [createButtons(currentBotIndex)]
                 });
             });
 
             collector.on('end', () => {
-                // Timeout - przyciski zostaną nieaktywne automatycznie
+                // Timeout - przyciski przestaną działać
             });
 
         } catch (error) {
