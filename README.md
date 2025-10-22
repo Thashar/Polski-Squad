@@ -6,8 +6,6 @@
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D16.0.0-brightgreen.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-ISC-green.svg)](LICENSE)
 
-**Ostatnia aktualizacja:** Styczeń 2025
-
 ---
 
 ## 🚀 Przegląd
