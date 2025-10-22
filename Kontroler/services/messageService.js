@@ -71,7 +71,7 @@ class MessageService {
 
         // Dodaj informację o roli specjalnej CX
         if (specialRoleResult && !specialRoleResult.alreadyHad) {
-            baseMessage += `\n\n👑 **BONUS:** Otrzymujesz dodatkową rolę za wynik 2800+ punktów!\n🎲 **Dodatkowa szansa** w loteriach CX!`;
+            baseMessage += `\n\n👑 **BONUS:** Otrzymujesz dodatkową rolę za wynik 2700+ punktów!\n🎲 **Dodatkowa szansa** w loteriach CX!`;
         } else if (specialRoleResult && specialRoleResult.alreadyHad) {
             baseMessage += `\n\n👑 **Już posiadasz rolę specjalną CX** - dodatkowa szansa w loteriach!`;
         }

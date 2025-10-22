@@ -43,7 +43,7 @@ module.exports = {
             // Nowa konfiguracja dla roli specjalnej
             specialRole: {
                 roleId: '1421502672112058589',
-                threshold: 2800
+                threshold: 2700
             }
         },
         daily: {
