@@ -1630,6 +1630,7 @@ async function handlePhase1Command(interaction, sharedState) {
 
             if (warningEmbed) {
                 await interaction.editReply({
+                    content: `<@${interaction.user.id}>`,
                     embeds: [warningEmbed.embed],
                     components: [warningEmbed.row]
                 });
@@ -1876,7 +1877,7 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
             if (firstConflict) {
                 const conflictEmbed = phaseService.createConflictEmbed(firstConflict, 1, conflicts.length, 1);
                 await interaction.editReply({
-                    content: '',
+                    content: `<@${interaction.user.id}>`,
                     embeds: [conflictEmbed.embed],
                     components: [conflictEmbed.row]
                 });
@@ -1940,6 +1941,7 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
 
         const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts, 1);
         await interaction.update({
+            content: `<@${interaction.user.id}>`,
             embeds: [conflictEmbed.embed],
             components: [conflictEmbed.row]
         });
@@ -2063,7 +2065,7 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     session.stage = 'final_confirmation';
 
     await interaction.editReply({
-        content: '',
+        content: `<@${interaction.user.id}>`,
         embeds: [summaryEmbed.embed],
         components: [summaryEmbed.row]
     });
@@ -2160,6 +2162,7 @@ async function handlePhase2Command(interaction, sharedState) {
 
             if (warningEmbed) {
                 await interaction.editReply({
+                    content: `<@${interaction.user.id}>`,
                     embeds: [warningEmbed.embed],
                     components: [warningEmbed.row]
                 });
@@ -2319,6 +2322,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                     2
                 );
                 await interaction.update({
+                    content: `<@${interaction.user.id}>`,
                     embeds: [conflictEmbed.embed],
                     components: [conflictEmbed.row]
                 });
@@ -2350,7 +2354,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             session.currentConflictIndex = 0;
             const conflictEmbed = phaseService.createConflictEmbed(conflicts[0], 0, conflicts.length, 2);
             await interaction.editReply({
-                content: '',
+                content: `<@${interaction.user.id}>`,
                 embeds: [conflictEmbed.embed],
                 components: [conflictEmbed.row]
             });
@@ -2529,13 +2533,13 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
             // Po update() trzeba użyć followUp() zamiast editReply()
             if (interaction.replied) {
                 await interaction.followUp({
-                    content: '',
+                    content: `<@${interaction.user.id}>`,
                     embeds: [summaryEmbed.embed],
                     components: [summaryEmbed.row]
                 });
             } else {
                 await interaction.editReply({
-                    content: '',
+                    content: `<@${interaction.user.id}>`,
                     embeds: [summaryEmbed.embed],
                     components: [summaryEmbed.row]
                 });
@@ -2648,13 +2652,13 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
     // Użyj odpowiedniej metody w zależności od stanu interakcji
     if (interaction.replied || interaction.deferred) {
         await interaction.editReply({
-            content: '',
+            content: `<@${interaction.user.id}>`,
             embeds: [embed],
             components: [row]
         });
     } else {
         await interaction.update({
-            content: '',
+            content: `<@${interaction.user.id}>`,
             embeds: [embed],
             components: [row]
         });

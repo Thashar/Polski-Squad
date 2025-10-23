@@ -204,6 +204,7 @@ client.on(Events.MessageCreate, async (message) => {
 
                 if (session.publicInteraction) {
                     await session.publicInteraction.editReply({
+                        content: `<@${message.author.id}>`,
                         embeds: [confirmation.embed],
                         components: [confirmation.row]
                     });
