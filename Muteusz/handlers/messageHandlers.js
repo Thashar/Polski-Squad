@@ -11,6 +11,7 @@ class MessageHandler {
         this.config = config;
         this.mediaService = mediaService;
         this.logService = logService;
+        this.logger = logger; // Przypisz logger do this.logger
         this.warningService = new WarningService(config, logger);
         this.autoModerationService = new AutoModerationService(config, logger, this.warningService);
         this.spamDetectionService = new SpamDetectionService(config, logger);
