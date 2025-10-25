@@ -187,6 +187,15 @@ class OCRService {
             }
         }
 
+        // NORMALIZACJA: Zamień .X9 na .XQ (gdy są dwie cyfry po kropce i ostatnia to 9)
+        // Przykład: 224.29 -> 224.2Q
+        if (/\.\d9$/.test(fixedScore)) {
+            fixedScore = fixedScore.replace(/(\.\d)9$/, '$1Q');
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
+                logger.info('Zastąpiono końcowe 9 po kropce na Q (np. .29 -> .2Q)');
+            }
+        }
+
         // Zamień 7 na końcu na T (jeśli nie ma już jednostki)
         // Sprawdź czy wynik kończy się cyfrą 7 i nie ma jednostki K/M/B/T/Q/S
         if (/7$/.test(fixedScore) && !/[KMBTQS]$/i.test(fixedScore)) {
