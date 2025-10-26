@@ -4632,10 +4632,25 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
 
     // Oblicz TOP30 dla rund 1, 2, 3 oraz sumy
     let top30Text = '';
-    if (view === 'round1' || view === 'round2' || view === 'round3' || view === 'summary') {
+    if (view === 'round1' || view === 'round2' || view === 'round3') {
         const top30Players = sortedPlayers.slice(0, 30);
         const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
         top30Text = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n`;
+    } else if (view === 'summary') {
+        // Dla sumy: oblicz TOP30 z każdej rundy osobno i zsumuj
+        let totalTop30Sum = 0;
+
+        if (weekData.rounds && weekData.rounds.length === 3) {
+            for (let i = 0; i < 3; i++) {
+                if (weekData.rounds[i] && weekData.rounds[i].players) {
+                    const roundPlayers = [...weekData.rounds[i].players].sort((a, b) => b.score - a.score);
+                    const roundTop30 = roundPlayers.slice(0, 30);
+                    const roundTop30Sum = roundTop30.reduce((sum, player) => sum + player.score, 0);
+                    totalTop30Sum += roundTop30Sum;
+                }
+            }
+            top30Text = `**TOP30:** ${totalTop30Sum.toLocaleString('pl-PL')} pkt (suma TOP30 z 3 rund)\n`;
+        }
     }
 
     const resultsText = sortedPlayers.map((player, index) => {
@@ -4746,8 +4761,23 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     let playerHistoricalRecords = new Map(); // userId -> bestScore
 
     if (view === 'phase1' || view === 'round1' || view === 'round2' || view === 'round3' || view === 'summary') {
-        const top30Players = sortedPlayers.slice(0, 30);
-        const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
+        let top30Sum = 0;
+
+        // Dla "Suma Faza 2" - oblicz sumę TOP30 z każdej rundy osobno
+        if (view === 'summary' && weekDataPhase2?.rounds) {
+            for (let i = 0; i < 3; i++) {
+                if (weekDataPhase2.rounds[i] && weekDataPhase2.rounds[i].players) {
+                    const roundPlayers = [...weekDataPhase2.rounds[i].players].sort((a, b) => b.score - a.score);
+                    const roundTop30 = roundPlayers.slice(0, 30);
+                    const roundTop30Sum = roundTop30.reduce((sum, player) => sum + player.score, 0);
+                    top30Sum += roundTop30Sum;
+                }
+            }
+        } else {
+            // Dla pozostałych widoków - standardowe TOP30
+            const top30Players = sortedPlayers.slice(0, 30);
+            top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
+        }
 
         // Pobierz TOP30 z poprzedniego tygodnia (tylko dla Fazy 1)
         const { databaseService } = interaction.client;
@@ -4797,7 +4827,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             }
         }
 
-        descriptionExtra = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt${top30ProgressText}\n`;
+        // Dodaj informację o sposobie liczenia dla widoku "Suma"
+        const summaryNote = view === 'summary' ? ' (suma TOP30 z 3 rund)' : '';
+        descriptionExtra = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt${summaryNote}${top30ProgressText}\n`;
 
         // Pobierz historyczne rekordy dla wszystkich graczy (tylko dla Fazy 1)
         if (view === 'phase1' && databaseService) {
