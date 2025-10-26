@@ -120,7 +120,7 @@ class RankingService {
         if (sorted.length === 0) {
             const embed = new EmbedBuilder()
                 .setTitle(`${this.config.emojis.virtuttiPapajlari} Ranking Medali Virtutti Papajlari`)
-                .setDescription('🚫 Jeszcze nikt nie zdobył medalu Virtutti Papajlari!\n\nMedal otrzymuje gracz, który osiągnie **30 punktów** w rankingu.')
+                .setDescription('🚫 Jeszcze nikt nie zdobył medalu Virtutti Papajlari!\n\nMedal otrzymuje gracz, który osiągnie **10 punktów** w rankingu.')
                 .setColor('#9B59B6')
                 .setTimestamp()
                 .setFooter({ text: 'Konklawe - System medali' });

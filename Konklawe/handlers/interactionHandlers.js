@@ -567,13 +567,13 @@ class InteractionHandler {
             // Informacja o medalach
             embed.addFields({
                 name: '💡 O medalach',
-                value: 'Medal Virtutti Papajlari otrzymuje gracz po zdobyciu **30 punktów**. Po zdobyciu medalu ranking zostaje zresetowany.',
+                value: 'Medal Virtutti Papajlari otrzymuje gracz po zdobyciu **10 punktów**. Po zdobyciu medalu ranking zostaje zresetowany.',
                 inline: false
             });
         } else {
             embed.addFields({
                 name: `${this.config.emojis.virtuttiPapajlari} Medale Virtutti Papajlari`,
-                value: 'Jeszcze nikt nie zdobył medalu Virtutti Papajlari!\n\nMedal otrzymuje się po zdobyciu **30 punktów**.',
+                value: 'Jeszcze nikt nie zdobył medalu Virtutti Papajlari!\n\nMedal otrzymuje się po zdobyciu **10 punktów**.',
                 inline: false
             });
         }

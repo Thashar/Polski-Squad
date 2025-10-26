@@ -37,11 +37,11 @@ module.exports = {
         hintAdded: "## {emoji} Podpowiedź została dodana! {emoji}",
         autoReset: "## {emoji} Hasło zostało automatycznie ustawione na \"Konklawe\" po {minutes} minutach bezczynności! {emoji}",
         roleRemoved: "## {emoji} Rola papieska została usunięta za brak podpowiedzi przez 24 godziny! {emoji}",
-        virtuttiPapajlariAchieved: "## 🏆 {user} osiągnął 30 poprawnych odpowiedzi i otrzymuje medal Virtutti Papajlari! {emoji} 🏆",
+        virtuttiPapajlariAchieved: "## 🏆 {user} osiągnął 10 poprawnych odpowiedzi i otrzymuje medal Virtutti Papajlari! {emoji} 🏆",
         rankingReset: "## 🔄 Ranking został zresetowany! Nowy cykl rozpoczyna się teraz! 🔄"
     },
     achievements: {
-        virtuttiPapajlariThreshold: 30
+        virtuttiPapajlariThreshold: 10
     },
     randomResponse: {
         virtuttiPapajlariChance: 100 // 1 in 100 chance (1%)
