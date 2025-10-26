@@ -9,14 +9,23 @@ class VirtuttiService {
         this.config = config;
         this.cooldowns = new Map(); // userId -> { blessing: timestamp, virtueCheck: timestamp, curse: timestamp }
         this.dailyUsage = new Map(); // userId -> { date: string, blessing: count, virtueCheck: count, curse: count }
-        
+
         // Ścieżki do plików danych
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
         this.dailyUsageFile = path.join(this.dataDir, 'virtutti_daily_usage.json');
-        
+
         // Wczytaj dane przy starcie
         this.loadData();
+    }
+
+    /**
+     * Pobiera aktualny czas w polskiej strefie czasowej
+     * @returns {Date} - Data w polskim czasie
+     */
+    getPolishTime() {
+        const now = new Date();
+        return new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
     }
 
     /**
@@ -27,7 +36,7 @@ class VirtuttiService {
      */
     canUseCommand(userId, commandType) {
         const now = Date.now();
-        const today = new Date().toDateString();
+        const today = this.getPolishTime().toDateString();
 
         // Sprawdź cooldown
         const userCooldowns = this.cooldowns.get(userId);
@@ -66,7 +75,7 @@ class VirtuttiService {
      */
     registerUsage(userId, commandType, userTag = null) {
         const now = Date.now();
-        const today = new Date().toDateString();
+        const today = this.getPolishTime().toDateString();
 
         // Ustaw cooldown
         if (!this.cooldowns.has(userId)) {
@@ -244,7 +253,7 @@ class VirtuttiService {
     cleanup() {
         const now = Date.now();
         const oneDayMs = 24 * 60 * 60 * 1000;
-        const today = new Date().toDateString();
+        const today = this.getPolishTime().toDateString();
         let dataChanged = false;
 
         // Usuń stare cooldowny (starsze niż dzień)

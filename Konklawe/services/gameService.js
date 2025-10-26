@@ -7,7 +7,7 @@ class GameService {
     constructor(config, dataService) {
         this.config = config;
         this.dataService = dataService;
-        
+
         // Zmienne stanu gry
         this.trigger = null;
         this.triggerSetTimestamp = null;
@@ -44,6 +44,15 @@ class GameService {
         this.EXISTING_HINT_REMINDER_TIME = 6 * 60 * 60 * 1000; // 6 godzin
         this.RECURRING_REMINDER_TIME = 15 * 60 * 1000; // 15 minut dla powtarzających się przypomnień
         this.HINT_TIMEOUT_TIME = 24 * 60 * 60 * 1000; // 24 godziny - timeout za brak nowej podpowiedzi
+    }
+
+    /**
+     * Pobiera aktualny czas w polskiej strefie czasowej
+     * @returns {Date} - Data w polskim czasie
+     */
+    getPolishTime() {
+        const now = new Date();
+        return new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
     }
 
     /**
@@ -114,7 +123,7 @@ class GameService {
         
         this.playerAttempts[userId].push({
             attempt: attempt,
-            timestamp: new Date().toISOString(),
+            timestamp: this.getPolishTime().toISOString(),
             isCorrect: isCorrect
         });
 
@@ -130,7 +139,7 @@ class GameService {
     addGameToHistory(solvedByUserId) {
         if (!this.trigger || !this.triggerSetTimestamp) return;
 
-        const now = new Date();
+        const now = this.getPolishTime();
         const duration = now - this.triggerSetTimestamp; // w milisekundach
         const totalAttempts = Object.values(this.attempts).reduce((sum, attempts) => sum + attempts, 0);
         
@@ -177,7 +186,7 @@ class GameService {
      */
     addHint(hintText) {
         this.hints.push(hintText);
-        this.lastHintTimestamp = new Date();
+        this.lastHintTimestamp = this.getPolishTime();
         this.dataService.saveHints(this.hints, this.lastHintTimestamp);
     }
 
@@ -197,7 +206,7 @@ class GameService {
      */
     setNewPassword(newTrigger, setByUserId = null) {
         this.trigger = newTrigger;
-        this.triggerSetTimestamp = new Date();
+        this.triggerSetTimestamp = this.getPolishTime();
         this.triggerClearedTimestamp = null;
         this.triggerSetBy = setByUserId;
         this.clearAttempts();
@@ -212,7 +221,7 @@ class GameService {
     clearPassword() {
         this.trigger = null;
         this.triggerSetTimestamp = null;
-        this.triggerClearedTimestamp = new Date();
+        this.triggerClearedTimestamp = this.getPolishTime();
         this.saveTriggerState();
     }
 
@@ -221,7 +230,7 @@ class GameService {
      */
     resetToDefaultPassword() {
         this.trigger = this.config.messages.defaultPassword;
-        this.triggerSetTimestamp = new Date();
+        this.triggerSetTimestamp = this.getPolishTime();
         this.triggerClearedTimestamp = null;
         this.clearAttempts();
         this.resetHints();
@@ -304,7 +313,7 @@ class GameService {
      */
     getTimeSincePasswordSet() {
         if (!this.triggerSetTimestamp) return 0;
-        return new Date() - this.triggerSetTimestamp;
+        return this.getPolishTime() - this.triggerSetTimestamp;
     }
 
     /**

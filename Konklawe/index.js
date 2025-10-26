@@ -71,7 +71,7 @@ async function onReady() {
 
         // Sprawdź czy hasło powinno być automatycznie przywrócone
         if (gameService.trigger === null && gameService.triggerClearedTimestamp) {
-            const timeSinceCleared = new Date() - gameService.triggerClearedTimestamp;
+            const timeSinceCleared = gameService.getPolishTime() - gameService.triggerClearedTimestamp;
             if (timeSinceCleared >= gameService.AUTO_RESET_TIME) {
                 gameService.resetToDefaultPassword();
 
