@@ -689,10 +689,9 @@ class PhaseService {
                         const channel = await this.client.channels.fetch(session.channelId);
                         if (channel) {
                             await channel.send({
-                                content: `❌ <@${session.userId}> Sesja wygasła z powodu braku aktywności. Spróbuj ponownie.`,
                                 embeds: [new EmbedBuilder()
                                     .setTitle('⏰ Sesja wygasła')
-                                    .setDescription('Interakcja Discord wygasła (max 15 minut). Dane nie zostały zapisane.')
+                                    .setDescription('❌ Sesja wygasła z powodu braku aktywności. Spróbuj ponownie.\n\nInterakcja Discord wygasła (max 15 minut). Dane nie zostały zapisane.')
                                     .setColor('#FF0000')
                                     .setTimestamp()
                                 ]

@@ -881,7 +881,7 @@ function hasPermission(member, allowedRoles) {
 }
 
 /**
- * Wysyła "ghost ping" - wiadomość z pingiem, która jest usuwana po 1 sekundzie
+ * Wysyła "ghost ping" - wiadomość z pingiem, która jest usuwana po 5 sekundach
  * Jeśli użytkownik nie kliknie przycisku, ping jest ponawiany co 30 sekund
  * @param {Object} channel - Kanał Discord
  * @param {string} userId - ID użytkownika do pingowania
@@ -893,14 +893,14 @@ async function sendGhostPing(channel, userId, session = null) {
             content: `<@${userId}> Analiza zdjęć została zakończona, kontynuuj!`
         });
 
-        // Usuń wiadomość po 1 sekundzie
+        // Usuń wiadomość po 5 sekundach
         setTimeout(async () => {
             try {
                 await pingMessage.delete();
             } catch (error) {
                 logger.error('[GHOST_PING] ❌ Nie udało się usunąć ghost pingu:', error.message);
             }
-        }, 1000);
+        }, 5000);
 
         logger.info(`[GHOST_PING] 📨 Wysłano ghost ping do użytkownika ${userId}`);
 
@@ -924,7 +924,7 @@ async function sendGhostPing(channel, userId, session = null) {
                         } catch (error) {
                             logger.error('[GHOST_PING] ❌ Nie udało się usunąć powtarzanego ghost pingu:', error.message);
                         }
-                    }, 1000);
+                    }, 5000);
 
                     logger.info(`[GHOST_PING] 🔄 Powtórzono ghost ping do użytkownika ${userId}`);
                 } catch (error) {
@@ -1701,7 +1701,6 @@ async function handlePhase1Command(interaction, sharedState) {
 
             if (warningEmbed) {
                 await interaction.editReply({
-                    content: `<@${interaction.user.id}>`,
                     embeds: [warningEmbed.embed],
                     components: [warningEmbed.row]
                 });
@@ -2265,7 +2264,6 @@ async function handlePhase2Command(interaction, sharedState) {
 
             if (warningEmbed) {
                 await interaction.editReply({
-                    content: `<@${interaction.user.id}>`,
                     embeds: [warningEmbed.embed],
                     components: [warningEmbed.row]
                 });
@@ -2640,18 +2638,20 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
             // Po update() trzeba użyć followUp() zamiast editReply()
             if (interaction.replied) {
                 await interaction.followUp({
-                    content: `<@${interaction.user.id}>`,
                     embeds: [summaryEmbed.embed],
                     components: [summaryEmbed.row]
                 });
             } else {
                 await interaction.editReply({
-                    content: `<@${interaction.user.id}>`,
                     embeds: [summaryEmbed.embed],
                     components: [summaryEmbed.row]
                 });
             }
             logger.info(`[PHASE2] ✅ Podsumowanie wysłane pomyślnie`);
+
+            // Wyślij ghost ping zamiast zwykłego pingu
+            const channel = await interaction.client.channels.fetch(interaction.channelId);
+            await sendGhostPing(channel, interaction.user.id, session);
         } catch (replyError) {
             logger.error(`[PHASE2] ❌ Błąd podczas wysyłania odpowiedzi:`, replyError);
             logger.error(`[PHASE2] ❌ Reply error message:`, replyError?.message);
