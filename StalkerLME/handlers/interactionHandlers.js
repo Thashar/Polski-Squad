@@ -4630,9 +4630,9 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
     const maxScore = sortedPlayers[0]?.score || 1;
 
-    // Oblicz TOP30 dla rund 1, 2, 3
+    // Oblicz TOP30 dla rund 1, 2, 3 oraz sumy
     let top30Text = '';
-    if (view === 'round1' || view === 'round2' || view === 'round3') {
+    if (view === 'round1' || view === 'round2' || view === 'round3' || view === 'summary') {
         const top30Players = sortedPlayers.slice(0, 30);
         const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
         top30Text = `**TOP30:** ${top30Sum.toLocaleString('pl-PL')} pkt\n`;
@@ -4741,11 +4741,11 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
     const maxScore = sortedPlayers[0]?.score || 1;
 
-    // Oblicz TOP30 dla Fazy 1 oraz rund 1, 2, 3 i pobierz historyczne rekordy
+    // Oblicz TOP30 dla Fazy 1 oraz rund 1, 2, 3 i sumy Fazy 2 - pobierz historyczne rekordy
     let descriptionExtra = '';
     let playerHistoricalRecords = new Map(); // userId -> bestScore
 
-    if (view === 'phase1' || view === 'round1' || view === 'round2' || view === 'round3') {
+    if (view === 'phase1' || view === 'round1' || view === 'round2' || view === 'round3' || view === 'summary') {
         const top30Players = sortedPlayers.slice(0, 30);
         const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
 
