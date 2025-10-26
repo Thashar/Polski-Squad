@@ -880,6 +880,77 @@ function hasPermission(member, allowedRoles) {
     return allowedRoles.some(roleId => member.roles.cache.has(roleId));
 }
 
+/**
+ * Wysyła "ghost ping" - wiadomość z pingiem, która jest usuwana po 1 sekundzie
+ * Jeśli użytkownik nie kliknie przycisku, ping jest ponawiany co 30 sekund
+ * @param {Object} channel - Kanał Discord
+ * @param {string} userId - ID użytkownika do pingowania
+ * @param {Object} session - Sesja phaseService (opcjonalne - do zapisywania timerów)
+ */
+async function sendGhostPing(channel, userId, session = null) {
+    try {
+        const pingMessage = await channel.send({
+            content: `<@${userId}> Analiza zdjęć została zakończona, kontynuuj!`
+        });
+
+        // Usuń wiadomość po 1 sekundzie
+        setTimeout(async () => {
+            try {
+                await pingMessage.delete();
+            } catch (error) {
+                logger.error('[GHOST_PING] ❌ Nie udało się usunąć ghost pingu:', error.message);
+            }
+        }, 1000);
+
+        logger.info(`[GHOST_PING] 📨 Wysłano ghost ping do użytkownika ${userId}`);
+
+        // Jeśli mamy sesję, ustaw timer do ponawiania pingu co 30 sekund
+        if (session) {
+            // Wyczyść poprzedni timer jeśli istnieje
+            if (session.pingTimer) {
+                clearInterval(session.pingTimer);
+            }
+
+            // Ustaw nowy timer
+            session.pingTimer = setInterval(async () => {
+                try {
+                    const repeatPingMessage = await channel.send({
+                        content: `<@${userId}> Analiza zdjęć została zakończona, kontynuuj!`
+                    });
+
+                    setTimeout(async () => {
+                        try {
+                            await repeatPingMessage.delete();
+                        } catch (error) {
+                            logger.error('[GHOST_PING] ❌ Nie udało się usunąć powtarzanego ghost pingu:', error.message);
+                        }
+                    }, 1000);
+
+                    logger.info(`[GHOST_PING] 🔄 Powtórzono ghost ping do użytkownika ${userId}`);
+                } catch (error) {
+                    logger.error('[GHOST_PING] ❌ Błąd podczas powtarzania ghost pingu:', error.message);
+                }
+            }, 30000); // 30 sekund
+
+            logger.info(`[GHOST_PING] ⏰ Ustawiono timer ponawiania pingów co 30s dla sesji ${session.sessionId}`);
+        }
+    } catch (error) {
+        logger.error('[GHOST_PING] ❌ Błąd wysyłania ghost pingu:', error.message);
+    }
+}
+
+/**
+ * Zatrzymuje ponawianie ghost pingów dla sesji
+ * @param {Object} session - Sesja phaseService
+ */
+function stopGhostPing(session) {
+    if (session && session.pingTimer) {
+        clearInterval(session.pingTimer);
+        session.pingTimer = null;
+        logger.info(`[GHOST_PING] ⏹️ Zatrzymano ponawianie ghost pingów dla sesji ${session.sessionId}`);
+    }
+}
+
 function createConfirmationButtons(action) {
     return new ActionRowBuilder()
         .addComponents(
@@ -1877,10 +1948,13 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
             if (firstConflict) {
                 const conflictEmbed = phaseService.createConflictEmbed(firstConflict, 1, conflicts.length, 1);
                 await interaction.editReply({
-                    content: `<@${interaction.user.id}>`,
                     embeds: [conflictEmbed.embed],
                     components: [conflictEmbed.row]
                 });
+
+                // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
+                const channel = await interaction.client.channels.fetch(interaction.channelId);
+                await sendGhostPing(channel, interaction.user.id, session);
             }
         } else {
             // Brak konfliktów - przejdź do finalnego podsumowania
@@ -1916,6 +1990,9 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
         return;
     }
 
+    // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+    stopGhostPing(session);
+
     // Wyciągnij nick i wartość z customId
     // Format: phase1_resolve_{nick}_{value}
     const parts = interaction.customId.split('_');
@@ -1941,10 +2018,13 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
 
         const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts, 1);
         await interaction.update({
-            content: `<@${interaction.user.id}>`,
             embeds: [conflictEmbed.embed],
             components: [conflictEmbed.row]
         });
+
+        // Wyślij nowy ghost ping dla następnego konfliktu
+        const channel = await interaction.client.channels.fetch(interaction.channelId);
+        await sendGhostPing(channel, interaction.user.id, session);
     } else {
         logger.info(`[PHASE1] Wszystkie konflikty rozstrzygnięte!`);
         // Wszystkie konflikty rozstrzygnięte - pokaż finalne podsumowanie
@@ -1978,6 +2058,9 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         });
         return;
     }
+
+    // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+    stopGhostPing(session);
 
     if (interaction.customId === 'phase1_cancel_save') {
         // Anuluj - usuń pliki temp i zwolnij kolejkę
@@ -2065,10 +2148,13 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     session.stage = 'final_confirmation';
 
     await interaction.editReply({
-        content: `<@${interaction.user.id}>`,
         embeds: [summaryEmbed.embed],
         components: [summaryEmbed.row]
     });
+
+    // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
+    const channel = await interaction.client.channels.fetch(interaction.channelId);
+    await sendGhostPing(channel, interaction.user.id, session);
 }
 
 // =============== PHASE 2 HANDLERS ===============
@@ -2302,6 +2388,9 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
 
     // Jeśli to przycisk rozwiązywania konfliktu
     if (interaction.customId.startsWith('phase2_resolve_')) {
+        // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+        stopGhostPing(session);
+
         const parts = interaction.customId.split('_');
         const nick = parts[2];
         const chosenValue = parseInt(parts[3]);
@@ -2322,10 +2411,13 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                     2
                 );
                 await interaction.update({
-                    content: `<@${interaction.user.id}>`,
                     embeds: [conflictEmbed.embed],
                     components: [conflictEmbed.row]
                 });
+
+                // Wyślij nowy ghost ping dla następnego konfliktu
+                const channel = await interaction.client.channels.fetch(interaction.channelId);
+                await sendGhostPing(channel, interaction.user.id, session);
                 return;
             }
         }
@@ -2354,10 +2446,13 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             session.currentConflictIndex = 0;
             const conflictEmbed = phaseService.createConflictEmbed(conflicts[0], 0, conflicts.length, 2);
             await interaction.editReply({
-                content: `<@${interaction.user.id}>`,
                 embeds: [conflictEmbed.embed],
                 components: [conflictEmbed.row]
             });
+
+            // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
+            const channel = await interaction.client.channels.fetch(interaction.channelId);
+            await sendGhostPing(channel, interaction.user.id, session);
         } else {
             // Brak konfliktów - pokaż podsumowanie rundy
             await showPhase2RoundSummary(interaction, session, phaseService);
@@ -2382,6 +2477,9 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         });
         return;
     }
+
+    // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+    stopGhostPing(session);
 
     if (interaction.customId === 'phase2_cancel_save') {
         // Anuluj zapis i zwolnij kolejkę
@@ -2571,6 +2669,9 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
         return;
     }
 
+    // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+    stopGhostPing(session);
+
     // Sprawdź czy to była ostatnia runda
     if (session.currentRound < 3) {
         // Zapisz wyniki bieżącej rundy i przejdź do następnej
@@ -2652,19 +2753,19 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
     // Użyj odpowiedniej metody w zależności od stanu interakcji
     if (interaction.replied || interaction.deferred) {
         await interaction.editReply({
-            content: `<@${interaction.user.id}>`,
             embeds: [embed],
             components: [row]
         });
     } else {
         await interaction.update({
-            content: `<@${interaction.user.id}>`,
             embeds: [embed],
             components: [row]
         });
     }
 
-    logger.info(`[PHASE2] ✅ Podsumowanie rundy ${session.currentRound} wysłane`);
+    // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
+    const channel = await interaction.client.channels.fetch(interaction.channelId);
+    await sendGhostPing(channel, interaction.user.id, session);
 }
 
 // =============== DODAJ HANDLERS ===============

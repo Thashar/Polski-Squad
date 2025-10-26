@@ -479,6 +479,13 @@ class PhaseService {
             session.timeout = null;
         }
 
+        // Zatrzymaj timer ghost pingów jeśli istnieje
+        if (session.pingTimer) {
+            clearInterval(session.pingTimer);
+            session.pingTimer = null;
+            logger.info(`[PHASE${session.phase || 1}] ⏹️ Zatrzymano timer ghost pingów dla sesji: ${sessionId}`);
+        }
+
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
 
