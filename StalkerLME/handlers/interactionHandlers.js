@@ -1951,10 +1951,6 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
                     embeds: [conflictEmbed.embed],
                     components: [conflictEmbed.row]
                 });
-
-                // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
-                const channel = await interaction.client.channels.fetch(interaction.channelId);
-                await sendGhostPing(channel, interaction.user.id, session);
             }
         } else {
             // Brak konfliktów - przejdź do finalnego podsumowania
@@ -2021,10 +2017,6 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
             embeds: [conflictEmbed.embed],
             components: [conflictEmbed.row]
         });
-
-        // Wyślij nowy ghost ping dla następnego konfliktu
-        const channel = await interaction.client.channels.fetch(interaction.channelId);
-        await sendGhostPing(channel, interaction.user.id, session);
     } else {
         logger.info(`[PHASE1] Wszystkie konflikty rozstrzygnięte!`);
         // Wszystkie konflikty rozstrzygnięte - pokaż finalne podsumowanie
@@ -2414,10 +2406,6 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                     embeds: [conflictEmbed.embed],
                     components: [conflictEmbed.row]
                 });
-
-                // Wyślij nowy ghost ping dla następnego konfliktu
-                const channel = await interaction.client.channels.fetch(interaction.channelId);
-                await sendGhostPing(channel, interaction.user.id, session);
                 return;
             }
         }
@@ -2449,10 +2437,6 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
                 embeds: [conflictEmbed.embed],
                 components: [conflictEmbed.row]
             });
-
-            // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
-            const channel = await interaction.client.channels.fetch(interaction.channelId);
-            await sendGhostPing(channel, interaction.user.id, session);
         } else {
             // Brak konfliktów - pokaż podsumowanie rundy
             await showPhase2RoundSummary(interaction, session, phaseService);
