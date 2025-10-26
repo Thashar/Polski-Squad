@@ -11,6 +11,15 @@ class TimerService {
     }
 
     /**
+     * Pobiera aktualny czas w polskiej strefie czasowej
+     * @returns {Date} - Data w polskim czasie
+     */
+    getPolishTime() {
+        const now = new Date(); // UTC timestamp
+        return new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+    }
+
+    /**
      * Ustawia klienta Discord
      * @param {Client} client - Klient Discord
      */
@@ -192,7 +201,7 @@ class TimerService {
                             const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
                             if (membersWithRole.size > 0) {
                                 const papalMember = membersWithRole.first();
-                                const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
+                                const timeSincePassword = this.getPolishTime() - this.gameService.triggerSetTimestamp;
                                 const timeText = formatTimeDifference(timeSincePassword);
                                 await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Przypomnienie: Minęło już **${timeText}** od ustawienia hasła. Dodaj podpowiedź dla graczy. 💡`);
                                 await this.setSecondHintReminder();
@@ -221,7 +230,7 @@ class TimerService {
                         const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
                         if (membersWithRole.size > 0) {
                             const papalMember = membersWithRole.first();
-                            const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
+                            const timeSincePassword = this.getPolishTime() - this.gameService.triggerSetTimestamp;
                             const timeText = formatTimeDifference(timeSincePassword);
                             await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Drugie przypomnienie: Minęło już **${timeText}** od ustawienia hasła bez podpowiedzi. Za **30 minut** stracisz rolę papieską! 🚨`);
                             await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
@@ -250,7 +259,7 @@ class TimerService {
                     if (guild && triggerChannel && triggerChannel.isTextBased()) {
                         const member = guild.members.cache.get(userId);
                         if (member && member.roles.cache.has(this.config.roles.papal)) {
-                            const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
+                            const timeSincePassword = this.getPolishTime() - this.gameService.triggerSetTimestamp;
                             const timeText = formatTimeDifference(timeSincePassword);
                             await triggerChannel.send(`<@${userId}> ⚠️ Ostatnie ostrzeżenie! Czas bez podpowiedzi: **${timeText}**. Za **15 minut** stracisz rolę papieską! 🚨`);
                             await this.setRecurringReminders(userId);
@@ -305,7 +314,7 @@ class TimerService {
                             const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
                             if (membersWithRole.size > 0) {
                                 const papalMember = membersWithRole.first();
-                                const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
+                                const timeSinceLastHint = this.getPolishTime() - this.gameService.lastHintTimestamp;
                                 const timeText = formatTimeDifference(timeSinceLastHint);
                                 await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
                                 await this.setHintReminderTimer();
@@ -330,7 +339,7 @@ class TimerService {
         if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.lastHintTimestamp) {
 
             // Oblicz ile czasu już minęło od ostatniej podpowiedzi
-            const now = new Date();
+            const now = this.getPolishTime();
             const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
             const timeUntilTimeout = this.gameService.HINT_TIMEOUT_TIME - timeSinceLastHint;
 
@@ -458,7 +467,7 @@ class TimerService {
             return;
         }
 
-        const now = new Date();
+        const now = this.getPolishTime();
         const timeSincePassword = now - this.gameService.triggerSetTimestamp;
 
         // Jeśli brak podpowiedzi
@@ -493,7 +502,7 @@ class TimerService {
                                         const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
                                         if (membersWithRole.size > 0) {
                                             const papalMember = membersWithRole.first();
-                                            const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
+                                            const timeSincePassword = this.getPolishTime() - this.gameService.triggerSetTimestamp;
                                             const timeText = formatTimeDifference(timeSincePassword);
                                             await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Przypomnienie: Minęło już **${timeText}** od ustawienia hasła. Dodaj podpowiedź dla graczy. 💡`);
                                             await this.setSecondHintReminder();
@@ -517,7 +526,7 @@ class TimerService {
                                         const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
                                         if (membersWithRole.size > 0) {
                                             const papalMember = membersWithRole.first();
-                                            const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
+                                            const timeSincePassword = this.getPolishTime() - this.gameService.triggerSetTimestamp;
                                             const timeText = formatTimeDifference(timeSincePassword);
                                             await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Drugie przypomnienie: Minęło już **${timeText}** od ustawienia hasła bez podpowiedzi. Za **30 minut** stracisz rolę papieską! 🚨`);
                                             await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
@@ -580,7 +589,7 @@ class TimerService {
                             const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
                             if (membersWithRole.size > 0) {
                                 const papalMember = membersWithRole.first();
-                                const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
+                                const timeSinceLastHint = this.getPolishTime() - this.gameService.lastHintTimestamp;
                                 const timeText = formatTimeDifference(timeSinceLastHint);
                                 await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
                                 // Ustaw kolejny timer
