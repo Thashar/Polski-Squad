@@ -2135,7 +2135,32 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     const stats = phaseService.calculateStatistics(finalResults);
     const weekInfo = phaseService.getCurrentWeekInfo();
 
+    // Przygotuj listę graczy z paskami postępu
+    const players = Array.from(finalResults.entries()).map(([nick, score]) => ({
+        displayName: nick,
+        score: score,
+        userId: null // W phase1 nie mamy userId w finalResults
+    }));
+
+    const sortedPlayers = players.sort((a, b) => b.score - a.score);
+    const maxScore = sortedPlayers[0]?.score || 1;
+
+    const resultsText = sortedPlayers.map((player, index) => {
+        const position = index + 1;
+        const barLength = 16;
+        const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
+        const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+        return `${progressBar} ${position}. ${player.displayName} - ${player.score.toLocaleString('pl-PL')}`;
+    }).join('\n');
+
     const summaryEmbed = phaseService.createFinalSummaryEmbed(stats, weekInfo, session.clan, 1);
+
+    // Dodaj listę graczy do description
+    const clanName = phaseService.config.roleDisplayNames[session.clan] || session.clan;
+    summaryEmbed.embed.setDescription(
+        `**Klan:** ${clanName}\n**Tydzień:** ${weekInfo.weekNumber}/${weekInfo.year}\n**TOP30:** ${stats.top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText}\n\n✅ Przeanalizowano wszystkie zdjęcia i rozstrzygnięto konflikty.`
+    );
 
     session.stage = 'final_confirmation';
 
@@ -2701,30 +2726,34 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
     const finalResults = phaseService.getFinalResults(session);
     const stats = phaseService.calculateStatistics(finalResults);
 
-    // Zbierz nicki graczy z wynikiem 0
-    const playersWithZero = [];
-    for (const [nick, score] of finalResults) {
-        if (score === 0) {
-            playersWithZero.push(nick);
-        }
-    }
+    // Przygotuj listę graczy z paskami postępu
+    const players = Array.from(finalResults.entries()).map(([nick, score]) => ({
+        displayName: nick,
+        score: score,
+        userId: null
+    }));
+
+    const sortedPlayers = players.sort((a, b) => b.score - a.score);
+    const maxScore = sortedPlayers[0]?.score || 1;
+
+    const resultsText = sortedPlayers.map((player, index) => {
+        const position = index + 1;
+        const barLength = 16;
+        const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
+        const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+        return `${progressBar} ${position}. ${player.displayName} - ${player.score.toLocaleString('pl-PL')}`;
+    }).join('\n');
+
+    const weekInfo = phaseService.getCurrentWeekInfo();
+    const clanName = phaseService.config.roleDisplayNames[session.clan] || session.clan;
 
     const embed = new EmbedBuilder()
         .setTitle(`✅ Runda ${session.currentRound}/3 - Podsumowanie`)
+        .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekInfo.weekNumber}/${weekInfo.year}\n**TOP30:** ${stats.top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText}`)
         .setColor('#00FF00')
-        .addFields(
-            { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
-            { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
-            { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
-            { name: '🏆 Suma TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false }
-        )
+        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length}` })
         .setTimestamp();
-
-    // Dodaj listę graczy z zerem jeśli są
-    if (playersWithZero.length > 0) {
-        const zeroList = playersWithZero.join(', ');
-        embed.addFields({ name: '📋 Gracze z wynikiem 0', value: zeroList, inline: false });
-    }
 
     const row = new ActionRowBuilder()
         .addComponents(
@@ -5110,5 +5139,7 @@ module.exports = {
     handleInteraction,
     registerSlashCommands,
     unregisterCommand,
-    confirmationData
+    confirmationData,
+    sendGhostPing,
+    stopGhostPing
 };

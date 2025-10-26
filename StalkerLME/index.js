@@ -3,7 +3,7 @@ const cron = require('node-cron');
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
-const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
+const { handleInteraction, registerSlashCommands, sendGhostPing } = require('./handlers/interactionHandlers');
 
 const DatabaseService = require('./services/databaseService');
 const OCRService = require('./services/ocrService');
@@ -204,10 +204,13 @@ client.on(Events.MessageCreate, async (message) => {
 
                 if (session.publicInteraction) {
                     await session.publicInteraction.editReply({
-                        content: `<@${message.author.id}>`,
                         embeds: [confirmation.embed],
                         components: [confirmation.row]
                     });
+
+                    // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
+                    const channel = await client.channels.fetch(session.channelId);
+                    await sendGhostPing(channel, message.author.id, session);
                 }
             }
         }
