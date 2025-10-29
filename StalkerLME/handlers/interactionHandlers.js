@@ -2167,10 +2167,6 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
         embeds: [summaryEmbed.embed],
         components: [summaryEmbed.row]
     });
-
-    // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
-    const channel = await interaction.client.channels.fetch(interaction.channelId);
-    await sendGhostPing(channel, interaction.user.id, session);
 }
 
 // =============== PHASE 2 HANDLERS ===============
@@ -2648,10 +2644,6 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
                 });
             }
             logger.info(`[PHASE2] ✅ Podsumowanie wysłane pomyślnie`);
-
-            // Wyślij ghost ping zamiast zwykłego pingu
-            const channel = await interaction.client.channels.fetch(interaction.channelId);
-            await sendGhostPing(channel, interaction.user.id, session);
         } catch (replyError) {
             logger.error(`[PHASE2] ❌ Błąd podczas wysyłania odpowiedzi:`, replyError);
             logger.error(`[PHASE2] ❌ Reply error message:`, replyError?.message);
@@ -2775,10 +2767,6 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
             components: [row]
         });
     }
-
-    // Wyślij ghost ping zamiast pingu w edytowanej wiadomości
-    const channel = await interaction.client.channels.fetch(interaction.channelId);
-    await sendGhostPing(channel, interaction.user.id, session);
 }
 
 // =============== DODAJ HANDLERS ===============
