@@ -305,8 +305,21 @@ class ClanRoleChangeService {
                 name: bannerFileName
             });
 
+            // Mapowanie ról klanowych do informacji o aplikacji
+            const clanInfo = {
+                [this.config.roles.mainClan]: 'Aplikuj do: Polski Squad ID: 42578',
+                [this.config.roles.clan2]: 'Aplikuj do: PolskiSquad² ID: 202226',
+                [this.config.roles.clan1]: 'Aplikuj do: PolskiSquad¹ ID: 125634',
+                [this.config.roles.clan0]: 'Aplikuj do: PolskiSquad⁰ ID: 11616'
+            };
+
+            const clanApplicationInfo = clanInfo[newRole] || '';
+            const message = clanApplicationInfo
+                ? `${member} zmieniasz klan!\n${clanApplicationInfo}`
+                : `${member} zmieniasz klan!`;
+
             await channel.send({
-                content: `${member} zaszły zmiany!`,
+                content: message,
                 files: [attachment]
             });
 
