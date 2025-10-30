@@ -22,43 +22,19 @@ async function assignClanRole(member, attack, user, config, client) {
     logger.info(`[CLAN_ASSIGN] Przypisywanie klanu dla ${user.username} z atakiem ${attack}`);
     await safeAddRole(member, config.roles.verified);
     let targetChannelId = null;
-    
-    if (attack < 100000) {
+
+    // Wiadomość dla niezakwalifikowanych - pozostawiona w kodzie, ale nigdy nie wywoływana
+    if (false && attack < 0) {
         logger.info(`[CLAN_ASSIGN] Atak ${attack} - nie kwalifikuje się do żadnego klanu`);
         const welcomeChannel = client.channels.cache.get(config.channels.welcome);
         if (welcomeChannel) {
             await welcomeChannel.send(`${user}${config.messages.notQualified}`);
         }
-        // Ustawiam targetChannelId na kanał welcome dla niekwalifikujących się
         targetChannelId = config.channels.welcome;
     } else {
         await delay(1000);
-        
-        if (attack >= 100000 && attack <= 599999) {
-            logger.info(`[CLAN_ASSIGN] Przypisano do Clan0 (atak: ${attack})`);
-            await safeAddRole(member, config.roles.clan0);
-            targetChannelId = config.channels.clan0;
-            const channel = client.channels.cache.get(targetChannelId);
-            if (channel) {
-                await channel.send(`# ${user}\n${config.messages.clan0Welcome}`);
-            }
-        } else if (attack >= 600000 && attack <= 799999) {
-            logger.info(`[CLAN_ASSIGN] Przypisano do Clan1 (atak: ${attack})`);
-            await safeAddRole(member, config.roles.clan1);
-            targetChannelId = config.channels.clan1;
-            const channel = client.channels.cache.get(targetChannelId);
-            if (channel) {
-                await channel.send(`# ${user}\n${config.messages.clan1Welcome}`);
-            }
-        } else if (attack >= 800000 && attack <= 999999) {
-            logger.info(`[CLAN_ASSIGN] Przypisano do Clan2 (atak: ${attack})`);
-            await safeAddRole(member, config.roles.clan2);
-            targetChannelId = config.channels.clan2;
-            const channel = client.channels.cache.get(targetChannelId);
-            if (channel) {
-                await channel.send(`# ${user}\n${config.messages.clan2Welcome}`);
-            }
-        } else if (attack >= 1200000) {
+
+        if (attack >= 1500000) {
             logger.info(`[CLAN_ASSIGN] Przypisano do MainClan (atak: ${attack})`);
             await safeAddRole(member, config.roles.mainClan);
             targetChannelId = config.channels.mainClan;
@@ -66,7 +42,7 @@ async function assignClanRole(member, attack, user, config, client) {
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.mainClanWelcome}`);
             }
-        } else if (attack >= 1000000 && attack <= 1199999) {
+        } else if (attack >= 1000000) {
             logger.info(`[CLAN_ASSIGN] Przypisano do Clan2 (atak: ${attack})`);
             await safeAddRole(member, config.roles.clan2);
             targetChannelId = config.channels.clan2;
@@ -74,9 +50,25 @@ async function assignClanRole(member, attack, user, config, client) {
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.clan2Welcome}`);
             }
+        } else if (attack >= 500000) {
+            logger.info(`[CLAN_ASSIGN] Przypisano do Clan1 (atak: ${attack})`);
+            await safeAddRole(member, config.roles.clan1);
+            targetChannelId = config.channels.clan1;
+            const channel = client.channels.cache.get(targetChannelId);
+            if (channel) {
+                await channel.send(`# ${user}\n${config.messages.clan1Welcome}`);
+            }
+        } else {
+            logger.info(`[CLAN_ASSIGN] Przypisano do Clan0 (atak: ${attack})`);
+            await safeAddRole(member, config.roles.clan0);
+            targetChannelId = config.channels.clan0;
+            const channel = client.channels.cache.get(targetChannelId);
+            if (channel) {
+                await channel.send(`# ${user}\n${config.messages.clan0Welcome}`);
+            }
         }
     }
-    
+
     logger.info(`[CLAN_ASSIGN] ✅ Zakończono przypisywanie klanu dla ${user.username}`);
     return targetChannelId;
 }
