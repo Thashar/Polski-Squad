@@ -22,15 +22,44 @@ class ClanRoleChangeService {
             [config.roles.clan0]: { level: 1, name: '0' },
             [config.roles.verified]: { level: 0, name: 'Verified' }
         };
+
+        // Cache ról użytkowników (userId -> roleIds[])
+        // Używamy własnego cache, ponieważ oldMember.roles może być już zaktualizowany
+        this.memberRolesCache = new Map();
     }
 
     /**
      * Inicjalizuje serwis
      * @param {Client} client - Klient Discord
      */
-    initialize(client) {
+    async initialize(client) {
         this.client = client;
+        await this.buildInitialCache();
         logger.info('Serwis zmian ról klanowych został zainicjalizowany');
+    }
+
+    /**
+     * Buduje początkowy cache ról wszystkich członków
+     */
+    async buildInitialCache() {
+        try {
+            logger.info('[CLAN_ROLE] Budowanie cache ról członków...');
+            let totalCached = 0;
+
+            for (const guild of this.client.guilds.cache.values()) {
+                const members = await guild.members.fetch({ limit: 1000 });
+
+                for (const member of members.values()) {
+                    const roleIds = Array.from(member.roles.cache.keys());
+                    this.memberRolesCache.set(member.user.id, roleIds);
+                    totalCached++;
+                }
+            }
+
+            logger.info(`[CLAN_ROLE] Cache gotowy - ${totalCached} członków`);
+        } catch (error) {
+            logger.error('[CLAN_ROLE] ❌ Błąd budowania cache:', error);
+        }
     }
 
     /**
@@ -40,52 +69,60 @@ class ClanRoleChangeService {
      */
     async handleRoleChange(oldMember, newMember) {
         try {
-            // Debug log
-            logger.info(`[CLAN_ROLE] Sprawdzanie zmian ról dla ${newMember.user.tag}`);
+            const userId = newMember.user.id;
 
-            // Pobierz stare i nowe role (ID)
-            const oldRoleIds = Array.from(oldMember.roles.cache.keys());
-            const newRoleIds = Array.from(newMember.roles.cache.keys());
+            // Pobierz POPRZEDNIE role z naszego cache (nie z oldMember!)
+            const previousRoleIds = this.memberRolesCache.get(userId) || [];
 
-            logger.info(`[CLAN_ROLE] Stare role: ${oldRoleIds.join(', ')}`);
-            logger.info(`[CLAN_ROLE] Nowe role: ${newRoleIds.join(', ')}`);
+            // Pobierz AKTUALNE role z fresh member
+            let freshMember;
+            try {
+                freshMember = await newMember.guild.members.fetch(userId);
+            } catch (fetchError) {
+                freshMember = newMember;
+            }
+            const currentRoleIds = Array.from(freshMember.roles.cache.keys());
+
+            // Aktualizuj cache
+            this.memberRolesCache.set(userId, currentRoleIds);
 
             // Sprawdź czy użytkownik otrzymał rolę Lider
-            if (!oldMember.roles.cache.has(this.leaderRole) && newMember.roles.cache.has(this.leaderRole)) {
-                logger.info(`[CLAN_ROLE] Wykryto nadanie roli Lider dla ${newMember.user.tag}`);
-                await this.sendLeadershipRoleNotification(newMember, 'AwansLider.png');
+            const hadLeaderRole = previousRoleIds.includes(this.leaderRole);
+            const hasLeaderRole = currentRoleIds.includes(this.leaderRole);
+
+            if (!hadLeaderRole && hasLeaderRole) {
+                logger.info(`[CLAN_ROLE] Wykryto nadanie roli Lider dla ${freshMember.user.tag}`);
+                await this.sendLeadershipRoleNotification(freshMember, 'AwansLider.png');
                 return;
             }
 
             // Sprawdź czy użytkownik otrzymał rolę Vice Lider
-            if (!oldMember.roles.cache.has(this.viceLeaderRole) && newMember.roles.cache.has(this.viceLeaderRole)) {
-                logger.info(`[CLAN_ROLE] Wykryto nadanie roli Vice Lider dla ${newMember.user.tag}`);
-                await this.sendLeadershipRoleNotification(newMember, 'AwansViceLider.png');
+            const hadViceLeaderRole = previousRoleIds.includes(this.viceLeaderRole);
+            const hasViceLeaderRole = currentRoleIds.includes(this.viceLeaderRole);
+
+            if (!hadViceLeaderRole && hasViceLeaderRole) {
+                logger.info(`[CLAN_ROLE] Wykryto nadanie roli Vice Lider dla ${freshMember.user.tag}`);
+                await this.sendLeadershipRoleNotification(freshMember, 'AwansViceLider.png');
                 return;
             }
 
-            const oldClanRole = this.getClanRole(oldMember.roles.cache);
-            const newClanRole = this.getClanRole(newMember.roles.cache);
-
-            logger.info(`[CLAN_ROLE] Porównanie ról klanowych: stara=${oldClanRole || 'brak'}, nowa=${newClanRole || 'brak'}`);
+            // Sprawdź zmiany ról klanowych
+            const oldClanRole = this.getClanRoleFromIds(previousRoleIds);
+            const newClanRole = this.getClanRoleFromIds(currentRoleIds);
 
             // Jeśli nie ma zmiany roli klanowej, return
             if (oldClanRole === newClanRole) {
-                logger.info(`[CLAN_ROLE] Brak zmiany roli klanowej dla ${newMember.user.tag}`);
                 return;
             }
 
-            logger.info(`[CLAN_ROLE] Wykryto zmianę roli klanowej dla ${newMember.user.tag}: ${oldClanRole || 'brak'} -> ${newClanRole || 'brak'}`);
+            logger.info(`[CLAN_ROLE] Wykryto zmianę roli klanowej dla ${freshMember.user.tag}: ${oldClanRole || 'brak'} -> ${newClanRole || 'brak'}`);
 
             // Określ typ zmiany
             const changeType = this.determineChangeType(oldClanRole, newClanRole);
 
-            logger.info(`[CLAN_ROLE] Typ zmiany: ${changeType}`);
-
             if (changeType) {
-                await this.sendRoleChangeNotification(newMember, changeType, newClanRole);
-            } else {
-                logger.info(`[CLAN_ROLE] Nie określono typu zmiany - pomijam`);
+                logger.info(`[CLAN_ROLE] Typ zmiany: ${changeType}`);
+                await this.sendRoleChangeNotification(freshMember, changeType, newClanRole);
             }
         } catch (error) {
             logger.error(`[CLAN_ROLE] ❌ Błąd podczas obsługi zmiany roli:`, error);
@@ -94,11 +131,11 @@ class ClanRoleChangeService {
     }
 
     /**
-     * Pobiera najwyższą rolę klanową użytkownika
-     * @param {Collection} roles - Kolekcja ról użytkownika
+     * Pobiera najwyższą rolę klanową użytkownika z tablicy ID ról
+     * @param {Array<string>} roleIds - Tablica ID ról użytkownika
      * @returns {string|null} - ID roli klanowej lub null
      */
-    getClanRole(roles) {
+    getClanRoleFromIds(roleIds) {
         const clanRoleIds = [
             this.config.roles.mainClan,
             this.config.roles.clan2,
@@ -108,17 +145,27 @@ class ClanRoleChangeService {
 
         // Znajdź najwyższą rolę klanową (według hierarchii)
         for (const roleId of clanRoleIds) {
-            if (roles.has(roleId)) {
+            if (roleIds.includes(roleId)) {
                 return roleId;
             }
         }
 
         // Jeśli nie ma żadnej roli klanowej, sprawdź czy ma verified
-        if (roles.has(this.config.roles.verified)) {
+        if (roleIds.includes(this.config.roles.verified)) {
             return this.config.roles.verified;
         }
 
         return null;
+    }
+
+    /**
+     * Pobiera najwyższą rolę klanową użytkownika
+     * @param {Collection} roles - Kolekcja ról użytkownika
+     * @returns {string|null} - ID roli klanowej lub null
+     */
+    getClanRole(roles) {
+        const roleIds = Array.from(roles.keys());
+        return this.getClanRoleFromIds(roleIds);
     }
 
     /**
