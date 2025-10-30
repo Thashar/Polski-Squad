@@ -11,8 +11,9 @@ class ClanRoleChangeService {
         this.notificationChannelId = '1194396792981311489';
 
         // Specjalne role kierownicze
-        this.leaderRole = '1196586785413795850';
-        this.viceLeaderRole = '1196911721588199464';
+        this.leaderRole = config.roles.leader;
+        this.viceLeaderRole = config.roles.viceLeader;
+        this.viceLeaderMainRole = config.roles.viceLeaderMain;
 
         // Hierarchia klanów (od najwyższego do najniższego)
         this.clanHierarchy = {
@@ -76,7 +77,7 @@ class ClanRoleChangeService {
             const currentRoleIds = Array.from(freshMember.roles.cache.keys());
             this.memberRolesCache.set(userId, currentRoleIds);
 
-            // Sprawdź czy użytkownik otrzymał rolę Lider
+            // Sprawdź czy użytkownik otrzymał rolę Lider (Clan2/1/0)
             const hadLeaderRole = previousRoleIds.includes(this.leaderRole);
             const hasLeaderRole = currentRoleIds.includes(this.leaderRole);
 
@@ -85,7 +86,16 @@ class ClanRoleChangeService {
                 return;
             }
 
-            // Sprawdź czy użytkownik otrzymał rolę Vice Lider
+            // Sprawdź czy użytkownik otrzymał rolę Vice Lider Main
+            const hadViceLeaderMainRole = previousRoleIds.includes(this.viceLeaderMainRole);
+            const hasViceLeaderMainRole = currentRoleIds.includes(this.viceLeaderMainRole);
+
+            if (!hadViceLeaderMainRole && hasViceLeaderMainRole) {
+                await this.sendLeadershipRoleNotification(freshMember, 'AwansViceLiderMain.png', 'Vice Lider Main');
+                return;
+            }
+
+            // Sprawdź czy użytkownik otrzymał rolę Vice Lider (Clan2/1/0)
             const hadViceLeaderRole = previousRoleIds.includes(this.viceLeaderRole);
             const hasViceLeaderRole = currentRoleIds.includes(this.viceLeaderRole);
 

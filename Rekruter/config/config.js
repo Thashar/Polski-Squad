@@ -19,7 +19,10 @@ const requiredEnvVars = [
     'CLAN0_ROLE',
     'CLAN1_ROLE',
     'CLAN2_ROLE',
-    'MAIN_CLAN_ROLE'
+    'MAIN_CLAN_ROLE',
+    'LEADER_ROLE',
+    'VICE_LEADER_ROLE',
+    'VICE_LEADER_MAIN_ROLE'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -46,7 +49,10 @@ module.exports = {
         clan0: process.env.CLAN0_ROLE,
         clan1: process.env.CLAN1_ROLE,
         clan2: process.env.CLAN2_ROLE,
-        mainClan: process.env.MAIN_CLAN_ROLE
+        mainClan: process.env.MAIN_CLAN_ROLE,
+        leader: process.env.LEADER_ROLE,
+        viceLeader: process.env.VICE_LEADER_ROLE,
+        viceLeaderMain: process.env.VICE_LEADER_MAIN_ROLE
     },
     
     // Konfiguracja monitorowania użytkowników bez ról
