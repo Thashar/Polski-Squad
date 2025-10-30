@@ -109,6 +109,11 @@ class ClanRoleChangeService {
             const removedRoles = previousRoleIds.filter(id => !currentRoleIds.includes(id));
             logger.info(`[CLAN_ROLE] Dodane role: ${addedRoles.length}, Usunięte role: ${removedRoles.length}`);
 
+            // DEBUG: Pokaż wszystkie aktualne role użytkownika
+            logger.info(`[CLAN_ROLE] === WSZYSTKIE AKTUALNE ROLE UŻYTKOWNIKA ===`);
+            logger.info(`[CLAN_ROLE] ${currentRoleIds.join(', ')}`);
+            logger.info(`[CLAN_ROLE] ============================================`);
+
             // Sprawdź czy użytkownik otrzymał rolę Lider
             const hadLeaderRole = previousRoleIds.includes(this.leaderRole);
             const hasLeaderRole = currentRoleIds.includes(this.leaderRole);
