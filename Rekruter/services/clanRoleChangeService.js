@@ -34,8 +34,19 @@ class ClanRoleChangeService {
      */
     async initialize(client) {
         this.client = client;
+
+        // Loguj ID ról klanowych z konfiguracji
+        logger.info(`[CLAN_ROLE] ID ról klanowych z konfiguracji:`);
+        logger.info(`[CLAN_ROLE]   - Main Clan: ${this.config.roles.mainClan}`);
+        logger.info(`[CLAN_ROLE]   - Clan2: ${this.config.roles.clan2}`);
+        logger.info(`[CLAN_ROLE]   - Clan1: ${this.config.roles.clan1}`);
+        logger.info(`[CLAN_ROLE]   - Clan0: ${this.config.roles.clan0}`);
+        logger.info(`[CLAN_ROLE]   - Verified: ${this.config.roles.verified}`);
+        logger.info(`[CLAN_ROLE]   - Lider: ${this.leaderRole}`);
+        logger.info(`[CLAN_ROLE]   - Vice Lider: ${this.viceLeaderRole}`);
+
         await this.buildInitialCache();
-        logger.info('Serwis zmian ról klanowych został zainicjalizowany');
+        logger.info(`[CLAN_ROLE] Serwis zmian ról klanowych został zainicjalizowany - ${this.memberRolesCache.size} członków w cache`);
     }
 
     /**
@@ -71,20 +82,32 @@ class ClanRoleChangeService {
         try {
             const userId = newMember.user.id;
 
+            logger.info(`[CLAN_ROLE] ========== Sprawdzanie zmian dla ${newMember.user.tag} (${userId}) ==========`);
+
             // Pobierz POPRZEDNIE role z naszego cache (nie z oldMember!)
             const previousRoleIds = this.memberRolesCache.get(userId) || [];
+            logger.info(`[CLAN_ROLE] Cache miał ${previousRoleIds.length} poprzednich ról`);
 
             // Pobierz AKTUALNE role z fresh member
             let freshMember;
             try {
                 freshMember = await newMember.guild.members.fetch(userId);
+                logger.info(`[CLAN_ROLE] Pobrano fresh member z API`);
             } catch (fetchError) {
                 freshMember = newMember;
+                logger.warn(`[CLAN_ROLE] Nie udało się pobrać fresh member, używam newMember: ${fetchError.message}`);
             }
             const currentRoleIds = Array.from(freshMember.roles.cache.keys());
+            logger.info(`[CLAN_ROLE] Aktualne role: ${currentRoleIds.length} ról`);
 
             // Aktualizuj cache
             this.memberRolesCache.set(userId, currentRoleIds);
+            logger.info(`[CLAN_ROLE] Cache zaktualizowany`);
+
+            // Sprawdź czy były jakieś zmiany w ogóle
+            const addedRoles = currentRoleIds.filter(id => !previousRoleIds.includes(id));
+            const removedRoles = previousRoleIds.filter(id => !currentRoleIds.includes(id));
+            logger.info(`[CLAN_ROLE] Dodane role: ${addedRoles.length}, Usunięte role: ${removedRoles.length}`);
 
             // Sprawdź czy użytkownik otrzymał rolę Lider
             const hadLeaderRole = previousRoleIds.includes(this.leaderRole);
@@ -107,22 +130,42 @@ class ClanRoleChangeService {
             }
 
             // Sprawdź zmiany ról klanowych
+            logger.info(`[CLAN_ROLE] Sprawdzanie ról klanowych...`);
             const oldClanRole = this.getClanRoleFromIds(previousRoleIds);
             const newClanRole = this.getClanRoleFromIds(currentRoleIds);
 
+            logger.info(`[CLAN_ROLE] Poprzednia rola klanowa: ${oldClanRole || 'BRAK'}`);
+            logger.info(`[CLAN_ROLE] Aktualna rola klanowa: ${newClanRole || 'BRAK'}`);
+
+            // Debug: Pokaż które role klanowe ma użytkownik
+            const clanRoleIds = [
+                this.config.roles.mainClan,
+                this.config.roles.clan2,
+                this.config.roles.clan1,
+                this.config.roles.clan0,
+                this.config.roles.verified
+            ];
+            const userClanRoles = currentRoleIds.filter(id => clanRoleIds.includes(id));
+            logger.info(`[CLAN_ROLE] Użytkownik ma następujące role klanowe: ${userClanRoles.join(', ') || 'BRAK'}`);
+
             // Jeśli nie ma zmiany roli klanowej, return
             if (oldClanRole === newClanRole) {
+                logger.info(`[CLAN_ROLE] Brak zmiany roli klanowej - koniec sprawdzania`);
                 return;
             }
 
-            logger.info(`[CLAN_ROLE] Wykryto zmianę roli klanowej dla ${freshMember.user.tag}: ${oldClanRole || 'brak'} -> ${newClanRole || 'brak'}`);
+            logger.info(`[CLAN_ROLE] ✅ WYKRYTO ZMIANĘ ROLI KLANOWEJ!`);
+            logger.info(`[CLAN_ROLE] ${oldClanRole || 'brak'} -> ${newClanRole || 'brak'}`);
 
             // Określ typ zmiany
             const changeType = this.determineChangeType(oldClanRole, newClanRole);
+            logger.info(`[CLAN_ROLE] Określony typ zmiany: ${changeType || 'BRAK'}`);
 
             if (changeType) {
-                logger.info(`[CLAN_ROLE] Typ zmiany: ${changeType}`);
+                logger.info(`[CLAN_ROLE] Wysyłanie powiadomienia...`);
                 await this.sendRoleChangeNotification(freshMember, changeType, newClanRole);
+            } else {
+                logger.warn(`[CLAN_ROLE] Nie określono typu zmiany mimo wykrycia zmiany roli!`);
             }
         } catch (error) {
             logger.error(`[CLAN_ROLE] ❌ Błąd podczas obsługi zmiany roli:`, error);
@@ -143,18 +186,27 @@ class ClanRoleChangeService {
             this.config.roles.clan0
         ];
 
+        logger.info(`[CLAN_ROLE] getClanRoleFromIds: Sprawdzam ${roleIds.length} ról użytkownika`);
+        logger.info(`[CLAN_ROLE] getClanRoleFromIds: Szukam w kolejności: MainClan, Clan2, Clan1, Clan0`);
+
         // Znajdź najwyższą rolę klanową (według hierarchii)
         for (const roleId of clanRoleIds) {
+            logger.info(`[CLAN_ROLE] getClanRoleFromIds: Sprawdzam czy user ma rolę ${roleId}`);
             if (roleIds.includes(roleId)) {
+                logger.info(`[CLAN_ROLE] getClanRoleFromIds: ✅ Znaleziono! Zwracam ${roleId}`);
                 return roleId;
             }
         }
 
+        logger.info(`[CLAN_ROLE] getClanRoleFromIds: Nie znaleziono ról klanowych, sprawdzam Verified`);
+
         // Jeśli nie ma żadnej roli klanowej, sprawdź czy ma verified
         if (roleIds.includes(this.config.roles.verified)) {
+            logger.info(`[CLAN_ROLE] getClanRoleFromIds: ✅ Znaleziono Verified! Zwracam ${this.config.roles.verified}`);
             return this.config.roles.verified;
         }
 
+        logger.info(`[CLAN_ROLE] getClanRoleFromIds: ❌ Nie znaleziono żadnej roli klanowej ani Verified - zwracam null`);
         return null;
     }
 
