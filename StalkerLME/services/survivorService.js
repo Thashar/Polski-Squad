@@ -409,7 +409,8 @@ class SurvivorService {
             2: 'Croaky',
             3: 'Capy',
             4: 'Clucker',
-            5: 'Puffo'
+            5: 'Puffo',
+            6: 'King Blizzblast'
         };
 
         // Mapowanie nazw pets na ikony Discord
@@ -418,7 +419,8 @@ class SurvivorService {
             'Puffo': '<:puffo:1417809665806565397>',
             'Clucker': '<:clucker:1417809647284523080>',
             'Croaky': '<:croaky:1417809629622042675>',
-            'Capy': '<:capy:1417809563301974117>'
+            'Capy': '<:capy:1417809563301974117>',
+            'King Blizzblast': '<:KingBlizzblast:1432096544764465284>'
         };
 
         const petType = petData.t || 0;
