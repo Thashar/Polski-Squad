@@ -8,7 +8,7 @@ class ClanRoleChangeService {
     constructor(config) {
         this.config = config;
         this.client = null;
-        this.notificationChannelId = '1194396792981311489';
+        this.notificationChannelId = config.channels.welcome;
 
         // Specjalne role kierownicze
         this.leaderRole = config.roles.leader;
