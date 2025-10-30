@@ -40,6 +40,16 @@ class ClanRoleChangeService {
      */
     async handleRoleChange(oldMember, newMember) {
         try {
+            // Debug log
+            logger.info(`[CLAN_ROLE] Sprawdzanie zmian ról dla ${newMember.user.tag}`);
+
+            // Pobierz stare i nowe role (ID)
+            const oldRoleIds = Array.from(oldMember.roles.cache.keys());
+            const newRoleIds = Array.from(newMember.roles.cache.keys());
+
+            logger.info(`[CLAN_ROLE] Stare role: ${oldRoleIds.join(', ')}`);
+            logger.info(`[CLAN_ROLE] Nowe role: ${newRoleIds.join(', ')}`);
+
             // Sprawdź czy użytkownik otrzymał rolę Lider
             if (!oldMember.roles.cache.has(this.leaderRole) && newMember.roles.cache.has(this.leaderRole)) {
                 logger.info(`[CLAN_ROLE] Wykryto nadanie roli Lider dla ${newMember.user.tag}`);
@@ -57,8 +67,11 @@ class ClanRoleChangeService {
             const oldClanRole = this.getClanRole(oldMember.roles.cache);
             const newClanRole = this.getClanRole(newMember.roles.cache);
 
+            logger.info(`[CLAN_ROLE] Porównanie ról klanowych: stara=${oldClanRole || 'brak'}, nowa=${newClanRole || 'brak'}`);
+
             // Jeśli nie ma zmiany roli klanowej, return
             if (oldClanRole === newClanRole) {
+                logger.info(`[CLAN_ROLE] Brak zmiany roli klanowej dla ${newMember.user.tag}`);
                 return;
             }
 
@@ -67,11 +80,16 @@ class ClanRoleChangeService {
             // Określ typ zmiany
             const changeType = this.determineChangeType(oldClanRole, newClanRole);
 
+            logger.info(`[CLAN_ROLE] Typ zmiany: ${changeType}`);
+
             if (changeType) {
                 await this.sendRoleChangeNotification(newMember, changeType, newClanRole);
+            } else {
+                logger.info(`[CLAN_ROLE] Nie określono typu zmiany - pomijam`);
             }
         } catch (error) {
             logger.error(`[CLAN_ROLE] ❌ Błąd podczas obsługi zmiany roli:`, error);
+            logger.error(`[CLAN_ROLE] ❌ Stack trace:`, error.stack);
         }
     }
 

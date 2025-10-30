@@ -166,6 +166,8 @@ client.on('guildMemberRemove', async member => {
 // Obsługa boost events i zmian ról klanowych
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
+        logger.info(`[MEMBER_UPDATE] Wykryto zmianę członka: ${newMember.user.tag}`);
+
         // Obsługa zmian ról klanowych
         await clanRoleChangeService.handleRoleChange(oldMember, newMember);
 
