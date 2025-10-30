@@ -9,6 +9,7 @@ const { handleMessage } = require('./handlers/messageHandlers');
 const RoleMonitoringService = require('./services/roleMonitoringService');
 const MemberNotificationService = require('./services/memberNotificationService');
 const MemberCacheService = require('./services/memberCacheService');
+const ClanRoleChangeService = require('./services/clanRoleChangeService');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -18,6 +19,7 @@ const logger = createBotLogger('Rekruter');
 const roleMonitoringService = new RoleMonitoringService(config);
 const memberNotificationService = new MemberNotificationService(config);
 const memberCacheService = new MemberCacheService(config);
+const clanRoleChangeService = new ClanRoleChangeService(config);
 
 const client = new Client({
     intents: [
@@ -63,6 +65,7 @@ client.once('ready', async () => {
     await roleMonitoringService.initialize(client);
     memberNotificationService.initialize(client);
     await memberCacheService.initialize(client);
+    clanRoleChangeService.initialize(client);
     await initializeOCR(config);
     
     // Inicjalizacja folderu temp
@@ -160,12 +163,15 @@ client.on('guildMemberRemove', async member => {
     await memberNotificationService.handleMemberLeave(member);
 });
 
-// Obsługa boost events
+// Obsługa boost events i zmian ról klanowych
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
+        // Obsługa zmian ról klanowych
+        await clanRoleChangeService.handleRoleChange(oldMember, newMember);
+
         // NOWY SYSTEM: Użyj MemberCacheService do prawidłowego wykrywania zmian boost
         const cacheResult = await memberCacheService.handleMemberUpdate(oldMember, newMember);
-        
+
         if (cacheResult.changed) {
             if (cacheResult.changeType === 'gained') {
                 // Nowy boost!
