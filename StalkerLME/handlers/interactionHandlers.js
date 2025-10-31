@@ -5078,7 +5078,10 @@ async function handleWynikiCommand(interaction, sharedState) {
         '1348200849242984478'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId)) {
+    // Administratorzy mogą używać komendy wszędzie
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
         await interaction.reply({
             content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
