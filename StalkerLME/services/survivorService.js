@@ -2702,8 +2702,8 @@ class SurvivorService {
             if (awakeningCost > 0) {
                 resourceText = `\n\n<:awakening_crystal:1417810137459982416> ${awakeningCost}`;
             }
-        } else if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy') {
-            // Puffo, Clucker, Capy - awakening crystals + xeno pet cores
+        } else if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy' || petName === 'King Blizzblast') {
+            // Puffo, Clucker, Capy, King Blizzblast - awakening crystals + xeno pet cores
             const awakeningCosts = [0, 10, 30, 70, 130, 190, 250, 310, 370, 430, 490];
             const xenoCosts = [0, 0, 1, 2, 4, 7, 11, 17, 25, 35, 50];
 
@@ -2814,8 +2814,8 @@ class SurvivorService {
                     skillsText += `${icon} ${skillName}: ${rarity}\n`;
                 }
             }
-        } else if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy') {
-            // Puffo, Clucker, Capy - wyświetl value skills z %
+        } else if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy' || petName === 'King Blizzblast') {
+            // Puffo, Clucker, Capy, King Blizzblast - wyświetl value skills z %
             const skillOrder = ['Sync Rate', 'Resonance Chance', 'Resonance Damage', 'Dmg to Weakened', 'Dmg to Poisoned', 'Dmg to Chilled', 'Shield Damage'];
 
             for (const skillName of skillOrder) {
