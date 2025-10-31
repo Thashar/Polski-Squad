@@ -2294,6 +2294,9 @@ class SurvivorService {
                     value: `Punkty przeciwnika: **${lmeTestaments}**`,
                     inline: false
                 });
+
+                // Dodaj pole "Zużyte zasoby" przed wyjściem
+                await this.addStartResourcesField(embed, buildData);
                 return; // Wyjdź wcześniej dla lme2
             }
         }
@@ -3049,8 +3052,8 @@ class SurvivorService {
         const petName = pets.name || 'Unknown';
         const stars = pets.stars || 0;
 
-        // Tylko Puffo, Clucker, Capy używają xeno pet cores (kopiowane z addPetsFields)
-        if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy') {
+        // Tylko Puffo, Clucker, Capy, King Blizzblast używają xeno pet cores (kopiowane z addPetsFields)
+        if (petName === 'Puffo' || petName === 'Clucker' || petName === 'Capy' || petName === 'King Blizzblast') {
             const xenoCosts = [0, 0, 1, 2, 4, 7, 11, 17, 25, 35, 50];
             const xenoCost = xenoCosts[stars] || 0;
             return xenoCost;
