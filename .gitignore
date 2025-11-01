@@ -39,3 +39,7 @@ tests/
 #TrainedData
 pol.TrainedData
 eng.TrainedData
+
+# Personal TV channel lists
+Lista kanalow.txt
+Lista kanalow.txt.backup
