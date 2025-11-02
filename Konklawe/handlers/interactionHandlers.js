@@ -906,6 +906,44 @@ class InteractionHandler {
             } catch (error) {
                 logger.error(`❌ Błąd nakładania specjalnej roli: ${error.message}`);
             }
+
+        } else if (curseDescription.includes('Scrambled words')) {
+            // Scrambled words przez 5 minut z szansą 30%
+            this.activeCurses.set(userId, {
+                type: 'scrambledWords',
+                data: { chance: 30 },
+                endTime: now + (5 * 60 * 1000)
+            });
+            this.saveActiveCurses();
+
+        } else if (curseDescription.includes('Don\'t be smart')) {
+            // Don't be smart przez 5 minut z szansą 30%
+            this.activeCurses.set(userId, {
+                type: 'dontBeSmart',
+                data: { chance: 30 },
+                endTime: now + (5 * 60 * 1000)
+            });
+            this.saveActiveCurses();
+
+        } else if (curseDescription.includes('Blah blah')) {
+            // Blah blah przez 5 minut z szansą 30%
+            this.activeCurses.set(userId, {
+                type: 'blahBlah',
+                data: {
+                    chance: 30,
+                    gifs: [
+                        "https://tenor.com/view/blablabla-stopmainsplaining-gif-4048671241003979606",
+                        "https://tenor.com/view/blah-blah-blah-blah-blah-blah-gif-22583735",
+                        "https://tenor.com/view/bluh-bluh-gif-1341121593359244317",
+                        "https://tenor.com/view/aburrido-gif-6860728247558979752",
+                        "https://tenor.com/view/not-listening-stop-talking-shh-gif-18219914",
+                        "https://tenor.com/view/leatylrs-friends-gif-24758003",
+                        "https://tenor.com/view/blah-blah-blah-gif-2813101195058663365"
+                    ]
+                },
+                endTime: now + (5 * 60 * 1000)
+            });
+            this.saveActiveCurses();
         }
     }
 
@@ -1076,7 +1114,71 @@ class InteractionHandler {
                     }
                 }
                 break;
+
+            case 'scrambledWords':
+                // Szansa 30% na przemieszanie liter w słowach
+                const scrambleChance = Math.random() * 100;
+                if (scrambleChance < curse.data.chance) {
+                    try {
+                        await message.delete();
+                        const scrambledText = this.scrambleWords(message.content);
+                        const member = await message.guild.members.fetch(message.author.id);
+                        const displayName = member.displayName;
+                        await message.channel.send(`**${displayName}** chciał powiedzieć, że ${scrambledText}`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd scrambled words: ${error.message}`);
+                    }
+                }
+                break;
+
+            case 'dontBeSmart':
+                // Szansa 30% na "nie mądruj się"
+                const smartChance = Math.random() * 100;
+                if (smartChance < curse.data.chance) {
+                    try {
+                        await message.delete();
+                        await message.channel.send(`${message.author.toString()} nie mądruj się! <:z_Trollface:1171154605372084367>`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd don't be smart: ${error.message}`);
+                    }
+                }
+                break;
+
+            case 'blahBlah':
+                // Szansa 30% na losowy GIF
+                const blahChance = Math.random() * 100;
+                if (blahChance < curse.data.chance) {
+                    try {
+                        const randomGif = curse.data.gifs[Math.floor(Math.random() * curse.data.gifs.length)];
+                        await message.reply(randomGif);
+                    } catch (error) {
+                        logger.error(`❌ Błąd blah blah: ${error.message}`);
+                    }
+                }
+                break;
         }
+    }
+
+    /**
+     * Miesza litery w słowach (zachowując pierwszą i ostatnią literę)
+     * @param {string} text - Tekst do przemieszania
+     * @returns {string} - Przemieszany tekst
+     */
+    scrambleWords(text) {
+        return text.split(' ').map(word => {
+            // Jeśli słowo ma mniej niż 4 znaki, zostaw bez zmian
+            if (word.length <= 3) return word;
+
+            // Wyodrębnij pierwszą, ostatnią i środkowe litery
+            const first = word[0];
+            const last = word[word.length - 1];
+            const middle = word.slice(1, -1);
+
+            // Przemieszaj środkowe litery
+            const shuffledMiddle = middle.split('').sort(() => Math.random() - 0.5).join('');
+
+            return first + shuffledMiddle + last;
+        }).join(' ');
     }
 
     /**

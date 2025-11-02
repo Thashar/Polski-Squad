@@ -100,13 +100,16 @@ module.exports = {
             "Żebyś doszedł do Championa w cnociach, synu."
         ],
         curses: [
-            "⏰ Slow mode personal - musi czekać 30 sekund między wiadomościami na 5 minut", 
+            "⏰ Slow mode personal - musi czekać 30 sekund między wiadomościami na 5 minut",
             "🗑️ Auto-delete - przez 5 minut losowo usuwa wiadomości z szansą 30%",
             "📢 Random ping - bot pinguje go losowo przez następne 5 minut",
             "😀 Emoji spam - przez 5 minut losowo reaguje emoji z szansą 30%",
             "📝 Forced caps - bot przepisuje jego wiadomości CAPSEM przez 5 minut z szansą 100%",
             "💤 Random timeout - przez 5 minut wysyła na timeout przez 30% czasu całkowicie",
-            "🎭 Special role - nakłada specjalną rolę na 5 minut"
+            "🎭 Special role - nakłada specjalną rolę na 5 minut",
+            "🔤 Scrambled words - przez 5 minut z szansą 30% bot miesza litery w słowach (zachowując pierwszą i ostatnią)",
+            "🤫 Don't be smart - przez 5 minut z szansą 30% bot usuwa wiadomość i pisze 'nie mądruj się'",
+            "💬 Blah blah - przez 5 minut z szansą 30% bot odpowiada losowym GIFem 'blah blah'"
         ],
         forcedNickname: "Przeklęty",
         nicknameTime: 5, // minutes
