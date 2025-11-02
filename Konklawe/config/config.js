@@ -47,7 +47,7 @@ module.exports = {
         virtuttiPapajlariChance: 100 // 1 in 100 chance (1%)
     },
     virtuttiPapajlari: {
-        cooldownMinutes: 10,
+        cooldownMinutes: 5,
         dailyLimit: 10,
         blessings: [
             "🍫 Niech Ci dropi same toblerony! 🎁",
