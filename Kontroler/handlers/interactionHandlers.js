@@ -62,6 +62,8 @@ async function handleInteraction(interaction, config, lotteryService = null) {
             // Obsługa Modal Submit
             if (interaction.customId === 'kawka_modal') {
                 await handleKawkaModalSubmit(interaction, config);
+            } else {
+                await interaction.reply({ content: 'Nieznany modal!', ephemeral: true });
             }
         } else if (interaction.isButton()) {
             // Obsługa Button
@@ -1858,59 +1860,73 @@ async function handleOligopolyClearCommand(interaction, config) {
  * Obsługuje komendę /kawka
  */
 async function handleKawkaCommand(interaction, config) {
-    // Sprawdź uprawnienia administratora
-    if (!interaction.member.permissions.has('Administrator')) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
-        });
-        return;
+    try {
+        // Sprawdź uprawnienia administratora
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+                ephemeral: true
+            });
+            return;
+        }
+
+        const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+
+        // Stwórz modal
+        const modal = new ModalBuilder()
+            .setCustomId('kawka_modal')
+            .setTitle('☕ Wsparcie kawką');
+
+        // Pole Nick
+        const nickInput = new TextInputBuilder()
+            .setCustomId('nick_input')
+            .setLabel('Nick')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Wpisz nick użytkownika')
+            .setRequired(true)
+            .setMaxLength(100);
+
+        // Pole PLN
+        const plnInput = new TextInputBuilder()
+            .setCustomId('pln_input')
+            .setLabel('PLN')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Wpisz kwotę w PLN')
+            .setRequired(true)
+            .setMaxLength(50);
+
+        // Pole Wpłata (jednorazowa/cykliczna)
+        const wplataInput = new TextInputBuilder()
+            .setCustomId('wplata_input')
+            .setLabel('Wpłata (wpisz: 1 = jednorazowa, 2 = cykliczna)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('1 lub 2')
+            .setRequired(true)
+            .setMaxLength(1);
+
+        // Dodaj pola do wierszy
+        const firstRow = new ActionRowBuilder().addComponents(nickInput);
+        const secondRow = new ActionRowBuilder().addComponents(plnInput);
+        const thirdRow = new ActionRowBuilder().addComponents(wplataInput);
+
+        // Dodaj wiersze do modala
+        modal.addComponents(firstRow, secondRow, thirdRow);
+
+        // Pokaż modal
+        await interaction.showModal(modal);
+
+        logger.info(`☕ ${interaction.user.tag} otworzył modal /kawka`);
+    } catch (error) {
+        logger.error('❌ Błąd podczas pokazywania modala kawka:', error);
+
+        const errorMessage = `❌ Wystąpił błąd podczas otwierania formularza: ${error.message}`;
+
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({ content: errorMessage, ephemeral: true });
+        } else {
+            await interaction.reply({ content: errorMessage, ephemeral: true });
+        }
     }
-
-    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
-
-    // Stwórz modal
-    const modal = new ModalBuilder()
-        .setCustomId('kawka_modal')
-        .setTitle('☕ Wsparcie kawką');
-
-    // Pole Nick
-    const nickInput = new TextInputBuilder()
-        .setCustomId('nick_input')
-        .setLabel('Nick')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Wpisz nick użytkownika')
-        .setRequired(true)
-        .setMaxLength(100);
-
-    // Pole PLN
-    const plnInput = new TextInputBuilder()
-        .setCustomId('pln_input')
-        .setLabel('PLN')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Wpisz kwotę w PLN')
-        .setRequired(true)
-        .setMaxLength(50);
-
-    // Pole Wpłata (jednorazowa/cykliczna)
-    const wplataInput = new TextInputBuilder()
-        .setCustomId('wplata_input')
-        .setLabel('Wpłata (wpisz: 1 = jednorazowa, 2 = cykliczna)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('1 lub 2')
-        .setRequired(true)
-        .setMaxLength(1);
-
-    // Dodaj pola do wierszy
-    const firstRow = new ActionRowBuilder().addComponents(nickInput);
-    const secondRow = new ActionRowBuilder().addComponents(plnInput);
-    const thirdRow = new ActionRowBuilder().addComponents(wplataInput);
-
-    // Dodaj wiersze do modala
-    modal.addComponents(firstRow, secondRow, thirdRow);
-
-    // Pokaż modal
-    await interaction.showModal(modal);
 }
 
 /**
@@ -1988,10 +2004,14 @@ async function handleKawkaModalSubmit(interaction, config) {
 
     } catch (error) {
         logger.error('❌ Błąd podczas wysyłania wiadomości kawka:', error);
-        await interaction.reply({
-            content: `❌ Wystąpił błąd podczas wysyłania wiadomości: ${error.message}`,
-            ephemeral: true
-        });
+
+        const errorMessage = `❌ Wystąpił błąd podczas wysyłania wiadomości: ${error.message}`;
+
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({ content: errorMessage, ephemeral: true });
+        } else {
+            await interaction.reply({ content: errorMessage, ephemeral: true });
+        }
     }
 }
 
