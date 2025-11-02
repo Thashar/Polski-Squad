@@ -1,0 +1,39 @@
+{
+  "example_guild_id_123456789": {
+    "serverName": "Example Server 1",
+    "enabled": true,
+    "allowedPunishRoles": [
+      "role_id_moderator_1",
+      "role_id_moderator_2",
+      "role_id_moderator_3",
+      "role_id_moderator_4"
+    ],
+    "punishmentRoleId": "role_id_punishment",
+    "lotteryBanRoleId": "role_id_lottery_ban",
+    "targetRoles": {
+      "0": "role_id_squad_0",
+      "1": "role_id_squad_1",
+      "2": "role_id_squad_2",
+      "main": "role_id_squad_main"
+    },
+    "roleDisplayNames": {
+      "0": "🎮Squad⁰🎮",
+      "1": "⚡Squad¹⚡",
+      "2": "💥Squad²💥",
+      "main": "🔥Main Squad🔥"
+    },
+    "warningChannels": {
+      "role_id_squad_0": "channel_id_warnings_0",
+      "role_id_squad_1": "channel_id_warnings_1",
+      "role_id_squad_2": "channel_id_warnings_2",
+      "role_id_squad_main": "channel_id_warnings_main"
+    },
+    "allowedDecodeChannels": [
+      "channel_id_decode_1",
+      "channel_id_decode_2"
+    ],
+    "vacationChannelId": "channel_id_vacation",
+    "vacationRequestRoleId": "role_id_vacation_request"
+  },
+  "_comment": "To add a new server, copy the structure above and replace 'example_guild_id_123456789' with your actual Guild ID. You can find your server's Guild ID by right-clicking the server icon in Discord (with Developer Mode enabled) and selecting 'Copy ID'. Make sure to update all role IDs and channel IDs with the actual IDs from your Discord server."
+}
