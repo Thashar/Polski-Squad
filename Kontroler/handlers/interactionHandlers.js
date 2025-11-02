@@ -1898,7 +1898,7 @@ async function handleKawkaCommand(interaction, config) {
         // Pole Wpłata (jednorazowa/cykliczna)
         const wplataInput = new TextInputBuilder()
             .setCustomId('wplata_input')
-            .setLabel('Wpłata (wpisz: 1 = jednorazowa, 2 = cykliczna)')
+            .setLabel('Wpłata (1=jednorazowa, 2=cykliczna)')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('1 lub 2')
             .setRequired(true)
