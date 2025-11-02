@@ -1951,7 +1951,7 @@ async function handleKawkaModalSubmit(interaction, config) {
     const wplata = wplataInput === '1' ? 'jednorazowa' : 'cykliczna';
 
     // ID kanału do wysłania wiadomości
-    const channelId = '1194396792981311489';
+    const channelId = '1170323972173340744';
 
     try {
         const channel = await interaction.client.channels.fetch(channelId);
