@@ -1895,11 +1895,11 @@ async function handleKawkaCommand(interaction, config) {
     // Pole Wpłata (jednorazowa/cykliczna)
     const wplataInput = new TextInputBuilder()
         .setCustomId('wplata_input')
-        .setLabel('Wpłata (wpisz: jednorazowa lub cykliczna)')
+        .setLabel('Wpłata (wpisz: 1 = jednorazowa, 2 = cykliczna)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('jednorazowa lub cykliczna')
+        .setPlaceholder('1 lub 2')
         .setRequired(true)
-        .setMaxLength(20);
+        .setMaxLength(1);
 
     // Dodaj pola do wierszy
     const firstRow = new ActionRowBuilder().addComponents(nickInput);
@@ -1920,16 +1920,19 @@ async function handleKawkaModalSubmit(interaction, config) {
     // Pobierz wartości z modala
     const nick = interaction.fields.getTextInputValue('nick_input');
     const pln = interaction.fields.getTextInputValue('pln_input');
-    const wplata = interaction.fields.getTextInputValue('wplata_input').toLowerCase().trim();
+    const wplataInput = interaction.fields.getTextInputValue('wplata_input').trim();
 
     // Walidacja typu wpłaty
-    if (wplata !== 'jednorazowa' && wplata !== 'cykliczna') {
+    if (wplataInput !== '1' && wplataInput !== '2') {
         await interaction.reply({
-            content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **jednorazowa** lub **cykliczna**',
+            content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **1** (jednorazowa) lub **2** (cykliczna)',
             ephemeral: true
         });
         return;
     }
+
+    // Mapuj 1/2 na typ wpłaty
+    const wplata = wplataInput === '1' ? 'jednorazowa' : 'cykliczna';
 
     // ID kanału do wysłania wiadomości
     const channelId = '1194396792981311489';
@@ -1945,12 +1948,31 @@ async function handleKawkaModalSubmit(interaction, config) {
             return;
         }
 
-        // Przygotuj wiadomość w zależności od typu wpłaty
+        // Przygotuj losową wiadomość w zależności od typu wpłaty
+        const jednorazoweWiadomosci = [
+            `## **${nick}** postawił mocne espresso za **${pln} PLN**! ☕\n## W imieniu serwera dzięki za ten energetyczny shot! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** funduje pyszne latte za **${pln} PLN**! ☕\n## W imieniu serwera dzięki, ta kawa smakuje wybornie! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** stawia podwójne doppio za **${pln} PLN**! ☕☕\n## W imieniu serwera dzięki za tę podwójną dawkę kofeiny! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** serwuje aromatyczne cappuccino za **${pln} PLN**! ☕\n## W imieniu serwera dzięki, pachnie wyśmienicie! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** stawia solidną americano za **${pln} PLN**! ☕\n## W imieniu serwera dzięki za tego dużego czarnego! <:PepeHeart2:1223714711196143787>`
+        ];
+
+        const cykliczneWiadomosci = [
+            `## **${nick}** wykupił miesięczny abonament kawowy za **${pln} PLN**! ☕📅\n## W imieniu serwera dzięki za regularną porcję kofeiny! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** dołączył do Coffee Club z miesięcznym flat white za **${pln} PLN**! ☕✨\n## W imieniu serwera dzięki, widzimy się przy barze co miesiąc! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** zamówił comiesięczne espresso za **${pln} PLN**! ☕🔄\n## W imieniu serwera dzięki za ten stały zastrzyk energii! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** został stałym bywalcem kawiarni serwerowej za **${pln} PLN** miesięcznie! ☕💳\n## W imieniu serwera dzięki za regularne dolewki! <:PepeHeart2:1223714711196143787>`,
+            `## **${nick}** zapisał się na comiesięczne macchiato za **${pln} PLN**! ☕📆\n## W imieniu serwera dzięki, co miesiąc pachnie świeżą kawą! <:PepeHeart2:1223714711196143787>`
+        ];
+
+        // Wybierz losową wiadomość
         let message = '';
         if (wplata === 'jednorazowa') {
-            message = `Użytkownik **${nick}** wsparł serwer stawiając solidną kawę w postaci **${pln}**. W imieniu całego serwera, serdeczne dzięki! <:PepeHeart2:1223714711196143787>`;
+            const randomIndex = Math.floor(Math.random() * jednorazoweWiadomosci.length);
+            message = jednorazoweWiadomosci[randomIndex];
         } else if (wplata === 'cykliczna') {
-            message = `Użytkownik **${nick}** zdecydował się wspierać serwer comiesięczną kawką w postaci **${pln}**. W imieniu całego serwera, serdeczne dzięki! <:PepeHeart2:1223714711196143787>`;
+            const randomIndex = Math.floor(Math.random() * cykliczneWiadomosci.length);
+            message = cykliczneWiadomosci[randomIndex];
         }
 
         // Wyślij wiadomość na kanał
