@@ -48,7 +48,7 @@ module.exports = {
     },
     virtuttiPapajlari: {
         cooldownMinutes: 10,
-        dailyLimit: 5,
+        dailyLimit: 10,
         blessings: [
             "🍫 Niech Ci dropi same toblerony! 🎁",
             "💎 Niech Ci gemy tylko przybywają! 📈",
