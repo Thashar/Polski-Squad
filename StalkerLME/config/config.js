@@ -43,7 +43,7 @@ module.exports = {
     // Strefa czasowa i deadline
     timezone: 'Europe/Warsaw',
     bossDeadline: {
-        hour: 17,
+        hour: 16,
         minute: 50
     },
     
