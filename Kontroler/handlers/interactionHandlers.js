@@ -37,6 +37,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'oligopoly-clear':
                     await handleOligopolyClearCommand(interaction, config);
                     break;
+                case 'kawka':
+                    await handleKawkaCommand(interaction, config);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -54,6 +57,11 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     break;
                 default:
                     await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
+            }
+        } else if (interaction.isModalSubmit()) {
+            // Obsługa Modal Submit
+            if (interaction.customId === 'kawka_modal') {
+                await handleKawkaModalSubmit(interaction, config);
             }
         } else if (interaction.isButton()) {
             // Obsługa Button
@@ -1291,6 +1299,10 @@ async function registerSlashCommands(client, config) {
             .setName('oligopoly-clear')
             .setDescription('Usuwa wszystkie wpisy oligopoly (tylko administratorzy)'),
 
+        new SlashCommandBuilder()
+            .setName('kawka')
+            .setDescription('Ogłoszenie wsparcia serwera kawką (tylko administratorzy)'),
+
     ];
 
     const rest = new REST().setToken(config.token);
@@ -1837,6 +1849,125 @@ async function handleOligopolyClearCommand(interaction, config) {
     } else {
         await interaction.reply({
             content: '❌ Wystąpił błąd podczas usuwania wpisów oligopoly.',
+            ephemeral: true
+        });
+    }
+}
+
+/**
+ * Obsługuje komendę /kawka
+ */
+async function handleKawkaCommand(interaction, config) {
+    // Sprawdź uprawnienia administratora
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+
+    // Stwórz modal
+    const modal = new ModalBuilder()
+        .setCustomId('kawka_modal')
+        .setTitle('☕ Wsparcie kawką');
+
+    // Pole Nick
+    const nickInput = new TextInputBuilder()
+        .setCustomId('nick_input')
+        .setLabel('Nick')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz nick użytkownika')
+        .setRequired(true)
+        .setMaxLength(100);
+
+    // Pole PLN
+    const plnInput = new TextInputBuilder()
+        .setCustomId('pln_input')
+        .setLabel('PLN')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz kwotę w PLN')
+        .setRequired(true)
+        .setMaxLength(50);
+
+    // Pole Wpłata (jednorazowa/cykliczna)
+    const wplataInput = new TextInputBuilder()
+        .setCustomId('wplata_input')
+        .setLabel('Wpłata (wpisz: jednorazowa lub cykliczna)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('jednorazowa lub cykliczna')
+        .setRequired(true)
+        .setMaxLength(20);
+
+    // Dodaj pola do wierszy
+    const firstRow = new ActionRowBuilder().addComponents(nickInput);
+    const secondRow = new ActionRowBuilder().addComponents(plnInput);
+    const thirdRow = new ActionRowBuilder().addComponents(wplataInput);
+
+    // Dodaj wiersze do modala
+    modal.addComponents(firstRow, secondRow, thirdRow);
+
+    // Pokaż modal
+    await interaction.showModal(modal);
+}
+
+/**
+ * Obsługuje submit modala kawka
+ */
+async function handleKawkaModalSubmit(interaction, config) {
+    // Pobierz wartości z modala
+    const nick = interaction.fields.getTextInputValue('nick_input');
+    const pln = interaction.fields.getTextInputValue('pln_input');
+    const wplata = interaction.fields.getTextInputValue('wplata_input').toLowerCase().trim();
+
+    // Walidacja typu wpłaty
+    if (wplata !== 'jednorazowa' && wplata !== 'cykliczna') {
+        await interaction.reply({
+            content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **jednorazowa** lub **cykliczna**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // ID kanału do wysłania wiadomości
+    const channelId = '1194396792981311489';
+
+    try {
+        const channel = await interaction.client.channels.fetch(channelId);
+
+        if (!channel) {
+            await interaction.reply({
+                content: '❌ Nie można znaleźć kanału do wysłania wiadomości.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Przygotuj wiadomość w zależności od typu wpłaty
+        let message = '';
+        if (wplata === 'jednorazowa') {
+            message = `Użytkownik **${nick}** wsparł serwer stawiając solidną kawę w postaci **${pln}**. W imieniu całego serwera, serdeczne dzięki! <:PepeHeart2:1223714711196143787>`;
+        } else if (wplata === 'cykliczna') {
+            message = `Użytkownik **${nick}** zdecydował się wspierać serwer comiesięczną kawką w postaci **${pln}**. W imieniu całego serwera, serdeczne dzięki! <:PepeHeart2:1223714711196143787>`;
+        }
+
+        // Wyślij wiadomość na kanał
+        await channel.send(message);
+
+        // Potwierdź użytkownikowi
+        await interaction.reply({
+            content: `✅ **Wiadomość została wysłana na kanał!**\n\n📝 **Nick:** ${nick}\n💰 **Kwota:** ${pln}\n📊 **Typ wpłaty:** ${wplata}`,
+            ephemeral: true
+        });
+
+        logger.info(`☕ ${interaction.user.tag} użył komendy /kawka - Nick: ${nick}, PLN: ${pln}, Wpłata: ${wplata}`);
+
+    } catch (error) {
+        logger.error('❌ Błąd podczas wysyłania wiadomości kawka:', error);
+        await interaction.reply({
+            content: `❌ Wystąpił błąd podczas wysyłania wiadomości: ${error.message}`,
             ephemeral: true
         });
     }
