@@ -731,7 +731,7 @@ async function handleButton(interaction, sharedState) {
                         )
                         .setImage(data.imageUrl)
                         .setTimestamp()
-                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.tag} | Boss deadline: 17:50` });
+                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.tag} | Boss deadline: 16:50` });
                     
                     await interaction.followUp({ 
                         embeds: [reminderEmbed],
