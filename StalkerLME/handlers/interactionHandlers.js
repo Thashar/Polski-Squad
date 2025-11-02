@@ -2619,6 +2619,23 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
         }
         stats.totalZeroCount = totalZeroCount;
 
+        // Oblicz sumę TOP30 z 3 rund (tak jak w /wyniki w zakładce "Suma Faza2")
+        let top30Sum = 0;
+        for (const roundData of session.roundsData) {
+            if (roundData.results) {
+                // Konwertuj Map do tablicy [{nick, score}]
+                const roundPlayers = Array.from(roundData.results.entries())
+                    .map(([nick, score]) => ({ nick, score }))
+                    .sort((a, b) => b.score - a.score);
+
+                const roundTop30 = roundPlayers.slice(0, 30);
+                const roundTop30Sum = roundTop30.reduce((sum, player) => sum + player.score, 0);
+                top30Sum += roundTop30Sum;
+            }
+        }
+        stats.top30Sum = top30Sum;
+        logger.info(`[PHASE2] 🏆 Suma TOP30 z 3 rund: ${top30Sum}`);
+
         logger.info(`[PHASE2] 📅 Pobieram informacje o tygodniu...`);
         const weekInfo = phaseService.getCurrentWeekInfo();
 

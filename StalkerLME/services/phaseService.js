@@ -769,17 +769,8 @@ class PhaseService {
                     .map(([value, count]) => ({ value, count }))
                     .sort((a, b) => b.count - a.count); // Sortuj po liczbie wystąpień
 
-                // Autoakceptacja: jeśli najczęstsza wartość występuje 2+ razy i jest tylko jedna taka wartość
-                const valuesWithTwoOrMore = values.filter(v => v.count >= 2);
-
-                if (valuesWithTwoOrMore.length === 1) {
-                    // Tylko jedna wartość występuje 2+ razy - autoakceptuj ją
-                    logger.info(`[PHASE1] ✅ Autoakceptacja dla "${nick}": ${valuesWithTwoOrMore[0].value} (${valuesWithTwoOrMore[0].count}x)`);
-                    session.resolvedConflicts.set(nick, valuesWithTwoOrMore[0].value);
-                } else {
-                    // Więcej niż jedna wartość występuje 2+ razy lub żadna nie występuje 2+ razy - wymagaj wyboru
-                    session.conflicts.push({ nick, values });
-                }
+                // Zawsze wymagaj wyboru przy konflikcie - bez autoakceptacji
+                session.conflicts.push({ nick, values });
             }
         }
 
@@ -1063,7 +1054,11 @@ class PhaseService {
                 { name: '🏆 Suma wyników TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
             );
         } else if (phase === 2) {
-            // Dla Fazy 2 - pokaż sumę zer z 3 rund
+            // Dla Fazy 2 - pokaż sumę TOP30 i sumę zer z 3 rund
+            fields.push(
+                { name: '🏆 Suma TOP30 (z 3 rund)', value: `${stats.top30Sum.toLocaleString('pl-PL')} punktów`, inline: false }
+            );
+
             if (stats.totalZeroCount !== undefined) {
                 fields.push(
                     { name: '⭕ Wynik = 0 (suma z 3 rund)', value: `${stats.totalZeroCount} wystąpień`, inline: false }
