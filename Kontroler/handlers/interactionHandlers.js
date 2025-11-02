@@ -8,7 +8,12 @@ const logger = createBotLogger('Kontroler');
  */
 async function handleInteraction(interaction, config, lotteryService = null) {
     try {
-        if (interaction.isChatInputCommand()) {
+        if (interaction.isAutocomplete()) {
+            // Obsługa autocomplete
+            if (interaction.commandName === 'kawka') {
+                await handleKawkaAutocomplete(interaction);
+            }
+        } else if (interaction.isChatInputCommand()) {
             switch (interaction.commandName) {
                 case 'ocr-debug':
                     await handleOcrDebugCommand(interaction, config);
@@ -60,7 +65,7 @@ async function handleInteraction(interaction, config, lotteryService = null) {
             }
         } else if (interaction.isModalSubmit()) {
             // Obsługa Modal Submit
-            if (interaction.customId === 'kawka_modal') {
+            if (interaction.customId.startsWith('kawka_modal_')) {
                 await handleKawkaModalSubmit(interaction, config);
             } else {
                 await interaction.reply({ content: 'Nieznany modal!', ephemeral: true });
@@ -1303,7 +1308,12 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('kawka')
-            .setDescription('Ogłoszenie wsparcia serwera kawką (tylko administratorzy)'),
+            .setDescription('Ogłoszenie wsparcia serwera kawką (tylko administratorzy)')
+            .addStringOption(option =>
+                option.setName('nick')
+                    .setDescription('Nick użytkownika (wybierz z listy lub wpisz własny)')
+                    .setRequired(true)
+                    .setAutocomplete(true)),
 
     ];
 
@@ -1857,6 +1867,45 @@ async function handleOligopolyClearCommand(interaction, config) {
 }
 
 /**
+ * Obsługuje autocomplete dla komendy /kawka
+ */
+async function handleKawkaAutocomplete(interaction) {
+    try {
+        const focusedValue = interaction.options.getFocused().toLowerCase();
+
+        // Pobierz członków serwera
+        const members = await interaction.guild.members.fetch();
+
+        // Filtruj i sortuj członków według dopasowania
+        const choices = members
+            .filter(member => !member.user.bot) // Pomijamy boty
+            .filter(member => {
+                const displayName = member.displayName.toLowerCase();
+                const username = member.user.username.toLowerCase();
+                return displayName.includes(focusedValue) || username.includes(focusedValue);
+            })
+            .map(member => ({
+                name: `${member.displayName} (@${member.user.username})`,
+                value: `userid_${member.id}` // Prefix userid_ oznacza że to member
+            }))
+            .slice(0, 25); // Discord limit: max 25 opcji
+
+        // Jeśli użytkownik coś wpisał, dodaj opcję "użyj tego co wpisałem"
+        if (focusedValue.length > 0 && choices.length < 25) {
+            choices.unshift({
+                name: `📝 Użyj wpisanego: "${interaction.options.getFocused()}"`,
+                value: `custom_${interaction.options.getFocused()}`
+            });
+        }
+
+        await interaction.respond(choices);
+    } catch (error) {
+        logger.error('❌ Błąd autocomplete kawka:', error);
+        await interaction.respond([]);
+    }
+}
+
+/**
  * Obsługuje komendę /kawka
  */
 async function handleKawkaCommand(interaction, config) {
@@ -1870,21 +1919,17 @@ async function handleKawkaCommand(interaction, config) {
             return;
         }
 
+        // Pobierz nick z opcji komendy
+        const nickOption = interaction.options.getString('nick');
+
         const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
-        // Stwórz modal
+        // Stwórz modal z customId zawierającym nick
+        // Enkodujemy nick w base64 żeby uniknąć problemów ze znakami specjalnymi
+        const encodedNick = Buffer.from(nickOption).toString('base64');
         const modal = new ModalBuilder()
-            .setCustomId('kawka_modal')
+            .setCustomId(`kawka_modal_${encodedNick}`)
             .setTitle('☕ Wsparcie kawką');
-
-        // Pole Nick
-        const nickInput = new TextInputBuilder()
-            .setCustomId('nick_input')
-            .setLabel('Nick')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Wpisz nick użytkownika')
-            .setRequired(true)
-            .setMaxLength(100);
 
         // Pole PLN
         const plnInput = new TextInputBuilder()
@@ -1905,17 +1950,16 @@ async function handleKawkaCommand(interaction, config) {
             .setMaxLength(1);
 
         // Dodaj pola do wierszy
-        const firstRow = new ActionRowBuilder().addComponents(nickInput);
-        const secondRow = new ActionRowBuilder().addComponents(plnInput);
-        const thirdRow = new ActionRowBuilder().addComponents(wplataInput);
+        const firstRow = new ActionRowBuilder().addComponents(plnInput);
+        const secondRow = new ActionRowBuilder().addComponents(wplataInput);
 
         // Dodaj wiersze do modala
-        modal.addComponents(firstRow, secondRow, thirdRow);
+        modal.addComponents(firstRow, secondRow);
 
         // Pokaż modal
         await interaction.showModal(modal);
 
-        logger.info(`☕ ${interaction.user.tag} otworzył modal /kawka`);
+        logger.info(`☕ ${interaction.user.tag} otworzył modal /kawka dla: ${nickOption}`);
     } catch (error) {
         logger.error('❌ Błąd podczas pokazywania modala kawka:', error);
 
@@ -1933,27 +1977,31 @@ async function handleKawkaCommand(interaction, config) {
  * Obsługuje submit modala kawka
  */
 async function handleKawkaModalSubmit(interaction, config) {
-    // Pobierz wartości z modala
-    const nick = interaction.fields.getTextInputValue('nick_input');
-    const pln = interaction.fields.getTextInputValue('pln_input');
-    const wplataInput = interaction.fields.getTextInputValue('wplata_input').trim();
-
-    // Walidacja typu wpłaty
-    if (wplataInput !== '1' && wplataInput !== '2') {
-        await interaction.reply({
-            content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **1** (jednorazowa) lub **2** (cykliczna)',
-            ephemeral: true
-        });
-        return;
-    }
-
-    // Mapuj 1/2 na typ wpłaty
-    const wplata = wplataInput === '1' ? 'jednorazowa' : 'cykliczna';
-
-    // ID kanału do wysłania wiadomości
-    const channelId = '1170323972173340744';
-
     try {
+        // Pobierz nick z customId modala (zdekoduj base64)
+        const customId = interaction.customId;
+        const encodedNick = customId.replace('kawka_modal_', '');
+        const nickOption = Buffer.from(encodedNick, 'base64').toString('utf-8');
+
+        // Pobierz wartości z modala
+        const pln = interaction.fields.getTextInputValue('pln_input');
+        const wplataInput = interaction.fields.getTextInputValue('wplata_input').trim();
+
+        // Walidacja typu wpłaty
+        if (wplataInput !== '1' && wplataInput !== '2') {
+            await interaction.reply({
+                content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **1** (jednorazowa) lub **2** (cykliczna)',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Mapuj 1/2 na typ wpłaty
+        const wplata = wplataInput === '1' ? 'jednorazowa' : 'cykliczna';
+
+        // ID kanału do wysłania wiadomości
+        const channelId = '1170323972173340744';
+
         const channel = await interaction.client.channels.fetch(channelId);
 
         if (!channel) {
@@ -1964,21 +2012,44 @@ async function handleKawkaModalSubmit(interaction, config) {
             return;
         }
 
+        // Sprawdź czy nick to userid czy custom
+        let displayNick;
+        let shouldPing = false;
+
+        if (nickOption.startsWith('userid_')) {
+            // To jest member - pingujemy
+            const userId = nickOption.replace('userid_', '');
+            try {
+                const member = await interaction.guild.members.fetch(userId);
+                displayNick = `<@${userId}>`;
+                shouldPing = true;
+            } catch (error) {
+                logger.warn(`Nie można znaleźć użytkownika ${userId}, używam fallback`);
+                displayNick = `**Użytkownik**`;
+            }
+        } else if (nickOption.startsWith('custom_')) {
+            // To jest custom nick - bez pinga
+            displayNick = `**${nickOption.replace('custom_', '')}**`;
+        } else {
+            // Fallback - traktuj jako custom nick
+            displayNick = `**${nickOption}**`;
+        }
+
         // Przygotuj losową wiadomość w zależności od typu wpłaty
         const jednorazoweWiadomosci = [
-            `## **${nick}** postawił mocne espresso za **${pln} PLN**! ☕\n## W imieniu serwera dzięki za ten energetyczny shot! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** funduje pyszne latte za **${pln} PLN**! ☕\n## W imieniu serwera dzięki, ta kawa smakuje wybornie! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** stawia podwójne doppio za **${pln} PLN**! ☕☕\n## W imieniu serwera dzięki za tę podwójną dawkę kofeiny! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** serwuje aromatyczne cappuccino za **${pln} PLN**! ☕\n## W imieniu serwera dzięki, pachnie wyśmienicie! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** stawia solidną americano za **${pln} PLN**! ☕\n## W imieniu serwera dzięki za tego dużego czarnego! <:PepeHeart2:1223714711196143787>`
+            `## ${displayNick} postawił mocne espresso za **${pln} PLN**! ☕\n## W imieniu serwera dzięki za ten energetyczny shot! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} funduje pyszne latte za **${pln} PLN**! ☕\n## W imieniu serwera dzięki, ta kawa smakuje wybornie! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} stawia podwójne doppio za **${pln} PLN**! ☕☕\n## W imieniu serwera dzięki za tę podwójną dawkę kofeiny! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} serwuje aromatyczne cappuccino za **${pln} PLN**! ☕\n## W imieniu serwera dzięki, pachnie wyśmienicie! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} stawia solidną americano za **${pln} PLN**! ☕\n## W imieniu serwera dzięki za tego dużego czarnego! <:PepeHeart2:1223714711196143787>`
         ];
 
         const cykliczneWiadomosci = [
-            `## **${nick}** wykupił miesięczny abonament kawowy za **${pln} PLN**! ☕📅\n## W imieniu serwera dzięki za regularną porcję kofeiny! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** dołączył do Coffee Club z miesięcznym flat white za **${pln} PLN**! ☕✨\n## W imieniu serwera dzięki, widzimy się przy barze co miesiąc! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** zamówił comiesięczne espresso za **${pln} PLN**! ☕🔄\n## W imieniu serwera dzięki za ten stały zastrzyk energii! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** został stałym bywalcem kawiarni serwerowej za **${pln} PLN** miesięcznie! ☕💳\n## W imieniu serwera dzięki za regularne dolewki! <:PepeHeart2:1223714711196143787>`,
-            `## **${nick}** zapisał się na comiesięczne macchiato za **${pln} PLN**! ☕📆\n## W imieniu serwera dzięki, co miesiąc pachnie świeżą kawą! <:PepeHeart2:1223714711196143787>`
+            `## ${displayNick} wykupił miesięczny abonament kawowy za **${pln} PLN**! ☕📅\n## W imieniu serwera dzięki za regularną porcję kofeiny! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} dołączył do Coffee Club z miesięcznym flat white za **${pln} PLN**! ☕✨\n## W imieniu serwera dzięki, widzimy się przy barze co miesiąc! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} zamówił comiesięczne espresso za **${pln} PLN**! ☕🔄\n## W imieniu serwera dzięki za ten stały zastrzyk energii! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} został stałym bywalcem kawiarni serwerowej za **${pln} PLN** miesięcznie! ☕💳\n## W imieniu serwera dzięki za regularne dolewki! <:PepeHeart2:1223714711196143787>`,
+            `## ${displayNick} zapisał się na comiesięczne macchiato za **${pln} PLN**! ☕📆\n## W imieniu serwera dzięki, co miesiąc pachnie świeżą kawą! <:PepeHeart2:1223714711196143787>`
         ];
 
         // Wybierz losową wiadomość
@@ -1995,12 +2066,13 @@ async function handleKawkaModalSubmit(interaction, config) {
         await channel.send(message);
 
         // Potwierdź użytkownikowi
+        const confirmNick = shouldPing ? displayNick : nickOption.replace('custom_', '').replace('userid_', '');
         await interaction.reply({
-            content: `✅ **Wiadomość została wysłana na kanał!**\n\n📝 **Nick:** ${nick}\n💰 **Kwota:** ${pln}\n📊 **Typ wpłaty:** ${wplata}`,
+            content: `✅ **Wiadomość została wysłana na kanał!**\n\n📝 **Nick:** ${confirmNick}\n💰 **Kwota:** ${pln}\n📊 **Typ wpłaty:** ${wplata}${shouldPing ? '\n🔔 **Z pingiem**' : ''}`,
             ephemeral: true
         });
 
-        logger.info(`☕ ${interaction.user.tag} użył komendy /kawka - Nick: ${nick}, PLN: ${pln}, Wpłata: ${wplata}`);
+        logger.info(`☕ ${interaction.user.tag} użył komendy /kawka - Nick: ${confirmNick}, PLN: ${pln}, Wpłata: ${wplata}, Ping: ${shouldPing}`);
 
     } catch (error) {
         logger.error('❌ Błąd podczas wysyłania wiadomości kawka:', error);
