@@ -645,7 +645,7 @@ class PhaseService {
             // Oblicz statystyki
             const uniqueNicks = session.aggregatedResults.size;
             const confirmedResults = Array.from(session.aggregatedResults.values())
-                .filter(scores => new Set(scores).size === 1).length;
+                .filter(scores => scores.length >= 2 && new Set(scores).size === 1).length;
             const unconfirmedResults = uniqueNicks - confirmedResults;
 
             const progressBar = this.createProgressBar(percent);
