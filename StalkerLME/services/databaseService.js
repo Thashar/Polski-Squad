@@ -546,11 +546,12 @@ class DatabaseService {
 
     /**
      * Pobiera najwyższy historyczny wynik gracza przed określonym tygodniem
+     * Przeszukuje wszystkie klany z danego serwera
      * @param {string} guildId - ID serwera
      * @param {string} userId - ID użytkownika
      * @param {number} beforeWeekNumber - Numer tygodnia (wyłącznie, nie włączamy tego tygodnia)
      * @param {number} beforeYear - Rok tygodnia
-     * @param {string} clan - Klan
+     * @param {string} clan - Klan (parametr zachowany dla kompatybilności, ale nie jest używany)
      * @returns {number|null} - Najwyższy wynik lub null jeśli nie znaleziono
      */
     async getPlayerHistoricalBestScore(guildId, userId, beforeWeekNumber, beforeYear, clan) {
@@ -584,10 +585,7 @@ class DatabaseService {
                     if (!match) continue;
 
                     const weekNumber = parseInt(match[1]);
-                    const fileClan = match[2];
-
-                    // Pomiń jeśli to nie ten sam klan
-                    if (fileClan !== clan) continue;
+                    // const fileClan = match[2]; // Nie filtrujemy po klanie - przeszukujemy wszystkie
 
                     // Sprawdź czy ten tydzień jest PRZED określonym tygodniem
                     const isBeforeTarget = (year < beforeYear) ||
