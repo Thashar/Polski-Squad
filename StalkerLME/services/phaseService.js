@@ -416,7 +416,8 @@ class PhaseService {
             timeout: null,
             downloadedFiles: [], // ścieżki do pobranych plików
             messageToDelete: null, // wiadomość ze zdjęciami do usunięcia
-            publicInteraction: null // interakcja do aktualizacji postępu (PUBLICZNA)
+            publicInteraction: null, // interakcja do aktualizacji postępu (PUBLICZNA)
+            roleNicksSnapshotPath: null // ścieżka do snapshotu nicków z roli
         };
 
         this.activeSessions.set(sessionId, session);
@@ -489,6 +490,12 @@ class PhaseService {
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
 
+        // Usuń snapshot nicków jeśli istnieje
+        if (session.roleNicksSnapshotPath) {
+            await this.ocrService.deleteRoleNicksSnapshot(session.roleNicksSnapshotPath);
+            session.roleNicksSnapshotPath = null;
+        }
+
         // Wyczyść duże struktury danych z pamięci
         if (session.processedImages) {
             session.processedImages.length = 0;
@@ -543,6 +550,17 @@ class PhaseService {
 
         logger.info(`[PHASE1] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
+        // Utwórz snapshot nicków z roli na początku
+        const snapshotPath = path.join(this.tempDir, `role_nicks_snapshot_${sessionId}.json`);
+        const snapshotCreated = await this.ocrService.saveRoleNicksSnapshot(guild, member, snapshotPath);
+
+        if (snapshotCreated) {
+            session.roleNicksSnapshotPath = snapshotPath;
+            logger.info(`[PHASE1] ✅ Snapshot nicków utworzony: ${snapshotPath}`);
+        } else {
+            logger.warn(`[PHASE1] ⚠️ Nie udało się utworzyć snapshotu - będzie używane pobieranie na żywo`);
+        }
+
         const results = [];
         const totalImages = downloadedFiles.length;
 
@@ -581,7 +599,13 @@ class PhaseService {
                 });
 
                 // Wyciągnij wszystkich graczy z wynikami (nie tylko zerami)
-                const playersWithScores = await this.ocrService.extractAllPlayersWithScores(text, guild, member);
+                // Użyj snapshotu jeśli istnieje
+                const playersWithScores = await this.ocrService.extractAllPlayersWithScores(
+                    text,
+                    guild,
+                    member,
+                    session.roleNicksSnapshotPath
+                );
 
                 results.push({
                     imageUrl: attachment.url,

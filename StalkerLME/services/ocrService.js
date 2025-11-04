@@ -674,7 +674,7 @@ class OCRService {
         try {
             const targetRoleIds = Object.values(this.config.targetRoles);
             let userRoleId = null;
-            
+
             // Znajdź rolę użytkownika wykonującego polecenie
             for (const roleId of targetRoleIds) {
                 if (requestingMember.roles.cache.has(roleId)) {
@@ -682,16 +682,40 @@ class OCRService {
                     break;
                 }
             }
-            
+
             if (!userRoleId) {
                 logger.info('❌ Użytkownik nie posiada żadnej z ról TARGET');
                 return [];
             }
-            
-            
-            const members = await guild.members.fetch();
+
+            logger.info(`📥 Pobieranie członków z rolą ${userRoleId}...`);
+
+            // Retry logic z exponential backoff
+            let members = null;
+            let retryCount = 0;
+            const maxRetries = 3;
+
+            while (retryCount < maxRetries) {
+                try {
+                    members = await guild.members.fetch({ force: false }); // Użyj cache jeśli dostępny
+                    break; // Sukces - wyjdź z pętli
+                } catch (fetchError) {
+                    retryCount++;
+                    logger.warn(`⚠️ Próba ${retryCount}/${maxRetries} pobierania członków nie powiodła się: ${fetchError.message}`);
+
+                    if (retryCount < maxRetries) {
+                        // Exponential backoff: 1s, 2s, 4s
+                        const delay = Math.pow(2, retryCount - 1) * 1000;
+                        logger.info(`⏳ Ponowna próba za ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        throw fetchError; // Ostatnia próba - wyrzuć błąd
+                    }
+                }
+            }
+
             const roleMembers = [];
-            
+
             for (const [userId, member] of members) {
                 if (member.roles.cache.has(userRoleId)) {
                     roleMembers.push({
@@ -701,12 +725,101 @@ class OCRService {
                     });
                 }
             }
-            
+
             logger.info(`👥 Znaleziono ${roleMembers.length} członków z rolą ${userRoleId}`);
             return roleMembers;
         } catch (error) {
-            logger.error('❌ Błąd pobierania nicków z roli:', error);
+            logger.error('❌ Błąd pobierania nicków z roli:');
+            logger.error(`   Typ błędu: ${error.name}`);
+            logger.error(`   Kod: ${error.code || 'brak'}`);
+            logger.error(`   Wiadomość: ${error.message}`);
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack.split('\n').slice(0, 3).join('\n')}`);
+            }
             return [];
+        }
+    }
+
+    /**
+     * Zapisuje snapshot nicków z roli do pliku
+     * @param {Guild} guild - Obiekt serwera Discord
+     * @param {GuildMember} requestingMember - Członek wykonujący polecenie
+     * @param {string} snapshotPath - Ścieżka do pliku snapshot
+     * @returns {Promise<boolean>} - true jeśli sukces, false w przeciwnym razie
+     */
+    async saveRoleNicksSnapshot(guild, requestingMember, snapshotPath) {
+        try {
+            logger.info(`💾 Tworzenie snapshotu nicków do pliku: ${snapshotPath}`);
+
+            // Pobierz nicki używając istniejącej metody
+            const roleNicks = await this.getRoleNicks(guild, requestingMember);
+
+            if (roleNicks.length === 0) {
+                logger.warn('⚠️ Nie znaleziono członków z roli - snapshot będzie pusty');
+            }
+
+            // Zapisz do pliku z metadanymi
+            const snapshotData = {
+                timestamp: Date.now(),
+                guildId: guild.id,
+                userId: requestingMember.id,
+                count: roleNicks.length,
+                members: roleNicks.map(rm => ({
+                    userId: rm.userId,
+                    displayName: rm.displayName
+                }))
+            };
+
+            // Upewnij się że katalog istnieje
+            const dir = path.dirname(snapshotPath);
+            await fs.mkdir(dir, { recursive: true });
+
+            await fs.writeFile(snapshotPath, JSON.stringify(snapshotData, null, 2), 'utf8');
+            logger.info(`✅ Zapisano snapshot ${roleNicks.length} członków do pliku`);
+
+            return true;
+        } catch (error) {
+            logger.error('❌ Błąd zapisywania snapshotu nicków:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Ładuje snapshot nicków z pliku
+     * @param {string} snapshotPath - Ścieżka do pliku snapshot
+     * @returns {Promise<Array>} - Tablica członków w formacie [{userId, displayName}]
+     */
+    async loadRoleNicksSnapshot(snapshotPath) {
+        try {
+            const fileContent = await fs.readFile(snapshotPath, 'utf8');
+            const snapshotData = JSON.parse(fileContent);
+
+            logger.info(`📂 Załadowano snapshot ${snapshotData.count} członków z pliku (utworzony: ${new Date(snapshotData.timestamp).toLocaleString('pl-PL')})`);
+
+            // Zwróć w formacie zgodnym z getRoleNicks (bez obiektu member)
+            return snapshotData.members.map(m => ({
+                userId: m.userId,
+                displayName: m.displayName,
+                member: null // snapshot nie zawiera pełnego obiektu member
+            }));
+        } catch (error) {
+            logger.error(`❌ Błąd ładowania snapshotu nicków z ${snapshotPath}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Usuwa plik snapshot
+     * @param {string} snapshotPath - Ścieżka do pliku snapshot
+     */
+    async deleteRoleNicksSnapshot(snapshotPath) {
+        try {
+            await fs.unlink(snapshotPath);
+            logger.info(`🗑️ Usunięto snapshot nicków: ${snapshotPath}`);
+        } catch (error) {
+            if (error.code !== 'ENOENT') { // Ignoruj błąd jeśli plik nie istnieje
+                logger.warn(`⚠️ Błąd usuwania snapshotu ${snapshotPath}:`, error.message);
+            }
         }
     }
 
@@ -995,8 +1108,9 @@ class OCRService {
     /**
      * Wyciąga wszystkich graczy z ich wynikami (nie tylko z zerem)
      * Używane dla komendy /faza1
+     * @param {string} snapshotPath - Opcjonalna ścieżka do pliku snapshot z nickami
      */
-    async extractAllPlayersWithScores(text, guild = null, requestingMember = null) {
+    async extractAllPlayersWithScores(text, guild = null, requestingMember = null, snapshotPath = null) {
         try {
             logger.info('[PHASE1] 🎯 Rozpoczynam ekstrakcję wszystkich graczy z wynikami...');
 
@@ -1005,8 +1119,16 @@ class OCRService {
                 return [];
             }
 
-            // Pobierz nicki z odpowiedniej roli
-            const roleNicks = await this.getRoleNicks(guild, requestingMember);
+            // Pobierz nicki - ze snapshotu jeśli podano, lub z roli
+            let roleNicks;
+            if (snapshotPath) {
+                logger.info('[PHASE1] 📂 Używam snapshotu nicków zamiast pobierania na żywo');
+                roleNicks = await this.loadRoleNicksSnapshot(snapshotPath);
+            } else {
+                logger.info('[PHASE1] 📥 Pobieranie nicków z roli (brak snapshotu)');
+                roleNicks = await this.getRoleNicks(guild, requestingMember);
+            }
+
             if (roleNicks.length === 0) {
                 logger.info('[PHASE1] ❌ Brak nicków z odpowiedniej roli');
                 return [];
