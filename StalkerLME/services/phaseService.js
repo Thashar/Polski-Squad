@@ -672,6 +672,15 @@ class PhaseService {
                 .filter(scores => scores.length >= 2 && new Set(scores).size === 1).length;
             const unconfirmedResults = uniqueNicks - confirmedResults;
 
+            // Oblicz konflikty - nicki z różnymi wartościami
+            const conflictsCount = Array.from(session.aggregatedResults.values())
+                .filter(scores => new Set(scores).size > 1).length;
+
+            // Oblicz graczy z zerem - nicki, które mają przynajmniej jedną wartość 0
+            const playersWithZero = Array.from(session.aggregatedResults.entries())
+                .filter(([nick, scores]) => scores.some(score => score === 0 || score === '0'))
+                .length;
+
             const progressBar = this.createProgressBar(percent);
 
             // Ikony dla różnych etapów
@@ -692,8 +701,10 @@ class PhaseService {
                 .setColor('#FFA500')
                 .addFields(
                     { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
-                    { name: '✅ Potwierdzonych wyników', value: confirmedResults.toString(), inline: true },
-                    { name: '❓ Niepotwierdzonych', value: unconfirmedResults.toString(), inline: true }
+                    { name: '✅ Potwierdzone', value: confirmedResults.toString(), inline: true },
+                    { name: '❓ Niepotwierdzone', value: unconfirmedResults.toString(), inline: true },
+                    { name: '⚠️ Konflikty', value: conflictsCount.toString(), inline: true },
+                    { name: '🥚 Graczy z zerem', value: playersWithZero.toString(), inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Przetwarzanie...' });
