@@ -2014,6 +2014,9 @@ async function handleKawkaCommand(interaction, config) {
  */
 async function handleKawkaModalSubmit(interaction, config) {
     try {
+        // WAŻNE: Defer reply zanim zaczniemy długie operacje (Discord wymaga odpowiedzi w 3 sekundy)
+        await interaction.deferReply({ ephemeral: true });
+
         // Pobierz nick z customId modala (zdekoduj base64)
         const customId = interaction.customId;
         const encodedNick = customId.replace('kawka_modal_', '');
@@ -2025,9 +2028,8 @@ async function handleKawkaModalSubmit(interaction, config) {
 
         // Walidacja typu wpłaty
         if (wplataInput !== '1' && wplataInput !== '2') {
-            await interaction.reply({
-                content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **1** (jednorazowa) lub **2** (cykliczna)',
-                ephemeral: true
+            await interaction.editReply({
+                content: '❌ Nieprawidłowy typ wpłaty. Dozwolone wartości: **1** (jednorazowa) lub **2** (cykliczna)'
             });
             return;
         }
@@ -2041,9 +2043,8 @@ async function handleKawkaModalSubmit(interaction, config) {
         const channel = await interaction.client.channels.fetch(channelId);
 
         if (!channel) {
-            await interaction.reply({
-                content: '❌ Nie można znaleźć kanału do wysłania wiadomości.',
-                ephemeral: true
+            await interaction.editReply({
+                content: '❌ Nie można znaleźć kanału do wysłania wiadomości.'
             });
             return;
         }
@@ -2103,9 +2104,8 @@ async function handleKawkaModalSubmit(interaction, config) {
 
         // Potwierdź użytkownikowi
         const confirmNick = shouldPing ? displayNick : nickOption.replace('custom_', '').replace('userid_', '');
-        await interaction.reply({
-            content: `✅ **Wiadomość została wysłana na kanał!**\n\n📝 **Nick:** ${confirmNick}\n💰 **Kwota:** ${pln}\n📊 **Typ wpłaty:** ${wplata}${shouldPing ? '\n🔔 **Z pingiem**' : ''}`,
-            ephemeral: true
+        await interaction.editReply({
+            content: `✅ **Wiadomość została wysłana na kanał!**\n\n📝 **Nick:** ${confirmNick}\n💰 **Kwota:** ${pln}\n📊 **Typ wpłaty:** ${wplata}${shouldPing ? '\n🔔 **Z pingiem**' : ''}`
         });
 
         logger.info(`☕ ${interaction.user.tag} użył komendy /kawka - Nick: ${confirmNick}, PLN: ${pln}, Wpłata: ${wplata}, Ping: ${shouldPing}`);
@@ -2115,10 +2115,14 @@ async function handleKawkaModalSubmit(interaction, config) {
 
         const errorMessage = `❌ Wystąpił błąd podczas wysyłania wiadomości: ${error.message}`;
 
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
-        } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
+        try {
+            if (interaction.deferred) {
+                await interaction.editReply({ content: errorMessage });
+            } else if (!interaction.replied) {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        } catch (replyError) {
+            logger.error('❌ Nie można wysłać komunikatu o błędzie:', replyError);
         }
     }
 }
