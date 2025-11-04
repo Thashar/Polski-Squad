@@ -106,13 +106,22 @@ async function handleInteraction(interaction, config, lotteryService = null) {
         }
     } catch (error) {
         logger.error('❌ Błąd obsługi interakcji:', error);
-        
-        const errorMessage = '❌ Wystąpił błąd podczas wykonywania komendy.';
-        
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
+
+        // Dla autocomplete nie można używać reply/followUp - tylko respond
+        if (interaction.isAutocomplete()) {
+            try {
+                await interaction.respond([]);
+            } catch (respondError) {
+                logger.error('❌ Nie można wysłać odpowiedzi autocomplete:', respondError);
+            }
         } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
+            const errorMessage = '❌ Wystąpił błąd podczas wykonywania komendy.';
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ content: errorMessage, ephemeral: true });
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
         }
     }
 }
@@ -1871,30 +1880,57 @@ async function handleOligopolyClearCommand(interaction, config) {
  */
 async function handleKawkaAutocomplete(interaction) {
     try {
-        const focusedValue = interaction.options.getFocused().toLowerCase();
+        const focusedValue = interaction.options.getFocused();
 
-        // Pobierz członków serwera
-        const members = await interaction.guild.members.fetch();
+        // Pobierz członków serwera z Discord API używając query
+        // To bezpośrednio wyszukuje członków po nazwie w API Discord, co jest znacznie szybsze
+        let members;
+        if (focusedValue.length > 0) {
+            // Wyszukaj członków którzy pasują do wpisanego tekstu
+            members = await interaction.guild.members.fetch({
+                query: focusedValue,
+                limit: 100 // Pobierz więcej żeby po odfiltrowaniu botów zostało 25
+            });
+        } else {
+            // Jeśli nic nie wpisano, pobierz pierwszych 100 członków
+            members = await interaction.guild.members.fetch({ limit: 100 });
+        }
+
+        const focusedValueLower = focusedValue.toLowerCase();
 
         // Filtruj i sortuj członków według dopasowania
         const choices = members
             .filter(member => !member.user.bot) // Pomijamy boty
             .filter(member => {
+                // Dodatkowa filtracja po stronie klienta dla lepszego dopasowania
                 const displayName = member.displayName.toLowerCase();
                 const username = member.user.username.toLowerCase();
-                return displayName.includes(focusedValue) || username.includes(focusedValue);
+                return displayName.includes(focusedValueLower) || username.includes(focusedValueLower);
+            })
+            .sort((a, b) => {
+                // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
+                const aDisplayLower = a.displayName.toLowerCase();
+                const bDisplayLower = b.displayName.toLowerCase();
+                const aStartsWith = aDisplayLower.startsWith(focusedValueLower);
+                const bStartsWith = bDisplayLower.startsWith(focusedValueLower);
+
+                if (aStartsWith && !bStartsWith) return -1;
+                if (!aStartsWith && bStartsWith) return 1;
+
+                // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
+                return aDisplayLower.localeCompare(bDisplayLower);
             })
             .map(member => ({
                 name: `${member.displayName} (@${member.user.username})`,
                 value: `userid_${member.id}` // Prefix userid_ oznacza że to member
             }))
-            .slice(0, 25); // Discord limit: max 25 opcji
+            .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
 
         // Jeśli użytkownik coś wpisał, dodaj opcję "użyj tego co wpisałem"
-        if (focusedValue.length > 0 && choices.length < 25) {
+        if (focusedValue.length > 0) {
             choices.unshift({
-                name: `📝 Użyj wpisanego: "${interaction.options.getFocused()}"`,
-                value: `custom_${interaction.options.getFocused()}`
+                name: `📝 Użyj wpisanego: "${focusedValue}"`,
+                value: `custom_${focusedValue}`
             });
         }
 
