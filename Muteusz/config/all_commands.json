@@ -284,7 +284,7 @@
           "name": "/ocr-debug",
           "description": "Przełącza szczegółowe logowanie OCR",
           "usage": "/ocr-debug",
-          "requiredPermission": "moderator"
+          "requiredPermission": "administrator"
         },
         {
           "name": "/faza1",
