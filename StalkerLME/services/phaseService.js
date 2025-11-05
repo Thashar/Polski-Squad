@@ -991,7 +991,7 @@ class PhaseService {
                 '**2.** Im więcej screenów, tym lepsza jakość odczytu\n' +
                 '   • TYLKO pierwszy i ostatni nick nie może się powtórzyć!\n' +
                 '   • Wszystkie inne nicki muszą być powtórzone!\n' +
-                '   • Rób screeny zgodnie z zasadą 1-9, +4, +5, +4, +5... 30-39, 31-40.\n' +
+                '   • Rób screeny zgodnie z zasadą 1-9, +4, +5, +4, +5... 31-39, 32-40.\n' +
                 '**3.** Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze.\n' +
                 '**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!**\n\n' +
                 '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**\n\n' +
