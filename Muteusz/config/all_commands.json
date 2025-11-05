@@ -237,6 +237,12 @@
           "description": "Czyści wszystkie wpisy w systemie Oligopoly",
           "usage": "/oligopoly-clear",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/kawka",
+          "description": "Ogłoszenie wsparcia serwera kawką (tylko administratorzy)",
+          "usage": "/kawka nick:[nick użytkownika] → wypełnij formularz z kwotą i typem wpłaty",
+          "requiredPermission": "administrator"
         }
       ]
     },
