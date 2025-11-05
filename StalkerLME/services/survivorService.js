@@ -103,7 +103,15 @@ class SurvivorService {
                     return null;
                 }
 
-                const cleanJsonString = jsonString.substring(jsonStart);
+                let cleanJsonString = jsonString.substring(jsonStart);
+
+                // FIX: sio-tools generuje podwójny nawias otwierający {{
+                // Sprawdź czy jest podwójny nawias i pomiń pierwszy
+                if (cleanJsonString.startsWith('{{')) {
+                    this.logger.info('🔧 Wykryto podwójny nawias otwierający - pomijam pierwszy');
+                    cleanJsonString = cleanJsonString.substring(1);
+                }
+
                 const parsed = JSON.parse(cleanJsonString);
 
                 // Przekonwertuj format sio-tools na nasz format
@@ -1602,7 +1610,15 @@ class SurvivorService {
                 const jsonStart = jsonString.indexOf('{');
 
                 if (jsonStart !== -1) {
-                    const cleanJsonString = jsonString.substring(jsonStart);
+                    let cleanJsonString = jsonString.substring(jsonStart);
+
+                    // FIX: sio-tools generuje podwójny nawias otwierający {{
+                    // Sprawdź czy jest podwójny nawias i pomiń pierwszy
+                    if (cleanJsonString.startsWith('{{')) {
+                        this.logger.info('🔧 Wykryto podwójny nawias otwierający - pomijam pierwszy');
+                        cleanJsonString = cleanJsonString.substring(1);
+                    }
+
                     const parsed = JSON.parse(cleanJsonString);
 
                     const converted = this.convertSioToolsFormat(parsed);
@@ -1614,6 +1630,7 @@ class SurvivorService {
 
             return null;
         } catch (error) {
+            this.logger.error(`❌ Błąd dekodowania: ${error.message}`);
             return null;
         }
     }
