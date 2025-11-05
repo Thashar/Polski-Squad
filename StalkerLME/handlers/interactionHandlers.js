@@ -2158,7 +2158,7 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
     // Dodaj listę graczy do description
     const clanName = phaseService.config.roleDisplayNames[session.clan] || session.clan;
     summaryEmbed.embed.setDescription(
-        `**Klan:** ${clanName}\n**Tydzień:** ${weekInfo.weekNumber}/${weekInfo.year}\n**TOP30:** ${stats.top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText}\n\n✅ Przeanalizowano wszystkie zdjęcia i rozstrzygnięto konflikty.`
+        `**Klan:** ${clanName}\n**Tydzień:** ${weekInfo.weekNumber}/${weekInfo.year}\n**TOP30:** ${stats.top30Sum.toLocaleString('pl-PL')} pkt\n\n${resultsText}\n\n✅ Przeanalizowano wszystkie zdjęcia i rozstrzygnięto konflikty.\n\n**⚠️ Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze.**\n**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!**`
     );
 
     session.stage = 'final_confirmation';
