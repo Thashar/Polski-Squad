@@ -759,11 +759,9 @@ class SurvivorService {
                     // Pokaż tylko RC w pierwszej linii dla itemów B (jeśli mają C)
                     detailText = '';
 
-                    // Oblicz RC dla itemów B jeżeli mają C - koszt C + bonus RC
+                    // Oblicz RC dla itemów B jeżeli mają C
                     if (c > 0) {
-                        const cCost = this.calculateOldCCost(c);
-                        const cBonus = this.calculateBItemCBonus(c);
-                        const totalCost = cCost + cBonus;
+                        const totalCost = this.calculateBItemCResourceCost(c);
                         costText = totalCost > 0 ? ` • <:II_RC:1385139885924421653> **${totalCost}**` : '';
                     } else {
                         costText = ''; // Brak C = brak kosztów RC
@@ -792,9 +790,7 @@ class SurvivorService {
                     rcText = resourceCost > 0 ? ` • <:II_RC:1385139885924421653> ${resourceCost}` : '';
                 } else {
                     if (c > 0) {
-                        const cCost = this.calculateOldCCost(c);
-                        const cBonus = this.calculateBItemCBonus(c);
-                        const totalCost = cCost + cBonus;
+                        const totalCost = this.calculateBItemCResourceCost(c);
                         rcText = totalCost > 0 ? ` • <:II_RC:1385139885924421653> ${totalCost}` : '';
                     }
                 }
@@ -1335,6 +1331,30 @@ class SurvivorService {
     }
 
     /**
+     * Oblicza całkowity koszt RC dla itemów B z poziomem C
+     * C1-C2: 1E + 2V + koszt C (bez bonusu)
+     * C3+: koszt C + bonus C
+     */
+    calculateBItemCResourceCost(cLevel) {
+        if (cLevel === 0) {
+            return 0;
+        }
+
+        const cCost = this.calculateOldCCost(cLevel);
+
+        // Dla C1 i C2: dodaj 1E + 2V, ale bez bonusu
+        if (cLevel <= 2) {
+            const eCost = this.calculateOldEVCost(1); // 1E = 1 RC
+            const vCost = this.calculateOldEVCost(2); // 2V = 1+2 = 3 RC
+            return eCost + vCost + cCost; // 1 + 3 + cCost
+        }
+
+        // Dla C3+: koszt C + bonus C (jak było)
+        const cBonus = this.calculateBItemCBonus(cLevel);
+        return cCost + cBonus;
+    }
+
+    /**
      * Oblicza dodatkowe materiały E+V dla poziomów C w itemach B
      */
     calculateBItemCMaterialBonus(cLevel) {
@@ -1476,10 +1496,8 @@ class SurvivorService {
                         totalEvolutionCost += eCost;
                         totalResourceCost += eCost + vCost + cCost;
                     } else {
-                        // Przedmioty B - licz tylko C plus bonus RC
-                        const cCost = this.calculateOldCCost(c);
-                        const cBonus = this.calculateBItemCBonus(c);
-                        totalResourceCost += cCost + cBonus;
+                        // Przedmioty B - użyj nowej logiki obliczania RC dla C
+                        totalResourceCost += this.calculateBItemCResourceCost(c);
                     }
                 }
 
