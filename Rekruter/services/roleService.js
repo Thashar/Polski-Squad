@@ -35,32 +35,32 @@ async function assignClanRole(member, attack, user, config, client) {
         await delay(1000);
 
         if (attack >= 1500000) {
-            logger.info(`[CLAN_ASSIGN] Przypisano do MainClan (atak: ${attack})`);
-            await safeAddRole(member, config.roles.mainClan);
+            logger.info(`[CLAN_ASSIGN] Przypisano rolę rekrutacyjną Main (atak: ${attack})`);
+            await safeAddRole(member, config.recruitRoles.recruitMain);
             targetChannelId = config.channels.mainClan;
             const channel = client.channels.cache.get(targetChannelId);
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.mainClanWelcome}`);
             }
         } else if (attack >= 1000000) {
-            logger.info(`[CLAN_ASSIGN] Przypisano do Clan2 (atak: ${attack})`);
-            await safeAddRole(member, config.roles.clan2);
+            logger.info(`[CLAN_ASSIGN] Przypisano rolę rekrutacyjną Clan2 (atak: ${attack})`);
+            await safeAddRole(member, config.recruitRoles.recruit2);
             targetChannelId = config.channels.clan2;
             const channel = client.channels.cache.get(targetChannelId);
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.clan2Welcome}`);
             }
         } else if (attack >= 500000) {
-            logger.info(`[CLAN_ASSIGN] Przypisano do Clan1 (atak: ${attack})`);
-            await safeAddRole(member, config.roles.clan1);
+            logger.info(`[CLAN_ASSIGN] Przypisano rolę rekrutacyjną Clan1 (atak: ${attack})`);
+            await safeAddRole(member, config.recruitRoles.recruit1);
             targetChannelId = config.channels.clan1;
             const channel = client.channels.cache.get(targetChannelId);
             if (channel) {
                 await channel.send(`# ${user}\n${config.messages.clan1Welcome}`);
             }
         } else {
-            logger.info(`[CLAN_ASSIGN] Przypisano do Clan0 (atak: ${attack})`);
-            await safeAddRole(member, config.roles.clan0);
+            logger.info(`[CLAN_ASSIGN] Przypisano rolę rekrutacyjną Clan0 (atak: ${attack})`);
+            await safeAddRole(member, config.recruitRoles.recruit0);
             targetChannelId = config.channels.clan0;
             const channel = client.channels.cache.get(targetChannelId);
             if (channel) {

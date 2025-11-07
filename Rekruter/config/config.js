@@ -20,6 +20,10 @@ const requiredEnvVars = [
     'CLAN1_ROLE',
     'CLAN2_ROLE',
     'MAIN_CLAN_ROLE',
+    'RECRUIT_0_ROLE',
+    'RECRUIT_1_ROLE',
+    'RECRUIT_2_ROLE',
+    'RECRUIT_MAIN_ROLE',
     'LEADER_ROLE',
     'VICE_LEADER_ROLE',
     'VICE_LEADER_MAIN_ROLE'
@@ -53,6 +57,13 @@ module.exports = {
         leader: process.env.LEADER_ROLE,
         viceLeader: process.env.VICE_LEADER_ROLE,
         viceLeaderMain: process.env.VICE_LEADER_MAIN_ROLE
+    },
+    // Role rekrutacyjne - nadawane podczas rekrutacji
+    recruitRoles: {
+        recruit0: process.env.RECRUIT_0_ROLE,
+        recruit1: process.env.RECRUIT_1_ROLE,
+        recruit2: process.env.RECRUIT_2_ROLE,
+        recruitMain: process.env.RECRUIT_MAIN_ROLE
     },
     
     // Konfiguracja monitorowania użytkowników bez ról
