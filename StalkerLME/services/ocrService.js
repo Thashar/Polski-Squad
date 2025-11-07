@@ -690,40 +690,24 @@ class OCRService {
 
             logger.info(`📥 Pobieranie członków z rolą ${userRoleId}...`);
 
-            // Retry logic z exponential backoff
-            let members = null;
-            let retryCount = 0;
-            const maxRetries = 3;
+            // Użyj bezpośrednio cache roli - znacznie szybsze niż fetch wszystkich członków
+            const role = guild.roles.cache.get(userRoleId);
 
-            while (retryCount < maxRetries) {
-                try {
-                    members = await guild.members.fetch({ force: false }); // Użyj cache jeśli dostępny
-                    break; // Sukces - wyjdź z pętli
-                } catch (fetchError) {
-                    retryCount++;
-                    logger.warn(`⚠️ Próba ${retryCount}/${maxRetries} pobierania członków nie powiodła się: ${fetchError.message}`);
-
-                    if (retryCount < maxRetries) {
-                        // Exponential backoff: 1s, 2s, 4s
-                        const delay = Math.pow(2, retryCount - 1) * 1000;
-                        logger.info(`⏳ Ponowna próba za ${delay}ms...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } else {
-                        throw fetchError; // Ostatnia próba - wyrzuć błąd
-                    }
-                }
+            if (!role) {
+                logger.error(`❌ Nie znaleziono roli ${userRoleId} w cache`);
+                return [];
             }
 
-            const roleMembers = [];
+            // Pobierz członków bezpośrednio z roli (używa cache)
+            const members = role.members;
 
+            const roleMembers = [];
             for (const [userId, member] of members) {
-                if (member.roles.cache.has(userRoleId)) {
-                    roleMembers.push({
-                        userId: userId,
-                        member: member,
-                        displayName: member.displayName
-                    });
-                }
+                roleMembers.push({
+                    userId: userId,
+                    member: member,
+                    displayName: member.displayName
+                });
             }
 
             logger.info(`👥 Znaleziono ${roleMembers.length} członków z rolą ${userRoleId}`);
