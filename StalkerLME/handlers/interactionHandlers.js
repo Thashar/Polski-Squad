@@ -725,7 +725,7 @@ async function handleButton(interaction, sharedState) {
                         .addFields(
                             { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
                             { name: '📢 Wysłano przypomnienia dla', value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false },
-                            { name: '⏰ Pozostały czas do 17:50', value: timeDisplay, inline: true },
+                            { name: '⏰ Pozostały czas do 16:50', value: timeDisplay, inline: true },
                             { name: '📤 Wysłano wiadomości', value: reminderResult.sentMessages.toString(), inline: true },
                             { name: '📢 Na kanały', value: reminderResult.roleGroups.toString(), inline: true }
                         )
