@@ -108,7 +108,7 @@ client.once(Events.ClientReady, async () => {
     // Uruchomienie zadania cron dla czyszczenia starych danych przypomnień (codziennie o 03:00)
     cron.schedule('0 3 * * *', async () => {
         logger.info('Rozpoczynam czyszczenie starych danych przypomnień...');
-        await reminderUsageService.cleanupOldReminders();
+        await reminderUsageService.cleanupOldData();
     }, {
         timezone: config.timezone
     });
