@@ -9,6 +9,7 @@ const DatabaseService = require('./services/databaseService');
 const OCRService = require('./services/ocrService');
 const PunishmentService = require('./services/punishmentService');
 const ReminderService = require('./services/reminderService');
+const ReminderUsageService = require('./services/reminderUsageService');
 const VacationService = require('./services/vacationService');
 const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
@@ -30,6 +31,7 @@ const databaseService = new DatabaseService(config);
 const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config);
+const reminderUsageService = new ReminderUsageService(config);
 const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
@@ -51,6 +53,7 @@ const sharedState = {
     ocrService,
     punishmentService,
     reminderService,
+    reminderUsageService,
     vacationService,
     survivorService,
     messageCleanupService,
@@ -64,6 +67,7 @@ client.once(Events.ClientReady, async () => {
     await databaseService.initializeDatabase();
     await ocrService.initializeOCR();
     await messageCleanupService.init();
+    await reminderUsageService.loadUsageData();
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
@@ -100,7 +104,15 @@ client.once(Events.ClientReady, async () => {
     }, {
         timezone: config.timezone
     });
-    
+
+    // Uruchomienie zadania cron dla czyszczenia starych danych przypomnień (codziennie o 03:00)
+    cron.schedule('0 3 * * *', async () => {
+        logger.info('Rozpoczynam czyszczenie starych danych przypomnień...');
+        await reminderUsageService.cleanupOldReminders();
+    }, {
+        timezone: config.timezone
+    });
+
     // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
     
 });
