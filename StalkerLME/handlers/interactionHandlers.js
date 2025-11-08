@@ -40,7 +40,7 @@ async function handleInteraction(interaction, sharedState, config) {
 }
 
 async function handleSlashCommand(interaction, sharedState) {
-    const { config, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
+    const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /decode i /wyniki
     const publicCommands = ['decode', 'wyniki'];
@@ -54,7 +54,7 @@ async function handleSlashCommand(interaction, sharedState) {
             await handlePunishCommand(interaction, config, ocrService, punishmentService);
             break;
         case 'remind':
-            await handleRemindCommand(interaction, config, ocrService, reminderService);
+            await handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService);
             break;
         case 'punishment':
             await handlePunishmentCommand(interaction, config, databaseService, punishmentService);
@@ -63,7 +63,7 @@ async function handleSlashCommand(interaction, sharedState) {
             await handlePointsCommand(interaction, config, databaseService, punishmentService);
             break;
         case 'debug-roles':
-            await handleDebugRolesCommand(interaction, config);
+            await handleDebugRolesCommand(interaction, config, reminderUsageService);
             break;
         case 'ocr-debug':
             await handleOcrDebugCommand(interaction, config);
@@ -130,21 +130,41 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
     }
 }
 
-async function handleRemindCommand(interaction, config, ocrService, reminderService) {
+async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
     const attachment = interaction.options.getAttachment('image');
-    
+
     if (!attachment) {
         await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
         return;
     }
-    
+
     if (!attachment.contentType?.startsWith('image/')) {
         await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
         return;
     }
-    
+
     try {
-        // Najpierw odpowiedz z informacją o rozpoczęciu analizy
+        // Najpierw sprawdź czy użytkownik może wysłać przypomnienie
+        const userId = interaction.user.id;
+        const canSend = await reminderUsageService.canSendReminder(userId);
+
+        if (!canSend.canSend) {
+            // Użytkownik przekroczył limit przypomnień
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('⏰ Limit przypomnień')
+                .setDescription(canSend.reason)
+                .setColor('#ff0000')
+                .setTimestamp()
+                .setFooter({ text: `Limit: 2 przypomnienia dziennie | Boss deadline: 16:50` });
+
+            await interaction.reply({
+                embeds: [errorEmbed],
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Użytkownik może wysłać przypomnienie, kontynuuj z OCR
         await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
         
         // Odśwież cache członków przed analizą
@@ -183,7 +203,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             imageUrl: attachment.url,
             originalUserId: interaction.user.id,
             config: config,
-            reminderService: reminderService
+            reminderService: reminderService,
+            reminderUsageService: reminderUsageService
         });
         
         // Usunięcie danych po 5 minut
@@ -328,17 +349,17 @@ async function handlePointsCommand(interaction, config, databaseService, punishm
     }
 }
 
-async function handleDebugRolesCommand(interaction, config) {
+async function handleDebugRolesCommand(interaction, config, reminderUsageService) {
     const category = interaction.options.getString('category');
     const roleId = config.targetRoles[category];
-    
+
     if (!roleId) {
         await interaction.reply({ content: 'Nieprawidłowa kategoria!', flags: MessageFlags.Ephemeral });
         return;
     }
-    
+
     await interaction.deferReply();
-    
+
     // Odśwież cache członków przed sprawdzeniem ról
     try {
         logger.info('🔄 Odświeżanie cache\'u członków dla debug-roles...');
@@ -347,23 +368,27 @@ async function handleDebugRolesCommand(interaction, config) {
     } catch (error) {
         logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
-    
+
     try {
         const role = interaction.guild.roles.cache.get(roleId);
         const roleName = config.roleDisplayNames[category];
-        
+
         if (!role) {
             await interaction.editReply({ content: 'Nie znaleziono roli!', flags: MessageFlags.Ephemeral });
             return;
         }
-        
+
         // Pobierz wszystkich członków z daną rolą
         const members = role.members;
         let membersList = '';
-        
+
         if (members.size === 0) {
             membersList = 'Brak członków z tą rolą.';
         } else {
+            // Pobierz statystyki przypomnień dla wszystkich członków
+            const userIds = Array.from(members.keys());
+            const reminderStats = await reminderUsageService.getMultipleUserStats(userIds);
+
             const sortedMembers = members.sort((a, b) => a.displayName.localeCompare(b.displayName));
             let count = 0;
             for (const [userId, member] of sortedMembers) {
@@ -371,7 +396,11 @@ async function handleDebugRolesCommand(interaction, config) {
                     membersList += `\n... i ${members.size - count} więcej`;
                     break;
                 }
-                membersList += `${count + 1}. ${member.displayName}\n`;
+
+                // Dodaj licznik przypomnień przy nicku
+                const reminderCount = reminderStats[userId] || 0;
+                const reminderBadge = reminderCount > 0 ? ` [📢 ${reminderCount}]` : '';
+                membersList += `${count + 1}. ${member.displayName}${reminderBadge}\n`;
                 count++;
             }
         }
@@ -677,7 +706,10 @@ async function handleButton(interaction, sharedState) {
                     break;
                 case 'remind':
                     const reminderResult = await data.reminderService.sendReminders(interaction.guild, data.foundUsers);
-                    
+
+                    // Zapisz użycie przypomnienia
+                    await data.reminderUsageService.recordReminder(data.originalUserId);
+
                     // Zaktualizuj ephemeral message z potwierdzeniem
                     const confirmationSuccess = new EmbedBuilder()
                         .setTitle('✅ Przypomnienie wysłane')
@@ -685,8 +717,8 @@ async function handleButton(interaction, sharedState) {
                         .setColor('#00ff00')
                         .setTimestamp()
                         .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
-                    
-                    await interaction.update({ 
+
+                    await interaction.update({
                         embeds: [confirmationSuccess],
                         components: []
                     });
