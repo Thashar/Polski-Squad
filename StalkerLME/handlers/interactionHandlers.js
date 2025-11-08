@@ -144,18 +144,34 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
     }
 
     try {
-        // Najpierw sprawdź czy użytkownik może wysłać przypomnienie
-        const userId = interaction.user.id;
-        const canSend = await reminderUsageService.canSendReminder(userId);
+        // Znajdź rolę klanu użytkownika (do sprawdzania limitów)
+        let userClanRoleId = null;
+        for (const [roleKey, roleId] of Object.entries(config.targetRoles)) {
+            if (interaction.member.roles.cache.has(roleId)) {
+                userClanRoleId = roleId;
+                break;
+            }
+        }
+
+        if (!userClanRoleId) {
+            await interaction.reply({
+                content: '❌ Nie masz żadnej z ról klanowych. Tylko członkowie klanów mogą używać /remind.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Sprawdź czy klan może wysłać przypomnienie (limity czasowe)
+        const canSend = await reminderUsageService.canSendReminder(userClanRoleId);
 
         if (!canSend.canSend) {
-            // Użytkownik przekroczył limit przypomnień
+            // Klan przekroczył limit przypomnień
             const errorEmbed = new EmbedBuilder()
                 .setTitle('⏰ Limit przypomnień')
                 .setDescription(canSend.reason)
                 .setColor('#ff0000')
                 .setTimestamp()
-                .setFooter({ text: `Limit: 2 przypomnienia dziennie | Boss deadline: 16:50` });
+                .setFooter({ text: `Limit: 2 przypomnienia dziennie (per klan) | Boss deadline: 16:50` });
 
             await interaction.reply({
                 embeds: [errorEmbed],
@@ -164,7 +180,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             return;
         }
 
-        // Użytkownik może wysłać przypomnienie, kontynuuj z OCR
+        // Klan może wysłać przypomnienie, kontynuuj z OCR
         await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
         
         // Odśwież cache członków przed analizą
@@ -202,6 +218,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             zeroScorePlayers: zeroScorePlayers, // Oryginalne nicki dla wyświetlenia
             imageUrl: attachment.url,
             originalUserId: interaction.user.id,
+            userClanRoleId: userClanRoleId, // Rola klanu użytkownika (do limitów)
             config: config,
             reminderService: reminderService,
             reminderUsageService: reminderUsageService
@@ -707,8 +724,11 @@ async function handleButton(interaction, sharedState) {
                 case 'remind':
                     const reminderResult = await data.reminderService.sendReminders(interaction.guild, data.foundUsers);
 
-                    // Zapisz użycie przypomnienia
-                    await data.reminderUsageService.recordReminder(data.originalUserId);
+                    // Zapisz użycie /remind przez klan (dla limitów czasowych)
+                    await data.reminderUsageService.recordRoleUsage(data.userClanRoleId, data.originalUserId);
+
+                    // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
+                    await data.reminderUsageService.recordPingedUsers(data.foundUsers);
 
                     // Zaktualizuj ephemeral message z potwierdzeniem
                     const confirmationSuccess = new EmbedBuilder()

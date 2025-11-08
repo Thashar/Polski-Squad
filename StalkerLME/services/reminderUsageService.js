@@ -12,32 +12,38 @@ class ReminderUsageService {
     }
 
     /**
-     * Ładuje dane o użyciu przypomnień z pliku
-     * @returns {Promise<Object>} - Obiekt z danymi użycia przypomnień
+     * Ładuje dane o przypomnieniach z pliku
+     * @returns {Promise<Object>} - Obiekt z danymi
      */
     async loadUsageData() {
         try {
             const data = await fs.readFile(this.dataPath, 'utf8');
             this.usageData = JSON.parse(data);
-            logger.info('✅ Załadowano dane użycia przypomnień');
+            logger.info('✅ Załadowano dane przypomnień (limity + pingi)');
             return this.usageData;
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje, utworzenie nowego
-                this.usageData = {};
+                this.usageData = {
+                    senders: {},  // Kto wysyłał /remind (limity czasowe)
+                    receivers: {} // Kto był pingowany (statystyki)
+                };
                 await this.saveUsageData();
-                logger.info('📝 Utworzono nowy plik danych użycia przypomnień');
+                logger.info('📝 Utworzono nowy plik danych przypomnień');
                 return this.usageData;
             }
 
-            logger.error('❌ Błąd ładowania danych użycia przypomnień:', error.message);
-            this.usageData = {};
+            logger.error('❌ Błąd ładowania danych przypomnień:', error.message);
+            this.usageData = {
+                senders: {},
+                receivers: {}
+            };
             return this.usageData;
         }
     }
 
     /**
-     * Zapisuje dane o użyciu przypomnień do pliku
+     * Zapisuje dane o przypomnieniach do pliku
      */
     async saveUsageData() {
         try {
@@ -46,9 +52,9 @@ class ReminderUsageService {
             await fs.mkdir(dir, { recursive: true });
 
             await fs.writeFile(this.dataPath, JSON.stringify(this.usageData, null, 2), 'utf8');
-            logger.info('💾 Zapisano dane użycia przypomnień');
+            logger.info('💾 Zapisano dane przypomnień');
         } catch (error) {
-            logger.error('❌ Błąd zapisu danych użycia przypomnień:', error.message);
+            logger.error('❌ Błąd zapisu danych przypomnień:', error.message);
         }
     }
 
@@ -87,11 +93,11 @@ class ReminderUsageService {
     }
 
     /**
-     * Sprawdza czy użytkownik może wysłać przypomnienie
-     * @param {string} userId - ID użytkownika
+     * Sprawdza czy klan może wysłać /remind (limity czasowe PER KLAN)
+     * @param {string} roleId - ID roli (klanu)
      * @returns {Object} - { canSend: boolean, reason: string, minutesToDeadline: number }
      */
-    async canSendReminder(userId) {
+    async canSendReminder(roleId) {
         if (!this.usageData) {
             await this.loadUsageData();
         }
@@ -99,19 +105,19 @@ class ReminderUsageService {
         const minutesToDeadline = this.getMinutesToDeadline();
         const today = this.getTodayDate();
 
-        // Inicjalizacja danych użytkownika jeśli nie istnieją
-        if (!this.usageData[userId]) {
-            this.usageData[userId] = {
-                totalReminders: 0,
-                dailyReminders: {}
+        // Inicjalizacja danych klanu jeśli nie istnieją
+        if (!this.usageData.senders[roleId]) {
+            this.usageData.senders[roleId] = {
+                totalSent: 0,
+                dailyUsage: {}
             };
         }
 
-        const userData = this.usageData[userId];
-        const todayReminders = userData.dailyReminders[today] || [];
+        const clanData = this.usageData.senders[roleId];
+        const todayUsage = clanData.dailyUsage[today] || [];
 
-        // Sprawdź czy użytkownik wysłał już przypomnienia dzisiaj
-        const remindersCount = todayReminders.length;
+        // Sprawdź ile razy KLAN użył /remind dzisiaj
+        const usageCount = todayUsage.length;
 
         // Logika limitów:
         // - Więcej niż 6h (>360 min) - za wcześnie, blokada
@@ -147,31 +153,31 @@ class ReminderUsageService {
 
         if (minutesToDeadline >= 60 && minutesToDeadline < 360) {
             // Między 1h a 6h - można wysłać PIERWSZE przypomnienie
-            if (remindersCount === 0) {
+            if (usageCount === 0) {
                 return {
                     canSend: true,
                     reason: '✅ Pierwsze przypomnienie (ostatnie 6h przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
-            } else if (remindersCount === 1) {
+            } else if (usageCount === 1) {
                 // Już wysłano pierwsze, ale jest jeszcze miejsce na drugie
-                const firstReminder = todayReminders[0];
+                const firstUsage = todayUsage[0];
                 return {
                     canSend: false,
-                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**.\n\nDrugie przypomnienie możesz wysłać w **ostatniej godzinie** przed deadline (15:50-16:50).`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}** przez <@${firstUsage.sentBy}>.\n\nDrugie przypomnienie klan może wysłać w **ostatniej godzinie** przed deadline (15:50-16:50).`,
                     minutesToDeadline
                 };
             } else {
                 // Już wysłano oba przypomnienia
-                const firstReminder = todayReminders[0];
-                const secondReminder = todayReminders[1];
+                const firstUsage = todayUsage[0];
+                const secondUsage = todayUsage[1];
                 return {
                     canSend: false,
-                    reason: `❌ Wykorzystałeś już oba dzienne przypomnienia:\n\n` +
-                           `**1.** ${new Date(firstReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} (${firstReminder.minutesToDeadline} min do deadline)\n` +
-                           `**2.** ${new Date(secondReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} (${secondReminder.minutesToDeadline} min do deadline)\n\n` +
-                           `Możesz użyć komendy /remind maksymalnie **2 razy dziennie**.`,
+                    reason: `❌ Klan wykorzystał już oba dzienne przypomnienia:\n\n` +
+                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${firstUsage.sentBy}> (${firstUsage.minutesToDeadline} min do deadline)\n` +
+                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${secondUsage.sentBy}> (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
+                           `Każdy klan może użyć komendy /remind maksymalnie **2 razy dziennie**.`,
                     minutesToDeadline
                 };
             }
@@ -179,14 +185,14 @@ class ReminderUsageService {
 
         if (minutesToDeadline >= 0 && minutesToDeadline < 60) {
             // Mniej niż 1h - można wysłać DRUGIE przypomnienie
-            if (remindersCount === 0) {
+            if (usageCount === 0) {
                 return {
                     canSend: true,
                     reason: '✅ Pierwsze przypomnienie (ostatnia godzina przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
-            } else if (remindersCount === 1) {
+            } else if (usageCount === 1) {
                 return {
                     canSend: true,
                     reason: '✅ Drugie przypomnienie (ostatnia godzina przed deadline)',
@@ -195,14 +201,14 @@ class ReminderUsageService {
                 };
             } else {
                 // Już wysłano oba przypomnienia
-                const firstReminder = todayReminders[0];
-                const secondReminder = todayReminders[1];
+                const firstUsage = todayUsage[0];
+                const secondUsage = todayUsage[1];
                 return {
                     canSend: false,
-                    reason: `❌ Wykorzystałeś już oba dzienne przypomnienia:\n\n` +
-                           `**1.** ${new Date(firstReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} (${firstReminder.minutesToDeadline} min do deadline)\n` +
-                           `**2.** ${new Date(secondReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} (${secondReminder.minutesToDeadline} min do deadline)\n\n` +
-                           `Możesz użyć komendy /remind maksymalnie **2 razy dziennie**.`,
+                    reason: `❌ Klan wykorzystał już oba dzienne przypomnienia:\n\n` +
+                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${firstUsage.sentBy}> (${firstUsage.minutesToDeadline} min do deadline)\n` +
+                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${secondUsage.sentBy}> (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
+                           `Każdy klan może użyć komendy /remind maksymalnie **2 razy dziennie**.`,
                     minutesToDeadline
                 };
             }
@@ -216,10 +222,11 @@ class ReminderUsageService {
     }
 
     /**
-     * Rejestruje wysłanie przypomnienia przez użytkownika
-     * @param {string} userId - ID użytkownika
+     * Rejestruje użycie /remind przez klan (dla limitów czasowych)
+     * @param {string} roleId - ID roli (klanu)
+     * @param {string} senderId - ID użytkownika który wysłał komendę
      */
-    async recordReminder(userId) {
+    async recordRoleUsage(roleId, senderId) {
         if (!this.usageData) {
             await this.loadUsageData();
         }
@@ -227,53 +234,98 @@ class ReminderUsageService {
         const today = this.getTodayDate();
         const minutesToDeadline = this.getMinutesToDeadline();
 
-        // Inicjalizacja danych użytkownika jeśli nie istnieją
-        if (!this.usageData[userId]) {
-            this.usageData[userId] = {
-                totalReminders: 0,
-                dailyReminders: {}
+        // Inicjalizacja danych klanu jeśli nie istnieją
+        if (!this.usageData.senders[roleId]) {
+            this.usageData.senders[roleId] = {
+                totalSent: 0,
+                dailyUsage: {}
             };
         }
 
-        const userData = this.usageData[userId];
+        const clanData = this.usageData.senders[roleId];
 
-        // Inicjalizacja dzisiejszych przypomnień jeśli nie istnieją
-        if (!userData.dailyReminders[today]) {
-            userData.dailyReminders[today] = [];
+        // Inicjalizacja dzisiejszego użycia jeśli nie istnieje
+        if (!clanData.dailyUsage[today]) {
+            clanData.dailyUsage[today] = [];
         }
 
-        // Dodaj nowe przypomnienie
-        userData.dailyReminders[today].push({
+        // Dodaj nowe użycie
+        clanData.dailyUsage[today].push({
             timestamp: Date.now(),
-            minutesToDeadline: minutesToDeadline
+            minutesToDeadline: minutesToDeadline,
+            sentBy: senderId
         });
 
         // Zwiększ całkowity licznik
-        userData.totalReminders++;
+        clanData.totalSent++;
 
-        // Zapisz dane
-        await this.saveUsageData();
-
-        logger.info(`📝 Zarejestrowano przypomnienie dla użytkownika ${userId} (${userData.totalReminders} ogółem, ${userData.dailyReminders[today].length} dzisiaj)`);
+        logger.info(`📤 Zarejestrowano użycie /remind dla klanu ${roleId} przez użytkownika ${senderId} (${clanData.totalSent} ogółem dla klanu)`);
     }
 
     /**
-     * Pobiera całkowitą liczbę przypomnień dla użytkownika
-     * @param {string} userId - ID użytkownika
-     * @returns {number}
+     * Rejestruje pingi do użytkowników (dla statystyk w /debug-roles)
+     * @param {Array<Object>} foundUsers - Tablica obiektów { member, matchedName }
      */
-    async getTotalReminders(userId) {
+    async recordPingedUsers(foundUsers) {
         if (!this.usageData) {
             await this.loadUsageData();
         }
 
-        return this.usageData[userId]?.totalReminders || 0;
+        const today = this.getTodayDate();
+        const timestamp = Date.now();
+
+        for (const userData of foundUsers) {
+            const userId = userData.member.id;
+
+            // Inicjalizacja danych odbiorcy jeśli nie istnieją
+            if (!this.usageData.receivers[userId]) {
+                this.usageData.receivers[userId] = {
+                    totalPings: 0,
+                    dailyPings: {}
+                };
+            }
+
+            const receiverData = this.usageData.receivers[userId];
+
+            // Inicjalizacja dzisiejszych pingów jeśli nie istnieją
+            if (!receiverData.dailyPings[today]) {
+                receiverData.dailyPings[today] = [];
+            }
+
+            // Dodaj nowy ping
+            receiverData.dailyPings[today].push({
+                timestamp: timestamp,
+                matchedName: userData.matchedName
+            });
+
+            // Zwiększ całkowity licznik
+            receiverData.totalPings++;
+
+            logger.info(`📢 Zarejestrowano ping dla użytkownika ${userData.member.displayName} (${userId}), ogółem: ${receiverData.totalPings}`);
+        }
+
+        // Zapisz dane
+        await this.saveUsageData();
+        logger.info(`✅ Zapisano ${foundUsers.length} pingów do bazy danych`);
     }
 
     /**
-     * Pobiera statystyki przypomnień dla wielu użytkowników
+     * Pobiera całkowitą liczbę pingów dla użytkownika
+     * @param {string} userId - ID użytkownika
+     * @returns {number}
+     */
+    async getTotalPings(userId) {
+        if (!this.usageData) {
+            await this.loadUsageData();
+        }
+
+        return this.usageData.receivers[userId]?.totalPings || 0;
+    }
+
+    /**
+     * Pobiera statystyki pingów dla wielu użytkowników (do wyświetlenia w /debug-roles)
      * @param {Array<string>} userIds - Tablica ID użytkowników
-     * @returns {Object} - Mapa userId -> liczba przypomnień
+     * @returns {Object} - Mapa userId -> liczba pingów
      */
     async getMultipleUserStats(userIds) {
         if (!this.usageData) {
@@ -282,16 +334,16 @@ class ReminderUsageService {
 
         const stats = {};
         for (const userId of userIds) {
-            stats[userId] = this.usageData[userId]?.totalReminders || 0;
+            stats[userId] = this.usageData.receivers[userId]?.totalPings || 0;
         }
 
         return stats;
     }
 
     /**
-     * Czyści stare dane przypomnień (starsze niż 30 dni)
+     * Czyści stare dane (starsze niż 30 dni)
      */
-    async cleanupOldReminders() {
+    async cleanupOldData() {
         if (!this.usageData) {
             await this.loadUsageData();
         }
@@ -303,14 +355,29 @@ class ReminderUsageService {
 
         let cleanedCount = 0;
 
-        for (const userId in this.usageData) {
-            const userData = this.usageData[userId];
-            const dailyReminders = userData.dailyReminders;
+        // Czyść dane nadawców (limity czasowe)
+        for (const userId in this.usageData.senders) {
+            const senderData = this.usageData.senders[userId];
+            const dailyUsage = senderData.dailyUsage;
 
-            for (const date in dailyReminders) {
-                const reminderDate = new Date(date);
-                if (reminderDate < thirtyDaysAgo) {
-                    delete dailyReminders[date];
+            for (const date in dailyUsage) {
+                const usageDate = new Date(date);
+                if (usageDate < thirtyDaysAgo) {
+                    delete dailyUsage[date];
+                    cleanedCount++;
+                }
+            }
+        }
+
+        // Czyść dane odbiorców (pingi) - TYLKO szczegóły, NIE totalPings!
+        for (const userId in this.usageData.receivers) {
+            const receiverData = this.usageData.receivers[userId];
+            const dailyPings = receiverData.dailyPings;
+
+            for (const date in dailyPings) {
+                const pingDate = new Date(date);
+                if (pingDate < thirtyDaysAgo) {
+                    delete dailyPings[date];
                     cleanedCount++;
                 }
             }
