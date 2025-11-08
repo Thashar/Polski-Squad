@@ -114,51 +114,82 @@ class ReminderUsageService {
         const remindersCount = todayReminders.length;
 
         // Logika limitów:
-        // - Więcej niż 6h (>360 min) - można wysłać pierwsze przypomnienie
-        // - Między 1h a 6h (60-360 min) - można wysłać drugie przypomnienie
-        // - Mniej niż 1h (<60 min) - nie można wysłać
+        // - Więcej niż 6h (>360 min) - za wcześnie, blokada
+        // - Między 1h a 6h (60-360 min) - można wysłać PIERWSZE przypomnienie (ostatnie 6h)
+        // - Mniej niż 1h (0-60 min) - można wysłać DRUGIE przypomnienie (ostatnia 1h)
+        // - Po deadline (<0 min) - blokada
 
-        if (minutesToDeadline < 60) {
+        if (minutesToDeadline < 0) {
             return {
                 canSend: false,
-                reason: '❌ Nie można wysłać przypomnienia - zostało mniej niż **1 godzina** do deadline (16:50)!',
+                reason: '❌ Nie można wysłać przypomnienia - deadline już minął (16:50)!',
                 minutesToDeadline
             };
         }
 
         if (minutesToDeadline >= 360) {
-            // Więcej niż 6h - można wysłać pierwsze przypomnienie
+            // Więcej niż 6h - za wcześnie
+            const hoursUntilWindow = Math.floor((minutesToDeadline - 360) / 60);
+            const minutesUntilWindow = (minutesToDeadline - 360) % 60;
+            let timeStr = '';
+            if (hoursUntilWindow > 0) {
+                timeStr = `${hoursUntilWindow}h ${minutesUntilWindow}m`;
+            } else {
+                timeStr = `${minutesUntilWindow}m`;
+            }
+
+            return {
+                canSend: false,
+                reason: `❌ Za wcześnie! Możesz użyć /remind dopiero w **ostatnich 6 godzinach** przed deadline.\n\nOkno na przypomnienia otwiera się o **10:50**.\nDo otwarcia okna zostało: **${timeStr}**`,
+                minutesToDeadline
+            };
+        }
+
+        if (minutesToDeadline >= 60 && minutesToDeadline < 360) {
+            // Między 1h a 6h - można wysłać PIERWSZE przypomnienie
             if (remindersCount === 0) {
                 return {
                     canSend: true,
-                    reason: '✅ Pierwsze przypomnienie (> 6h do deadline)',
+                    reason: '✅ Pierwsze przypomnienie (ostatnie 6h przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
-            } else {
-                // Już wysłano przypomnienie w tym okresie
+            } else if (remindersCount === 1) {
+                // Już wysłano pierwsze, ale jest jeszcze miejsce na drugie
                 const firstReminder = todayReminders[0];
                 return {
                     canSend: false,
-                    reason: `❌ Już wysłałeś przypomnienie dzisiaj o **${new Date(firstReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**.\n\nMożesz wysłać drugie przypomnienie po godzinie **10:50** (6h przed deadline).`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**.\n\nDrugie przypomnienie możesz wysłać w **ostatniej godzinie** przed deadline (15:50-16:50).`,
+                    minutesToDeadline
+                };
+            } else {
+                // Już wysłano oba przypomnienia
+                const firstReminder = todayReminders[0];
+                const secondReminder = todayReminders[1];
+                return {
+                    canSend: false,
+                    reason: `❌ Wykorzystałeś już oba dzienne przypomnienia:\n\n` +
+                           `**1.** ${new Date(firstReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} (${firstReminder.minutesToDeadline} min do deadline)\n` +
+                           `**2.** ${new Date(secondReminder.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} (${secondReminder.minutesToDeadline} min do deadline)\n\n` +
+                           `Możesz użyć komendy /remind maksymalnie **2 razy dziennie**.`,
                     minutesToDeadline
                 };
             }
         }
 
-        if (minutesToDeadline >= 60 && minutesToDeadline < 360) {
-            // Między 1h a 6h - można wysłać drugie przypomnienie
+        if (minutesToDeadline >= 0 && minutesToDeadline < 60) {
+            // Mniej niż 1h - można wysłać DRUGIE przypomnienie
             if (remindersCount === 0) {
                 return {
                     canSend: true,
-                    reason: '✅ Pierwsze przypomnienie (1-6h do deadline)',
+                    reason: '✅ Pierwsze przypomnienie (ostatnia godzina przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
             } else if (remindersCount === 1) {
                 return {
                     canSend: true,
-                    reason: '✅ Drugie przypomnienie (1-6h do deadline)',
+                    reason: '✅ Drugie przypomnienie (ostatnia godzina przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 2
                 };
