@@ -19,7 +19,25 @@ class ReminderUsageService {
         try {
             const data = await fs.readFile(this.dataPath, 'utf8');
             this.usageData = JSON.parse(data);
-            logger.info('✅ Załadowano dane przypomnień (limity + pingi)');
+
+            // Migracja danych ze starej struktury do nowej
+            if (!this.usageData.senders || !this.usageData.receivers) {
+                logger.info('🔄 Wykryto starą strukturę danych, przeprowadzam migrację...');
+
+                const oldData = this.usageData;
+                this.usageData = {
+                    senders: {},   // Nowa struktura - limity per klan
+                    receivers: {}  // Nowa struktura - pingi per użytkownik
+                };
+
+                // Jeśli były jakieś stare dane, zapisz je jako receivers (założenie że to były dane użytkowników)
+                // Ale w praktyce najlepiej zacząć od czystego stanu
+                await this.saveUsageData();
+                logger.info('✅ Migracja zakończona - rozpoczynam z czystymi danymi');
+            } else {
+                logger.info('✅ Załadowano dane przypomnień (limity + pingi)');
+            }
+
             return this.usageData;
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -163,20 +181,23 @@ class ReminderUsageService {
             } else if (usageCount === 1) {
                 // Już wysłano pierwsze, ale jest jeszcze miejsce na drugie
                 const firstUsage = todayUsage[0];
+                const senderMention = firstUsage.sentBy ? ` przez <@${firstUsage.sentBy}>` : '';
                 return {
                     canSend: false,
-                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}** przez <@${firstUsage.sentBy}>.\n\nDrugie przypomnienie klan może wysłać w **ostatniej godzinie** przed deadline (15:50-16:50).`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **ostatniej godzinie** przed deadline (15:50-16:50).`,
                     minutesToDeadline
                 };
             } else {
                 // Już wysłano oba przypomnienia
                 const firstUsage = todayUsage[0];
                 const secondUsage = todayUsage[1];
+                const sender1 = firstUsage.sentBy ? ` - <@${firstUsage.sentBy}>` : '';
+                const sender2 = secondUsage.sentBy ? ` - <@${secondUsage.sentBy}>` : '';
                 return {
                     canSend: false,
                     reason: `❌ Klan wykorzystał już oba dzienne przypomnienia:\n\n` +
-                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${firstUsage.sentBy}> (${firstUsage.minutesToDeadline} min do deadline)\n` +
-                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${secondUsage.sentBy}> (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
+                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}${sender1} (${firstUsage.minutesToDeadline} min do deadline)\n` +
+                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}${sender2} (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
                            `Każdy klan może użyć komendy /remind maksymalnie **2 razy dziennie**.`,
                     minutesToDeadline
                 };
@@ -203,11 +224,13 @@ class ReminderUsageService {
                 // Już wysłano oba przypomnienia
                 const firstUsage = todayUsage[0];
                 const secondUsage = todayUsage[1];
+                const sender1 = firstUsage.sentBy ? ` - <@${firstUsage.sentBy}>` : '';
+                const sender2 = secondUsage.sentBy ? ` - <@${secondUsage.sentBy}>` : '';
                 return {
                     canSend: false,
                     reason: `❌ Klan wykorzystał już oba dzienne przypomnienia:\n\n` +
-                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${firstUsage.sentBy}> (${firstUsage.minutesToDeadline} min do deadline)\n` +
-                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })} - <@${secondUsage.sentBy}> (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
+                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}${sender1} (${firstUsage.minutesToDeadline} min do deadline)\n` +
+                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}${sender2} (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
                            `Każdy klan może użyć komendy /remind maksymalnie **2 razy dziennie**.`,
                     minutesToDeadline
                 };
