@@ -552,14 +552,21 @@ class ReminderService {
                 // Wyodrębnij graczy z wynikiem 0
                 const foundPlayers = await ocrService.extractPlayersFromText(text, guild, member);
 
+                // Zapisz aktualny rozmiar przed dodaniem nowych nicków
+                const uniqueBeforeThisImage = session.uniqueNicks.size;
+
                 // Dodaj unikalne nicki do sesji (automatyczne usuwanie duplikatów)
                 for (const player of foundPlayers) {
                     session.uniqueNicks.add(player.detectedNick);
                 }
 
+                // Oblicz ile nowych unikalnych nicków dodano z tego zdjęcia
+                const newUniquesFromThisImage = session.uniqueNicks.size - uniqueBeforeThisImage;
+
                 results.push({
                     imageIndex,
                     foundPlayers: foundPlayers.length,
+                    newUniques: newUniquesFromThisImage,
                     players: foundPlayers
                 });
 
@@ -568,11 +575,12 @@ class ReminderService {
                     result: {
                         imageIndex,
                         foundPlayers: foundPlayers.length,
+                        newUniques: newUniquesFromThisImage,
                         players: foundPlayers
                     }
                 });
 
-                logger.info(`[REMIND] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych`);
+                logger.info(`[REMIND] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych (${newUniquesFromThisImage} nowych unikalnych)`);
 
                 // Zaktualizuj progress bar po przetworzeniu zdjęcia
                 const completedBar = this.createProgressBar(imageIndex, totalImages);
@@ -585,14 +593,16 @@ class ReminderService {
                     .setColor('#FFA500')
                     .setTimestamp();
 
-                // Dodaj wyniki z przetworzonych zdjęć
-                const resultsText = session.processedImages.map((img, idx) =>
-                    `📸 Zdjęcie ${idx + 1}: ${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`
-                ).join('\n');
+                // Dodaj wyniki z przetworzonych zdjęć z informacją o nowych unikalnych
+                const resultsText = session.processedImages.map((img, idx) => {
+                    const playersText = `${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`;
+                    const uniquesText = `${img.result.newUniques} ${img.result.newUniques === 1 ? 'nowy unikalny' : 'nowych unikalnych'}`;
+                    return `📸 Zdjęcie ${idx + 1}: ${playersText} (${uniquesText})`;
+                }).join('\n');
 
                 completedEmbed.addFields(
                     { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
-                    { name: '👥 Unikalni gracze (bez duplikatów)', value: `${session.uniqueNicks.size}`, inline: true }
+                    { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
                 );
 
                 if (session.publicInteraction) {
@@ -636,17 +646,19 @@ class ReminderService {
     }
 
     /**
-     * Tworzy progress bar dla przetwarzania zdjęć
+     * Tworzy progress bar dla przetwarzania zdjęć (1 zdjęcie = 1 kratka)
      */
     createProgressBar(current, total) {
         const percentage = Math.floor((current / total) * 100);
-        const completed = Math.floor((current / total) * 10);
-        const remaining = 10 - completed;
+        const completed = current; // Liczba ukończonych zdjęć
+        const remaining = total - current; // Liczba pozostałych zdjęć
 
         let bar = '';
+        // Ukończone zdjęcia (zielone kratki)
         for (let i = 0; i < completed; i++) {
             bar += '🟩';
         }
+        // Aktualne przetwarzane (żółta kratka) + pozostałe (białe kratki)
         if (remaining > 0) {
             bar += '🟨';
             for (let i = 1; i < remaining; i++) {
