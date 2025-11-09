@@ -581,14 +581,14 @@ class ReminderService {
                     .setTimestamp();
 
                 // Dodaj wyniki z poprzednich przetworzonych zdjęć
-                const resultsText = session.processedImages.map((img, idx) => {
+                const previousResultsText = session.processedImages.map((img, idx) => {
                     const playersText = `${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`;
                     const uniquesText = `${img.result.newUniques} ${img.result.newUniques === 1 ? 'nowy unikalny' : 'nowych unikalnych'}`;
                     return `📸 Zdjęcie ${idx + 1}: ${playersText} (${uniquesText})`;
                 }).join('\n');
 
                 processingEmbed.addFields(
-                    { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
+                    { name: '✅ Przetworzone zdjęcia', value: previousResultsText || 'Brak', inline: false },
                     { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
                 );
 
