@@ -556,6 +556,18 @@ class ReminderService {
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
 
+        // Zaktualizuj embed na progress bar przed rozpoczęciem przetwarzania
+        const initialProgressBar = this.createProgressBar(0, totalImages);
+        const initialEmbed = new EmbedBuilder()
+            .setTitle('⏳ Przetwarzanie zdjęć...')
+            .setDescription(`${initialProgressBar}`)
+            .setColor('#FFA500')
+            .setTimestamp()
+            .addFields(
+                { name: '✅ Przetworzone zdjęcia', value: 'Brak', inline: false },
+                { name: '👥 Suma unikalnych graczy', value: '0', inline: true }
+            );
+
         const cancelRow = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
@@ -563,6 +575,17 @@ class ReminderService {
                     .setLabel('❌ Anuluj')
                     .setStyle(ButtonStyle.Danger)
             );
+
+        if (session.publicInteraction) {
+            try {
+                await session.publicInteraction.editReply({
+                    embeds: [initialEmbed],
+                    components: [cancelRow]
+                });
+            } catch (error) {
+                logger.error('[REMIND] ❌ Błąd aktualizacji embeda na początek:', error);
+            }
+        }
 
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];
@@ -684,13 +707,15 @@ class ReminderService {
             // Wszystko ukończone - 10 zielonych kratek
             bar = '🟩'.repeat(totalBars);
         } else {
-            // W trakcie przetwarzania - proporcjonalnie
-            // completedBars to liczba kratek które powinny być wypełnione (zielone + żółta razem)
+            // W trakcie przetwarzania
+            // Zielone kratki = postęp ukończonych zdjęć (current - 1)
+            // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do current)
             const completedBars = Math.ceil((current / total) * totalBars);
-            const greenBars = Math.max(0, completedBars - 1); // Ostatnia z completedBars to żółta
+            const greenBars = Math.floor(((current - 1) / total) * totalBars);
+            const yellowBars = completedBars - greenBars;
             const whiteBars = totalBars - completedBars;
 
-            bar = '🟩'.repeat(greenBars) + '🟨' + '⬜'.repeat(Math.max(0, whiteBars));
+            bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(whiteBars);
         }
 
         return `${bar} ${percentage}%`;

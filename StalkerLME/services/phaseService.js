@@ -573,6 +573,14 @@ class PhaseService {
         const results = [];
         const totalImages = downloadedFiles.length;
 
+        // Zaktualizuj embed na progress bar przed rozpoczęciem przetwarzania
+        await this.updateProgress(session, {
+            currentImage: 0,
+            totalImages: totalImages,
+            stage: 'loading',
+            action: 'Przygotowuję do przetworzenia zdjęć...'
+        });
+
         for (let i = 0; i < downloadedFiles.length; i++) {
             const fileData = downloadedFiles[i];
             const attachment = fileData.originalAttachment;
@@ -775,13 +783,15 @@ class PhaseService {
             // Wszystko ukończone - 10 zielonych kratek
             bar = '🟩'.repeat(totalBars);
         } else {
-            // W trakcie przetwarzania - proporcjonalnie
-            // completedBars to liczba kratek które powinny być wypełnione (zielone + żółta razem)
+            // W trakcie przetwarzania
+            // Zielone kratki = postęp ukończonych zdjęć (currentImage - 1)
+            // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do currentImage)
             const completedBars = Math.ceil((currentImage / totalImages) * totalBars);
-            const greenBars = Math.max(0, completedBars - 1); // Ostatnia z completedBars to żółta
+            const greenBars = Math.floor(((currentImage - 1) / totalImages) * totalBars);
+            const yellowBars = completedBars - greenBars;
             const remainingBars = totalBars - completedBars;
 
-            bar = '🟩'.repeat(greenBars) + '🟨' + '⬜'.repeat(Math.max(0, remainingBars));
+            bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(remainingBars);
         }
 
         return `${bar} ${percentage}%`;
