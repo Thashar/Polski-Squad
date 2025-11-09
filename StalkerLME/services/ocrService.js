@@ -1260,11 +1260,13 @@ class OCRService {
         if (active) {
             try {
                 const user = await this.client.users.fetch(active.userId);
+                const expiryTimestamp = Math.floor(active.expiresAt / 1000);
                 description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `${user.tag} - \`${active.commandName}\`\n\n`;
+                description += `${user.tag} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
             } catch (error) {
+                const expiryTimestamp = Math.floor(active.expiresAt / 1000);
                 description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `Użytkownik ${active.userId} - \`${active.commandName}\`\n\n`;
+                description += `Użytkownik ${active.userId} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
             }
         }
 
@@ -1556,7 +1558,10 @@ class OCRService {
             }
         }
 
-        this.activeProcessing.set(guildId, { userId, commandName });
+        // Sesja aktywna trwa 15 minut (cleanup timeout)
+        const expiresAt = Date.now() + (15 * 60 * 1000);
+
+        this.activeProcessing.set(guildId, { userId, commandName, expiresAt });
         logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName}`);
 
         // Aktualizuj wyświetlanie kolejki
