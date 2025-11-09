@@ -196,20 +196,58 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         // Klan może wysłać przypomnienie, kontynuuj z OCR
         const imageCount = attachments.length;
         const imageText = imageCount === 1 ? 'zdjęcie' : `${imageCount} zdjęcia`;
-        await interaction.reply({ content: `🔍 Odświeżam cache członków i analizuję ${imageText}...`, flags: MessageFlags.Ephemeral });
 
         // Odśwież cache członków przed analizą
         logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
+        await interaction.reply({ content: '🔄 Odświeżam cache członków...' }); // Publiczna wiadomość
         await interaction.guild.members.fetch();
         logger.info('✅ Cache członków odświeżony');
+
+        // Funkcja tworząca progress bar
+        const createProgressBar = (current, total, currentStatus = 'pending') => {
+            let bar = '';
+            for (let i = 0; i < total; i++) {
+                if (i < current - 1) {
+                    bar += '🟩'; // Ukończone
+                } else if (i === current - 1) {
+                    bar += currentStatus === 'processing' ? '🟨' : '🟩'; // W trakcie lub ukończone
+                } else {
+                    bar += '⬜'; // Oczekujące
+                }
+            }
+            return bar;
+        };
 
         // Przetwarzaj wszystkie zdjęcia i zbieraj nicki (używając Set do usuwania duplikatów)
         const uniqueNicks = new Set();
         const imageUrls = [];
+        const imageResults = []; // Wyniki dla każdego zdjęcia
 
         for (let i = 0; i < attachments.length; i++) {
             const attachment = attachments[i];
             imageUrls.push(attachment.url);
+
+            // Aktualizuj progress bar - rozpoczęcie przetwarzania
+            const progressBar = createProgressBar(i + 1, imageCount, 'processing');
+            const progressEmbed = new EmbedBuilder()
+                .setTitle('🔍 Analizuję zdjęcia...')
+                .setDescription(`${progressBar}\n\n📸 Przetwarzam zdjęcie **${i + 1}/${imageCount}**...`)
+                .setColor('#ffa500')
+                .setTimestamp();
+
+            // Dodaj wyniki z poprzednich zdjęć
+            if (imageResults.length > 0) {
+                const resultsText = imageResults.map((result, idx) =>
+                    `📸 Zdjęcie ${idx + 1}: ${result.count} ${result.count === 1 ? 'gracz' : 'graczy'}`
+                ).join('\n');
+                progressEmbed.addFields({
+                    name: '✅ Przetworzone zdjęcia',
+                    value: resultsText,
+                    inline: false
+                });
+            }
+
+            await interaction.editReply({ content: '', embeds: [progressEmbed] });
 
             logger.info(`📸 Przetwarzanie zdjęcia ${i + 1}/${attachments.length}: ${attachment.name}`);
 
@@ -217,12 +255,51 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
                 const text = await ocrService.processImage(attachment);
                 const playersFromImage = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
 
+                // Zapisz wynik dla tego zdjęcia
+                imageResults.push({
+                    count: playersFromImage.length,
+                    players: playersFromImage
+                });
+
                 // Dodaj nicki do zbioru (automatycznie pominie duplikaty)
                 playersFromImage.forEach(nick => uniqueNicks.add(nick));
 
                 logger.info(`✅ Ze zdjęcia ${i + 1} znaleziono ${playersFromImage.length} graczy: ${playersFromImage.join(', ')}`);
+
+                // Aktualizuj progress bar - zakończenie przetwarzania tego zdjęcia
+                const completedBar = createProgressBar(i + 1, imageCount, 'completed');
+                const completedEmbed = new EmbedBuilder()
+                    .setTitle('🔍 Analizuję zdjęcia...')
+                    .setDescription(`${completedBar}\n\n✅ Zdjęcie **${i + 1}/${imageCount}** przetworzone`)
+                    .setColor('#ffa500')
+                    .setTimestamp();
+
+                const allResultsText = imageResults.map((result, idx) =>
+                    `📸 Zdjęcie ${idx + 1}: ${result.count} ${result.count === 1 ? 'gracz' : 'graczy'}`
+                ).join('\n');
+
+                completedEmbed.addFields(
+                    { name: '✅ Przetworzone zdjęcia', value: allResultsText, inline: false },
+                    { name: '👥 Unikalni gracze (bez duplikatów)', value: `${uniqueNicks.size}`, inline: true }
+                );
+
+                await interaction.editReply({ content: '', embeds: [completedEmbed] });
+
+                // Małe opóźnienie między zdjęciami (żeby widać było progress)
+                if (i < attachments.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
             } catch (error) {
                 logger.error(`❌ Błąd przetwarzania zdjęcia ${i + 1}:`, error);
+
+                // Zapisz błąd
+                imageResults.push({
+                    count: 0,
+                    players: [],
+                    error: true
+                });
+
                 // Kontynuuj mimo błędu w jednym zdjęciu
             }
         }
@@ -233,7 +310,13 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         logger.info(`🎯 Łącznie znaleziono ${zeroScorePlayers.length} unikalnych graczy (po usunięciu duplikatów)`);
 
         if (zeroScorePlayers.length === 0) {
-            await interaction.editReply(`Nie znaleziono graczy z wynikiem 0 na ${imageCount === 1 ? 'obrazie' : 'obrazach'}.`);
+            const noPlayersEmbed = new EmbedBuilder()
+                .setTitle('❌ Brak graczy z wynikiem 0')
+                .setDescription(`Przeanalizowano ${imageCount === 1 ? '1 zdjęcie' : `${imageCount} zdjęcia`}, ale nie znaleziono graczy z wynikiem 0.`)
+                .setColor('#ff0000')
+                .setTimestamp();
+
+            await interaction.editReply({ content: '', embeds: [noPlayersEmbed] });
             return;
         }
 
