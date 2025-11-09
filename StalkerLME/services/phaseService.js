@@ -62,8 +62,9 @@ class PhaseService {
 
         logger.info(`[QUEUE] ➕ Użytkownik ${userId} dodany do kolejki (pozycja: ${position}) dla guild ${guildId}`);
 
-        // Powiadom użytkownika o jego pozycji w kolejce
-        await this.notifyQueuePosition(guildId, userId, position);
+        // WYŁĄCZONE: Powiadomienie o pozycji w kolejce
+        // Użytkownik dostanie powiadomienie tylko gdy nadejdzie jego kolej (rezerwacja)
+        // await this.notifyQueuePosition(guildId, userId, position);
     }
 
     /**
@@ -173,10 +174,11 @@ class PhaseService {
                 const nextPerson = queue[0];
                 await this.createQueueReservation(guildId, nextPerson.userId);
 
-                // Powiadom pozostałe osoby o zmianie pozycji
-                for (let i = 1; i < queue.length; i++) {
-                    await this.notifyQueuePosition(guildId, queue[i].userId, i);
-                }
+                // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
+                // Użytkownicy dostaną powiadomienie tylko gdy nadejdzie ich kolej (rezerwacja)
+                // for (let i = 1; i < queue.length; i++) {
+                //     await this.notifyQueuePosition(guildId, queue[i].userId, i);
+                // }
             } else {
                 this.waitingQueue.delete(guildId);
             }
