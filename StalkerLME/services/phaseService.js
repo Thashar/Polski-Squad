@@ -714,24 +714,17 @@ class PhaseService {
 
             const embed = new EmbedBuilder()
                 .setTitle(`🔄 Przetwarzanie zdjęć - ${phaseTitle}${roundText}`)
+                .setDescription(`${progressBar}\n\n📸 Przetwarzam zdjęcie **${currentImage}/${totalImages}**...\n${icon} ${action}`)
                 .setColor('#FFA500')
+                .addFields(
+                    { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
+                    { name: '✅ Potwierdzone', value: confirmedResults.toString(), inline: true },
+                    { name: '❓ Niepotwierdzone', value: unconfirmedResults.toString(), inline: true },
+                    { name: '⚠️ Konflikty', value: conflictsCount.toString(), inline: true },
+                    { name: '🥚 Graczy z zerem', value: playersWithZero.toString(), inline: true }
+                )
                 .setTimestamp()
                 .setFooter({ text: 'Przetwarzanie...' });
-
-            // Dla currentImage = 0 nie pokazuj szczegółów przetwarzania
-            if (currentImage === 0) {
-                embed.setDescription(`${progressBar}`);
-            } else {
-                embed.setDescription(`${progressBar}\n\n📸 Przetwarzam zdjęcie **${currentImage}/${totalImages}**...\n${icon} ${action}`);
-            }
-
-            embed.addFields(
-                { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
-                { name: '✅ Potwierdzone', value: confirmedResults.toString(), inline: true },
-                { name: '❓ Niepotwierdzone', value: unconfirmedResults.toString(), inline: true },
-                { name: '⚠️ Konflikty', value: conflictsCount.toString(), inline: true },
-                { name: '🥚 Graczy z zerem', value: playersWithZero.toString(), inline: true }
-            );
 
             // Spróbuj zaktualizować przez editReply
             try {
