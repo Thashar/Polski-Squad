@@ -754,8 +754,14 @@ async function handleButton(interaction, sharedState) {
             // Zapisz użycie /remind przez klan (dla limitów czasowych)
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
 
+            // Przekształć foundUsers do formatu oczekiwanego przez recordPingedUsers
+            const pingData = foundUsers.map(userData => ({
+                member: userData.user.member,
+                matchedName: userData.detectedNick
+            }));
+
             // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
-            await sharedState.reminderUsageService.recordPingedUsers(foundUsers);
+            await sharedState.reminderUsageService.recordPingedUsers(pingData);
 
             // Zatrzymaj ghost ping
             stopGhostPing(session);
