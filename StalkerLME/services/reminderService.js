@@ -16,15 +16,21 @@ class ReminderService {
 
     async sendReminders(guild, foundUsers) {
         try {
-            
+
             const timeUntilDeadline = this.calculateTimeUntilDeadline();
             const roleGroups = new Map();
             let sentMessages = 0;
-            
+
             // Grupuj użytkowników według ról
             for (const userData of foundUsers) {
-                const { member } = userData;
-                
+                // POPRAWKA: userData.user zawiera {userId, member, displayName}
+                const member = userData.user.member;
+
+                if (!member) {
+                    logger.warn(`⚠️ Brak member dla użytkownika: ${userData.detectedNick}`);
+                    continue;
+                }
+
                 for (const [roleKey, roleId] of Object.entries(this.config.targetRoles)) {
                     if (member.roles.cache.has(roleId)) {
                         if (!roleGroups.has(roleKey)) {
@@ -35,30 +41,30 @@ class ReminderService {
                     }
                 }
             }
-            
+
             // Wyślij przypomnienia dla każdej grupy ról
             for (const [roleKey, members] of roleGroups) {
                 const roleId = this.config.targetRoles[roleKey];
                 const warningChannelId = this.config.warningChannels[roleId];
-                
+
                 if (warningChannelId) {
                     const warningChannel = guild.channels.cache.get(warningChannelId);
-                    
+
                     if (warningChannel) {
                         const userMentions = members.map(member => member.toString()).join(' ');
                         const timeMessage = messages.formatTimeMessage(timeUntilDeadline);
                         const reminderMessage = messages.reminderMessage(timeMessage, userMentions);
-                        
+
                         await warningChannel.send(reminderMessage);
                         sentMessages++;
-                        
+
                         logger.info(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} dla ${members.length} użytkowników`);
                     }
                 }
             }
-            
+
             logger.info(`✅ Wysłano ${sentMessages} przypomnień dla ${foundUsers.length} użytkowników`);
-            
+
             return {
                 sentMessages: sentMessages,
                 roleGroups: roleGroups.size,

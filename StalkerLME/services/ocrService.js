@@ -1592,13 +1592,14 @@ class OCRService {
                 const nextPerson = queue[0];
                 logger.info(`[OCR-QUEUE] 📢 Następna osoba: ${nextPerson.userId} (${nextPerson.commandName})`);
 
-                // Stwórz rezerwację na 5 minut
+                // Stwórz rezerwację na 3 minuty
                 await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
 
-                // Powiadom pozostałe osoby o zmianie pozycji
-                for (let i = 1; i < queue.length; i++) {
-                    await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
-                }
+                // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
+                // Użytkownicy dostaną powiadomienie tylko gdy nadejdzie ich kolej (rezerwacja)
+                // for (let i = 1; i < queue.length; i++) {
+                //     await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
+                // }
             } else {
                 this.waitingQueue.delete(guildId);
             }
@@ -1636,8 +1637,9 @@ class OCRService {
 
         logger.info(`[OCR-QUEUE] ➕ ${userId} dodany do kolejki OCR (pozycja: ${position}, komenda: ${commandName})`);
 
-        // Powiadom użytkownika
-        await this.notifyQueuePosition(guildId, userId, position, commandName);
+        // WYŁĄCZONE: Powiadomienie o pozycji w kolejce
+        // Użytkownik dostanie powiadomienie tylko gdy nadejdzie jego kolej (rezerwacja)
+        // await this.notifyQueuePosition(guildId, userId, position, commandName);
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
@@ -1695,9 +1697,6 @@ class OCRService {
     async expireOCRReservation(guildId, userId) {
         this.queueReservation.delete(guildId);
 
-        // Aktualizuj wyświetlanie kolejki
-        await this.updateQueueDisplay(guildId);
-
         // Usuń z kolejki
         if (this.waitingQueue.has(guildId)) {
             const queue = this.waitingQueue.get(guildId);
@@ -1728,14 +1727,20 @@ class OCRService {
                     const nextPerson = queue[0];
                     await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
 
-                    for (let i = 1; i < queue.length; i++) {
-                        await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
-                    }
+                    // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
+                    // Użytkownicy dostaną powiadomienie tylko gdy nadejdzie ich kolej (rezerwacja)
+                    // for (let i = 1; i < queue.length; i++) {
+                    //     await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
+                    // }
                 } else {
                     this.waitingQueue.delete(guildId);
                 }
             }
         }
+
+        // KLUCZOWE: Aktualizuj wyświetlanie NA KOŃCU, po usunięciu użytkownika z kolejki
+        // Dzięki temu jeśli był jedyny w kolejce, embed pokaże pustą kolejkę
+        await this.updateQueueDisplay(guildId);
     }
 
     /**
