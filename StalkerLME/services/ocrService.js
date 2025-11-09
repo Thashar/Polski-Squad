@@ -1260,11 +1260,13 @@ class OCRService {
         if (active) {
             try {
                 const user = await this.client.users.fetch(active.userId);
+                const expiryTimestamp = Math.floor(active.expiresAt / 1000);
                 description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `${user.tag} - \`${active.commandName}\`\n\n`;
+                description += `${user.tag} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
             } catch (error) {
+                const expiryTimestamp = Math.floor(active.expiresAt / 1000);
                 description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `Użytkownik ${active.userId} - \`${active.commandName}\`\n\n`;
+                description += `Użytkownik ${active.userId} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
             }
         }
 
@@ -1556,7 +1558,10 @@ class OCRService {
             }
         }
 
-        this.activeProcessing.set(guildId, { userId, commandName });
+        // Sesja aktywna trwa 15 minut (cleanup timeout)
+        const expiresAt = Date.now() + (15 * 60 * 1000);
+
+        this.activeProcessing.set(guildId, { userId, commandName, expiresAt });
         logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName}`);
 
         // Aktualizuj wyświetlanie kolejki
@@ -1601,6 +1606,17 @@ class OCRService {
     }
 
     /**
+     * Sprawdza czy kolejka OCR jest pusta
+     */
+    isQueueEmpty(guildId) {
+        if (!this.waitingQueue.has(guildId)) {
+            return true;
+        }
+        const queue = this.waitingQueue.get(guildId);
+        return queue.length === 0;
+    }
+
+    /**
      * Dodaje użytkownika do kolejki OCR
      */
     async addToOCRQueue(guildId, userId, commandName) {
@@ -1642,12 +1658,12 @@ class OCRService {
             }
         }
 
-        const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minut
+        const expiresAt = Date.now() + (3 * 60 * 1000); // 3 minuty
 
         const timeout = setTimeout(async () => {
             logger.warn(`[OCR-QUEUE] ⏰ Rezerwacja wygasła dla ${userId}`);
             await this.expireOCRReservation(guildId, userId);
-        }, 5 * 60 * 1000);
+        }, 3 * 60 * 1000);
 
         this.queueReservation.set(guildId, { userId, expiresAt, timeout, commandName });
 
@@ -1663,7 +1679,7 @@ class OCRService {
             await user.send({
                 embeds: [new EmbedBuilder()
                     .setTitle('✅ Twoja kolej!')
-                    .setDescription(`Możesz teraz użyć komendy \`${commandName}\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 5 minut, Twoja kolej przepadnie.**`)
+                    .setDescription(`Możesz teraz użyć komendy \`${commandName}\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 3 minut, Twoja kolej przepadnie.**`)
                     .setColor('#00FF00')
                     .setTimestamp()
                 ]
@@ -1698,7 +1714,7 @@ class OCRService {
                     await user.send({
                         embeds: [new EmbedBuilder()
                             .setTitle('⏰ Czas minął')
-                            .setDescription('Nie użyłeś komendy w ciągu 5 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
+                            .setDescription('Nie użyłeś komendy w ciągu 3 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
                             .setColor('#FF0000')
                             .setTimestamp()
                         ]
