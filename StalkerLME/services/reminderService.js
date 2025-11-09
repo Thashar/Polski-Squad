@@ -648,24 +648,23 @@ class ReminderService {
     }
 
     /**
-     * Tworzy progress bar dla przetwarzania zdjęć (1 zdjęcie = 1 kratka)
+     * Tworzy progress bar dla przetwarzania zdjęć (stałe 10 kratek + procent)
      */
     createProgressBar(current, total) {
         const percentage = Math.floor((current / total) * 100);
-        const completed = current; // Liczba ukończonych zdjęć
-        const remaining = total - current; // Liczba pozostałych zdjęć
+        const totalBars = 10;
 
         let bar = '';
-        // Ukończone zdjęcia (zielone kratki)
-        for (let i = 0; i < completed; i++) {
-            bar += '🟩';
-        }
-        // Aktualne przetwarzane (żółta kratka) + pozostałe (białe kratki)
-        if (remaining > 0) {
-            bar += '🟨';
-            for (let i = 1; i < remaining; i++) {
-                bar += '⬜';
-            }
+
+        if (current === total) {
+            // Wszystko ukończone - 10 zielonych kratek
+            bar = '🟩'.repeat(totalBars);
+        } else {
+            // W trakcie przetwarzania
+            const completedBars = Math.floor((current - 1) / total * totalBars);
+            const remainingBars = totalBars - completedBars - 1; // -1 dla żółtej kratki
+
+            bar = '🟩'.repeat(completedBars) + '🟨' + '⬜'.repeat(remainingBars);
         }
 
         return `${bar} ${percentage}%`;
