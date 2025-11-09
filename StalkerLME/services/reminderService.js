@@ -1,5 +1,8 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const messages = require('../config/messages');
+const fs = require('fs').promises;
+const path = require('path');
+const https = require('https');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -7,6 +10,8 @@ const logger = createBotLogger('StalkerLME');
 class ReminderService {
     constructor(config) {
         this.config = config;
+        this.activeSessions = new Map(); // sessionId → session
+        this.tempDir = './StalkerLME/temp';
     }
 
     async sendReminders(guild, foundUsers) {
@@ -214,15 +219,342 @@ class ReminderService {
         if (timeLeft <= 0) {
             return 'Deadline minął!';
         }
-        
+
         const hours = Math.floor(timeLeft / (1000 * 60 * 60));
         const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-        
+
         if (hours > 0) {
             return `${hours}h ${minutes}m`;
         } else {
             return `${minutes}m`;
         }
+    }
+
+    // ============ ZARZĄDZANIE SESJAMI ============
+
+    /**
+     * Tworzy nową sesję dla /remind
+     */
+    createSession(userId, guildId, channelId, userClanRoleId) {
+        const sessionId = `remind_${userId}_${Date.now()}`;
+
+        const session = {
+            sessionId,
+            userId,
+            guildId,
+            channelId,
+            userClanRoleId,
+            stage: 'awaiting_images', // 'awaiting_images' | 'confirming_complete'
+            downloadedFiles: [], // ścieżki do pobranych plików
+            processedImages: [], // wyniki OCR
+            uniqueNicks: new Set(), // unikalne nicki znalezione
+            createdAt: Date.now(),
+            timeout: null,
+            publicInteraction: null
+        };
+
+        this.activeSessions.set(sessionId, session);
+
+        // Auto-cleanup po 15 minutach
+        session.timeout = setTimeout(() => {
+            this.cleanupSession(sessionId);
+        }, 15 * 60 * 1000);
+
+        logger.info(`[REMIND] 📝 Utworzono sesję: ${sessionId}`);
+        return sessionId;
+    }
+
+    /**
+     * Pobiera sesję po ID
+     */
+    getSession(sessionId) {
+        return this.activeSessions.get(sessionId);
+    }
+
+    /**
+     * Pobiera sesję użytkownika po userId
+     */
+    getSessionByUserId(userId) {
+        for (const [sessionId, session] of this.activeSessions.entries()) {
+            if (session.userId === userId) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Odnawia timeout sesji
+     */
+    refreshSessionTimeout(sessionId) {
+        const session = this.activeSessions.get(sessionId);
+        if (!session) return;
+
+        if (session.timeout) {
+            clearTimeout(session.timeout);
+        }
+
+        session.timeout = setTimeout(() => {
+            this.cleanupSession(sessionId);
+        }, 15 * 60 * 1000);
+    }
+
+    /**
+     * Usuwa sesję i pliki tymczasowe
+     */
+    async cleanupSession(sessionId) {
+        const session = this.activeSessions.get(sessionId);
+        if (!session) return;
+
+        logger.info(`[REMIND] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
+
+        if (session.timeout) {
+            clearTimeout(session.timeout);
+            session.timeout = null;
+        }
+
+        // Usuń pliki z temp
+        await this.cleanupSessionFiles(sessionId);
+
+        this.activeSessions.delete(sessionId);
+        logger.info(`[REMIND] ✅ Sesja usunięta: ${sessionId}`);
+    }
+
+    /**
+     * Usuwa pliki sesji z temp
+     */
+    async cleanupSessionFiles(sessionId) {
+        try {
+            const files = await fs.readdir(this.tempDir);
+            const sessionFiles = files.filter(f => f.startsWith(sessionId));
+
+            for (const file of sessionFiles) {
+                const filepath = path.join(this.tempDir, file);
+                await fs.unlink(filepath);
+                logger.info(`[REMIND] 🗑️ Usunięto plik: ${file}`);
+            }
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                logger.error('[REMIND] ❌ Błąd czyszczenia plików sesji:', error);
+            }
+        }
+    }
+
+    /**
+     * Tworzy embed z prośbą o zdjęcia
+     */
+    createAwaitingImagesEmbed() {
+        const embed = new EmbedBuilder()
+            .setTitle('📸 Wyślij zdjęcia do analizy')
+            .setDescription(
+                '**Instrukcja:**\n' +
+                '1. Wyślij zdjęcia jako załączniki na tym kanale (możesz wysłać wiele zdjęć jednocześnie)\n' +
+                '2. Bot automatycznie je przeanalizuje\n' +
+                '3. Po przeanalizowaniu wszystkich zdjęć potwierdź wysłanie przypomnienia\n\n' +
+                '**Uwaga:** Wiadomość ze zdjęciami zostanie automatycznie usunięta po przetworzeniu.'
+            )
+            .setColor('#FFA500')
+            .setTimestamp()
+            .setFooter({ text: 'Sesja wygaśnie po 15 minutach nieaktywności' });
+
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('remind_cancel_session')
+            .setLabel('❌ Anuluj')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder()
+            .addComponents(cancelButton);
+
+        return { embed, row };
+    }
+
+    /**
+     * Tworzy embed z potwierdzeniem przetworzonych zdjęć
+     */
+    createProcessedImagesEmbed(processedCount, totalImages) {
+        const embed = new EmbedBuilder()
+            .setTitle('✅ Zdjęcia przetworzone')
+            .setDescription(
+                `Przeanalizowano **${processedCount}** ${processedCount === 1 ? 'zdjęcie' : 'zdjęcia'}.\n\n` +
+                `Czy chcesz dodać więcej zdjęć, czy przejść do potwierdzenia?`
+            )
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        const addMoreButton = new ButtonBuilder()
+            .setCustomId('remind_add_more')
+            .setLabel('➕ Dodaj więcej zdjęć')
+            .setStyle(ButtonStyle.Primary);
+
+        const confirmButton = new ButtonBuilder()
+            .setCustomId('remind_complete_yes')
+            .setLabel('✅ Przejdź do potwierdzenia')
+            .setStyle(ButtonStyle.Success);
+
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('remind_cancel_session')
+            .setLabel('❌ Anuluj')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder()
+            .addComponents(addMoreButton, confirmButton, cancelButton);
+
+        return { embed, row };
+    }
+
+    // ============ POBIERANIE I PRZETWARZANIE ZDJĘĆ ============
+
+    /**
+     * Upewnia się że katalog temp istnieje
+     */
+    async initTempDir() {
+        try {
+            await fs.mkdir(this.tempDir, { recursive: true });
+        } catch (error) {
+            logger.error('[REMIND] ❌ Błąd tworzenia katalogu temp:', error);
+        }
+    }
+
+    /**
+     * Pobiera zdjęcie z URL i zapisuje lokalnie
+     */
+    async downloadImage(url, sessionId, index) {
+        await this.initTempDir();
+
+        const filename = `${sessionId}_${index}_${Date.now()}.png`;
+        const filepath = path.join(this.tempDir, filename);
+
+        return new Promise((resolve, reject) => {
+            https.get(url, (response) => {
+                const fileStream = require('fs').createWriteStream(filepath);
+                response.pipe(fileStream);
+
+                fileStream.on('finish', () => {
+                    fileStream.close();
+                    logger.info(`[REMIND] 💾 Zapisano zdjęcie: ${filename}`);
+                    resolve(filepath);
+                });
+
+                fileStream.on('error', (err) => {
+                    reject(err);
+                });
+            }).on('error', (err) => {
+                reject(err);
+            });
+        });
+    }
+
+    /**
+     * Przetwarza zdjęcia z dysku dla /remind
+     */
+    async processImagesFromDisk(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
+        const session = this.getSession(sessionId);
+        if (!session) {
+            throw new Error('Sesja nie istnieje lub wygasła');
+        }
+
+        session.publicInteraction = publicInteraction;
+
+        logger.info(`[REMIND] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
+
+        const results = [];
+
+        // Progress bar - aktualizacja na żywo
+        const totalImages = downloadedFiles.length;
+
+        for (let i = 0; i < downloadedFiles.length; i++) {
+            const file = downloadedFiles[i];
+            const imageIndex = i + 1;
+
+            // Aktualizuj progress bar
+            const progressBar = this.createProgressBar(imageIndex - 1, totalImages);
+            const progressEmbed = new EmbedBuilder()
+                .setTitle('⏳ Przetwarzanie zdjęć...')
+                .setDescription(
+                    `${progressBar}\n\n` +
+                    `Analizuję zdjęcie **${imageIndex}** z **${totalImages}**...\n\n` +
+                    `**Status:** Rozpoznawanie nicków z obrazu`
+                )
+                .setColor('#FFA500')
+                .setTimestamp();
+
+            if (session.publicInteraction) {
+                try {
+                    await session.publicInteraction.editReply({
+                        embeds: [progressEmbed],
+                        components: []
+                    });
+                } catch (error) {
+                    logger.error('[REMIND] ❌ Błąd aktualizacji progress bara:', error);
+                }
+            }
+
+            try {
+                // Przetwórz zdjęcie przez OCR
+                const text = await ocrService.processImageFromPath(file.filepath);
+
+                // Wyodrębnij graczy z wynikiem 0
+                const foundPlayers = await ocrService.extractPlayersFromText(text, guild, member);
+
+                // Dodaj unikalne nicki do sesji (automatyczne usuwanie duplikatów)
+                for (const player of foundPlayers) {
+                    const nick = player.matchedName;
+                    if (!session.uniqueNicks.has(nick)) {
+                        session.uniqueNicks.add(nick);
+                    }
+                }
+
+                results.push({
+                    imageIndex,
+                    foundPlayers: foundPlayers.length,
+                    players: foundPlayers
+                });
+
+                session.processedImages.push({
+                    filepath: file.filepath,
+                    result: {
+                        imageIndex,
+                        foundPlayers: foundPlayers.length,
+                        players: foundPlayers
+                    }
+                });
+
+                logger.info(`[REMIND] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych`);
+
+            } catch (error) {
+                logger.error(`[REMIND] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
+                results.push({
+                    imageIndex,
+                    error: error.message
+                });
+            }
+        }
+
+        logger.info(`[REMIND] ✅ Zakończono przetwarzanie ${totalImages} zdjęć, znaleziono ${session.uniqueNicks.size} unikalnych nicków`);
+
+        return results;
+    }
+
+    /**
+     * Tworzy progress bar dla przetwarzania zdjęć
+     */
+    createProgressBar(current, total) {
+        const percentage = Math.floor((current / total) * 100);
+        const completed = Math.floor((current / total) * 10);
+        const remaining = 10 - completed;
+
+        let bar = '';
+        for (let i = 0; i < completed; i++) {
+            bar += '🟩';
+        }
+        if (remaining > 0) {
+            bar += '🟨';
+            for (let i = 1; i < remaining; i++) {
+                bar += '⬜';
+            }
+        }
+
+        return `${bar} ${percentage}%`;
     }
 }
 

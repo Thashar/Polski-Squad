@@ -231,6 +231,85 @@ client.on(Events.MessageCreate, async (message) => {
         logger.error(`[PHASE1] ❌ Błąd podczas obsługi wiadomości Phase 1: ${error.message}`);
     }
 
+    // Obsługa wiadomości z zdjęciami dla /remind
+    try {
+        const session = reminderService.getSessionByUserId(message.author.id);
+
+        if (session && session.stage === 'awaiting_images' && session.channelId === message.channelId) {
+            // Sprawdź czy wiadomość ma załączniki (zdjęcia)
+            const imageAttachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
+
+            if (imageAttachments.size > 0) {
+                logger.info(`[REMIND] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
+
+                const attachmentsArray = Array.from(imageAttachments.values());
+
+                // KROK 1: Zapisz wszystkie zdjęcia na dysk
+                logger.info('[REMIND] 💾 Zapisywanie zdjęć na dysk...');
+                const downloadedFiles = [];
+
+                for (let i = 0; i < attachmentsArray.length; i++) {
+                    try {
+                        const filepath = await reminderService.downloadImage(
+                            attachmentsArray[i].url,
+                            session.sessionId,
+                            session.downloadedFiles.length + i
+                        );
+                        downloadedFiles.push({
+                            filepath,
+                            originalAttachment: attachmentsArray[i]
+                        });
+                    } catch (error) {
+                        logger.error(`[REMIND] ❌ Błąd pobierania zdjęcia ${i + 1}:`, error);
+                    }
+                }
+
+                session.downloadedFiles.push(...downloadedFiles.map(f => f.filepath));
+                logger.info(`[REMIND] ✅ Zapisano ${downloadedFiles.length} zdjęć na dysk`);
+
+                // KROK 2: Usuń wiadomość ze zdjęciami z kanału
+                try {
+                    await message.delete();
+                    logger.info('[REMIND] 🗑️ Usunięto wiadomość ze zdjęciami z kanału');
+                } catch (deleteError) {
+                    logger.error('[REMIND] ❌ Błąd usuwania wiadomości:', deleteError);
+                }
+
+                // KROK 3: Przetwarzaj zdjęcia z dysku
+                const results = await reminderService.processImagesFromDisk(
+                    session.sessionId,
+                    downloadedFiles,
+                    message.guild,
+                    message.member,
+                    session.publicInteraction,
+                    ocrService
+                );
+
+                // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
+                const processedCount = results.length;
+                const totalImages = session.processedImages.length;
+
+                const confirmation = reminderService.createProcessedImagesEmbed(processedCount, totalImages);
+
+                session.stage = 'confirming_complete';
+                reminderService.refreshSessionTimeout(session.sessionId);
+
+                if (session.publicInteraction) {
+                    await session.publicInteraction.editReply({
+                        embeds: [confirmation.embed],
+                        components: [confirmation.row]
+                    });
+
+                    // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
+                    const channel = await client.channels.fetch(session.channelId);
+                    await sendGhostPing(channel, message.author.id, session);
+                }
+            }
+        }
+    } catch (error) {
+        logger.error(`[REMIND] ❌ Błąd podczas obsługi wiadomości /remind: ${error.message}`);
+    }
+
     // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
     // Ten blok kodu nie jest już używany, ale zostawiam dla referencji w przypadku problemów
 });

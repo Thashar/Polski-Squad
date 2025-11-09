@@ -175,30 +175,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 }
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
-    // Zbierz wszystkie załączone zdjęcia (image1 do image5)
-    const attachments = [];
-    for (let i = 1; i <= 5; i++) {
-        const attachment = interaction.options.getAttachment(`image${i}`);
-        if (attachment) {
-            attachments.push(attachment);
-        }
-    }
-
-    if (attachments.length === 0) {
-        await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
-        return;
-    }
-
-    // Sprawdź czy wszystkie załączniki to obrazy
-    for (const attachment of attachments) {
-        if (!attachment.contentType?.startsWith('image/')) {
-            await interaction.reply({
-                content: `❌ Plik "${attachment.name}" nie jest obrazem. Wszystkie załączniki muszą być zdjęciami.`,
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-    }
+    await interaction.deferReply();
 
     try {
         // Znajdź rolę klanu użytkownika (do sprawdzania limitów)
@@ -211,9 +188,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         }
 
         if (!userClanRoleId) {
-            await interaction.reply({
-                content: '❌ Nie masz żadnej z ról klanowych. Tylko członkowie klanów mogą używać /remind.',
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: '❌ Nie masz żadnej z ról klanowych. Tylko członkowie klanów mogą używać /remind.'
             });
             return;
         }
@@ -230,9 +206,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
                 .setTimestamp()
                 .setFooter({ text: `Limit: 2 przypomnienia dziennie (per klan) | Boss deadline: 16:50` });
 
-            await interaction.reply({
-                embeds: [errorEmbed],
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                embeds: [errorEmbed]
             });
             return;
         }
@@ -262,9 +237,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
                 .setTimestamp()
                 .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
 
-            await interaction.reply({
-                embeds: [queueEmbed],
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                embeds: [queueEmbed]
             });
             return;
         }
@@ -273,216 +247,30 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
-        // Klan może wysłać przypomnienie, kontynuuj z OCR
-        const imageCount = attachments.length;
-        const imageText = imageCount === 1 ? 'zdjęcie' : `${imageCount} zdjęcia`;
+        // Utwórz sesję przypomnienia
+        const sessionId = reminderService.createSession(userId, guildId, interaction.channelId, userClanRoleId);
+        const session = reminderService.getSession(sessionId);
+        session.publicInteraction = interaction;
 
-        // Odśwież cache członków przed analizą
-        logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
-        await interaction.reply({ content: '🔄 Odświeżam cache członków...' }); // Publiczna wiadomość
-        await interaction.guild.members.fetch();
-        logger.info('✅ Cache członków odświeżony');
-
-        // Funkcja tworząca progress bar
-        const createProgressBar = (current, total, currentStatus = 'pending') => {
-            let bar = '';
-            for (let i = 0; i < total; i++) {
-                if (i < current - 1) {
-                    bar += '🟩'; // Ukończone
-                } else if (i === current - 1) {
-                    bar += currentStatus === 'processing' ? '🟨' : '🟩'; // W trakcie lub ukończone
-                } else {
-                    bar += '⬜'; // Oczekujące
-                }
-            }
-            return bar;
-        };
-
-        // Przetwarzaj wszystkie zdjęcia i zbieraj nicki (używając Set do usuwania duplikatów)
-        const uniqueNicks = new Set();
-        const imageUrls = [];
-        const imageResults = []; // Wyniki dla każdego zdjęcia
-
-        for (let i = 0; i < attachments.length; i++) {
-            const attachment = attachments[i];
-            imageUrls.push(attachment.url);
-
-            // Aktualizuj progress bar - rozpoczęcie przetwarzania
-            const progressBar = createProgressBar(i + 1, imageCount, 'processing');
-            const progressEmbed = new EmbedBuilder()
-                .setTitle('🔍 Analizuję zdjęcia...')
-                .setDescription(`${progressBar}\n\n📸 Przetwarzam zdjęcie **${i + 1}/${imageCount}**...`)
-                .setColor('#ffa500')
-                .setTimestamp();
-
-            // Dodaj wyniki z poprzednich zdjęć
-            if (imageResults.length > 0) {
-                const resultsText = imageResults.map((result, idx) =>
-                    `📸 Zdjęcie ${idx + 1}: ${result.count} ${result.count === 1 ? 'gracz' : 'graczy'}`
-                ).join('\n');
-                progressEmbed.addFields({
-                    name: '✅ Przetworzone zdjęcia',
-                    value: resultsText,
-                    inline: false
-                });
-            }
-
-            await interaction.editReply({ content: '', embeds: [progressEmbed] });
-
-            logger.info(`📸 Przetwarzanie zdjęcia ${i + 1}/${attachments.length}: ${attachment.name}`);
-
-            try {
-                const text = await ocrService.processImage(attachment);
-                const playersFromImage = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
-
-                // Zapisz wynik dla tego zdjęcia
-                imageResults.push({
-                    count: playersFromImage.length,
-                    players: playersFromImage
-                });
-
-                // Dodaj nicki do zbioru (automatycznie pominie duplikaty)
-                playersFromImage.forEach(nick => uniqueNicks.add(nick));
-
-                logger.info(`✅ Ze zdjęcia ${i + 1} znaleziono ${playersFromImage.length} graczy: ${playersFromImage.join(', ')}`);
-
-                // Aktualizuj progress bar - zakończenie przetwarzania tego zdjęcia
-                const completedBar = createProgressBar(i + 1, imageCount, 'completed');
-                const completedEmbed = new EmbedBuilder()
-                    .setTitle('🔍 Analizuję zdjęcia...')
-                    .setDescription(`${completedBar}\n\n✅ Zdjęcie **${i + 1}/${imageCount}** przetworzone`)
-                    .setColor('#ffa500')
-                    .setTimestamp();
-
-                const allResultsText = imageResults.map((result, idx) =>
-                    `📸 Zdjęcie ${idx + 1}: ${result.count} ${result.count === 1 ? 'gracz' : 'graczy'}`
-                ).join('\n');
-
-                completedEmbed.addFields(
-                    { name: '✅ Przetworzone zdjęcia', value: allResultsText, inline: false },
-                    { name: '👥 Unikalni gracze (bez duplikatów)', value: `${uniqueNicks.size}`, inline: true }
-                );
-
-                await interaction.editReply({ content: '', embeds: [completedEmbed] });
-
-                // Małe opóźnienie między zdjęciami (żeby widać było progress)
-                if (i < attachments.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-
-            } catch (error) {
-                logger.error(`❌ Błąd przetwarzania zdjęcia ${i + 1}:`, error);
-
-                // Zapisz błąd
-                imageResults.push({
-                    count: 0,
-                    players: [],
-                    error: true
-                });
-
-                // Kontynuuj mimo błędu w jednym zdjęciu
-            }
-        }
-
-        // Konwertuj Set na tablicę
-        const zeroScorePlayers = Array.from(uniqueNicks);
-
-        logger.info(`🎯 Łącznie znaleziono ${zeroScorePlayers.length} unikalnych graczy (po usunięciu duplikatów)`);
-
-        if (zeroScorePlayers.length === 0) {
-            const noPlayersEmbed = new EmbedBuilder()
-                .setTitle('❌ Brak graczy z wynikiem 0')
-                .setDescription(`Przeanalizowano ${imageCount === 1 ? '1 zdjęcie' : `${imageCount} zdjęcia`}, ale nie znaleziono graczy z wynikiem 0.`)
-                .setColor('#ff0000')
-                .setTimestamp();
-
-            await interaction.editReply({ content: '', embeds: [noPlayersEmbed] });
-            return;
-        }
-
-        // Konwertuj nicki na obiekty z członkami dla reminderService (również bez duplikatów)
-        const foundUserObjects = [];
-        const processedUserIds = new Set(); // Zapobiegaj duplikatom na poziomie userId
-
-        for (const nick of zeroScorePlayers) {
-            const member = interaction.guild.members.cache.find(m =>
-                m.displayName.toLowerCase() === nick.toLowerCase() ||
-                m.user.username.toLowerCase() === nick.toLowerCase()
-            );
-            if (member && !processedUserIds.has(member.id)) {
-                foundUserObjects.push({ member: member, matchedName: nick });
-                processedUserIds.add(member.id);
-            }
-        }
-        
-        // Generowanie unikalnego ID dla potwierdzenia
-        const confirmationId = Date.now().toString();
-        
-        // Zapisanie danych do mapy
-        confirmationData.set(confirmationId, {
-            action: 'remind',
-            foundUsers: foundUserObjects, // Obiekty z właściwością member
-            zeroScorePlayers: zeroScorePlayers, // Oryginalne nicki dla wyświetlenia
-            imageUrls: imageUrls, // Wszystkie zdjęcia
-            originalUserId: interaction.user.id,
-            userClanRoleId: userClanRoleId, // Rola klanu użytkownika (do limitów)
-            config: config,
-            reminderService: reminderService,
-            reminderUsageService: reminderUsageService
-        });
-        
-        // Usunięcie danych po 5 minut
-        setTimeout(() => {
-            confirmationData.delete(confirmationId);
-        }, 5 * 60 * 1000);
-        
-        // Tworzenie przycisków
-        const confirmButton = new ButtonBuilder()
-            .setCustomId(`confirm_remind_${confirmationId}`)
-            .setLabel('✅ Tak')
-            .setStyle(ButtonStyle.Success);
-        
-        const cancelButton = new ButtonBuilder()
-            .setCustomId(`cancel_remind_${confirmationId}`)
-            .setLabel('❌ Nie')
-            .setStyle(ButtonStyle.Danger);
-        
-        const row = new ActionRowBuilder()
-            .addComponents(confirmButton, cancelButton);
-        
-        const imageInfo = imageCount === 1
-            ? 'Przeanalizowano 1 zdjęcie'
-            : `Przeanalizowano ${imageCount} zdjęcia (usunięto duplikaty nicków)`;
-
-        const confirmationEmbed = new EmbedBuilder()
-            .setTitle('🔍 Potwierdzenie wysłania przypomnienia')
-            .setDescription(`Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?\n\n📸 ${imageInfo}`)
-            .setColor('#ffa500')
-            .addFields(
-                { name: `✅ Znaleziono ${zeroScorePlayers.length} unikalnych graczy z wynikiem ZERO`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false }
-            )
-            .setImage(imageUrls[0]) // Pokaż pierwsze zdjęcie
-            .setTimestamp()
-            .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
-        
+        // Pokaż embed z prośbą o zdjęcia
+        const awaitingEmbed = reminderService.createAwaitingImagesEmbed();
         await interaction.editReply({
-            embeds: [confirmationEmbed],
-            components: [row]
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
 
-        // Zakończ sesję OCR
-        await ocrService.endOCRSession(guildId, userId);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (${commandName})`);
+        logger.info(`[REMIND] ✅ Sesja utworzona, czekam na zdjęcia od ${interaction.user.tag}`);
 
     } catch (error) {
         logger.error('[REMIND] ❌ Błąd komendy /remind:', error);
-        await interaction.editReply({ content: messages.errors.ocrError });
 
-        // Zakończ sesję OCR również w przypadku błędu
+        // Zakończ sesję OCR w przypadku błędu
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
         await ocrService.endOCRSession(guildId, userId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+
+        await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
 
@@ -856,6 +644,170 @@ async function handleButton(interaction, sharedState) {
         }
         return;
     }
+
+    // ============ OBSŁUGA PRZYCISKÓW /REMIND (SYSTEM SESJI) ============
+
+    if (interaction.customId === 'remind_cancel_session') {
+        // Anuluj sesję /remind
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Zakończ sesję OCR
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+
+        // Wyczyść sesję
+        await sharedState.reminderService.cleanupSession(session.sessionId);
+
+        const cancelEmbed = new EmbedBuilder()
+            .setTitle('❌ Sesja anulowana')
+            .setDescription('Sesja /remind została anulowana. Wszystkie pliki zostały usunięte.')
+            .setColor('#ff0000')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [cancelEmbed],
+            components: []
+        });
+
+        logger.info(`[REMIND] ❌ Sesja anulowana przez ${interaction.user.tag}`);
+        return;
+    }
+
+    if (interaction.customId === 'remind_add_more') {
+        // Dodaj więcej zdjęć - zmień stage na awaiting_images
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        session.stage = 'awaiting_images';
+        sharedState.reminderService.refreshSessionTimeout(session.sessionId);
+
+        const awaitingEmbed = sharedState.reminderService.createAwaitingImagesEmbed();
+
+        await interaction.update({
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
+        });
+
+        logger.info(`[REMIND] ➕ Użytkownik ${interaction.user.tag} dodaje więcej zdjęć`);
+        return;
+    }
+
+    if (interaction.customId === 'remind_complete_yes') {
+        // Pokaż potwierdzenie końcowe i wyślij przypomnienia
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Stwórz listę znalezionych użytkowników
+        const foundUsers = [];
+        for (const imageResult of session.processedImages) {
+            for (const player of imageResult.result.players) {
+                foundUsers.push(player);
+            }
+        }
+
+        if (foundUsers.length === 0) {
+            await interaction.update({
+                content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
+                embeds: [],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+            return;
+        }
+
+        // Wyślij przypomnienia
+        await interaction.deferUpdate();
+
+        try {
+            const reminderResult = await sharedState.reminderService.sendReminders(interaction.guild, foundUsers);
+
+            // Zapisz użycie /remind przez klan (dla limitów czasowych)
+            await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
+
+            // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
+            await sharedState.reminderUsageService.recordPingedUsers(foundUsers);
+
+            // Zakończ sesję OCR
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+
+            // Wyczyść sesję
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+
+            // Oblicz czas do deadline
+            const timeLeft = sharedState.reminderService.calculateTimeUntilDeadline();
+            const timeMessage = messages.formatTimeMessage(timeLeft);
+
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ Przypomnienia wysłane')
+                .setDescription(
+                    `**Podsumowanie:**\n` +
+                    `🎯 Przeanalizowano: **${session.processedImages.length}** ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
+                    `👥 Znaleziono: **${session.uniqueNicks.size}** ${session.uniqueNicks.size === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
+                    `📤 Wysłano: **${reminderResult.sentMessages}** ${reminderResult.sentMessages === 1 ? 'przypomnienie' : 'przypomnień'}\n\n` +
+                    `⏰ ${timeMessage}`
+                )
+                .setColor('#00ff00')
+                .setTimestamp()
+                .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+
+            await interaction.editReply({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            logger.info(`[REMIND] ✅ Przypomnienia wysłane przez ${interaction.user.tag}`);
+
+        } catch (error) {
+            logger.error('[REMIND] ❌ Błąd wysyłania przypomnień:', error);
+
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas wysyłania przypomnień.',
+                embeds: [],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+        }
+
+        return;
+    }
+
+    // ============ KONIEC OBSŁUGI PRZYCISKÓW /REMIND ============
 
     if (interaction.customId === 'vacation_request') {
         // Obsługa przycisku "Zgłoś urlop"
@@ -1282,32 +1234,7 @@ async function registerSlashCommands(client) {
         
         new SlashCommandBuilder()
             .setName('remind')
-            .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0')
-            .addAttachmentOption(option =>
-                option.setName('image1')
-                    .setDescription('Pierwsze zdjęcie do analizy')
-                    .setRequired(true)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image2')
-                    .setDescription('Drugie zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image3')
-                    .setDescription('Trzecie zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image4')
-                    .setDescription('Czwarte zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image5')
-                    .setDescription('Piąte zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            ),
+            .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0 (wrzuć screeny po uruchomieniu)'),
         
         new SlashCommandBuilder()
             .setName('punishment')
