@@ -649,13 +649,14 @@ class PunishmentService {
         // Zaktualizuj embed na progress bar przed rozpoczęciem przetwarzania
         const initialProgressBar = this.createProgressBar(0, totalImages);
         const initialEmbed = new EmbedBuilder()
-            .setTitle('⏳ Rozpoczynam przetwarzanie zdjęć...')
-            .setDescription(
-                `${initialProgressBar}\n\n` +
-                `📸 Przygotowuję do przetworzenia **${totalImages}** ${totalImages === 1 ? 'zdjęcia' : 'zdjęć'}...`
-            )
+            .setTitle('⏳ Przetwarzanie zdjęć...')
+            .setDescription(`${initialProgressBar}`)
             .setColor('#FFA500')
-            .setTimestamp();
+            .setTimestamp()
+            .addFields(
+                { name: '✅ Przetworzone zdjęcia', value: 'Brak', inline: false },
+                { name: '👥 Suma unikalnych graczy', value: '0', inline: true }
+            );
 
         if (session.publicInteraction) {
             try {
@@ -788,13 +789,15 @@ class PunishmentService {
             // Wszystko ukończone - 10 zielonych kratek
             bar = '🟩'.repeat(totalBars);
         } else {
-            // W trakcie przetwarzania - proporcjonalnie
-            // completedBars to liczba kratek które powinny być wypełnione (zielone + żółta razem)
+            // W trakcie przetwarzania
+            // Zielone kratki = postęp ukończonych zdjęć (current - 1)
+            // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do current)
             const completedBars = Math.ceil((current / total) * totalBars);
-            const greenBars = Math.max(0, completedBars - 1); // Ostatnia z completedBars to żółta
+            const greenBars = Math.floor(((current - 1) / total) * totalBars);
+            const yellowBars = completedBars - greenBars;
             const whiteBars = totalBars - completedBars;
 
-            bar = '🟩'.repeat(greenBars) + '🟨' + '⬜'.repeat(Math.max(0, whiteBars));
+            bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(whiteBars);
         }
 
         return `${bar} ${percentage}%`;
