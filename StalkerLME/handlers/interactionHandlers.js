@@ -1163,24 +1163,29 @@ async function handleButton(interaction, sharedState) {
                         addedPoints += 1;
                     }
                     
-                    const targetMembers = interaction.guild.members.cache.filter(member => 
+                    const targetMembers = interaction.guild.members.cache.filter(member =>
                         Object.values(data.config.targetRoles).some(roleId => member.roles.cache.has(roleId))
                     );
-                    
+
+                    // Format current date and time
+                    const currentDate = new Date();
+                    const formattedDate = currentDate.toLocaleDateString('en-GB'); // DD.MM.YYYY
+                    const formattedTime = currentDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
+
                     // Wyślij publiczny embed z pełnym podsumowaniem
                     const punishEmbed = new EmbedBuilder()
-                        .setTitle('📊 Analiza Zakończona')
+                        .setTitle('📊 Kary Dodane')
                         .setColor('#ff6b6b')
                         .addFields(
-                            { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
-                            { name: '✅ Dopasowano i dodano punkty', value: processedUsers.length > 0 ? processedUsers.join('\n') : 'Brak', inline: false },
+                            { name: '🎯 Znaleziono graczy z wynikiem 0', value: `${data.zeroScorePlayers.join(', ')}`, inline: false },
+                            { name: '✅ Dodano punkty karne dla', value: processedUsers.length > 0 ? processedUsers.join('\n') : 'Brak', inline: false },
                             { name: '📈 Dodano punktów', value: addedPoints.toString(), inline: true },
-                            { name: '🎭 Rola karania (2+ pkt)', value: `<@&${data.config.punishmentRoleId}>`, inline: true },
-                            { name: '🚨 Rola karania (3+ pkt)', value: `<@&${data.config.lotteryBanRoleId}>`, inline: true }
+                            { name: '🎭 Rola karna (2+ pkt)', value: `<@&${data.config.punishmentRoleId}>`, inline: true },
+                            { name: '🚨 Zakaz loterii (3+ pkt)', value: `<@&${data.config.lotteryBanRoleId}>`, inline: true }
                         )
                         .setImage(data.imageUrl)
                         .setTimestamp()
-                        .setFooter({ text: `Przeanalizowano przez ${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 🚨 = rola karania (3+ pkt) | 📢 = ostrzeżenie wysłane` });
+                        .setFooter({ text: `Kary dodane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${formattedDate} ${formattedTime}` });
                     
                     await interaction.followUp({ 
                         embeds: [punishEmbed],
@@ -1239,22 +1244,25 @@ async function handleButton(interaction, sharedState) {
                     const imageCount = data.imageUrls.length;
                     const imageCountText = imageCount === 1 ? '1 zdjęcie' : `${imageCount} zdjęcia`;
 
+                    // Format current date and time
+                    const currentDate = new Date();
+                    const formattedDate = currentDate.toLocaleDateString('en-GB'); // DD.MM.YYYY
+                    const formattedTime = currentDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
+
                     // Wyślij publiczny embed z pełnym podsumowaniem
                     const reminderEmbed = new EmbedBuilder()
                         .setTitle('📢 Przypomnienie Wysłane')
-                        .setColor('#ffa500')
+                        .setColor('#ec4899')
                         .addFields(
-                            { name: '📸 Przeanalizowano', value: imageCountText, inline: true },
-                            { name: '✅ Znaleziono unikalnych graczy', value: data.zeroScorePlayers.length.toString(), inline: true },
-                            { name: '⏰ Czas do deadline', value: timeDisplay, inline: true },
-                            { name: '📷 Gracze z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
+                            { name: '🎯 Znaleziono graczy z wynikiem 0', value: `${data.zeroScorePlayers.join(', ')}`, inline: false },
                             { name: '📢 Wysłano przypomnienia dla', value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false },
-                            { name: '📤 Wysłano wiadomości', value: reminderResult.sentMessages.toString(), inline: true },
-                            { name: '📢 Na kanały', value: reminderResult.roleGroups.toString(), inline: true }
+                            { name: '🚨 Wysłano wiadomości', value: reminderResult.sentMessages.toString(), inline: true },
+                            { name: '🔕 Na kanały', value: reminderResult.roleGroups.toString(), inline: true },
+                            { name: '⏰ Pozostały czas do 16:50', value: timeDisplay, inline: true }
                         )
                         .setImage(data.imageUrls[0]) // Pierwsze zdjęcie
                         .setTimestamp()
-                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.tag} | Boss deadline: 16:50` });
+                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${formattedDate} ${formattedTime}` });
                     
                     await interaction.followUp({ 
                         embeds: [reminderEmbed],
@@ -1955,11 +1963,11 @@ async function showFinalConfirmation(interaction, finalPlayers, imageUrl, config
         .addComponents(confirmButton, cancelButton);
     
     const confirmationEmbed = new EmbedBuilder()
-        .setTitle('⚖️ Potwierdzenie dodania punktów karnych')
-        .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
+        .setTitle('⚖️ Potwierdź Dodanie Punktów Karnych')
+        .setDescription('Czy chcesz dodać punkty karne znalezionym graczom?')
         .setColor('#ff6b6b')
         .addFields(
-            { name: `✅ Znaleziono ${finalPlayers.length} graczy z wynikiem ZERO`, value: `\`${finalPlayers.join(', ')}\``, inline: false }
+            { name: `🎯 Znaleziono ${finalPlayers.length} graczy z wynikiem 0`, value: `${finalPlayers.join(', ')}`, inline: false }
         )
         .setImage(imageUrl)
         .setTimestamp()
@@ -2020,11 +2028,11 @@ async function showFinalConfirmationWithUpdate(interaction, finalPlayers, imageU
         .addComponents(confirmButton, cancelButton);
     
     const confirmationEmbed = new EmbedBuilder()
-        .setTitle('⚖️ Potwierdzenie dodania punktów karnych')
-        .setDescription('Czy chcesz dodać punkty karne dla znalezionych graczy?')
+        .setTitle('⚖️ Potwierdź Dodanie Punktów Karnych')
+        .setDescription('Czy chcesz dodać punkty karne znalezionym graczom?')
         .setColor('#ff6b6b')
         .addFields(
-            { name: `✅ Znaleziono ${finalPlayers.length} graczy z wynikiem ZERO`, value: `\`${finalPlayers.join(', ')}\``, inline: false }
+            { name: `🎯 Znaleziono ${finalPlayers.length} graczy z wynikiem 0`, value: `${finalPlayers.join(', ')}`, inline: false }
         )
         .setImage(imageUrl)
         .setTimestamp()
