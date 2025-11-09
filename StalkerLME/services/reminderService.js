@@ -434,7 +434,7 @@ class ReminderService {
             const endButton = new ButtonBuilder()
                 .setCustomId('remind_cancel_session')
                 .setLabel('✅ Zakończ')
-                .setStyle(ButtonStyle.Success);
+                .setStyle(ButtonStyle.Danger);
 
             row = new ActionRowBuilder()
                 .addComponents(endButton);
@@ -634,7 +634,7 @@ class ReminderService {
                     .setTitle('⏳ Przetwarzanie zdjęć...')
                     .setDescription(
                         `${completedBar}\n\n` +
-                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone`
+                        `📸 Przetwarzanie **${imageIndex}** z **${totalImages}**`
                     )
                     .setColor('#FFA500')
                     .setTimestamp();
