@@ -190,6 +190,7 @@ class PhaseService {
      */
     async notifyQueuePosition(guildId, userId, position) {
         try {
+            const guild = await this.client.guilds.fetch(guildId);
             const user = await this.client.users.fetch(userId);
             const activeUserId = this.activeProcessing.get(guildId);
 
@@ -197,8 +198,8 @@ class PhaseService {
 
             if (activeUserId) {
                 try {
-                    const activeUser = await this.client.users.fetch(activeUserId);
-                    description += `🔒 Obecnie używa: **${activeUser.username}**\n`;
+                    const activeMember = await guild.members.fetch(activeUserId);
+                    description += `🔒 Obecnie używa: **${activeMember.displayName}**\n`;
                 } catch (err) {
                     description += `🔒 Obecnie system jest zajęty\n`;
                 }
@@ -213,8 +214,8 @@ class PhaseService {
                     description += `\n👥 Przed Tobą w kolejce:\n`;
                     for (let i = 0; i < Math.min(peopleAhead.length, 3); i++) {
                         try {
-                            const person = await this.client.users.fetch(peopleAhead[i].userId);
-                            description += `${i + 1}. **${person.username}**\n`;
+                            const personMember = await guild.members.fetch(peopleAhead[i].userId);
+                            description += `${i + 1}. **${personMember.displayName}**\n`;
                         } catch (err) {
                             description += `${i + 1}. *Użytkownik*\n`;
                         }
@@ -258,6 +259,7 @@ class PhaseService {
      * Pobiera informacje o kolejce dla użytkownika (do wyświetlenia w kanale)
      */
     async getQueueInfo(guildId, userId) {
+        const guild = await this.client.guilds.fetch(guildId);
         const activeUserId = this.activeProcessing.get(guildId);
         const queue = this.waitingQueue.get(guildId) || [];
         const userIndex = queue.findIndex(item => item.userId === userId);
@@ -268,8 +270,8 @@ class PhaseService {
         // Informacja o osobie obecnie używającej
         if (activeUserId) {
             try {
-                const activeUser = await this.client.users.fetch(activeUserId);
-                description += `🔒 **Obecnie używa:** ${activeUser.username}\n\n`;
+                const activeMember = await guild.members.fetch(activeUserId);
+                description += `🔒 **Obecnie używa:** ${activeMember.displayName}\n\n`;
             } catch (err) {
                 description += `🔒 **System jest obecnie zajęty**\n\n`;
             }
@@ -287,8 +289,8 @@ class PhaseService {
 
             for (let i = 0; i < displayLimit; i++) {
                 try {
-                    const person = await this.client.users.fetch(peopleAhead[i].userId);
-                    description += `${i + 1}. ${person.username}\n`;
+                    const personMember = await guild.members.fetch(peopleAhead[i].userId);
+                    description += `${i + 1}. ${personMember.displayName}\n`;
                 } catch (err) {
                     description += `${i + 1}. *Użytkownik*\n`;
                 }
