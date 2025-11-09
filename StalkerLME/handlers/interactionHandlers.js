@@ -199,7 +199,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
 
         // Odśwież cache członków przed analizą
         logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
-        await interaction.reply({ content: '🔄 Odświeżam cache członków...', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: '🔄 Odświeżam cache członków...' }); // Publiczna wiadomość
         await interaction.guild.members.fetch();
         logger.info('✅ Cache członków odświeżony');
 
