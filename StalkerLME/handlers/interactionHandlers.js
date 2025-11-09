@@ -1244,10 +1244,10 @@ async function handleButton(interaction, sharedState) {
                     const imageCount = data.imageUrls.length;
                     const imageCountText = imageCount === 1 ? '1 zdjęcie' : `${imageCount} zdjęcia`;
 
-                    // Format current date and time
-                    const currentDate = new Date();
-                    const formattedDate = currentDate.toLocaleDateString('en-GB'); // DD.MM.YYYY
-                    const formattedTime = currentDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
+                    // Format current date and time for reminder
+                    const reminderDate = new Date();
+                    const reminderFormattedDate = reminderDate.toLocaleDateString('en-GB'); // DD.MM.YYYY
+                    const reminderFormattedTime = reminderDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
 
                     // Wyślij publiczny embed z pełnym podsumowaniem
                     const reminderEmbed = new EmbedBuilder()
@@ -1262,7 +1262,7 @@ async function handleButton(interaction, sharedState) {
                         )
                         .setImage(data.imageUrls[0]) // Pierwsze zdjęcie
                         .setTimestamp()
-                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${formattedDate} ${formattedTime}` });
+                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${reminderFormattedDate} ${reminderFormattedTime}` });
                     
                     await interaction.followUp({ 
                         embeds: [reminderEmbed],
