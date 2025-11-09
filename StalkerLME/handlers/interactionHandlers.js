@@ -755,13 +755,21 @@ async function handleButton(interaction, sharedState) {
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
 
             // Przekształć foundUsers do formatu oczekiwanego przez recordPingedUsers
-            const pingData = foundUsers.map(userData => ({
-                member: userData.user.member,
-                matchedName: userData.detectedNick
-            }));
+            const pingData = foundUsers
+                .filter(userData => userData.user && userData.user.member) // Pomiń użytkowników bez member
+                .map(userData => ({
+                    member: userData.user.member,
+                    matchedName: userData.detectedNick
+                }));
+
+            logger.info(`[REMIND] 📊 Zapisywanie statystyk pingów dla ${pingData.length} użytkowników (z ${foundUsers.length} znalezionych)`);
 
             // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
-            await sharedState.reminderUsageService.recordPingedUsers(pingData);
+            if (pingData.length > 0) {
+                await sharedState.reminderUsageService.recordPingedUsers(pingData);
+            } else {
+                logger.warn(`[REMIND] ⚠️ Brak użytkowników z member do zapisania w statystykach`);
+            }
 
             // Zatrzymaj ghost ping
             stopGhostPing(session);
