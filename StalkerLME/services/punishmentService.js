@@ -688,17 +688,19 @@ class PunishmentService {
     }
 
     /**
-     * Tworzy progress bar dla przetwarzania zdjęć
+     * Tworzy progress bar dla przetwarzania zdjęć (1 zdjęcie = 1 kratka)
      */
     createProgressBar(current, total) {
         const percentage = Math.floor((current / total) * 100);
-        const completed = Math.floor((current / total) * 10);
-        const remaining = 10 - completed;
+        const completed = current; // Liczba ukończonych zdjęć
+        const remaining = total - current; // Liczba pozostałych zdjęć
 
         let bar = '';
+        // Ukończone zdjęcia (zielone kratki)
         for (let i = 0; i < completed; i++) {
             bar += '🟩';
         }
+        // Aktualne przetwarzane (żółta kratka) + pozostałe (białe kratki)
         if (remaining > 0) {
             bar += '🟨';
             for (let i = 1; i < remaining; i++) {
