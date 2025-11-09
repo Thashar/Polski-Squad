@@ -550,6 +550,11 @@ class PhaseService {
 
         logger.info(`[PHASE1] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
+        // Odśwież cache członków przed przetwarzaniem
+        logger.info('[PHASE1] 🔄 Odświeżanie cache członków...');
+        await guild.members.fetch();
+        logger.info('[PHASE1] ✅ Cache członków odświeżony');
+
         // Utwórz snapshot nicków z roli na początku
         const snapshotPath = path.join(this.tempDir, `role_nicks_snapshot_${sessionId}.json`);
         const snapshotCreated = await this.ocrService.saveRoleNicksSnapshot(guild, member, snapshotPath);
