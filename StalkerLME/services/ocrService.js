@@ -1248,9 +1248,25 @@ class OCRService {
         const active = this.activeProcessing.get(guildId);
         const reservation = this.queueReservation.get(guildId);
 
+        // Dynamiczny kolor embeda
+        let embedColor = '#00FF00'; // Zielony (domyślnie - pusta kolejka)
+
+        if (active || reservation) {
+            // Jeśli coś jest w użyciu lub jest rezerwacja
+            if (queue.length > 2) {
+                embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby w kolejce)
+            } else {
+                embedColor = '#FFA500'; // Żółty (w użyciu, max 2 osoby)
+            }
+        } else if (queue.length > 2) {
+            embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby czeka)
+        } else if (queue.length > 0) {
+            embedColor = '#FFA500'; // Żółty (1-2 osoby czekają)
+        }
+
         const embed = new EmbedBuilder()
             .setTitle('📋 Kolejka OCR')
-            .setColor('#FFA500')
+            .setColor(embedColor)
             .setTimestamp()
             .setFooter({ text: 'Aktualizowane automatycznie' });
 
