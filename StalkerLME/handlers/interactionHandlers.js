@@ -996,12 +996,27 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Stwórz listę znalezionych użytkowników
-        const foundUsers = [];
+        const allFoundUsers = [];
         for (const imageResult of session.processedImages) {
             for (const player of imageResult.result.players) {
-                foundUsers.push(player);
+                allFoundUsers.push(player);
             }
         }
+
+        // DEDUPLIKACJA: Usuń duplikaty użytkowników (ten sam gracz może mieć 0 na wielu zdjęciach)
+        const uniqueUserIds = new Set();
+        const foundUsers = [];
+        for (const userData of allFoundUsers) {
+            if (userData.user && userData.user.member) {
+                const userId = userData.user.member.id;
+                if (!uniqueUserIds.has(userId)) {
+                    uniqueUserIds.add(userId);
+                    foundUsers.push(userData);
+                }
+            }
+        }
+
+        logger.info(`[PUNISH] 📊 Deduplikacja: ${allFoundUsers.length} znalezionych → ${foundUsers.length} unikalnych użytkowników`);
 
         if (foundUsers.length === 0) {
             // Zatrzymaj ghost ping

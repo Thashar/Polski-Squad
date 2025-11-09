@@ -376,11 +376,8 @@ client.on(Events.MessageCreate, async (message) => {
                     ocrService
                 );
 
-                // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
-                const processedCount = results.length;
-                const totalImages = session.processedImages.length;
-
-                const confirmation = punishmentService.createProcessedImagesEmbed(processedCount, totalImages);
+                // Pokaż końcowe potwierdzenie z listą graczy
+                const confirmation = punishmentService.createFinalConfirmationEmbed(session);
 
                 session.stage = 'confirming_complete';
                 punishmentService.refreshSessionTimeout(session.sessionId);
