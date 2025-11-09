@@ -369,7 +369,58 @@ class ReminderService {
     }
 
     /**
-     * Tworzy embed z potwierdzeniem przetworzonych zdjęć
+     * Tworzy embed z końcowym potwierdzeniem i listą graczy
+     */
+    createFinalConfirmationEmbed(session) {
+        const foundUsers = [];
+        for (const imageResult of session.processedImages) {
+            for (const player of imageResult.result.players) {
+                foundUsers.push(player);
+            }
+        }
+
+        const uniqueNicks = Array.from(session.uniqueNicks);
+
+        let description = `**Przeanalizowano:** ${session.processedImages.length} ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n`;
+        description += `**Znaleziono:** ${uniqueNicks.length} ${uniqueNicks.length === 1 ? 'unikalny nick' : 'unikalnych nicków'} z wynikiem 0\n\n`;
+
+        if (uniqueNicks.length > 0) {
+            description += `**📋 Lista graczy z zerem:**\n`;
+            // Pokaż maksymalnie 20 nicków w embedzie (limit Discord)
+            const displayNicks = uniqueNicks.slice(0, 20);
+            description += displayNicks.map(nick => `• ${nick}`).join('\n');
+
+            if (uniqueNicks.length > 20) {
+                description += `\n... i ${uniqueNicks.length - 20} więcej`;
+            }
+        } else {
+            description += `❌ Nie znaleziono żadnych graczy z wynikiem 0`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle('✅ Analiza zakończona')
+            .setDescription(description)
+            .setColor('#FFA500')
+            .setTimestamp();
+
+        const confirmButton = new ButtonBuilder()
+            .setCustomId('remind_complete_yes')
+            .setLabel('✅ Wyślij przypomnienia')
+            .setStyle(ButtonStyle.Success);
+
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('remind_cancel_session')
+            .setLabel('❌ Anuluj')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder()
+            .addComponents(confirmButton, cancelButton);
+
+        return { embed, row };
+    }
+
+    /**
+     * Tworzy embed z potwierdzeniem przetworzonych zdjęć (stara metoda - nie używana już dla /remind)
      */
     createProcessedImagesEmbed(processedCount, totalImages) {
         const embed = new EmbedBuilder()
@@ -503,10 +554,7 @@ class ReminderService {
 
                 // Dodaj unikalne nicki do sesji (automatyczne usuwanie duplikatów)
                 for (const player of foundPlayers) {
-                    const nick = player.matchedName;
-                    if (!session.uniqueNicks.has(nick)) {
-                        session.uniqueNicks.add(nick);
-                    }
+                    session.uniqueNicks.add(player.detectedNick);
                 }
 
                 results.push({
@@ -526,11 +574,58 @@ class ReminderService {
 
                 logger.info(`[REMIND] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych`);
 
+                // Zaktualizuj progress bar po przetworzeniu zdjęcia
+                const completedBar = this.createProgressBar(imageIndex, totalImages);
+                const completedEmbed = new EmbedBuilder()
+                    .setTitle('⏳ Przetwarzanie zdjęć...')
+                    .setDescription(
+                        `${completedBar}\n\n` +
+                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone`
+                    )
+                    .setColor('#FFA500')
+                    .setTimestamp();
+
+                // Dodaj wyniki z przetworzonych zdjęć
+                const resultsText = session.processedImages.map((img, idx) =>
+                    `📸 Zdjęcie ${idx + 1}: ${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`
+                ).join('\n');
+
+                completedEmbed.addFields(
+                    { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
+                    { name: '👥 Unikalni gracze (bez duplikatów)', value: `${session.uniqueNicks.size}`, inline: true }
+                );
+
+                if (session.publicInteraction) {
+                    try {
+                        await session.publicInteraction.editReply({
+                            embeds: [completedEmbed],
+                            components: []
+                        });
+                    } catch (error) {
+                        logger.error('[REMIND] ❌ Błąd aktualizacji progress bara:', error);
+                    }
+                }
+
+                // Małe opóźnienie między zdjęciami (żeby widać było progress)
+                if (i < totalImages - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
             } catch (error) {
                 logger.error(`[REMIND] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
                 results.push({
                     imageIndex,
                     error: error.message
+                });
+
+                session.processedImages.push({
+                    filepath: file.filepath,
+                    result: {
+                        imageIndex,
+                        foundPlayers: 0,
+                        players: [],
+                        error: error.message
+                    }
                 });
             }
         }
