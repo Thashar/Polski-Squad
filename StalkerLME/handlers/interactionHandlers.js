@@ -103,7 +103,43 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
         return;
     }
-    
+
+    // ===== SPRAWDZENIE KOLEJKI OCR =====
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = '/punish';
+
+    // Sprawdź czy użytkownik ma rezerwację
+    const hasReservation = ocrService.hasReservation(guildId, userId);
+
+    // Sprawdź czy ktoś inny używa OCR
+    const isOCRActive = ocrService.isOCRActive(guildId);
+
+    if (!hasReservation && isOCRActive) {
+        // Ktoś inny używa OCR, dodaj do kolejki
+        const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+
+        const queueEmbed = new EmbedBuilder()
+            .setTitle('⏳ Kolejka OCR')
+            .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                           `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                           `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                           `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+            .setColor('#ffa500')
+            .setTimestamp()
+            .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
+
+        await interaction.reply({
+            embeds: [queueEmbed],
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Rozpocznij sesję OCR
+    ocrService.startOCRSession(guildId, userId, commandName);
+    logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
+
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
         await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
@@ -123,38 +159,23 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         
         // Sprawdź urlopy przed potwierdzeniem (tylko dla punish)
         await checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, attachment.url, config, punishmentService, text);
-        
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (${commandName})`);
+
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
+
+        // Zakończ sesję OCR również w przypadku błędu
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
     }
 }
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
-    // Zbierz wszystkie załączone zdjęcia (image1 do image5)
-    const attachments = [];
-    for (let i = 1; i <= 5; i++) {
-        const attachment = interaction.options.getAttachment(`image${i}`);
-        if (attachment) {
-            attachments.push(attachment);
-        }
-    }
-
-    if (attachments.length === 0) {
-        await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
-        return;
-    }
-
-    // Sprawdź czy wszystkie załączniki to obrazy
-    for (const attachment of attachments) {
-        if (!attachment.contentType?.startsWith('image/')) {
-            await interaction.reply({
-                content: `❌ Plik "${attachment.name}" nie jest obrazem. Wszystkie załączniki muszą być zdjęciami.`,
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-    }
+    await interaction.deferReply();
 
     try {
         // Znajdź rolę klanu użytkownika (do sprawdzania limitów)
@@ -167,9 +188,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         }
 
         if (!userClanRoleId) {
-            await interaction.reply({
-                content: '❌ Nie masz żadnej z ról klanowych. Tylko członkowie klanów mogą używać /remind.',
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: '❌ Nie masz żadnej z ról klanowych. Tylko członkowie klanów mogą używać /remind.'
             });
             return;
         }
@@ -186,212 +206,70 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
                 .setTimestamp()
                 .setFooter({ text: `Limit: 2 przypomnienia dziennie (per klan) | Boss deadline: 16:50` });
 
-            await interaction.reply({
-                embeds: [errorEmbed],
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                embeds: [errorEmbed]
             });
             return;
         }
 
-        // Klan może wysłać przypomnienie, kontynuuj z OCR
-        const imageCount = attachments.length;
-        const imageText = imageCount === 1 ? 'zdjęcie' : `${imageCount} zdjęcia`;
+        // ===== SPRAWDZENIE KOLEJKI OCR =====
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        const commandName = '/remind';
 
-        // Odśwież cache członków przed analizą
-        logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
-        await interaction.reply({ content: '🔄 Odświeżam cache członków...' }); // Publiczna wiadomość
-        await interaction.guild.members.fetch();
-        logger.info('✅ Cache członków odświeżony');
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
 
-        // Funkcja tworząca progress bar
-        const createProgressBar = (current, total, currentStatus = 'pending') => {
-            let bar = '';
-            for (let i = 0; i < total; i++) {
-                if (i < current - 1) {
-                    bar += '🟩'; // Ukończone
-                } else if (i === current - 1) {
-                    bar += currentStatus === 'processing' ? '🟨' : '🟩'; // W trakcie lub ukończone
-                } else {
-                    bar += '⬜'; // Oczekujące
-                }
-            }
-            return bar;
-        };
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
 
-        // Przetwarzaj wszystkie zdjęcia i zbieraj nicki (używając Set do usuwania duplikatów)
-        const uniqueNicks = new Set();
-        const imageUrls = [];
-        const imageResults = []; // Wyniki dla każdego zdjęcia
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
-        for (let i = 0; i < attachments.length; i++) {
-            const attachment = attachments[i];
-            imageUrls.push(attachment.url);
-
-            // Aktualizuj progress bar - rozpoczęcie przetwarzania
-            const progressBar = createProgressBar(i + 1, imageCount, 'processing');
-            const progressEmbed = new EmbedBuilder()
-                .setTitle('🔍 Analizuję zdjęcia...')
-                .setDescription(`${progressBar}\n\n📸 Przetwarzam zdjęcie **${i + 1}/${imageCount}**...`)
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
                 .setColor('#ffa500')
-                .setTimestamp();
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
 
-            // Dodaj wyniki z poprzednich zdjęć
-            if (imageResults.length > 0) {
-                const resultsText = imageResults.map((result, idx) =>
-                    `📸 Zdjęcie ${idx + 1}: ${result.count} ${result.count === 1 ? 'gracz' : 'graczy'}`
-                ).join('\n');
-                progressEmbed.addFields({
-                    name: '✅ Przetworzone zdjęcia',
-                    value: resultsText,
-                    inline: false
-                });
-            }
-
-            await interaction.editReply({ content: '', embeds: [progressEmbed] });
-
-            logger.info(`📸 Przetwarzanie zdjęcia ${i + 1}/${attachments.length}: ${attachment.name}`);
-
-            try {
-                const text = await ocrService.processImage(attachment);
-                const playersFromImage = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
-
-                // Zapisz wynik dla tego zdjęcia
-                imageResults.push({
-                    count: playersFromImage.length,
-                    players: playersFromImage
-                });
-
-                // Dodaj nicki do zbioru (automatycznie pominie duplikaty)
-                playersFromImage.forEach(nick => uniqueNicks.add(nick));
-
-                logger.info(`✅ Ze zdjęcia ${i + 1} znaleziono ${playersFromImage.length} graczy: ${playersFromImage.join(', ')}`);
-
-                // Aktualizuj progress bar - zakończenie przetwarzania tego zdjęcia
-                const completedBar = createProgressBar(i + 1, imageCount, 'completed');
-                const completedEmbed = new EmbedBuilder()
-                    .setTitle('🔍 Analizuję zdjęcia...')
-                    .setDescription(`${completedBar}\n\n✅ Zdjęcie **${i + 1}/${imageCount}** przetworzone`)
-                    .setColor('#ffa500')
-                    .setTimestamp();
-
-                const allResultsText = imageResults.map((result, idx) =>
-                    `📸 Zdjęcie ${idx + 1}: ${result.count} ${result.count === 1 ? 'gracz' : 'graczy'}`
-                ).join('\n');
-
-                completedEmbed.addFields(
-                    { name: '✅ Przetworzone zdjęcia', value: allResultsText, inline: false },
-                    { name: '👥 Unikalni gracze (bez duplikatów)', value: `${uniqueNicks.size}`, inline: true }
-                );
-
-                await interaction.editReply({ content: '', embeds: [completedEmbed] });
-
-                // Małe opóźnienie między zdjęciami (żeby widać było progress)
-                if (i < attachments.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-
-            } catch (error) {
-                logger.error(`❌ Błąd przetwarzania zdjęcia ${i + 1}:`, error);
-
-                // Zapisz błąd
-                imageResults.push({
-                    count: 0,
-                    players: [],
-                    error: true
-                });
-
-                // Kontynuuj mimo błędu w jednym zdjęciu
-            }
-        }
-
-        // Konwertuj Set na tablicę
-        const zeroScorePlayers = Array.from(uniqueNicks);
-
-        logger.info(`🎯 Łącznie znaleziono ${zeroScorePlayers.length} unikalnych graczy (po usunięciu duplikatów)`);
-
-        if (zeroScorePlayers.length === 0) {
-            const noPlayersEmbed = new EmbedBuilder()
-                .setTitle('❌ Brak graczy z wynikiem 0')
-                .setDescription(`Przeanalizowano ${imageCount === 1 ? '1 zdjęcie' : `${imageCount} zdjęcia`}, ale nie znaleziono graczy z wynikiem 0.`)
-                .setColor('#ff0000')
-                .setTimestamp();
-
-            await interaction.editReply({ content: '', embeds: [noPlayersEmbed] });
+            await interaction.editReply({
+                embeds: [queueEmbed]
+            });
             return;
         }
 
-        // Konwertuj nicki na obiekty z członkami dla reminderService (również bez duplikatów)
-        const foundUserObjects = [];
-        const processedUserIds = new Set(); // Zapobiegaj duplikatom na poziomie userId
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
-        for (const nick of zeroScorePlayers) {
-            const member = interaction.guild.members.cache.find(m =>
-                m.displayName.toLowerCase() === nick.toLowerCase() ||
-                m.user.username.toLowerCase() === nick.toLowerCase()
-            );
-            if (member && !processedUserIds.has(member.id)) {
-                foundUserObjects.push({ member: member, matchedName: nick });
-                processedUserIds.add(member.id);
-            }
-        }
-        
-        // Generowanie unikalnego ID dla potwierdzenia
-        const confirmationId = Date.now().toString();
-        
-        // Zapisanie danych do mapy
-        confirmationData.set(confirmationId, {
-            action: 'remind',
-            foundUsers: foundUserObjects, // Obiekty z właściwością member
-            zeroScorePlayers: zeroScorePlayers, // Oryginalne nicki dla wyświetlenia
-            imageUrls: imageUrls, // Wszystkie zdjęcia
-            originalUserId: interaction.user.id,
-            userClanRoleId: userClanRoleId, // Rola klanu użytkownika (do limitów)
-            config: config,
-            reminderService: reminderService,
-            reminderUsageService: reminderUsageService
-        });
-        
-        // Usunięcie danych po 5 minut
-        setTimeout(() => {
-            confirmationData.delete(confirmationId);
-        }, 5 * 60 * 1000);
-        
-        // Tworzenie przycisków
-        const confirmButton = new ButtonBuilder()
-            .setCustomId(`confirm_remind_${confirmationId}`)
-            .setLabel('✅ Tak')
-            .setStyle(ButtonStyle.Success);
-        
-        const cancelButton = new ButtonBuilder()
-            .setCustomId(`cancel_remind_${confirmationId}`)
-            .setLabel('❌ Nie')
-            .setStyle(ButtonStyle.Danger);
-        
-        const row = new ActionRowBuilder()
-            .addComponents(confirmButton, cancelButton);
-        
-        const imageInfo = imageCount === 1
-            ? 'Przeanalizowano 1 zdjęcie'
-            : `Przeanalizowano ${imageCount} zdjęcia (usunięto duplikaty nicków)`;
+        // Utwórz sesję przypomnienia
+        const sessionId = reminderService.createSession(userId, guildId, interaction.channelId, userClanRoleId);
+        const session = reminderService.getSession(sessionId);
+        session.publicInteraction = interaction;
 
-        const confirmationEmbed = new EmbedBuilder()
-            .setTitle('🔍 Potwierdzenie wysłania przypomnienia')
-            .setDescription(`Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?\n\n📸 ${imageInfo}`)
-            .setColor('#ffa500')
-            .addFields(
-                { name: `✅ Znaleziono ${zeroScorePlayers.length} unikalnych graczy z wynikiem ZERO`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false }
-            )
-            .setImage(imageUrls[0]) // Pokaż pierwsze zdjęcie
-            .setTimestamp()
-            .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
-        
-        await interaction.editReply({ 
-            embeds: [confirmationEmbed],
-            components: [row]
+        // Pokaż embed z prośbą o zdjęcia
+        const awaitingEmbed = reminderService.createAwaitingImagesEmbed();
+        await interaction.editReply({
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
         });
-        
+
+        logger.info(`[REMIND] ✅ Sesja utworzona, czekam na zdjęcia od ${interaction.user.tag}`);
+
     } catch (error) {
         logger.error('[REMIND] ❌ Błąd komendy /remind:', error);
+
+        // Zakończ sesję OCR w przypadku błędu
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+
         await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
@@ -766,6 +644,170 @@ async function handleButton(interaction, sharedState) {
         }
         return;
     }
+
+    // ============ OBSŁUGA PRZYCISKÓW /REMIND (SYSTEM SESJI) ============
+
+    if (interaction.customId === 'remind_cancel_session') {
+        // Anuluj sesję /remind
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Zakończ sesję OCR
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+
+        // Wyczyść sesję
+        await sharedState.reminderService.cleanupSession(session.sessionId);
+
+        const cancelEmbed = new EmbedBuilder()
+            .setTitle('❌ Sesja anulowana')
+            .setDescription('Sesja /remind została anulowana. Wszystkie pliki zostały usunięte.')
+            .setColor('#ff0000')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [cancelEmbed],
+            components: []
+        });
+
+        logger.info(`[REMIND] ❌ Sesja anulowana przez ${interaction.user.tag}`);
+        return;
+    }
+
+    if (interaction.customId === 'remind_add_more') {
+        // Dodaj więcej zdjęć - zmień stage na awaiting_images
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        session.stage = 'awaiting_images';
+        sharedState.reminderService.refreshSessionTimeout(session.sessionId);
+
+        const awaitingEmbed = sharedState.reminderService.createAwaitingImagesEmbed();
+
+        await interaction.update({
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
+        });
+
+        logger.info(`[REMIND] ➕ Użytkownik ${interaction.user.tag} dodaje więcej zdjęć`);
+        return;
+    }
+
+    if (interaction.customId === 'remind_complete_yes') {
+        // Pokaż potwierdzenie końcowe i wyślij przypomnienia
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Stwórz listę znalezionych użytkowników
+        const foundUsers = [];
+        for (const imageResult of session.processedImages) {
+            for (const player of imageResult.result.players) {
+                foundUsers.push(player);
+            }
+        }
+
+        if (foundUsers.length === 0) {
+            await interaction.update({
+                content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
+                embeds: [],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+            return;
+        }
+
+        // Wyślij przypomnienia
+        await interaction.deferUpdate();
+
+        try {
+            const reminderResult = await sharedState.reminderService.sendReminders(interaction.guild, foundUsers);
+
+            // Zapisz użycie /remind przez klan (dla limitów czasowych)
+            await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
+
+            // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
+            await sharedState.reminderUsageService.recordPingedUsers(foundUsers);
+
+            // Zakończ sesję OCR
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+
+            // Wyczyść sesję
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+
+            // Oblicz czas do deadline
+            const timeLeft = sharedState.reminderService.calculateTimeUntilDeadline();
+            const timeMessage = messages.formatTimeMessage(timeLeft);
+
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ Przypomnienia wysłane')
+                .setDescription(
+                    `**Podsumowanie:**\n` +
+                    `🎯 Przeanalizowano: **${session.processedImages.length}** ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
+                    `👥 Znaleziono: **${session.uniqueNicks.size}** ${session.uniqueNicks.size === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
+                    `📤 Wysłano: **${reminderResult.sentMessages}** ${reminderResult.sentMessages === 1 ? 'przypomnienie' : 'przypomnień'}\n\n` +
+                    `⏰ ${timeMessage}`
+                )
+                .setColor('#00ff00')
+                .setTimestamp()
+                .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+
+            await interaction.editReply({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            logger.info(`[REMIND] ✅ Przypomnienia wysłane przez ${interaction.user.tag}`);
+
+        } catch (error) {
+            logger.error('[REMIND] ❌ Błąd wysyłania przypomnień:', error);
+
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas wysyłania przypomnień.',
+                embeds: [],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+        }
+
+        return;
+    }
+
+    // ============ KONIEC OBSŁUGI PRZYCISKÓW /REMIND ============
 
     if (interaction.customId === 'vacation_request') {
         // Obsługa przycisku "Zgłoś urlop"
@@ -1192,32 +1234,7 @@ async function registerSlashCommands(client) {
         
         new SlashCommandBuilder()
             .setName('remind')
-            .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0')
-            .addAttachmentOption(option =>
-                option.setName('image1')
-                    .setDescription('Pierwsze zdjęcie do analizy')
-                    .setRequired(true)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image2')
-                    .setDescription('Drugie zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image3')
-                    .setDescription('Trzecie zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image4')
-                    .setDescription('Czwarte zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            )
-            .addAttachmentOption(option =>
-                option.setName('image5')
-                    .setDescription('Piąte zdjęcie do analizy (opcjonalne)')
-                    .setRequired(false)
-            ),
+            .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0 (wrzuć screeny po uruchomieniu)'),
         
         new SlashCommandBuilder()
             .setName('punishment')
@@ -1821,7 +1838,10 @@ async function handleModalSubmit(interaction, sharedState) {
 }
 
 async function handlePhase1Command(interaction, sharedState) {
-    const { config, phaseService, databaseService } = sharedState;
+    const { config, phaseService, databaseService, ocrService } = sharedState;
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = '/faza1';
 
     // Sprawdź uprawnienia (admin lub allowedPunishRoles)
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -1858,35 +1878,36 @@ async function handlePhase1Command(interaction, sharedState) {
             return;
         }
 
-        // Sprawdź czy ktoś już przetwarza dane
-        if (phaseService.isProcessingActive(interaction.guild.id)) {
-            const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+        // ===== SPRAWDZENIE KOLEJKI OCR (globalny system) =====
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
 
-            // Sprawdź czy użytkownik ma rezerwację
-            if (!phaseService.hasReservation(interaction.guild.id, interaction.user.id)) {
-                // Użytkownik nie ma rezerwacji - dodaj do kolejki
-                await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
 
-                // Pobierz informacje o kolejce
-                const queueInfo = await phaseService.getQueueInfo(interaction.guild.id, interaction.user.id);
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('⏳ Kolejka zajęta')
-                        .setDescription(queueInfo.description)
-                        .setColor('#FFA500')
-                        .setTimestamp()
-                    ]
-                });
-                return;
-            }
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                .setColor('#ffa500')
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
 
-            // Użytkownik ma rezerwację ale ktoś inny jeszcze używa - to nie powinno się zdarzyć
-            logger.warn(`[PHASE] ⚠️ Użytkownik ${interaction.user.id} ma rezerwację ale ktoś inny (${activeUserId}) nadal przetwarza`);
+            await interaction.editReply({
+                embeds: [queueEmbed]
+            });
+            return;
         }
 
-        // Jeśli użytkownik ma rezerwację, usuń go z kolejki
-        phaseService.removeFromQueue(interaction.guild.id, interaction.user.id);
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -1916,9 +1937,6 @@ async function handlePhase1Command(interaction, sharedState) {
             }
         }
 
-        // Zablokuj przetwarzanie dla tego guild
-        phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
-
         // Utwórz sesję
         const sessionId = phaseService.createSession(
             interaction.user.id,
@@ -1942,8 +1960,9 @@ async function handlePhase1Command(interaction, sharedState) {
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd komendy /faza1:', error);
 
-        // Odblokuj w przypadku błędu
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Zakończ sesję OCR w przypadku błędu
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas inicjalizacji komendy /faza1.'
@@ -2029,11 +2048,12 @@ async function handleDecodeModalSubmit(interaction, sharedState) {
 // =============== PHASE 1 HANDLERS ===============
 
 async function handlePhase1OverwriteButton(interaction, sharedState) {
-    const { phaseService, config } = sharedState;
+    const { phaseService, config, ocrService } = sharedState;
 
     if (interaction.customId === 'phase1_overwrite_no') {
-        // Anuluj - odblokuj przetwarzanie
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Anuluj - zakończ sesję OCR
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
 
         await interaction.update({
             content: '❌ Operacja anulowana.',
@@ -2063,8 +2083,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
         return;
     }
 
-    // Nadpisz - zablokuj przetwarzanie i utwórz sesję
-    phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+    // Nadpisz - sesja OCR już aktywna (została rozpoczęta w handlePhase1Command)
 
     const sessionId = phaseService.createSession(
         interaction.user.id,
@@ -2086,7 +2105,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
 }
 
 async function handlePhase1CompleteButton(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2107,9 +2126,11 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase1_cancel_session') {
-        // Anuluj sesję i zwolnij kolejkę
+        // Anuluj sesję i zwolnij kolejkę OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
+
 
         await interaction.update({
             content: '❌ Sesja anulowana.',
@@ -2238,7 +2259,7 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
 }
 
 async function handlePhase1FinalConfirmButton(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2262,9 +2283,10 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase1_cancel_save') {
-        // Anuluj - usuń pliki temp i zwolnij kolejkę
+        // Anuluj - usuń pliki temp i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase1)`);
 
         await interaction.update({
             content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
@@ -2320,15 +2342,20 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
 
-        // Usuń pliki temp po zapisaniu (odblokuje też przetwarzanie)
+        // Usuń pliki temp po zapisaniu
         await phaseService.cleanupSession(session.sessionId);
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase1)`);
         logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
 
-        // Odblokuj przetwarzanie w przypadku błędu
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Zakończ sesję OCR w przypadku błędu
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase1)`);
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisu danych do bazy.',
@@ -2380,7 +2407,10 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
 // =============== PHASE 2 HANDLERS ===============
 
 async function handlePhase2Command(interaction, sharedState) {
-    const { config, phaseService, databaseService } = sharedState;
+    const { config, phaseService, databaseService, ocrService } = sharedState;
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = '/faza2';
 
     // Sprawdź uprawnienia (admin lub allowedPunishRoles)
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -2417,35 +2447,36 @@ async function handlePhase2Command(interaction, sharedState) {
             return;
         }
 
-        // Sprawdź czy ktoś już przetwarza dane
-        if (phaseService.isProcessingActive(interaction.guild.id)) {
-            const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+        // ===== SPRAWDZENIE KOLEJKI OCR (globalny system) =====
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
 
-            // Sprawdź czy użytkownik ma rezerwację
-            if (!phaseService.hasReservation(interaction.guild.id, interaction.user.id)) {
-                // Użytkownik nie ma rezerwacji - dodaj do kolejki
-                await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
 
-                // Pobierz informacje o kolejce
-                const queueInfo = await phaseService.getQueueInfo(interaction.guild.id, interaction.user.id);
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('⏳ Kolejka zajęta')
-                        .setDescription(queueInfo.description)
-                        .setColor('#FFA500')
-                        .setTimestamp()
-                    ]
-                });
-                return;
-            }
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                .setColor('#ffa500')
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
 
-            // Użytkownik ma rezerwację ale ktoś inny jeszcze używa - to nie powinno się zdarzyć
-            logger.warn(`[PHASE] ⚠️ Użytkownik ${interaction.user.id} ma rezerwację ale ktoś inny (${activeUserId}) nadal przetwarza`);
+            await interaction.editReply({
+                embeds: [queueEmbed]
+            });
+            return;
         }
 
-        // Jeśli użytkownik ma rezerwację, usuń go z kolejki
-        phaseService.removeFromQueue(interaction.guild.id, interaction.user.id);
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -2475,9 +2506,6 @@ async function handlePhase2Command(interaction, sharedState) {
             }
         }
 
-        // Zablokuj przetwarzanie dla tego guild
-        phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
-
         // Utwórz sesję dla fazy 2
         const sessionId = phaseService.createSession(
             interaction.user.id,
@@ -2502,8 +2530,9 @@ async function handlePhase2Command(interaction, sharedState) {
     } catch (error) {
         logger.info(`[PHASE2] ❌ Błąd komendy /faza2:`, error);
 
-        // Odblokuj w przypadku błędu
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Zakończ sesję OCR w przypadku błędu
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd Phase2)`);
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas uruchamiania komendy.'
@@ -2512,10 +2541,11 @@ async function handlePhase2Command(interaction, sharedState) {
 }
 
 async function handlePhase2OverwriteButton(interaction, sharedState) {
-    const { phaseService, config } = sharedState;
+    const { phaseService, config, ocrService } = sharedState;
 
     if (interaction.customId === 'phase2_overwrite_no') {
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
         await interaction.update({
             content: '❌ Operacja anulowana.',
             embeds: [],
@@ -2543,7 +2573,7 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
         return;
     }
 
-    phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+    // Sesja OCR już aktywna (została rozpoczęta w handlePhase2Command)
 
     const sessionId = phaseService.createSession(
         interaction.user.id,
@@ -2566,7 +2596,7 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
 }
 
 async function handlePhase2CompleteButton(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2579,9 +2609,10 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase2_cancel_session') {
-        // Anuluj sesję i zwolnij kolejkę
+        // Anuluj sesję i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
 
         await interaction.update({
             content: '❌ Sesja anulowana.',
@@ -2677,7 +2708,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
 }
 
 async function handlePhase2FinalConfirmButton(interaction, sharedState) {
-    const { phaseService, databaseService } = sharedState;
+    const { phaseService, databaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2693,9 +2724,10 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase2_cancel_save') {
-        // Anuluj zapis i zwolnij kolejkę
+        // Anuluj zapis i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
 
         await interaction.update({
             content: '❌ Anulowano zapis danych.',
@@ -2795,11 +2827,16 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
         await phaseService.cleanupSession(session.sessionId);
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase2)`);
         logger.info(`[PHASE2] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
     } catch (error) {
         logger.error('[PHASE2] ❌ Błąd zapisu:', error);
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase2)`);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisywania danych.'
         });
