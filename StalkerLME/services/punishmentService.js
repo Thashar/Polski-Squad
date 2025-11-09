@@ -619,11 +619,58 @@ class PunishmentService {
 
                 logger.info(`[PUNISH] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych`);
 
+                // Zaktualizuj progress bar po przetworzeniu zdjęcia
+                const completedBar = this.createProgressBar(imageIndex, totalImages);
+                const completedEmbed = new EmbedBuilder()
+                    .setTitle('⏳ Przetwarzanie zdjęć...')
+                    .setDescription(
+                        `${completedBar}\n\n` +
+                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone`
+                    )
+                    .setColor('#FFA500')
+                    .setTimestamp();
+
+                // Dodaj wyniki z przetworzonych zdjęć
+                const resultsText = session.processedImages.map((img, idx) =>
+                    `📸 Zdjęcie ${idx + 1}: ${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`
+                ).join('\n');
+
+                completedEmbed.addFields(
+                    { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
+                    { name: '👥 Unikalni gracze (bez duplikatów)', value: `${session.uniqueNicks.size}`, inline: true }
+                );
+
+                if (session.publicInteraction) {
+                    try {
+                        await session.publicInteraction.editReply({
+                            embeds: [completedEmbed],
+                            components: []
+                        });
+                    } catch (error) {
+                        logger.error('[PUNISH] ❌ Błąd aktualizacji progress bara:', error);
+                    }
+                }
+
+                // Małe opóźnienie między zdjęciami (żeby widać było progress)
+                if (i < totalImages - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
             } catch (error) {
                 logger.error(`[PUNISH] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
                 results.push({
                     imageIndex,
                     error: error.message
+                });
+
+                session.processedImages.push({
+                    filepath: file.filepath,
+                    result: {
+                        imageIndex,
+                        foundPlayers: 0,
+                        players: [],
+                        error: error.message
+                    }
                 });
             }
         }
