@@ -59,7 +59,6 @@ class MessageCleanupService {
             this.scheduledMessages.push(scheduledMessage);
             await this.saveScheduledMessages();
 
-            this.logger.info(`[MESSAGE_CLEANUP] 📝 Zaplanowano usunięcie wiadomości ${messageId} na ${new Date(deleteAtTimestamp).toLocaleString('pl-PL')}`);
             return true;
         } catch (error) {
             this.logger.error('[MESSAGE_CLEANUP] ❌ Błąd planowania usunięcia wiadomości:', error.message);
@@ -171,7 +170,6 @@ class MessageCleanupService {
 
             if (this.scheduledMessages.length < initialCount) {
                 await this.saveScheduledMessages();
-                this.logger.info(`[MESSAGE_CLEANUP] ✅ Usunięto zaplanowane usuwanie dla wiadomości ${messageId}`);
                 return true;
             }
 
