@@ -457,6 +457,11 @@ class ReminderService {
 
         logger.info(`[REMIND] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
+        // Odśwież cache członków przed przetwarzaniem
+        logger.info('[REMIND] 🔄 Odświeżanie cache członków...');
+        await guild.members.fetch();
+        logger.info('[REMIND] ✅ Cache członków odświeżony');
+
         const results = [];
 
         // Progress bar - aktualizacja na żywo
