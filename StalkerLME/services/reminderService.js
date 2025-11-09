@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const messages = require('../config/messages');
 const fs = require('fs').promises;
 const path = require('path');
@@ -403,6 +403,15 @@ class ReminderService {
             .setColor('#FFA500')
             .setTimestamp();
 
+        // Dodaj zdjęcie do embeda (pierwsze przetworzone zdjęcie)
+        const files = [];
+        if (session.processedImages.length > 0) {
+            const firstImage = session.processedImages[0];
+            const attachment = new AttachmentBuilder(firstImage.filepath, { name: 'analyzed_image.png' });
+            files.push(attachment);
+            embed.setImage('attachment://analyzed_image.png');
+        }
+
         const confirmButton = new ButtonBuilder()
             .setCustomId('remind_complete_yes')
             .setLabel('✅ Wyślij przypomnienia')
@@ -416,7 +425,7 @@ class ReminderService {
         const row = new ActionRowBuilder()
             .addComponents(confirmButton, cancelButton);
 
-        return { embed, row };
+        return { embed, row, files };
     }
 
     /**
