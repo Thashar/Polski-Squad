@@ -1248,9 +1248,25 @@ class OCRService {
         const active = this.activeProcessing.get(guildId);
         const reservation = this.queueReservation.get(guildId);
 
+        // Dynamiczny kolor embeda
+        let embedColor = '#00FF00'; // Zielony (domyślnie - pusta kolejka)
+
+        if (active || reservation) {
+            // Jeśli coś jest w użyciu lub jest rezerwacja
+            if (queue.length > 2) {
+                embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby w kolejce)
+            } else {
+                embedColor = '#FFA500'; // Żółty (w użyciu, max 2 osoby)
+            }
+        } else if (queue.length > 2) {
+            embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby czeka)
+        } else if (queue.length > 0) {
+            embedColor = '#FFA500'; // Żółty (1-2 osoby czekają)
+        }
+
         const embed = new EmbedBuilder()
             .setTitle('📋 Kolejka OCR')
-            .setColor('#FFA500')
+            .setColor(embedColor)
             .setTimestamp()
             .setFooter({ text: 'Aktualizowane automatycznie' });
 
@@ -1319,11 +1335,21 @@ class OCRService {
 
             const embed = await this.createQueueEmbed(guildId);
 
+            // Dodaj przycisk "Wyjdź z kolejki"
+            const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+            const leaveQueueButton = new ButtonBuilder()
+                .setCustomId('queue_leave')
+                .setLabel('🚪 Wyjdź z kolejki')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder()
+                .addComponents(leaveQueueButton);
+
             // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
             if (this.queueMessageId) {
                 try {
                     const message = await channel.messages.fetch(this.queueMessageId);
-                    await message.edit({ embeds: [embed] });
+                    await message.edit({ embeds: [embed], components: [row] });
                     logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
                     return;
                 } catch (error) {
@@ -1361,8 +1387,8 @@ class OCRService {
                 logger.warn('[OCR-QUEUE] ⚠️ Błąd podczas usuwania starych wiadomości:', error.message);
             }
 
-            // Wyślij nową wiadomość
-            const message = await channel.send({ embeds: [embed] });
+            // Wyślij nową wiadomość z przyciskiem
+            const message = await channel.send({ embeds: [embed], components: [row] });
             this.queueMessageId = message.id;
             logger.info('[OCR-QUEUE] 📤 Wysłano nowy embed kolejki (ID: ' + message.id + ')');
         } catch (error) {

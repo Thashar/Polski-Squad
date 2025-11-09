@@ -539,11 +539,20 @@ class ReminderService {
             .setColor('#FFA500')
             .setTimestamp();
 
+        // Dodaj przycisk anuluj
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('remind_cancel_session')
+            .setLabel('❌ Anuluj')
+            .setStyle(ButtonStyle.Danger);
+
+        const cancelRow = new ActionRowBuilder()
+            .addComponents(cancelButton);
+
         if (session.publicInteraction) {
             try {
                 await session.publicInteraction.editReply({
                     embeds: [initialEmbed],
-                    components: []
+                    components: [cancelRow]
                 });
             } catch (error) {
                 logger.error('[REMIND] ❌ Błąd aktualizacji embeda początkowego:', error.message);
@@ -618,7 +627,7 @@ class ReminderService {
                     try {
                         await session.publicInteraction.editReply({
                             embeds: [completedEmbed],
-                            components: []
+                            components: [cancelRow]
                         });
                     } catch (error) {
                         logger.error('[REMIND] ❌ Błąd aktualizacji progress bara:', error);

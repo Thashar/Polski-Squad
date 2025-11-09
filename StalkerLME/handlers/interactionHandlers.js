@@ -722,12 +722,27 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Stwórz listę znalezionych użytkowników
-        const foundUsers = [];
+        const allFoundUsers = [];
         for (const imageResult of session.processedImages) {
             for (const player of imageResult.result.players) {
-                foundUsers.push(player);
+                allFoundUsers.push(player);
             }
         }
+
+        // DEDUPLIKACJA: Usuń duplikaty użytkowników (ten sam gracz może mieć 0 na wielu zdjęciach)
+        const uniqueUserIds = new Set();
+        const foundUsers = [];
+        for (const userData of allFoundUsers) {
+            if (userData.user && userData.user.member) {
+                const userId = userData.user.member.id;
+                if (!uniqueUserIds.has(userId)) {
+                    uniqueUserIds.add(userId);
+                    foundUsers.push(userData);
+                }
+            }
+        }
+
+        logger.info(`[REMIND] 📊 Deduplikacja: ${allFoundUsers.length} znalezionych → ${foundUsers.length} unikalnych użytkowników`);
 
         if (foundUsers.length === 0) {
             // Zatrzymaj ghost ping
@@ -755,13 +770,21 @@ async function handleButton(interaction, sharedState) {
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
 
             // Przekształć foundUsers do formatu oczekiwanego przez recordPingedUsers
-            const pingData = foundUsers.map(userData => ({
-                member: userData.user.member,
-                matchedName: userData.detectedNick
-            }));
+            const pingData = foundUsers
+                .filter(userData => userData.user && userData.user.member) // Pomiń użytkowników bez member
+                .map(userData => ({
+                    member: userData.user.member,
+                    matchedName: userData.detectedNick
+                }));
+
+            logger.info(`[REMIND] 📊 Zapisywanie statystyk pingów dla ${pingData.length} użytkowników (z ${foundUsers.length} znalezionych)`);
 
             // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
-            await sharedState.reminderUsageService.recordPingedUsers(pingData);
+            if (pingData.length > 0) {
+                await sharedState.reminderUsageService.recordPingedUsers(pingData);
+            } else {
+                logger.warn(`[REMIND] ⚠️ Brak użytkowników z member do zapisania w statystykach`);
+            }
 
             // Zatrzymaj ghost ping
             stopGhostPing(session);
@@ -817,6 +840,75 @@ async function handleButton(interaction, sharedState) {
     }
 
     // ============ KONIEC OBSŁUGI PRZYCISKÓW /REMIND ============
+
+    // ============ OBSŁUGA PRZYCISKU "WYJDŹ Z KOLEJKI" ============
+
+    if (interaction.customId === 'queue_leave') {
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = sharedState.ocrService.hasReservation(guildId, userId);
+
+        // Sprawdź czy użytkownik jest w kolejce
+        const queue = sharedState.ocrService.waitingQueue.get(guildId) || [];
+        const isInQueue = queue.find(item => item.userId === userId);
+
+        if (!hasReservation && !isInQueue) {
+            await interaction.reply({
+                content: '❌ Nie jesteś w kolejce ani nie masz rezerwacji.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Jeśli ma rezerwację, usuń ją
+        if (hasReservation) {
+            const reservation = sharedState.ocrService.queueReservation.get(guildId);
+            if (reservation && reservation.timeout) {
+                clearTimeout(reservation.timeout);
+            }
+            sharedState.ocrService.queueReservation.delete(guildId);
+            logger.info(`[OCR-QUEUE] 🚪 ${userId} opuścił kolejkę (rezerwacja)`);
+
+            // Usuń z kolejki jeśli tam jest
+            if (isInQueue) {
+                const index = queue.findIndex(item => item.userId === userId);
+                if (index !== -1) {
+                    queue.splice(index, 1);
+                }
+            }
+
+            // Przejdź do następnej osoby w kolejce
+            if (queue.length > 0) {
+                const nextPerson = queue[0];
+                await sharedState.ocrService.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
+            } else {
+                sharedState.ocrService.waitingQueue.delete(guildId);
+            }
+        } else if (isInQueue) {
+            // Usuń tylko z kolejki
+            const index = queue.findIndex(item => item.userId === userId);
+            if (index !== -1) {
+                queue.splice(index, 1);
+                logger.info(`[OCR-QUEUE] 🚪 ${userId} opuścił kolejkę (pozycja ${index + 1})`);
+            }
+
+            if (queue.length === 0) {
+                sharedState.ocrService.waitingQueue.delete(guildId);
+            }
+        }
+
+        // Aktualizuj wyświetlanie kolejki
+        await sharedState.ocrService.updateQueueDisplay(guildId);
+
+        await interaction.reply({
+            content: '✅ Opuściłeś kolejkę OCR.',
+            flags: MessageFlags.Ephemeral
+        });
+
+        return;
+    }
 
     // ============ OBSŁUGA PRZYCISKÓW /PUNISH (SYSTEM SESJI) ============
 

@@ -290,46 +290,57 @@ class ReminderUsageService {
      * @param {Array<Object>} foundUsers - Tablica obiektów { member, matchedName }
      */
     async recordPingedUsers(foundUsers) {
-        if (!this.usageData) {
-            await this.loadUsageData();
-        }
-
-        const today = this.getTodayDate();
-        const timestamp = Date.now();
-
-        for (const userData of foundUsers) {
-            const userId = userData.member.id;
-
-            // Inicjalizacja danych odbiorcy jeśli nie istnieją
-            if (!this.usageData.receivers[userId]) {
-                this.usageData.receivers[userId] = {
-                    totalPings: 0,
-                    dailyPings: {}
-                };
+        try {
+            if (!this.usageData) {
+                await this.loadUsageData();
             }
 
-            const receiverData = this.usageData.receivers[userId];
+            const today = this.getTodayDate();
+            const timestamp = Date.now();
 
-            // Inicjalizacja dzisiejszych pingów jeśli nie istnieją
-            if (!receiverData.dailyPings[today]) {
-                receiverData.dailyPings[today] = [];
+            logger.info(`[REMIND-STATS] 📝 Rozpoczynam zapisywanie ${foundUsers.length} pingów`);
+
+            for (const userData of foundUsers) {
+                try {
+                    const userId = userData.member.id;
+
+                    // Inicjalizacja danych odbiorcy jeśli nie istnieją
+                    if (!this.usageData.receivers[userId]) {
+                        this.usageData.receivers[userId] = {
+                            totalPings: 0,
+                            dailyPings: {}
+                        };
+                    }
+
+                    const receiverData = this.usageData.receivers[userId];
+
+                    // Inicjalizacja dzisiejszych pingów jeśli nie istnieją
+                    if (!receiverData.dailyPings[today]) {
+                        receiverData.dailyPings[today] = [];
+                    }
+
+                    // Dodaj nowy ping
+                    receiverData.dailyPings[today].push({
+                        timestamp: timestamp,
+                        matchedName: userData.matchedName
+                    });
+
+                    // Zwiększ całkowity licznik
+                    receiverData.totalPings++;
+
+                    logger.info(`[REMIND-STATS] 📢 Zarejestrowano ping dla użytkownika ${userData.member.displayName} (${userId}), ogółem: ${receiverData.totalPings}`);
+                } catch (error) {
+                    logger.error(`[REMIND-STATS] ❌ Błąd rejestrowania pingu dla użytkownika:`, error.message);
+                }
             }
 
-            // Dodaj nowy ping
-            receiverData.dailyPings[today].push({
-                timestamp: timestamp,
-                matchedName: userData.matchedName
-            });
-
-            // Zwiększ całkowity licznik
-            receiverData.totalPings++;
-
-            logger.info(`📢 Zarejestrowano ping dla użytkownika ${userData.member.displayName} (${userId}), ogółem: ${receiverData.totalPings}`);
+            // Zapisz dane
+            await this.saveUsageData();
+            logger.info(`[REMIND-STATS] ✅ Zapisano ${foundUsers.length} pingów do bazy danych`);
+        } catch (error) {
+            logger.error(`[REMIND-STATS] ❌ Błąd zapisywania statystyk pingów:`, error);
+            throw error;
         }
-
-        // Zapisz dane
-        await this.saveUsageData();
-        logger.info(`✅ Zapisano ${foundUsers.length} pingów do bazy danych`);
     }
 
     /**
