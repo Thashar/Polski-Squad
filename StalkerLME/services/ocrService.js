@@ -1697,9 +1697,6 @@ class OCRService {
     async expireOCRReservation(guildId, userId) {
         this.queueReservation.delete(guildId);
 
-        // Aktualizuj wyświetlanie kolejki
-        await this.updateQueueDisplay(guildId);
-
         // Usuń z kolejki
         if (this.waitingQueue.has(guildId)) {
             const queue = this.waitingQueue.get(guildId);
@@ -1740,6 +1737,10 @@ class OCRService {
                 }
             }
         }
+
+        // KLUCZOWE: Aktualizuj wyświetlanie NA KOŃCU, po usunięciu użytkownika z kolejki
+        // Dzięki temu jeśli był jedyny w kolejce, embed pokaże pustą kolejkę
+        await this.updateQueueDisplay(guildId);
     }
 
     /**
