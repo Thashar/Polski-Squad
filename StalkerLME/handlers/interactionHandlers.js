@@ -127,7 +127,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         }
 
         // Rozpocznij sesję OCR
-        ocrService.startOCRSession(guildId, userId, commandName);
+        await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Utwórz sesję punishment
@@ -227,7 +227,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         }
 
         // Rozpocznij sesję OCR
-        ocrService.startOCRSession(guildId, userId, commandName);
+        await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Utwórz sesję przypomnienia
@@ -2073,7 +2073,7 @@ async function handlePhase1Command(interaction, sharedState) {
         }
 
         // Rozpocznij sesję OCR
-        ocrService.startOCRSession(guildId, userId, commandName);
+        await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
@@ -2642,7 +2642,7 @@ async function handlePhase2Command(interaction, sharedState) {
         }
 
         // Rozpocznij sesję OCR
-        ocrService.startOCRSession(guildId, userId, commandName);
+        await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją

@@ -150,5 +150,8 @@ module.exports = {
         '1262792174475673610',
         '1207041051831832586',
         '1269698743393849458'
-    ]
+    ],
+
+    // Kanał wyświetlania kolejki OCR
+    queueChannelId: '1393641032737882213'
 };
