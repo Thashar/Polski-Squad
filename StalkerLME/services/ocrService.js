@@ -1331,6 +1331,17 @@ class OCRService {
                 }
             }
 
+            // Usuń poprzednią wiadomość jeśli istnieje
+            if (this.queueMessageId) {
+                try {
+                    const oldMessage = await channel.messages.fetch(this.queueMessageId);
+                    await oldMessage.delete();
+                    logger.info('[OCR-QUEUE] 🗑️ Usunięto poprzedni embed kolejki');
+                } catch (error) {
+                    logger.warn('[OCR-QUEUE] ⚠️ Nie można usunąć poprzedniego embeda:', error.message);
+                }
+            }
+
             // Wyślij nową wiadomość
             const message = await channel.send({ embeds: [embed] });
             this.queueMessageId = message.id;

@@ -574,8 +574,7 @@ class ReminderService {
                     .setTitle('⏳ Przetwarzanie zdjęć...')
                     .setDescription(
                         `${completedBar}\n\n` +
-                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone\n\n` +
-                        `**👥 Łącznie unikalnych użytkowników:** ${session.uniqueNicks.size}`
+                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone`
                     )
                     .setColor('#FFA500')
                     .setTimestamp();
