@@ -667,22 +667,25 @@ async function handleButton(interaction, sharedState) {
         // Zatrzymaj ghost ping
         stopGhostPing(session);
 
-        // Zakończ sesję OCR
-        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-
-        // Wyczyść sesję
-        await sharedState.reminderService.cleanupSession(session.sessionId);
-
         const cancelEmbed = new EmbedBuilder()
             .setTitle('❌ Sesja anulowana')
             .setDescription('Sesja /remind została anulowana. Wszystkie pliki zostały usunięte.')
             .setColor('#ff0000')
             .setTimestamp();
 
+        // Najpierw odpowiedz na interaction
         await interaction.update({
             embeds: [cancelEmbed],
             components: []
         });
+
+        // Potem wykonaj czyszczenie (asynchronicznie w tle)
+        try {
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+        } catch (error) {
+            logger.error(`[REMIND] ⚠️ Błąd czyszczenia sesji: ${error.message}`);
+        }
 
         logger.info(`[REMIND] ❌ Sesja anulowana przez ${interaction.user.tag}`);
         return;
@@ -1010,22 +1013,25 @@ async function handleButton(interaction, sharedState) {
         // Zatrzymaj ghost ping
         stopGhostPing(session);
 
-        // Zakończ sesję OCR
-        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-
-        // Wyczyść sesję
-        await sharedState.punishmentService.cleanupSession(session.sessionId);
-
         const cancelEmbed = new EmbedBuilder()
             .setTitle('❌ Sesja anulowana')
             .setDescription('Sesja /punish została anulowana. Wszystkie pliki zostały usunięte.')
             .setColor('#ff0000')
             .setTimestamp();
 
+        // Najpierw odpowiedz na interaction
         await interaction.update({
             embeds: [cancelEmbed],
             components: []
         });
+
+        // Potem wykonaj czyszczenie (asynchronicznie w tle)
+        try {
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+        } catch (error) {
+            logger.error(`[PUNISH] ⚠️ Błąd czyszczenia sesji: ${error.message}`);
+        }
 
         logger.info(`[PUNISH] ❌ Sesja anulowana przez ${interaction.user.tag}`);
         return;

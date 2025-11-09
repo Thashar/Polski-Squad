@@ -400,6 +400,17 @@ client.on(Events.MessageCreate, async (message) => {
 
     // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
     // Ten blok kodu nie jest już używany, ale zostawiam dla referencji w przypadku problemów
+
+    // Automatyczne czyszczenie kanału kolejki - usuń wszystkie wiadomości od użytkowników
+    const queueChannelId = '1437122516974829679';
+    if (message.channelId === queueChannelId && !message.author.bot) {
+        try {
+            await message.delete();
+            logger.info(`[QUEUE-CLEANUP] 🧹 Usunięto wiadomość od ${message.author.tag} z kanału kolejki`);
+        } catch (error) {
+            logger.error(`[QUEUE-CLEANUP] ❌ Błąd usuwania wiadomości: ${error.message}`);
+        }
+    }
 });
 
 // Obsługa błędów
