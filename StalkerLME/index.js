@@ -72,7 +72,14 @@ client.once(Events.ClientReady, async () => {
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
-    
+
+    // Inicjalizacja wyświetlania kolejki OCR
+    try {
+        await ocrService.initializeQueueDisplay(client);
+    } catch (error) {
+        logger.error(`❌ Błąd inicjalizacji wyświetlania kolejki OCR: ${error.message}`);
+    }
+
     // Sprawdź i upewnij się, że wiadomość o urlopach jest ostatnia na kanale
     for (const guild of client.guilds.cache.values()) {
         try {

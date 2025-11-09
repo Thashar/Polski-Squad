@@ -1345,7 +1345,7 @@ class OCRService {
      */
     async ensureQueueMessageIsLatest(guildId) {
         try {
-            if (!this.client || !this.queueChannelId || !this.queueMessageId) return;
+            if (!this.client || !this.queueChannelId) return;
 
             const channel = await this.client.channels.fetch(this.queueChannelId);
             if (!channel) return;
@@ -1353,14 +1353,76 @@ class OCRService {
             const messages = await channel.messages.fetch({ limit: 1 });
             const lastMessage = messages.first();
 
-            // Jeśli ostatnia wiadomość to nie nasz embed, wyślij nowy
-            if (!lastMessage || lastMessage.id !== this.queueMessageId) {
+            // Jeśli nie mamy zapisanego ID, wyślij nowy embed
+            if (!this.queueMessageId) {
+                await this.updateQueueDisplay(guildId);
+                return;
+            }
+
+            // Jeśli ostatnia wiadomość to nasz embed, zaktualizuj go
+            if (lastMessage && lastMessage.id === this.queueMessageId) {
+                await this.updateQueueDisplay(guildId);
+            } else {
+                // Jeśli ostatnia wiadomość to nie nasz embed, wyślij nowy
                 logger.info('[OCR-QUEUE] 🔄 Embed kolejki nie jest najnowszy, wysyłam nowy');
                 this.queueMessageId = null; // Wymuś wysłanie nowej wiadomości
                 await this.updateQueueDisplay(guildId);
             }
         } catch (error) {
             logger.error('[OCR-QUEUE] ❌ Błąd sprawdzania pozycji embeda:', error);
+        }
+    }
+
+    /**
+     * Inicjalizuje wyświetlanie kolejki podczas startu bota
+     */
+    async initializeQueueDisplay(client) {
+        try {
+            if (!this.queueChannelId) {
+                logger.warn('[OCR-QUEUE] ⚠️ Brak skonfigurowanego kanału kolejki');
+                return;
+            }
+
+            logger.info('[OCR-QUEUE] 🚀 Inicjalizacja wyświetlania kolejki...');
+
+            const channel = await client.channels.fetch(this.queueChannelId);
+            if (!channel) {
+                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału kolejki');
+                return;
+            }
+
+            // Pobierz ostatnią wiadomość z kanału
+            const messages = await channel.messages.fetch({ limit: 10 });
+
+            // Znajdź naszą wiadomość z kolejką (od bota z odpowiednim tytułem)
+            const queueMessage = messages.find(msg =>
+                msg.author.id === client.user.id &&
+                msg.embeds.length > 0 &&
+                msg.embeds[0].title === '📋 Kolejka OCR'
+            );
+
+            if (queueMessage) {
+                this.queueMessageId = queueMessage.id;
+                logger.info(`[OCR-QUEUE] ✅ Znaleziono istniejący embed kolejki (ID: ${queueMessage.id})`);
+
+                // Sprawdź czy jest najnowszy i zaktualizuj
+                const lastMessage = messages.first();
+                if (lastMessage && lastMessage.id === queueMessage.id) {
+                    logger.info('[OCR-QUEUE] 📝 Aktualizuję istniejący embed kolejki');
+                    await this.updateQueueDisplay(channel.guildId);
+                } else {
+                    logger.info('[OCR-QUEUE] 📤 Embed nie jest najnowszy, wysyłam nowy');
+                    this.queueMessageId = null;
+                    await this.updateQueueDisplay(channel.guildId);
+                }
+            } else {
+                logger.info('[OCR-QUEUE] 📤 Brak istniejącego embeda, wysyłam nowy');
+                await this.updateQueueDisplay(channel.guildId);
+            }
+
+            logger.info('[OCR-QUEUE] ✅ Inicjalizacja wyświetlania kolejki zakończona');
+        } catch (error) {
+            logger.error('[OCR-QUEUE] ❌ Błąd inicjalizacji wyświetlania kolejki:', error);
         }
     }
 
