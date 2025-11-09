@@ -646,34 +646,45 @@ class PunishmentService {
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
 
-        // Zaktualizuj embed na progress bar przed rozpoczęciem przetwarzania
-        const initialProgressBar = this.createProgressBar(0, totalImages);
-        const initialEmbed = new EmbedBuilder()
-            .setTitle('⏳ Przetwarzanie zdjęć...')
-            .setDescription(`${initialProgressBar}`)
-            .setColor('#FFA500')
-            .setTimestamp()
-            .addFields(
-                { name: '✅ Przetworzone zdjęcia', value: 'Brak', inline: false },
-                { name: '👥 Suma unikalnych graczy', value: '0', inline: true }
-            );
-
-        if (session.publicInteraction) {
-            try {
-                await session.publicInteraction.editReply({
-                    embeds: [initialEmbed],
-                    components: []
-                });
-            } catch (error) {
-                logger.error('[PUNISH] ❌ Błąd aktualizacji embeda na początek:', error);
-            }
-        }
-
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];
             const imageIndex = i + 1;
 
             try {
+                // Zaktualizuj progress bar przed przetworzeniem zdjęcia
+                const progressBar = this.createProgressBar(imageIndex, totalImages);
+                const processingEmbed = new EmbedBuilder()
+                    .setTitle('⏳ Przetwarzanie zdjęć...')
+                    .setDescription(
+                        `${progressBar}\n\n` +
+                        `📸 Przetwarzanie **${imageIndex}** z **${totalImages}**`
+                    )
+                    .setColor('#FFA500')
+                    .setTimestamp();
+
+                // Dodaj wyniki z poprzednich przetworzonych zdjęć
+                const resultsText = session.processedImages.map((img, idx) => {
+                    const playersText = `${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`;
+                    const uniquesText = `${img.result.newUniques} ${img.result.newUniques === 1 ? 'nowy unikalny' : 'nowych unikalnych'}`;
+                    return `📸 Zdjęcie ${idx + 1}: ${playersText} (${uniquesText})`;
+                }).join('\n');
+
+                processingEmbed.addFields(
+                    { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
+                    { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
+                );
+
+                if (session.publicInteraction) {
+                    try {
+                        await session.publicInteraction.editReply({
+                            embeds: [processingEmbed],
+                            components: []
+                        });
+                    } catch (error) {
+                        logger.error('[PUNISH] ❌ Błąd aktualizacji embeda przed przetworzeniem:', error);
+                    }
+                }
+
                 // Przetwórz zdjęcie przez OCR
                 const text = await ocrService.processImageFromFile(file.filepath);
 
@@ -709,45 +720,6 @@ class PunishmentService {
                 });
 
                 logger.info(`[PUNISH] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych (${newUniquesFromThisImage} nowych unikalnych)`);
-
-                // Zaktualizuj progress bar po przetworzeniu zdjęcia
-                const completedBar = this.createProgressBar(imageIndex, totalImages);
-                const completedEmbed = new EmbedBuilder()
-                    .setTitle('⏳ Przetwarzanie zdjęć...')
-                    .setDescription(
-                        `${completedBar}\n\n` +
-                        `📸 Przetwarzanie **${imageIndex}** z **${totalImages}**`
-                    )
-                    .setColor('#FFA500')
-                    .setTimestamp();
-
-                // Dodaj wyniki z przetworzonych zdjęć z informacją o nowych unikalnych
-                const resultsText = session.processedImages.map((img, idx) => {
-                    const playersText = `${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`;
-                    const uniquesText = `${img.result.newUniques} ${img.result.newUniques === 1 ? 'nowy unikalny' : 'nowych unikalnych'}`;
-                    return `📸 Zdjęcie ${idx + 1}: ${playersText} (${uniquesText})`;
-                }).join('\n');
-
-                completedEmbed.addFields(
-                    { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
-                    { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
-                );
-
-                if (session.publicInteraction) {
-                    try {
-                        await session.publicInteraction.editReply({
-                            embeds: [completedEmbed],
-                            components: []
-                        });
-                    } catch (error) {
-                        logger.error('[PUNISH] ❌ Błąd aktualizacji progress bara:', error);
-                    }
-                }
-
-                // Małe opóźnienie między zdjęciami (żeby widać było progress)
-                if (i < totalImages - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
 
             } catch (error) {
                 logger.error(`[PUNISH] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
