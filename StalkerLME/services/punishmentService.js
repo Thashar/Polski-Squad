@@ -646,28 +646,6 @@ class PunishmentService {
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
 
-        // Zaktualizuj embed na progress bar przed rozpoczęciem przetwarzania
-        const initialProgressBar = this.createProgressBar(0, totalImages);
-        const initialEmbed = new EmbedBuilder()
-            .setTitle('⏳ Rozpoczynam przetwarzanie zdjęć...')
-            .setDescription(
-                `${initialProgressBar}\n\n` +
-                `📸 Przygotowuję do przetworzenia **${totalImages}** ${totalImages === 1 ? 'zdjęcia' : 'zdjęć'}...`
-            )
-            .setColor('#FFA500')
-            .setTimestamp();
-
-        if (session.publicInteraction) {
-            try {
-                await session.publicInteraction.editReply({
-                    embeds: [initialEmbed],
-                    components: []
-                });
-            } catch (error) {
-                logger.error('[PUNISH] ❌ Błąd aktualizacji embeda na początek:', error);
-            }
-        }
-
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];
             const imageIndex = i + 1;

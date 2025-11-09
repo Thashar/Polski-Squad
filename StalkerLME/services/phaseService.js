@@ -573,14 +573,6 @@ class PhaseService {
         const results = [];
         const totalImages = downloadedFiles.length;
 
-        // Zaktualizuj embed na progress bar przed rozpoczęciem przetwarzania
-        await this.updateProgress(session, {
-            currentImage: 0,
-            totalImages: totalImages,
-            stage: 'loading',
-            action: 'Przygotowuję do przetworzenia zdjęć...'
-        });
-
         for (let i = 0; i < downloadedFiles.length; i++) {
             const fileData = downloadedFiles[i];
             const attachment = fileData.originalAttachment;
