@@ -1642,12 +1642,12 @@ class OCRService {
             }
         }
 
-        const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minut
+        const expiresAt = Date.now() + (3 * 60 * 1000); // 3 minuty
 
         const timeout = setTimeout(async () => {
             logger.warn(`[OCR-QUEUE] ⏰ Rezerwacja wygasła dla ${userId}`);
             await this.expireOCRReservation(guildId, userId);
-        }, 5 * 60 * 1000);
+        }, 3 * 60 * 1000);
 
         this.queueReservation.set(guildId, { userId, expiresAt, timeout, commandName });
 
@@ -1663,7 +1663,7 @@ class OCRService {
             await user.send({
                 embeds: [new EmbedBuilder()
                     .setTitle('✅ Twoja kolej!')
-                    .setDescription(`Możesz teraz użyć komendy \`${commandName}\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 5 minut, Twoja kolej przepadnie.**`)
+                    .setDescription(`Możesz teraz użyć komendy \`${commandName}\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 3 minut, Twoja kolej przepadnie.**`)
                     .setColor('#00FF00')
                     .setTimestamp()
                 ]
@@ -1698,7 +1698,7 @@ class OCRService {
                     await user.send({
                         embeds: [new EmbedBuilder()
                             .setTitle('⏰ Czas minął')
-                            .setDescription('Nie użyłeś komendy w ciągu 5 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
+                            .setDescription('Nie użyłeś komendy w ciągu 3 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
                             .setColor('#FF0000')
                             .setTimestamp()
                         ]

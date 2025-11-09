@@ -108,13 +108,13 @@ class PhaseService {
             }
         }
 
-        const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minut
+        const expiresAt = Date.now() + (3 * 60 * 1000); // 3 minuty
 
         // Timeout który usuwa rezerwację i powiadamia następną osobę
         const timeout = setTimeout(async () => {
             logger.warn(`[QUEUE] ⏰ Rezerwacja wygasła dla użytkownika ${userId}`);
             await this.expireReservation(guildId, userId);
-        }, 5 * 60 * 1000);
+        }, 3 * 60 * 1000);
 
         this.queueReservation.set(guildId, { userId, expiresAt, timeout });
 
@@ -125,7 +125,7 @@ class PhaseService {
             await user.send({
                 embeds: [new EmbedBuilder()
                     .setTitle('✅ Twoja kolej!')
-                    .setDescription(`Możesz teraz użyć komendy \`/faza1\` lub \`/faza2\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 5 minut, Twoja kolej przepadnie.**`)
+                    .setDescription(`Możesz teraz użyć komendy \`/faza1\` lub \`/faza2\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 3 minut, Twoja kolej przepadnie.**`)
                     .setColor('#00FF00')
                     .setTimestamp()
                 ]
@@ -158,7 +158,7 @@ class PhaseService {
                     await user.send({
                         embeds: [new EmbedBuilder()
                             .setTitle('⏰ Czas minął')
-                            .setDescription('Nie użyłeś komendy w ciągu 5 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
+                            .setDescription('Nie użyłeś komendy w ciągu 3 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
                             .setColor('#FF0000')
                             .setTimestamp()
                         ]
