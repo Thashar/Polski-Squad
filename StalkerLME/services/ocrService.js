@@ -20,6 +20,10 @@ class OCRService {
         this.activeProcessing = new Map(); // guildId → {userId, commandName}
         this.waitingQueue = new Map(); // guildId → [{userId, addedAt, commandName}]
         this.queueReservation = new Map(); // guildId → {userId, expiresAt, timeout, commandName}
+
+        // Wyświetlanie kolejki
+        this.queueMessageId = null; // ID wiadomości z embdem kolejki
+        this.queueChannelId = this.config.queueChannelId;
     }
 
     /**
@@ -1234,6 +1238,132 @@ class OCRService {
         }
     }
 
+    // ==================== WYŚWIETLANIE KOLEJKI OCR ====================
+
+    /**
+     * Tworzy embed z aktualną kolejką OCR
+     */
+    async createQueueEmbed(guildId) {
+        const queue = this.waitingQueue.get(guildId) || [];
+        const active = this.activeProcessing.get(guildId);
+        const reservation = this.queueReservation.get(guildId);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📋 Kolejka OCR')
+            .setColor('#FFA500')
+            .setTimestamp()
+            .setFooter({ text: 'Aktualizowane automatycznie' });
+
+        let description = '';
+
+        // Aktywne przetwarzanie
+        if (active) {
+            try {
+                const user = await this.client.users.fetch(active.userId);
+                description += `🔒 **Aktualnie w użyciu:**\n`;
+                description += `${user.tag} - \`${active.commandName}\`\n\n`;
+            } catch (error) {
+                description += `🔒 **Aktualnie w użyciu:**\n`;
+                description += `Użytkownik ${active.userId} - \`${active.commandName}\`\n\n`;
+            }
+        }
+
+        // Rezerwacja
+        if (reservation && !active) {
+            try {
+                const user = await this.client.users.fetch(reservation.userId);
+                const expiryTimestamp = Math.floor(reservation.expiresAt / 1000);
+                description += `⏰ **Rezerwacja:**\n`;
+                description += `${user.tag} - \`${reservation.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
+            } catch (error) {
+                description += `⏰ **Rezerwacja:**\n`;
+                description += `Użytkownik ${reservation.userId} - \`${reservation.commandName}\`\n\n`;
+            }
+        }
+
+        // Kolejka oczekujących
+        if (queue.length > 0) {
+            description += `⏳ **Kolejka oczekujących:** (${queue.length})\n\n`;
+
+            for (let i = 0; i < queue.length; i++) {
+                const person = queue[i];
+                try {
+                    const user = await this.client.users.fetch(person.userId);
+                    description += `**${i + 1}.** ${user.tag} - \`${person.commandName}\`\n`;
+                } catch (error) {
+                    description += `**${i + 1}.** Użytkownik ${person.userId} - \`${person.commandName}\`\n`;
+                }
+            }
+        } else if (!active && !reservation) {
+            description += `✅ **Kolejka pusta**\n\nOCR jest dostępny do użycia!`;
+        }
+
+        embed.setDescription(description || 'Brak danych');
+        return embed;
+    }
+
+    /**
+     * Aktualizuje wyświetlanie kolejki na kanale
+     */
+    async updateQueueDisplay(guildId) {
+        try {
+            if (!this.client || !this.queueChannelId) return;
+
+            const channel = await this.client.channels.fetch(this.queueChannelId);
+            if (!channel) {
+                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału kolejki');
+                return;
+            }
+
+            const embed = await this.createQueueEmbed(guildId);
+
+            // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
+            if (this.queueMessageId) {
+                try {
+                    const message = await channel.messages.fetch(this.queueMessageId);
+                    await message.edit({ embeds: [embed] });
+                    logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
+                    return;
+                } catch (error) {
+                    // Wiadomość nie istnieje lub została usunięta
+                    logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda, wysyłam nowy');
+                    this.queueMessageId = null;
+                }
+            }
+
+            // Wyślij nową wiadomość
+            const message = await channel.send({ embeds: [embed] });
+            this.queueMessageId = message.id;
+            logger.info('[OCR-QUEUE] 📤 Wysłano nowy embed kolejki');
+        } catch (error) {
+            logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji wyświetlania kolejki:', error);
+        }
+    }
+
+    /**
+     * Sprawdza czy embed kolejki jest najnowszą wiadomością i jeśli nie, wysyła nowy
+     */
+    async ensureQueueMessageIsLatest(guildId) {
+        try {
+            if (!this.client || !this.queueChannelId || !this.queueMessageId) return;
+
+            const channel = await this.client.channels.fetch(this.queueChannelId);
+            if (!channel) return;
+
+            const messages = await channel.messages.fetch({ limit: 1 });
+            const lastMessage = messages.first();
+
+            // Jeśli ostatnia wiadomość to nie nasz embed, wyślij nowy
+            if (!lastMessage || lastMessage.id !== this.queueMessageId) {
+                logger.info('[OCR-QUEUE] 🔄 Embed kolejki nie jest najnowszy, wysyłam nowy');
+                this.queueMessageId = null; // Wymuś wysłanie nowej wiadomości
+                await this.updateQueueDisplay(guildId);
+            }
+        } catch (error) {
+            logger.error('[OCR-QUEUE] ❌ Błąd sprawdzania pozycji embeda:', error);
+        }
+    }
+
     // ==================== SYSTEM KOLEJKOWANIA OCR ====================
 
     /**
@@ -1264,7 +1394,7 @@ class OCRService {
     /**
      * Rozpoczyna sesję OCR dla użytkownika
      */
-    startOCRSession(guildId, userId, commandName) {
+    async startOCRSession(guildId, userId, commandName) {
         // Usuń rezerwację jeśli istnieje
         if (this.queueReservation.has(guildId)) {
             const reservation = this.queueReservation.get(guildId);
@@ -1285,6 +1415,9 @@ class OCRService {
 
         this.activeProcessing.set(guildId, { userId, commandName });
         logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName}`);
+
+        // Aktualizuj wyświetlanie kolejki
+        await this.updateQueueDisplay(guildId);
     }
 
     /**
@@ -1298,6 +1431,9 @@ class OCRService {
 
         this.activeProcessing.delete(guildId);
         logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR`);
+
+        // Aktualizuj wyświetlanie kolejki
+        await this.updateQueueDisplay(guildId);
 
         // Sprawdź czy są osoby w kolejce
         if (this.waitingQueue.has(guildId)) {
@@ -1344,6 +1480,10 @@ class OCRService {
         // Powiadom użytkownika
         await this.notifyQueuePosition(guildId, userId, position, commandName);
 
+        // Aktualizuj wyświetlanie kolejki
+        await this.updateQueueDisplay(guildId);
+        await this.ensureQueueMessageIsLatest(guildId);
+
         return { position };
     }
 
@@ -1368,6 +1508,10 @@ class OCRService {
 
         this.queueReservation.set(guildId, { userId, expiresAt, timeout, commandName });
 
+        // Aktualizuj wyświetlanie kolejki
+        await this.updateQueueDisplay(guildId);
+        await this.ensureQueueMessageIsLatest(guildId);
+
         // Powiadom użytkownika
         try {
             if (!this.client) return;
@@ -1391,6 +1535,9 @@ class OCRService {
      */
     async expireOCRReservation(guildId, userId) {
         this.queueReservation.delete(guildId);
+
+        // Aktualizuj wyświetlanie kolejki
+        await this.updateQueueDisplay(guildId);
 
         // Usuń z kolejki
         if (this.waitingQueue.has(guildId)) {
@@ -1474,7 +1621,7 @@ class OCRService {
     /**
      * Usuwa użytkownika z kolejki (anulowanie)
      */
-    removeFromOCRQueue(guildId, userId) {
+    async removeFromOCRQueue(guildId, userId) {
         // Usuń z rezerwacji
         if (this.queueReservation.has(guildId)) {
             const reservation = this.queueReservation.get(guildId);
@@ -1484,6 +1631,9 @@ class OCRService {
                 }
                 this.queueReservation.delete(guildId);
                 logger.info(`[OCR-QUEUE] ➖ Usunięto rezerwację dla ${userId}`);
+
+                // Aktualizuj wyświetlanie kolejki
+                await this.updateQueueDisplay(guildId);
                 return true;
             }
         }
@@ -1499,6 +1649,9 @@ class OCRService {
                 if (queue.length === 0) {
                     this.waitingQueue.delete(guildId);
                 }
+
+                // Aktualizuj wyświetlanie kolejki
+                await this.updateQueueDisplay(guildId);
                 return true;
             }
         }

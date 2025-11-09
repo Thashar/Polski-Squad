@@ -538,7 +538,8 @@ class ReminderService {
                 .setDescription(
                     `${progressBar}\n\n` +
                     `Analizuję zdjęcie **${imageIndex}** z **${totalImages}**...\n\n` +
-                    `**Status:** Rozpoznawanie nicków z obrazu`
+                    `**Status:** Rozpoznawanie nicków z obrazu\n` +
+                    `**👥 Unikalni użytkownicy:** ${session.uniqueNicks.size}`
                 )
                 .setColor('#FFA500')
                 .setTimestamp();
@@ -597,7 +598,8 @@ class ReminderService {
                     .setTitle('⏳ Przetwarzanie zdjęć...')
                     .setDescription(
                         `${completedBar}\n\n` +
-                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone`
+                        `✅ Zdjęcie **${imageIndex}** z **${totalImages}** przetworzone\n\n` +
+                        `**👥 Łącznie unikalnych użytkowników:** ${session.uniqueNicks.size}`
                     )
                     .setColor('#FFA500')
                     .setTimestamp();

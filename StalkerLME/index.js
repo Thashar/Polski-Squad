@@ -389,6 +389,17 @@ client.on(Events.MessageCreate, async (message) => {
 
     // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
     // Ten blok kodu nie jest już używany, ale zostawiam dla referencji w przypadku problemów
+
+    // Monitorowanie kanału kolejki OCR - wysyła nowy embed jeśli pojawią się nowe wiadomości
+    try {
+        if (config.queueChannelId && message.channelId === config.queueChannelId) {
+            // Sprawdź czy embed kolejki jest najnowszą wiadomością
+            // Używamy guildId z wiadomości
+            await ocrService.ensureQueueMessageIsLatest(message.guildId);
+        }
+    } catch (error) {
+        logger.error(`[OCR-QUEUE] ❌ Błąd monitorowania kanału kolejki: ${error.message}`);
+    }
 });
 
 // Obsługa błędów
