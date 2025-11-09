@@ -1601,6 +1601,17 @@ class OCRService {
     }
 
     /**
+     * Sprawdza czy kolejka OCR jest pusta
+     */
+    isQueueEmpty(guildId) {
+        if (!this.waitingQueue.has(guildId)) {
+            return true;
+        }
+        const queue = this.waitingQueue.get(guildId);
+        return queue.length === 0;
+    }
+
+    /**
      * Dodaje użytkownika do kolejki OCR
      */
     async addToOCRQueue(guildId, userId, commandName) {

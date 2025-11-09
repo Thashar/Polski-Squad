@@ -106,8 +106,12 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         // Sprawdź czy ktoś inny używa OCR
         const isOCRActive = ocrService.isOCRActive(guildId);
 
-        if (!hasReservation && isOCRActive) {
-            // Ktoś inny używa OCR, dodaj do kolejki
+        // Sprawdź czy kolejka jest pusta
+        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+        // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
+        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+            // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
@@ -206,8 +210,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         // Sprawdź czy ktoś inny używa OCR
         const isOCRActive = ocrService.isOCRActive(guildId);
 
-        if (!hasReservation && isOCRActive) {
-            // Ktoś inny używa OCR, dodaj do kolejki
+        // Sprawdź czy kolejka jest pusta
+        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+        // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
+        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+            // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
@@ -2052,8 +2060,12 @@ async function handlePhase1Command(interaction, sharedState) {
         // Sprawdź czy ktoś inny używa OCR
         const isOCRActive = ocrService.isOCRActive(guildId);
 
-        if (!hasReservation && isOCRActive) {
-            // Ktoś inny używa OCR, dodaj do kolejki
+        // Sprawdź czy kolejka jest pusta
+        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+        // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
+        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+            // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
@@ -2621,8 +2633,12 @@ async function handlePhase2Command(interaction, sharedState) {
         // Sprawdź czy ktoś inny używa OCR
         const isOCRActive = ocrService.isOCRActive(guildId);
 
-        if (!hasReservation && isOCRActive) {
-            // Ktoś inny używa OCR, dodaj do kolejki
+        // Sprawdź czy kolejka jest pusta
+        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+        // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
+        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+            // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
