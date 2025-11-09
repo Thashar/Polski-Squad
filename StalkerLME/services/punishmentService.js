@@ -652,29 +652,6 @@ class PunishmentService {
             const file = downloadedFiles[i];
             const imageIndex = i + 1;
 
-            // Aktualizuj progress bar
-            const progressBar = this.createProgressBar(imageIndex - 1, totalImages);
-            const progressEmbed = new EmbedBuilder()
-                .setTitle('⏳ Przetwarzanie zdjęć...')
-                .setDescription(
-                    `${progressBar}\n\n` +
-                    `Analizuję zdjęcie **${imageIndex}** z **${totalImages}**...\n\n` +
-                    `**Status:** Rozpoznawanie nicków z obrazu`
-                )
-                .setColor('#FFA500')
-                .setTimestamp();
-
-            if (session.publicInteraction) {
-                try {
-                    await session.publicInteraction.editReply({
-                        embeds: [progressEmbed],
-                        components: [cancelRow]
-                    });
-                } catch (error) {
-                    logger.error('[PUNISH] ❌ Błąd aktualizacji progress bara:', error);
-                }
-            }
-
             try {
                 // Przetwórz zdjęcie przez OCR
                 const text = await ocrService.processImageFromFile(file.filepath);
