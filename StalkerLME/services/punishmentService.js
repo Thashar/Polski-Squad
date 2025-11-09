@@ -499,8 +499,24 @@ class PunishmentService {
             .setColor('#FFA500')
             .setTimestamp();
 
-        // NIE dodawaj zdjęcia do embeda potwierdzenia
+        // Dodaj zdjęcia jako załączniki do embeda
         const files = [];
+        for (let i = 0; i < session.processedImages.length; i++) {
+            const imagePath = session.processedImages[i].filepath;
+            try {
+                const attachment = new AttachmentBuilder(imagePath, {
+                    name: `screenshot_${i + 1}.png`
+                });
+                files.push(attachment);
+            } catch (error) {
+                logger.error(`[PUNISH] ❌ Błąd dodawania załącznika ${imagePath}:`, error);
+            }
+        }
+
+        // Dodaj obrazy do embeda (tylko jeśli są jakieś zdjęcia)
+        if (files.length > 0) {
+            embed.setImage(`attachment://screenshot_1.png`);
+        }
 
         const confirmButton = new ButtonBuilder()
             .setCustomId('punish_complete_yes')
