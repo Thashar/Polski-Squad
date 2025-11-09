@@ -1275,10 +1275,11 @@ class OCRService {
         // Aktywne przetwarzanie
         if (active) {
             try {
-                const user = await this.client.users.fetch(active.userId);
+                const guild = await this.client.guilds.fetch(guildId);
+                const member = await guild.members.fetch(active.userId);
                 const expiryTimestamp = Math.floor(active.expiresAt / 1000);
                 description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `${user.tag} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
+                description += `${member.displayName} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
             } catch (error) {
                 const expiryTimestamp = Math.floor(active.expiresAt / 1000);
                 description += `🔒 **Aktualnie w użyciu:**\n`;
@@ -1289,10 +1290,11 @@ class OCRService {
         // Rezerwacja
         if (reservation && !active) {
             try {
-                const user = await this.client.users.fetch(reservation.userId);
+                const guild = await this.client.guilds.fetch(guildId);
+                const member = await guild.members.fetch(reservation.userId);
                 const expiryTimestamp = Math.floor(reservation.expiresAt / 1000);
                 description += `⏰ **Rezerwacja:**\n`;
-                description += `${user.tag} - \`${reservation.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
+                description += `${member.displayName} - \`${reservation.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
             } catch (error) {
                 description += `⏰ **Rezerwacja:**\n`;
                 description += `Użytkownik ${reservation.userId} - \`${reservation.commandName}\`\n\n`;
@@ -1303,11 +1305,12 @@ class OCRService {
         if (queue.length > 0) {
             description += `⏳ **Kolejka oczekujących:** (${queue.length})\n\n`;
 
+            const guild = await this.client.guilds.fetch(guildId);
             for (let i = 0; i < queue.length; i++) {
                 const person = queue[i];
                 try {
-                    const user = await this.client.users.fetch(person.userId);
-                    description += `**${i + 1}.** ${user.tag} - \`${person.commandName}\`\n`;
+                    const member = await guild.members.fetch(person.userId);
+                    description += `**${i + 1}.** ${member.displayName} - \`${person.commandName}\`\n`;
                 } catch (error) {
                     description += `**${i + 1}.** Użytkownik ${person.userId} - \`${person.commandName}\`\n`;
                 }
