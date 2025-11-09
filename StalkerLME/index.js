@@ -66,6 +66,7 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizacja serwisów
     await databaseService.initializeDatabase();
     await ocrService.initializeOCR();
+    ocrService.setClient(client); // Ustaw klienta dla systemu kolejkowania OCR
     await messageCleanupService.init();
     await reminderUsageService.loadUsageData();
 

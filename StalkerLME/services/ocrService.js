@@ -5,15 +5,28 @@ const path = require('path');
 const { calculateNameSimilarity } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { saveProcessedImage } = require('../../utils/ocrFileUtils');
+const { EmbedBuilder } = require('discord.js');
 
 const logger = createBotLogger('StalkerLME');
 
 class OCRService {
-    constructor(config) {
+    constructor(config, client = null) {
         this.config = config;
+        this.client = client;
         this.tempDir = this.config.ocr.tempDir || './StalkerLME/temp';
         this.processedDir = this.config.ocr.processedDir || './StalkerLME/processed';
-        this.processingQueue = Promise.resolve(); // Kolejka dla sekwencyjnego przetwarzania OCR
+
+        // System kolejkowania OCR - wspólny dla wszystkich komend używających OCR
+        this.activeProcessing = new Map(); // guildId → {userId, commandName}
+        this.waitingQueue = new Map(); // guildId → [{userId, addedAt, commandName}]
+        this.queueReservation = new Map(); // guildId → {userId, expiresAt, timeout, commandName}
+    }
+
+    /**
+     * Ustaw klienta (wywoływane z index.js po inicjalizacji)
+     */
+    setClient(client) {
+        this.client = client;
     }
 
     async initializeOCR() {
@@ -29,18 +42,6 @@ class OCRService {
     }
 
     async processImage(attachment) {
-        // Dodaj do kolejki aby przetwarzać sekwencyjnie
-        // Każde zadanie czeka na zakończenie poprzedniego (nawet jeśli było błędne)
-        this.processingQueue = this.processingQueue
-            .then(
-                () => this._processImageInternal(attachment),
-                () => this._processImageInternal(attachment) // Wykonaj nawet jeśli poprzednie się nie powiodło
-            );
-
-        return this.processingQueue;
-    }
-
-    async _processImageInternal(attachment) {
         let buffer = null;
         let processedBuffer = null;
 
@@ -1231,6 +1232,278 @@ class OCRService {
             logger.error('[PHASE1] ❌ Błąd ekstrakcji graczy z wynikami:', error);
             return [];
         }
+    }
+
+    // ==================== SYSTEM KOLEJKOWANIA OCR ====================
+
+    /**
+     * Sprawdza czy użytkownik ma rezerwację OCR
+     */
+    hasReservation(guildId, userId) {
+        if (!this.queueReservation.has(guildId)) {
+            return false;
+        }
+        const reservation = this.queueReservation.get(guildId);
+        return reservation.userId === userId;
+    }
+
+    /**
+     * Sprawdza czy ktoś obecnie używa OCR
+     */
+    isOCRActive(guildId) {
+        return this.activeProcessing.has(guildId);
+    }
+
+    /**
+     * Pobiera info kto obecnie używa OCR
+     */
+    getActiveOCRUser(guildId) {
+        return this.activeProcessing.get(guildId);
+    }
+
+    /**
+     * Rozpoczyna sesję OCR dla użytkownika
+     */
+    startOCRSession(guildId, userId, commandName) {
+        // Usuń rezerwację jeśli istnieje
+        if (this.queueReservation.has(guildId)) {
+            const reservation = this.queueReservation.get(guildId);
+            if (reservation.timeout) {
+                clearTimeout(reservation.timeout);
+            }
+            this.queueReservation.delete(guildId);
+        }
+
+        // Usuń z kolejki jeśli tam jest
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+            const index = queue.findIndex(item => item.userId === userId);
+            if (index !== -1) {
+                queue.splice(index, 1);
+            }
+        }
+
+        this.activeProcessing.set(guildId, { userId, commandName });
+        logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName}`);
+    }
+
+    /**
+     * Kończy sesję OCR i powiadamia następną osobę w kolejce
+     */
+    async endOCRSession(guildId, userId) {
+        const active = this.activeProcessing.get(guildId);
+        if (!active || active.userId !== userId) {
+            return; // Nie ten użytkownik
+        }
+
+        this.activeProcessing.delete(guildId);
+        logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR`);
+
+        // Sprawdź czy są osoby w kolejce
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+
+            if (queue.length > 0) {
+                // Pobierz pierwszą osobę z kolejki
+                const nextPerson = queue[0];
+                logger.info(`[OCR-QUEUE] 📢 Następna osoba: ${nextPerson.userId} (${nextPerson.commandName})`);
+
+                // Stwórz rezerwację na 5 minut
+                await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
+
+                // Powiadom pozostałe osoby o zmianie pozycji
+                for (let i = 1; i < queue.length; i++) {
+                    await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
+                }
+            } else {
+                this.waitingQueue.delete(guildId);
+            }
+        }
+    }
+
+    /**
+     * Dodaje użytkownika do kolejki OCR
+     */
+    async addToOCRQueue(guildId, userId, commandName) {
+        if (!this.waitingQueue.has(guildId)) {
+            this.waitingQueue.set(guildId, []);
+        }
+
+        const queue = this.waitingQueue.get(guildId);
+
+        // Sprawdź czy już jest w kolejce
+        if (queue.find(item => item.userId === userId)) {
+            return { position: queue.findIndex(item => item.userId === userId) + 1 };
+        }
+
+        queue.push({ userId, addedAt: Date.now(), commandName });
+        const position = queue.length;
+
+        logger.info(`[OCR-QUEUE] ➕ ${userId} dodany do kolejki OCR (pozycja: ${position}, komenda: ${commandName})`);
+
+        // Powiadom użytkownika
+        await this.notifyQueuePosition(guildId, userId, position, commandName);
+
+        return { position };
+    }
+
+    /**
+     * Tworzy rezerwację OCR dla pierwszej osoby w kolejce
+     */
+    async createOCRReservation(guildId, userId, commandName) {
+        // Wyczyść poprzednią rezerwację jeśli istnieje
+        if (this.queueReservation.has(guildId)) {
+            const oldReservation = this.queueReservation.get(guildId);
+            if (oldReservation.timeout) {
+                clearTimeout(oldReservation.timeout);
+            }
+        }
+
+        const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minut
+
+        const timeout = setTimeout(async () => {
+            logger.warn(`[OCR-QUEUE] ⏰ Rezerwacja wygasła dla ${userId}`);
+            await this.expireOCRReservation(guildId, userId);
+        }, 5 * 60 * 1000);
+
+        this.queueReservation.set(guildId, { userId, expiresAt, timeout, commandName });
+
+        // Powiadom użytkownika
+        try {
+            if (!this.client) return;
+            const user = await this.client.users.fetch(userId);
+            const expiryTimestamp = Math.floor(expiresAt / 1000);
+            await user.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Twoja kolej!')
+                    .setDescription(`Możesz teraz użyć komendy \`${commandName}\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 5 minut, Twoja kolej przepadnie.**`)
+                    .setColor('#00FF00')
+                    .setTimestamp()
+                ]
+            });
+        } catch (error) {
+            logger.error(`[OCR-QUEUE] ❌ Nie udało się powiadomić użytkownika:`, error.message);
+        }
+    }
+
+    /**
+     * Wygasa rezerwację i przechodzi do następnej osoby
+     */
+    async expireOCRReservation(guildId, userId) {
+        this.queueReservation.delete(guildId);
+
+        // Usuń z kolejki
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+            const index = queue.findIndex(item => item.userId === userId);
+
+            if (index !== -1) {
+                queue.splice(index, 1);
+                logger.info(`[OCR-QUEUE] ➖ ${userId} usunięty z kolejki (timeout)`);
+
+                // Powiadom o utracie kolejki
+                try {
+                    if (!this.client) return;
+                    const user = await this.client.users.fetch(userId);
+                    await user.send({
+                        embeds: [new EmbedBuilder()
+                            .setTitle('⏰ Czas minął')
+                            .setDescription('Nie użyłeś komendy w ciągu 5 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
+                            .setColor('#FF0000')
+                            .setTimestamp()
+                        ]
+                    });
+                } catch (error) {
+                    logger.error(`[OCR-QUEUE] ❌ Błąd powiadomienia:`, error.message);
+                }
+
+                // Przejdź do następnej osoby
+                if (queue.length > 0) {
+                    const nextPerson = queue[0];
+                    await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
+
+                    for (let i = 1; i < queue.length; i++) {
+                        await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
+                    }
+                } else {
+                    this.waitingQueue.delete(guildId);
+                }
+            }
+        }
+    }
+
+    /**
+     * Powiadamia użytkownika o pozycji w kolejce
+     */
+    async notifyQueuePosition(guildId, userId, position, commandName) {
+        try {
+            if (!this.client) return;
+
+            const queue = this.waitingQueue.get(guildId) || [];
+            const peopleAhead = queue.slice(0, position - 1);
+
+            let description = `Ktoś obecnie używa komendy OCR.\n\n`;
+            description += `📊 **Twoja pozycja w kolejce:** ${position}\n`;
+            description += `👥 **Łącznie osób w kolejce:** ${queue.length}\n\n`;
+
+            if (peopleAhead.length > 0) {
+                description += `⏳ **Osoby przed Tobą:**\n`;
+                for (let i = 0; i < peopleAhead.length; i++) {
+                    const person = peopleAhead[i];
+                    const member = await this.client.users.fetch(person.userId);
+                    description += `${i + 1}. ${member.tag} - \`${person.commandName}\`\n`;
+                }
+            }
+
+            description += `\n💡 **Dostaniesz powiadomienie gdy będzie Twoja kolej.**`;
+
+            const user = await this.client.users.fetch(userId);
+            await user.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('⏳ Jesteś w kolejce OCR')
+                    .setDescription(description)
+                    .setColor('#FFA500')
+                    .setTimestamp()
+                ]
+            });
+        } catch (error) {
+            logger.error(`[OCR-QUEUE] ❌ Błąd powiadomienia o kolejce:`, error.message);
+        }
+    }
+
+    /**
+     * Usuwa użytkownika z kolejki (anulowanie)
+     */
+    removeFromOCRQueue(guildId, userId) {
+        // Usuń z rezerwacji
+        if (this.queueReservation.has(guildId)) {
+            const reservation = this.queueReservation.get(guildId);
+            if (reservation.userId === userId) {
+                if (reservation.timeout) {
+                    clearTimeout(reservation.timeout);
+                }
+                this.queueReservation.delete(guildId);
+                logger.info(`[OCR-QUEUE] ➖ Usunięto rezerwację dla ${userId}`);
+                return true;
+            }
+        }
+
+        // Usuń z kolejki
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+            const index = queue.findIndex(item => item.userId === userId);
+            if (index !== -1) {
+                queue.splice(index, 1);
+                logger.info(`[OCR-QUEUE] ➖ Usunięto ${userId} z kolejki OCR`);
+
+                if (queue.length === 0) {
+                    this.waitingQueue.delete(guildId);
+                }
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }

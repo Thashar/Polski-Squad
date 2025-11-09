@@ -681,7 +681,7 @@ class PhaseService {
                 .filter(([nick, scores]) => scores.some(score => score === 0 || score === '0'))
                 .length;
 
-            const progressBar = this.createProgressBar(percent);
+            const progressBar = this.createProgressBar(currentImage, totalImages, stage);
 
             // Ikony dla różnych etapów
             const stageIcons = {
@@ -697,7 +697,7 @@ class PhaseService {
 
             const embed = new EmbedBuilder()
                 .setTitle(`🔄 Przetwarzanie zdjęć - ${phaseTitle}${roundText}`)
-                .setDescription(`**Zdjęcie:** ${currentImage}/${totalImages}\n${icon} ${action}\n${progressBar} ${percent}%`)
+                .setDescription(`${progressBar}\n\n📸 Przetwarzam zdjęcie **${currentImage}/${totalImages}**...\n${icon} ${action}`)
                 .setColor('#FFA500')
                 .addFields(
                     { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
@@ -751,12 +751,21 @@ class PhaseService {
     }
 
     /**
-     * Tworzy pasek postępu
+     * Tworzy pasek postępu z emoji (jak w /remind)
      */
-    createProgressBar(percent) {
-        const filled = Math.round(percent / 5);
-        const empty = 20 - filled;
-        return '█'.repeat(filled) + '░'.repeat(empty);
+    createProgressBar(currentImage, totalImages, stage = 'pending') {
+        let bar = '';
+        for (let i = 0; i < totalImages; i++) {
+            if (i < currentImage - 1) {
+                bar += '🟩'; // Ukończone
+            } else if (i === currentImage - 1) {
+                // Obecne zdjęcie - pokaż 🟨 jeśli w trakcie przetwarzania
+                bar += (stage === 'loading' || stage === 'ocr' || stage === 'extracting') ? '🟨' : '🟩';
+            } else {
+                bar += '⬜'; // Oczekujące
+            }
+        }
+        return bar;
     }
 
     /**

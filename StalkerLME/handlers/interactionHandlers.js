@@ -103,7 +103,43 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
         return;
     }
-    
+
+    // ===== SPRAWDZENIE KOLEJKI OCR =====
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = '/punish';
+
+    // Sprawdź czy użytkownik ma rezerwację
+    const hasReservation = ocrService.hasReservation(guildId, userId);
+
+    // Sprawdź czy ktoś inny używa OCR
+    const isOCRActive = ocrService.isOCRActive(guildId);
+
+    if (!hasReservation && isOCRActive) {
+        // Ktoś inny używa OCR, dodaj do kolejki
+        const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+
+        const queueEmbed = new EmbedBuilder()
+            .setTitle('⏳ Kolejka OCR')
+            .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                           `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                           `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                           `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+            .setColor('#ffa500')
+            .setTimestamp()
+            .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
+
+        await interaction.reply({
+            embeds: [queueEmbed],
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Rozpocznij sesję OCR
+    ocrService.startOCRSession(guildId, userId, commandName);
+    logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
+
     try {
         // Najpierw odpowiedz z informacją o rozpoczęciu analizy
         await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
@@ -123,10 +159,18 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         
         // Sprawdź urlopy przed potwierdzeniem (tylko dla punish)
         await checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, attachment.url, config, punishmentService, text);
-        
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (${commandName})`);
+
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
+
+        // Zakończ sesję OCR również w przypadku błędu
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
     }
 }
 
@@ -192,6 +236,42 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             });
             return;
         }
+
+        // ===== SPRAWDZENIE KOLEJKI OCR =====
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        const commandName = '/remind';
+
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
+
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
+
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                .setColor('#ffa500')
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
+
+            await interaction.reply({
+                embeds: [queueEmbed],
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Klan może wysłać przypomnienie, kontynuuj z OCR
         const imageCount = attachments.length;
@@ -385,14 +465,24 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             .setTimestamp()
             .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
         
-        await interaction.editReply({ 
+        await interaction.editReply({
             embeds: [confirmationEmbed],
             components: [row]
         });
-        
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (${commandName})`);
+
     } catch (error) {
         logger.error('[REMIND] ❌ Błąd komendy /remind:', error);
         await interaction.editReply({ content: messages.errors.ocrError });
+
+        // Zakończ sesję OCR również w przypadku błędu
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
     }
 }
 
@@ -1821,7 +1911,10 @@ async function handleModalSubmit(interaction, sharedState) {
 }
 
 async function handlePhase1Command(interaction, sharedState) {
-    const { config, phaseService, databaseService } = sharedState;
+    const { config, phaseService, databaseService, ocrService } = sharedState;
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = '/faza1';
 
     // Sprawdź uprawnienia (admin lub allowedPunishRoles)
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -1858,35 +1951,36 @@ async function handlePhase1Command(interaction, sharedState) {
             return;
         }
 
-        // Sprawdź czy ktoś już przetwarza dane
-        if (phaseService.isProcessingActive(interaction.guild.id)) {
-            const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+        // ===== SPRAWDZENIE KOLEJKI OCR (globalny system) =====
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
 
-            // Sprawdź czy użytkownik ma rezerwację
-            if (!phaseService.hasReservation(interaction.guild.id, interaction.user.id)) {
-                // Użytkownik nie ma rezerwacji - dodaj do kolejki
-                await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
 
-                // Pobierz informacje o kolejce
-                const queueInfo = await phaseService.getQueueInfo(interaction.guild.id, interaction.user.id);
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('⏳ Kolejka zajęta')
-                        .setDescription(queueInfo.description)
-                        .setColor('#FFA500')
-                        .setTimestamp()
-                    ]
-                });
-                return;
-            }
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                .setColor('#ffa500')
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
 
-            // Użytkownik ma rezerwację ale ktoś inny jeszcze używa - to nie powinno się zdarzyć
-            logger.warn(`[PHASE] ⚠️ Użytkownik ${interaction.user.id} ma rezerwację ale ktoś inny (${activeUserId}) nadal przetwarza`);
+            await interaction.editReply({
+                embeds: [queueEmbed]
+            });
+            return;
         }
 
-        // Jeśli użytkownik ma rezerwację, usuń go z kolejki
-        phaseService.removeFromQueue(interaction.guild.id, interaction.user.id);
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -1916,9 +2010,6 @@ async function handlePhase1Command(interaction, sharedState) {
             }
         }
 
-        // Zablokuj przetwarzanie dla tego guild
-        phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
-
         // Utwórz sesję
         const sessionId = phaseService.createSession(
             interaction.user.id,
@@ -1942,8 +2033,9 @@ async function handlePhase1Command(interaction, sharedState) {
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd komendy /faza1:', error);
 
-        // Odblokuj w przypadku błędu
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Zakończ sesję OCR w przypadku błędu
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas inicjalizacji komendy /faza1.'
@@ -2029,11 +2121,12 @@ async function handleDecodeModalSubmit(interaction, sharedState) {
 // =============== PHASE 1 HANDLERS ===============
 
 async function handlePhase1OverwriteButton(interaction, sharedState) {
-    const { phaseService, config } = sharedState;
+    const { phaseService, config, ocrService } = sharedState;
 
     if (interaction.customId === 'phase1_overwrite_no') {
-        // Anuluj - odblokuj przetwarzanie
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Anuluj - zakończ sesję OCR
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
 
         await interaction.update({
             content: '❌ Operacja anulowana.',
@@ -2063,8 +2156,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
         return;
     }
 
-    // Nadpisz - zablokuj przetwarzanie i utwórz sesję
-    phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+    // Nadpisz - sesja OCR już aktywna (została rozpoczęta w handlePhase1Command)
 
     const sessionId = phaseService.createSession(
         interaction.user.id,
@@ -2086,7 +2178,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
 }
 
 async function handlePhase1CompleteButton(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2107,9 +2199,11 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase1_cancel_session') {
-        // Anuluj sesję i zwolnij kolejkę
+        // Anuluj sesję i zwolnij kolejkę OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
+
 
         await interaction.update({
             content: '❌ Sesja anulowana.',
@@ -2238,7 +2332,7 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
 }
 
 async function handlePhase1FinalConfirmButton(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2262,9 +2356,10 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase1_cancel_save') {
-        // Anuluj - usuń pliki temp i zwolnij kolejkę
+        // Anuluj - usuń pliki temp i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase1)`);
 
         await interaction.update({
             content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
@@ -2320,15 +2415,20 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
 
-        // Usuń pliki temp po zapisaniu (odblokuje też przetwarzanie)
+        // Usuń pliki temp po zapisaniu
         await phaseService.cleanupSession(session.sessionId);
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase1)`);
         logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
 
-        // Odblokuj przetwarzanie w przypadku błędu
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Zakończ sesję OCR w przypadku błędu
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase1)`);
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisu danych do bazy.',
@@ -2380,7 +2480,10 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
 // =============== PHASE 2 HANDLERS ===============
 
 async function handlePhase2Command(interaction, sharedState) {
-    const { config, phaseService, databaseService } = sharedState;
+    const { config, phaseService, databaseService, ocrService } = sharedState;
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = '/faza2';
 
     // Sprawdź uprawnienia (admin lub allowedPunishRoles)
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -2417,35 +2520,36 @@ async function handlePhase2Command(interaction, sharedState) {
             return;
         }
 
-        // Sprawdź czy ktoś już przetwarza dane
-        if (phaseService.isProcessingActive(interaction.guild.id)) {
-            const activeUserId = phaseService.getActiveProcessor(interaction.guild.id);
+        // ===== SPRAWDZENIE KOLEJKI OCR (globalny system) =====
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
 
-            // Sprawdź czy użytkownik ma rezerwację
-            if (!phaseService.hasReservation(interaction.guild.id, interaction.user.id)) {
-                // Użytkownik nie ma rezerwacji - dodaj do kolejki
-                await phaseService.addToWaitingQueue(interaction.guild.id, interaction.user.id);
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
 
-                // Pobierz informacje o kolejce
-                const queueInfo = await phaseService.getQueueInfo(interaction.guild.id, interaction.user.id);
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('⏳ Kolejka zajęta')
-                        .setDescription(queueInfo.description)
-                        .setColor('#FFA500')
-                        .setTimestamp()
-                    ]
-                });
-                return;
-            }
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                .setColor('#ffa500')
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
 
-            // Użytkownik ma rezerwację ale ktoś inny jeszcze używa - to nie powinno się zdarzyć
-            logger.warn(`[PHASE] ⚠️ Użytkownik ${interaction.user.id} ma rezerwację ale ktoś inny (${activeUserId}) nadal przetwarza`);
+            await interaction.editReply({
+                embeds: [queueEmbed]
+            });
+            return;
         }
 
-        // Jeśli użytkownik ma rezerwację, usuń go z kolejki
-        phaseService.removeFromQueue(interaction.guild.id, interaction.user.id);
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
@@ -2475,9 +2579,6 @@ async function handlePhase2Command(interaction, sharedState) {
             }
         }
 
-        // Zablokuj przetwarzanie dla tego guild
-        phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
-
         // Utwórz sesję dla fazy 2
         const sessionId = phaseService.createSession(
             interaction.user.id,
@@ -2502,8 +2603,9 @@ async function handlePhase2Command(interaction, sharedState) {
     } catch (error) {
         logger.info(`[PHASE2] ❌ Błąd komendy /faza2:`, error);
 
-        // Odblokuj w przypadku błędu
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        // Zakończ sesję OCR w przypadku błędu
+        await ocrService.endOCRSession(guildId, userId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd Phase2)`);
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas uruchamiania komendy.'
@@ -2512,10 +2614,11 @@ async function handlePhase2Command(interaction, sharedState) {
 }
 
 async function handlePhase2OverwriteButton(interaction, sharedState) {
-    const { phaseService, config } = sharedState;
+    const { phaseService, config, ocrService } = sharedState;
 
     if (interaction.customId === 'phase2_overwrite_no') {
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
         await interaction.update({
             content: '❌ Operacja anulowana.',
             embeds: [],
@@ -2543,7 +2646,7 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
         return;
     }
 
-    phaseService.setActiveProcessing(interaction.guild.id, interaction.user.id);
+    // Sesja OCR już aktywna (została rozpoczęta w handlePhase2Command)
 
     const sessionId = phaseService.createSession(
         interaction.user.id,
@@ -2566,7 +2669,7 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
 }
 
 async function handlePhase2CompleteButton(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2579,9 +2682,10 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     }
 
     if (interaction.customId === 'phase2_cancel_session') {
-        // Anuluj sesję i zwolnij kolejkę
+        // Anuluj sesję i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
 
         await interaction.update({
             content: '❌ Sesja anulowana.',
@@ -2677,7 +2781,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
 }
 
 async function handlePhase2FinalConfirmButton(interaction, sharedState) {
-    const { phaseService, databaseService } = sharedState;
+    const { phaseService, databaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -2693,9 +2797,10 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase2_cancel_save') {
-        // Anuluj zapis i zwolnij kolejkę
+        // Anuluj zapis i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
 
         await interaction.update({
             content: '❌ Anulowano zapis danych.',
@@ -2795,11 +2900,16 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
         await phaseService.cleanupSession(session.sessionId);
+
+        // Zakończ sesję OCR
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase2)`);
         logger.info(`[PHASE2] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
     } catch (error) {
         logger.error('[PHASE2] ❌ Błąd zapisu:', error);
-        phaseService.clearActiveProcessing(interaction.guild.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase2)`);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisywania danych.'
         });
