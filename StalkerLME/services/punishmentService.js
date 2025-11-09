@@ -496,7 +496,7 @@ class PunishmentService {
         const embed = new EmbedBuilder()
             .setTitle('✅ Analiza zakończona')
             .setDescription(description)
-            .setColor('#FFA500')
+            .setColor(uniqueNicks.length > 0 ? '#FFA500' : '#00FF00')
             .setTimestamp();
 
         // Dodaj zdjęcia jako załączniki do embeda
@@ -518,18 +518,31 @@ class PunishmentService {
             embed.setImage(`attachment://screenshot_1.png`);
         }
 
-        const confirmButton = new ButtonBuilder()
-            .setCustomId('punish_complete_yes')
-            .setLabel('✅ Dodaj punkty karne')
-            .setStyle(ButtonStyle.Success);
+        let row;
+        if (uniqueNicks.length === 0) {
+            // Brak graczy z zerem - tylko przycisk Zakończ
+            const endButton = new ButtonBuilder()
+                .setCustomId('punish_cancel_session')
+                .setLabel('✅ Zakończ')
+                .setStyle(ButtonStyle.Success);
 
-        const cancelButton = new ButtonBuilder()
-            .setCustomId('punish_cancel_session')
-            .setLabel('❌ Anuluj')
-            .setStyle(ButtonStyle.Danger);
+            row = new ActionRowBuilder()
+                .addComponents(endButton);
+        } else {
+            // Są gracze z zerem - standardowe przyciski
+            const confirmButton = new ButtonBuilder()
+                .setCustomId('punish_complete_yes')
+                .setLabel('✅ Dodaj punkty karne')
+                .setStyle(ButtonStyle.Success);
 
-        const row = new ActionRowBuilder()
-            .addComponents(confirmButton, cancelButton);
+            const cancelButton = new ButtonBuilder()
+                .setCustomId('punish_cancel_session')
+                .setLabel('❌ Anuluj')
+                .setStyle(ButtonStyle.Danger);
+
+            row = new ActionRowBuilder()
+                .addComponents(confirmButton, cancelButton);
+        }
 
         return { embed, row, files };
     }
