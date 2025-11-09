@@ -496,7 +496,7 @@ class PunishmentService {
         const embed = new EmbedBuilder()
             .setTitle('✅ Analiza zakończona')
             .setDescription(description)
-            .setColor(uniqueNicks.length > 0 ? '#FFA500' : '#00FF00')
+            .setColor('#FFA500')
             .setTimestamp();
 
         // Dodaj zdjęcia jako załączniki do embeda
