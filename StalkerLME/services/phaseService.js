@@ -758,21 +758,26 @@ class PhaseService {
     }
 
     /**
-     * Tworzy pasek postępu z emoji (jak w /remind)
+     * Tworzy pasek postępu z emoji (stałe 10 kratek + procent)
      */
     createProgressBar(currentImage, totalImages, stage = 'pending') {
+        const percentage = Math.floor((currentImage / totalImages) * 100);
+        const totalBars = 10;
+
         let bar = '';
-        for (let i = 0; i < totalImages; i++) {
-            if (i < currentImage - 1) {
-                bar += '🟩'; // Ukończone
-            } else if (i === currentImage - 1) {
-                // Obecne zdjęcie - pokaż 🟨 jeśli w trakcie przetwarzania
-                bar += (stage === 'loading' || stage === 'ocr' || stage === 'extracting') ? '🟨' : '🟩';
-            } else {
-                bar += '⬜'; // Oczekujące
-            }
+
+        if (currentImage === totalImages && stage !== 'loading' && stage !== 'ocr' && stage !== 'extracting') {
+            // Wszystko ukończone - 10 zielonych kratek
+            bar = '🟩'.repeat(totalBars);
+        } else {
+            // W trakcie przetwarzania
+            const completedBars = Math.floor((currentImage - 1) / totalImages * totalBars);
+            const remainingBars = totalBars - completedBars - 1; // -1 dla żółtej kratki
+
+            bar = '🟩'.repeat(completedBars) + '🟨' + '⬜'.repeat(remainingBars);
         }
-        return bar;
+
+        return `${bar} ${percentage}%`;
     }
 
     /**
