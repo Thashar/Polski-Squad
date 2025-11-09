@@ -131,16 +131,29 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 }
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
-    const attachment = interaction.options.getAttachment('image');
+    // Zbierz wszystkie załączone zdjęcia (image1 do image5)
+    const attachments = [];
+    for (let i = 1; i <= 5; i++) {
+        const attachment = interaction.options.getAttachment(`image${i}`);
+        if (attachment) {
+            attachments.push(attachment);
+        }
+    }
 
-    if (!attachment) {
+    if (attachments.length === 0) {
         await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
         return;
     }
 
-    if (!attachment.contentType?.startsWith('image/')) {
-        await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
-        return;
+    // Sprawdź czy wszystkie załączniki to obrazy
+    for (const attachment of attachments) {
+        if (!attachment.contentType?.startsWith('image/')) {
+            await interaction.reply({
+                content: `❌ Plik "${attachment.name}" nie jest obrazem. Wszystkie załączniki muszą być zdjęciami.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
     }
 
     try {
@@ -181,30 +194,61 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         }
 
         // Klan może wysłać przypomnienie, kontynuuj z OCR
-        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
-        
+        const imageCount = attachments.length;
+        const imageText = imageCount === 1 ? 'zdjęcie' : `${imageCount} zdjęcia`;
+        await interaction.reply({ content: `🔍 Odświeżam cache członków i analizuję ${imageText}...`, flags: MessageFlags.Ephemeral });
+
         // Odśwież cache członków przed analizą
         logger.info('🔄 Odświeżanie cache\'u członków dla komendy /remind...');
         await interaction.guild.members.fetch();
         logger.info('✅ Cache członków odświeżony');
-        
-        const text = await ocrService.processImage(attachment);
-        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
-        
+
+        // Przetwarzaj wszystkie zdjęcia i zbieraj nicki (używając Set do usuwania duplikatów)
+        const uniqueNicks = new Set();
+        const imageUrls = [];
+
+        for (let i = 0; i < attachments.length; i++) {
+            const attachment = attachments[i];
+            imageUrls.push(attachment.url);
+
+            logger.info(`📸 Przetwarzanie zdjęcia ${i + 1}/${attachments.length}: ${attachment.name}`);
+
+            try {
+                const text = await ocrService.processImage(attachment);
+                const playersFromImage = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
+
+                // Dodaj nicki do zbioru (automatycznie pominie duplikaty)
+                playersFromImage.forEach(nick => uniqueNicks.add(nick));
+
+                logger.info(`✅ Ze zdjęcia ${i + 1} znaleziono ${playersFromImage.length} graczy: ${playersFromImage.join(', ')}`);
+            } catch (error) {
+                logger.error(`❌ Błąd przetwarzania zdjęcia ${i + 1}:`, error);
+                // Kontynuuj mimo błędu w jednym zdjęciu
+            }
+        }
+
+        // Konwertuj Set na tablicę
+        const zeroScorePlayers = Array.from(uniqueNicks);
+
+        logger.info(`🎯 Łącznie znaleziono ${zeroScorePlayers.length} unikalnych graczy (po usunięciu duplikatów)`);
+
         if (zeroScorePlayers.length === 0) {
-            await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
+            await interaction.editReply(`Nie znaleziono graczy z wynikiem 0 na ${imageCount === 1 ? 'obrazie' : 'obrazach'}.`);
             return;
         }
-        
-        // Konwertuj nicki na obiekty z członkami dla reminderService
+
+        // Konwertuj nicki na obiekty z członkami dla reminderService (również bez duplikatów)
         const foundUserObjects = [];
+        const processedUserIds = new Set(); // Zapobiegaj duplikatom na poziomie userId
+
         for (const nick of zeroScorePlayers) {
-            const member = interaction.guild.members.cache.find(m => 
-                m.displayName.toLowerCase() === nick.toLowerCase() || 
+            const member = interaction.guild.members.cache.find(m =>
+                m.displayName.toLowerCase() === nick.toLowerCase() ||
                 m.user.username.toLowerCase() === nick.toLowerCase()
             );
-            if (member) {
+            if (member && !processedUserIds.has(member.id)) {
                 foundUserObjects.push({ member: member, matchedName: nick });
+                processedUserIds.add(member.id);
             }
         }
         
@@ -216,7 +260,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             action: 'remind',
             foundUsers: foundUserObjects, // Obiekty z właściwością member
             zeroScorePlayers: zeroScorePlayers, // Oryginalne nicki dla wyświetlenia
-            imageUrl: attachment.url,
+            imageUrls: imageUrls, // Wszystkie zdjęcia
             originalUserId: interaction.user.id,
             userClanRoleId: userClanRoleId, // Rola klanu użytkownika (do limitów)
             config: config,
@@ -243,14 +287,18 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         const row = new ActionRowBuilder()
             .addComponents(confirmButton, cancelButton);
         
+        const imageInfo = imageCount === 1
+            ? 'Przeanalizowano 1 zdjęcie'
+            : `Przeanalizowano ${imageCount} zdjęcia (usunięto duplikaty nicków)`;
+
         const confirmationEmbed = new EmbedBuilder()
             .setTitle('🔍 Potwierdzenie wysłania przypomnienia')
-            .setDescription('Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?')
+            .setDescription(`Czy chcesz wysłać przypomnienie o bossie dla znalezionych graczy?\n\n📸 ${imageInfo}`)
             .setColor('#ffa500')
             .addFields(
-                { name: `✅ Znaleziono ${zeroScorePlayers.length} graczy z wynikiem ZERO`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false }
+                { name: `✅ Znaleziono ${zeroScorePlayers.length} unikalnych graczy z wynikiem ZERO`, value: `\`${zeroScorePlayers.join(', ')}\``, inline: false }
             )
-            .setImage(attachment.url)
+            .setImage(imageUrls[0]) // Pokaż pierwsze zdjęcie
             .setTimestamp()
             .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
         
@@ -769,19 +817,24 @@ async function handleButton(interaction, sharedState) {
                     }
                     
                     const matchedUsers = data.foundUsers.map(user => `${user.member} (${user.matchedName})`);
-                    
+
+                    const imageCount = data.imageUrls.length;
+                    const imageCountText = imageCount === 1 ? '1 zdjęcie' : `${imageCount} zdjęcia`;
+
                     // Wyślij publiczny embed z pełnym podsumowaniem
                     const reminderEmbed = new EmbedBuilder()
                         .setTitle('📢 Przypomnienie Wysłane')
                         .setColor('#ffa500')
                         .addFields(
-                            { name: '📷 Znaleziono graczy z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
+                            { name: '📸 Przeanalizowano', value: imageCountText, inline: true },
+                            { name: '✅ Znaleziono unikalnych graczy', value: data.zeroScorePlayers.length.toString(), inline: true },
+                            { name: '⏰ Czas do deadline', value: timeDisplay, inline: true },
+                            { name: '📷 Gracze z wynikiem 0', value: `\`${data.zeroScorePlayers.join(', ')}\``, inline: false },
                             { name: '📢 Wysłano przypomnienia dla', value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false },
-                            { name: '⏰ Pozostały czas do 16:50', value: timeDisplay, inline: true },
                             { name: '📤 Wysłano wiadomości', value: reminderResult.sentMessages.toString(), inline: true },
                             { name: '📢 Na kanały', value: reminderResult.roleGroups.toString(), inline: true }
                         )
-                        .setImage(data.imageUrl)
+                        .setImage(data.imageUrls[0]) // Pierwsze zdjęcie
                         .setTimestamp()
                         .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.tag} | Boss deadline: 16:50` });
                     
@@ -1058,9 +1111,29 @@ async function registerSlashCommands(client) {
             .setName('remind')
             .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0')
             .addAttachmentOption(option =>
-                option.setName('image')
-                    .setDescription('Zdjęcie do analizy')
+                option.setName('image1')
+                    .setDescription('Pierwsze zdjęcie do analizy')
                     .setRequired(true)
+            )
+            .addAttachmentOption(option =>
+                option.setName('image2')
+                    .setDescription('Drugie zdjęcie do analizy (opcjonalne)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('image3')
+                    .setDescription('Trzecie zdjęcie do analizy (opcjonalne)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('image4')
+                    .setDescription('Czwarte zdjęcie do analizy (opcjonalne)')
+                    .setRequired(false)
+            )
+            .addAttachmentOption(option =>
+                option.setName('image5')
+                    .setDescription('Piąte zdjęcie do analizy (opcjonalne)')
+                    .setRequired(false)
             ),
         
         new SlashCommandBuilder()
