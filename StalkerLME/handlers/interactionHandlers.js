@@ -826,6 +826,75 @@ async function handleButton(interaction, sharedState) {
 
     // ============ KONIEC OBSŁUGI PRZYCISKÓW /REMIND ============
 
+    // ============ OBSŁUGA PRZYCISKU "WYJDŹ Z KOLEJKI" ============
+
+    if (interaction.customId === 'queue_leave') {
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = sharedState.ocrService.hasReservation(guildId, userId);
+
+        // Sprawdź czy użytkownik jest w kolejce
+        const queue = sharedState.ocrService.waitingQueue.get(guildId) || [];
+        const isInQueue = queue.find(item => item.userId === userId);
+
+        if (!hasReservation && !isInQueue) {
+            await interaction.reply({
+                content: '❌ Nie jesteś w kolejce ani nie masz rezerwacji.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Jeśli ma rezerwację, usuń ją
+        if (hasReservation) {
+            const reservation = sharedState.ocrService.queueReservation.get(guildId);
+            if (reservation && reservation.timeout) {
+                clearTimeout(reservation.timeout);
+            }
+            sharedState.ocrService.queueReservation.delete(guildId);
+            logger.info(`[OCR-QUEUE] 🚪 ${userId} opuścił kolejkę (rezerwacja)`);
+
+            // Usuń z kolejki jeśli tam jest
+            if (isInQueue) {
+                const index = queue.findIndex(item => item.userId === userId);
+                if (index !== -1) {
+                    queue.splice(index, 1);
+                }
+            }
+
+            // Przejdź do następnej osoby w kolejce
+            if (queue.length > 0) {
+                const nextPerson = queue[0];
+                await sharedState.ocrService.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
+            } else {
+                sharedState.ocrService.waitingQueue.delete(guildId);
+            }
+        } else if (isInQueue) {
+            // Usuń tylko z kolejki
+            const index = queue.findIndex(item => item.userId === userId);
+            if (index !== -1) {
+                queue.splice(index, 1);
+                logger.info(`[OCR-QUEUE] 🚪 ${userId} opuścił kolejkę (pozycja ${index + 1})`);
+            }
+
+            if (queue.length === 0) {
+                sharedState.ocrService.waitingQueue.delete(guildId);
+            }
+        }
+
+        // Aktualizuj wyświetlanie kolejki
+        await sharedState.ocrService.updateQueueDisplay(guildId);
+
+        await interaction.reply({
+            content: '✅ Opuściłeś kolejkę OCR.',
+            flags: MessageFlags.Ephemeral
+        });
+
+        return;
+    }
+
     // ============ OBSŁUGA PRZYCISKÓW /PUNISH (SYSTEM SESJI) ============
 
     if (interaction.customId === 'punish_cancel_session') {
