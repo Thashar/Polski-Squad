@@ -596,10 +596,7 @@ class PunishmentService {
 
                 // Dodaj unikalne nicki do sesji (automatyczne usuwanie duplikatów)
                 for (const player of foundPlayers) {
-                    const nick = player.matchedName;
-                    if (!session.uniqueNicks.has(nick)) {
-                        session.uniqueNicks.add(nick);
-                    }
+                    session.uniqueNicks.add(player.detectedNick);
                 }
 
                 results.push({

@@ -358,11 +358,11 @@ class OCRService {
             }
             
             const resultNicks = confirmedPlayers.map(p => p.detectedNick);
-            
+
             logger.info(`📊 PODSUMOWANIE ANALIZY OCR:`);
             logger.info(`   🎯 Potwierdzonych graczy z zerem: ${confirmedPlayers.length}`);
             logger.info(`   👥 Lista: ${resultNicks.join(', ')}`);
-            return resultNicks;
+            return confirmedPlayers;
         } catch (error) {
             logger.error('Błąd analizy tekstu');
             logger.error('❌ Błąd analizy tekstu:', error);

@@ -285,11 +285,8 @@ client.on(Events.MessageCreate, async (message) => {
                     ocrService
                 );
 
-                // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
-                const processedCount = results.length;
-                const totalImages = session.processedImages.length;
-
-                const confirmation = reminderService.createProcessedImagesEmbed(processedCount, totalImages);
+                // Pokaż końcowe potwierdzenie z listą graczy
+                const confirmation = reminderService.createFinalConfirmationEmbed(session);
 
                 session.stage = 'confirming_complete';
                 reminderService.refreshSessionTimeout(session.sessionId);
