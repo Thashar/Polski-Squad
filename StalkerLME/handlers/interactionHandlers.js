@@ -92,85 +92,68 @@ async function handleSlashCommand(interaction, sharedState) {
 }
 
 async function handlePunishCommand(interaction, config, ocrService, punishmentService) {
-    const attachment = interaction.options.getAttachment('image');
-    
-    if (!attachment) {
-        await interaction.reply({ content: messages.errors.noImage, flags: MessageFlags.Ephemeral });
-        return;
-    }
-    
-    if (!attachment.contentType?.startsWith('image/')) {
-        await interaction.reply({ content: messages.errors.invalidImage, flags: MessageFlags.Ephemeral });
-        return;
-    }
-
-    // ===== SPRAWDZENIE KOLEJKI OCR =====
-    const guildId = interaction.guild.id;
-    const userId = interaction.user.id;
-    const commandName = '/punish';
-
-    // Sprawdź czy użytkownik ma rezerwację
-    const hasReservation = ocrService.hasReservation(guildId, userId);
-
-    // Sprawdź czy ktoś inny używa OCR
-    const isOCRActive = ocrService.isOCRActive(guildId);
-
-    if (!hasReservation && isOCRActive) {
-        // Ktoś inny używa OCR, dodaj do kolejki
-        const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
-
-        const queueEmbed = new EmbedBuilder()
-            .setTitle('⏳ Kolejka OCR')
-            .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
-                           `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
-                           `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
-                           `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
-            .setColor('#ffa500')
-            .setTimestamp()
-            .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
-
-        await interaction.reply({
-            embeds: [queueEmbed],
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    // Rozpocznij sesję OCR
-    ocrService.startOCRSession(guildId, userId, commandName);
-    logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
+    await interaction.deferReply();
 
     try {
-        // Najpierw odpowiedz z informacją o rozpoczęciu analizy
-        await interaction.reply({ content: '🔍 Odświeżam cache członków i analizuję zdjęcie...', flags: MessageFlags.Ephemeral });
-        
-        // Odśwież cache członków przed analizą
-        logger.info('🔄 Odświeżanie cache\'u członków dla komendy /punish...');
-        await interaction.guild.members.fetch();
-        logger.info('✅ Cache członków odświeżony');
-        
-        const text = await ocrService.processImage(attachment);
-        const zeroScorePlayers = await ocrService.extractPlayersFromText(text, interaction.guild, interaction.member);
-        
-        if (zeroScorePlayers.length === 0) {
-            await interaction.editReply('Nie znaleziono graczy z wynikiem 0 na obrazie.');
+        // ===== SPRAWDZENIE KOLEJKI OCR =====
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        const commandName = '/punish';
+
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
+
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
+
+        if (!hasReservation && isOCRActive) {
+            // Ktoś inny używa OCR, dodaj do kolejki
+            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+
+            const queueEmbed = new EmbedBuilder()
+                .setTitle('⏳ Kolejka OCR')
+                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
+                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
+                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 5 minut na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 5 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                .setColor('#ffa500')
+                .setTimestamp()
+                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
+
+            await interaction.editReply({
+                embeds: [queueEmbed]
+            });
             return;
         }
-        
-        // Sprawdź urlopy przed potwierdzeniem (tylko dla punish)
-        await checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, attachment.url, config, punishmentService, text);
 
-        // Zakończ sesję OCR
-        await ocrService.endOCRSession(guildId, userId);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (${commandName})`);
+        // Rozpocznij sesję OCR
+        ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
+
+        // Utwórz sesję punishment
+        const sessionId = punishmentService.createSession(userId, guildId, interaction.channelId);
+        const session = punishmentService.getSession(sessionId);
+        session.publicInteraction = interaction;
+
+        // Pokaż embed z prośbą o zdjęcia
+        const awaitingEmbed = punishmentService.createAwaitingImagesEmbed();
+        await interaction.editReply({
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
+        });
+
+        logger.info(`[PUNISH] ✅ Sesja utworzona, czekam na zdjęcia od ${interaction.user.tag}`);
 
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
-        await interaction.editReply({ content: messages.errors.ocrError });
 
-        // Zakończ sesję OCR również w przypadku błędu
+        // Zakończ sesję OCR w przypadku błędu
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
         await ocrService.endOCRSession(guildId, userId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+
+        await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
 
@@ -809,6 +792,171 @@ async function handleButton(interaction, sharedState) {
 
     // ============ KONIEC OBSŁUGI PRZYCISKÓW /REMIND ============
 
+    // ============ OBSŁUGA PRZYCISKÓW /PUNISH (SYSTEM SESJI) ============
+
+    if (interaction.customId === 'punish_cancel_session') {
+        // Anuluj sesję /punish
+        const session = sharedState.punishmentService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Zakończ sesję OCR
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+
+        // Wyczyść sesję
+        await sharedState.punishmentService.cleanupSession(session.sessionId);
+
+        const cancelEmbed = new EmbedBuilder()
+            .setTitle('❌ Sesja anulowana')
+            .setDescription('Sesja /punish została anulowana. Wszystkie pliki zostały usunięte.')
+            .setColor('#ff0000')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [cancelEmbed],
+            components: []
+        });
+
+        logger.info(`[PUNISH] ❌ Sesja anulowana przez ${interaction.user.tag}`);
+        return;
+    }
+
+    if (interaction.customId === 'punish_add_more') {
+        // Dodaj więcej zdjęć - zmień stage na awaiting_images
+        const session = sharedState.punishmentService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        session.stage = 'awaiting_images';
+        sharedState.punishmentService.refreshSessionTimeout(session.sessionId);
+
+        const awaitingEmbed = sharedState.punishmentService.createAwaitingImagesEmbed();
+
+        await interaction.update({
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
+        });
+
+        logger.info(`[PUNISH] ➕ Użytkownik ${interaction.user.tag} dodaje więcej zdjęć`);
+        return;
+    }
+
+    if (interaction.customId === 'punish_complete_yes') {
+        // Pokaż potwierdzenie końcowe i dodaj punkty karne
+        const session = sharedState.punishmentService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Sprawdź czy użytkownik jest właścicielem sesji
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // Stwórz listę znalezionych użytkowników
+        const foundUsers = [];
+        for (const imageResult of session.processedImages) {
+            for (const player of imageResult.result.players) {
+                foundUsers.push(player);
+            }
+        }
+
+        if (foundUsers.length === 0) {
+            await interaction.update({
+                content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
+                embeds: [],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+            return;
+        }
+
+        // Dodaj punkty karne
+        await interaction.deferUpdate();
+
+        try {
+            const results = await sharedState.punishmentService.processPunishments(interaction.guild, foundUsers);
+
+            // Zakończ sesję OCR
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+
+            // Wyczyść sesję
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+
+            // Przygotuj listę przetworzonych użytkowników
+            const processedUsers = [];
+            let addedPoints = 0;
+
+            for (const result of results) {
+                const warningEmoji = result.points === 2 || result.points === 3 ? '📢' : '';
+                const punishmentEmoji = result.points >= 2 ? '🎭' : '';
+                processedUsers.push(`${result.user} - ${result.points} punktów ${punishmentEmoji}${warningEmoji}`);
+                addedPoints += 1;
+            }
+
+            const successEmbed = new EmbedBuilder()
+                .setTitle('✅ Punkty karne dodane')
+                .setDescription(
+                    `**Podsumowanie:**\n` +
+                    `🎯 Przeanalizowano: **${session.processedImages.length}** ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
+                    `👥 Znaleziono: **${session.uniqueNicks.size}** ${session.uniqueNicks.size === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
+                    `📈 Dodano punktów: **${addedPoints}**\n\n` +
+                    `**Przetworzone osoby:**\n${processedUsers.join('\n')}`
+                )
+                .setColor('#00ff00')
+                .setTimestamp()
+                .setFooter({ text: `Wykonano przez ${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
+
+            await interaction.editReply({
+                embeds: [successEmbed],
+                components: []
+            });
+
+            logger.info(`[PUNISH] ✅ Punkty karne dodane przez ${interaction.user.tag}`);
+
+        } catch (error) {
+            logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych:', error);
+
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas dodawania punktów karnych.',
+                embeds: [],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+        }
+
+        return;
+    }
+
+    // ============ KONIEC OBSŁUGI PRZYCISKÓW /PUNISH ============
+
     if (interaction.customId === 'vacation_request') {
         // Obsługa przycisku "Zgłoś urlop"
         await sharedState.vacationService.handleVacationRequest(interaction);
@@ -1225,12 +1373,7 @@ async function registerSlashCommands(client) {
     const commands = [
         new SlashCommandBuilder()
             .setName('punish')
-            .setDescription('Analizuj zdjęcie i znajdź graczy z wynikiem 0')
-            .addAttachmentOption(option =>
-                option.setName('image')
-                    .setDescription('Zdjęcie do analizy')
-                    .setRequired(true)
-            ),
+            .setDescription('Analizuj zdjęcia i znajdź graczy z wynikiem 0 (wrzuć screeny po uruchomieniu)'),
         
         new SlashCommandBuilder()
             .setName('remind')
