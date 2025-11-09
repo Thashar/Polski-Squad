@@ -23,8 +23,11 @@ class PunishmentService {
             const results = [];
             
             for (const userData of foundUsers) {
-                const { userId, member, matchedName } = userData;
-                
+                // POPRAWKA: userData.user zawiera {userId, member, displayName}
+                const member = userData.user.member;
+                const userId = userData.user.userId;
+                const matchedName = userData.detectedNick;
+
                 logger.info(`\n👤 Przetwarzanie: ${member.displayName} (${userId})`);
                 const userPunishment = await this.db.addPunishmentPoints(guild.id, userId, 1, 'Niepokonanie bossa');
                 
@@ -462,7 +465,61 @@ class PunishmentService {
     }
 
     /**
-     * Tworzy embed z potwierdzeniem przetworzonych zdjęć
+     * Tworzy embed z końcowym potwierdzeniem i listą graczy
+     */
+    createFinalConfirmationEmbed(session) {
+        const foundUsers = [];
+        for (const imageResult of session.processedImages) {
+            for (const player of imageResult.result.players) {
+                foundUsers.push(player);
+            }
+        }
+
+        const uniqueNicks = Array.from(session.uniqueNicks);
+
+        let description = `**Przeanalizowano:** ${session.processedImages.length} ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n`;
+        description += `**Znaleziono:** ${uniqueNicks.length} ${uniqueNicks.length === 1 ? 'unikalny nick' : 'unikalnych nicków'} z wynikiem 0\n\n`;
+
+        if (uniqueNicks.length > 0) {
+            description += `**📋 Lista graczy do ukarania:**\n`;
+            // Pokaż maksymalnie 20 nicków w embedzie (limit Discord)
+            const displayNicks = uniqueNicks.slice(0, 20);
+            description += displayNicks.map(nick => `• ${nick}`).join('\n');
+
+            if (uniqueNicks.length > 20) {
+                description += `\n... i ${uniqueNicks.length - 20} więcej`;
+            }
+        } else {
+            description += `❌ Nie znaleziono żadnych graczy z wynikiem 0`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle('✅ Analiza zakończona')
+            .setDescription(description)
+            .setColor('#FFA500')
+            .setTimestamp();
+
+        // NIE dodawaj zdjęcia do embeda potwierdzenia
+        const files = [];
+
+        const confirmButton = new ButtonBuilder()
+            .setCustomId('punish_complete_yes')
+            .setLabel('✅ Dodaj punkty karne')
+            .setStyle(ButtonStyle.Success);
+
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('punish_cancel_session')
+            .setLabel('❌ Anuluj')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder()
+            .addComponents(confirmButton, cancelButton);
+
+        return { embed, row, files };
+    }
+
+    /**
+     * Tworzy embed z potwierdzeniem przetworzonych zdjęć (stara metoda - nie używana już dla /punish)
      */
     createProcessedImagesEmbed(processedCount, totalImages) {
         const embed = new EmbedBuilder()
@@ -560,6 +617,15 @@ class PunishmentService {
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
 
+        // Dodaj przycisk anuluj
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('punish_cancel_session')
+            .setLabel('❌ Anuluj')
+            .setStyle(ButtonStyle.Danger);
+
+        const cancelRow = new ActionRowBuilder()
+            .addComponents(cancelButton);
+
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];
             const imageIndex = i + 1;
@@ -580,7 +646,7 @@ class PunishmentService {
                 try {
                     await session.publicInteraction.editReply({
                         embeds: [progressEmbed],
-                        components: []
+                        components: [cancelRow]
                     });
                 } catch (error) {
                     logger.error('[PUNISH] ❌ Błąd aktualizacji progress bara:', error);
