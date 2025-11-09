@@ -491,7 +491,7 @@ class ReminderService {
 
             try {
                 // Przetwórz zdjęcie przez OCR
-                const text = await ocrService.processImageFromPath(file.filepath);
+                const text = await ocrService.processImageFromFile(file.filepath);
 
                 // Wyodrębnij graczy z wynikiem 0
                 const foundPlayers = await ocrService.extractPlayersFromText(text, guild, member);
