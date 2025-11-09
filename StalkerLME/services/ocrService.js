@@ -1331,6 +1331,17 @@ class OCRService {
                 }
             }
 
+            // Usuń poprzednią wiadomość jeśli istnieje
+            if (this.queueMessageId) {
+                try {
+                    const oldMessage = await channel.messages.fetch(this.queueMessageId);
+                    await oldMessage.delete();
+                    logger.info('[OCR-QUEUE] 🗑️ Usunięto poprzedni embed kolejki');
+                } catch (error) {
+                    logger.warn('[OCR-QUEUE] ⚠️ Nie można usunąć poprzedniego embeda:', error.message);
+                }
+            }
+
             // Wyślij nową wiadomość
             const message = await channel.send({ embeds: [embed] });
             this.queueMessageId = message.id;
@@ -1370,6 +1381,59 @@ class OCRService {
             }
         } catch (error) {
             logger.error('[OCR-QUEUE] ❌ Błąd sprawdzania pozycji embeda:', error);
+        }
+    }
+
+    /**
+     * Czyści wszystkie wiadomości z kanału kolejki OCR
+     */
+    async cleanupQueueChannel() {
+        try {
+            if (!this.client || !this.queueChannelId) {
+                logger.warn('[OCR-QUEUE] ⚠️ Brak klienta lub kanału kolejki do wyczyszczenia');
+                return;
+            }
+
+            logger.info('[OCR-QUEUE] 🧹 Rozpoczynam czyszczenie kanału kolejki...');
+
+            const channel = await this.client.channels.fetch(this.queueChannelId);
+            if (!channel) {
+                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału kolejki');
+                return;
+            }
+
+            // Pobierz wszystkie wiadomości z kanału (maksymalnie 100)
+            const messages = await channel.messages.fetch({ limit: 100 });
+
+            if (messages.size === 0) {
+                logger.info('[OCR-QUEUE] ✅ Kanał kolejki jest już pusty');
+                // Wyślij nowy embed
+                await this.updateQueueDisplay(channel.guildId);
+                return;
+            }
+
+            // Usuń wszystkie wiadomości
+            let deletedCount = 0;
+            for (const [messageId, message] of messages) {
+                try {
+                    await message.delete();
+                    deletedCount++;
+                } catch (error) {
+                    logger.warn(`[OCR-QUEUE] ⚠️ Nie można usunąć wiadomości ${messageId}: ${error.message}`);
+                }
+            }
+
+            logger.info(`[OCR-QUEUE] 🗑️ Usunięto ${deletedCount} wiadomości z kanału kolejki`);
+
+            // Resetuj ID embeda kolejki
+            this.queueMessageId = null;
+
+            // Wyślij nowy embed kolejki
+            await this.updateQueueDisplay(channel.guildId);
+
+            logger.info('[OCR-QUEUE] ✅ Czyszczenie kanału kolejki zakończone');
+        } catch (error) {
+            logger.error('[OCR-QUEUE] ❌ Błąd czyszczenia kanału kolejki:', error);
         }
     }
 
