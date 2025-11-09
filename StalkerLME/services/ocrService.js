@@ -13,6 +13,7 @@ class OCRService {
         this.config = config;
         this.tempDir = this.config.ocr.tempDir || './StalkerLME/temp';
         this.processedDir = this.config.ocr.processedDir || './StalkerLME/processed';
+        this.processingQueue = Promise.resolve(); // Kolejka dla sekwencyjnego przetwarzania OCR
     }
 
     async initializeOCR() {
@@ -28,6 +29,18 @@ class OCRService {
     }
 
     async processImage(attachment) {
+        // Dodaj do kolejki aby przetwarzać sekwencyjnie
+        // Każde zadanie czeka na zakończenie poprzedniego (nawet jeśli było błędne)
+        this.processingQueue = this.processingQueue
+            .then(
+                () => this._processImageInternal(attachment),
+                () => this._processImageInternal(attachment) // Wykonaj nawet jeśli poprzednie się nie powiodło
+            );
+
+        return this.processingQueue;
+    }
+
+    async _processImageInternal(attachment) {
         let buffer = null;
         let processedBuffer = null;
 
