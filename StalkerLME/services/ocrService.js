@@ -1354,78 +1354,57 @@ class OCRService {
                     return;
                 } catch (error) {
                     // Wiadomość nie istnieje lub została usunięta
-                    logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda, wysyłam nowy');
+                    logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda, tworzę nowy jako pierwszą wiadomość');
                     this.queueMessageId = null;
                 }
             }
 
-            // KLUCZOWE: Usuń WSZYSTKIE stare wiadomości o kolejce przed wysłaniem nowej
-            // (nie tylko poprzednią, ale wszystkie - na wypadek restartów bota lub błędów)
-            try {
-                const messages = await channel.messages.fetch({ limit: 50 });
-                let deletedCount = 0;
-
-                for (const [messageId, message] of messages) {
-                    // Usuń wszystkie wiadomości od bota z embedem "📋 Kolejka OCR"
-                    if (message.author.id === this.client.user.id &&
-                        message.embeds.length > 0 &&
-                        message.embeds[0].title === '📋 Kolejka OCR') {
-                        try {
-                            await message.delete();
-                            deletedCount++;
-                            logger.info(`[OCR-QUEUE] 🗑️ Usunięto starą wiadomość kolejki (ID: ${messageId})`);
-                        } catch (deleteError) {
-                            logger.warn(`[OCR-QUEUE] ⚠️ Nie można usunąć wiadomości ${messageId}:`, deleteError.message);
-                        }
-                    }
-                }
-
-                if (deletedCount > 0) {
-                    logger.info(`[OCR-QUEUE] 🧹 Usunięto ${deletedCount} starych wiadomości kolejki`);
-                }
-            } catch (error) {
-                logger.warn('[OCR-QUEUE] ⚠️ Błąd podczas usuwania starych wiadomości:', error.message);
-            }
-
-            // Wyślij nową wiadomość z przyciskiem
-            const message = await channel.send({ embeds: [embed], components: [row] });
-            this.queueMessageId = message.id;
-            logger.info('[OCR-QUEUE] 📤 Wysłano nowy embed kolejki (ID: ' + message.id + ')');
+            // Nie wysyłaj nowej wiadomości - zostanie wysłana podczas inicjalizacji bota
+            logger.warn('[OCR-QUEUE] ⚠️ Brak embeda kolejki - zostanie utworzony podczas inicjalizacji');
         } catch (error) {
             logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji wyświetlania kolejki:', error);
         }
     }
 
+
     /**
-     * Sprawdza czy embed kolejki jest najnowszą wiadomością i jeśli nie, wysyła nowy
+     * Czyści wiadomości z kanału kolejki (zostawia tylko pierwszą z embedem)
      */
-    async ensureQueueMessageIsLatest(guildId) {
+    async cleanupQueueChannelMessages() {
         try {
-            if (!this.client || !this.queueChannelId) return;
-
-            const channel = await this.client.channels.fetch(this.queueChannelId);
-            if (!channel) return;
-
-            const messages = await channel.messages.fetch({ limit: 1 });
-            const lastMessage = messages.first();
-
-            // Jeśli nie mamy zapisanego ID, wyślij nowy embed
-            if (!this.queueMessageId) {
-                await this.updateQueueDisplay(guildId);
+            if (!this.client || !this.queueChannelId) {
                 return;
             }
 
-            // Jeśli ostatnia wiadomość to nasz embed, zaktualizuj go
-            if (lastMessage && lastMessage.id === this.queueMessageId) {
-                await this.updateQueueDisplay(guildId);
-            } else {
-                // Jeśli ostatnia wiadomość to nie nasz embed, wyślij nowy
-                logger.info('[OCR-QUEUE] 🔄 Embed kolejki nie jest najnowszy, wysyłam nowy');
-                this.queueMessageId = null; // Wymuś wysłanie nowej wiadomości
-                await this.updateQueueDisplay(guildId);
+            const channel = await this.client.channels.fetch(this.queueChannelId);
+            if (!channel) {
+                return;
+            }
+
+            // Pobierz wszystkie wiadomości z kanału
+            const messages = await channel.messages.fetch({ limit: 100 });
+
+            let deletedCount = 0;
+            for (const [messageId, message] of messages) {
+                // Pomiń pierwszą wiadomość z embedem kolejki
+                if (messageId === this.queueMessageId) {
+                    continue;
+                }
+
+                // Usuń wszystkie inne wiadomości
+                try {
+                    await message.delete();
+                    deletedCount++;
+                } catch (error) {
+                    // Ignoruj błędy usuwania (np. brak uprawnień)
+                }
+            }
+
+            if (deletedCount > 0) {
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono ${deletedCount} wiadomości z kanału kolejki`);
             }
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd sprawdzania pozycji embeda:', error);
+            // Ignoruj błędy czyszczenia
         }
     }
 
@@ -1500,33 +1479,40 @@ class OCRService {
                 return;
             }
 
-            // Pobierz ostatnią wiadomość z kanału
-            const messages = await channel.messages.fetch({ limit: 10 });
+            // Pobierz wszystkie wiadomości z kanału
+            const messages = await channel.messages.fetch({ limit: 100 });
 
-            // Znajdź naszą wiadomość z kolejką (od bota z odpowiednim tytułem)
-            const queueMessage = messages.find(msg =>
-                msg.author.id === client.user.id &&
-                msg.embeds.length > 0 &&
-                msg.embeds[0].title === '📋 Kolejka OCR'
-            );
+            // Znajdź PIERWSZĄ wiadomość od bota z embedem kolejki (najstarsza)
+            let queueMessage = null;
+            for (const [messageId, message] of messages) {
+                if (message.author.id === client.user.id &&
+                    message.embeds.length > 0 &&
+                    message.embeds[0].title === '📋 Kolejka OCR') {
+                    queueMessage = message;
+                    // Nie break - chcemy znaleźć najstarszą (iterujemy od najnowszych do najstarszych)
+                }
+            }
+
+            const embed = await this.createQueueEmbed(channel.guildId);
+            const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+            const leaveQueueButton = new ButtonBuilder()
+                .setCustomId('queue_leave')
+                .setLabel('🚪 Wyjdź z kolejki')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder()
+                .addComponents(leaveQueueButton);
 
             if (queueMessage) {
+                // Zaktualizuj istniejący embed
+                await queueMessage.edit({ embeds: [embed], components: [row] });
                 this.queueMessageId = queueMessage.id;
-                logger.info(`[OCR-QUEUE] ✅ Znaleziono istniejący embed kolejki (ID: ${queueMessage.id})`);
-
-                // Sprawdź czy jest najnowszy i zaktualizuj
-                const lastMessage = messages.first();
-                if (lastMessage && lastMessage.id === queueMessage.id) {
-                    logger.info('[OCR-QUEUE] 📝 Aktualizuję istniejący embed kolejki');
-                    await this.updateQueueDisplay(channel.guildId);
-                } else {
-                    logger.info('[OCR-QUEUE] 📤 Embed nie jest najnowszy, wysyłam nowy');
-                    this.queueMessageId = null;
-                    await this.updateQueueDisplay(channel.guildId);
-                }
+                logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed kolejki (ID: ' + queueMessage.id + ')');
             } else {
-                logger.info('[OCR-QUEUE] 📤 Brak istniejącego embeda, wysyłam nowy');
-                await this.updateQueueDisplay(channel.guildId);
+                // Wyślij nowy embed jako pierwszą wiadomość
+                const message = await channel.send({ embeds: [embed], components: [row] });
+                this.queueMessageId = message.id;
+                logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed kolejki (ID: ' + message.id + ')');
             }
 
             logger.info('[OCR-QUEUE] ✅ Inicjalizacja wyświetlania kolejki zakończona');
@@ -1606,6 +1592,9 @@ class OCRService {
         this.activeProcessing.delete(guildId);
         logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR`);
 
+        // Wyczyść kanał kolejki (usuń wszystkie wiadomości oprócz pierwszej z embedem)
+        await this.cleanupQueueChannelMessages();
+
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
 
@@ -1669,7 +1658,6 @@ class OCRService {
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
-        await this.ensureQueueMessageIsLatest(guildId);
 
         return { position };
     }
@@ -1697,7 +1685,6 @@ class OCRService {
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
-        await this.ensureQueueMessageIsLatest(guildId);
 
         // Powiadom użytkownika
         try {

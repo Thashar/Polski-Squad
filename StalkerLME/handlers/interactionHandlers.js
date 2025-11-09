@@ -49,6 +49,17 @@ async function handleSlashCommand(interaction, sharedState) {
         return;
     }
 
+    // Sprawdź kanał dla komend OCR i faz
+    const ocrCommands = ['punish', 'remind', 'faza1', 'faza2'];
+    const allowedChannelId = '1437122516974829679';
+    if (ocrCommands.includes(interaction.commandName) && interaction.channelId !== allowedChannelId) {
+        await interaction.reply({
+            content: `❌ Ta komenda może być użyta tylko na kanale <#${allowedChannelId}>`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
     switch (interaction.commandName) {
         case 'punish':
             await handlePunishCommand(interaction, config, ocrService, punishmentService);
