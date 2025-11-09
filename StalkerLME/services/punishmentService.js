@@ -617,6 +617,17 @@ class PunishmentService {
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
 
+        // KLUCZOWE: Wyświetl embed z progresem PRZED rozpoczęciem przetwarzania pierwszego zdjęcia
+        const initialProgressBar = this.createProgressBar(0, totalImages);
+        const initialEmbed = new EmbedBuilder()
+            .setTitle('⏳ Rozpoczynam analizę...')
+            .setDescription(
+                `${initialProgressBar}\n\n` +
+                `📸 Przetwarzam **0** z **${totalImages}** zdjęć`
+            )
+            .setColor('#FFA500')
+            .setTimestamp();
+
         // Dodaj przycisk anuluj
         const cancelButton = new ButtonBuilder()
             .setCustomId('punish_cancel_session')
@@ -625,6 +636,17 @@ class PunishmentService {
 
         const cancelRow = new ActionRowBuilder()
             .addComponents(cancelButton);
+
+        if (session.publicInteraction) {
+            try {
+                await session.publicInteraction.editReply({
+                    embeds: [initialEmbed],
+                    components: [cancelRow]
+                });
+            } catch (error) {
+                logger.error('[PUNISH] ❌ Błąd aktualizacji embeda początkowego:', error.message);
+            }
+        }
 
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];

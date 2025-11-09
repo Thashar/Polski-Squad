@@ -760,6 +760,75 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Sprawdź urlopy przed wysłaniem przypomnień
+        const vacationChannelId = '1269726207633522740';
+        const playersWithVacation = [];
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+        try {
+            const vacationChannel = await interaction.guild.channels.fetch(vacationChannelId);
+            if (vacationChannel) {
+                logger.info(`[REMIND] 🏖️ Sprawdzanie urlopów dla ${foundUsers.length} graczy`);
+
+                for (const userData of foundUsers) {
+                    const member = userData.user.member;
+                    if (!member) continue;
+
+                    // Sprawdź wiadomości użytkownika na kanale urlopów z ostatniego miesiąca
+                    const messages = await vacationChannel.messages.fetch({ limit: 100 });
+                    const userMessages = messages.filter(msg =>
+                        msg.author.id === member.user.id &&
+                        msg.createdAt >= oneMonthAgo
+                    );
+
+                    // Sprawdź czy któraś wiadomość ma reakcje (aktywny urlop)
+                    let hasActiveVacation = false;
+                    for (const userMsg of userMessages.values()) {
+                        if (userMsg.reactions && userMsg.reactions.cache && userMsg.reactions.cache.size > 0) {
+                            hasActiveVacation = true;
+                            break;
+                        }
+                    }
+
+                    if (hasActiveVacation) {
+                        playersWithVacation.push(userData);
+                        logger.info(`[REMIND] 🏖️ ${member.displayName} ma aktywny urlop (z reakcjami)`);
+                    }
+                }
+
+                // Usuń urlopowiczów z listy
+                if (playersWithVacation.length > 0) {
+                    const vacationUserIds = new Set(playersWithVacation.map(u => u.user.member.id));
+                    const filteredUsers = foundUsers.filter(u => !vacationUserIds.has(u.user.member.id));
+
+                    logger.info(`[REMIND] 🏖️ Usunięto ${playersWithVacation.length} urlopowiczów z listy`);
+                    logger.info(`[REMIND] 📊 ${foundUsers.length} znalezionych → ${filteredUsers.length} po odfiltrowaniu urlopów`);
+
+                    // Aktualizuj foundUsers
+                    foundUsers.splice(0, foundUsers.length, ...filteredUsers);
+
+                    if (foundUsers.length === 0) {
+                        // Zatrzymaj ghost ping
+                        stopGhostPing(session);
+
+                        await interaction.update({
+                            content: '✅ Wszyscy znalezieni gracze mają aktywny urlop - nie wysłano żadnych przypomnień.',
+                            embeds: [],
+                            components: []
+                        });
+
+                        // Zakończ sesję OCR i wyczyść
+                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                        await sharedState.reminderService.cleanupSession(session.sessionId);
+                        return;
+                    }
+                }
+            }
+        } catch (vacationError) {
+            logger.error('[REMIND] ⚠️ Błąd sprawdzania urlopów, kontynuuję bez filtrowania:', vacationError.message);
+        }
+
         // Wyślij przypomnienia
         await interaction.deferUpdate();
 
@@ -1032,6 +1101,75 @@ async function handleButton(interaction, sharedState) {
             await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
             await sharedState.punishmentService.cleanupSession(session.sessionId);
             return;
+        }
+
+        // Sprawdź urlopy przed dodaniem punktów
+        const vacationChannelId = '1269726207633522740';
+        const playersWithVacation = [];
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+        try {
+            const vacationChannel = await interaction.guild.channels.fetch(vacationChannelId);
+            if (vacationChannel) {
+                logger.info(`[PUNISH] 🏖️ Sprawdzanie urlopów dla ${foundUsers.length} graczy`);
+
+                for (const userData of foundUsers) {
+                    const member = userData.user.member;
+                    if (!member) continue;
+
+                    // Sprawdź wiadomości użytkownika na kanale urlopów z ostatniego miesiąca
+                    const messages = await vacationChannel.messages.fetch({ limit: 100 });
+                    const userMessages = messages.filter(msg =>
+                        msg.author.id === member.user.id &&
+                        msg.createdAt >= oneMonthAgo
+                    );
+
+                    // Sprawdź czy któraś wiadomość ma reakcje (aktywny urlop)
+                    let hasActiveVacation = false;
+                    for (const userMsg of userMessages.values()) {
+                        if (userMsg.reactions && userMsg.reactions.cache && userMsg.reactions.cache.size > 0) {
+                            hasActiveVacation = true;
+                            break;
+                        }
+                    }
+
+                    if (hasActiveVacation) {
+                        playersWithVacation.push(userData);
+                        logger.info(`[PUNISH] 🏖️ ${member.displayName} ma aktywny urlop (z reakcjami)`);
+                    }
+                }
+
+                // Usuń urlopowiczów z listy
+                if (playersWithVacation.length > 0) {
+                    const vacationUserIds = new Set(playersWithVacation.map(u => u.user.member.id));
+                    const filteredUsers = foundUsers.filter(u => !vacationUserIds.has(u.user.member.id));
+
+                    logger.info(`[PUNISH] 🏖️ Usunięto ${playersWithVacation.length} urlopowiczów z listy`);
+                    logger.info(`[PUNISH] 📊 ${foundUsers.length} znalezionych → ${filteredUsers.length} po odfiltrowaniu urlopów`);
+
+                    // Aktualizuj foundUsers
+                    foundUsers.splice(0, foundUsers.length, ...filteredUsers);
+
+                    if (foundUsers.length === 0) {
+                        // Zatrzymaj ghost ping
+                        stopGhostPing(session);
+
+                        await interaction.update({
+                            content: '✅ Wszyscy znalezieni gracze mają aktywny urlop - nie dodano żadnych punktów karnych.',
+                            embeds: [],
+                            components: []
+                        });
+
+                        // Zakończ sesję OCR i wyczyść
+                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                        await sharedState.punishmentService.cleanupSession(session.sessionId);
+                        return;
+                    }
+                }
+            }
+        } catch (vacationError) {
+            logger.error('[PUNISH] ⚠️ Błąd sprawdzania urlopów, kontynuuję bez filtrowania:', vacationError.message);
         }
 
         // Dodaj punkty karne
