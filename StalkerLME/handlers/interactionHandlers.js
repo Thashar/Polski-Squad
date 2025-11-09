@@ -108,7 +108,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 
         if (!hasReservation && isOCRActive) {
             // Ktoś inny używa OCR, dodaj do kolejki
-            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+            const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
                 .setTitle('⏳ Kolejka OCR')
@@ -208,7 +208,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
 
         if (!hasReservation && isOCRActive) {
             // Ktoś inny używa OCR, dodaj do kolejki
-            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+            const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
                 .setTitle('⏳ Kolejka OCR')
@@ -2054,7 +2054,7 @@ async function handlePhase1Command(interaction, sharedState) {
 
         if (!hasReservation && isOCRActive) {
             // Ktoś inny używa OCR, dodaj do kolejki
-            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+            const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
                 .setTitle('⏳ Kolejka OCR')
@@ -2623,7 +2623,7 @@ async function handlePhase2Command(interaction, sharedState) {
 
         if (!hasReservation && isOCRActive) {
             // Ktoś inny używa OCR, dodaj do kolejki
-            const position = await ocrService.addToOCRQueue(guildId, userId, commandName);
+            const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
             const queueEmbed = new EmbedBuilder()
                 .setTitle('⏳ Kolejka OCR')
