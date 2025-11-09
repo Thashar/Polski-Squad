@@ -403,14 +403,9 @@ class ReminderService {
             .setColor('#FFA500')
             .setTimestamp();
 
-        // Dodaj zdjęcie do embeda (pierwsze przetworzone zdjęcie)
+        // NIE dodawaj zdjęcia do embeda potwierdzenia
+        // Zdjęcie zostanie pokazane dopiero po kliknięciu "Wyślij przypomnienia"
         const files = [];
-        if (session.processedImages.length > 0) {
-            const firstImage = session.processedImages[0];
-            const attachment = new AttachmentBuilder(firstImage.filepath, { name: 'analyzed_image.png' });
-            files.push(attachment);
-            embed.setImage('attachment://analyzed_image.png');
-        }
 
         const confirmButton = new ButtonBuilder()
             .setCustomId('remind_complete_yes')
@@ -526,6 +521,28 @@ class ReminderService {
 
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
+
+        // KLUCZOWE: Wyświetl embed z progresem PRZED rozpoczęciem przetwarzania pierwszego zdjęcia
+        const initialProgressBar = this.createProgressBar(0, totalImages);
+        const initialEmbed = new EmbedBuilder()
+            .setTitle('⏳ Rozpoczynam analizę...')
+            .setDescription(
+                `${initialProgressBar}\n\n` +
+                `📸 Przetwarzam **0** z **${totalImages}** zdjęć`
+            )
+            .setColor('#FFA500')
+            .setTimestamp();
+
+        if (session.publicInteraction) {
+            try {
+                await session.publicInteraction.editReply({
+                    embeds: [initialEmbed],
+                    components: []
+                });
+            } catch (error) {
+                logger.error('[REMIND] ❌ Błąd aktualizacji embeda początkowego:', error.message);
+            }
+        }
 
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];

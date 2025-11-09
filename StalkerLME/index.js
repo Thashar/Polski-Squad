@@ -309,8 +309,7 @@ client.on(Events.MessageCreate, async (message) => {
                 if (session.publicInteraction) {
                     await session.publicInteraction.editReply({
                         embeds: [confirmation.embed],
-                        components: [confirmation.row],
-                        files: confirmation.files
+                        components: [confirmation.row]
                     });
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
