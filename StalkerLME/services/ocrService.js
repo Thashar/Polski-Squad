@@ -1331,21 +1331,38 @@ class OCRService {
                 }
             }
 
-            // Usuń poprzednią wiadomość jeśli istnieje
-            if (this.queueMessageId) {
-                try {
-                    const oldMessage = await channel.messages.fetch(this.queueMessageId);
-                    await oldMessage.delete();
-                    logger.info('[OCR-QUEUE] 🗑️ Usunięto poprzedni embed kolejki');
-                } catch (error) {
-                    logger.warn('[OCR-QUEUE] ⚠️ Nie można usunąć poprzedniego embeda:', error.message);
+            // KLUCZOWE: Usuń WSZYSTKIE stare wiadomości o kolejce przed wysłaniem nowej
+            // (nie tylko poprzednią, ale wszystkie - na wypadek restartów bota lub błędów)
+            try {
+                const messages = await channel.messages.fetch({ limit: 50 });
+                let deletedCount = 0;
+
+                for (const [messageId, message] of messages) {
+                    // Usuń wszystkie wiadomości od bota z embedem "📋 Kolejka OCR"
+                    if (message.author.id === this.client.user.id &&
+                        message.embeds.length > 0 &&
+                        message.embeds[0].title === '📋 Kolejka OCR') {
+                        try {
+                            await message.delete();
+                            deletedCount++;
+                            logger.info(`[OCR-QUEUE] 🗑️ Usunięto starą wiadomość kolejki (ID: ${messageId})`);
+                        } catch (deleteError) {
+                            logger.warn(`[OCR-QUEUE] ⚠️ Nie można usunąć wiadomości ${messageId}:`, deleteError.message);
+                        }
+                    }
                 }
+
+                if (deletedCount > 0) {
+                    logger.info(`[OCR-QUEUE] 🧹 Usunięto ${deletedCount} starych wiadomości kolejki`);
+                }
+            } catch (error) {
+                logger.warn('[OCR-QUEUE] ⚠️ Błąd podczas usuwania starych wiadomości:', error.message);
             }
 
             // Wyślij nową wiadomość
             const message = await channel.send({ embeds: [embed] });
             this.queueMessageId = message.id;
-            logger.info('[OCR-QUEUE] 📤 Wysłano nowy embed kolejki');
+            logger.info('[OCR-QUEUE] 📤 Wysłano nowy embed kolejki (ID: ' + message.id + ')');
         } catch (error) {
             logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji wyświetlania kolejki:', error);
         }
