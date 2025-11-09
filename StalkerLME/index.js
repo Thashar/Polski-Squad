@@ -3,7 +3,7 @@ const cron = require('node-cron');
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
-const { handleInteraction, registerSlashCommands, sendGhostPing } = require('./handlers/interactionHandlers');
+const { handleInteraction, registerSlashCommands, sendGhostPing, stopGhostPing } = require('./handlers/interactionHandlers');
 
 const DatabaseService = require('./services/databaseService');
 const OCRService = require('./services/ocrService');

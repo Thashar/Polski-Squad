@@ -645,6 +645,9 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Zatrzymaj ghost ping
+        stopGhostPing(session);
+
         // Zakończ sesję OCR
         await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
 
@@ -719,6 +722,9 @@ async function handleButton(interaction, sharedState) {
         }
 
         if (foundUsers.length === 0) {
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
             await interaction.update({
                 content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
                 embeds: [],
@@ -742,6 +748,9 @@ async function handleButton(interaction, sharedState) {
 
             // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
             await sharedState.reminderUsageService.recordPingedUsers(foundUsers);
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
 
             // Zakończ sesję OCR
             await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
@@ -776,6 +785,9 @@ async function handleButton(interaction, sharedState) {
         } catch (error) {
             logger.error('[REMIND] ❌ Błąd wysyłania przypomnień:', error);
 
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
             await interaction.editReply({
                 content: '❌ Wystąpił błąd podczas wysyłania przypomnień.',
                 embeds: [],
@@ -808,6 +820,9 @@ async function handleButton(interaction, sharedState) {
             await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
             return;
         }
+
+        // Zatrzymaj ghost ping
+        stopGhostPing(session);
 
         // Zakończ sesję OCR
         await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
@@ -883,6 +898,9 @@ async function handleButton(interaction, sharedState) {
         }
 
         if (foundUsers.length === 0) {
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
             await interaction.update({
                 content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
                 embeds: [],
@@ -900,6 +918,9 @@ async function handleButton(interaction, sharedState) {
 
         try {
             const results = await sharedState.punishmentService.processPunishments(interaction.guild, foundUsers);
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
 
             // Zakończ sesję OCR
             await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
@@ -940,6 +961,9 @@ async function handleButton(interaction, sharedState) {
 
         } catch (error) {
             logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych:', error);
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
 
             await interaction.editReply({
                 content: '❌ Wystąpił błąd podczas dodawania punktów karnych.',
