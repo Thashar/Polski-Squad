@@ -721,6 +721,45 @@ class PunishmentService {
 
                 logger.info(`[PUNISH] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych (${newUniquesFromThisImage} nowych unikalnych)`);
 
+                // Zaktualizuj progress bar PO przetworzeniu zdjęcia (żółte → zielone)
+                const completedBar = this.createProgressBar(imageIndex, totalImages, 'completed');
+                const completedEmbed = new EmbedBuilder()
+                    .setTitle('⏳ Przetwarzanie zdjęć...')
+                    .setDescription(
+                        `${completedBar}\n\n` +
+                        `📸 Przetwarzanie **${imageIndex}** z **${totalImages}**`
+                    )
+                    .setColor('#FFA500')
+                    .setTimestamp();
+
+                // Dodaj wyniki z przetworzonych zdjęć
+                const resultsText = session.processedImages.map((img, idx) => {
+                    const playersText = `${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`;
+                    const uniquesText = `${img.result.newUniques} ${img.result.newUniques === 1 ? 'nowy unikalny' : 'nowych unikalnych'}`;
+                    return `📸 Zdjęcie ${idx + 1}: ${playersText} (${uniquesText})`;
+                }).join('\n');
+
+                completedEmbed.addFields(
+                    { name: '✅ Przetworzone zdjęcia', value: resultsText || 'Brak', inline: false },
+                    { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
+                );
+
+                if (session.publicInteraction) {
+                    try {
+                        await session.publicInteraction.editReply({
+                            embeds: [completedEmbed],
+                            components: []
+                        });
+                    } catch (error) {
+                        logger.error('[PUNISH] ❌ Błąd aktualizacji embeda po przetworzeniu:', error);
+                    }
+                }
+
+                // Małe opóźnienie między zdjęciami (żeby widać było progress)
+                if (i < totalImages - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
             } catch (error) {
                 logger.error(`[PUNISH] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
                 results.push({
@@ -747,8 +786,11 @@ class PunishmentService {
 
     /**
      * Tworzy progress bar dla przetwarzania zdjęć (stałe 10 kratek + procent)
+     * @param {number} current - Numer aktualnego zdjęcia
+     * @param {number} total - Całkowita liczba zdjęć
+     * @param {string} stage - 'processing' (żółte dla aktualnego) lub 'completed' (zielone dla aktualnego)
      */
-    createProgressBar(current, total) {
+    createProgressBar(current, total, stage = 'processing') {
         const percentage = Math.floor((current / total) * 100);
         const totalBars = 10;
 
@@ -757,19 +799,22 @@ class PunishmentService {
         if (current === 0) {
             // Początek - wszystkie białe kratki
             bar = '⬜'.repeat(totalBars);
-        } else if (current === total) {
-            // Wszystko ukończone - 10 zielonych kratek
-            bar = '🟩'.repeat(totalBars);
         } else {
-            // W trakcie przetwarzania
-            // Zielone kratki = postęp ukończonych zdjęć (current - 1)
-            // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do current)
             const completedBars = Math.ceil((current / total) * totalBars);
-            const greenBars = Math.floor(((current - 1) / total) * totalBars);
-            const yellowBars = completedBars - greenBars;
-            const whiteBars = totalBars - completedBars;
 
-            bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(whiteBars);
+            if (stage === 'completed') {
+                // Po przetworzeniu - wszystkie kratki do current są zielone
+                bar = '🟩'.repeat(completedBars) + '⬜'.repeat(totalBars - completedBars);
+            } else {
+                // Podczas przetwarzania
+                // Zielone kratki = postęp ukończonych zdjęć (current - 1)
+                // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do current)
+                const greenBars = Math.floor(((current - 1) / total) * totalBars);
+                const yellowBars = completedBars - greenBars;
+                const whiteBars = totalBars - completedBars;
+
+                bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(whiteBars);
+            }
         }
 
         return `${bar} ${percentage}%`;
