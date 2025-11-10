@@ -6453,7 +6453,7 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
         const clanEmoji = Array.from(player.clanName)[0];
         const formattedScore = player.maxScore.toLocaleString('pl-PL');
 
-        return `${progressBar} ${clanEmoji} ${player.playerName} - ${formattedScore}`;
+        return `${globalRank}. ${progressBar} ${clanEmoji} ${player.playerName} - ${formattedScore}`;
     });
 
     const rankingText = rankingLines.join('\n');
