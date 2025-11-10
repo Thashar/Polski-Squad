@@ -110,6 +110,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'faza2':
             await handlePhase2Command(interaction, sharedState);
             break;
+        case 'clan-status':
+            await handleClanStatusCommand(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -1600,6 +1603,8 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2RoundContinue(interaction, sharedState);
     } else if (interaction.customId.startsWith('progres_nav_better|') || interaction.customId.startsWith('progres_nav_worse|')) {
         await handleProgresNavButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('clan_status_prev|') || interaction.customId.startsWith('clan_status_next|')) {
+        await handleClanStatusPageButton(interaction, sharedState);
     }
 }
 
@@ -1833,7 +1838,11 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('faza2')
-            .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 2 (3 rundy)')
+            .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 2 (3 rundy)'),
+
+        new SlashCommandBuilder()
+            .setName('clan-status')
+            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów')
     ];
 
     try {
@@ -6366,6 +6375,240 @@ async function handleWynikiCommand(interaction, sharedState) {
         logger.error('[WYNIKI] ❌ Błąd pobierania wyników:', error);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas pobierania wyników.'
+        });
+    }
+}
+
+// Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
+async function createGlobalPlayerRanking(guildId, databaseService, config, last54Weeks) {
+    // Mapa: playerName -> {maxScore, clanName, clanKey}
+    const playerData = new Map();
+
+    for (const week of last54Weeks) {
+        for (const clan of week.clans) {
+            const weekData = await databaseService.getPhase1Results(
+                guildId,
+                week.weekNumber,
+                week.year,
+                clan
+            );
+
+            if (weekData && weekData.players) {
+                weekData.players.forEach(player => {
+                    if (player.displayName && player.score > 0) {
+                        const existing = playerData.get(player.displayName);
+
+                        // Jeśli gracz nie istnieje lub ma niższy wynik - zaktualizuj
+                        if (!existing || player.score > existing.maxScore) {
+                            playerData.set(player.displayName, {
+                                maxScore: player.score,
+                                clanName: config.roleDisplayNames[clan],
+                                clanKey: clan
+                            });
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // Konwertuj do tablicy i posortuj po maxScore (malejąco)
+    const ranking = Array.from(playerData.entries())
+        .map(([playerName, data]) => ({
+            playerName,
+            maxScore: data.maxScore,
+            clanName: data.clanName,
+            clanKey: data.clanKey
+        }))
+        .sort((a, b) => b.maxScore - a.maxScore);
+
+    return ranking;
+}
+
+// Funkcja wyświetlająca konkretną stronę rankingu clan-status
+async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = false) {
+    const PLAYERS_PER_PAGE = 40;
+    const totalPages = Math.ceil(ranking.length / PLAYERS_PER_PAGE);
+
+    // Walidacja strony
+    if (currentPage < 0) currentPage = 0;
+    if (currentPage >= totalPages) currentPage = totalPages - 1;
+
+    const startIndex = currentPage * PLAYERS_PER_PAGE;
+    const endIndex = Math.min(startIndex + PLAYERS_PER_PAGE, ranking.length);
+    const pageRanking = ranking.slice(startIndex, endIndex);
+
+    // Oblicz maksymalny wynik na tej stronie dla skalowania progress bara
+    const maxScoreOnPage = Math.max(...pageRanking.map(p => p.maxScore));
+
+    // Stwórz tekst rankingu
+    const barLength = 10;
+    const rankingLines = pageRanking.map((player, index) => {
+        const globalRank = startIndex + index + 1;
+        const filledLength = player.maxScore > 0 ? Math.max(1, Math.round((player.maxScore / maxScoreOnPage) * barLength)) : 0;
+        const progressBar = player.maxScore > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+        // Wyciągnij emotkę klanu z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
+        const clanEmoji = player.clanName.charAt(0);
+        const formattedScore = player.maxScore.toLocaleString('pl-PL');
+
+        return `${progressBar} ${clanEmoji} ${player.playerName} - ${formattedScore}`;
+    });
+
+    const rankingText = rankingLines.join('\n');
+
+    // Przyciski paginacji
+    const navigationButtons = [];
+
+    if (currentPage > 0) {
+        const prevButton = new ButtonBuilder()
+            .setCustomId(`clan_status_prev|${currentPage}`)
+            .setLabel('◀')
+            .setStyle(ButtonStyle.Secondary);
+        navigationButtons.push(prevButton);
+    }
+
+    if (currentPage < totalPages - 1) {
+        const nextButton = new ButtonBuilder()
+            .setCustomId(`clan_status_next|${currentPage}`)
+            .setLabel('▶')
+            .setStyle(ButtonStyle.Secondary);
+        navigationButtons.push(nextButton);
+    }
+
+    const components = [];
+    if (navigationButtons.length > 0) {
+        const navRow = new ActionRowBuilder().addComponents(navigationButtons);
+        components.push(navRow);
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🏆 Globalny Ranking - Wszyscy Gracze`)
+        .setDescription(`**Najlepsze wyniki z Fazy 1** (ostatnie 54 tygodnie):\n\n${rankingText}`)
+        .setColor('#FFD700')
+        .setFooter({ text: `Strona ${currentPage + 1}/${totalPages} | Graczy: ${ranking.length} | Zakres: #${startIndex + 1} - #${endIndex}` })
+        .setTimestamp();
+
+    if (isUpdate) {
+        await interaction.update({
+            embeds: [embed],
+            components: components
+        });
+    } else {
+        await interaction.editReply({
+            embeds: [embed],
+            components: components
+        });
+    }
+}
+
+// Handler dla komendy /clan-status
+async function handleClanStatusCommand(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    await interaction.deferReply();
+
+    try {
+        // Pobierz wszystkie dostępne tygodnie
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
+            });
+            return;
+        }
+
+        const last54Weeks = allWeeks.slice(0, 54);
+
+        // Stwórz globalny ranking
+        const ranking = await createGlobalPlayerRanking(
+            interaction.guild.id,
+            databaseService,
+            config,
+            last54Weeks
+        );
+
+        if (ranking.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak graczy z wynikami w bazie danych.'
+            });
+            return;
+        }
+
+        // Wyświetl pierwszą stronę
+        await showClanStatusPage(interaction, ranking, 0, false);
+
+        // Zapisz ranking w cache dla paginacji (używamy message.id jako klucza)
+        if (!sharedState.clanStatusPagination) {
+            sharedState.clanStatusPagination = new Map();
+        }
+
+        const response = await interaction.fetchReply();
+        sharedState.clanStatusPagination.set(response.id, {
+            ranking: ranking,
+            timestamp: Date.now()
+        });
+
+        // Automatyczne czyszczenie cache po 15 minutach
+        setTimeout(() => {
+            if (sharedState.clanStatusPagination) {
+                sharedState.clanStatusPagination.delete(response.id);
+            }
+        }, 15 * 60 * 1000);
+
+    } catch (error) {
+        logger.error('[CLAN-STATUS] ❌ Błąd wyświetlania rankingu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania danych rankingu.'
+        });
+    }
+}
+
+// Handler dla przycisków paginacji clan-status
+async function handleClanStatusPageButton(interaction, sharedState) {
+    try {
+        // Pobierz dane paginacji
+        if (!sharedState.clanStatusPagination) {
+            await interaction.reply({
+                content: '❌ Sesja paginacji wygasła. Użyj `/clan-status` ponownie.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const paginationData = sharedState.clanStatusPagination.get(interaction.message.id);
+        if (!paginationData) {
+            await interaction.reply({
+                content: '❌ Nie znaleziono danych paginacji. Sesja mogła wygasnąć.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Parsuj customId
+        const [action, currentPageStr] = interaction.customId.split('|');
+        const currentPage = parseInt(currentPageStr, 10);
+
+        // Oblicz nową stronę
+        let newPage = currentPage;
+        if (action === 'clan_status_prev') {
+            newPage = currentPage - 1;
+        } else if (action === 'clan_status_next') {
+            newPage = currentPage + 1;
+        }
+
+        // Wyświetl nową stronę
+        await showClanStatusPage(interaction, paginationData.ranking, newPage, true);
+
+        // Odśwież timestamp
+        paginationData.timestamp = Date.now();
+
+    } catch (error) {
+        logger.error('[CLAN-STATUS] ❌ Błąd paginacji:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas zmiany strony.',
+            flags: MessageFlags.Ephemeral
         });
     }
 }
