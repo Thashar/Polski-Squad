@@ -6123,26 +6123,46 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         // Oblicz maksymalny wynik dla progress bara
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
 
-        // Przygotuj tekst z wynikami
+        // Stwórz mapę wyników gracza dla szybkiego dostępu
+        const playerScoreMap = new Map();
+        playerProgressData.forEach(data => {
+            const key = `${data.weekNumber}-${data.year}`;
+            playerScoreMap.set(key, data.score);
+        });
+
+        // Przygotuj tekst z wynikami - iteruj po WSZYSTKICH 54 tygodniach
         const barLength = 10;
         const resultsLines = [];
 
-        for (let i = 0; i < playerProgressData.length; i++) {
-            const data = playerProgressData[i];
-            const prevData = playerProgressData[i + 1];
+        for (let i = 0; i < last54Weeks.length; i++) {
+            const week = last54Weeks[i];
+            const weekKey = `${week.weekNumber}-${week.year}`;
+            const score = playerScoreMap.get(weekKey);
+            const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
-            const filledLength = data.score > 0 ? Math.max(1, Math.round((data.score / maxScore) * barLength)) : 0;
-            const progressBar = data.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+            if (score !== undefined) {
+                // Gracz ma dane z tego tygodnia - pokaż normalny pasek
+                const filledLength = score > 0 ? Math.max(1, Math.round((score / maxScore) * barLength)) : 0;
+                const progressBar = score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
-            // Użyj małych liczb dla różnic tydzień-do-tygodnia
-            let differenceText = '';
-            if (prevData) {
-                const difference = data.score - prevData.score;
-                differenceText = formatSmallDifference(difference);
+                // Oblicz różnicę z poprzednim tygodniem (jeśli istnieje)
+                let differenceText = '';
+                if (i < last54Weeks.length - 1) {
+                    const prevWeek = last54Weeks[i + 1];
+                    const prevWeekKey = `${prevWeek.weekNumber}-${prevWeek.year}`;
+                    const prevScore = playerScoreMap.get(prevWeekKey);
+
+                    if (prevScore !== undefined) {
+                        const difference = score - prevScore;
+                        differenceText = formatSmallDifference(difference);
+                    }
+                }
+
+                resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
+            } else {
+                // Gracz nie ma danych z tego tygodnia - pokaż tylko etykietę
+                resultsLines.push(`           ${weekLabel} - ━`);
             }
-
-            const weekLabel = `${String(data.weekNumber).padStart(2, '0')}/${String(data.year).slice(-2)}`;
-            resultsLines.push(`${progressBar} ${weekLabel} - ${data.score.toLocaleString('pl-PL')}${differenceText}`);
         }
 
         const resultsText = resultsLines.join('\n');
@@ -6205,9 +6225,9 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const embed = new EmbedBuilder()
             .setTitle(`📈 Progres gracza: ${selectedPlayer}`)
-            .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${playerProgressData.length} tygodni):\n\n${resultsText}${expiryInfo}`)
+            .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${last54Weeks.length} tygodni):\n\n${resultsText}${expiryInfo}`)
             .setColor('#00FF00')
-            .setFooter({ text: `Łącznie tygodni: ${playerProgressData.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
+            .setFooter({ text: `Tygodni z danymi: ${playerProgressData.length}/${last54Weeks.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
             .setTimestamp();
 
         const response = await interaction.editReply({
