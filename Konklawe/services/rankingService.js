@@ -46,7 +46,7 @@ class RankingService {
                 if (!member) {
                     member = await interaction.guild.members.fetch(userId);
                 }
-                const name = member.nickname || member.user.username;
+                const name = member.displayName;
                 const medalCount = this.gameService.virtuttiMedals[userId] || 0;
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 const medalDisplay = medalIcons ? `${medalIcons} ` : '';
@@ -145,7 +145,7 @@ class RankingService {
                 if (!member) {
                     member = await interaction.guild.members.fetch(userId);
                 }
-                const name = member.nickname || member.user.username;
+                const name = member.displayName;
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 medalLines.push(`${globalRank}. ${name} - ${medalIcons} (${medalCount})`);
             } catch (memberError) {
@@ -249,7 +249,7 @@ class RankingService {
             const [userId, count] = top3[i];
             try {
                 const member = await guild.members.fetch(userId);
-                const name = member.nickname || member.user.username;
+                const name = member.displayName;
                 const medalCount = this.gameService.virtuttiMedals[userId] || 0;
                 const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(medalCount);
                 const medalDisplay = medalIcons ? `${medalIcons} ` : '';
