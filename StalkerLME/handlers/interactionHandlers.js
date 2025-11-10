@@ -6011,7 +6011,7 @@ async function handleProgresCommand(interaction, sharedState) {
             const current = playerProgressData[0].score;
             const past = playerProgressData[3].score;
             const diff = current - past;
-            cumulativeSection += `**📅 Miesiąc (4 tyg):** ${formatDifference(diff)}\n`;
+            cumulativeSection += `**🔹 Miesiąc (4):** ${formatDifference(diff)}\n`;
         }
 
         // Progres z 13 tygodni (kwartał)
@@ -6019,7 +6019,7 @@ async function handleProgresCommand(interaction, sharedState) {
             const current = playerProgressData[0].score;
             const past = playerProgressData[12].score;
             const diff = current - past;
-            cumulativeSection += `**📊 Kwartał (13 tyg):** ${formatDifference(diff)}\n`;
+            cumulativeSection += `**🔷 Kwartał (13):** ${formatDifference(diff)}\n`;
         }
 
         // Progres z 26 tygodni (pół roku)
@@ -6027,7 +6027,7 @@ async function handleProgresCommand(interaction, sharedState) {
             const current = playerProgressData[0].score;
             const past = playerProgressData[25].score;
             const diff = current - past;
-            cumulativeSection += `**📈 Pół roku (26 tyg):** ${formatDifference(diff)}\n`;
+            cumulativeSection += `**🔶 Pół roku (26):** ${formatDifference(diff)}\n`;
         }
 
         if (cumulativeSection) {
