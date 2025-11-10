@@ -5935,8 +5935,8 @@ async function handleProgresNavButton(interaction, sharedState) {
         return;
     }
 
-    // Defer update (aktualizujemy istniejącą wiadomość)
-    await interaction.deferUpdate();
+    // Defer reply (wysyłamy nową wiadomość)
+    await interaction.deferReply();
 
     try {
         // Pobierz wszystkie tygodnie
@@ -6074,7 +6074,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             return b.weekNumber - a.weekNumber;
         });
 
-        // Oblicz skumulowany progres/regres
+        // Oblicz skumulowany progres/regres (duże liczby dla skumulowanych wartości)
         const formatDifference = (difference) => {
             if (difference > 0) {
                 return `▲ ${difference.toLocaleString('pl-PL')}`;
@@ -6082,6 +6082,21 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                 return `▼ ${Math.abs(difference).toLocaleString('pl-PL')}`;
             }
             return '━';
+        };
+
+        // Małe liczby dla progress barów (tydzień do tygodnia)
+        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+
+        const formatSmallDifference = (difference) => {
+            if (difference > 0) {
+                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                return ` ▲${superscriptNumber}`;
+            } else if (difference < 0) {
+                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                return ` ▼${subscriptNumber}`;
+            }
+            return '';
         };
 
         let cumulativeSection = '';
@@ -6119,15 +6134,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             const filledLength = data.score > 0 ? Math.max(1, Math.round((data.score / maxScore) * barLength)) : 0;
             const progressBar = data.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
+            // Użyj małych liczb dla różnic tydzień-do-tygodnia
             let differenceText = '';
             if (prevData) {
                 const difference = data.score - prevData.score;
-
-                if (difference > 0) {
-                    differenceText = ` ▲ ${difference.toLocaleString('pl-PL')}`;
-                } else if (difference < 0) {
-                    differenceText = ` ▼ ${Math.abs(difference).toLocaleString('pl-PL')}`;
-                }
+                differenceText = formatSmallDifference(difference);
             }
 
             const weekLabel = `${String(data.weekNumber).padStart(2, '0')}/${String(data.year).slice(-2)}`;
