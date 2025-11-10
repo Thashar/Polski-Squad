@@ -6231,8 +6231,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
 
+        // Pobierz klan gracza z najnowszych danych
+        const playerClan = playerProgressData.length > 0 ? playerProgressData[0].clanName : 'Brak';
+
         const embed = new EmbedBuilder()
-            .setTitle(`📈 Progres gracza: ${selectedPlayer}`)
+            .setTitle(`📈 Progres gracza: ${selectedPlayer} (${playerClan})`)
             .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${last54Weeks.length} tygodni):\n\n${resultsText}${expiryInfo}`)
             .setColor('#00FF00')
             .setFooter({ text: `Tygodni z danymi: ${playerProgressData.length}/${last54Weeks.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
