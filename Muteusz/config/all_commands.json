@@ -323,6 +323,12 @@
           "requiredPermission": "public"
         },
         {
+          "name": "/clan-status",
+          "description": "Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów (max 40 na stronę)",
+          "usage": "/clan-status",
+          "requiredPermission": "moderator"
+        },
+        {
           "name": "/modyfikuj",
           "description": "Modyfikuje wyniki faz ekspedycji",
           "usage": "/modyfikuj użytkownik:@user faza:[1/2] [wartość:liczba]",
