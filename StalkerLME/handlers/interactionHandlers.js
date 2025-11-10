@@ -6385,9 +6385,13 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
     const playerMaxScores = new Map();
     // Mapa: playerName -> {clanName, clanKey} (z najnowszego tygodnia)
     const playerCurrentClans = new Map();
+    // Mapa: playerName -> ostatni tydzień w którym wystąpił (indeks w last54Weeks)
+    const playerLastSeenWeek = new Map();
 
     // Iterujemy od najnowszych do najstarszych tygodni
-    for (const week of last54Weeks) {
+    for (let weekIndex = 0; weekIndex < last54Weeks.length; weekIndex++) {
+        const week = last54Weeks[weekIndex];
+
         for (const clan of week.clans) {
             const weekData = await databaseService.getPhase1Results(
                 guildId,
@@ -6412,23 +6416,32 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
                                 clanKey: clan
                             });
                         }
+
+                        // Zapisz ostatni tydzień w którym gracz wystąpił
+                        if (!playerLastSeenWeek.has(player.displayName)) {
+                            playerLastSeenWeek.set(player.displayName, weekIndex);
+                        }
                     }
                 });
             }
         }
     }
 
-    // Konwertuj do tablicy i posortuj po maxScore (malejąco)
+    // Konwertuj do tablicy, filtruj aktywnych graczy i posortuj po maxScore (malejąco)
     const ranking = Array.from(playerMaxScores.entries())
         .map(([playerName, maxScore]) => {
             const clanData = playerCurrentClans.get(playerName);
+            const lastSeenWeek = playerLastSeenWeek.get(playerName);
             return {
                 playerName,
                 maxScore,
                 clanName: clanData?.clanName || 'Brak',
-                clanKey: clanData?.clanKey || 'unknown'
+                clanKey: clanData?.clanKey || 'unknown',
+                lastSeenWeek: lastSeenWeek
             };
         })
+        // Filtruj tylko graczy którzy występowali w ostatnich 4 tygodniach (aktywni w klanie)
+        .filter(player => player.lastSeenWeek !== undefined && player.lastSeenWeek < 4)
         .sort((a, b) => b.maxScore - a.maxScore);
 
     return ranking;
