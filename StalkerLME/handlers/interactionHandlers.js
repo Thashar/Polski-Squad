@@ -6451,7 +6451,7 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
 }
 
 // Funkcja wyświetlająca konkretną stronę rankingu clan-status
-async function showClanStatusPage(interaction, ranking, currentPage, deleteTimestamp, isUpdate = false) {
+async function showClanStatusPage(interaction, ranking, currentPage, deleteTimestamp, viewerDisplayName, isUpdate = false) {
     const PLAYERS_PER_PAGE = 40;
     const totalPages = Math.ceil(ranking.length / PLAYERS_PER_PAGE);
 
@@ -6515,7 +6515,7 @@ async function showClanStatusPage(interaction, ranking, currentPage, deleteTimes
         .setTitle(`🏆 Globalny Ranking - Wszyscy Gracze`)
         .setDescription(`**Najlepsze wyniki z Fazy 1:**\n\n${rankingText}${expiryInfo}`)
         .setColor('#FFD700')
-        .setFooter({ text: `Strona ${currentPage + 1}/${totalPages} | Graczy: ${ranking.length} | Zakres: #${startIndex + 1} - #${endIndex}` })
+        .setFooter({ text: `Strona ${currentPage + 1}/${totalPages} | Graczy: ${ranking.length} | Ogląda: ${viewerDisplayName}` })
         .setTimestamp();
 
     if (isUpdate) {
@@ -6569,8 +6569,11 @@ async function handleClanStatusCommand(interaction, sharedState) {
         const deleteAt = Date.now() + (5 * 60 * 1000);
         const deleteTimestamp = Math.floor(deleteAt / 1000);
 
+        // Pobierz displayName osoby wywołującej komendę
+        const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
+
         // Wyświetl pierwszą stronę
-        await showClanStatusPage(interaction, ranking, 0, deleteTimestamp, false);
+        await showClanStatusPage(interaction, ranking, 0, deleteTimestamp, viewerDisplayName, false);
 
         // Zapisz ranking w cache dla paginacji (używamy message.id jako klucza)
         if (!sharedState.clanStatusPagination) {
@@ -6646,8 +6649,11 @@ async function handleClanStatusPageButton(interaction, sharedState) {
         const deleteAt = Date.now() + (5 * 60 * 1000);
         const deleteTimestamp = Math.floor(deleteAt / 1000);
 
+        // Pobierz displayName osoby klikającej przycisk
+        const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
+
         // Wyświetl nową stronę z nowym timestampem
-        await showClanStatusPage(interaction, paginationData.ranking, newPage, deleteTimestamp, true);
+        await showClanStatusPage(interaction, paginationData.ranking, newPage, deleteTimestamp, viewerDisplayName, true);
 
         // Zaktualizuj scheduled deletion z nowym czasem
         const messageCleanupService = interaction.client.messageCleanupService;
