@@ -539,6 +539,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_user|')) {
         await handleDodajUserSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('progres_select_player|')) {
+        await handleProgresPlayerSelect(interaction, sharedState);
     }
 }
 
@@ -1795,13 +1797,7 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('progres')
-            .setDescription('Wyświetla wykres progresów gracza z ostatnich 40 tygodni')
-            .addStringOption(option =>
-                option.setName('nick')
-                    .setDescription('Nick gracza (pozostaw puste aby zobaczyć swój)')
-                    .setRequired(false)
-                    .setAutocomplete(true)
-            ),
+            .setDescription('Wyświetla wykres progresów gracza z ostatnich 54 tygodni z wyszukiwarką graczy'),
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
@@ -5844,58 +5840,272 @@ async function handleAutocomplete(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        if (interaction.commandName === 'progres') {
-            const focusedValue = interaction.options.getFocused().toLowerCase();
-
-            // Pobierz wszystkie dostępne tygodnie
-            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-
-            if (allWeeks.length === 0) {
-                await interaction.respond([]);
-                return;
-            }
-
-            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
-            const playerNames = new Set();
-
-            // Ogranicz do ostatnich 10 tygodni dla wydajności
-            const recentWeeks = allWeeks.slice(0, 10);
-
-            for (const week of recentWeeks) {
-                for (const clan of week.clans) {
-                    const weekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        week.weekNumber,
-                        week.year,
-                        clan
-                    );
-
-                    if (weekData && weekData.players) {
-                        weekData.players.forEach(player => {
-                            if (player.displayName) {
-                                playerNames.add(player.displayName);
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Filtruj wyniki na podstawie wpisywanego tekstu
-            const filtered = Array.from(playerNames)
-                .filter(name => name.toLowerCase().includes(focusedValue))
-                .sort()
-                .slice(0, 25); // Discord pozwala max 25 opcji
-
-            await interaction.respond(
-                filtered.map(name => ({
-                    name: name,
-                    value: name
-                }))
-            );
-        }
+        // Autocomplete zostało usunięte z komendy /progres
+        // W razie potrzeby można dodać tutaj obsługę dla innych komend
     } catch (error) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
         await interaction.respond([]);
+    }
+}
+
+// Funkcja obsługująca wybór gracza w /progres
+async function handleProgresPlayerSelect(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    // Sprawdź czy użytkownik który kliknął to ten sam który wywołał komendę
+    const [, ownerId] = interaction.customId.split('|');
+    if (interaction.user.id !== ownerId) {
+        await interaction.reply({
+            content: '❌ Tylko osoba która wywołała komendę może zmieniać gracza.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Jeśli to pierwsza interakcja - zaktualizuj ephemeral message i wyślij nową publiczną
+    const isUpdate = interaction.message && !interaction.message.flags.has(MessageFlags.Ephemeral);
+
+    if (!isUpdate) {
+        await interaction.deferUpdate();
+    }
+
+    try {
+        const selectedPlayer = interaction.values[0];
+
+        // Pobierz wszystkie dostępne tygodnie
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const last54Weeks = allWeeks.slice(0, 54);
+
+        // Zbierz dane gracza ze wszystkich tygodni i klanów
+        const playerProgressData = [];
+
+        for (const week of last54Weeks) {
+            for (const clan of week.clans) {
+                const weekData = await databaseService.getPhase1Results(
+                    interaction.guild.id,
+                    week.weekNumber,
+                    week.year,
+                    clan
+                );
+
+                if (weekData && weekData.players) {
+                    const player = weekData.players.find(p =>
+                        p.displayName && p.displayName.toLowerCase() === selectedPlayer.toLowerCase()
+                    );
+
+                    if (player) {
+                        playerProgressData.push({
+                            weekNumber: week.weekNumber,
+                            year: week.year,
+                            clan: clan,
+                            clanName: config.roleDisplayNames[clan],
+                            score: player.score,
+                            createdAt: weekData.createdAt
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (playerProgressData.length === 0) {
+            if (isUpdate) {
+                await interaction.update({
+                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                    embeds: [],
+                    components: []
+                });
+            } else {
+                await interaction.followUp({
+                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+            return;
+        }
+
+        // Posortuj dane od najnowszych do najstarszych
+        playerProgressData.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
+
+        // Oblicz skumulowany progres/regres
+        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+
+        const formatDifference = (difference) => {
+            if (difference > 0) {
+                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                return `▲${superscriptNumber}`;
+            } else if (difference < 0) {
+                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                return `▼${subscriptNumber}`;
+            }
+            return '━';
+        };
+
+        let cumulativeSection = '';
+
+        if (playerProgressData.length >= 4) {
+            const diff = playerProgressData[0].score - playerProgressData[3].score;
+            cumulativeSection += `**🔹 Miesiąc:** ${formatDifference(diff)}\n`;
+        }
+
+        if (playerProgressData.length >= 13) {
+            const diff = playerProgressData[0].score - playerProgressData[12].score;
+            cumulativeSection += `**🔷 Kwartał:** ${formatDifference(diff)}\n`;
+        }
+
+        if (playerProgressData.length >= 26) {
+            const diff = playerProgressData[0].score - playerProgressData[25].score;
+            cumulativeSection += `**🔶 Pół roku:** ${formatDifference(diff)}\n`;
+        }
+
+        if (cumulativeSection) {
+            cumulativeSection += '\n';
+        }
+
+        // Oblicz maksymalny wynik dla progress bara
+        const maxScore = Math.max(...playerProgressData.map(d => d.score));
+
+        // Przygotuj tekst z wynikami
+        const barLength = 10;
+        const resultsLines = [];
+
+        for (let i = 0; i < playerProgressData.length; i++) {
+            const data = playerProgressData[i];
+            const prevData = playerProgressData[i + 1];
+
+            const filledLength = data.score > 0 ? Math.max(1, Math.round((data.score / maxScore) * barLength)) : 0;
+            const progressBar = data.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+            let differenceText = '';
+            if (prevData) {
+                const difference = data.score - prevData.score;
+
+                if (difference > 0) {
+                    const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                    differenceText = ` ▲${superscriptNumber}`;
+                } else if (difference < 0) {
+                    const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                    differenceText = ` ▼${subscriptNumber}`;
+                }
+            }
+
+            const weekLabel = `${String(data.weekNumber).padStart(2, '0')}/${String(data.year).slice(-2)}`;
+            resultsLines.push(`${progressBar} ${weekLabel} - ${data.score.toLocaleString('pl-PL')}${differenceText}`);
+        }
+
+        const resultsText = resultsLines.join('\n');
+
+        // Zbierz listę graczy dla select menu (tak jak w handleProgresCommand)
+        const playerNames = new Set();
+        const recentWeeks = allWeeks.slice(0, 10);
+
+        for (const week of recentWeeks) {
+            for (const clan of week.clans) {
+                const weekData = await databaseService.getPhase1Results(
+                    interaction.guild.id,
+                    week.weekNumber,
+                    week.year,
+                    clan
+                );
+
+                if (weekData && weekData.players) {
+                    weekData.players.forEach(player => {
+                        if (player.displayName) {
+                            playerNames.add(player.displayName);
+                        }
+                    });
+                }
+            }
+        }
+
+        const sortedPlayers = Array.from(playerNames).sort();
+        const playerOptions = sortedPlayers.slice(0, 25).map(name =>
+            new StringSelectMenuOptionBuilder()
+                .setLabel(name)
+                .setValue(name)
+                .setDefault(name === selectedPlayer)
+        );
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`progres_select_player|${ownerId}`)
+            .setPlaceholder('Zmień gracza...')
+            .addOptions(playerOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        // Kanały permanentne
+        const permanentChannels = [
+            '1185510890930458705',
+            '1200055492458856458',
+            '1200414388327292938',
+            '1262792522497921084'
+        ];
+
+        const permanentThreads = ['1346401063858606092'];
+
+        const currentChannelId = interaction.channelId;
+        const parentChannelId = interaction.channel?.parentId || interaction.channel?.parent?.id;
+        const isPermanentChannel = permanentChannels.includes(currentChannelId) ||
+                                   (parentChannelId && permanentChannels.includes(parentChannelId)) ||
+                                   permanentThreads.includes(currentChannelId);
+
+        const messageCleanupService = interaction.client.messageCleanupService;
+        const shouldAutoDelete = !isPermanentChannel;
+        const deleteAt = shouldAutoDelete ? Date.now() + (5 * 60 * 1000) : null;
+        const deleteTimestamp = deleteAt ? Math.floor(deleteAt / 1000) : null;
+
+        const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
+
+        const embed = new EmbedBuilder()
+            .setTitle(`📈 Progres gracza: ${selectedPlayer}`)
+            .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${playerProgressData.length} tygodni):\n\n${resultsText}${expiryInfo}`)
+            .setColor('#00FF00')
+            .setFooter({ text: `Łącznie tygodni: ${playerProgressData.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
+            .setTimestamp();
+
+        let messageToSchedule;
+
+        if (isUpdate) {
+            // Aktualizuj istniejącą wiadomość
+            await interaction.update({
+                embeds: [embed],
+                components: [row]
+            });
+            messageToSchedule = interaction.message;
+        } else {
+            // Wyślij nową publiczną wiadomość
+            const response = await interaction.followUp({
+                embeds: [embed],
+                components: [row]
+            });
+            messageToSchedule = response;
+        }
+
+        // Zaplanuj/zaktualizuj usunięcie wiadomości
+        if (messageToSchedule && messageCleanupService && shouldAutoDelete) {
+            if (isUpdate) {
+                await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
+            }
+            await messageCleanupService.scheduleMessageDeletion(
+                messageToSchedule.id,
+                messageToSchedule.channelId,
+                deleteAt,
+                ownerId
+            );
+        } else if (messageToSchedule && messageCleanupService && !shouldAutoDelete && isUpdate) {
+            await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
+        }
+
+    } catch (error) {
+        logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);
+        await interaction.followUp({
+            content: '❌ Wystąpił błąd podczas pobierania danych progresu.',
+            flags: MessageFlags.Ephemeral
+        });
     }
 }
 
@@ -5920,17 +6130,9 @@ async function handleProgresCommand(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-        // Pobierz nick z opcji lub użyj nicku użytkownika
-        let targetPlayerName = interaction.options.getString('nick');
-
-        if (!targetPlayerName) {
-            // Użyj displayName użytkownika który wywołał komendę
-            targetPlayerName = interaction.member.displayName;
-        }
-
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
 
@@ -5941,13 +6143,11 @@ async function handleProgresCommand(interaction, sharedState) {
             return;
         }
 
-        // Ogranicz do 54 ostatnich tygodni
-        const last54Weeks = allWeeks.slice(0, 54);
+        // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni (ostatnie 10 tygodni dla wydajności)
+        const playerNames = new Set();
+        const recentWeeks = allWeeks.slice(0, 10);
 
-        // Zbierz dane gracza ze wszystkich tygodni i klanów
-        const playerProgressData = [];
-
-        for (const week of last54Weeks) {
+        for (const week of recentWeeks) {
             for (const clan of week.clans) {
                 const weekData = await databaseService.getPhase1Results(
                     interaction.guild.id,
@@ -5957,173 +6157,48 @@ async function handleProgresCommand(interaction, sharedState) {
                 );
 
                 if (weekData && weekData.players) {
-                    const player = weekData.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === targetPlayerName.toLowerCase()
-                    );
-
-                    if (player) {
-                        playerProgressData.push({
-                            weekNumber: week.weekNumber,
-                            year: week.year,
-                            clan: clan,
-                            clanName: config.roleDisplayNames[clan],
-                            score: player.score,
-                            createdAt: weekData.createdAt
-                        });
-                        break; // Znaleziono gracza w tym klanie, przejdź do następnego tygodnia
-                    }
+                    weekData.players.forEach(player => {
+                        if (player.displayName) {
+                            playerNames.add(player.displayName);
+                        }
+                    });
                 }
             }
         }
 
-        if (playerProgressData.length === 0) {
+        const sortedPlayers = Array.from(playerNames).sort();
+
+        if (sortedPlayers.length === 0) {
             await interaction.editReply({
-                content: `❌ Nie znaleziono żadnych wyników dla gracza **${targetPlayerName}** w ostatnich 54 tygodniach.`
+                content: '❌ Nie znaleziono żadnych graczy w ostatnich tygodniach.'
             });
             return;
         }
 
-        // Posortuj dane od najnowszych do najstarszych
-        playerProgressData.sort((a, b) => {
-            if (a.year !== b.year) return b.year - a.year;
-            return b.weekNumber - a.weekNumber;
-        });
+        // Utwórz select menu z graczami (max 25)
+        const playerOptions = sortedPlayers.slice(0, 25).map(name =>
+            new StringSelectMenuOptionBuilder()
+                .setLabel(name)
+                .setValue(name)
+        );
 
-        // Oblicz skumulowany progres/regres dla różnych okresów
-        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
-        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`progres_select_player|${interaction.user.id}`)
+            .setPlaceholder('Wybierz gracza...')
+            .addOptions(playerOptions);
 
-        const formatDifference = (difference) => {
-            if (difference > 0) {
-                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                return `▲${superscriptNumber}`;
-            } else if (difference < 0) {
-                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                return `▼${subscriptNumber}`;
-            }
-            return '━';
-        };
+        const row = new ActionRowBuilder().addComponents(selectMenu);
 
-        let cumulativeSection = '';
-
-        // Progres z 4 tygodni (miesiąc)
-        if (playerProgressData.length >= 4) {
-            const current = playerProgressData[0].score;
-            const past = playerProgressData[3].score;
-            const diff = current - past;
-            cumulativeSection += `**🔹 Miesiąc:** ${formatDifference(diff)}\n`;
-        }
-
-        // Progres z 13 tygodni (kwartał)
-        if (playerProgressData.length >= 13) {
-            const current = playerProgressData[0].score;
-            const past = playerProgressData[12].score;
-            const diff = current - past;
-            cumulativeSection += `**🔷 Kwartał:** ${formatDifference(diff)}\n`;
-        }
-
-        // Progres z 26 tygodni (pół roku)
-        if (playerProgressData.length >= 26) {
-            const current = playerProgressData[0].score;
-            const past = playerProgressData[25].score;
-            const diff = current - past;
-            cumulativeSection += `**🔶 Pół roku:** ${formatDifference(diff)}\n`;
-        }
-
-        if (cumulativeSection) {
-            cumulativeSection += '\n';
-        }
-
-        // Oblicz maksymalny wynik dla progress bara
-        const maxScore = Math.max(...playerProgressData.map(d => d.score));
-
-        // Przygotuj tekst z wynikami
-        const barLength = 10;
-        const resultsLines = [];
-
-        for (let i = 0; i < playerProgressData.length; i++) {
-            const data = playerProgressData[i];
-            const prevData = playerProgressData[i + 1]; // Poprzedni tydzień (starszy)
-
-            // Progress bar
-            const filledLength = data.score > 0 ? Math.max(1, Math.round((data.score / maxScore) * barLength)) : 0;
-            const progressBar = data.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
-
-            // Oblicz różnicę względem poprzedniego tygodnia
-            let differenceText = '';
-            if (prevData) {
-                const difference = data.score - prevData.score;
-
-                if (difference > 0) {
-                    // Wzrost - użyj strzałki w górę z superscriptem
-                    const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
-                    const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                    differenceText = ` ▲${superscriptNumber}`;
-                } else if (difference < 0) {
-                    // Spadek - użyj strzałki w dół z subscriptem
-                    const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
-                    const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                    differenceText = ` ▼${subscriptNumber}`;
-                }
-            }
-
-            // Format: tydzień/rok
-            const weekLabel = `${String(data.weekNumber).padStart(2, '0')}/${String(data.year).slice(-2)}`;
-
-            resultsLines.push(`${progressBar} ${weekLabel} - ${data.score.toLocaleString('pl-PL')}${differenceText}`);
-        }
-
-        const resultsText = resultsLines.join('\n');
-
-        // Kanały permanentne (bez auto-delete) - te same co w /wyniki
-        const permanentChannels = [
-            '1185510890930458705',
-            '1200055492458856458',
-            '1200414388327292938',
-            '1262792522497921084'
-        ];
-
-        const permanentThreads = [
-            '1346401063858606092'
-        ];
-
-        // Sprawdź czy to specjalny kanał lub wątek
-        const currentChannelId = interaction.channelId;
-        const parentChannelId = interaction.channel?.parentId || interaction.channel?.parent?.id;
-        const isPermanentChannel = permanentChannels.includes(currentChannelId) ||
-                                   (parentChannelId && permanentChannels.includes(parentChannelId)) ||
-                                   permanentThreads.includes(currentChannelId);
-
-        // Oblicz timestamp usunięcia (5 minut od teraz)
-        const messageCleanupService = interaction.client.messageCleanupService;
-        const shouldAutoDelete = !isPermanentChannel;
-        const deleteAt = shouldAutoDelete ? Date.now() + (5 * 60 * 1000) : null;
-        const deleteTimestamp = deleteAt ? Math.floor(deleteAt / 1000) : null;
-
-        // Informacja o wygaśnięciu
-        const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
-
-        // Stwórz embed
         const embed = new EmbedBuilder()
-            .setTitle(`📈 Progres gracza: ${targetPlayerName}`)
-            .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${playerProgressData.length} tygodni):\n\n${resultsText}${expiryInfo}`)
-            .setColor('#00FF00')
-            .setFooter({ text: `Łącznie tygodni: ${playerProgressData.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
+            .setTitle('📈 Progres gracza')
+            .setDescription('Wybierz gracza z listy, aby zobaczyć jego progres z ostatnich 54 tygodni.')
+            .setColor('#0099FF')
             .setTimestamp();
 
-        const response = await interaction.editReply({
-            embeds: [embed]
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
         });
-
-        // Zaplanuj usunięcie wiadomości po 5 minutach (jeśli nie jest to permanentny kanał)
-        if (response && messageCleanupService && shouldAutoDelete) {
-            await messageCleanupService.scheduleMessageDeletion(
-                response.id,
-                response.channelId,
-                deleteAt,
-                interaction.user.id
-            );
-        }
 
     } catch (error) {
         logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);

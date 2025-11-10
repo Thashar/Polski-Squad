@@ -306,8 +306,8 @@
         },
         {
           "name": "/progres",
-          "description": "Wyświetla wykres progresów gracza z ostatnich 54 tygodni z podsumowaniem miesięcznym, kwartalnym i półrocznym",
-          "usage": "/progres [nick:nazwa gracza]",
+          "description": "Wyświetla wykres progresów gracza z ostatnich 54 tygodni z interaktywną wyszukiwarką",
+          "usage": "/progres - wybierz gracza z listy",
           "requiredPermission": "public"
         },
         {
