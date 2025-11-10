@@ -6,12 +6,13 @@ const WarningService = require('../services/warningService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.messageHandler = messageHandler;
         this.roleKickingService = roleKickingService;
+        this.chaosService = chaosService;
         this.warningService = new WarningService(config, logger);
     }
 
@@ -260,6 +261,24 @@ class InteractionHandler {
                 ),
 
             new SlashCommandBuilder()
+                .setName('chaos-mode')
+                .setDescription('Włącza/wyłącza Chaos Mode - losowe nadawanie ról użytkownikom')
+                .addStringOption(option =>
+                    option.setName('tryb')
+                        .setDescription('Włącz lub wyłącz Chaos Mode')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Włącz', value: 'on' },
+                            { name: 'Wyłącz', value: 'off' }
+                        )
+                )
+                .addStringOption(option =>
+                    option.setName('rola_id')
+                        .setDescription('ID roli do nadawania (wymagane tylko przy włączaniu)')
+                        .setRequired(false)
+                ),
+
+            new SlashCommandBuilder()
                 .setName('komendy')
                 .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów')
         ];
@@ -338,6 +357,9 @@ class InteractionHandler {
                     break;
                 case 'add-roles':
                     await this.handleAddRolesCommand(interaction);
+                    break;
+                case 'chaos-mode':
+                    await this.handleChaosModeCommand(interaction);
                     break;
                 case 'komendy':
                     await this.handleKomendyCommand(interaction);
@@ -2731,6 +2753,105 @@ class InteractionHandler {
             await this.logService.logMessage('error', `Błąd podczas nadawania ról: ${error.message}`, interaction);
             await interaction.editReply({
                 content: `❌ Wystąpił błąd podczas nadawania ról: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Obsługuje komendę chaos mode
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleChaosModeCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /chaos-mode`, interaction);
+
+        // Sprawdź uprawnienia administratora
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy!',
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /chaos-mode bez uprawnień`, interaction);
+            return;
+        }
+
+        // Sprawdź czy chaosService jest dostępny
+        if (!this.chaosService) {
+            await interaction.reply({
+                content: '❌ Chaos Service nie jest zainicjalizowany!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        const mode = interaction.options.getString('tryb');
+        const roleId = interaction.options.getString('rola_id');
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            if (mode === 'on') {
+                // Włączanie Chaos Mode
+                if (!roleId) {
+                    await interaction.editReply({
+                        content: '❌ Musisz podać ID roli przy włączaniu Chaos Mode!\nPrzykład: `/chaos-mode tryb:Włącz rola_id:1234567890`'
+                    });
+                    return;
+                }
+
+                // Walidacja ID roli
+                if (!/^\d+$/.test(roleId)) {
+                    await interaction.editReply({
+                        content: '❌ Nieprawidłowe ID roli! Upewnij się, że podałeś samo ID (same cyfry).'
+                    });
+                    return;
+                }
+
+                // Sprawdź czy rola istnieje
+                try {
+                    const role = await interaction.guild.roles.fetch(roleId);
+                    if (!role) {
+                        await interaction.editReply({
+                            content: '❌ Nie znaleziono roli o podanym ID na tym serwerze!'
+                        });
+                        return;
+                    }
+
+                    // Sprawdź hierarchię ról
+                    if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                        await interaction.editReply({
+                            content: `❌ Nie mogę nadawać roli **${role.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`
+                        });
+                        return;
+                    }
+                } catch (error) {
+                    await interaction.editReply({
+                        content: '❌ Nie znaleziono roli o podanym ID na tym serwerze!'
+                    });
+                    return;
+                }
+
+                // Włącz Chaos Mode
+                const result = await this.chaosService.enableChaosMode(roleId);
+                await interaction.editReply({ content: result.message });
+
+                if (result.success) {
+                    await this.logService.logMessage('success', `Chaos Mode włączony przez ${interaction.user.tag}, rola: ${roleId}`, interaction);
+                }
+
+            } else if (mode === 'off') {
+                // Wyłączanie Chaos Mode
+                const result = await this.chaosService.disableChaosMode();
+                await interaction.editReply({ content: result.message });
+
+                if (result.success) {
+                    await this.logService.logMessage('success', `Chaos Mode wyłączony przez ${interaction.user.tag}`, interaction);
+                }
+            }
+
+        } catch (error) {
+            await this.logService.logMessage('error', `Błąd podczas obsługi /chaos-mode: ${error.message}`, interaction);
+            await interaction.editReply({
+                content: `❌ Wystąpił błąd: ${error.message}`
             });
         }
     }

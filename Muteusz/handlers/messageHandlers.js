@@ -7,17 +7,18 @@ const SpamDetectionService = require('../services/spamDetectionService');
 const logger = createBotLogger('Muteusz');
 
 class MessageHandler {
-    constructor(config, mediaService, logService) {
+    constructor(config, mediaService, logService, chaosService = null) {
         this.config = config;
         this.mediaService = mediaService;
         this.logService = logService;
+        this.chaosService = chaosService;
         this.logger = logger; // Przypisz logger do this.logger
         this.warningService = new WarningService(config, logger);
         this.autoModerationService = new AutoModerationService(config, logger, this.warningService);
         this.spamDetectionService = new SpamDetectionService(config, logger);
         this.imageBlockService = null;
         this.wordBlockService = null;
-        
+
         // Uruchom czyszczenie co 5 minut
         setInterval(() => {
             this.autoModerationService.cleanup();
@@ -80,7 +81,16 @@ class MessageHandler {
                 return; // Zatrzymaj dalsze przetwarzanie jeśli słowa zostały zablokowane
             }
         }
-        
+
+        // Obsługa Chaos Mode (losowe nadawanie ról i odpowiedzi)
+        if (this.chaosService) {
+            try {
+                await this.chaosService.handleMessage(message);
+            } catch (error) {
+                logger.error(`❌ Błąd w Chaos Mode: ${error.message}`);
+            }
+        }
+
         // Losowa odpowiedź dla użytkowników z rolą Virtutti Papajlari
         if (message.member && message.member.roles.cache.has(this.config.randomResponse.virtuttiPapajlariRoleId)) {
             const randomChance = Math.floor(Math.random() * this.config.randomResponse.virtuttiPapajlariChance) + 1;
