@@ -322,7 +322,7 @@ class InteractionHandler {
             if (this.gameService.triggerSetBy) {
                 try {
                     const setByMember = await interaction.guild.members.fetch(this.gameService.triggerSetBy);
-                    const setByName = setByMember.nickname || setByMember.user.username;
+                    const setByName = setByMember.displayName;
                     passwordInfo += `\n**Ustawił:** ${setByName}`;
                 } catch {
                     passwordInfo += `\n**Ustawił:** Nieznany użytkownik`;
@@ -379,7 +379,7 @@ class InteractionHandler {
                 activePlayersEntries.map(async ([userId, attempts], index) => {
                     try {
                         const member = await interaction.guild.members.fetch(userId);
-                        const name = member.nickname || member.user.username;
+                        const name = member.displayName;
                         return `${index + 1}. ${name} - ${attempts} prób`;
                     } catch {
                         return `${index + 1}. Nieznany użytkownik - ${attempts} prób`;
@@ -422,7 +422,7 @@ class InteractionHandler {
             ranking.map(async ([userId, points], index) => {
                 try {
                     const member = await interaction.guild.members.fetch(userId);
-                    const name = member.nickname || member.user.username;
+                    const name = member.displayName;
                     const medalCount = this.gameService.virtuttiMedals[userId] || 0;
                     const medalIcons = medalCount > 0 ? ` ${this.config.emojis.virtuttiPapajlari.repeat(medalCount)}` : '';
                     return `${index + 1}. ${name} - ${points}${this.config.emojis.medal}${medalIcons}`;
@@ -460,12 +460,12 @@ class InteractionHandler {
                 try {
                     const setByMember = game.setBy ? await interaction.guild.members.fetch(game.setBy) : null;
                     const solvedByMember = await interaction.guild.members.fetch(game.solvedBy);
-                    
-                    const setByName = setByMember ? (setByMember.nickname || setByMember.user.username) : 'System';
-                    const solvedByName = solvedByMember.nickname || solvedByMember.user.username;
-                    
+
+                    const setByName = setByMember ? setByMember.displayName : 'System';
+                    const solvedByName = solvedByMember.displayName;
+
                     const duration = this.formatDuration(game.duration);
-                    
+
                     return `\`${(index + 1).toString().padStart(2, '0')}.\` **${game.password}**\n` +
                            `🎯 Ustawił: ${setByName} | ✅ Odgadł: ${solvedByName}\n` +
                            `⏱️ Czas: ${duration} | 🎲 Próby: ${game.totalAttempts} | 💡 Podpowiedzi: ${game.hintsUsed}`;
@@ -549,7 +549,7 @@ class InteractionHandler {
                 allMedalHolders.map(async ([userId, count], index) => {
                     try {
                         const member = await interaction.guild.members.fetch(userId);
-                        const name = member.nickname || member.user.username;
+                        const name = member.displayName;
                         const medalIcons = this.config.emojis.virtuttiPapajlari.repeat(count);
                         return `${index + 1}. ${name} - ${medalIcons} (${count})`;
                     } catch {
