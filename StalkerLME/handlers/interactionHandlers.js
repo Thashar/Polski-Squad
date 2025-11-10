@@ -6381,9 +6381,12 @@ async function handleWynikiCommand(interaction, sharedState) {
 
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
 async function createGlobalPlayerRanking(guildId, databaseService, config, last54Weeks) {
-    // Mapa: playerName -> {maxScore, clanName, clanKey}
-    const playerData = new Map();
+    // Mapa: playerName -> maxScore
+    const playerMaxScores = new Map();
+    // Mapa: playerName -> {clanName, clanKey} (z najnowszego tygodnia)
+    const playerCurrentClans = new Map();
 
+    // Iterujemy od najnowszych do najstarszych tygodni
     for (const week of last54Weeks) {
         for (const clan of week.clans) {
             const weekData = await databaseService.getPhase1Results(
@@ -6396,12 +6399,15 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
             if (weekData && weekData.players) {
                 weekData.players.forEach(player => {
                     if (player.displayName && player.score > 0) {
-                        const existing = playerData.get(player.displayName);
+                        // Aktualizuj maxScore jeśli wyższy
+                        const currentMax = playerMaxScores.get(player.displayName) || 0;
+                        if (player.score > currentMax) {
+                            playerMaxScores.set(player.displayName, player.score);
+                        }
 
-                        // Jeśli gracz nie istnieje lub ma niższy wynik - zaktualizuj
-                        if (!existing || player.score > existing.maxScore) {
-                            playerData.set(player.displayName, {
-                                maxScore: player.score,
+                        // Zapisz klan tylko jeśli to pierwsze występowanie gracza (najnowszy tydzień)
+                        if (!playerCurrentClans.has(player.displayName)) {
+                            playerCurrentClans.set(player.displayName, {
                                 clanName: config.roleDisplayNames[clan],
                                 clanKey: clan
                             });
@@ -6413,13 +6419,16 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
     }
 
     // Konwertuj do tablicy i posortuj po maxScore (malejąco)
-    const ranking = Array.from(playerData.entries())
-        .map(([playerName, data]) => ({
-            playerName,
-            maxScore: data.maxScore,
-            clanName: data.clanName,
-            clanKey: data.clanKey
-        }))
+    const ranking = Array.from(playerMaxScores.entries())
+        .map(([playerName, maxScore]) => {
+            const clanData = playerCurrentClans.get(playerName);
+            return {
+                playerName,
+                maxScore,
+                clanName: clanData?.clanName || 'Brak',
+                clanKey: clanData?.clanKey || 'unknown'
+            };
+        })
         .sort((a, b) => b.maxScore - a.maxScore);
 
     return ranking;
