@@ -6145,17 +6145,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                 const filledLength = score > 0 ? Math.max(1, Math.round((score / maxScore) * barLength)) : 0;
                 const progressBar = score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
-                // Oblicz różnicę z poprzednim tygodniem (jeśli istnieje)
+                // Oblicz różnicę względem najlepszego wyniku w historii
                 let differenceText = '';
-                if (i < last54Weeks.length - 1) {
-                    const prevWeek = last54Weeks[i + 1];
-                    const prevWeekKey = `${prevWeek.weekNumber}-${prevWeek.year}`;
-                    const prevScore = playerScoreMap.get(prevWeekKey);
-
-                    if (prevScore !== undefined) {
-                        const difference = score - prevScore;
-                        differenceText = formatSmallDifference(difference);
-                    }
+                const difference = score - maxScore;
+                if (difference !== 0) {
+                    differenceText = formatSmallDifference(difference);
                 }
 
                 resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
