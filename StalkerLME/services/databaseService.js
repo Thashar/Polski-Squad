@@ -209,6 +209,9 @@ class DatabaseService {
         }
 
         punishments[guildId][userId].points = Math.max(0, punishments[guildId][userId].points - points);
+        // Odejmij także od lifetime_points
+        punishments[guildId][userId].lifetime_points = Math.max(0, punishments[guildId][userId].lifetime_points - points);
+
         punishments[guildId][userId].history.push({
             points: -points,
             reason: 'Ręczne usunięcie punktów',
