@@ -20,7 +20,7 @@ class ChaosService {
 
         // Szanse
         this.ROLE_CHANCE = 0.10; // 10% szansa na otrzymanie roli
-        this.RESPONSE_CHANCE = 0.01; // 1% szansa na odpowiedź bota
+        this.RESPONSE_CHANCE = 0.05; // 5% szansa na odpowiedź bota (1/20)
         this.ROLE_DURATION = 15 * 60 * 1000; // 15 minut w milisekundach
 
         // Emoji do odpowiedzi
@@ -140,7 +140,7 @@ class ChaosService {
             logger.info(`🔥 Chaos Mode włączony! Rola: ${roleId}`);
             return {
                 success: true,
-                message: `✅ Chaos Mode został włączony!\n🎲 Rola: <@&${roleId}>\n📊 Szansa na rolę: **10%**\n⏰ Czas trwania roli: **15 minut**\n💬 Szansa na odpowiedź bota: **1%**`
+                message: `✅ Chaos Mode został włączony!\n🎲 Rola: <@&${roleId}>\n📊 Szansa na rolę: **10%**\n⏰ Czas trwania roli: **15 minut**\n💬 Szansa na odpowiedź bota: **5%** (1 na 20)`
             };
         } catch (error) {
             logger.error(`❌ Błąd włączania Chaos Mode: ${error.message}`);
@@ -214,7 +214,7 @@ class ChaosService {
             }
         }
 
-        // 2. Jeśli użytkownik ma rolę, losuj czy bot odpowie (1% szansa)
+        // 2. Jeśli użytkownik ma rolę, losuj czy bot odpowie (5% szansa, 1/20)
         if (hasRole) {
             const randomResponse = Math.random();
             if (randomResponse < this.RESPONSE_CHANCE) {
@@ -311,7 +311,7 @@ class ChaosService {
         try {
             const randomEmoji = this.responseEmojis[Math.floor(Math.random() * this.responseEmojis.length)];
             await message.reply(randomEmoji);
-            logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź do ${message.author.tag} (1% szansa)`);
+            logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź do ${message.author.tag} (5% szansa, 1/20)`);
         } catch (error) {
             logger.error(`❌ Błąd wysyłania losowej odpowiedzi chaos: ${error.message}`);
         }

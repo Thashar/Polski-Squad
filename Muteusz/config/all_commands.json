@@ -108,7 +108,7 @@
         },
         {
           "name": "/chaos-mode",
-          "description": "Włącza/wyłącza Chaos Mode - losowe nadawanie ról użytkownikom (10% szansa, 15 minut, 1% odpowiedź)",
+          "description": "Włącza/wyłącza Chaos Mode - losowe nadawanie ról użytkownikom (10% szansa, 15 minut, 5% odpowiedź)",
           "usage": "/chaos-mode tryb:[Włącz/Wyłącz] [rola_id:ID roli]",
           "requiredPermission": "administrator"
         }
