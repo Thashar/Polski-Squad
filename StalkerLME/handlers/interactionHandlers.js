@@ -428,7 +428,14 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 // Dodaj licznik przypomnień przy nicku
                 const reminderCount = reminderStats[userId] || 0;
                 const reminderBadge = reminderCount > 0 ? ` [📢 ${reminderCount}]` : '';
-                membersList += `${count + 1}. ${member.displayName}${reminderBadge}\n`;
+
+                // Sprawdź role karania i zakazu loterii
+                const hasPunishmentRole = member.roles.cache.has(config.punishmentRoleId);
+                const hasLotteryBanRole = member.roles.cache.has(config.lotteryBanRoleId);
+                const punishmentBadge = hasPunishmentRole ? ' 🎭' : '';
+                const lotteryBanBadge = hasLotteryBanRole ? ' 🚨' : '';
+
+                membersList += `${count + 1}. ${member.displayName}${punishmentBadge}${lotteryBanBadge}${reminderBadge}\n`;
                 count++;
             }
         }
