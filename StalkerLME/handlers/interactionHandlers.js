@@ -5447,11 +5447,14 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
         return `${progressBar} ${position}. ${displayName} - ${player.score}`;
     }).join('\n');
 
+    // Pobierz displayName osoby oglądającej
+    const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
+
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - Faza 2 - ${viewTitle}`)
         .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${top30Text}\n${resultsText}`)
         .setColor('#0099FF')
-        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
+        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')} | Ogląda: ${viewerDisplayName}` })
         .setTimestamp();
 
     // Przyciski nawigacji między rundami
@@ -5765,11 +5768,14 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     // Opis z informacją o wygaśnięciu - NIE pokazuj na specjalnych kanałach/wątkach
     const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
 
+    // Pobierz displayName osoby oglądającej
+    const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
+
     const embed = new EmbedBuilder()
         .setTitle(`📊 Wyniki - ${viewTitle}`)
         .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n${descriptionExtra}\n${resultsText}${top3Section}${expiryInfo}`)
         .setColor('#0099FF')
-        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')}` })
+        .setFooter({ text: `Łącznie graczy: ${sortedPlayers.length} | Zapisano: ${new Date(weekData.createdAt).toLocaleDateString('pl-PL')} | Ogląda: ${viewerDisplayName}` })
         .setTimestamp();
 
     // Przyciski nawigacji między fazami
