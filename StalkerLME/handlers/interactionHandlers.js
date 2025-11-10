@@ -421,11 +421,11 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             const userIds = Array.from(members.keys());
             const reminderStats = await reminderUsageService.getMultipleUserStats(userIds);
 
-            // Najpierw zlicz wszystkie punkty dla wszystkich członków (nie tylko widocznych)
+            // Najpierw zlicz wszystkie punkty LIFETIME dla wszystkich członków (nie tylko widocznych)
             for (const [userId, member] of members) {
                 const userPunishment = guildPunishments[userId];
-                const punishmentPoints = userPunishment ? userPunishment.points : 0;
-                totalPunishmentPoints += punishmentPoints;
+                const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
+                totalPunishmentPoints += lifetimePoints;
             }
 
             // Teraz wyświetl listę członków (z limitem 50)
@@ -437,9 +437,9 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                     break;
                 }
 
-                // Pobierz punkty kary dla tego użytkownika
+                // Pobierz punkty kary LIFETIME dla tego użytkownika
                 const userPunishment = guildPunishments[userId];
-                const punishmentPoints = userPunishment ? userPunishment.points : 0;
+                const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
 
                 // Dodaj licznik przypomnień przy nicku
                 const reminderCount = reminderStats[userId] || 0;
@@ -451,8 +451,8 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 const punishmentBadge = hasPunishmentRole ? ' 🎭' : '';
                 const lotteryBanBadge = hasLotteryBanRole ? ' 🚨' : '';
 
-                // Dodaj punkty przy nicku jeśli ma jakieś punkty
-                const pointsBadge = punishmentPoints > 0 ? ` (${punishmentPoints} pkt)` : '';
+                // Dodaj punkty LIFETIME przy nicku jeśli ma jakieś punkty
+                const pointsBadge = lifetimePoints > 0 ? ` (${lifetimePoints} pkt)` : '';
 
                 membersList += `${count + 1}. ${member.displayName}${punishmentBadge}${lotteryBanBadge}${pointsBadge}${reminderBadge}\n`;
                 count++;
@@ -470,7 +470,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         
         const embed = new EmbedBuilder()
             .setTitle(`🔧 Debug - ${roleName}`)
-            .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}\n**🔥 Suma punktów kary:** ${totalPunishmentPoints}`)
+            .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}\n**🏆 Suma punktów kary (kariera):** ${totalPunishmentPoints}`)
             .addFields(
                 { name: '👥 Członkowie', value: membersList.length > 1024 ? membersList.substring(0, 1020) + '...' : membersList, inline: false },
                 { name: '🎭 Rola karania (2+ pkt)', value: punishmentRoleInfo, inline: true },

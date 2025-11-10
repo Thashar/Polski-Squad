@@ -138,6 +138,7 @@ class DatabaseService {
         if (!punishments[guildId][userId]) {
             punishments[guildId][userId] = {
                 points: 0,
+                lifetime_points: 0,
                 history: []
             };
         }
@@ -163,13 +164,24 @@ class DatabaseService {
             logger.info('👤 Tworzenie nowego użytkownika w bazie...');
             punishments[guildId][userId] = {
                 points: 0,
+                lifetime_points: 0,
                 history: []
             };
         }
-        
+
+        // Zapewnij że lifetime_points istnieje (dla starych rekordów)
+        if (!punishments[guildId][userId].lifetime_points) {
+            punishments[guildId][userId].lifetime_points = 0;
+        }
+
         const oldPoints = punishments[guildId][userId].points;
         punishments[guildId][userId].points += points;
         const newPoints = punishments[guildId][userId].points;
+
+        // Zwiększ lifetime_points (tylko jeśli dodajemy punkty, nie odejmujemy)
+        if (points > 0) {
+            punishments[guildId][userId].lifetime_points += points;
+        }
         
         punishments[guildId][userId].history.push({
             points: points,
@@ -186,22 +198,28 @@ class DatabaseService {
 
     async removePunishmentPoints(guildId, userId, points) {
         const punishments = await this.loadPunishments();
-        
+
         if (!punishments[guildId] || !punishments[guildId][userId]) {
             return null;
         }
-        
+
+        // Zapewnij że lifetime_points istnieje (dla starych rekordów)
+        if (!punishments[guildId][userId].lifetime_points) {
+            punishments[guildId][userId].lifetime_points = 0;
+        }
+
         punishments[guildId][userId].points = Math.max(0, punishments[guildId][userId].points - points);
         punishments[guildId][userId].history.push({
             points: -points,
             reason: 'Ręczne usunięcie punktów',
             date: new Date().toISOString()
         });
-        
-        if (punishments[guildId][userId].points === 0) {
+
+        // Usuń użytkownika TYLKO jeśli ma 0 punktów i 0 lifetime_points
+        if (punishments[guildId][userId].points === 0 && punishments[guildId][userId].lifetime_points === 0) {
             delete punishments[guildId][userId];
         }
-        
+
         await this.savePunishments(punishments);
         return punishments[guildId][userId];
     }
@@ -249,6 +267,11 @@ class DatabaseService {
             let usersInGuild = 0;
             
             for (const userId in punishments[guildId]) {
+                // Zapewnij że lifetime_points istnieje (dla starych rekordów)
+                if (!punishments[guildId][userId].lifetime_points) {
+                    punishments[guildId][userId].lifetime_points = 0;
+                }
+
                 const oldPoints = punishments[guildId][userId].points;
                 if (oldPoints > 0) {
                     punishments[guildId][userId].points = Math.max(0, oldPoints - 1);
@@ -261,11 +284,11 @@ class DatabaseService {
                     logger.info(`➖ Użytkownik ${userId}: ${oldPoints} -> ${newPoints} punktów (usunięto 1)`);
                     totalCleaned++;
                     usersInGuild++;
-                    
-                    // Jeśli użytkownik ma teraz 0 punktów, usuń go z bazy
-                    if (newPoints === 0) {
+
+                    // Usuń użytkownika TYLKO jeśli ma 0 punktów i 0 lifetime_points (stary rekord)
+                    if (newPoints === 0 && (!punishments[guildId][userId].lifetime_points || punishments[guildId][userId].lifetime_points === 0)) {
                         delete punishments[guildId][userId];
-                        logger.info(`🗑️ Użytkownik ${userId}: usunięty z bazy (0 punktów)`);
+                        logger.info(`🗑️ Użytkownik ${userId}: usunięty z bazy (0 punktów, 0 lifetime_points)`);
                     }
                 } else {
                     logger.info(`⏭️ Użytkownik ${userId}: już ma 0 punktów, pomijam`);
