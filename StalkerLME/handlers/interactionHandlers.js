@@ -6449,10 +6449,11 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
         const progressBar = player.maxScore > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
         // Wyciągnij emotkę klanu z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
-        const clanEmoji = player.clanName.charAt(0);
+        // Użyj Array.from() aby poprawnie wyodrębnić emoji (surrogate pairs)
+        const clanEmoji = Array.from(player.clanName)[0];
         const formattedScore = player.maxScore.toLocaleString('pl-PL');
 
-        return `${progressBar} ${clanEmoji} ${player.playerName} - ${formattedScore}`;
+        return `${globalRank}. ${progressBar} ${clanEmoji} ${player.playerName} - ${formattedScore}`;
     });
 
     const rankingText = rankingLines.join('\n');
@@ -6484,7 +6485,7 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
 
     const embed = new EmbedBuilder()
         .setTitle(`🏆 Globalny Ranking - Wszyscy Gracze`)
-        .setDescription(`**Najlepsze wyniki z Fazy 1** (ostatnie 54 tygodnie):\n\n${rankingText}`)
+        .setDescription(`**Najlepsze wyniki z Fazy 1:**\n\n${rankingText}`)
         .setColor('#FFD700')
         .setFooter({ text: `Strona ${currentPage + 1}/${totalPages} | Graczy: ${ranking.length} | Zakres: #${startIndex + 1} - #${endIndex}` })
         .setTimestamp();
