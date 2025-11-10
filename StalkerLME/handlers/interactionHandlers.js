@@ -2896,7 +2896,7 @@ async function showPhase1FinalSummary(interaction, session, phaseService) {
 
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
-        const barLength = 16;
+        const barLength = 8;
         const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
         const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
@@ -3511,7 +3511,7 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
 
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
-        const barLength = 16;
+        const barLength = 8;
         const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
         const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
@@ -5437,7 +5437,7 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
 
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
-        const barLength = 16;
+        const barLength = 8;
         const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
         const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
@@ -5640,7 +5640,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
-        const barLength = 16;
+        const barLength = 8;
         const filledLength = player.score > 0 ? Math.max(1, Math.round((player.score / maxScore) * barLength)) : 0;
         const progressBar = player.score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
