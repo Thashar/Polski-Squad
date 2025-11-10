@@ -74,7 +74,7 @@ async function handleSlashCommand(interaction, sharedState) {
             await handlePointsCommand(interaction, config, databaseService, punishmentService);
             break;
         case 'debug-roles':
-            await handleDebugRolesCommand(interaction, config, reminderUsageService);
+            await handleDebugRolesCommand(interaction, config, reminderUsageService, databaseService);
             break;
         case 'ocr-debug':
             await handleOcrDebugCommand(interaction, config);
@@ -377,7 +377,7 @@ async function handlePointsCommand(interaction, config, databaseService, punishm
     }
 }
 
-async function handleDebugRolesCommand(interaction, config, reminderUsageService) {
+async function handleDebugRolesCommand(interaction, config, reminderUsageService, databaseService) {
     const category = interaction.options.getString('category');
     const roleId = config.targetRoles[category];
 
@@ -409,6 +409,10 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         // Pobierz wszystkich członków z daną rolą
         const members = role.members;
         let membersList = '';
+        let totalPunishmentPoints = 0;
+
+        // Pobierz wszystkie punkty kary z bazy danych
+        const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
 
         if (members.size === 0) {
             membersList = 'Brak członków z tą rolą.';
@@ -417,6 +421,14 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             const userIds = Array.from(members.keys());
             const reminderStats = await reminderUsageService.getMultipleUserStats(userIds);
 
+            // Najpierw zlicz wszystkie punkty LIFETIME dla wszystkich członków (nie tylko widocznych)
+            for (const [userId, member] of members) {
+                const userPunishment = guildPunishments[userId];
+                const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
+                totalPunishmentPoints += lifetimePoints;
+            }
+
+            // Teraz wyświetl listę członków (z limitem 50)
             const sortedMembers = members.sort((a, b) => a.displayName.localeCompare(b.displayName));
             let count = 0;
             for (const [userId, member] of sortedMembers) {
@@ -425,10 +437,24 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                     break;
                 }
 
+                // Pobierz punkty kary LIFETIME dla tego użytkownika
+                const userPunishment = guildPunishments[userId];
+                const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
+
                 // Dodaj licznik przypomnień przy nicku
                 const reminderCount = reminderStats[userId] || 0;
                 const reminderBadge = reminderCount > 0 ? ` [📢 ${reminderCount}]` : '';
-                membersList += `${count + 1}. ${member.displayName}${reminderBadge}\n`;
+
+                // Sprawdź role karania i zakazu loterii
+                const hasPunishmentRole = member.roles.cache.has(config.punishmentRoleId);
+                const hasLotteryBanRole = member.roles.cache.has(config.lotteryBanRoleId);
+                const punishmentBadge = hasPunishmentRole ? ' 🎭' : '';
+                const lotteryBanBadge = hasLotteryBanRole ? ' 🚨' : '';
+
+                // Dodaj punkty LIFETIME przy nicku jeśli ma jakieś punkty
+                const pointsBadge = lifetimePoints > 0 ? ` [💀 ${lifetimePoints}]` : '';
+
+                membersList += `${count + 1}. ${member.displayName}${punishmentBadge}${lotteryBanBadge}${pointsBadge}${reminderBadge}\n`;
                 count++;
             }
         }
@@ -444,7 +470,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         
         const embed = new EmbedBuilder()
             .setTitle(`🔧 Debug - ${roleName}`)
-            .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}`)
+            .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}\n**🏆 Suma punktów kary (kariera):** ${totalPunishmentPoints}`)
             .addFields(
                 { name: '👥 Członkowie', value: membersList.length > 1024 ? membersList.substring(0, 1020) + '...' : membersList, inline: false },
                 { name: '🎭 Rola karania (2+ pkt)', value: punishmentRoleInfo, inline: true },
