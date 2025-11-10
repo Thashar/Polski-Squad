@@ -5941,13 +5941,13 @@ async function handleProgresCommand(interaction, sharedState) {
             return;
         }
 
-        // Ogranicz do 40 ostatnich tygodni
-        const last40Weeks = allWeeks.slice(0, 40);
+        // Ogranicz do 54 ostatnich tygodni
+        const last54Weeks = allWeeks.slice(0, 54);
 
         // Zbierz dane gracza ze wszystkich tygodni i klanów
         const playerProgressData = [];
 
-        for (const week of last40Weeks) {
+        for (const week of last54Weeks) {
             for (const clan of week.clans) {
                 const weekData = await databaseService.getPhase1Results(
                     interaction.guild.id,
@@ -5978,7 +5978,7 @@ async function handleProgresCommand(interaction, sharedState) {
 
         if (playerProgressData.length === 0) {
             await interaction.editReply({
-                content: `❌ Nie znaleziono żadnych wyników dla gracza **${targetPlayerName}** w ostatnich 40 tygodniach.`
+                content: `❌ Nie znaleziono żadnych wyników dla gracza **${targetPlayerName}** w ostatnich 54 tygodniach.`
             });
             return;
         }
@@ -5988,6 +5988,51 @@ async function handleProgresCommand(interaction, sharedState) {
             if (a.year !== b.year) return b.year - a.year;
             return b.weekNumber - a.weekNumber;
         });
+
+        // Oblicz skumulowany progres/regres dla różnych okresów
+        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+
+        const formatDifference = (difference) => {
+            if (difference > 0) {
+                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                return `▲${superscriptNumber} (+${difference.toLocaleString('pl-PL')})`;
+            } else if (difference < 0) {
+                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                return `▼${subscriptNumber} (${difference.toLocaleString('pl-PL')})`;
+            }
+            return '━ (0)';
+        };
+
+        let cumulativeSection = '';
+
+        // Progres z 4 tygodni (miesiąc)
+        if (playerProgressData.length >= 4) {
+            const current = playerProgressData[0].score;
+            const past = playerProgressData[3].score;
+            const diff = current - past;
+            cumulativeSection += `**📅 Miesiąc (4 tyg):** ${formatDifference(diff)}\n`;
+        }
+
+        // Progres z 13 tygodni (kwartał)
+        if (playerProgressData.length >= 13) {
+            const current = playerProgressData[0].score;
+            const past = playerProgressData[12].score;
+            const diff = current - past;
+            cumulativeSection += `**📊 Kwartał (13 tyg):** ${formatDifference(diff)}\n`;
+        }
+
+        // Progres z 26 tygodni (pół roku)
+        if (playerProgressData.length >= 26) {
+            const current = playerProgressData[0].score;
+            const past = playerProgressData[25].score;
+            const diff = current - past;
+            cumulativeSection += `**📈 Pół roku (26 tyg):** ${formatDifference(diff)}\n`;
+        }
+
+        if (cumulativeSection) {
+            cumulativeSection += '\n';
+        }
 
         // Oblicz maksymalny wynik dla progress bara
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
@@ -6061,7 +6106,7 @@ async function handleProgresCommand(interaction, sharedState) {
         // Stwórz embed
         const embed = new EmbedBuilder()
             .setTitle(`📈 Progres gracza: ${targetPlayerName}`)
-            .setDescription(`**Wyniki z Fazy 1** (ostatnie ${playerProgressData.length} tygodni):\n\n${resultsText}${expiryInfo}`)
+            .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${playerProgressData.length} tygodni):\n\n${resultsText}${expiryInfo}`)
             .setColor('#00FF00')
             .setFooter({ text: `Łącznie tygodni: ${playerProgressData.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
             .setTimestamp();
