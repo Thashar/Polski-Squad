@@ -1598,6 +1598,8 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2FinalConfirmButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_round_continue') {
         await handlePhase2RoundContinue(interaction, sharedState);
+    } else if (interaction.customId.startsWith('progres_nav_better|') || interaction.customId.startsWith('progres_nav_worse|')) {
+        await handleProgresNavButton(interaction, sharedState);
     }
 }
 
@@ -5856,11 +5858,10 @@ async function handleAutocomplete(interaction, sharedState) {
                 return;
             }
 
-            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni (ostatnie 10 tygodni dla wydajności)
+            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
             const playerNames = new Set();
-            const recentWeeks = allWeeks.slice(0, 10);
 
-            for (const week of recentWeeks) {
+            for (const week of allWeeks) {
                 for (const clan of week.clans) {
                     const weekData = await databaseService.getPhase1Results(
                         interaction.guild.id,
@@ -5915,6 +5916,98 @@ async function handleAutocomplete(interaction, sharedState) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
         await interaction.respond([]);
     }
+}
+
+// Funkcja obsługująca przyciski nawigacji między graczami
+async function handleProgresNavButton(interaction, sharedState) {
+    const { databaseService } = sharedState;
+
+    // Sprawdź czy użytkownik który kliknął to ten sam który wywołał komendę
+    const customIdParts = interaction.customId.split('|');
+    const ownerId = customIdParts[1];
+    const playerName = customIdParts[2];
+
+    if (interaction.user.id !== ownerId) {
+        await interaction.reply({
+            content: '❌ Tylko osoba która wywołała komendę może zmieniać gracza.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Defer update (aktualizujemy istniejącą wiadomość)
+    await interaction.deferUpdate();
+
+    try {
+        // Pobierz wszystkie tygodnie
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.followUp({
+                content: '❌ Brak zapisanych wyników.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Usuń starą wiadomość i wyświetl nową
+        const messageCleanupService = interaction.client.messageCleanupService;
+        if (interaction.message && messageCleanupService) {
+            // Usuń scheduled deletion dla starej wiadomości
+            await messageCleanupService.removeScheduledMessage(interaction.message.id);
+
+            try {
+                await interaction.message.delete();
+            } catch (error) {
+                logger.warn('[PROGRES] Nie udało się usunąć starej wiadomości');
+            }
+        }
+
+        // Wyświetl progres nowego gracza
+        await showPlayerProgress(interaction, playerName, ownerId, sharedState);
+
+    } catch (error) {
+        logger.error('[PROGRES] ❌ Błąd nawigacji:', error);
+        await interaction.followUp({
+            content: '❌ Wystąpił błąd podczas zmiany gracza.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+// Funkcja tworząca ranking graczy po all-time max
+async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
+    // Mapa: playerName -> maxScore
+    const playerMaxScores = new Map();
+
+    for (const week of last54Weeks) {
+        for (const clan of week.clans) {
+            const weekData = await databaseService.getPhase1Results(
+                guildId,
+                week.weekNumber,
+                week.year,
+                clan
+            );
+
+            if (weekData && weekData.players) {
+                weekData.players.forEach(player => {
+                    if (player.displayName && player.score > 0) {
+                        const currentMax = playerMaxScores.get(player.displayName) || 0;
+                        if (player.score > currentMax) {
+                            playerMaxScores.set(player.displayName, player.score);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // Konwertuj do tablicy i posortuj po maxScore (malejąco - najlepsi na początku)
+    const ranking = Array.from(playerMaxScores.entries())
+        .map(([playerName, maxScore]) => ({ playerName, maxScore }))
+        .sort((a, b) => b.maxScore - a.maxScore);
+
+    return ranking;
 }
 
 // Funkcja wyświetlająca progres gracza
@@ -5982,16 +6075,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         });
 
         // Oblicz skumulowany progres/regres
-        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
-        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
-
         const formatDifference = (difference) => {
             if (difference > 0) {
-                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                return `▲${superscriptNumber}`;
+                return `▲ ${difference.toLocaleString('pl-PL')}`;
             } else if (difference < 0) {
-                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                return `▼${subscriptNumber}`;
+                return `▼ ${Math.abs(difference).toLocaleString('pl-PL')}`;
             }
             return '━';
         };
@@ -6036,11 +6124,9 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                 const difference = data.score - prevData.score;
 
                 if (difference > 0) {
-                    const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                    differenceText = ` ▲${superscriptNumber}`;
+                    differenceText = ` ▲ ${difference.toLocaleString('pl-PL')}`;
                 } else if (difference < 0) {
-                    const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                    differenceText = ` ▼${subscriptNumber}`;
+                    differenceText = ` ▼ ${Math.abs(difference).toLocaleString('pl-PL')}`;
                 }
             }
 
@@ -6049,6 +6135,39 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         }
 
         const resultsText = resultsLines.join('\n');
+
+        // Stwórz ranking all-time i znajdź pozycję gracza
+        const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
+        const currentPlayerIndex = allTimeRanking.findIndex(p => p.playerName.toLowerCase() === selectedPlayer.toLowerCase());
+
+        // Gracze sąsiedzi w rankingu (lepszy i gorszy)
+        const betterPlayer = currentPlayerIndex > 0 ? allTimeRanking[currentPlayerIndex - 1] : null;
+        const worsePlayer = currentPlayerIndex < allTimeRanking.length - 1 ? allTimeRanking[currentPlayerIndex + 1] : null;
+
+        // Stwórz przyciski nawigacji
+        const navigationButtons = [];
+
+        if (betterPlayer) {
+            const betterButton = new ButtonBuilder()
+                .setCustomId(`progres_nav_better|${ownerId}|${betterPlayer.playerName}`)
+                .setLabel(`◀ ${betterPlayer.playerName}`)
+                .setStyle(ButtonStyle.Secondary);
+            navigationButtons.push(betterButton);
+        }
+
+        if (worsePlayer) {
+            const worseButton = new ButtonBuilder()
+                .setCustomId(`progres_nav_worse|${ownerId}|${worsePlayer.playerName}`)
+                .setLabel(`${worsePlayer.playerName} ▶`)
+                .setStyle(ButtonStyle.Secondary);
+            navigationButtons.push(worseButton);
+        }
+
+        const components = [];
+        if (navigationButtons.length > 0) {
+            const navRow = new ActionRowBuilder().addComponents(navigationButtons);
+            components.push(navRow);
+        }
 
         // Kanały permanentne
         const permanentChannels = [
@@ -6081,7 +6200,8 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             .setTimestamp();
 
         const response = await interaction.editReply({
-            embeds: [embed]
+            embeds: [embed],
+            components: components
         });
 
         // Zaplanuj usunięcie wiadomości
