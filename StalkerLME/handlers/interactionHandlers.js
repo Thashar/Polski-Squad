@@ -452,7 +452,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 const lotteryBanBadge = hasLotteryBanRole ? ' 🚨' : '';
 
                 // Dodaj punkty LIFETIME przy nicku jeśli ma jakieś punkty
-                const pointsBadge = lifetimePoints > 0 ? ` (${lifetimePoints} pkt)` : '';
+                const pointsBadge = lifetimePoints > 0 ? ` [💀 ${lifetimePoints}]` : '';
 
                 membersList += `${count + 1}. ${member.displayName}${punishmentBadge}${lotteryBanBadge}${pointsBadge}${reminderBadge}\n`;
                 count++;
