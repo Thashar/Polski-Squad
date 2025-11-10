@@ -6449,7 +6449,8 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
         const progressBar = player.maxScore > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
         // Wyciągnij emotkę klanu z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
-        const clanEmoji = player.clanName.charAt(0);
+        // Użyj Array.from() aby poprawnie wyodrębnić emoji (surrogate pairs)
+        const clanEmoji = Array.from(player.clanName)[0];
         const formattedScore = player.maxScore.toLocaleString('pl-PL');
 
         return `${progressBar} ${clanEmoji} ${player.playerName} - ${formattedScore}`;
