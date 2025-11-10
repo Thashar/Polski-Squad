@@ -6485,7 +6485,7 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
 
     const embed = new EmbedBuilder()
         .setTitle(`🏆 Globalny Ranking - Wszyscy Gracze`)
-        .setDescription(`**Najlepsze wyniki z Fazy 1** (ostatnie 54 tygodnie):\n\n${rankingText}`)
+        .setDescription(`**Najlepsze wyniki z Fazy 1:**\n\n${rankingText}`)
         .setColor('#FFD700')
         .setFooter({ text: `Strona ${currentPage + 1}/${totalPages} | Graczy: ${ranking.length} | Zakres: #${startIndex + 1} - #${endIndex}` })
         .setTimestamp();
