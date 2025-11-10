@@ -15,6 +15,7 @@ const RoleKickingService = require('./services/roleKickingService');
 const ReactionRoleService = require('./services/reactionRoleService');
 const RoleConflictService = require('./services/roleConflictService');
 const MemberCacheService = require('./services/memberCacheService');
+const ChaosService = require('./services/chaosService');
 
 // Importuj handlery
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -47,14 +48,15 @@ const logService = new LogService(config);
 const roleKickingService = new RoleKickingService(config);
 const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
+const chaosService = new ChaosService(config, logService);
 
 // NicknameManager i reactionRoleService będą zainicjalizowane w funkcji async
 let nicknameManager;
 let reactionRoleService;
 
 // Inicjalizacja handlerów
-const messageHandler = new MessageHandler(config, mediaService, logService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService);
+const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 // Obiekt zawierający wszystkie współdzielone stany
@@ -106,11 +108,14 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj serwisy blokowania w messageHandlerze
     await messageHandler.initializeImageBlockService();
     await messageHandler.initializeWordBlockService();
-    
+    // Inicjalizuj ChaosService
+    await chaosService.initialize();
+    await chaosService.restoreTimeouts(client);
+
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
-    
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów');
+
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode');
 });
 
 // Obsługa wiadomości

@@ -99,6 +99,18 @@
           "description": "Blokuje określone słowo i nakłada karę za jego użycie",
           "usage": "/block-word słowo:[tekst] czas:[gg:mm dd.mm.rrrr] timeout:[true/false] inside:[true/false] [na_ile:1h30m]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/add-roles",
+          "description": "Nadaje rolę wszystkim użytkownikom posiadającym określoną rolę (lub wszystkim, jeśli nie wybrano roli źródłowej)",
+          "usage": "/add-roles rola_do_nadania:[wybierz rolę] [rola_komu:opcjonalnie wybierz rolę]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/chaos-mode",
+          "description": "Włącza/wyłącza Chaos Mode - losowe nadawanie ról użytkownikom (10% szansa, 15 minut, 5% odpowiedź)",
+          "usage": "/chaos-mode tryb:[Włącz/Wyłącz] [rola_id:ID roli]",
+          "requiredPermission": "administrator"
         }
       ]
     },

@@ -6,12 +6,13 @@ const WarningService = require('../services/warningService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.messageHandler = messageHandler;
         this.roleKickingService = roleKickingService;
+        this.chaosService = chaosService;
         this.warningService = new WarningService(config, logger);
     }
 
@@ -246,6 +247,38 @@ class InteractionHandler {
                 ),
 
             new SlashCommandBuilder()
+                .setName('add-roles')
+                .setDescription('Nadaje rolę wszystkim użytkownikom posiadającym określoną rolę')
+                .addRoleOption(option =>
+                    option.setName('rola_do_nadania')
+                        .setDescription('Rola, którą chcesz nadać')
+                        .setRequired(true)
+                )
+                .addRoleOption(option =>
+                    option.setName('rola_komu')
+                        .setDescription('Rola, której posiadacze otrzymają nową rolę (opcjonalnie - brak = wszyscy)')
+                        .setRequired(false)
+                ),
+
+            new SlashCommandBuilder()
+                .setName('chaos-mode')
+                .setDescription('Włącza/wyłącza Chaos Mode - losowe nadawanie ról użytkownikom')
+                .addStringOption(option =>
+                    option.setName('tryb')
+                        .setDescription('Włącz lub wyłącz Chaos Mode')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Włącz', value: 'on' },
+                            { name: 'Wyłącz', value: 'off' }
+                        )
+                )
+                .addStringOption(option =>
+                    option.setName('rola_id')
+                        .setDescription('ID roli do nadawania (wymagane tylko przy włączaniu)')
+                        .setRequired(false)
+                ),
+
+            new SlashCommandBuilder()
                 .setName('komendy')
                 .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów')
         ];
@@ -321,6 +354,12 @@ class InteractionHandler {
                     break;
                 case 'block-word':
                     await this.handleBlockWordCommand(interaction);
+                    break;
+                case 'add-roles':
+                    await this.handleAddRolesCommand(interaction);
+                    break;
+                case 'chaos-mode':
+                    await this.handleChaosModeCommand(interaction);
                     break;
                 case 'komendy':
                     await this.handleKomendyCommand(interaction);
@@ -2558,6 +2597,263 @@ class InteractionHandler {
             error: null,
             formatted: formatted
         };
+    }
+
+    /**
+     * Obsługuje komendę dodawania ról
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleAddRolesCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /add-roles`, interaction);
+
+        // Sprawdź uprawnienia administratora
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy!',
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /add-roles bez uprawnień`, interaction);
+            return;
+        }
+
+        const roleToAdd = interaction.options.getRole('rola_do_nadania');
+        const targetRole = interaction.options.getRole('rola_komu');
+
+        if (!roleToAdd) {
+            await interaction.reply({
+                content: '❌ Nie znaleziono roli do nadania!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Sprawdź hierarchię ról (bot musi być wyżej niż rola którą nadaje)
+        if (roleToAdd.position >= interaction.guild.members.me.roles.highest.position) {
+            await interaction.reply({
+                content: `❌ Nie mogę nadać roli **${roleToAdd.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`,
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Pobierz wszystkich członków serwera
+            const members = await interaction.guild.members.fetch();
+
+            // Filtruj członków
+            let targetMembers;
+            if (targetRole) {
+                // Tylko członkowie z określoną rolą
+                targetMembers = members.filter(member =>
+                    member.roles.cache.has(targetRole.id) && !member.user.bot
+                );
+            } else {
+                // Wszyscy członkowie (bez botów)
+                targetMembers = members.filter(member => !member.user.bot);
+            }
+
+            if (targetMembers.size === 0) {
+                const noUsersMessage = targetRole
+                    ? `❌ Nie znaleziono użytkowników z rolą **${targetRole.name}**!`
+                    : `❌ Nie znaleziono użytkowników na serwerze!`;
+
+                await interaction.editReply({ content: noUsersMessage });
+                return;
+            }
+
+            // Filtruj użytkowników, którzy już mają tę rolę
+            const membersToUpdate = targetMembers.filter(member =>
+                !member.roles.cache.has(roleToAdd.id)
+            );
+
+            if (membersToUpdate.size === 0) {
+                const alreadyHaveMessage = targetRole
+                    ? `✅ Wszyscy użytkownicy z rolą **${targetRole.name}** już posiadają rolę **${roleToAdd.name}**!`
+                    : `✅ Wszyscy użytkownicy na serwerze już posiadają rolę **${roleToAdd.name}**!`;
+
+                await interaction.editReply({ content: alreadyHaveMessage });
+                return;
+            }
+
+            const targetDescription = targetRole
+                ? `użytkownikom z rolą **${targetRole.name}**`
+                : `**wszystkim** użytkownikom na serwerze`;
+
+            await this.logService.logMessage('info',
+                `Rozpoczynanie nadawania roli ${roleToAdd.name} ${membersToUpdate.size} użytkownikom`,
+                interaction
+            );
+
+            const startMessage = `⏳ Rozpoczynam nadawanie roli **${roleToAdd.name}** ${targetDescription}...\n` +
+                `👥 Użytkowników do zaktualizowania: **${membersToUpdate.size}**\n` +
+                `⏰ Szacowany czas: **${Math.ceil(membersToUpdate.size / 60)} minut**`;
+
+            await interaction.editReply({ content: startMessage });
+
+            let successCount = 0;
+            let errorCount = 0;
+            const delayBetweenAdds = 1000; // 1 sekunda opóźnienia między każdym nadaniem
+
+            let delay = 0;
+
+            for (const [memberId, member] of membersToUpdate) {
+                setTimeout(async () => {
+                    try {
+                        await member.roles.add(roleToAdd);
+                        successCount++;
+
+                        // Co 10 użytkowników wyślij update
+                        if (successCount % 10 === 0) {
+                            const progressMessage = `⏳ Postęp: **${successCount}/${membersToUpdate.size}** użytkowników zaktualizowanych...`;
+                            await interaction.editReply({ content: progressMessage }).catch(() => {});
+                        }
+
+                        // Jeśli to ostatni użytkownik
+                        if (successCount + errorCount === membersToUpdate.size) {
+                            const completionMessage = `✅ **Zakończono!**\n\n` +
+                                `📊 Nadano rolę **${roleToAdd.name}** ${targetDescription}\n` +
+                                `✅ Sukces: **${successCount}**\n` +
+                                `❌ Błędy: **${errorCount}**`;
+
+                            await interaction.editReply({ content: completionMessage });
+                            await this.logService.logMessage('success',
+                                `Nadawanie roli ${roleToAdd.name} zakończone. Sukces: ${successCount}, Błędy: ${errorCount}`,
+                                interaction
+                            );
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        await this.logService.logMessage('error',
+                            `Błąd podczas nadawania roli użytkownikowi ${member.user.tag}: ${error.message}`,
+                            interaction
+                        );
+
+                        // Jeśli to ostatni użytkownik (nawet po błędzie)
+                        if (successCount + errorCount === membersToUpdate.size) {
+                            const completionMessage = `✅ **Zakończono z błędami!**\n\n` +
+                                `📊 Nadano rolę **${roleToAdd.name}** ${targetDescription}\n` +
+                                `✅ Sukces: **${successCount}**\n` +
+                                `❌ Błędy: **${errorCount}**`;
+
+                            await interaction.editReply({ content: completionMessage });
+                            await this.logService.logMessage('warn',
+                                `Nadawanie roli ${roleToAdd.name} zakończone z błędami. Sukces: ${successCount}, Błędy: ${errorCount}`,
+                                interaction
+                            );
+                        }
+                    }
+                }, delay);
+
+                delay += delayBetweenAdds;
+            }
+
+        } catch (error) {
+            await this.logService.logMessage('error', `Błąd podczas nadawania ról: ${error.message}`, interaction);
+            await interaction.editReply({
+                content: `❌ Wystąpił błąd podczas nadawania ról: ${error.message}`
+            });
+        }
+    }
+
+    /**
+     * Obsługuje komendę chaos mode
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     */
+    async handleChaosModeCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /chaos-mode`, interaction);
+
+        // Sprawdź uprawnienia administratora
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy!',
+                ephemeral: true
+            });
+            await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /chaos-mode bez uprawnień`, interaction);
+            return;
+        }
+
+        // Sprawdź czy chaosService jest dostępny
+        if (!this.chaosService) {
+            await interaction.reply({
+                content: '❌ Chaos Service nie jest zainicjalizowany!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        const mode = interaction.options.getString('tryb');
+        const roleId = interaction.options.getString('rola_id');
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            if (mode === 'on') {
+                // Włączanie Chaos Mode
+                if (!roleId) {
+                    await interaction.editReply({
+                        content: '❌ Musisz podać ID roli przy włączaniu Chaos Mode!\nPrzykład: `/chaos-mode tryb:Włącz rola_id:1234567890`'
+                    });
+                    return;
+                }
+
+                // Walidacja ID roli
+                if (!/^\d+$/.test(roleId)) {
+                    await interaction.editReply({
+                        content: '❌ Nieprawidłowe ID roli! Upewnij się, że podałeś samo ID (same cyfry).'
+                    });
+                    return;
+                }
+
+                // Sprawdź czy rola istnieje
+                try {
+                    const role = await interaction.guild.roles.fetch(roleId);
+                    if (!role) {
+                        await interaction.editReply({
+                            content: '❌ Nie znaleziono roli o podanym ID na tym serwerze!'
+                        });
+                        return;
+                    }
+
+                    // Sprawdź hierarchię ról
+                    if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                        await interaction.editReply({
+                            content: `❌ Nie mogę nadawać roli **${role.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`
+                        });
+                        return;
+                    }
+                } catch (error) {
+                    await interaction.editReply({
+                        content: '❌ Nie znaleziono roli o podanym ID na tym serwerze!'
+                    });
+                    return;
+                }
+
+                // Włącz Chaos Mode
+                const result = await this.chaosService.enableChaosMode(roleId);
+                await interaction.editReply({ content: result.message });
+
+                if (result.success) {
+                    await this.logService.logMessage('success', `Chaos Mode włączony przez ${interaction.user.tag}, rola: ${roleId}`, interaction);
+                }
+
+            } else if (mode === 'off') {
+                // Wyłączanie Chaos Mode
+                const result = await this.chaosService.disableChaosMode();
+                await interaction.editReply({ content: result.message });
+
+                if (result.success) {
+                    await this.logService.logMessage('success', `Chaos Mode wyłączony przez ${interaction.user.tag}`, interaction);
+                }
+            }
+
+        } catch (error) {
+            await this.logService.logMessage('error', `Błąd podczas obsługi /chaos-mode: ${error.message}`, interaction);
+            await interaction.editReply({
+                content: `❌ Wystąpił błąd: ${error.message}`
+            });
+        }
     }
 
     /**
