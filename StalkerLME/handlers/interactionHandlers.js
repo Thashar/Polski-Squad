@@ -539,8 +539,6 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_user|')) {
         await handleDodajUserSelect(interaction, sharedState);
-    } else if (interaction.customId.startsWith('progres_select_player|')) {
-        await handleProgresPlayerSelect(interaction, sharedState);
     }
 }
 
@@ -1600,6 +1598,8 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2FinalConfirmButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_round_continue') {
         await handlePhase2RoundContinue(interaction, sharedState);
+    } else if (interaction.customId.startsWith('progres_change_player|')) {
+        await handleProgresChangePlayerButton(interaction, sharedState);
     }
 }
 
@@ -2330,6 +2330,8 @@ async function handleModalSubmit(interaction, sharedState) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
         await handleDodajModalSubmit(interaction, sharedState);
+    } else if (interaction.customId.startsWith('progres_search_modal|')) {
+        await handleProgresSearchModalSubmit(interaction, sharedState);
     }
 }
 
@@ -5848,9 +5850,9 @@ async function handleAutocomplete(interaction, sharedState) {
     }
 }
 
-// Funkcja obsługująca wybór gracza w /progres
-async function handleProgresPlayerSelect(interaction, sharedState) {
-    const { config, databaseService } = sharedState;
+// Funkcja obsługująca kliknięcie przycisku "Zmień gracza"
+async function handleProgresChangePlayerButton(interaction, sharedState) {
+    const { databaseService } = sharedState;
 
     // Sprawdź czy użytkownik który kliknął to ten sam który wywołał komendę
     const [, ownerId] = interaction.customId.split('|');
@@ -5862,15 +5864,116 @@ async function handleProgresPlayerSelect(interaction, sharedState) {
         return;
     }
 
-    // Jeśli to pierwsza interakcja - zaktualizuj ephemeral message i wyślij nową publiczną
-    const isUpdate = interaction.message && !interaction.message.flags.has(MessageFlags.Ephemeral);
+    try {
+        // Sprawdź czy są dostępne dane
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
 
-    if (!isUpdate) {
-        await interaction.deferUpdate();
+        if (allWeeks.length === 0) {
+            await interaction.reply({
+                content: '❌ Brak zapisanych wyników.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Pokaż modal do wyszukiwania gracza
+        const modal = new ModalBuilder()
+            .setCustomId(`progres_search_modal|${ownerId}|update`)
+            .setTitle('🔍 Wyszukaj gracza');
+
+        const nicknameInput = new TextInputBuilder()
+            .setCustomId('nickname')
+            .setLabel('Wpisz nick gracza')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Nazwa gracza...')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(32);
+
+        const firstRow = new ActionRowBuilder().addComponents(nicknameInput);
+        modal.addComponents(firstRow);
+
+        await interaction.showModal(modal);
+
+    } catch (error) {
+        logger.error('[PROGRES] ❌ Błąd otwierania modala:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd.',
+            flags: MessageFlags.Ephemeral
+        });
     }
+}
+
+// Funkcja obsługująca submit modala wyszukiwania gracza
+async function handleProgresSearchModalSubmit(interaction, sharedState) {
+    const { databaseService } = sharedState;
+
+    await interaction.deferReply();
 
     try {
-        const selectedPlayer = interaction.values[0];
+        const [, ownerId, mode] = interaction.customId.split('|');
+        const nickname = interaction.fields.getTextInputValue('nickname').trim();
+
+        if (!nickname) {
+            await interaction.editReply({
+                content: '❌ Musisz podać nick gracza.'
+            });
+            return;
+        }
+
+        // Sprawdź czy gracz istnieje w danych
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const last54Weeks = allWeeks.slice(0, 54);
+
+        let foundPlayer = null;
+
+        for (const week of last54Weeks) {
+            for (const clan of week.clans) {
+                const weekData = await databaseService.getPhase1Results(
+                    interaction.guild.id,
+                    week.weekNumber,
+                    week.year,
+                    clan
+                );
+
+                if (weekData && weekData.players) {
+                    const player = weekData.players.find(p =>
+                        p.displayName && p.displayName.toLowerCase() === nickname.toLowerCase()
+                    );
+
+                    if (player) {
+                        foundPlayer = player.displayName;
+                        break;
+                    }
+                }
+            }
+            if (foundPlayer) break;
+        }
+
+        if (!foundPlayer) {
+            await interaction.editReply({
+                content: `❌ Nie znaleziono gracza **${nickname}** w ostatnich 54 tygodniach.`
+            });
+            return;
+        }
+
+        // Wyświetl progres gracza
+        const isUpdate = mode === 'update';
+        await showPlayerProgress(interaction, foundPlayer, ownerId, sharedState, isUpdate);
+
+    } catch (error) {
+        logger.error('[PROGRES] ❌ Błąd wyszukiwania gracza:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyszukiwania gracza.'
+        });
+    }
+}
+
+// Funkcja wyświetlająca progres gracza
+async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedState, isUpdate = false) {
+    const { config, databaseService } = sharedState;
+
+    try {
 
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
@@ -5999,43 +6102,13 @@ async function handleProgresPlayerSelect(interaction, sharedState) {
 
         const resultsText = resultsLines.join('\n');
 
-        // Zbierz listę graczy dla select menu (tak jak w handleProgresCommand)
-        const playerNames = new Set();
-        const recentWeeks = allWeeks.slice(0, 10);
+        // Utwórz przycisk do zmiany gracza
+        const changePlayerButton = new ButtonBuilder()
+            .setCustomId(`progres_change_player|${ownerId}`)
+            .setLabel('🔍 Zmień gracza')
+            .setStyle(ButtonStyle.Primary);
 
-        for (const week of recentWeeks) {
-            for (const clan of week.clans) {
-                const weekData = await databaseService.getPhase1Results(
-                    interaction.guild.id,
-                    week.weekNumber,
-                    week.year,
-                    clan
-                );
-
-                if (weekData && weekData.players) {
-                    weekData.players.forEach(player => {
-                        if (player.displayName) {
-                            playerNames.add(player.displayName);
-                        }
-                    });
-                }
-            }
-        }
-
-        const sortedPlayers = Array.from(playerNames).sort();
-        const playerOptions = sortedPlayers.slice(0, 25).map(name =>
-            new StringSelectMenuOptionBuilder()
-                .setLabel(name)
-                .setValue(name)
-                .setDefault(name === selectedPlayer)
-        );
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`progres_select_player|${ownerId}`)
-            .setPlaceholder('Zmień gracza...')
-            .addOptions(playerOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        const row = new ActionRowBuilder().addComponents(changePlayerButton);
 
         // Kanały permanentne
         const permanentChannels = [
@@ -6070,34 +6143,43 @@ async function handleProgresPlayerSelect(interaction, sharedState) {
         let messageToSchedule;
 
         if (isUpdate) {
-            // Aktualizuj istniejącą wiadomość
-            await interaction.update({
+            // Gdy klikamy przycisk "Zmień gracza" - usuń starą wiadomość i wyślij nową
+            if (interaction.message) {
+                // Usuń scheduled deletion dla starej wiadomości
+                if (messageCleanupService) {
+                    await messageCleanupService.removeScheduledMessage(interaction.message.id);
+                }
+
+                try {
+                    await interaction.message.delete();
+                } catch (error) {
+                    logger.warn('[PROGRES] Nie udało się usunąć starej wiadomości');
+                }
+            }
+
+            // Wyślij nową wiadomość
+            const response = await interaction.editReply({
                 embeds: [embed],
                 components: [row]
             });
-            messageToSchedule = interaction.message;
+            messageToSchedule = response;
         } else {
-            // Wyślij nową publiczną wiadomość
-            const response = await interaction.followUp({
+            // Pierwsza wyszukiwarka - wyślij nową publiczną wiadomość
+            const response = await interaction.editReply({
                 embeds: [embed],
                 components: [row]
             });
             messageToSchedule = response;
         }
 
-        // Zaplanuj/zaktualizuj usunięcie wiadomości
+        // Zaplanuj usunięcie wiadomości
         if (messageToSchedule && messageCleanupService && shouldAutoDelete) {
-            if (isUpdate) {
-                await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
-            }
             await messageCleanupService.scheduleMessageDeletion(
                 messageToSchedule.id,
                 messageToSchedule.channelId,
                 deleteAt,
                 ownerId
             );
-        } else if (messageToSchedule && messageCleanupService && !shouldAutoDelete && isUpdate) {
-            await messageCleanupService.removeScheduledMessage(messageToSchedule.id);
         }
 
     } catch (error) {
@@ -6130,80 +6212,42 @@ async function handleProgresCommand(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     try {
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
 
         if (allWeeks.length === 0) {
-            await interaction.editReply({
-                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
+            await interaction.reply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.',
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni (ostatnie 10 tygodni dla wydajności)
-        const playerNames = new Set();
-        const recentWeeks = allWeeks.slice(0, 10);
+        // Pokaż modal do wyszukiwania gracza
+        const modal = new ModalBuilder()
+            .setCustomId(`progres_search_modal|${interaction.user.id}|new`)
+            .setTitle('🔍 Wyszukaj gracza');
 
-        for (const week of recentWeeks) {
-            for (const clan of week.clans) {
-                const weekData = await databaseService.getPhase1Results(
-                    interaction.guild.id,
-                    week.weekNumber,
-                    week.year,
-                    clan
-                );
+        const nicknameInput = new TextInputBuilder()
+            .setCustomId('nickname')
+            .setLabel('Wpisz nick gracza')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Nazwa gracza...')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(32);
 
-                if (weekData && weekData.players) {
-                    weekData.players.forEach(player => {
-                        if (player.displayName) {
-                            playerNames.add(player.displayName);
-                        }
-                    });
-                }
-            }
-        }
+        const firstRow = new ActionRowBuilder().addComponents(nicknameInput);
+        modal.addComponents(firstRow);
 
-        const sortedPlayers = Array.from(playerNames).sort();
-
-        if (sortedPlayers.length === 0) {
-            await interaction.editReply({
-                content: '❌ Nie znaleziono żadnych graczy w ostatnich tygodniach.'
-            });
-            return;
-        }
-
-        // Utwórz select menu z graczami (max 25)
-        const playerOptions = sortedPlayers.slice(0, 25).map(name =>
-            new StringSelectMenuOptionBuilder()
-                .setLabel(name)
-                .setValue(name)
-        );
-
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`progres_select_player|${interaction.user.id}`)
-            .setPlaceholder('Wybierz gracza...')
-            .addOptions(playerOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-
-        const embed = new EmbedBuilder()
-            .setTitle('📈 Progres gracza')
-            .setDescription('Wybierz gracza z listy, aby zobaczyć jego progres z ostatnich 54 tygodni.')
-            .setColor('#0099FF')
-            .setTimestamp();
-
-        await interaction.editReply({
-            embeds: [embed],
-            components: [row]
-        });
+        await interaction.showModal(modal);
 
     } catch (error) {
         logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas pobierania danych progresu.'
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas pobierania danych progresu.',
+            flags: MessageFlags.Ephemeral
         });
     }
 }
