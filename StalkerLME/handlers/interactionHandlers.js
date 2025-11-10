@@ -6380,21 +6380,15 @@ async function handleWynikiCommand(interaction, sharedState) {
 }
 
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
-async function createGlobalPlayerRanking(guildId, databaseService, config, last54Weeks) {
-    // Mapa: playerName -> maxScore
+async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks) {
+    // Najpierw zbierz wszystkie max score dla wszystkich graczy z historii
     const playerMaxScores = new Map();
-    // Mapa: playerName -> {clanName, clanKey} (z najnowszego tygodnia)
-    const playerCurrentClans = new Map();
-    // Mapa: playerName -> ostatni tydzień w którym wystąpił (indeks w last54Weeks)
-    const playerLastSeenWeek = new Map();
 
-    // Iterujemy od najnowszych do najstarszych tygodni
-    for (let weekIndex = 0; weekIndex < last54Weeks.length; weekIndex++) {
-        const week = last54Weeks[weekIndex];
-
+    // Iterujemy po wszystkich tygodniach aby znaleźć najlepsze wyniki
+    for (const week of last54Weeks) {
         for (const clan of week.clans) {
             const weekData = await databaseService.getPhase1Results(
-                guildId,
+                guild.id,
                 week.weekNumber,
                 week.year,
                 clan
@@ -6403,23 +6397,12 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
             if (weekData && weekData.players) {
                 weekData.players.forEach(player => {
                     if (player.displayName && player.score > 0) {
-                        // Aktualizuj maxScore jeśli wyższy
-                        const currentMax = playerMaxScores.get(player.displayName) || 0;
+                        const currentMax = playerMaxScores.get(player.displayName.toLowerCase()) || 0;
                         if (player.score > currentMax) {
-                            playerMaxScores.set(player.displayName, player.score);
-                        }
-
-                        // Zapisz klan tylko jeśli to pierwsze występowanie gracza (najnowszy tydzień)
-                        if (!playerCurrentClans.has(player.displayName)) {
-                            playerCurrentClans.set(player.displayName, {
-                                clanName: config.roleDisplayNames[clan],
-                                clanKey: clan
+                            playerMaxScores.set(player.displayName.toLowerCase(), {
+                                score: player.score,
+                                displayName: player.displayName
                             });
-                        }
-
-                        // Zapisz ostatni tydzień w którym gracz wystąpił
-                        if (!playerLastSeenWeek.has(player.displayName)) {
-                            playerLastSeenWeek.set(player.displayName, weekIndex);
                         }
                     }
                 });
@@ -6427,22 +6410,42 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
         }
     }
 
-    // Konwertuj do tablicy, filtruj aktywnych graczy i posortuj po maxScore (malejąco)
-    const ranking = Array.from(playerMaxScores.entries())
-        .map(([playerName, maxScore]) => {
-            const clanData = playerCurrentClans.get(playerName);
-            const lastSeenWeek = playerLastSeenWeek.get(playerName);
-            return {
-                playerName,
-                maxScore,
-                clanName: clanData?.clanName || 'Brak',
-                clanKey: clanData?.clanKey || 'unknown',
-                lastSeenWeek: lastSeenWeek
-            };
-        })
-        // Filtruj tylko graczy którzy występowali w ostatnich 4 tygodniach (aktywni w klanie)
-        .filter(player => player.lastSeenWeek !== undefined && player.lastSeenWeek < 4)
-        .sort((a, b) => b.maxScore - a.maxScore);
+    // Pobierz wszystkich członków serwera z rolami klanowymi
+    const ranking = [];
+    const members = await guild.members.fetch();
+
+    // Iteruj po wszystkich członkach i sprawdź czy mają rolę klanową
+    for (const [memberId, member] of members) {
+        // Sprawdź którą rolę klanową ma member
+        let memberClan = null;
+        let memberClanKey = null;
+
+        for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+            if (member.roles.cache.has(roleId)) {
+                memberClan = config.roleDisplayNames[clanKey];
+                memberClanKey = clanKey;
+                break; // Zakładamy że gracz ma tylko jedną rolę klanową
+            }
+        }
+
+        // Jeśli ma rolę klanową, znajdź jego wyniki
+        if (memberClan && memberClanKey) {
+            const memberDisplayName = member.displayName;
+            const scoreData = playerMaxScores.get(memberDisplayName.toLowerCase());
+
+            if (scoreData) {
+                ranking.push({
+                    playerName: scoreData.displayName,
+                    maxScore: scoreData.score,
+                    clanName: memberClan,
+                    clanKey: memberClanKey
+                });
+            }
+        }
+    }
+
+    // Sortuj po maxScore (malejąco)
+    ranking.sort((a, b) => b.maxScore - a.maxScore);
 
     return ranking;
 }
@@ -6549,7 +6552,7 @@ async function handleClanStatusCommand(interaction, sharedState) {
 
         // Stwórz globalny ranking
         const ranking = await createGlobalPlayerRanking(
-            interaction.guild.id,
+            interaction.guild,
             databaseService,
             config,
             last54Weeks
@@ -6557,7 +6560,7 @@ async function handleClanStatusCommand(interaction, sharedState) {
 
         if (ranking.length === 0) {
             await interaction.editReply({
-                content: '❌ Brak graczy z wynikami w bazie danych.'
+                content: '❌ Brak aktywnych członków klanów z wynikami w bazie danych.'
             });
             return;
         }
