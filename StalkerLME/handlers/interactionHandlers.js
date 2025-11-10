@@ -6120,7 +6120,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             cumulativeSection += '\n';
         }
 
-        // Oblicz maksymalny wynik dla progress bara
+        // Oblicz maksymalny wynik dla progress bara (do skalowania)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
 
         // Stwórz mapę wyników gracza dla szybkiego dostępu
@@ -6140,22 +6140,34 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             const score = playerScoreMap.get(weekKey);
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
+            // Oblicz najlepszy wynik DO tego momentu (włącznie z aktualnym tygodniem)
+            let bestScoreUpToNow = 0;
+            for (let j = 0; j <= i; j++) {
+                const pastWeek = last54Weeks[j];
+                const pastWeekKey = `${pastWeek.weekNumber}-${pastWeek.year}`;
+                const pastScore = playerScoreMap.get(pastWeekKey);
+                if (pastScore !== undefined && pastScore > bestScoreUpToNow) {
+                    bestScoreUpToNow = pastScore;
+                }
+            }
+
             if (score !== undefined) {
                 // Gracz ma dane z tego tygodnia - pokaż normalny pasek
                 const filledLength = score > 0 ? Math.max(1, Math.round((score / maxScore) * barLength)) : 0;
                 const progressBar = score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
 
-                // Oblicz różnicę względem najlepszego wyniku w historii
+                // Oblicz różnicę względem najlepszego wyniku DO TEGO MOMENTU
                 let differenceText = '';
-                const difference = score - maxScore;
-                if (difference !== 0) {
+                if (bestScoreUpToNow > 0 && score !== bestScoreUpToNow) {
+                    const difference = score - bestScoreUpToNow;
                     differenceText = formatSmallDifference(difference);
                 }
 
                 resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
             } else {
-                // Gracz nie ma danych z tego tygodnia - pokaż tylko etykietę
-                resultsLines.push(`           ${weekLabel} - ━`);
+                // Gracz nie ma danych z tego tygodnia - pokaż pusty pasek bez wartości
+                const progressBar = '░'.repeat(barLength);
+                resultsLines.push(`${progressBar} ${weekLabel} - `);
             }
         }
 
