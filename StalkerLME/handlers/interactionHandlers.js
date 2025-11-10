@@ -6140,9 +6140,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             const score = playerScoreMap.get(weekKey);
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
-            // Oblicz najlepszy wynik z POPRZEDNICH tygodni (bez aktualnego)
+            // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
+            // last54Weeks jest posortowane od najnowszych do najstarszych
+            // więc dla tygodnia i, wcześniejsze tygodnie to j > i
             let bestScoreUpToNow = 0;
-            for (let j = 0; j < i; j++) {
+            for (let j = i + 1; j < last54Weeks.length; j++) {
                 const pastWeek = last54Weeks[j];
                 const pastWeekKey = `${pastWeek.weekNumber}-${pastWeek.year}`;
                 const pastScore = playerScoreMap.get(pastWeekKey);
