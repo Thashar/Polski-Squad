@@ -1598,8 +1598,6 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2FinalConfirmButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_round_continue') {
         await handlePhase2RoundContinue(interaction, sharedState);
-    } else if (interaction.customId.startsWith('progres_change_player|')) {
-        await handleProgresChangePlayerButton(interaction, sharedState);
     }
 }
 
@@ -1797,7 +1795,13 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('progres')
-            .setDescription('Wyświetla wykres progresów gracza z ostatnich 54 tygodni z wyszukiwarką graczy'),
+            .setDescription('Wyświetla wykres progresów gracza z ostatnich 54 tygodni')
+            .addStringOption(option =>
+                option.setName('nick')
+                    .setDescription('Nick gracza (wyszukaj z listy lub wpisz własny)')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            ),
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
@@ -2330,8 +2334,6 @@ async function handleModalSubmit(interaction, sharedState) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
         await handleDodajModalSubmit(interaction, sharedState);
-    } else if (interaction.customId.startsWith('progres_search_modal|')) {
-        await handleProgresSearchModalSubmit(interaction, sharedState);
     }
 }
 
@@ -5842,135 +5844,81 @@ async function handleAutocomplete(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        // Autocomplete zostało usunięte z komendy /progres
-        // W razie potrzeby można dodać tutaj obsługę dla innych komend
+        if (interaction.commandName === 'progres') {
+            const focusedValue = interaction.options.getFocused();
+            const focusedValueLower = focusedValue.toLowerCase();
+
+            // Pobierz wszystkie dostępne tygodnie
+            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+            if (allWeeks.length === 0) {
+                await interaction.respond([]);
+                return;
+            }
+
+            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni (ostatnie 10 tygodni dla wydajności)
+            const playerNames = new Set();
+            const recentWeeks = allWeeks.slice(0, 10);
+
+            for (const week of recentWeeks) {
+                for (const clan of week.clans) {
+                    const weekData = await databaseService.getPhase1Results(
+                        interaction.guild.id,
+                        week.weekNumber,
+                        week.year,
+                        clan
+                    );
+
+                    if (weekData && weekData.players) {
+                        weekData.players.forEach(player => {
+                            if (player.displayName) {
+                                playerNames.add(player.displayName);
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Filtruj i sortuj graczy według dopasowania
+            const choices = Array.from(playerNames)
+                .filter(name => name.toLowerCase().includes(focusedValueLower))
+                .sort((a, b) => {
+                    // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
+                    const aLower = a.toLowerCase();
+                    const bLower = b.toLowerCase();
+                    const aStartsWith = aLower.startsWith(focusedValueLower);
+                    const bStartsWith = bLower.startsWith(focusedValueLower);
+
+                    if (aStartsWith && !bStartsWith) return -1;
+                    if (!aStartsWith && bStartsWith) return 1;
+
+                    // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
+                    return aLower.localeCompare(bLower);
+                })
+                .map(name => ({
+                    name: name,
+                    value: name
+                }))
+                .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
+
+            // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
+            if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
+                choices.unshift({
+                    name: `📝 Użyj wpisanego: "${focusedValue}"`,
+                    value: focusedValue
+                });
+            }
+
+            await interaction.respond(choices);
+        }
     } catch (error) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
         await interaction.respond([]);
     }
 }
 
-// Funkcja obsługująca kliknięcie przycisku "Zmień gracza"
-async function handleProgresChangePlayerButton(interaction, sharedState) {
-    const { databaseService } = sharedState;
-
-    // Sprawdź czy użytkownik który kliknął to ten sam który wywołał komendę
-    const [, ownerId] = interaction.customId.split('|');
-    if (interaction.user.id !== ownerId) {
-        await interaction.reply({
-            content: '❌ Tylko osoba która wywołała komendę może zmieniać gracza.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    try {
-        // Sprawdź czy są dostępne dane
-        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-
-        if (allWeeks.length === 0) {
-            await interaction.reply({
-                content: '❌ Brak zapisanych wyników.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        // Pokaż modal do wyszukiwania gracza
-        const modal = new ModalBuilder()
-            .setCustomId(`progres_search_modal|${ownerId}|update`)
-            .setTitle('🔍 Wyszukaj gracza');
-
-        const nicknameInput = new TextInputBuilder()
-            .setCustomId('nickname')
-            .setLabel('Wpisz nick gracza')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Nazwa gracza...')
-            .setRequired(true)
-            .setMinLength(1)
-            .setMaxLength(32);
-
-        const firstRow = new ActionRowBuilder().addComponents(nicknameInput);
-        modal.addComponents(firstRow);
-
-        await interaction.showModal(modal);
-
-    } catch (error) {
-        logger.error('[PROGRES] ❌ Błąd otwierania modala:', error);
-        await interaction.reply({
-            content: '❌ Wystąpił błąd.',
-            flags: MessageFlags.Ephemeral
-        });
-    }
-}
-
-// Funkcja obsługująca submit modala wyszukiwania gracza
-async function handleProgresSearchModalSubmit(interaction, sharedState) {
-    const { databaseService } = sharedState;
-
-    await interaction.deferReply();
-
-    try {
-        const [, ownerId, mode] = interaction.customId.split('|');
-        const nickname = interaction.fields.getTextInputValue('nickname').trim();
-
-        if (!nickname) {
-            await interaction.editReply({
-                content: '❌ Musisz podać nick gracza.'
-            });
-            return;
-        }
-
-        // Sprawdź czy gracz istnieje w danych
-        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-        const last54Weeks = allWeeks.slice(0, 54);
-
-        let foundPlayer = null;
-
-        for (const week of last54Weeks) {
-            for (const clan of week.clans) {
-                const weekData = await databaseService.getPhase1Results(
-                    interaction.guild.id,
-                    week.weekNumber,
-                    week.year,
-                    clan
-                );
-
-                if (weekData && weekData.players) {
-                    const player = weekData.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === nickname.toLowerCase()
-                    );
-
-                    if (player) {
-                        foundPlayer = player.displayName;
-                        break;
-                    }
-                }
-            }
-            if (foundPlayer) break;
-        }
-
-        if (!foundPlayer) {
-            await interaction.editReply({
-                content: `❌ Nie znaleziono gracza **${nickname}** w ostatnich 54 tygodniach.`
-            });
-            return;
-        }
-
-        // Wyświetl progres gracza
-        const isUpdate = mode === 'update';
-        await showPlayerProgress(interaction, foundPlayer, ownerId, sharedState, isUpdate);
-
-    } catch (error) {
-        logger.error('[PROGRES] ❌ Błąd wyszukiwania gracza:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas wyszukiwania gracza.'
-        });
-    }
-}
-
 // Funkcja wyświetlająca progres gracza
-async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedState, isUpdate = false) {
+async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedState) {
     const { config, databaseService } = sharedState;
 
     try {
@@ -6102,14 +6050,6 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const resultsText = resultsLines.join('\n');
 
-        // Utwórz przycisk do zmiany gracza
-        const changePlayerButton = new ButtonBuilder()
-            .setCustomId(`progres_change_player|${ownerId}`)
-            .setLabel('🔍 Zmień gracza')
-            .setStyle(ButtonStyle.Primary);
-
-        const row = new ActionRowBuilder().addComponents(changePlayerButton);
-
         // Kanały permanentne
         const permanentChannels = [
             '1185510890930458705',
@@ -6140,43 +6080,15 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             .setFooter({ text: `Łącznie tygodni: ${playerProgressData.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
             .setTimestamp();
 
-        let messageToSchedule;
-
-        if (isUpdate) {
-            // Gdy klikamy przycisk "Zmień gracza" - usuń starą wiadomość i wyślij nową
-            if (interaction.message) {
-                // Usuń scheduled deletion dla starej wiadomości
-                if (messageCleanupService) {
-                    await messageCleanupService.removeScheduledMessage(interaction.message.id);
-                }
-
-                try {
-                    await interaction.message.delete();
-                } catch (error) {
-                    logger.warn('[PROGRES] Nie udało się usunąć starej wiadomości');
-                }
-            }
-
-            // Wyślij nową wiadomość
-            const response = await interaction.editReply({
-                embeds: [embed],
-                components: [row]
-            });
-            messageToSchedule = response;
-        } else {
-            // Pierwsza wyszukiwarka - wyślij nową publiczną wiadomość
-            const response = await interaction.editReply({
-                embeds: [embed],
-                components: [row]
-            });
-            messageToSchedule = response;
-        }
+        const response = await interaction.editReply({
+            embeds: [embed]
+        });
 
         // Zaplanuj usunięcie wiadomości
-        if (messageToSchedule && messageCleanupService && shouldAutoDelete) {
+        if (response && messageCleanupService && shouldAutoDelete) {
             await messageCleanupService.scheduleMessageDeletion(
-                messageToSchedule.id,
-                messageToSchedule.channelId,
+                response.id,
+                response.channelId,
                 deleteAt,
                 ownerId
             );
@@ -6212,42 +6124,29 @@ async function handleProgresCommand(interaction, sharedState) {
         return;
     }
 
+    await interaction.deferReply();
+
     try {
+        // Pobierz nick z parametru
+        const selectedPlayer = interaction.options.getString('nick');
+
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
 
         if (allWeeks.length === 0) {
-            await interaction.reply({
-                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.',
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
             });
             return;
         }
 
-        // Pokaż modal do wyszukiwania gracza
-        const modal = new ModalBuilder()
-            .setCustomId(`progres_search_modal|${interaction.user.id}|new`)
-            .setTitle('🔍 Wyszukaj gracza');
-
-        const nicknameInput = new TextInputBuilder()
-            .setCustomId('nickname')
-            .setLabel('Wpisz nick gracza')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Nazwa gracza...')
-            .setRequired(true)
-            .setMinLength(1)
-            .setMaxLength(32);
-
-        const firstRow = new ActionRowBuilder().addComponents(nicknameInput);
-        modal.addComponents(firstRow);
-
-        await interaction.showModal(modal);
+        // Wyświetl progres gracza
+        await showPlayerProgress(interaction, selectedPlayer, interaction.user.id, sharedState);
 
     } catch (error) {
         logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);
-        await interaction.reply({
-            content: '❌ Wystąpił błąd podczas pobierania danych progresu.',
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania danych progresu.'
         });
     }
 }
