@@ -305,6 +305,12 @@
           "requiredPermission": "public"
         },
         {
+          "name": "/progres",
+          "description": "Wyświetla wykres progresów gracza z ostatnich 40 tygodni",
+          "usage": "/progres [nick:nazwa gracza]",
+          "requiredPermission": "public"
+        },
+        {
           "name": "/modyfikuj",
           "description": "Modyfikuje wyniki faz ekspedycji",
           "usage": "/modyfikuj użytkownik:@user faza:[1/2] [wartość:liczba]",
