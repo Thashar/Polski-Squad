@@ -1754,7 +1754,7 @@ async function registerSlashCommands(client) {
         
         new SlashCommandBuilder()
             .setName('debug-roles')
-            .setDescription('Debugowanie ról na serwerze')
+            .setDescription('Debugowanie ról na serwerze (tylko dla moderatorów)')
             .addStringOption(option =>
                 option.setName('category')
                     .setDescription('Kategoria do sprawdzenia')
