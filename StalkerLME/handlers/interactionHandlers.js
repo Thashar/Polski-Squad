@@ -6426,7 +6426,7 @@ async function createGlobalPlayerRanking(guildId, databaseService, config, last5
 }
 
 // Funkcja wyświetlająca konkretną stronę rankingu clan-status
-async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = false) {
+async function showClanStatusPage(interaction, ranking, currentPage, deleteTimestamp, isUpdate = false) {
     const PLAYERS_PER_PAGE = 40;
     const totalPages = Math.ceil(ranking.length / PLAYERS_PER_PAGE);
 
@@ -6458,6 +6458,9 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
 
     const rankingText = rankingLines.join('\n');
 
+    // Informacja o wygaśnięciu
+    const expiryInfo = deleteTimestamp ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
+
     // Przyciski paginacji
     const navigationButtons = [];
 
@@ -6485,7 +6488,7 @@ async function showClanStatusPage(interaction, ranking, currentPage, isUpdate = 
 
     const embed = new EmbedBuilder()
         .setTitle(`🏆 Globalny Ranking - Wszyscy Gracze`)
-        .setDescription(`**Najlepsze wyniki z Fazy 1:**\n\n${rankingText}`)
+        .setDescription(`**Najlepsze wyniki z Fazy 1:**\n\n${rankingText}${expiryInfo}`)
         .setColor('#FFD700')
         .setFooter({ text: `Strona ${currentPage + 1}/${totalPages} | Graczy: ${ranking.length} | Zakres: #${startIndex + 1} - #${endIndex}` })
         .setTimestamp();
@@ -6537,8 +6540,12 @@ async function handleClanStatusCommand(interaction, sharedState) {
             return;
         }
 
+        // Ustaw czas usunięcia (5 minut)
+        const deleteAt = Date.now() + (5 * 60 * 1000);
+        const deleteTimestamp = Math.floor(deleteAt / 1000);
+
         // Wyświetl pierwszą stronę
-        await showClanStatusPage(interaction, ranking, 0, false);
+        await showClanStatusPage(interaction, ranking, 0, deleteTimestamp, false);
 
         // Zapisz ranking w cache dla paginacji (używamy message.id jako klucza)
         if (!sharedState.clanStatusPagination) {
@@ -6551,7 +6558,18 @@ async function handleClanStatusCommand(interaction, sharedState) {
             timestamp: Date.now()
         });
 
-        // Automatyczne czyszczenie cache po 15 minutach
+        // Zaplanuj usunięcie wiadomości po 5 minutach
+        const messageCleanupService = interaction.client.messageCleanupService;
+        if (response && messageCleanupService) {
+            await messageCleanupService.scheduleMessageDeletion(
+                response.id,
+                response.channelId,
+                deleteAt,
+                interaction.user.id
+            );
+        }
+
+        // Automatyczne czyszczenie cache po 15 minutach (dłużej niż auto-delete)
         setTimeout(() => {
             if (sharedState.clanStatusPagination) {
                 sharedState.clanStatusPagination.delete(response.id);
@@ -6599,10 +6617,29 @@ async function handleClanStatusPageButton(interaction, sharedState) {
             newPage = currentPage + 1;
         }
 
-        // Wyświetl nową stronę
-        await showClanStatusPage(interaction, paginationData.ranking, newPage, true);
+        // Resetuj timer usunięcia (5 minut od teraz)
+        const deleteAt = Date.now() + (5 * 60 * 1000);
+        const deleteTimestamp = Math.floor(deleteAt / 1000);
 
-        // Odśwież timestamp
+        // Wyświetl nową stronę z nowym timestampem
+        await showClanStatusPage(interaction, paginationData.ranking, newPage, deleteTimestamp, true);
+
+        // Zaktualizuj scheduled deletion z nowym czasem
+        const messageCleanupService = interaction.client.messageCleanupService;
+        if (messageCleanupService) {
+            // Usuń stare zaplanowane usunięcie
+            await messageCleanupService.removeScheduledMessage(interaction.message.id);
+
+            // Dodaj nowe zaplanowane usunięcie z resetowanym timerem
+            await messageCleanupService.scheduleMessageDeletion(
+                interaction.message.id,
+                interaction.message.channelId,
+                deleteAt,
+                interaction.user.id
+            );
+        }
+
+        // Odśwież timestamp w cache
         paginationData.timestamp = Date.now();
 
     } catch (error) {
