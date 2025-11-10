@@ -74,6 +74,14 @@ async function handleSlashCommand(interaction, sharedState) {
             await handlePointsCommand(interaction, config, databaseService, punishmentService);
             break;
         case 'debug-roles':
+            // Wymagane uprawnienia moderatora lub administratora
+            if (!interaction.member.permissions.has('ModerateMembers') && !interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({
+                    content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Moderator** lub **Administrator**',
+                    flags: MessageFlags.Ephemeral
+                });
+                return;
+            }
             await handleDebugRolesCommand(interaction, config, reminderUsageService, databaseService);
             break;
         case 'ocr-debug':
