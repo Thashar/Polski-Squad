@@ -5996,12 +5996,12 @@ async function handleProgresCommand(interaction, sharedState) {
         const formatDifference = (difference) => {
             if (difference > 0) {
                 const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
-                return `▲${superscriptNumber} (+${difference.toLocaleString('pl-PL')})`;
+                return `▲${superscriptNumber}`;
             } else if (difference < 0) {
                 const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
-                return `▼${subscriptNumber} (${difference.toLocaleString('pl-PL')})`;
+                return `▼${subscriptNumber}`;
             }
-            return '━ (0)';
+            return '━';
         };
 
         let cumulativeSection = '';
