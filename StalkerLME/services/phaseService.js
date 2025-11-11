@@ -491,6 +491,13 @@ class PhaseService {
             logger.info(`[PHASE${session.phase || 1}] ⏹️ Zatrzymano timer ghost pingów dla sesji: ${sessionId}`);
         }
 
+        // Zatrzymaj timer migania jeśli istnieje
+        if (session.blinkTimer) {
+            clearInterval(session.blinkTimer);
+            session.blinkTimer = null;
+            logger.info(`[PHASE${session.phase || 1}] ⏹️ Zatrzymano timer migania dla sesji: ${sessionId}`);
+        }
+
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
 
@@ -552,6 +559,23 @@ class PhaseService {
 
         session.publicInteraction = publicInteraction;
 
+        // Inicjalizuj stan migania
+        session.blinkState = false;
+
+        // Uruchom timer migania (co 1 sekundę)
+        session.blinkTimer = setInterval(async () => {
+            session.blinkState = !session.blinkState;
+
+            // Aktualizuj embed jeśli jest w trakcie przetwarzania
+            if (session.publicInteraction && session.currentProcessingImage) {
+                try {
+                    await this.updateProgress(session, session.currentProcessingImage);
+                } catch (error) {
+                    logger.error('[PHASE] ❌ Błąd aktualizacji migania:', error.message);
+                }
+            }
+        }, 1000);
+
         logger.info(`[PHASE1] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
         // Odśwież cache członków przed przetwarzaniem
@@ -586,34 +610,39 @@ class PhaseService {
             const attachment = fileData.originalAttachment;
 
             try {
-                // Aktualizuj postęp - ładowanie
-                await this.updateProgress(session, {
+                // Zapisz aktualnie przetwarzane zdjęcie (dla migania)
+                session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'loading',
                     action: 'Ładowanie zdjęcia'
-                });
+                };
+
+                // Aktualizuj postęp - ładowanie
+                await this.updateProgress(session, session.currentProcessingImage);
 
                 logger.info(`[PHASE1] 📷 Przetwarzanie zdjęcia ${i + 1}/${totalImages}: ${attachment.name}`);
 
                 // Aktualizuj postęp - OCR
-                await this.updateProgress(session, {
+                session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'ocr',
                     action: 'Rozpoznawanie tekstu (OCR)'
-                });
+                };
+                await this.updateProgress(session, session.currentProcessingImage);
 
                 // Przetwórz OCR z pliku lokalnego
                 const text = await this.ocrService.processImageFromFile(fileData.filepath);
 
                 // Aktualizuj postęp - ekstrakcja
-                await this.updateProgress(session, {
+                session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'extracting',
                     action: 'Wyciąganie wyników graczy'
-                });
+                };
+                await this.updateProgress(session, session.currentProcessingImage);
 
                 // Wyciągnij wszystkich graczy z wynikami (nie tylko zerami)
                 // Użyj snapshotu jeśli istnieje
@@ -638,12 +667,13 @@ class PhaseService {
                 });
 
                 // Aktualizuj postęp - agregacja
-                await this.updateProgress(session, {
+                session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'aggregating',
                     action: 'Agregacja wyników'
-                });
+                };
+                await this.updateProgress(session, session.currentProcessingImage);
 
                 // Tymczasowa agregacja dla statystyk postępu
                 this.aggregateResults(session);
@@ -669,6 +699,16 @@ class PhaseService {
 
         // Finalna agregacja
         this.aggregateResults(session);
+
+        // Zatrzymaj timer migania
+        if (session.blinkTimer) {
+            clearInterval(session.blinkTimer);
+            session.blinkTimer = null;
+            logger.info('[PHASE] ⏹️ Zatrzymano timer migania');
+        }
+
+        // Wyczyść aktualnie przetwarzane zdjęcie
+        session.currentProcessingImage = null;
 
         return results;
     }
@@ -698,7 +738,7 @@ class PhaseService {
                 .filter(([nick, scores]) => scores.some(score => score === 0 || score === '0'))
                 .length;
 
-            const progressBar = this.createProgressBar(currentImage, totalImages, stage);
+            const progressBar = this.createProgressBar(currentImage, totalImages, stage, session.blinkState || false);
 
             // Ikony dla różnych etapów
             const stageIcons = {
@@ -770,7 +810,7 @@ class PhaseService {
     /**
      * Tworzy pasek postępu z emoji (stałe 10 kratek + procent)
      */
-    createProgressBar(currentImage, totalImages, stage = 'pending') {
+    createProgressBar(currentImage, totalImages, stage = 'pending', blinkState = false) {
         const percentage = Math.floor((currentImage / totalImages) * 100);
         const totalBars = 10;
 
@@ -785,13 +825,17 @@ class PhaseService {
         } else {
             // W trakcie przetwarzania
             // Zielone kratki = postęp ukończonych zdjęć (currentImage - 1)
-            // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do currentImage)
+            // Pomarańczowe/białe kratki = postęp obecnego zdjęcia (migają co sekundę)
             const completedBars = Math.ceil((currentImage / totalImages) * totalBars);
             const greenBars = Math.floor(((currentImage - 1) / totalImages) * totalBars);
-            const yellowBars = completedBars - greenBars;
+            const orangeBars = completedBars - greenBars;
             const remainingBars = totalBars - completedBars;
 
-            bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(remainingBars);
+            // Miganie: pomarańczowe ↔ białe
+            const currentBar = blinkState ? '🟧' : '⬜';
+            const remainingBar = blinkState ? '⬜' : '🟧';
+
+            bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + remainingBar.repeat(remainingBars);
         }
 
         return `${bar} ${percentage}%`;
