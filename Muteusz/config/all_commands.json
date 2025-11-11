@@ -108,7 +108,7 @@
         },
         {
           "name": "/chaos-mode",
-          "description": "Włącza/wyłącza Chaos Mode - wybierz role aby włączyć, zostaw puste aby wyłączyć (5% szansa, 1 godzina)",
+          "description": "Włącza/wyłącza Chaos Mode - wybierz role aby włączyć, zostaw puste aby wyłączyć (5% szansa, rola na stałe)",
           "usage": "/chaos-mode [rola_1:@rola] [rola_2:@rola] [rola_3:@rola] [rola_4:@rola] [rola_5:@rola]",
           "requiredPermission": "administrator"
         }

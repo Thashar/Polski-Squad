@@ -15,13 +15,13 @@ class ChaosService {
         this.chaosRoleIds = []; // Array ról do nadawania
 
         // Map przechowujący użytkowników z aktywną rolą chaosową
-        // Key: userId, Value: { guildId, roleId, timeoutId, expiresAt }
+        // Key: userId, Value: { guildId, roleId }
+        // Role są przyznawane na stałe do wyłączenia chaos mode
         this.activeUsers = new Map();
 
         // Szanse
         this.ROLE_CHANCE = 0.05; // 5% szansa na otrzymanie roli
         this.RESPONSE_CHANCE = 0.10; // 10% szansa na odpowiedź bota (1/10)
-        this.ROLE_DURATION = 60 * 60 * 1000; // 1 godzina w milisekundach
 
         // Emoji do odpowiedzi
         this.responseEmojis = [
@@ -102,20 +102,13 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
                 this.chaosRoleIds = [];
             }
 
-            // Wczytaj aktywnych użytkowników i sprawdź czy ich role jeszcze są aktywne
-            const now = Date.now();
+            // Wczytaj aktywnych użytkowników (role przyznane na stałe do wyłączenia chaos mode)
             if (chaosData.activeUsers && Array.isArray(chaosData.activeUsers)) {
                 for (const user of chaosData.activeUsers) {
-                    if (user.expiresAt > now) {
-                        // Rola jeszcze aktywna - ustaw nowy timeout
-                        const remainingTime = user.expiresAt - now;
-                        this.activeUsers.set(user.userId, {
-                            guildId: user.guildId,
-                            roleId: user.roleId, // ID nadanej roli
-                            timeoutId: null, // Będzie ustawiony przez setupRoleTimeout
-                            expiresAt: user.expiresAt
-                        });
-                    }
+                    this.activeUsers.set(user.userId, {
+                        guildId: user.guildId,
+                        roleId: user.roleId // ID nadanej roli
+                    });
                 }
             }
 
@@ -133,12 +126,11 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
         try {
             await this.ensureDataDirectory();
 
-            // Konwertuj Map na tablicę
+            // Konwertuj Map na tablicę (role przyznane na stałe)
             const activeUsersArray = Array.from(this.activeUsers.entries()).map(([userId, data]) => ({
                 userId,
                 guildId: data.guildId,
-                roleId: data.roleId, // Zapisz ID nadanej roli
-                expiresAt: data.expiresAt
+                roleId: data.roleId // Zapisz ID nadanej roli
             }));
 
             const chaosData = {
@@ -181,7 +173,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             logger.info(`🔥 Chaos Mode włączony! Role: ${roleIds.join(', ')}`);
             return {
                 success: true,
-                message: `✅ Chaos Mode został włączony!\n🎲 ${roleIds.length === 1 ? 'Rola' : 'Role'}: ${rolesText}\n📊 Szansa na rolę: **5%**\n⏰ Czas trwania roli: **1 godzina**\n💬 Szansa na odpowiedź bota: **10%** (1 na 10)`
+                message: `✅ Chaos Mode został włączony!\n🎲 ${roleIds.length === 1 ? 'Rola' : 'Role'}: ${rolesText}\n📊 Szansa na rolę: **5%**\n⏰ Czas trwania roli: **na stałe do wyłączenia chaos mode**\n💬 Szansa na odpowiedź bota: **10%** (1 na 10)`
             };
         } catch (error) {
             logger.error(`❌ Błąd włączania Chaos Mode: ${error.message}`);
@@ -207,10 +199,6 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             // Usuń role od wszystkich aktywnych użytkowników
             if (guild) {
                 for (const [userId, data] of this.activeUsers.entries()) {
-                    if (data.timeoutId) {
-                        clearTimeout(data.timeoutId);
-                    }
-
                     // Spróbuj usunąć rolę od użytkownika
                     try {
                         const member = await guild.members.fetch(userId);
@@ -222,13 +210,6 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
                     } catch (error) {
                         errorCount++;
                         logger.warn(`⚠️ Nie można usunąć roli od użytkownika ${userId}: ${error.message}`);
-                    }
-                }
-            } else {
-                // Tylko wyczyść timery jeśli nie mamy guild
-                for (const [userId, data] of this.activeUsers.entries()) {
-                    if (data.timeoutId) {
-                        clearTimeout(data.timeoutId);
                     }
                 }
             }
@@ -300,7 +281,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
     }
 
     /**
-     * Nadaje rolę chaos użytkownikowi
+     * Nadaje rolę chaos użytkownikowi (na stałe do wyłączenia chaos mode)
      * @param {Message} message - Wiadomość Discord
      * @param {GuildMember} member - Członek serwera
      */
@@ -312,24 +293,15 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             // Nadaj rolę
             await member.roles.add(randomRoleId);
 
-            const expiresAt = Date.now() + this.ROLE_DURATION;
-
-            // Ustaw timeout na usunięcie roli
-            const timeoutId = setTimeout(async () => {
-                await this.removeChaosRole(member.id, member.guild.id);
-            }, this.ROLE_DURATION);
-
-            // Zapisz użytkownika z ID nadanej roli
+            // Zapisz użytkownika z ID nadanej roli (na stałe do wyłączenia chaos mode)
             this.activeUsers.set(member.id, {
                 guildId: member.guild.id,
-                roleId: randomRoleId,
-                timeoutId: timeoutId,
-                expiresAt: expiresAt
+                roleId: randomRoleId
             });
 
             await this.saveChaosMode();
 
-            logger.info(`🎲 Chaos Mode: Nadano rolę ${randomRoleId} użytkownikowi ${message.author.tag} (5% szansa)`);
+            logger.info(`🎲 Chaos Mode: Nadano rolę ${randomRoleId} użytkownikowi ${message.author.tag} na stałe (5% szansa)`);
 
             // Wyślij wiadomość w odpowiedzi
             try {
@@ -339,32 +311,6 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             }
         } catch (error) {
             logger.error(`❌ Błąd nadawania roli chaos: ${error.message}`);
-        }
-    }
-
-    /**
-     * Usuwa rolę chaos od użytkownika
-     * @param {string} userId - ID użytkownika
-     * @param {string} guildId - ID serwera
-     */
-    async removeChaosRole(userId, guildId) {
-        try {
-            // Usuń z mapy
-            const userData = this.activeUsers.get(userId);
-            if (userData && userData.timeoutId) {
-                clearTimeout(userData.timeoutId);
-            }
-            this.activeUsers.delete(userId);
-
-            await this.saveChaosMode();
-
-            logger.info(`⏰ Chaos Mode: Usunięto rolę użytkownikowi ${userId} (timeout 1 godzina)`);
-
-            // Znajdź użytkownika i usuń rolę
-            // Uwaga: To wymaga dostępu do klienta Discord, więc robimy to asynchronicznie
-            // i ignorujemy błędy jeśli użytkownik nie jest już na serwerze
-        } catch (error) {
-            logger.error(`❌ Błąd usuwania roli chaos: ${error.message}`);
         }
     }
 
@@ -425,7 +371,8 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
     }
 
     /**
-     * Przywraca timeouty dla aktywnych użytkowników po restarcie bota
+     * Weryfikuje aktywnych użytkowników po restarcie bota
+     * Sprawdza czy użytkownicy nadal mają role chaos i usuwa z listy tych, którzy ich nie mają
      * @param {Client} client - Klient Discord
      */
     async restoreTimeouts(client) {
@@ -433,57 +380,39 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             return;
         }
 
-        logger.info(`🔄 Przywracanie timeoutów Chaos Mode dla ${this.activeUsers.size} użytkowników...`);
+        logger.info(`🔄 Weryfikacja Chaos Mode dla ${this.activeUsers.size} użytkowników...`);
 
-        const now = Date.now();
         const toRemove = [];
 
         for (const [userId, data] of this.activeUsers.entries()) {
-            const remainingTime = data.expiresAt - now;
+            try {
+                const guild = await client.guilds.fetch(data.guildId);
+                const member = await guild.members.fetch(userId);
 
-            if (remainingTime <= 0) {
-                // Rola już wygasła
-                toRemove.push(userId);
-
-                // Spróbuj usunąć rolę z użytkownika
-                try {
-                    const guild = await client.guilds.fetch(data.guildId);
-                    const member = await guild.members.fetch(userId);
-                    await this.removeChaosRoleFromMember(member, data.roleId);
-                } catch (error) {
-                    // Ignoruj błędy (użytkownik mógł opuścić serwer)
+                // Sprawdź czy użytkownik nadal ma rolę
+                if (!member.roles.cache.has(data.roleId)) {
+                    // Użytkownik nie ma już roli - usuń z listy
+                    toRemove.push(userId);
+                    logger.info(`ℹ️ Użytkownik ${member.user.tag} nie ma już roli chaos - usuwam z listy`);
                 }
-            } else {
-                // Ustaw nowy timeout
-                const timeoutId = setTimeout(async () => {
-                    try {
-                        const guild = await client.guilds.fetch(data.guildId);
-                        const member = await guild.members.fetch(userId);
-                        await this.removeChaosRoleFromMember(member, data.roleId);
-                        await this.removeChaosRole(userId, data.guildId);
-                    } catch (error) {
-                        // Ignoruj błędy
-                        await this.removeChaosRole(userId, data.guildId);
-                    }
-                }, remainingTime);
-
-                this.activeUsers.set(userId, {
-                    ...data,
-                    timeoutId: timeoutId
-                });
+            } catch (error) {
+                // Użytkownik opuścił serwer lub wystąpił błąd - usuń z listy
+                toRemove.push(userId);
+                logger.info(`ℹ️ Nie można znaleźć użytkownika ${userId} - usuwam z listy`);
             }
         }
 
-        // Usuń wygasłych użytkowników
+        // Usuń użytkowników bez ról
         for (const userId of toRemove) {
             this.activeUsers.delete(userId);
         }
 
         if (toRemove.length > 0) {
             await this.saveChaosMode();
+            logger.info(`✅ Usunięto ${toRemove.length} użytkowników bez roli z listy Chaos Mode`);
         }
 
-        logger.info(`✅ Przywrócono ${this.activeUsers.size} timeoutów Chaos Mode`);
+        logger.info(`✅ Zweryfikowano Chaos Mode - aktywnych użytkowników: ${this.activeUsers.size}`);
     }
 
     /**
