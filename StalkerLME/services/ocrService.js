@@ -1363,7 +1363,7 @@ class OCRService {
             const punishButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_punish')
                 .setLabel('Punish')
-                .setEmoji('⚠️')
+                .setEmoji('💀')
                 .setStyle(ButtonStyle.Danger);
 
             const commandRow = new ActionRowBuilder()
@@ -1552,7 +1552,7 @@ class OCRService {
             const punishButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_punish')
                 .setLabel('Punish')
-                .setEmoji('⚠️')
+                .setEmoji('💀')
                 .setStyle(ButtonStyle.Danger);
 
             const commandRow = new ActionRowBuilder()
