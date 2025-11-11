@@ -831,11 +831,10 @@ class PhaseService {
             const orangeBars = completedBars - greenBars;
             const remainingBars = totalBars - completedBars;
 
-            // Miganie: pomarańczowe ↔ białe
+            // Miganie: pomarańczowe ↔ białe (tylko dla aktualnie przetwarzanych kratek)
             const currentBar = blinkState ? '🟧' : '⬜';
-            const remainingBar = blinkState ? '⬜' : '🟧';
 
-            bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + remainingBar.repeat(remainingBars);
+            bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + '⬜'.repeat(remainingBars);
         }
 
         return `${bar} ${percentage}%`;

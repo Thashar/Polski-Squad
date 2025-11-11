@@ -804,11 +804,10 @@ class ReminderService {
                 const orangeBars = completedBars - greenBars;
                 const whiteBars = totalBars - completedBars;
 
-                // Miganie: pomarańczowe ↔ białe
+                // Miganie: pomarańczowe ↔ białe (tylko dla aktualnie przetwarzanych kratek)
                 const currentBar = blinkState ? '🟧' : '⬜';
-                const remainingBar = blinkState ? '⬜' : '🟧';
 
-                bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + remainingBar.repeat(whiteBars);
+                bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + '⬜'.repeat(whiteBars);
             }
         }
 
