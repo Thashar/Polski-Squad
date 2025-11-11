@@ -58,7 +58,7 @@ Mówi zapłakany:
 Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
         ];
 
-        this.HYMN_CHANCE = 0.01; // 1% szansa na wysłanie zwrotki hymnu (1/100)
+        this.HYMN_CHANCE = 0.20; // 20% szansa na wysłanie zwrotki hymnu (1/5)
     }
 
     /**
@@ -405,19 +405,19 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
      */
     async sendRandomResponse(message) {
         try {
-            // 1% szansa na wysłanie zwrotki hymnu
+            // 20% szansa na wysłanie zwrotki hymnu, 80% na emoji
             const hymnChance = Math.random();
 
             if (hymnChance < this.HYMN_CHANCE) {
                 // Wyślij losową zwrotkę hymnu
                 const randomVerse = this.hymnVerses[Math.floor(Math.random() * this.hymnVerses.length)];
                 await message.channel.send(randomVerse);
-                logger.info(`🎵 Chaos Mode: Wysłano zwrotkę hymnu na kanale ${message.channel.name} (1% szansa, 1/100)`);
+                logger.info(`🎵 Chaos Mode: Wysłano zwrotkę hymnu na kanale ${message.channel.name} (20% szansa, 1/5)`);
             } else {
                 // Wyślij losowe emoji
                 const randomEmoji = this.responseEmojis[Math.floor(Math.random() * this.responseEmojis.length)];
                 await message.channel.send(randomEmoji);
-                logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź na kanale ${message.channel.name} (5% szansa, 1/20)`);
+                logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź emoji na kanale ${message.channel.name} (80% szansa, 4/5)`);
             }
         } catch (error) {
             logger.error(`❌ Błąd wysyłania losowej odpowiedzi chaos: ${error.message}`);
