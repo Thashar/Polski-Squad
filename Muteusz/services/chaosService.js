@@ -20,7 +20,7 @@ class ChaosService {
 
         // Szanse
         this.ROLE_CHANCE = 0.05; // 5% szansa na otrzymanie roli
-        this.RESPONSE_CHANCE = 0.05; // 5% szansa na odpowiedź bota (1/20)
+        this.RESPONSE_CHANCE = 0.10; // 10% szansa na odpowiedź bota (1/10)
         this.ROLE_DURATION = 60 * 60 * 1000; // 1 godzina w milisekundach
 
         // Emoji do odpowiedzi
@@ -181,7 +181,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             logger.info(`🔥 Chaos Mode włączony! Role: ${roleIds.join(', ')}`);
             return {
                 success: true,
-                message: `✅ Chaos Mode został włączony!\n🎲 ${roleIds.length === 1 ? 'Rola' : 'Role'}: ${rolesText}\n📊 Szansa na rolę: **5%**\n⏰ Czas trwania roli: **1 godzina**\n💬 Szansa na odpowiedź bota: **5%** (1 na 20)`
+                message: `✅ Chaos Mode został włączony!\n🎲 ${roleIds.length === 1 ? 'Rola' : 'Role'}: ${rolesText}\n📊 Szansa na rolę: **5%**\n⏰ Czas trwania roli: **1 godzina**\n💬 Szansa na odpowiedź bota: **10%** (1 na 10)`
             };
         } catch (error) {
             logger.error(`❌ Błąd włączania Chaos Mode: ${error.message}`);
@@ -290,7 +290,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             }
         }
 
-        // 2. Jeśli użytkownik ma rolę, losuj czy bot odpowie (5% szansa, 1/20)
+        // 2. Jeśli użytkownik ma rolę, losuj czy bot odpowie (10% szansa, 1/10)
         if (hasAnyRole) {
             const randomResponse = Math.random();
             if (randomResponse < this.RESPONSE_CHANCE) {
