@@ -333,7 +333,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
 
             // Wyślij wiadomość w odpowiedzi
             try {
-                await message.reply('Do hymnu baczność! <a:PepePolska:1341086791608041626>');
+                await message.reply('Do hymnu! <a:PepePolska:1341086791608041626>');
             } catch (error) {
                 // Ignoruj błędy wysyłania wiadomości
             }
