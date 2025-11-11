@@ -966,6 +966,30 @@ async function handleButton(interaction, sharedState) {
 
     // ============ KONIEC OBSŁUGI PRZYCISKÓW /REMIND ============
 
+    // ============ OBSŁUGA PRZYCISKÓW KOMEND Z KOLEJKI ============
+
+    if (interaction.customId === 'queue_cmd_faza1') {
+        await handlePhase1Command(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_faza2') {
+        await handlePhase2Command(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_remind') {
+        await handleRemindCommand(interaction, sharedState.config, sharedState.ocrService, sharedState.reminderService, sharedState.reminderUsageService);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_punish') {
+        await handlePunishCommand(interaction, sharedState.config, sharedState.ocrService, sharedState.punishmentService);
+        return;
+    }
+
+    // ============ KONIEC OBSŁUGI PRZYCISKÓW KOMEND Z KOLEJKI ============
+
     // ============ OBSŁUGA PRZYCISKU "WYJDŹ Z KOLEJKI" ============
 
     if (interaction.customId === 'queue_leave') {
