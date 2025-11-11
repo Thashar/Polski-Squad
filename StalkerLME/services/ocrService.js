@@ -1338,21 +1338,52 @@ class OCRService {
 
             const embed = await this.createQueueEmbed(guildId);
 
-            // Dodaj przycisk "Wyjdź z kolejki"
+            // Dodaj przyciski komend i przycisk "Wyjdź z kolejki"
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+
+            // Pierwszy rząd - przyciski komend
+            const faza1Button = new ButtonBuilder()
+                .setCustomId('queue_cmd_faza1')
+                .setLabel('Faza 1')
+                .setEmoji('📊')
+                .setStyle(ButtonStyle.Secondary);
+
+            const faza2Button = new ButtonBuilder()
+                .setCustomId('queue_cmd_faza2')
+                .setLabel('Faza 2')
+                .setEmoji('📈')
+                .setStyle(ButtonStyle.Secondary);
+
+            const remindButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_remind')
+                .setLabel('Remind')
+                .setEmoji('📢')
+                .setStyle(ButtonStyle.Secondary);
+
+            const punishButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_punish')
+                .setLabel('Punish')
+                .setEmoji('💀')
+                .setStyle(ButtonStyle.Secondary);
+
+            const commandRow = new ActionRowBuilder()
+                .addComponents(faza1Button, faza2Button, remindButton, punishButton);
+
+            // Drugi rząd - przycisk wyjdź z kolejki
             const leaveQueueButton = new ButtonBuilder()
                 .setCustomId('queue_leave')
-                .setLabel('🚪 Wyjdź z kolejki')
-                .setStyle(ButtonStyle.Danger);
+                .setLabel('Wyjdź z kolejki')
+                .setEmoji('🚪')
+                .setStyle(ButtonStyle.Secondary);
 
-            const row = new ActionRowBuilder()
+            const leaveRow = new ActionRowBuilder()
                 .addComponents(leaveQueueButton);
 
             // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
             if (this.queueMessageId) {
                 try {
                     const message = await channel.messages.fetch(this.queueMessageId);
-                    await message.edit({ embeds: [embed], components: [row] });
+                    await message.edit({ embeds: [embed], components: [commandRow, leaveRow] });
                     logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
                     return;
                 } catch (error) {
@@ -1498,22 +1529,53 @@ class OCRService {
 
             const embed = await this.createQueueEmbed(channel.guildId);
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+
+            // Pierwszy rząd - przyciski komend
+            const faza1Button = new ButtonBuilder()
+                .setCustomId('queue_cmd_faza1')
+                .setLabel('Faza 1')
+                .setEmoji('📊')
+                .setStyle(ButtonStyle.Secondary);
+
+            const faza2Button = new ButtonBuilder()
+                .setCustomId('queue_cmd_faza2')
+                .setLabel('Faza 2')
+                .setEmoji('📈')
+                .setStyle(ButtonStyle.Secondary);
+
+            const remindButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_remind')
+                .setLabel('Remind')
+                .setEmoji('📢')
+                .setStyle(ButtonStyle.Secondary);
+
+            const punishButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_punish')
+                .setLabel('Punish')
+                .setEmoji('💀')
+                .setStyle(ButtonStyle.Secondary);
+
+            const commandRow = new ActionRowBuilder()
+                .addComponents(faza1Button, faza2Button, remindButton, punishButton);
+
+            // Drugi rząd - przycisk wyjdź z kolejki
             const leaveQueueButton = new ButtonBuilder()
                 .setCustomId('queue_leave')
-                .setLabel('🚪 Wyjdź z kolejki')
-                .setStyle(ButtonStyle.Danger);
+                .setLabel('Wyjdź z kolejki')
+                .setEmoji('🚪')
+                .setStyle(ButtonStyle.Secondary);
 
-            const row = new ActionRowBuilder()
+            const leaveRow = new ActionRowBuilder()
                 .addComponents(leaveQueueButton);
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed
-                await queueMessage.edit({ embeds: [embed], components: [row] });
+                await queueMessage.edit({ embeds: [embed], components: [commandRow, leaveRow] });
                 this.queueMessageId = queueMessage.id;
                 logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed kolejki (ID: ' + queueMessage.id + ')');
             } else {
                 // Wyślij nowy embed jako pierwszą wiadomość
-                const message = await channel.send({ embeds: [embed], components: [row] });
+                const message = await channel.send({ embeds: [embed], components: [commandRow, leaveRow] });
                 this.queueMessageId = message.id;
                 logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed kolejki (ID: ' + message.id + ')');
             }
