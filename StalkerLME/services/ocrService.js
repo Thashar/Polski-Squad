@@ -1346,25 +1346,25 @@ class OCRService {
                 .setCustomId('queue_cmd_faza1')
                 .setLabel('Faza 1')
                 .setEmoji('📊')
-                .setStyle(ButtonStyle.Primary);
+                .setStyle(ButtonStyle.Secondary);
 
             const faza2Button = new ButtonBuilder()
                 .setCustomId('queue_cmd_faza2')
                 .setLabel('Faza 2')
                 .setEmoji('📈')
-                .setStyle(ButtonStyle.Primary);
+                .setStyle(ButtonStyle.Secondary);
 
             const remindButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_remind')
                 .setLabel('Remind')
                 .setEmoji('📢')
-                .setStyle(ButtonStyle.Success);
+                .setStyle(ButtonStyle.Secondary);
 
             const punishButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_punish')
                 .setLabel('Punish')
                 .setEmoji('💀')
-                .setStyle(ButtonStyle.Danger);
+                .setStyle(ButtonStyle.Secondary);
 
             const commandRow = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton);
@@ -1535,25 +1535,25 @@ class OCRService {
                 .setCustomId('queue_cmd_faza1')
                 .setLabel('Faza 1')
                 .setEmoji('📊')
-                .setStyle(ButtonStyle.Primary);
+                .setStyle(ButtonStyle.Secondary);
 
             const faza2Button = new ButtonBuilder()
                 .setCustomId('queue_cmd_faza2')
                 .setLabel('Faza 2')
                 .setEmoji('📈')
-                .setStyle(ButtonStyle.Primary);
+                .setStyle(ButtonStyle.Secondary);
 
             const remindButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_remind')
                 .setLabel('Remind')
                 .setEmoji('📢')
-                .setStyle(ButtonStyle.Success);
+                .setStyle(ButtonStyle.Secondary);
 
             const punishButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_punish')
                 .setLabel('Punish')
                 .setEmoji('💀')
-                .setStyle(ButtonStyle.Danger);
+                .setStyle(ButtonStyle.Secondary);
 
             const commandRow = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton);
