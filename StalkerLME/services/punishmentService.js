@@ -409,6 +409,13 @@ class PunishmentService {
             session.timeout = null;
         }
 
+        // Zatrzymaj timer migania jeśli istnieje
+        if (session.blinkTimer) {
+            clearInterval(session.blinkTimer);
+            session.blinkTimer = null;
+            logger.info('[PUNISH] ⏹️ Zatrzymano timer migania podczas czyszczenia sesji');
+        }
+
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
 
@@ -634,6 +641,50 @@ class PunishmentService {
 
         session.publicInteraction = publicInteraction;
 
+        // Inicjalizuj stan migania
+        session.blinkState = false;
+
+        // Uruchom timer migania (co 1 sekundę)
+        session.blinkTimer = setInterval(async () => {
+            session.blinkState = !session.blinkState;
+
+            // Aktualizuj embed jeśli jest w trakcie przetwarzania
+            if (session.publicInteraction && session.currentProcessingData) {
+                try {
+                    const { imageIndex, totalImages } = session.currentProcessingData;
+                    const progressBar = this.createProgressBar(imageIndex, totalImages, 'processing', session.blinkState);
+
+                    const processingEmbed = new EmbedBuilder()
+                        .setTitle('⏳ Przetwarzanie zdjęć...')
+                        .setDescription(
+                            `${progressBar}\n\n` +
+                            `📸 Przetwarzanie **${imageIndex}** z **${totalImages}**`
+                        )
+                        .setColor('#FFA500')
+                        .setTimestamp();
+
+                    // Dodaj wyniki z poprzednich przetworzonych zdjęć
+                    const previousResultsText = session.processedImages.map((img, idx) => {
+                        const playersText = `${img.result.foundPlayers} ${img.result.foundPlayers === 1 ? 'gracz' : 'graczy'}`;
+                        const uniquesText = `${img.result.newUniques} ${img.result.newUniques === 1 ? 'nowy unikalny' : 'nowych unikalnych'}`;
+                        return `📸 Zdjęcie ${idx + 1}: ${playersText} (${uniquesText})`;
+                    }).join('\n');
+
+                    processingEmbed.addFields(
+                        { name: '✅ Przetworzone zdjęcia', value: previousResultsText || 'Brak', inline: false },
+                        { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
+                    );
+
+                    await session.publicInteraction.editReply({
+                        embeds: [processingEmbed],
+                        components: []
+                    });
+                } catch (error) {
+                    logger.error('[PUNISH] ❌ Błąd aktualizacji migania:', error.message);
+                }
+            }
+        }, 1000);
+
         logger.info(`[PUNISH] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
         // Odśwież cache członków przed przetwarzaniem
@@ -651,8 +702,11 @@ class PunishmentService {
             const imageIndex = i + 1;
 
             try {
+                // Zapisz aktualnie przetwarzane dane (dla migania)
+                session.currentProcessingData = { imageIndex, totalImages };
+
                 // Zaktualizuj progress bar przed przetworzeniem zdjęcia
-                const progressBar = this.createProgressBar(imageIndex, totalImages);
+                const progressBar = this.createProgressBar(imageIndex, totalImages, 'processing', session.blinkState);
                 const processingEmbed = new EmbedBuilder()
                     .setTitle('⏳ Przetwarzanie zdjęć...')
                     .setDescription(
@@ -721,8 +775,8 @@ class PunishmentService {
 
                 logger.info(`[PUNISH] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych (${newUniquesFromThisImage} nowych unikalnych)`);
 
-                // Zaktualizuj progress bar PO przetworzeniu zdjęcia (żółte → zielone)
-                const completedBar = this.createProgressBar(imageIndex, totalImages, 'completed');
+                // Zaktualizuj progress bar PO przetworzeniu zdjęcia (pomarańczowe → zielone)
+                const completedBar = this.createProgressBar(imageIndex, totalImages, 'completed', session.blinkState);
                 const completedEmbed = new EmbedBuilder()
                     .setTitle('⏳ Przetwarzanie zdjęć...')
                     .setDescription(
@@ -781,6 +835,16 @@ class PunishmentService {
 
         logger.info(`[PUNISH] ✅ Zakończono przetwarzanie ${totalImages} zdjęć, znaleziono ${session.uniqueNicks.size} unikalnych nicków`);
 
+        // Zatrzymaj timer migania
+        if (session.blinkTimer) {
+            clearInterval(session.blinkTimer);
+            session.blinkTimer = null;
+            logger.info('[PUNISH] ⏹️ Zatrzymano timer migania');
+        }
+
+        // Wyczyść aktualnie przetwarzane dane
+        session.currentProcessingData = null;
+
         return results;
     }
 
@@ -788,9 +852,10 @@ class PunishmentService {
      * Tworzy progress bar dla przetwarzania zdjęć (stałe 10 kratek + procent)
      * @param {number} current - Numer aktualnego zdjęcia
      * @param {number} total - Całkowita liczba zdjęć
-     * @param {string} stage - 'processing' (żółte dla aktualnego) lub 'completed' (zielone dla aktualnego)
+     * @param {string} stage - 'processing' (pomarańczowe dla aktualnego) lub 'completed' (zielone dla aktualnego)
+     * @param {boolean} blinkState - Stan migania (true/false)
      */
-    createProgressBar(current, total, stage = 'processing') {
+    createProgressBar(current, total, stage = 'processing', blinkState = false) {
         const percentage = Math.floor((current / total) * 100);
         const totalBars = 10;
 
@@ -808,12 +873,16 @@ class PunishmentService {
             } else {
                 // Podczas przetwarzania
                 // Zielone kratki = postęp ukończonych zdjęć (current - 1)
-                // Żółte kratki = postęp obecnego zdjęcia (od ukończonych do current)
+                // Pomarańczowe/białe kratki = postęp obecnego zdjęcia (migają co sekundę)
                 const greenBars = Math.floor(((current - 1) / total) * totalBars);
-                const yellowBars = completedBars - greenBars;
+                const orangeBars = completedBars - greenBars;
                 const whiteBars = totalBars - completedBars;
 
-                bar = '🟩'.repeat(greenBars) + '🟨'.repeat(yellowBars) + '⬜'.repeat(whiteBars);
+                // Miganie: pomarańczowe ↔ białe
+                const currentBar = blinkState ? '🟧' : '⬜';
+                const remainingBar = blinkState ? '⬜' : '🟧';
+
+                bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + remainingBar.repeat(whiteBars);
             }
         }
 
