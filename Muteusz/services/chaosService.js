@@ -300,9 +300,9 @@ class ChaosService {
 
             logger.info(`🎲 Chaos Mode: Nadano rolę ${randomRoleId} użytkownikowi ${message.author.tag} (5% szansa)`);
 
-            // Wyślij wiadomość na kanale (bez trybu odpowiedzi)
+            // Wyślij wiadomość w odpowiedzi
             try {
-                await message.channel.send('Jeszcze Polska nie zginęła!');
+                await message.reply('Jeszcze Polska nie zginęła! <a:PepePolska:1341086791608041626>');
             } catch (error) {
                 // Ignoruj błędy wysyłania wiadomości
             }

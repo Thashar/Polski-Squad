@@ -262,20 +262,11 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('chaos-mode')
-                .setDescription('Włącza/wyłącza Chaos Mode - losowe nadawanie ról użytkownikom')
-                .addStringOption(option =>
-                    option.setName('tryb')
-                        .setDescription('Włącz lub wyłącz Chaos Mode')
-                        .setRequired(true)
-                        .addChoices(
-                            { name: 'Włącz', value: 'on' },
-                            { name: 'Wyłącz', value: 'off' }
-                        )
-                )
+                .setDescription('Włącza/wyłącza Chaos Mode - wybierz role lub zostaw puste aby wyłączyć')
                 .addRoleOption(option =>
                     option.setName('rola_1')
-                        .setDescription('Pierwsza rola do nadawania')
-                        .setRequired(true)
+                        .setDescription('Pierwsza rola do nadawania (zostaw puste aby wyłączyć chaos mode)')
+                        .setRequired(false)
                 )
                 .addRoleOption(option =>
                     option.setName('rola_2')
@@ -2803,50 +2794,40 @@ class InteractionHandler {
             return;
         }
 
-        const mode = interaction.options.getString('tryb');
-
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            if (mode === 'on') {
-                // Zbierz wszystkie role
-                const roles = [];
-                for (let i = 1; i <= 5; i++) {
-                    const role = interaction.options.getRole(`rola_${i}`);
-                    if (role) {
-                        // Sprawdź hierarchię ról
-                        if (role.position >= interaction.guild.members.me.roles.highest.position) {
-                            await interaction.editReply({
-                                content: `❌ Nie mogę nadawać roli **${role.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`
-                            });
-                            return;
-                        }
-                        roles.push(role.id);
+            // Zbierz wszystkie role
+            const roles = [];
+            for (let i = 1; i <= 5; i++) {
+                const role = interaction.options.getRole(`rola_${i}`);
+                if (role) {
+                    // Sprawdź hierarchię ról
+                    if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                        await interaction.editReply({
+                            content: `❌ Nie mogę nadawać roli **${role.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`
+                        });
+                        return;
                     }
+                    roles.push(role.id);
                 }
+            }
 
-                if (roles.length === 0) {
-                    await interaction.editReply({
-                        content: '❌ Musisz wybrać co najmniej jedną rolę!'
-                    });
-                    return;
-                }
-
-                // Włącz Chaos Mode
-                const result = await this.chaosService.enableChaosMode(roles);
-                await interaction.editReply({ content: result.message });
-
-                if (result.success) {
-                    await this.logService.logMessage('success', `Chaos Mode włączony przez ${interaction.user.tag}, role: ${roles.join(', ')}`, interaction);
-                }
-
-            } else if (mode === 'off') {
-                // Wyłączanie Chaos Mode
+            if (roles.length === 0) {
+                // Brak ról - wyłącz Chaos Mode
                 const result = await this.chaosService.disableChaosMode(interaction.guild);
                 await interaction.editReply({ content: result.message });
 
                 if (result.success) {
                     await this.logService.logMessage('success', `Chaos Mode wyłączony przez ${interaction.user.tag}`, interaction);
+                }
+            } else {
+                // Role wybrane - włącz Chaos Mode
+                const result = await this.chaosService.enableChaosMode(roles);
+                await interaction.editReply({ content: result.message });
+
+                if (result.success) {
+                    await this.logService.logMessage('success', `Chaos Mode włączony przez ${interaction.user.tag}, role: ${roles.join(', ')}`, interaction);
                 }
             }
 
