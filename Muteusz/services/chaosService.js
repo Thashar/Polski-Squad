@@ -28,6 +28,22 @@ class ChaosService {
             '<a:PepePolska:1341086791608041626>',
             '<a:Z_animated_polish_flag:1418123566687453235>'
         ];
+
+        // Zwrotki i refren hymnu Polski
+        this.hymnVerses = [
+            // Zwrotka 1
+            'Jeszcze Polska nie zginęła,\nKiedy my żyjemy.\nCo nam obca przemoc wzięła,\nSzablą odbierzemy. <a:Z_animated_polish_flag:1418123566687453235>',
+            // Refren
+            'Marsz, marsz, Dąbrowski,\nZ ziemi włoskiej do Polski.\nZa twoim przewodem\nZłączym się z narodem. <a:Z_animated_polish_flag:1418123566687453235>',
+            // Zwrotka 2
+            'Przejdziem Wisłę, przejdziem Wartę,\nBędziem Polakami.\nDał nam przykład Bonaparte,\nJak zwyciężać mamy. <a:Z_animated_polish_flag:1418123566687453235>',
+            // Zwrotka 3
+            'Jak Czarniecki do Poznania\nPo szwedzkim zaborze,\nDla ojczyzny ratowania\nWrócim się przez morze. <a:Z_animated_polish_flag:1418123566687453235>',
+            // Zwrotka 4
+            'Już tam ojciec do swej Basi\nMówi zapłakany:\n"Słuchaj jeno, pono nasi\nBiją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>'
+        ];
+
+        this.HYMN_CHANCE = 0.01; // 1% szansa na wysłanie zwrotki hymnu (1/100)
     }
 
     /**
@@ -369,14 +385,25 @@ class ChaosService {
     }
 
     /**
-     * Wysyła losową odpowiedź emoji
+     * Wysyła losową odpowiedź emoji lub zwrotkę hymnu
      * @param {Message} message - Wiadomość Discord
      */
     async sendRandomResponse(message) {
         try {
-            const randomEmoji = this.responseEmojis[Math.floor(Math.random() * this.responseEmojis.length)];
-            await message.channel.send(randomEmoji);
-            logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź na kanale ${message.channel.name} (5% szansa, 1/20)`);
+            // 1% szansa na wysłanie zwrotki hymnu
+            const hymnChance = Math.random();
+
+            if (hymnChance < this.HYMN_CHANCE) {
+                // Wyślij losową zwrotkę hymnu
+                const randomVerse = this.hymnVerses[Math.floor(Math.random() * this.hymnVerses.length)];
+                await message.channel.send(randomVerse);
+                logger.info(`🎵 Chaos Mode: Wysłano zwrotkę hymnu na kanale ${message.channel.name} (1% szansa, 1/100)`);
+            } else {
+                // Wyślij losowe emoji
+                const randomEmoji = this.responseEmojis[Math.floor(Math.random() * this.responseEmojis.length)];
+                await message.channel.send(randomEmoji);
+                logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź na kanale ${message.channel.name} (5% szansa, 1/20)`);
+            }
         } catch (error) {
             logger.error(`❌ Błąd wysyłania losowej odpowiedzi chaos: ${error.message}`);
         }
