@@ -35,32 +35,27 @@ class ChaosService {
             `Jeszcze Polska nie zginęła,
 Kiedy my żyjemy.
 Co nam obca przemoc wzięła,
-Szablą odbierzemy.
-<a:Z_animated_polish_flag:1418123566687453235>`,
+Szablą odbierzemy. <a:Z_animated_polish_flag:1418123566687453235>`,
             // Refren
             `Marsz, marsz, Dąbrowski,
 Z ziemi włoskiej do Polski.
 Za twoim przewodem
-Złączym się z narodem.
-<a:Z_animated_polish_flag:1418123566687453235>`,
+Złączym się z narodem. <a:Z_animated_polish_flag:1418123566687453235>`,
             // Zwrotka 2
             `Przejdziem Wisłę, przejdziem Wartę,
 Będziem Polakami.
 Dał nam przykład Bonaparte,
-Jak zwyciężać mamy.
-<a:Z_animated_polish_flag:1418123566687453235>`,
+Jak zwyciężać mamy. <a:Z_animated_polish_flag:1418123566687453235>`,
             // Zwrotka 3
             `Jak Czarniecki do Poznania
 Po szwedzkim zaborze,
 Dla ojczyzny ratowania
-Wrócim się przez morze.
-<a:Z_animated_polish_flag:1418123566687453235>`,
+Wrócim się przez morze. <a:Z_animated_polish_flag:1418123566687453235>`,
             // Zwrotka 4
             `Już tam ojciec do swej Basi
 Mówi zapłakany:
 "Słuchaj jeno, pono nasi
-Biją w tarabany".
-<a:Z_animated_polish_flag:1418123566687453235>`
+Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
         ];
 
         this.HYMN_CHANCE = 0.01; // 1% szansa na wysłanie zwrotki hymnu (1/100)
@@ -338,7 +333,7 @@ Biją w tarabany".
 
             // Wyślij wiadomość w odpowiedzi
             try {
-                await message.reply('Jeszcze Polska nie zginęła! <a:PepePolska:1341086791608041626>');
+                await message.reply('Do hymnu baczność! <a:PepePolska:1341086791608041626>');
             } catch (error) {
                 // Ignoruj błędy wysyłania wiadomości
             }
