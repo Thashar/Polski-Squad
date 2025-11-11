@@ -12,16 +12,16 @@ class ChaosService {
 
         // Stan chaos mode
         this.enabled = false;
-        this.chaosRoleId = null;
+        this.chaosRoleIds = []; // Array ról do nadawania
 
         // Map przechowujący użytkowników z aktywną rolą chaosową
-        // Key: userId, Value: { guildId, timeoutId, expiresAt }
+        // Key: userId, Value: { guildId, roleId, timeoutId, expiresAt }
         this.activeUsers = new Map();
 
         // Szanse
-        this.ROLE_CHANCE = 0.10; // 10% szansa na otrzymanie roli
+        this.ROLE_CHANCE = 0.05; // 5% szansa na otrzymanie roli
         this.RESPONSE_CHANCE = 0.05; // 5% szansa na odpowiedź bota (1/20)
-        this.ROLE_DURATION = 15 * 60 * 1000; // 15 minut w milisekundach
+        this.ROLE_DURATION = 60 * 60 * 1000; // 1 godzina w milisekundach
 
         // Emoji do odpowiedzi
         this.responseEmojis = [
@@ -62,7 +62,14 @@ class ChaosService {
             const chaosData = JSON.parse(data);
 
             this.enabled = chaosData.enabled || false;
-            this.chaosRoleId = chaosData.chaosRoleId || null;
+            // Kompatybilność wsteczna - obsługa starego formatu z pojedynczą rolą
+            if (chaosData.chaosRoleIds && Array.isArray(chaosData.chaosRoleIds)) {
+                this.chaosRoleIds = chaosData.chaosRoleIds;
+            } else if (chaosData.chaosRoleId) {
+                this.chaosRoleIds = [chaosData.chaosRoleId];
+            } else {
+                this.chaosRoleIds = [];
+            }
 
             // Wczytaj aktywnych użytkowników i sprawdź czy ich role jeszcze są aktywne
             const now = Date.now();
@@ -73,6 +80,7 @@ class ChaosService {
                         const remainingTime = user.expiresAt - now;
                         this.activeUsers.set(user.userId, {
                             guildId: user.guildId,
+                            roleId: user.roleId, // ID nadanej roli
                             timeoutId: null, // Będzie ustawiony przez setupRoleTimeout
                             expiresAt: user.expiresAt
                         });
@@ -80,7 +88,7 @@ class ChaosService {
                 }
             }
 
-            logger.info(`📥 Chaos Mode: ${this.enabled ? 'włączony' : 'wyłączony'}, Rola: ${this.chaosRoleId || 'brak'}, Aktywni użytkownicy: ${this.activeUsers.size}`);
+            logger.info(`📥 Chaos Mode: ${this.enabled ? 'włączony' : 'wyłączony'}, Role: ${this.chaosRoleIds.join(', ') || 'brak'}, Aktywni użytkownicy: ${this.activeUsers.size}`);
         } catch (error) {
             logger.error(`❌ Błąd ładowania chaos mode: ${error.message}`);
             throw error;
@@ -98,12 +106,13 @@ class ChaosService {
             const activeUsersArray = Array.from(this.activeUsers.entries()).map(([userId, data]) => ({
                 userId,
                 guildId: data.guildId,
+                roleId: data.roleId, // Zapisz ID nadanej roli
                 expiresAt: data.expiresAt
             }));
 
             const chaosData = {
                 enabled: this.enabled,
-                chaosRoleId: this.chaosRoleId,
+                chaosRoleIds: this.chaosRoleIds,
                 activeUsers: activeUsersArray
             };
 
@@ -128,19 +137,20 @@ class ChaosService {
 
     /**
      * Włącza chaos mode
-     * @param {string} roleId - ID roli do nadawania
+     * @param {Array<string>} roleIds - Array ID ról do nadawania
      * @returns {Object} - {success: boolean, message: string}
      */
-    async enableChaosMode(roleId) {
+    async enableChaosMode(roleIds) {
         try {
             this.enabled = true;
-            this.chaosRoleId = roleId;
+            this.chaosRoleIds = roleIds;
             await this.saveChaosMode();
 
-            logger.info(`🔥 Chaos Mode włączony! Rola: ${roleId}`);
+            const rolesText = roleIds.map(id => `<@&${id}>`).join(', ');
+            logger.info(`🔥 Chaos Mode włączony! Role: ${roleIds.join(', ')}`);
             return {
                 success: true,
-                message: `✅ Chaos Mode został włączony!\n🎲 Rola: <@&${roleId}>\n📊 Szansa na rolę: **10%**\n⏰ Czas trwania roli: **15 minut**\n💬 Szansa na odpowiedź bota: **5%** (1 na 20)`
+                message: `✅ Chaos Mode został włączony!\n🎲 ${roleIds.length === 1 ? 'Rola' : 'Role'}: ${rolesText}\n📊 Szansa na rolę: **5%**\n⏰ Czas trwania roli: **1 godzina**\n💬 Szansa na odpowiedź bota: **5%** (1 na 20)`
             };
         } catch (error) {
             logger.error(`❌ Błąd włączania Chaos Mode: ${error.message}`);
@@ -153,16 +163,42 @@ class ChaosService {
 
     /**
      * Wyłącza chaos mode
+     * @param {Guild} guild - Obiekt guild Discord (opcjonalny, jeśli podany usuwa role od użytkowników)
      * @returns {Object} - {success: boolean, message: string}
      */
-    async disableChaosMode() {
+    async disableChaosMode(guild = null) {
         try {
             this.enabled = false;
 
-            // Wyczyść wszystkie timery
-            for (const [userId, data] of this.activeUsers.entries()) {
-                if (data.timeoutId) {
-                    clearTimeout(data.timeoutId);
+            let removedCount = 0;
+            let errorCount = 0;
+
+            // Usuń role od wszystkich aktywnych użytkowników
+            if (guild) {
+                for (const [userId, data] of this.activeUsers.entries()) {
+                    if (data.timeoutId) {
+                        clearTimeout(data.timeoutId);
+                    }
+
+                    // Spróbuj usunąć rolę od użytkownika
+                    try {
+                        const member = await guild.members.fetch(userId);
+                        if (member && data.roleId && member.roles.cache.has(data.roleId)) {
+                            await member.roles.remove(data.roleId);
+                            removedCount++;
+                            logger.info(`✅ Usunięto rolę chaos od użytkownika ${member.user.tag}`);
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        logger.warn(`⚠️ Nie można usunąć roli od użytkownika ${userId}: ${error.message}`);
+                    }
+                }
+            } else {
+                // Tylko wyczyść timery jeśli nie mamy guild
+                for (const [userId, data] of this.activeUsers.entries()) {
+                    if (data.timeoutId) {
+                        clearTimeout(data.timeoutId);
+                    }
                 }
             }
 
@@ -171,10 +207,19 @@ class ChaosService {
 
             await this.saveChaosMode();
 
-            logger.info(`❌ Chaos Mode wyłączony. Wyczyszczono ${activeCount} aktywnych użytkowników.`);
+            logger.info(`❌ Chaos Mode wyłączony. Wyczyszczono ${activeCount} aktywnych użytkowników. Usuniętych ról: ${removedCount}.`);
+
+            let message = `✅ Chaos Mode został wyłączony!\n👥 Wyczyszczono ${activeCount} aktywnych użytkowników z listy.`;
+            if (guild) {
+                message += `\n🗑️ Usunięto rolę od ${removedCount} użytkowników.`;
+                if (errorCount > 0) {
+                    message += `\n⚠️ Nie udało się usunąć roli od ${errorCount} użytkowników (mogą być offline lub opuścili serwer).`;
+                }
+            }
+
             return {
                 success: true,
-                message: `✅ Chaos Mode został wyłączony!\n👥 Wyczyszczono ${activeCount} aktywnych użytkowników z rolą.`
+                message: message
             };
         } catch (error) {
             logger.error(`❌ Błąd wyłączania Chaos Mode: ${error.message}`);
@@ -190,7 +235,7 @@ class ChaosService {
      * @param {Message} message - Wiadomość Discord
      */
     async handleMessage(message) {
-        if (!this.enabled || !this.chaosRoleId) {
+        if (!this.enabled || this.chaosRoleIds.length === 0) {
             return;
         }
 
@@ -203,11 +248,11 @@ class ChaosService {
         const guildId = message.guild.id;
         const member = message.member;
 
-        // 1. Sprawdź czy użytkownik już ma rolę chaos
-        const hasRole = member.roles.cache.has(this.chaosRoleId);
+        // 1. Sprawdź czy użytkownik już ma jakąkolwiek rolę chaos
+        const hasAnyRole = this.chaosRoleIds.some(roleId => member.roles.cache.has(roleId));
 
-        if (!hasRole && !this.activeUsers.has(userId)) {
-            // Użytkownik nie ma roli - losuj czy ją otrzyma (10% szansa)
+        if (!hasAnyRole && !this.activeUsers.has(userId)) {
+            // Użytkownik nie ma roli - losuj czy ją otrzyma (5% szansa)
             const randomChance = Math.random();
             if (randomChance < this.ROLE_CHANCE) {
                 await this.grantChaosRole(message, member);
@@ -215,7 +260,7 @@ class ChaosService {
         }
 
         // 2. Jeśli użytkownik ma rolę, losuj czy bot odpowie (5% szansa, 1/20)
-        if (hasRole) {
+        if (hasAnyRole) {
             const randomResponse = Math.random();
             if (randomResponse < this.RESPONSE_CHANCE) {
                 await this.sendRandomResponse(message);
@@ -230,8 +275,11 @@ class ChaosService {
      */
     async grantChaosRole(message, member) {
         try {
+            // Losuj jedną z ról
+            const randomRoleId = this.chaosRoleIds[Math.floor(Math.random() * this.chaosRoleIds.length)];
+
             // Nadaj rolę
-            await member.roles.add(this.chaosRoleId);
+            await member.roles.add(randomRoleId);
 
             const expiresAt = Date.now() + this.ROLE_DURATION;
 
@@ -240,20 +288,21 @@ class ChaosService {
                 await this.removeChaosRole(member.id, member.guild.id);
             }, this.ROLE_DURATION);
 
-            // Zapisz użytkownika
+            // Zapisz użytkownika z ID nadanej roli
             this.activeUsers.set(member.id, {
                 guildId: member.guild.id,
+                roleId: randomRoleId,
                 timeoutId: timeoutId,
                 expiresAt: expiresAt
             });
 
             await this.saveChaosMode();
 
-            logger.info(`🎲 Chaos Mode: Nadano rolę użytkownikowi ${message.author.tag} (10% szansa)`);
+            logger.info(`🎲 Chaos Mode: Nadano rolę ${randomRoleId} użytkownikowi ${message.author.tag} (5% szansa)`);
 
-            // Opcjonalnie: wyślij wiadomość do użytkownika
+            // Wyślij wiadomość na kanale (bez trybu odpowiedzi)
             try {
-                await message.reply('🎲 **Chaos Mode aktywowany!** Otrzymałeś specjalną rolę na 15 minut! 🔥');
+                await message.channel.send('Jeszcze Polska nie zginęła!');
             } catch (error) {
                 // Ignoruj błędy wysyłania wiadomości
             }
@@ -278,7 +327,7 @@ class ChaosService {
 
             await this.saveChaosMode();
 
-            logger.info(`⏰ Chaos Mode: Usunięto rolę użytkownikowi ${userId} (timeout 15 minut)`);
+            logger.info(`⏰ Chaos Mode: Usunięto rolę użytkownikowi ${userId} (timeout 1 godzina)`);
 
             // Znajdź użytkownika i usuń rolę
             // Uwaga: To wymaga dostępu do klienta Discord, więc robimy to asynchronicznie
@@ -291,12 +340,28 @@ class ChaosService {
     /**
      * Usuwa rolę chaos od użytkownika (z guild memberem)
      * @param {GuildMember} member - Członek serwera
+     * @param {string} roleId - ID roli do usunięcia (opcjonalnie, jeśli nie podano usuwa wszystkie role chaos)
      */
-    async removeChaosRoleFromMember(member) {
+    async removeChaosRoleFromMember(member, roleId = null) {
         try {
-            if (member.roles.cache.has(this.chaosRoleId)) {
-                await member.roles.remove(this.chaosRoleId);
-                logger.info(`✅ Usunięto rolę chaos od użytkownika ${member.user.tag}`);
+            if (roleId) {
+                // Usuń konkretną rolę
+                if (member.roles.cache.has(roleId)) {
+                    await member.roles.remove(roleId);
+                    logger.info(`✅ Usunięto rolę chaos ${roleId} od użytkownika ${member.user.tag}`);
+                }
+            } else {
+                // Usuń wszystkie role chaos
+                let removed = false;
+                for (const chaosRoleId of this.chaosRoleIds) {
+                    if (member.roles.cache.has(chaosRoleId)) {
+                        await member.roles.remove(chaosRoleId);
+                        removed = true;
+                    }
+                }
+                if (removed) {
+                    logger.info(`✅ Usunięto role chaos od użytkownika ${member.user.tag}`);
+                }
             }
         } catch (error) {
             logger.error(`❌ Błąd usuwania roli od członka: ${error.message}`);
@@ -310,8 +375,8 @@ class ChaosService {
     async sendRandomResponse(message) {
         try {
             const randomEmoji = this.responseEmojis[Math.floor(Math.random() * this.responseEmojis.length)];
-            await message.reply(randomEmoji);
-            logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź do ${message.author.tag} (5% szansa, 1/20)`);
+            await message.channel.send(randomEmoji);
+            logger.info(`🇵🇱 Chaos Mode: Wysłano losową odpowiedź na kanale ${message.channel.name} (5% szansa, 1/20)`);
         } catch (error) {
             logger.error(`❌ Błąd wysyłania losowej odpowiedzi chaos: ${error.message}`);
         }
@@ -322,7 +387,7 @@ class ChaosService {
      * @param {Client} client - Klient Discord
      */
     async restoreTimeouts(client) {
-        if (!this.enabled || !this.chaosRoleId) {
+        if (!this.enabled || this.chaosRoleIds.length === 0) {
             return;
         }
 
@@ -342,7 +407,7 @@ class ChaosService {
                 try {
                     const guild = await client.guilds.fetch(data.guildId);
                     const member = await guild.members.fetch(userId);
-                    await this.removeChaosRoleFromMember(member);
+                    await this.removeChaosRoleFromMember(member, data.roleId);
                 } catch (error) {
                     // Ignoruj błędy (użytkownik mógł opuścić serwer)
                 }
@@ -352,7 +417,7 @@ class ChaosService {
                     try {
                         const guild = await client.guilds.fetch(data.guildId);
                         const member = await guild.members.fetch(userId);
-                        await this.removeChaosRoleFromMember(member);
+                        await this.removeChaosRoleFromMember(member, data.roleId);
                         await this.removeChaosRole(userId, data.guildId);
                     } catch (error) {
                         // Ignoruj błędy
@@ -381,12 +446,12 @@ class ChaosService {
 
     /**
      * Zwraca status chaos mode
-     * @returns {Object} - {enabled: boolean, roleId: string|null, activeUsers: number}
+     * @returns {Object} - {enabled: boolean, roleIds: Array<string>, activeUsers: number}
      */
     getStatus() {
         return {
             enabled: this.enabled,
-            roleId: this.chaosRoleId,
+            roleIds: this.chaosRoleIds,
             activeUsers: this.activeUsers.size
         };
     }

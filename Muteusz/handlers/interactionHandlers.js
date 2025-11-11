@@ -272,9 +272,29 @@ class InteractionHandler {
                             { name: 'Wyłącz', value: 'off' }
                         )
                 )
-                .addStringOption(option =>
-                    option.setName('rola_id')
-                        .setDescription('ID roli do nadawania (wymagane tylko przy włączaniu)')
+                .addRoleOption(option =>
+                    option.setName('rola_1')
+                        .setDescription('Pierwsza rola do nadawania')
+                        .setRequired(true)
+                )
+                .addRoleOption(option =>
+                    option.setName('rola_2')
+                        .setDescription('Druga rola do nadawania (opcjonalna)')
+                        .setRequired(false)
+                )
+                .addRoleOption(option =>
+                    option.setName('rola_3')
+                        .setDescription('Trzecia rola do nadawania (opcjonalna)')
+                        .setRequired(false)
+                )
+                .addRoleOption(option =>
+                    option.setName('rola_4')
+                        .setDescription('Czwarta rola do nadawania (opcjonalna)')
+                        .setRequired(false)
+                )
+                .addRoleOption(option =>
+                    option.setName('rola_5')
+                        .setDescription('Piąta rola do nadawania (opcjonalna)')
                         .setRequired(false)
                 ),
 
@@ -2784,63 +2804,45 @@ class InteractionHandler {
         }
 
         const mode = interaction.options.getString('tryb');
-        const roleId = interaction.options.getString('rola_id');
 
         await interaction.deferReply({ ephemeral: true });
 
         try {
             if (mode === 'on') {
-                // Włączanie Chaos Mode
-                if (!roleId) {
-                    await interaction.editReply({
-                        content: '❌ Musisz podać ID roli przy włączaniu Chaos Mode!\nPrzykład: `/chaos-mode tryb:Włącz rola_id:1234567890`'
-                    });
-                    return;
+                // Zbierz wszystkie role
+                const roles = [];
+                for (let i = 1; i <= 5; i++) {
+                    const role = interaction.options.getRole(`rola_${i}`);
+                    if (role) {
+                        // Sprawdź hierarchię ról
+                        if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                            await interaction.editReply({
+                                content: `❌ Nie mogę nadawać roli **${role.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`
+                            });
+                            return;
+                        }
+                        roles.push(role.id);
+                    }
                 }
 
-                // Walidacja ID roli
-                if (!/^\d+$/.test(roleId)) {
+                if (roles.length === 0) {
                     await interaction.editReply({
-                        content: '❌ Nieprawidłowe ID roli! Upewnij się, że podałeś samo ID (same cyfry).'
-                    });
-                    return;
-                }
-
-                // Sprawdź czy rola istnieje
-                try {
-                    const role = await interaction.guild.roles.fetch(roleId);
-                    if (!role) {
-                        await interaction.editReply({
-                            content: '❌ Nie znaleziono roli o podanym ID na tym serwerze!'
-                        });
-                        return;
-                    }
-
-                    // Sprawdź hierarchię ról
-                    if (role.position >= interaction.guild.members.me.roles.highest.position) {
-                        await interaction.editReply({
-                            content: `❌ Nie mogę nadawać roli **${role.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`
-                        });
-                        return;
-                    }
-                } catch (error) {
-                    await interaction.editReply({
-                        content: '❌ Nie znaleziono roli o podanym ID na tym serwerze!'
+                        content: '❌ Musisz wybrać co najmniej jedną rolę!'
                     });
                     return;
                 }
 
                 // Włącz Chaos Mode
-                const result = await this.chaosService.enableChaosMode(roleId);
+                const result = await this.chaosService.enableChaosMode(roles);
                 await interaction.editReply({ content: result.message });
 
                 if (result.success) {
-                    await this.logService.logMessage('success', `Chaos Mode włączony przez ${interaction.user.tag}, rola: ${roleId}`, interaction);
+                    await this.logService.logMessage('success', `Chaos Mode włączony przez ${interaction.user.tag}, role: ${roles.join(', ')}`, interaction);
                 }
 
             } else if (mode === 'off') {
                 // Wyłączanie Chaos Mode
-                const result = await this.chaosService.disableChaosMode();
+                const result = await this.chaosService.disableChaosMode(interaction.guild);
                 await interaction.editReply({ content: result.message });
 
                 if (result.success) {
