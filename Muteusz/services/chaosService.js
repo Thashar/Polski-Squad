@@ -32,15 +32,35 @@ class ChaosService {
         // Zwrotki i refren hymnu Polski
         this.hymnVerses = [
             // Zwrotka 1
-            'Jeszcze Polska nie zginęła,\nKiedy my żyjemy.\nCo nam obca przemoc wzięła,\nSzablą odbierzemy. <a:Z_animated_polish_flag:1418123566687453235>',
+            `Jeszcze Polska nie zginęła,
+Kiedy my żyjemy.
+Co nam obca przemoc wzięła,
+Szablą odbierzemy.
+<a:Z_animated_polish_flag:1418123566687453235>`,
             // Refren
-            'Marsz, marsz, Dąbrowski,\nZ ziemi włoskiej do Polski.\nZa twoim przewodem\nZłączym się z narodem. <a:Z_animated_polish_flag:1418123566687453235>',
+            `Marsz, marsz, Dąbrowski,
+Z ziemi włoskiej do Polski.
+Za twoim przewodem
+Złączym się z narodem.
+<a:Z_animated_polish_flag:1418123566687453235>`,
             // Zwrotka 2
-            'Przejdziem Wisłę, przejdziem Wartę,\nBędziem Polakami.\nDał nam przykład Bonaparte,\nJak zwyciężać mamy. <a:Z_animated_polish_flag:1418123566687453235>',
+            `Przejdziem Wisłę, przejdziem Wartę,
+Będziem Polakami.
+Dał nam przykład Bonaparte,
+Jak zwyciężać mamy.
+<a:Z_animated_polish_flag:1418123566687453235>`,
             // Zwrotka 3
-            'Jak Czarniecki do Poznania\nPo szwedzkim zaborze,\nDla ojczyzny ratowania\nWrócim się przez morze. <a:Z_animated_polish_flag:1418123566687453235>',
+            `Jak Czarniecki do Poznania
+Po szwedzkim zaborze,
+Dla ojczyzny ratowania
+Wrócim się przez morze.
+<a:Z_animated_polish_flag:1418123566687453235>`,
             // Zwrotka 4
-            'Już tam ojciec do swej Basi\nMówi zapłakany:\n"Słuchaj jeno, pono nasi\nBiją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>'
+            `Już tam ojciec do swej Basi
+Mówi zapłakany:
+"Słuchaj jeno, pono nasi
+Biją w tarabany".
+<a:Z_animated_polish_flag:1418123566687453235>`
         ];
 
         this.HYMN_CHANCE = 0.01; // 1% szansa na wysłanie zwrotki hymnu (1/100)
