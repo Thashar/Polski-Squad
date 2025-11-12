@@ -935,6 +935,10 @@ async function handleButton(interaction, sharedState) {
                 logger.warn(`[REMIND] ⚠️ Brak użytkowników z member do zapisania w statystykach`);
             }
 
+            // Zapisz dane sesji PRZED czyszczeniem (dla embeda)
+            const processedImagesCount = session.processedImages.length;
+            const uniqueNicksCount = session.uniqueNicks.size;
+
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
@@ -952,8 +956,8 @@ async function handleButton(interaction, sharedState) {
                 .setTitle('✅ Przypomnienia wysłane')
                 .setDescription(
                     `**Podsumowanie:**\n` +
-                    `🎯 Przeanalizowano: **${session.processedImages.length}** ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
-                    `👥 Znaleziono: **${session.uniqueNicks.size}** ${session.uniqueNicks.size === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
+                    `🎯 Przeanalizowano: **${processedImagesCount}** ${processedImagesCount === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
+                    `👥 Znaleziono: **${uniqueNicksCount}** ${uniqueNicksCount === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
                     `📤 Wysłano: **${reminderResult.sentMessages}** ${reminderResult.sentMessages === 1 ? 'przypomnienie' : 'przypomnień'}\n\n` +
                     `⏰ ${timeMessage}`
                 )
@@ -969,20 +973,41 @@ async function handleButton(interaction, sharedState) {
             logger.info(`[REMIND] ✅ Przypomnienia wysłane przez ${interaction.user.tag}`);
 
         } catch (error) {
-            logger.error('[REMIND] ❌ Błąd wysyłania przypomnień:', error);
+            logger.error('[REMIND] ❌ Błąd wysyłania przypomnień');
+            logger.error('[REMIND] ❌ Error type:', typeof error);
+            logger.error('[REMIND] ❌ Error object:', error);
+
+            if (error) {
+                logger.error('[REMIND] ❌ Error name:', error?.name);
+                logger.error('[REMIND] ❌ Error message:', error?.message);
+                logger.error('[REMIND] ❌ Error stack:', error?.stack);
+            }
 
             // Zatrzymaj ghost ping
-            stopGhostPing(session);
+            try {
+                stopGhostPing(session);
+            } catch (stopError) {
+                logger.error('[REMIND] ⚠️ Błąd zatrzymywania ghost ping:', stopError.message);
+            }
 
-            await interaction.editReply({
-                content: '❌ Wystąpił błąd podczas wysyłania przypomnień.',
-                embeds: [],
-                components: []
-            });
+            // Próbuj odpowiedzieć na interakcję
+            try {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas wysyłania przypomnień.',
+                    embeds: [],
+                    components: []
+                });
+            } catch (replyError) {
+                logger.error('[REMIND] ⚠️ Nie można zaktualizować interakcji:', replyError.message);
+            }
 
             // Zakończ sesję OCR i wyczyść
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-            await sharedState.reminderService.cleanupSession(session.sessionId);
+            try {
+                await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                await sharedState.reminderService.cleanupSession(session.sessionId);
+            } catch (cleanupError) {
+                logger.error('[REMIND] ⚠️ Błąd czyszczenia sesji:', cleanupError.message);
+            }
         }
 
         return;
@@ -1286,6 +1311,10 @@ async function handleButton(interaction, sharedState) {
         try {
             const results = await sharedState.punishmentService.processPunishments(interaction.guild, foundUsers);
 
+            // Zapisz dane sesji PRZED czyszczeniem (dla embeda)
+            const processedImagesCount = session.processedImages.length;
+            const uniqueNicksCount = session.uniqueNicks.size;
+
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
@@ -1310,8 +1339,8 @@ async function handleButton(interaction, sharedState) {
                 .setTitle('✅ Punkty karne dodane')
                 .setDescription(
                     `**Podsumowanie:**\n` +
-                    `🎯 Przeanalizowano: **${session.processedImages.length}** ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
-                    `👥 Znaleziono: **${session.uniqueNicks.size}** ${session.uniqueNicks.size === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
+                    `🎯 Przeanalizowano: **${processedImagesCount}** ${processedImagesCount === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
+                    `👥 Znaleziono: **${uniqueNicksCount}** ${uniqueNicksCount === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
                     `📈 Dodano punktów: **${addedPoints}**\n\n` +
                     `**Przetworzone osoby:**\n${processedUsers.join('\n')}`
                 )
@@ -1327,20 +1356,41 @@ async function handleButton(interaction, sharedState) {
             logger.info(`[PUNISH] ✅ Punkty karne dodane przez ${interaction.user.tag}`);
 
         } catch (error) {
-            logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych:', error);
+            logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych');
+            logger.error('[PUNISH] ❌ Error type:', typeof error);
+            logger.error('[PUNISH] ❌ Error object:', error);
+
+            if (error) {
+                logger.error('[PUNISH] ❌ Error name:', error?.name);
+                logger.error('[PUNISH] ❌ Error message:', error?.message);
+                logger.error('[PUNISH] ❌ Error stack:', error?.stack);
+            }
 
             // Zatrzymaj ghost ping
-            stopGhostPing(session);
+            try {
+                stopGhostPing(session);
+            } catch (stopError) {
+                logger.error('[PUNISH] ⚠️ Błąd zatrzymywania ghost ping:', stopError.message);
+            }
 
-            await interaction.editReply({
-                content: '❌ Wystąpił błąd podczas dodawania punktów karnych.',
-                embeds: [],
-                components: []
-            });
+            // Próbuj odpowiedzieć na interakcję
+            try {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas dodawania punktów karnych.',
+                    embeds: [],
+                    components: []
+                });
+            } catch (replyError) {
+                logger.error('[PUNISH] ⚠️ Nie można zaktualizować interakcji:', replyError.message);
+            }
 
             // Zakończ sesję OCR i wyczyść
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-            await sharedState.punishmentService.cleanupSession(session.sessionId);
+            try {
+                await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                await sharedState.punishmentService.cleanupSession(session.sessionId);
+            } catch (cleanupError) {
+                logger.error('[PUNISH] ⚠️ Błąd czyszczenia sesji:', cleanupError.message);
+            }
         }
 
         return;
