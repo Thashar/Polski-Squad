@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
@@ -142,9 +142,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    flags: MessageFlags.Ephemeral
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({ 

@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 
 class VacationService {
     constructor(config, logger) {
@@ -58,7 +58,7 @@ class VacationService {
                 const remainingTime = this.getRemainingCooldown(userId);
                 await interaction.reply({
                     content: `⏰ Możesz złożyć kolejny wniosek o urlop za ${remainingTime}.`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -90,14 +90,14 @@ Jeżeli zapoznałeś się z powyższymi zasadami i zgadzasz się z nimi naciśni
             await interaction.reply({
                 content: rulesMessage,
                 components: [row],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
         } catch (error) {
             this.logger.error(`❌ Błąd obsługi wniosku o urlop: ${error.message}`);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas obsługi wniosku.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }

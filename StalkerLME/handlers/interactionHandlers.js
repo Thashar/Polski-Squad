@@ -23,20 +23,43 @@ async function handleInteraction(interaction, sharedState, config) {
         }
     } catch (error) {
         logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
+        logger.error('[INTERACTION] ❌ Error name:', error?.name);
         logger.error('[INTERACTION] ❌ Error message:', error?.message);
+        logger.error('[INTERACTION] ❌ Error code:', error?.code);
+        logger.error('[INTERACTION] ❌ HTTP status:', error?.status);
         logger.error('[INTERACTION] ❌ Stack trace:', error?.stack);
-        logger.error('[INTERACTION] ❌ Full error object:', JSON.stringify(error, null, 2));
-        
-        const errorEmbed = new EmbedBuilder()
-            .setTitle('❌ Wystąpił błąd')
-            .setDescription(messages.errors.unknownError)
-            .setColor('#FF0000')
-            .setTimestamp();
-        
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
-        } else {
-            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+
+        // Próbuj serializować error z bezpieczną metodą
+        try {
+            const errorDetails = {
+                name: error?.name,
+                message: error?.message,
+                code: error?.code,
+                status: error?.status,
+                method: error?.method,
+                url: error?.url
+            };
+            logger.error('[INTERACTION] ❌ Error details:', JSON.stringify(errorDetails, null, 2));
+        } catch (serializeError) {
+            logger.error('[INTERACTION] ❌ Nie można serializować błędu:', serializeError.message);
+        }
+
+        // Próbuj odpowiedzieć na interakcję (może być już timeout)
+        try {
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('❌ Wystąpił błąd')
+                .setDescription(messages.errors.unknownError)
+                .setColor('#FF0000')
+                .setTimestamp();
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            } else {
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            }
+        } catch (replyError) {
+            // Interakcja prawdopodobnie wygasła (timeout)
+            logger.error('[INTERACTION] ⚠️ Nie można odpowiedzieć na interakcję (timeout?):', replyError.message);
         }
     }
 }
@@ -777,6 +800,9 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Defer update PRZED długimi operacjami (sprawdzanie urlopów może trwać kilka sekund)
+        await interaction.deferUpdate();
+
         // Stwórz listę znalezionych użytkowników
         const allFoundUsers = [];
         for (const imageResult of session.processedImages) {
@@ -804,7 +830,7 @@ async function handleButton(interaction, sharedState) {
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
-            await interaction.update({
+            await interaction.editReply({
                 content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
                 embeds: [],
                 components: []
@@ -868,7 +894,7 @@ async function handleButton(interaction, sharedState) {
                         // Zatrzymaj ghost ping
                         stopGhostPing(session);
 
-                        await interaction.update({
+                        await interaction.editReply({
                             content: '✅ Wszyscy znalezieni gracze mają aktywny urlop - nie wysłano żadnych przypomnień.',
                             embeds: [],
                             components: []
@@ -886,8 +912,6 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Wyślij przypomnienia
-        await interaction.deferUpdate();
-
         try {
             const reminderResult = await sharedState.reminderService.sendReminders(interaction.guild, foundUsers);
 
@@ -1147,6 +1171,9 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Defer update PRZED długimi operacjami (sprawdzanie urlopów może trwać kilka sekund)
+        await interaction.deferUpdate();
+
         // Stwórz listę znalezionych użytkowników
         const allFoundUsers = [];
         for (const imageResult of session.processedImages) {
@@ -1174,7 +1201,7 @@ async function handleButton(interaction, sharedState) {
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
-            await interaction.update({
+            await interaction.editReply({
                 content: '❌ Nie znaleziono żadnych graczy z wynikiem 0 na przesłanych zdjęciach.',
                 embeds: [],
                 components: []
@@ -1238,7 +1265,7 @@ async function handleButton(interaction, sharedState) {
                         // Zatrzymaj ghost ping
                         stopGhostPing(session);
 
-                        await interaction.update({
+                        await interaction.editReply({
                             content: '✅ Wszyscy znalezieni gracze mają aktywny urlop - nie dodano żadnych punktów karnych.',
                             embeds: [],
                             components: []
@@ -1256,8 +1283,6 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Dodaj punkty karne
-        await interaction.deferUpdate();
-
         try {
             const results = await sharedState.punishmentService.processPunishments(interaction.guild, foundUsers);
 
