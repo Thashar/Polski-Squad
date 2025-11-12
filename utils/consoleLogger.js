@@ -216,9 +216,35 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
                 break;
         }
 
-        // Wybierz odpowiedni webhook URL - dla backupów użyj osobnego, jeśli jest skonfigurowany
+        // Wybierz odpowiedni webhook URL
         const isBackupBot = botName === 'BackupManager' || botName === 'BackupScheduler' || botName === 'ManualBackup';
-        const webhookUrl = isBackupBot ? WEBHOOK_URL_BACKUP : WEBHOOK_URL;
+
+        // Słowa kluczowe dla faktycznych operacji backupu (webhook backup)
+        const backupOperationKeywords = [
+            'Rozpoczynam backup',
+            'backup wszystkich botów',
+            'Backup bota:',
+            'Utworzono archiwum',
+            'Przesłano',
+            'Google Drive',
+            'Usunięto stary backup',
+            'Backup zakończony',
+            'manualny backup',
+            'Pomyślnie zarchiwizowane',
+            'wywołany przez',
+            'Całkowity rozmiar',
+            'backup successfully',
+            'archivePath',
+            'uploadResult'
+        ];
+
+        // Sprawdź czy to faktyczna operacja backupu
+        const isBackupOperation = isBackupBot && backupOperationKeywords.some(keyword =>
+            message.toLowerCase().includes(keyword.toLowerCase())
+        );
+
+        // Użyj backup webhooka tylko dla faktycznych operacji backupu
+        const webhookUrl = isBackupOperation ? WEBHOOK_URL_BACKUP : WEBHOOK_URL;
 
         // Sprawdź czy to nowy bot (inny niż poprzedni w webhook)
         const isNewWebhookBot = lastWebhookBotName !== botName;
