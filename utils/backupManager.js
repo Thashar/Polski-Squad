@@ -244,7 +244,9 @@ class BackupManager {
             const response = await this.drive.files.list({
                 q: query,
                 fields: 'files(id, name)',
-                spaces: 'drive'
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
             });
 
             if (response.data.files.length > 0) {
@@ -264,7 +266,8 @@ class BackupManager {
 
             const folder = await this.drive.files.create({
                 resource: fileMetadata,
-                fields: 'id'
+                fields: 'id',
+                supportsAllDrives: true
             });
 
             logger.info(`📁 Utworzono folder na Google Drive: ${folderName}`);
@@ -309,7 +312,8 @@ class BackupManager {
             const response = await this.drive.files.create({
                 resource: fileMetadata,
                 media: media,
-                fields: 'id, name, size'
+                fields: 'id, name, size',
+                supportsAllDrives: true
             });
 
             const sizeMB = (response.data.size / 1024 / 1024).toFixed(2);
@@ -344,7 +348,9 @@ class BackupManager {
             const response = await this.drive.files.list({
                 q: `name='${botName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
                 fields: 'files(id, name)',
-                spaces: 'drive'
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
             });
 
             if (response.data.files.length > 0) {
@@ -360,7 +366,8 @@ class BackupManager {
 
             const folder = await this.drive.files.create({
                 resource: fileMetadata,
-                fields: 'id'
+                fields: 'id',
+                supportsAllDrives: true
             });
 
             logger.info(`📁 Utworzono folder bota na Google Drive: ${botName}`);
@@ -391,7 +398,9 @@ class BackupManager {
                 q: `'${botFolderId}' in parents and trashed=false`,
                 fields: 'files(id, name, createdTime)',
                 orderBy: 'createdTime desc',
-                spaces: 'drive'
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true
             });
 
             const files = response.data.files;
@@ -401,7 +410,10 @@ class BackupManager {
                 const filesToDelete = files.slice(this.maxBackupDays);
 
                 for (const file of filesToDelete) {
-                    await this.drive.files.delete({ fileId: file.id });
+                    await this.drive.files.delete({
+                        fileId: file.id,
+                        supportsAllDrives: true
+                    });
                     logger.info(`🗑️  Usunięto stary backup z Google Drive: ${file.name}`);
                 }
             }
@@ -546,7 +558,8 @@ class BackupManager {
             const response = await this.drive.files.create({
                 resource: fileMetadata,
                 media: media,
-                fields: 'id, name, size'
+                fields: 'id, name, size',
+                supportsAllDrives: true
             });
 
             const sizeMB = (response.data.size / 1024 / 1024).toFixed(2);
