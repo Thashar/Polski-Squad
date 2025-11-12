@@ -6503,9 +6503,10 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
                 weekData.players.forEach(player => {
                     if (player.displayName && player.score > 0) {
                         const playerKey = player.displayName.toLowerCase();
-                        const currentMax = playerMaxScores.get(playerKey) || 0;
+                        const currentData = playerMaxScores.get(playerKey);
+                        const currentMaxScore = currentData ? currentData.score : 0;
 
-                        if (player.score > currentMax) {
+                        if (player.score > currentMaxScore) {
                             playerMaxScores.set(playerKey, {
                                 score: player.score,
                                 displayName: player.displayName
