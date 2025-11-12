@@ -6486,8 +6486,9 @@ async function handleWynikiCommand(interaction, sharedState) {
 
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
 async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks) {
-    // Najpierw zbierz wszystkie max score dla wszystkich graczy z historii
-    const playerMaxScores = new Map();
+    // Przechowuj najwyższy wynik dla każdej kombinacji gracz-klan
+    // Klucz: "displayName_toLowerCase|clanKey"
+    const playerClanMaxScores = new Map();
 
     // Iterujemy po wszystkich tygodniach aby znaleźć najlepsze wyniki
     for (const week of last54Weeks) {
@@ -6502,11 +6503,16 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
             if (weekData && weekData.players) {
                 weekData.players.forEach(player => {
                     if (player.displayName && player.score > 0) {
-                        const currentMax = playerMaxScores.get(player.displayName.toLowerCase()) || 0;
-                        if (player.score > currentMax) {
-                            playerMaxScores.set(player.displayName.toLowerCase(), {
+                        // Klucz unikalny dla kombinacji gracz-klan
+                        const key = `${player.displayName.toLowerCase()}|${clan}`;
+                        const currentData = playerClanMaxScores.get(key);
+
+                        if (!currentData || player.score > currentData.score) {
+                            playerClanMaxScores.set(key, {
                                 score: player.score,
-                                displayName: player.displayName
+                                displayName: player.displayName,
+                                clanKey: clan,
+                                clanName: config.roleDisplayNames[clan]
                             });
                         }
                     }
@@ -6515,37 +6521,36 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
         }
     }
 
-    // Pobierz wszystkich członków serwera z rolami klanowymi
-    const ranking = [];
+    // Pobierz wszystkich członków serwera
     const members = await guild.members.fetch();
 
-    // Iteruj po wszystkich członkach i sprawdź czy mają rolę klanową
-    for (const [memberId, member] of members) {
-        // Sprawdź którą rolę klanową ma member
-        let memberClan = null;
-        let memberClanKey = null;
+    // Zbiór aktywnych członków (którzy są obecnie w klanach)
+    const activeMemberNames = new Set();
 
+    for (const [memberId, member] of members) {
+        // Sprawdź czy ma jakąkolwiek rolę klanową
         for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
             if (member.roles.cache.has(roleId)) {
-                memberClan = config.roleDisplayNames[clanKey];
-                memberClanKey = clanKey;
-                break; // Zakładamy że gracz ma tylko jedną rolę klanową
+                activeMemberNames.add(member.displayName.toLowerCase());
+                break;
             }
         }
+    }
 
-        // Jeśli ma rolę klanową, znajdź jego wyniki
-        if (memberClan && memberClanKey) {
-            const memberDisplayName = member.displayName;
-            const scoreData = playerMaxScores.get(memberDisplayName.toLowerCase());
+    // Stwórz ranking ze wszystkich wpisów gracz-klan (tylko dla aktywnych członków)
+    const ranking = [];
 
-            if (scoreData) {
-                ranking.push({
-                    playerName: scoreData.displayName,
-                    maxScore: scoreData.score,
-                    clanName: memberClan,
-                    clanKey: memberClanKey
-                });
-            }
+    for (const [key, data] of playerClanMaxScores) {
+        const playerNameLower = key.split('|')[0];
+
+        // Dodaj tylko jeśli gracz jest obecnie aktywnym członkiem klanu
+        if (activeMemberNames.has(playerNameLower)) {
+            ranking.push({
+                playerName: data.displayName,
+                maxScore: data.score,
+                clanName: data.clanName,
+                clanKey: data.clanKey
+            });
         }
     }
 
