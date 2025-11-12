@@ -37,6 +37,9 @@ const botColors = {
     'EndersEcho': colors.yellow,
     'Kontroler': colors.blue,
     'Konklawe': colors.white,
+    'BackupManager': colors.cyan,
+    'BackupScheduler': colors.cyan,
+    'ManualBackup': colors.cyan,
     'MAIN': colors.bright + colors.green
 };
 
@@ -48,6 +51,9 @@ const botEmojis = {
     'EndersEcho': '🏆',
     'Kontroler': '🎯',
     'Konklawe': '⛪',
+    'BackupManager': '💾',
+    'BackupScheduler': '⏰',
+    'ManualBackup': '📦',
     'MAIN': '🚀'
 };
 
@@ -78,6 +84,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 // Konfiguracja Discord webhook
 const WEBHOOK_URL = process.env.DISCORD_LOG_WEBHOOK_URL;
+const WEBHOOK_URL_BACKUP = process.env.DISCORD_LOG_WEBHOOK_URL_BACKUP || WEBHOOK_URL; // Fallback do głównego jeśli nie ustawiony
 const WEBHOOK_ENABLED = !!WEBHOOK_URL;
 
 // Kolejka webhook'ów i rate limiting
@@ -128,30 +135,30 @@ function writeToLogFile(botName, message, level = 'info') {
 // Funkcja do przetwarzania kolejki webhook'ów
 async function processWebhookQueue() {
     if (isProcessingQueue || webhookQueue.length === 0) return;
-    
+
     isProcessingQueue = true;
-    
+
     while (webhookQueue.length > 0) {
-        const webhookData = webhookQueue.shift();
-        
+        const { data, webhookUrl } = webhookQueue.shift();
+
         try {
-            await sendWebhookRequest(webhookData);
+            await sendWebhookRequest(data, webhookUrl);
             // Czekaj między webhook'ami aby uniknąć rate limiting
             await new Promise(resolve => setTimeout(resolve, WEBHOOK_DELAY));
         } catch (error) {
             // Kontynuuj mimo błędów
         }
     }
-    
+
     isProcessingQueue = false;
 }
 
 // Funkcja do wysyłania pojedynczego webhook'a
-function sendWebhookRequest(webhookData) {
+function sendWebhookRequest(webhookData, webhookUrl) {
     return new Promise((resolve, reject) => {
-        const data = JSON.stringify(webhookData);
-        const url = new URL(WEBHOOK_URL);
-        
+        const data = JSON.stringify({ content: webhookData.content });
+        const url = new URL(webhookUrl);
+
         const options = {
             hostname: url.hostname,
             path: url.pathname,
@@ -161,24 +168,24 @@ function sendWebhookRequest(webhookData) {
                 'Content-Length': Buffer.byteLength(data)
             }
         };
-        
+
         const req = https.request(options, (res) => {
             if (res.statusCode >= 200 && res.statusCode < 300) {
                 resolve();
             } else if (res.statusCode === 429) {
                 // Rate limit - spróbuj ponownie po dłuższym czasie
                 setTimeout(() => {
-                    sendWebhookRequest(webhookData).then(resolve).catch(reject);
+                    sendWebhookRequest(webhookData, webhookUrl).then(resolve).catch(reject);
                 }, 5000);
             } else {
                 reject(new Error(`Webhook error status: ${res.statusCode}`));
             }
         });
-        
+
         req.on('error', (error) => {
             reject(error);
         });
-        
+
         req.write(data);
         req.end();
     });
@@ -187,11 +194,11 @@ function sendWebhookRequest(webhookData) {
 // Funkcja do wysyłania logów przez Discord webhook (dodaje do kolejki)
 function sendToDiscordWebhook(botName, message, level = 'info') {
     if (!WEBHOOK_ENABLED) return;
-    
+
     try {
         const timestamp = getTimestamp();
         const emoji = botEmojis[botName] || '🤖';
-        
+
         let levelEmoji = '•';
         switch (level.toLowerCase()) {
             case 'error':
@@ -208,13 +215,17 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
                 levelEmoji = '•';
                 break;
         }
-        
+
+        // Wybierz odpowiedni webhook URL - dla backupów użyj osobnego, jeśli jest skonfigurowany
+        const isBackupBot = botName === 'BackupManager' || botName === 'BackupScheduler' || botName === 'ManualBackup';
+        const webhookUrl = isBackupBot ? WEBHOOK_URL_BACKUP : WEBHOOK_URL;
+
         // Sprawdź czy to nowy bot (inny niż poprzedni w webhook)
         const isNewWebhookBot = lastWebhookBotName !== botName;
-        
+
         // Zaktualizuj ostatni bot dla webhook
         lastWebhookBotName = botName;
-        
+
         let webhookMessage;
         if (isNewWebhookBot) {
             // Nowy bot - dodaj separator
@@ -224,17 +235,17 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
             // Ten sam bot - tylko wiadomość
             webhookMessage = `[${timestamp}] ${emoji} **${botName.toUpperCase()}** ${levelEmoji} ${message}`;
         }
-        
+
         const webhookData = {
             content: webhookMessage
         };
-        
-        // Dodaj do kolejki zamiast wysyłać od razu
-        webhookQueue.push(webhookData);
-        
+
+        // Dodaj do kolejki zamiast wysyłać od razu (razem z webhookUrl)
+        webhookQueue.push({ data: webhookData, webhookUrl });
+
         // Uruchom przetwarzanie kolejki
         setImmediate(processWebhookQueue);
-        
+
     } catch (error) {
         // Jeśli nie można dodać do kolejki, nie przerywamy aplikacji
     }
