@@ -15,7 +15,6 @@ class BackupManager {
         this.botsFolder = path.join(__dirname, '..');
         this.backupsFolder = path.join(this.botsFolder, 'backups');
         this.maxBackupDays = 7;
-        this.rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || null;
 
         // Lista botów do backupu
         this.bots = [
@@ -41,6 +40,8 @@ class BackupManager {
     async initializeDrive() {
         try {
             const credentialsPath = process.env.GOOGLE_CREDENTIALS_PATH;
+            const tokenPath = path.join(__dirname, '..', 'token.json');
+
             if (!credentialsPath) {
                 logger.warn('⚠️  GOOGLE_CREDENTIALS_PATH nie jest ustawiony w .env');
                 return;
@@ -51,14 +52,19 @@ class BackupManager {
                 return;
             }
 
+            if (!fs.existsSync(tokenPath)) {
+                logger.warn('⚠️  Token nie istnieje. Uruchom: node authorize-google.js');
+                return;
+            }
+
             const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+            const token = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
 
-            const auth = new google.auth.GoogleAuth({
-                credentials,
-                scopes: ['https://www.googleapis.com/auth/drive']
-            });
+            const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web;
+            const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+            oAuth2Client.setCredentials(token);
 
-            this.drive = google.drive({ version: 'v3', auth });
+            this.drive = google.drive({ version: 'v3', auth: oAuth2Client });
             logger.info('✅ Google Drive API zainicjalizowane');
         } catch (error) {
             logger.error('❌ Błąd inicjalizacji Google Drive API:', error.message);
@@ -292,8 +298,8 @@ class BackupManager {
         }
 
         try {
-            // Upewnij się, że główny folder backupów istnieje (w udostępnionym folderze root)
-            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups', this.rootFolderId);
+            // Upewnij się, że główny folder backupów istnieje w My Drive
+            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups');
 
             // Upewnij się, że folder bota istnieje
             const botFolderId = await this.ensureBotFolder(backupFolderId, botName);
@@ -389,8 +395,8 @@ class BackupManager {
         }
 
         try {
-            // Znajdź folder backupów (w udostępnionym folderze root)
-            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups', this.rootFolderId);
+            // Znajdź folder backupów w My Drive
+            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups');
             const botFolderId = await this.ensureBotFolder(backupFolderId, botName);
 
             // Pobierz listę plików w folderze bota
@@ -536,8 +542,8 @@ class BackupManager {
         }
 
         try {
-            // Upewnij się, że folder Manual_Backups istnieje (w udostępnionym folderze root)
-            const manualBackupFolderId = await this.ensureDriveFolder('Polski_Squad_Manual_Backups', this.rootFolderId);
+            // Upewnij się, że folder Manual_Backups istnieje w My Drive
+            const manualBackupFolderId = await this.ensureDriveFolder('Polski_Squad_Manual_Backups');
 
             // Upewnij się, że folder bota istnieje w Manual_Backups
             const botFolderId = await this.ensureBotFolder(manualBackupFolderId, botName);
