@@ -128,7 +128,7 @@ class BackupManager {
             // Dodaj timestamp na końcu
             summary += `\n🕐 ${timestamp}`;
 
-            const message = `────────────────────────────────────────────────────────────────────────────────\n${title}\n\n${summary}`;
+            const message = `${title}\n\n${summary}`;
 
             // Wyślij na webhook
             const data = JSON.stringify({ content: message });
