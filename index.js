@@ -4,6 +4,7 @@ process.noDeprecation = true;
 
 // Import system logowania
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
+const { scheduler } = require('./backup-scheduler');
 
 const logger = createBotLogger('Launcher');
 
@@ -167,6 +168,13 @@ function setupShutdownHandlers() {
 async function main() {
     setupShutdownHandlers();
     await startAllBots();
+
+    // Uruchom scheduler backupów (tylko w produkcji)
+    if (!process.argv.includes('--local')) {
+        scheduler.start();
+    } else {
+        logger.info('ℹ️  Scheduler backupów wyłączony w trybie lokalnym');
+    }
 }
 
 // Uruchomienie aplikacji

@@ -290,6 +290,10 @@ class InteractionHandler {
                 ),
 
             new SlashCommandBuilder()
+                .setName('data-archive')
+                .setDescription('Tworzy manualną archiwizację wszystkich danych botów do Google Drive (niezależną)'),
+
+            new SlashCommandBuilder()
                 .setName('komendy')
                 .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów')
         ];
@@ -371,6 +375,9 @@ class InteractionHandler {
                     break;
                 case 'chaos-mode':
                     await this.handleChaosModeCommand(interaction);
+                    break;
+                case 'data-archive':
+                    await this.handleDataArchiveCommand(interaction);
                     break;
                 case 'komendy':
                     await this.handleKomendyCommand(interaction);
@@ -3105,6 +3112,88 @@ class InteractionHandler {
             } else {
                 await interaction.reply(replyOptions);
             }
+        }
+    }
+
+    /**
+     * Obsługuje komendę /data-archive - tworzy manualną archiwizację wszystkich danych botów
+     * @param {ChatInputCommandInteraction} interaction - Interakcja Discord
+     */
+    async handleDataArchiveCommand(interaction) {
+        const { MessageFlags } = require('discord.js');
+
+        // Sprawdź uprawnienia administratora
+        if (!this.isAdminOrModerator(interaction.member) && !interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do użycia tej komendy. Wymaga uprawnień Administratora.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        await this.logService.logMessage('info', `Administrator ${interaction.user.tag} wywołał komendę /data-archive`, interaction);
+
+        // Defer reply ponieważ backup może trwać długo
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            // Import BackupManager
+            const BackupManager = require('../../utils/backupManager');
+            const backupManager = new BackupManager();
+
+            // Czekaj chwilę na inicjalizację Google Drive API
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Wykonaj manualny backup
+            const userName = interaction.user.username.replace(/[^a-zA-Z0-9]/g, '_');
+            const results = await backupManager.createManualBackup(userName);
+
+            // Przygotuj odpowiedź
+            const totalSizeMB = (results.totalSize / 1024 / 1024).toFixed(2);
+
+            let responseMessage = '✅ **Manualny backup zakończony!**\n\n';
+
+            if (results.success.length > 0) {
+                responseMessage += `**Pomyślnie zarchiwizowane boty (${results.success.length}):**\n`;
+                results.success.forEach(item => {
+                    const sizeMB = (item.size / 1024 / 1024).toFixed(2);
+                    responseMessage += `✅ ${item.bot} (${sizeMB} MB)\n`;
+                });
+                responseMessage += `\n**Całkowity rozmiar:** ${totalSizeMB} MB\n`;
+            }
+
+            if (results.failed.length > 0) {
+                responseMessage += `\n**Błędy (${results.failed.length}):**\n`;
+                results.failed.forEach(item => {
+                    responseMessage += `❌ ${item.bot}: ${item.reason}\n`;
+                });
+            }
+
+            responseMessage += '\n📁 **Lokalizacja:** Google Drive → `Polski_Squad_Manual_Backups`';
+            responseMessage += '\n⚠️ Te backupy NIE są automatycznie usuwane.';
+
+            await interaction.editReply({
+                content: responseMessage,
+                flags: MessageFlags.Ephemeral
+            });
+
+            await this.logService.logMessage('success',
+                `Manualny backup zakończony przez ${interaction.user.tag}. Sukces: ${results.success.length}, Błędy: ${results.failed.length}`,
+                interaction
+            );
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wykonywania manualnego backupu:', error);
+
+            await interaction.editReply({
+                content: `❌ Wystąpił błąd podczas tworzenia backupu:\n\`\`\`${error.message}\`\`\``,
+                flags: MessageFlags.Ephemeral
+            });
+
+            await this.logService.logMessage('error',
+                `Błąd manualnego backupu przez ${interaction.user.tag}: ${error.message}`,
+                interaction
+            );
         }
     }
 }
