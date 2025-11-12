@@ -312,7 +312,8 @@ class BackupManager {
             };
 
         } catch (error) {
-            logger.error('❌ Błąd przesyłania do Google Drive:', error.message);
+            logger.error('❌ Błąd przesyłania do Google Drive:', error);
+            console.error('Pełny błąd:', error);
             return null;
         }
     }
@@ -548,7 +549,8 @@ class BackupManager {
             };
 
         } catch (error) {
-            logger.error('❌ Błąd przesyłania manualnego backupu do Google Drive:', error.message);
+            logger.error('❌ Błąd przesyłania manualnego backupu do Google Drive:', error);
+            console.error('Pełny błąd:', error); // Dodatkowe logowanie do konsoli
             return null;
         }
     }
