@@ -15,6 +15,7 @@ class BackupManager {
         this.botsFolder = path.join(__dirname, '..');
         this.backupsFolder = path.join(this.botsFolder, 'backups');
         this.maxBackupDays = 7;
+        this.rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || null;
 
         // Lista botów do backupu
         this.bots = [
@@ -227,13 +228,21 @@ class BackupManager {
     /**
      * Sprawdza czy folder Google Drive istnieje, jeśli nie - tworzy go
      * @param {string} folderName - Nazwa folderu
+     * @param {string} parentFolderId - ID folderu nadrzędnego (opcjonalne)
      * @returns {Promise<string>} - ID folderu
      */
-    async ensureDriveFolder(folderName) {
+    async ensureDriveFolder(folderName, parentFolderId = null) {
         try {
-            // Sprawdź czy folder już istnieje
+            // Buduj query - sprawdź czy folder już istnieje
+            let query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+
+            // Jeśli podano parent folder, dodaj do query
+            if (parentFolderId) {
+                query += ` and '${parentFolderId}' in parents`;
+            }
+
             const response = await this.drive.files.list({
-                q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+                q: query,
                 fields: 'files(id, name)',
                 spaces: 'drive'
             });
@@ -247,6 +256,11 @@ class BackupManager {
                 name: folderName,
                 mimeType: 'application/vnd.google-apps.folder'
             };
+
+            // Jeśli podano parent folder, dodaj do metadanych
+            if (parentFolderId) {
+                fileMetadata.parents = [parentFolderId];
+            }
 
             const folder = await this.drive.files.create({
                 resource: fileMetadata,
@@ -275,8 +289,8 @@ class BackupManager {
         }
 
         try {
-            // Upewnij się, że główny folder backupów istnieje
-            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups');
+            // Upewnij się, że główny folder backupów istnieje (w udostępnionym folderze root)
+            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups', this.rootFolderId);
 
             // Upewnij się, że folder bota istnieje
             const botFolderId = await this.ensureBotFolder(backupFolderId, botName);
@@ -368,8 +382,8 @@ class BackupManager {
         }
 
         try {
-            // Znajdź folder backupów
-            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups');
+            // Znajdź folder backupów (w udostępnionym folderze root)
+            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups', this.rootFolderId);
             const botFolderId = await this.ensureBotFolder(backupFolderId, botName);
 
             // Pobierz listę plików w folderze bota
@@ -510,8 +524,8 @@ class BackupManager {
         }
 
         try {
-            // Upewnij się, że folder Manual_Backups istnieje
-            const manualBackupFolderId = await this.ensureDriveFolder('Polski_Squad_Manual_Backups');
+            // Upewnij się, że folder Manual_Backups istnieje (w udostępnionym folderze root)
+            const manualBackupFolderId = await this.ensureDriveFolder('Polski_Squad_Manual_Backups', this.rootFolderId);
 
             // Upewnij się, że folder bota istnieje w Manual_Backups
             const botFolderId = await this.ensureBotFolder(manualBackupFolderId, botName);
