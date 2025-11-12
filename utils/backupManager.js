@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const { google } = require('googleapis');
+const https = require('https');
 const { createBotLogger } = require('./consoleLogger');
 
 const logger = createBotLogger('BackupManager');
@@ -60,6 +61,100 @@ class BackupManager {
             logger.info('✅ Google Drive API zainicjalizowane');
         } catch (error) {
             logger.error('❌ Błąd inicjalizacji Google Drive API:', error.message);
+        }
+    }
+
+    /**
+     * Wysyła podsumowanie backupu bezpośrednio na webhook backupu
+     * @param {Object} results - Wyniki backupu { success: [], failed: [], totalSize: 0 }
+     * @param {string} backupType - Typ backupu ('automatic' lub 'manual')
+     * @param {string} triggerUser - Użytkownik który wywołał (tylko dla manual)
+     */
+    async sendBackupSummaryToWebhook(results, backupType = 'automatic', triggerUser = null) {
+        const webhookUrl = process.env.DISCORD_LOG_WEBHOOK_URL_BACKUP || process.env.DISCORD_LOG_WEBHOOK_URL;
+
+        if (!webhookUrl) return;
+
+        try {
+            const timestamp = new Date().toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+
+            const totalSizeMB = (results.totalSize / 1024 / 1024).toFixed(2);
+            const successCount = results.success.length;
+            const failedCount = results.failed.length;
+            const totalCount = successCount + failedCount;
+
+            // Tytuł w zależności od typu backupu
+            let title = backupType === 'manual'
+                ? `📦 **MANUALNY BACKUP** ${triggerUser ? `(${triggerUser})` : ''}`
+                : `💾 **AUTOMATYCZNY BACKUP**`;
+
+            // Podsumowanie
+            let summary = `**${successCount}/${totalCount} botów zarchiwizowanych** | **${totalSizeMB} MB**\n\n`;
+
+            // Lista botów z sukcesem
+            if (results.success.length > 0) {
+                results.success.forEach(item => {
+                    const sizeMB = (item.size / 1024 / 1024).toFixed(2);
+                    summary += `✅ **${item.bot}** - ${sizeMB} MB\n`;
+                });
+            }
+
+            // Lista botów z błędami
+            if (results.failed.length > 0) {
+                summary += '\n';
+                results.failed.forEach(item => {
+                    const reason = item.reason === 'Pusty folder data' ? '📭' : '❌';
+                    summary += `${reason} **${item.bot}** - ${item.reason}\n`;
+                });
+            }
+
+            // Dodaj timestamp na końcu
+            summary += `\n🕐 ${timestamp}`;
+
+            const message = `────────────────────────────────────────────────────────────────────────────────\n${title}\n\n${summary}`;
+
+            // Wyślij na webhook
+            const data = JSON.stringify({ content: message });
+            const url = new URL(webhookUrl);
+
+            const options = {
+                hostname: url.hostname,
+                path: url.pathname,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            };
+
+            await new Promise((resolve, reject) => {
+                const req = https.request(options, (res) => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        resolve();
+                    } else {
+                        reject(new Error(`Webhook error status: ${res.statusCode}`));
+                    }
+                });
+
+                req.on('error', (error) => {
+                    reject(error);
+                });
+
+                req.write(data);
+                req.end();
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd wysyłania podsumowania na webhook:', error.message);
         }
     }
 
@@ -171,11 +266,12 @@ class BackupManager {
      * Wysyła archiwum do Google Drive
      * @param {string} archivePath - Ścieżka do archiwum
      * @param {string} botName - Nazwa bota
+     * @returns {Promise<Object|null>} - Obiekt z informacjami o uploadzie lub null w przypadku błędu
      */
     async uploadToGoogleDrive(archivePath, botName) {
         if (!this.drive) {
             logger.warn('⚠️  Google Drive nie jest zainicjalizowany - pomijam upload');
-            return;
+            return null;
         }
 
         try {
@@ -209,8 +305,15 @@ class BackupManager {
             fs.unlinkSync(archivePath);
             logger.info(`🗑️  Usunięto lokalny plik: ${fileName}`);
 
+            return {
+                fileId: response.data.id,
+                fileName: fileName,
+                size: parseInt(response.data.size)
+            };
+
         } catch (error) {
             logger.error('❌ Błąd przesyłania do Google Drive:', error.message);
+            return null;
         }
     }
 
@@ -299,6 +402,12 @@ class BackupManager {
     async backupAll() {
         logger.info('🚀 Rozpoczynam backup wszystkich botów...');
 
+        const results = {
+            success: [],
+            failed: [],
+            totalSize: 0
+        };
+
         for (const botName of this.bots) {
             try {
                 logger.info(`📦 Backup bota: ${botName}`);
@@ -307,21 +416,33 @@ class BackupManager {
                 const archivePath = await this.createBotArchive(botName);
 
                 if (!archivePath) {
+                    results.failed.push({ bot: botName, reason: 'Pusty folder data' });
                     continue;
                 }
 
                 // Prześlij do Google Drive
-                await this.uploadToGoogleDrive(archivePath, botName);
+                const uploadResult = await this.uploadToGoogleDrive(archivePath, botName);
 
-                // Wyczyść stare backupy
-                await this.cleanOldBackups(botName);
+                if (uploadResult) {
+                    results.success.push({ bot: botName, size: uploadResult.size });
+                    results.totalSize += uploadResult.size;
+
+                    // Wyczyść stare backupy
+                    await this.cleanOldBackups(botName);
+                } else {
+                    results.failed.push({ bot: botName, reason: 'Błąd uploadu' });
+                }
 
             } catch (error) {
                 logger.error(`❌ Błąd podczas backupu ${botName}:`, error.message);
+                results.failed.push({ bot: botName, reason: error.message });
             }
         }
 
         logger.info('✅ Backup zakończony!');
+
+        // Wyślij podsumowanie na webhook backupu
+        await this.sendBackupSummaryToWebhook(results, 'automatic');
     }
 
     /**
@@ -367,6 +488,10 @@ class BackupManager {
         }
 
         logger.info(`✅ Manualny backup zakończony! Sukces: ${results.success.length}, Błędy: ${results.failed.length}`);
+
+        // Wyślij podsumowanie na webhook backupu
+        await this.sendBackupSummaryToWebhook(results, 'manual', triggerUser);
+
         return results;
     }
 

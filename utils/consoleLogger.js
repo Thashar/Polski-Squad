@@ -219,32 +219,36 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
         // Wybierz odpowiedni webhook URL
         const isBackupBot = botName === 'BackupManager' || botName === 'BackupScheduler' || botName === 'ManualBackup';
 
-        // Słowa kluczowe dla faktycznych operacji backupu (webhook backup)
-        const backupOperationKeywords = [
+        // Słowa kluczowe dla szczegółów operacji backupu (pomijane na webhook)
+        const backupDetailKeywords = [
             'Rozpoczynam backup',
             'backup wszystkich botów',
             'Backup bota:',
             'Utworzono archiwum',
             'Przesłano',
-            'Google Drive',
             'Usunięto stary backup',
+            'Usunięto lokalny plik',
             'Backup zakończony',
             'manualny backup',
-            'Pomyślnie zarchiwizowane',
             'wywołany przez',
-            'Całkowity rozmiar',
-            'backup successfully',
-            'archivePath',
-            'uploadResult'
+            'Manualny backup zakończony',
+            'Sukces:',
+            'Błędy:'
         ];
 
-        // Sprawdź czy to faktyczna operacja backupu
-        const isBackupOperation = isBackupBot && backupOperationKeywords.some(keyword =>
+        // Sprawdź czy to szczegół operacji backupu (do pominięcia)
+        const isBackupDetail = isBackupBot && backupDetailKeywords.some(keyword =>
             message.toLowerCase().includes(keyword.toLowerCase())
         );
 
-        // Użyj backup webhooka tylko dla faktycznych operacji backupu
-        const webhookUrl = isBackupOperation ? WEBHOOK_URL_BACKUP : WEBHOOK_URL;
+        // Nie wysyłaj szczegółów backupów na webhook - tylko startupowe logi i błędy
+        // Podsumowanie jest wysyłane bezpośrednio z backupManager.js
+        if (isBackupDetail) {
+            return; // Pomiń wysyłanie na webhook
+        }
+
+        // Użyj zawsze głównego webhooka dla logów startupowych i błędów
+        const webhookUrl = WEBHOOK_URL;
 
         // Sprawdź czy to nowy bot (inny niż poprzedni w webhook)
         const isNewWebhookBot = lastWebhookBotName !== botName;
