@@ -67,7 +67,8 @@ class BackupManager {
             this.drive = google.drive({ version: 'v3', auth: oAuth2Client });
             logger.info('✅ Google Drive API zainicjalizowane');
         } catch (error) {
-            logger.error('❌ Błąd inicjalizacji Google Drive API:', error.message);
+            logger.error('❌ Błąd inicjalizacji Google Drive API:', error);
+            console.error('Szczegóły błędu:', error);
         }
     }
 
