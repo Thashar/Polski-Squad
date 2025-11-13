@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -130,21 +130,43 @@ client.on('interactionCreate', async interaction => {
     try {
         await handleInteraction(interaction, sharedState, config, client);
     } catch (error) {
-        logger.error('❌ Błąd podczas obsługi interakcji:', error);
-        
+        logger.error('❌ Błąd podczas obsługi interakcji');
+        logger.error('❌ Error name:', error?.name);
+        logger.error('❌ Error message:', error?.message);
+        logger.error('❌ Error code:', error?.code);
+        logger.error('❌ HTTP status:', error?.status);
+        logger.error('❌ Stack trace:', error?.stack);
+
+        // Próbuj serializować error z bezpieczną metodą
+        try {
+            const errorDetails = {
+                name: error?.name,
+                message: error?.message,
+                code: error?.code,
+                status: error?.status,
+                method: error?.method,
+                url: error?.url
+            };
+            logger.error('❌ Error details:', JSON.stringify(errorDetails, null, 2));
+        } catch (serializeError) {
+            logger.error('❌ Nie można serializować błędu:', serializeError.message);
+        }
+
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    flags: MessageFlags.Ephemeral
                 });
             } else if (interaction.deferred) {
-                await interaction.editReply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
                 });
             }
         } catch (replyError) {
-            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
+            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout)');
+            logger.error('❌ Reply error message:', replyError?.message);
+            logger.error('❌ Reply error code:', replyError?.code);
         }
     }
 });

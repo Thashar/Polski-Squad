@@ -1103,7 +1103,12 @@ class OCRService {
                 }
             }
         } catch (error) {
-            logger.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych:', error);
+            logger.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych');
+            logger.error('[OCR] ❌ Error name:', error?.name);
+            logger.error('[OCR] ❌ Error message:', error?.message);
+            logger.error('[OCR] ❌ Error code:', error?.code);
+            logger.error('[OCR] ❌ Error path:', error?.path);
+            logger.error('[OCR] ❌ Stack trace:', error?.stack);
         }
     }
 
