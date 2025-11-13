@@ -754,26 +754,40 @@ class InteractionHandler {
             });
         }
 
+        // Sprawdź czy cel ma uprawnienia administratora - odbij klątwę!
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+        const hasAdminPermissions = targetMember.permissions.has('Administrator');
+
+        let actualTarget = targetUser;
+        let actualTargetMember = targetMember;
+        let isReflected = false;
+
+        if (hasAdminPermissions) {
+            // Klątwa zostaje odbita na osobę rzucającą!
+            actualTarget = interaction.user;
+            actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
+            isReflected = true;
+            logger.info(`🛡️ Klątwa odbita! ${targetUser.tag} (administrator) odbija klątwę na ${interaction.user.tag}`);
+        }
+
         // Zarejestruj użycie
         this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
 
         // Pobierz losową klątwę
         const curse = this.virtuttiService.getRandomCurse();
-        
+
         try {
-            const targetMember = await interaction.guild.members.fetch(targetUser.id);
-            
             // POPRAWKA: Najpierw defer, żeby zabezpieczyć interakcję
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.deferReply({ ephemeral: false });
             }
-            
+
             let nicknameError = null;
-            
+
             // Aplikuj klątwę na nick przy użyciu centralnego systemu
             try {
-                await this.applyNicknameCurse(targetMember, interaction, curse.duration);
-                logger.info(`😈 Aplikowano klątwę na nick ${targetUser.tag}: "${this.config.virtuttiPapajlari.forcedNickname} ${targetMember.displayName}"`);
+                await this.applyNicknameCurse(actualTargetMember, interaction, curse.duration);
+                logger.info(`😈 Aplikowano klątwę na nick ${actualTarget.tag}: "${this.config.virtuttiPapajlari.forcedNickname} ${actualTargetMember.displayName}"`);
             } catch (error) {
                 // Jeśli klątwa na nick nie może być aplikowana, kontynuuj z pozostałymi efektami
                 logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
@@ -785,10 +799,18 @@ class InteractionHandler {
             const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
 
             // Wykonaj dodatkową klątwę
-            await this.executeCurse(interaction, targetMember, curse.additional);
+            await this.executeCurse(interaction, actualTargetMember, curse.additional);
 
             // POPRAWKA: Użyj editReply zamiast reply po defer
-            let responseContent = `💀 **${targetUser.toString()} zostałeś przeklęty!**`;
+            let responseContent;
+            if (isReflected) {
+                // Komunikat o odbiciu klątwy
+                responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
+                    `💀 **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}`;
+            } else {
+                responseContent = `💀 **${actualTarget.toString()} zostałeś przeklęty!** ${randomReaction}`;
+            }
+
             if (nicknameError) {
                 responseContent += `\n\n⚠️ *Uwaga: ${nicknameError}*`;
             }
@@ -797,10 +819,10 @@ class InteractionHandler {
                 content: responseContent
             });
 
-            logger.info(`💀 ${interaction.user.tag} przeklął ${targetUser.tag}`);
+            logger.info(`💀 ${interaction.user.tag} przeklął ${actualTarget.tag}${isReflected ? ' (odbita klątwa)' : ''}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas rzucania klątwy: ${error.message}`);
-            
+
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: '❌ Wystąpił błąd podczas rzucania klątwy.',
