@@ -2676,11 +2676,17 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
 
-        await interaction.update({
-            content: '❌ Operacja anulowana.',
-            embeds: [],
-            components: []
-        });
+        // Próbuj zaktualizować wiadomość (może być już usunięta przez cleanup)
+        try {
+            await interaction.update({
+                content: '❌ Operacja anulowana.',
+                embeds: [],
+                components: []
+            });
+        } catch (updateError) {
+            // Wiadomość została już usunięta przez cleanupQueueChannelMessages - to OK
+            logger.info(`[PHASE1] ℹ️ Nie można zaktualizować wiadomości (prawdopodobnie już usunięta): ${updateError.message}`);
+        }
         return;
     }
 
@@ -3171,11 +3177,18 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
     if (interaction.customId === 'phase2_overwrite_no') {
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
-        await interaction.update({
-            content: '❌ Operacja anulowana.',
-            embeds: [],
-            components: []
-        });
+
+        // Próbuj zaktualizować wiadomość (może być już usunięta przez cleanup)
+        try {
+            await interaction.update({
+                content: '❌ Operacja anulowana.',
+                embeds: [],
+                components: []
+            });
+        } catch (updateError) {
+            // Wiadomość została już usunięta przez cleanupQueueChannelMessages - to OK
+            logger.info(`[PHASE2] ℹ️ Nie można zaktualizować wiadomości (prawdopodobnie już usunięta): ${updateError.message}`);
+        }
         return;
     }
 
