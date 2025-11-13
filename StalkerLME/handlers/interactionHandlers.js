@@ -22,12 +22,20 @@ async function handleInteraction(interaction, sharedState, config) {
             await handleModalSubmit(interaction, sharedState);
         }
     } catch (error) {
-        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji:', error);
-        logger.error('[INTERACTION] ❌ Error name:', error?.name);
-        logger.error('[INTERACTION] ❌ Error message:', error?.message);
-        logger.error('[INTERACTION] ❌ Error code:', error?.code);
-        logger.error('[INTERACTION] ❌ HTTP status:', error?.status);
-        logger.error('[INTERACTION] ❌ Stack trace:', error?.stack);
+        logger.error('[INTERACTION] ❌ Błąd obsługi interakcji');
+        logger.error('[INTERACTION] ❌ Error type:', typeof error);
+        logger.error('[INTERACTION] ❌ Error is null/undefined:', error === null || error === undefined);
+
+        if (error) {
+            logger.error('[INTERACTION] ❌ Error object:', error);
+            logger.error('[INTERACTION] ❌ Error name:', error?.name);
+            logger.error('[INTERACTION] ❌ Error message:', error?.message);
+            logger.error('[INTERACTION] ❌ Error code:', error?.code);
+            logger.error('[INTERACTION] ❌ HTTP status:', error?.status);
+            logger.error('[INTERACTION] ❌ Stack trace:', error?.stack);
+        } else {
+            logger.error('[INTERACTION] ❌ Error is null or undefined - this should not happen!');
+        }
 
         // Próbuj serializować error z bezpieczną metodą
         try {
