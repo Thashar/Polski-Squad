@@ -819,6 +819,15 @@ class InteractionHandler {
                 content: responseContent
             });
 
+            // Wyślij ephemeral message z informacją o pozostałych użyciach
+            const dailyUsage = this.virtuttiService.dailyUsage.get(userId);
+            const remainingUses = this.config.virtuttiPapajlari.dailyLimit - (dailyUsage?.curse || 0);
+
+            await interaction.followUp({
+                content: `📊 Pozostałe klątwy dzisiaj: **${remainingUses}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+                ephemeral: true
+            });
+
             logger.info(`💀 ${interaction.user.tag} przeklął ${actualTarget.tag}${isReflected ? ' (odbita klątwa)' : ''}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas rzucania klątwy: ${error.message}`);
