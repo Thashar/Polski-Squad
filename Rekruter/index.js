@@ -131,11 +131,11 @@ client.on('interactionCreate', async interaction => {
         await handleInteraction(interaction, sharedState, config, client);
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji');
-        logger.error('❌ Error name:', error?.name);
-        logger.error('❌ Error message:', error?.message);
-        logger.error('❌ Error code:', error?.code);
-        logger.error('❌ HTTP status:', error?.status);
-        logger.error('❌ Stack trace:', error?.stack);
+        logger.error(`❌ Error name: ${error?.name}`);
+        logger.error(`❌ Error message: ${error?.message}`);
+        logger.error(`❌ Error code: ${error?.code}`);
+        logger.error(`❌ HTTP status: ${error?.status}`);
+        logger.error(`❌ Stack trace: ${error?.stack}`);
 
         // Próbuj serializować error z bezpieczną metodą
         try {
@@ -147,9 +147,9 @@ client.on('interactionCreate', async interaction => {
                 method: error?.method,
                 url: error?.url
             };
-            logger.error('❌ Error details:', JSON.stringify(errorDetails, null, 2));
+            logger.error(`❌ Error details: ${JSON.stringify(errorDetails, null, 2)}`);
         } catch (serializeError) {
-            logger.error('❌ Nie można serializować błędu:', serializeError.message);
+            logger.error(`❌ Nie można serializować błędu: ${serializeError.message}`);
         }
 
         try {
@@ -165,8 +165,8 @@ client.on('interactionCreate', async interaction => {
             }
         } catch (replyError) {
             logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout)');
-            logger.error('❌ Reply error message:', replyError?.message);
-            logger.error('❌ Reply error code:', replyError?.code);
+            logger.error(`❌ Reply error message: ${replyError?.message}`);
+            logger.error(`❌ Reply error code: ${replyError?.code}`);
         }
     }
 });

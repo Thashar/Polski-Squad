@@ -23,33 +23,32 @@ async function handleInteraction(interaction, sharedState, config) {
         }
     } catch (error) {
         logger.error('[INTERACTION] ❌ Błąd obsługi interakcji');
-        logger.error('[INTERACTION] ❌ Error type:', typeof error);
-        logger.error('[INTERACTION] ❌ Error is null/undefined:', error === null || error === undefined);
+        logger.error(`[INTERACTION] ❌ Error type: ${typeof error}`);
+        logger.error(`[INTERACTION] ❌ Error is null/undefined: ${error === null || error === undefined}`);
 
         if (error) {
-            logger.error('[INTERACTION] ❌ Error object:', error);
-            logger.error('[INTERACTION] ❌ Error name:', error?.name);
-            logger.error('[INTERACTION] ❌ Error message:', error?.message);
-            logger.error('[INTERACTION] ❌ Error code:', error?.code);
-            logger.error('[INTERACTION] ❌ HTTP status:', error?.status);
-            logger.error('[INTERACTION] ❌ Stack trace:', error?.stack);
+            logger.error(`[INTERACTION] ❌ Error name: ${error?.name}`);
+            logger.error(`[INTERACTION] ❌ Error message: ${error?.message}`);
+            logger.error(`[INTERACTION] ❌ Error code: ${error?.code}`);
+            logger.error(`[INTERACTION] ❌ HTTP status: ${error?.status}`);
+            logger.error(`[INTERACTION] ❌ Stack trace: ${error?.stack}`);
+
+            // Próbuj serializować error z bezpieczną metodą
+            try {
+                const errorDetails = {
+                    name: error?.name,
+                    message: error?.message,
+                    code: error?.code,
+                    status: error?.status,
+                    method: error?.method,
+                    url: error?.url
+                };
+                logger.error(`[INTERACTION] ❌ Error details: ${JSON.stringify(errorDetails, null, 2)}`);
+            } catch (serializeError) {
+                logger.error(`[INTERACTION] ❌ Nie można serializować błędu: ${serializeError.message}`);
+            }
         } else {
             logger.error('[INTERACTION] ❌ Error is null or undefined - this should not happen!');
-        }
-
-        // Próbuj serializować error z bezpieczną metodą
-        try {
-            const errorDetails = {
-                name: error?.name,
-                message: error?.message,
-                code: error?.code,
-                status: error?.status,
-                method: error?.method,
-                url: error?.url
-            };
-            logger.error('[INTERACTION] ❌ Error details:', JSON.stringify(errorDetails, null, 2));
-        } catch (serializeError) {
-            logger.error('[INTERACTION] ❌ Nie można serializować błędu:', serializeError.message);
         }
 
         // Próbuj odpowiedzieć na interakcję (może być już timeout)
@@ -982,20 +981,20 @@ async function handleButton(interaction, sharedState) {
 
         } catch (error) {
             logger.error('[REMIND] ❌ Błąd wysyłania przypomnień');
-            logger.error('[REMIND] ❌ Error type:', typeof error);
-            logger.error('[REMIND] ❌ Error object:', error);
+            logger.error(`[REMIND] ❌ Error type: ${typeof error}`);
+            logger.error(`[REMIND] ❌ Error object: ${error}`);
 
             if (error) {
-                logger.error('[REMIND] ❌ Error name:', error?.name);
-                logger.error('[REMIND] ❌ Error message:', error?.message);
-                logger.error('[REMIND] ❌ Error stack:', error?.stack);
+                logger.error(`[REMIND] ❌ Error name: ${error?.name}`);
+                logger.error(`[REMIND] ❌ Error message: ${error?.message}`);
+                logger.error(`[REMIND] ❌ Error stack: ${error?.stack}`);
             }
 
             // Zatrzymaj ghost ping
             try {
                 stopGhostPing(session);
             } catch (stopError) {
-                logger.error('[REMIND] ⚠️ Błąd zatrzymywania ghost ping:', stopError.message);
+                logger.error(`[REMIND] ⚠️ Błąd zatrzymywania ghost ping: ${stopError.message}`);
             }
 
             // Próbuj odpowiedzieć na interakcję
@@ -1006,7 +1005,7 @@ async function handleButton(interaction, sharedState) {
                     components: []
                 });
             } catch (replyError) {
-                logger.error('[REMIND] ⚠️ Nie można zaktualizować interakcji:', replyError.message);
+                logger.error(`[REMIND] ⚠️ Nie można zaktualizować interakcji: ${replyError.message}`);
             }
 
             // Zakończ sesję OCR i wyczyść
@@ -1014,7 +1013,7 @@ async function handleButton(interaction, sharedState) {
                 await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
                 await sharedState.reminderService.cleanupSession(session.sessionId);
             } catch (cleanupError) {
-                logger.error('[REMIND] ⚠️ Błąd czyszczenia sesji:', cleanupError.message);
+                logger.error(`[REMIND] ⚠️ Błąd czyszczenia sesji: ${cleanupError.message}`);
             }
         }
 
@@ -1365,20 +1364,20 @@ async function handleButton(interaction, sharedState) {
 
         } catch (error) {
             logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych');
-            logger.error('[PUNISH] ❌ Error type:', typeof error);
-            logger.error('[PUNISH] ❌ Error object:', error);
+            logger.error(`[PUNISH] ❌ Error type: ${typeof error}`);
+            logger.error(`[PUNISH] ❌ Error object: ${error}`);
 
             if (error) {
-                logger.error('[PUNISH] ❌ Error name:', error?.name);
-                logger.error('[PUNISH] ❌ Error message:', error?.message);
-                logger.error('[PUNISH] ❌ Error stack:', error?.stack);
+                logger.error(`[PUNISH] ❌ Error name: ${error?.name}`);
+                logger.error(`[PUNISH] ❌ Error message: ${error?.message}`);
+                logger.error(`[PUNISH] ❌ Error stack: ${error?.stack}`);
             }
 
             // Zatrzymaj ghost ping
             try {
                 stopGhostPing(session);
             } catch (stopError) {
-                logger.error('[PUNISH] ⚠️ Błąd zatrzymywania ghost ping:', stopError.message);
+                logger.error(`[PUNISH] ⚠️ Błąd zatrzymywania ghost ping: ${stopError.message}`);
             }
 
             // Próbuj odpowiedzieć na interakcję
@@ -1389,7 +1388,7 @@ async function handleButton(interaction, sharedState) {
                     components: []
                 });
             } catch (replyError) {
-                logger.error('[PUNISH] ⚠️ Nie można zaktualizować interakcji:', replyError.message);
+                logger.error(`[PUNISH] ⚠️ Nie można zaktualizować interakcji: ${replyError.message}`);
             }
 
             // Zakończ sesję OCR i wyczyść
@@ -1397,7 +1396,7 @@ async function handleButton(interaction, sharedState) {
                 await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
                 await sharedState.punishmentService.cleanupSession(session.sessionId);
             } catch (cleanupError) {
-                logger.error('[PUNISH] ⚠️ Błąd czyszczenia sesji:', cleanupError.message);
+                logger.error(`[PUNISH] ⚠️ Błąd czyszczenia sesji: ${cleanupError.message}`);
             }
         }
 
