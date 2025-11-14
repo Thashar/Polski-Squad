@@ -1645,14 +1645,25 @@ class OCRService {
     /**
      * Kończy sesję OCR i powiadamia następną osobę w kolejce
      */
-    async endOCRSession(guildId, userId) {
+    async endOCRSession(guildId, userId, immediate = false) {
         const active = this.activeProcessing.get(guildId);
         if (!active || active.userId !== userId) {
             return; // Nie ten użytkownik
         }
 
+        const delay = immediate ? 0 : 5000; // 5 sekund jeśli nie immediate
+
+        if (delay > 0) {
+            logger.info(`[OCR-QUEUE] ⏳ Użytkownik ${userId} zakończył OCR - kolejka zostanie zwolniona za 5 sekund...`);
+        } else {
+            logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR - zwalnianie kolejki natychmiast...`);
+        }
+
+        // Opóźnienie przed zwolnieniem kolejki
+        await new Promise(resolve => setTimeout(resolve, delay));
+
         this.activeProcessing.delete(guildId);
-        logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR`);
+        logger.info(`[OCR-QUEUE] 🔓 Kolejka zwolniona dla użytkownika ${userId}`);
 
         // Wyczyść kanał kolejki (usuń wszystkie wiadomości oprócz pierwszej z embedem)
         await this.cleanupQueueChannelMessages();
