@@ -211,7 +211,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         // Zakończ sesję OCR w przypadku błędu
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
-        await ocrService.endOCRSession(guildId, userId);
+        await ocrService.endOCRSession(guildId, userId, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
 
         await interaction.editReply({ content: messages.errors.ocrError });
@@ -315,7 +315,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         // Zakończ sesję OCR w przypadku błędu
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
-        await ocrService.endOCRSession(guildId, userId);
+        await ocrService.endOCRSession(guildId, userId, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
 
         await interaction.editReply({ content: messages.errors.ocrError });
@@ -753,7 +753,7 @@ async function handleButton(interaction, sharedState) {
 
         // Potem wykonaj czyszczenie (asynchronicznie w tle)
         try {
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
             await sharedState.reminderService.cleanupSession(session.sessionId);
         } catch (error) {
             logger.error(`[REMIND] ⚠️ Błąd czyszczenia sesji: ${error.message}`);
@@ -844,7 +844,7 @@ async function handleButton(interaction, sharedState) {
             });
 
             // Zakończ sesję OCR i wyczyść
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
             await sharedState.reminderService.cleanupSession(session.sessionId);
             return;
         }
@@ -908,7 +908,7 @@ async function handleButton(interaction, sharedState) {
                         });
 
                         // Zakończ sesję OCR i wyczyść
-                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
                         await sharedState.reminderService.cleanupSession(session.sessionId);
                         return;
                     }
@@ -1010,7 +1010,7 @@ async function handleButton(interaction, sharedState) {
 
             // Zakończ sesję OCR i wyczyść
             try {
-                await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
                 await sharedState.reminderService.cleanupSession(session.sessionId);
             } catch (cleanupError) {
                 logger.error(`[REMIND] ⚠️ Błąd czyszczenia sesji: ${cleanupError.message}`);
@@ -1149,7 +1149,7 @@ async function handleButton(interaction, sharedState) {
 
         // Potem wykonaj czyszczenie (asynchronicznie w tle)
         try {
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
             await sharedState.punishmentService.cleanupSession(session.sessionId);
         } catch (error) {
             logger.error(`[PUNISH] ⚠️ Błąd czyszczenia sesji: ${error.message}`);
@@ -1240,7 +1240,7 @@ async function handleButton(interaction, sharedState) {
             });
 
             // Zakończ sesję OCR i wyczyść
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
             await sharedState.punishmentService.cleanupSession(session.sessionId);
             return;
         }
@@ -1304,7 +1304,7 @@ async function handleButton(interaction, sharedState) {
                         });
 
                         // Zakończ sesję OCR i wyczyść
-                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
                         await sharedState.punishmentService.cleanupSession(session.sessionId);
                         return;
                     }
@@ -1393,7 +1393,7 @@ async function handleButton(interaction, sharedState) {
 
             // Zakończ sesję OCR i wyczyść
             try {
-                await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+                await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
                 await sharedState.punishmentService.cleanupSession(session.sessionId);
             } catch (cleanupError) {
                 logger.error(`[PUNISH] ⚠️ Błąd czyszczenia sesji: ${cleanupError.message}`);
@@ -2582,7 +2582,7 @@ async function handlePhase1Command(interaction, sharedState) {
         logger.error('[PHASE1] ❌ Błąd komendy /faza1:', error);
 
         // Zakończ sesję OCR w przypadku błędu
-        await ocrService.endOCRSession(guildId, userId);
+        await ocrService.endOCRSession(guildId, userId, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
 
         await interaction.editReply({
@@ -2673,7 +2673,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
 
     if (interaction.customId === 'phase1_overwrite_no') {
         // Anuluj - zakończ sesję OCR
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
 
         // Próbuj zaktualizować wiadomość (może być już usunięta przez cleanup)
@@ -2755,7 +2755,7 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     if (interaction.customId === 'phase1_cancel_session') {
         // Anuluj sesję i zwolnij kolejkę OCR
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
 
 
@@ -2912,7 +2912,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     if (interaction.customId === 'phase1_cancel_save') {
         // Anuluj - usuń pliki temp i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase1)`);
 
         await interaction.update({
@@ -2981,7 +2981,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
 
         // Zakończ sesję OCR w przypadku błędu
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase1)`);
 
         await interaction.editReply({
@@ -3162,7 +3162,7 @@ async function handlePhase2Command(interaction, sharedState) {
         logger.info(`[PHASE2] ❌ Błąd komendy /faza2:`, error);
 
         // Zakończ sesję OCR w przypadku błędu
-        await ocrService.endOCRSession(guildId, userId);
+        await ocrService.endOCRSession(guildId, userId, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd Phase2)`);
 
         await interaction.editReply({
@@ -3175,7 +3175,7 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
     const { phaseService, config, ocrService } = sharedState;
 
     if (interaction.customId === 'phase2_overwrite_no') {
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
 
         // Próbuj zaktualizować wiadomość (może być już usunięta przez cleanup)
@@ -3249,7 +3249,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     if (interaction.customId === 'phase2_cancel_session') {
         // Anuluj sesję i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
 
         await interaction.update({
@@ -3364,7 +3364,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     if (interaction.customId === 'phase2_cancel_save') {
         // Anuluj zapis i zakończ sesję OCR
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
 
         await interaction.update({
@@ -3473,7 +3473,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
 
     } catch (error) {
         logger.error('[PHASE2] ❌ Błąd zapisu:', error);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase2)`);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisywania danych.'
