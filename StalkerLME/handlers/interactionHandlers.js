@@ -807,8 +807,12 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
-        // Defer update PRZED długimi operacjami (sprawdzanie urlopów może trwać kilka sekund)
-        await interaction.deferUpdate();
+        // Natychmiast pokaż status "Wysyłanie..." (usuwa przyciski)
+        await interaction.update({
+            content: '⏳ **Wysyłanie powiadomień...**\n\nSprawdzam urlopy i wysyłam wiadomości do użytkowników.',
+            embeds: [],
+            components: []
+        });
 
         // Stwórz listę znalezionych użytkowników
         const allFoundUsers = [];
@@ -956,17 +960,31 @@ async function handleButton(interaction, sharedState) {
             const timeLeft = sharedState.reminderService.calculateTimeUntilDeadline();
             const timeMessage = messages.formatTimeMessage(timeLeft);
 
+            // Przygotuj listę użytkowników którzy dostali powiadomienie
+            const userList = foundUsers
+                .filter(userData => userData.user && userData.user.member)
+                .map(userData => `• ${userData.user.member.displayName}`)
+                .join('\n');
+
+            // Funkcja do tworzenia paska progresu
+            const createProgressBar = (secondsLeft, totalSeconds = 5) => {
+                const percentage = secondsLeft / totalSeconds;
+                const filledBlocks = Math.round(percentage * 10);
+                const emptyBlocks = 10 - filledBlocks;
+                return '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+            };
+
+            // Pokaż embed z listą użytkowników i countdown
+            let secondsLeft = 5;
             const successEmbed = new EmbedBuilder()
                 .setTitle('✅ Przypomnienia wysłane')
                 .setDescription(
-                    `**Podsumowanie:**\n` +
-                    `🎯 Przeanalizowano: **${processedImagesCount}** ${processedImagesCount === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
-                    `👥 Znaleziono: **${uniqueNicksCount}** ${uniqueNicksCount === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
-                    `📤 Wysłano: **${reminderResult.sentMessages}** ${reminderResult.sentMessages === 1 ? 'przypomnienie' : 'przypomnień'}\n\n` +
-                    `⏰ ${timeMessage}`
+                    `📤 **Wysłano powiadomienia do ${reminderResult.sentMessages} ${reminderResult.sentMessages === 1 ? 'osoby' : 'osób'}:**\n\n` +
+                    `${userList}\n\n` +
+                    `⏰ ${timeMessage}\n\n` +
+                    `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
                 )
                 .setColor('#00ff00')
-                .setTimestamp()
                 .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
 
             await interaction.editReply({
@@ -976,8 +994,32 @@ async function handleButton(interaction, sharedState) {
 
             logger.info(`[REMIND] ✅ Przypomnienia wysłane przez ${interaction.user.tag}`);
 
-            // Zakończ sesję OCR (z opóźnieniem 5s)
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            // Odlicz 5 sekund z aktualizacją paska co sekundę
+            const countdownInterval = setInterval(async () => {
+                secondsLeft--;
+                if (secondsLeft > 0) {
+                    successEmbed.setDescription(
+                        `📤 **Wysłano powiadomienia do ${reminderResult.sentMessages} ${reminderResult.sentMessages === 1 ? 'osoby' : 'osób'}:**\n\n` +
+                        `${userList}\n\n` +
+                        `⏰ ${timeMessage}\n\n` +
+                        `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
+                    );
+                    try {
+                        await interaction.editReply({ embeds: [successEmbed] });
+                    } catch (error) {
+                        clearInterval(countdownInterval);
+                        logger.error(`[REMIND] ⚠️ Błąd aktualizacji countdown: ${error.message}`);
+                    }
+                } else {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+
+            // Poczekaj 5 sekund
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
 
         } catch (error) {
             logger.error('[REMIND] ❌ Błąd wysyłania przypomnień');
@@ -1203,8 +1245,12 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
-        // Defer update PRZED długimi operacjami (sprawdzanie urlopów może trwać kilka sekund)
-        await interaction.deferUpdate();
+        // Natychmiast pokaż status "Dodawanie punktów..." (usuwa przyciski)
+        await interaction.update({
+            content: '⏳ **Dodawanie punktów karnych...**\n\nSprawdzam urlopy i dodaję punkty użytkownikom.',
+            embeds: [],
+            components: []
+        });
 
         // Stwórz listę znalezionych użytkowników
         const allFoundUsers = [];
@@ -1335,22 +1381,29 @@ async function handleButton(interaction, sharedState) {
             for (const result of results) {
                 const warningEmoji = result.points === 2 || result.points === 3 ? '📢' : '';
                 const punishmentEmoji = result.points >= 2 ? '🎭' : '';
-                processedUsers.push(`${result.user} - ${result.points} punktów ${punishmentEmoji}${warningEmoji}`);
+                processedUsers.push(`• ${result.user} - ${result.points} pkt ${punishmentEmoji}${warningEmoji}`);
                 addedPoints += 1;
             }
 
+            // Funkcja do tworzenia paska progresu
+            const createProgressBar = (secondsLeft, totalSeconds = 5) => {
+                const percentage = secondsLeft / totalSeconds;
+                const filledBlocks = Math.round(percentage * 10);
+                const emptyBlocks = 10 - filledBlocks;
+                return '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+            };
+
+            // Pokaż embed z listą użytkowników i countdown
+            let secondsLeft = 5;
             const successEmbed = new EmbedBuilder()
                 .setTitle('✅ Punkty karne dodane')
                 .setDescription(
-                    `**Podsumowanie:**\n` +
-                    `🎯 Przeanalizowano: **${processedImagesCount}** ${processedImagesCount === 1 ? 'zdjęcie' : 'zdjęć'}\n` +
-                    `👥 Znaleziono: **${uniqueNicksCount}** ${uniqueNicksCount === 1 ? 'unikalny nick' : 'unikalnych nicków'}\n` +
-                    `📈 Dodano punktów: **${addedPoints}**\n\n` +
-                    `**Przetworzone osoby:**\n${processedUsers.join('\n')}`
+                    `📈 **Dodano punkty dla ${addedPoints} ${addedPoints === 1 ? 'osoby' : 'osób'}:**\n\n` +
+                    `${processedUsers.join('\n')}\n\n` +
+                    `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
                 )
                 .setColor('#00ff00')
-                .setTimestamp()
-                .setFooter({ text: `Wykonano przez ${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
+                .setFooter({ text: `${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
 
             await interaction.editReply({
                 embeds: [successEmbed],
@@ -1359,8 +1412,31 @@ async function handleButton(interaction, sharedState) {
 
             logger.info(`[PUNISH] ✅ Punkty karne dodane przez ${interaction.user.tag}`);
 
-            // Zakończ sesję OCR (z opóźnieniem 5s)
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
+            // Odlicz 5 sekund z aktualizacją paska co sekundę
+            const countdownInterval = setInterval(async () => {
+                secondsLeft--;
+                if (secondsLeft > 0) {
+                    successEmbed.setDescription(
+                        `📈 **Dodano punkty dla ${addedPoints} ${addedPoints === 1 ? 'osoby' : 'osób'}:**\n\n` +
+                        `${processedUsers.join('\n')}\n\n` +
+                        `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
+                    );
+                    try {
+                        await interaction.editReply({ embeds: [successEmbed] });
+                    } catch (error) {
+                        clearInterval(countdownInterval);
+                        logger.error(`[PUNISH] ⚠️ Błąd aktualizacji countdown: ${error.message}`);
+                    }
+                } else {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+
+            // Poczekaj 5 sekund
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
 
         } catch (error) {
             logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych');
@@ -2967,15 +3043,47 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             publicEmbed.addFields({ name: '📋 Gracze z wynikiem 0', value: zeroList, inline: false });
         }
 
+        // Funkcja do tworzenia paska progresu
+        const createProgressBar = (secondsLeft, totalSeconds = 5) => {
+            const percentage = secondsLeft / totalSeconds;
+            const filledBlocks = Math.round(percentage * 10);
+            const emptyBlocks = 10 - filledBlocks;
+            return '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+        };
+
+        // Dodaj countdown do embeda
+        let secondsLeft = 5;
+        publicEmbed.addFields({ name: '⏳ Zamknięcie sesji', value: `${createProgressBar(secondsLeft)} ${secondsLeft}s`, inline: false });
+
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
 
         // Usuń pliki temp po zapisaniu
         await phaseService.cleanupSession(session.sessionId);
 
-        // Zakończ sesję OCR
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase1)`);
         logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
+
+        // Odlicz 5 sekund z aktualizacją paska co sekundę
+        const countdownInterval = setInterval(async () => {
+            secondsLeft--;
+            if (secondsLeft > 0) {
+                publicEmbed.data.fields[publicEmbed.data.fields.length - 1].value = `${createProgressBar(secondsLeft)} ${secondsLeft}s`;
+                try {
+                    await interaction.editReply({ embeds: [publicEmbed] });
+                } catch (error) {
+                    clearInterval(countdownInterval);
+                    logger.error(`[PHASE1] ⚠️ Błąd aktualizacji countdown: ${error.message}`);
+                }
+            } else {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+
+        // Poczekaj 5 sekund
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase1)`);
 
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
@@ -3452,13 +3560,25 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             }
         }
 
+        // Funkcja do tworzenia paska progresu
+        const createProgressBar = (secondsLeft, totalSeconds = 5) => {
+            const percentage = secondsLeft / totalSeconds;
+            const filledBlocks = Math.round(percentage * 10);
+            const emptyBlocks = 10 - filledBlocks;
+            return '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+        };
+
+        // Dodaj countdown do embeda
+        let secondsLeft = 5;
+
         const publicEmbed = new EmbedBuilder()
             .setTitle('✅ Faza 2 - Dane zapisane pomyślnie')
             .setDescription(`Wyniki dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** zostały zapisane.`)
             .setColor('#00FF00')
             .addFields(
                 { name: '⭕ Wynik = 0 (suma z 3 rund)', value: `${totalZeroCount} wystąpień`, inline: false },
-                { name: '🎯 Klan', value: clanName, inline: false }
+                { name: '🎯 Klan', value: clanName, inline: false },
+                { name: '⏳ Zamknięcie sesji', value: `${createProgressBar(secondsLeft)} ${secondsLeft}s`, inline: false }
             )
             .setTimestamp()
             .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
@@ -3466,10 +3586,30 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
         await phaseService.cleanupSession(session.sessionId);
 
-        // Zakończ sesję OCR
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase2)`);
         logger.info(`[PHASE2] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
+
+        // Odlicz 5 sekund z aktualizacją paska co sekundę
+        const countdownInterval = setInterval(async () => {
+            secondsLeft--;
+            if (secondsLeft > 0) {
+                publicEmbed.data.fields[publicEmbed.data.fields.length - 1].value = `${createProgressBar(secondsLeft)} ${secondsLeft}s`;
+                try {
+                    await interaction.editReply({ embeds: [publicEmbed] });
+                } catch (error) {
+                    clearInterval(countdownInterval);
+                    logger.error(`[PHASE2] ⚠️ Błąd aktualizacji countdown: ${error.message}`);
+                }
+            } else {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+
+        // Poczekaj 5 sekund
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase2)`);
 
     } catch (error) {
         logger.error('[PHASE2] ❌ Błąd zapisu:', error);
