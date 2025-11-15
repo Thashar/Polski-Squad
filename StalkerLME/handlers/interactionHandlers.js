@@ -949,9 +949,6 @@ async function handleButton(interaction, sharedState) {
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
-            // Zakończ sesję OCR
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-
             // Wyczyść sesję
             await sharedState.reminderService.cleanupSession(session.sessionId);
 
@@ -978,6 +975,9 @@ async function handleButton(interaction, sharedState) {
             });
 
             logger.info(`[REMIND] ✅ Przypomnienia wysłane przez ${interaction.user.tag}`);
+
+            // Zakończ sesję OCR (z opóźnieniem 5s)
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
 
         } catch (error) {
             logger.error('[REMIND] ❌ Błąd wysyłania przypomnień');
@@ -1325,9 +1325,6 @@ async function handleButton(interaction, sharedState) {
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
-            // Zakończ sesję OCR
-            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
-
             // Wyczyść sesję
             await sharedState.punishmentService.cleanupSession(session.sessionId);
 
@@ -1361,6 +1358,9 @@ async function handleButton(interaction, sharedState) {
             });
 
             logger.info(`[PUNISH] ✅ Punkty karne dodane przez ${interaction.user.tag}`);
+
+            // Zakończ sesję OCR (z opóźnieniem 5s)
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id);
 
         } catch (error) {
             logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych');
