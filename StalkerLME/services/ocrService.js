@@ -17,7 +17,7 @@ class OCRService {
         this.processedDir = this.config.ocr.processedDir || './StalkerLME/processed';
 
         // System kolejkowania OCR - wspólny dla wszystkich komend używających OCR
-        this.activeProcessing = new Map(); // guildId → {userId, commandName}
+        this.activeProcessing = new Map(); // guildId → {userId, commandName, expiresAt, timeout}
         this.waitingQueue = new Map(); // guildId → [{userId, addedAt, commandName}]
         this.queueReservation = new Map(); // guildId → {userId, expiresAt, timeout, commandName}
 
@@ -1613,6 +1613,17 @@ class OCRService {
     /**
      * Rozpoczyna sesję OCR dla użytkownika
      */
+    /**
+     * Określa timeout dla sesji na podstawie komendy
+     */
+    getSessionTimeout(commandName) {
+        // faza2: 10 minut, reszta: 5 minut
+        if (commandName === '/faza2') {
+            return 10 * 60 * 1000; // 10 minut
+        }
+        return 5 * 60 * 1000; // 5 minut (faza1, remind, punish)
+    }
+
     async startOCRSession(guildId, userId, commandName) {
         // Usuń rezerwację jeśli istnieje
         if (this.queueReservation.has(guildId)) {
@@ -1632,14 +1643,55 @@ class OCRService {
             }
         }
 
-        // Sesja aktywna trwa 15 minut (cleanup timeout)
-        const expiresAt = Date.now() + (15 * 60 * 1000);
+        // Określ timeout na podstawie komendy
+        const timeoutDuration = this.getSessionTimeout(commandName);
+        const expiresAt = Date.now() + timeoutDuration;
 
-        this.activeProcessing.set(guildId, { userId, commandName, expiresAt });
-        logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName}`);
+        // Ustaw timeout który wywoła wygaśnięcie sesji
+        const timeout = setTimeout(async () => {
+            logger.warn(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${commandName})`);
+            await this.expireOCRSession(guildId, userId);
+        }, timeoutDuration);
+
+        this.activeProcessing.set(guildId, { userId, commandName, expiresAt, timeout });
+        const minutes = timeoutDuration / (60 * 1000);
+        logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName} (timeout: ${minutes} min)`);
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
+    }
+
+    /**
+     * Odnawia timeout sesji OCR (wywoływane przy każdym kliknięciu przycisku)
+     */
+    refreshOCRSession(guildId, userId) {
+        const active = this.activeProcessing.get(guildId);
+        if (!active || active.userId !== userId) {
+            return; // Nie ta sesja lub sesja nie istnieje
+        }
+
+        // Wyczyść stary timeout
+        if (active.timeout) {
+            clearTimeout(active.timeout);
+        }
+
+        // Określ timeout na podstawie komendy
+        const timeoutDuration = this.getSessionTimeout(active.commandName);
+        const expiresAt = Date.now() + timeoutDuration;
+
+        // Ustaw nowy timeout
+        const timeout = setTimeout(async () => {
+            logger.warn(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+            await this.expireOCRSession(guildId, userId);
+        }, timeoutDuration);
+
+        // Zaktualizuj sesję z nowym timeoutem
+        active.expiresAt = expiresAt;
+        active.timeout = timeout;
+        this.activeProcessing.set(guildId, active);
+
+        const minutes = timeoutDuration / (60 * 1000);
+        logger.info(`[OCR-QUEUE] 🔄 Odświeżono timeout dla ${userId} (${active.commandName}, +${minutes} min)`);
     }
 
     /**
@@ -1649,6 +1701,11 @@ class OCRService {
         const active = this.activeProcessing.get(guildId);
         if (!active || active.userId !== userId) {
             return; // Nie ten użytkownik
+        }
+
+        // Wyczyść timeout jeśli istnieje
+        if (active.timeout) {
+            clearTimeout(active.timeout);
         }
 
         // Usuń z aktywnego przetwarzania NATYCHMIAST (zapobiega wielokrotnym kliknięciom)
@@ -1687,6 +1744,60 @@ class OCRService {
                 // for (let i = 1; i < queue.length; i++) {
                 //     await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
                 // }
+            } else {
+                this.waitingQueue.delete(guildId);
+            }
+        }
+    }
+
+    /**
+     * Wygasa aktywną sesję OCR (timeout 15 minut)
+     */
+    async expireOCRSession(guildId, userId) {
+        const active = this.activeProcessing.get(guildId);
+
+        // Sprawdź czy to nadal ta sama sesja
+        if (!active || active.userId !== userId) {
+            return; // Sesja już zakończona lub inna osoba
+        }
+
+        // Usuń z aktywnego przetwarzania
+        this.activeProcessing.delete(guildId);
+        logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
+
+        // Powiadom użytkownika
+        try {
+            if (!this.client) return;
+            const user = await this.client.users.fetch(userId);
+            const timeoutMinutes = this.getSessionTimeout(active.commandName) / (60 * 1000);
+            await user.send({
+                embeds: [new (require('discord.js')).EmbedBuilder()
+                    .setTitle('⏰ Sesja wygasła')
+                    .setDescription(`Twoja sesja OCR (\`${active.commandName}\`) wygasła z powodu braku aktywności (${timeoutMinutes} min).\n\nMożesz użyć komendy ponownie, aby rozpocząć nową sesję.`)
+                    .setColor('#FF0000')
+                    .setTimestamp()
+                ]
+            });
+        } catch (error) {
+            logger.error(`[OCR-QUEUE] ❌ Błąd powiadomienia o wygasłej sesji:`, error.message);
+        }
+
+        // Wyczyść kanał kolejki
+        await this.cleanupQueueChannelMessages();
+
+        // Aktualizuj wyświetlanie kolejki
+        await this.updateQueueDisplay(guildId);
+
+        // Sprawdź czy są osoby w kolejce i powiadom następną
+        if (this.waitingQueue.has(guildId)) {
+            const queue = this.waitingQueue.get(guildId);
+
+            if (queue.length > 0) {
+                const nextPerson = queue[0];
+                logger.info(`[OCR-QUEUE] 📢 Następna osoba po wygaśnięciu: ${nextPerson.userId} (${nextPerson.commandName})`);
+
+                // Stwórz rezerwację na 3 minuty
+                await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
             } else {
                 this.waitingQueue.delete(guildId);
             }
