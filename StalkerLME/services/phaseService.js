@@ -811,7 +811,12 @@ class PhaseService {
      * Tworzy pasek postępu z emoji (stałe 10 kratek + procent)
      */
     createProgressBar(currentImage, totalImages, stage = 'pending', blinkState = false) {
-        const percentage = Math.floor((currentImage / totalImages) * 100);
+        // Oblicz procenty: pokazuj ile zdjęć zostało ZAKOŃCZONYCH
+        // Podczas przetwarzania zdjęcia N pokazuj procent za (N-1) zakończonych zdjęć
+        const isFullyCompleted = currentImage === totalImages && stage !== 'loading' && stage !== 'ocr' && stage !== 'extracting' && stage !== 'aggregating';
+        const percentage = isFullyCompleted
+            ? 100
+            : Math.floor(((currentImage - 1) / totalImages) * 100);
         const totalBars = 10;
 
         let bar = '';
@@ -819,7 +824,7 @@ class PhaseService {
         if (currentImage === 0) {
             // Początek - wszystkie białe kratki
             bar = '⬜'.repeat(totalBars);
-        } else if (currentImage === totalImages && stage !== 'loading' && stage !== 'ocr' && stage !== 'extracting') {
+        } else if (isFullyCompleted) {
             // Wszystko ukończone - 10 zielonych kratek
             bar = '🟩'.repeat(totalBars);
         } else {

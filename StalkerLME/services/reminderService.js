@@ -782,7 +782,10 @@ class ReminderService {
      * @param {boolean} blinkState - Stan migania (true/false)
      */
     createProgressBar(current, total, stage = 'processing', blinkState = false) {
-        const percentage = Math.floor((current / total) * 100);
+        // Oblicz procenty: dla 'processing' używamy (current-1), dla 'completed' używamy current
+        const percentage = stage === 'completed'
+            ? Math.floor((current / total) * 100)
+            : Math.floor(((current - 1) / total) * 100);
         const totalBars = 10;
 
         let bar = '';
