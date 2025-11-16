@@ -779,7 +779,7 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Odśwież timeout sesji OCR
-        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+        await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
         session.stage = 'awaiting_images';
         sharedState.reminderService.refreshSessionTimeout(session.sessionId);
@@ -811,7 +811,7 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Odśwież timeout sesji OCR
-        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+        await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
         // Natychmiast pokaż status "Wysyłanie..." (usuwa przyciski)
         await interaction.update({
@@ -1223,7 +1223,7 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Odśwież timeout sesji OCR
-        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+        await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
         session.stage = 'awaiting_images';
         sharedState.punishmentService.refreshSessionTimeout(session.sessionId);
@@ -1255,7 +1255,7 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Odśwież timeout sesji OCR
-        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+        await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
         // Natychmiast pokaż status "Dodawanie punktów..." (usuwa przyciski)
         await interaction.update({
@@ -2841,7 +2841,7 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     }
 
     // Odśwież timeout sesji OCR
-    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     if (interaction.customId === 'phase1_cancel_session') {
         // Anuluj sesję i zwolnij kolejkę OCR
@@ -2933,7 +2933,7 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
     }
 
     // Odśwież timeout sesji OCR
-    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -3001,7 +3001,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     }
 
     // Odśwież timeout sesji OCR
-    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -3376,7 +3376,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     }
 
     // Odśwież timeout sesji OCR
-    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     if (interaction.customId === 'phase2_cancel_session') {
         // Anuluj sesję i zakończ sesję OCR
@@ -3491,7 +3491,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     }
 
     // Odśwież timeout sesji OCR
-    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
