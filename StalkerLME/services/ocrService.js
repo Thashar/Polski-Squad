@@ -1664,7 +1664,7 @@ class OCRService {
     /**
      * Odnawia timeout sesji OCR (wywoływane przy każdym kliknięciu przycisku)
      */
-    refreshOCRSession(guildId, userId) {
+    async refreshOCRSession(guildId, userId) {
         const active = this.activeProcessing.get(guildId);
         if (!active || active.userId !== userId) {
             return; // Nie ta sesja lub sesja nie istnieje
@@ -1692,6 +1692,9 @@ class OCRService {
 
         const minutes = timeoutDuration / (60 * 1000);
         logger.info(`[OCR-QUEUE] 🔄 Odświeżono timeout dla ${userId} (${active.commandName}, +${minutes} min)`);
+
+        // Aktualizuj wyświetlanie kolejki (odświeża timestamp w embedzie)
+        await this.updateQueueDisplay(guildId);
     }
 
     /**
