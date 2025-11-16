@@ -1613,6 +1613,17 @@ class OCRService {
     /**
      * Rozpoczyna sesję OCR dla użytkownika
      */
+    /**
+     * Określa timeout dla sesji na podstawie komendy
+     */
+    getSessionTimeout(commandName) {
+        // faza2: 10 minut, reszta: 5 minut
+        if (commandName === '/faza2') {
+            return 10 * 60 * 1000; // 10 minut
+        }
+        return 5 * 60 * 1000; // 5 minut (faza1, remind, punish)
+    }
+
     async startOCRSession(guildId, userId, commandName) {
         // Usuń rezerwację jeśli istnieje
         if (this.queueReservation.has(guildId)) {
@@ -1632,20 +1643,55 @@ class OCRService {
             }
         }
 
-        // Sesja aktywna trwa 15 minut (cleanup timeout)
-        const expiresAt = Date.now() + (15 * 60 * 1000);
+        // Określ timeout na podstawie komendy
+        const timeoutDuration = this.getSessionTimeout(commandName);
+        const expiresAt = Date.now() + timeoutDuration;
 
-        // Ustaw timeout który wywoła wygaśnięcie sesji po 15 minutach
+        // Ustaw timeout który wywoła wygaśnięcie sesji
         const timeout = setTimeout(async () => {
             logger.warn(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${commandName})`);
             await this.expireOCRSession(guildId, userId);
-        }, 15 * 60 * 1000);
+        }, timeoutDuration);
 
         this.activeProcessing.set(guildId, { userId, commandName, expiresAt, timeout });
-        logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName}`);
+        const minutes = timeoutDuration / (60 * 1000);
+        logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName} (timeout: ${minutes} min)`);
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
+    }
+
+    /**
+     * Odnawia timeout sesji OCR (wywoływane przy każdym kliknięciu przycisku)
+     */
+    refreshOCRSession(guildId, userId) {
+        const active = this.activeProcessing.get(guildId);
+        if (!active || active.userId !== userId) {
+            return; // Nie ta sesja lub sesja nie istnieje
+        }
+
+        // Wyczyść stary timeout
+        if (active.timeout) {
+            clearTimeout(active.timeout);
+        }
+
+        // Określ timeout na podstawie komendy
+        const timeoutDuration = this.getSessionTimeout(active.commandName);
+        const expiresAt = Date.now() + timeoutDuration;
+
+        // Ustaw nowy timeout
+        const timeout = setTimeout(async () => {
+            logger.warn(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+            await this.expireOCRSession(guildId, userId);
+        }, timeoutDuration);
+
+        // Zaktualizuj sesję z nowym timeoutem
+        active.expiresAt = expiresAt;
+        active.timeout = timeout;
+        this.activeProcessing.set(guildId, active);
+
+        const minutes = timeoutDuration / (60 * 1000);
+        logger.info(`[OCR-QUEUE] 🔄 Odświeżono timeout dla ${userId} (${active.commandName}, +${minutes} min)`);
     }
 
     /**
@@ -1723,10 +1769,11 @@ class OCRService {
         try {
             if (!this.client) return;
             const user = await this.client.users.fetch(userId);
+            const timeoutMinutes = this.getSessionTimeout(active.commandName) / (60 * 1000);
             await user.send({
                 embeds: [new (require('discord.js')).EmbedBuilder()
                     .setTitle('⏰ Sesja wygasła')
-                    .setDescription(`Twoja sesja OCR (\`${active.commandName}\`) wygasła po 15 minutach.\n\nMożesz użyć komendy ponownie, aby rozpocząć nową sesję.`)
+                    .setDescription(`Twoja sesja OCR (\`${active.commandName}\`) wygasła z powodu braku aktywności (${timeoutMinutes} min).\n\nMożesz użyć komendy ponownie, aby rozpocząć nową sesję.`)
                     .setColor('#FF0000')
                     .setTimestamp()
                 ]
