@@ -347,7 +347,7 @@ class InteractionHandler {
         let hintsInfo = `**Liczba podpowiedzi:** ${hintsCount}`;
         if (hintsCount > 0 && this.gameService.lastHintTimestamp) {
             const lastHintTime = new Date(this.gameService.lastHintTimestamp);
-            const timeSince = this.gameService.getPolishTime() - lastHintTime;
+            const timeSince = new Date() - lastHintTime;
             const hours = Math.floor(timeSince / (1000 * 60 * 60));
             const minutes = Math.floor((timeSince % (1000 * 60 * 60)) / (1000 * 60));
             hintsInfo += `\n**Ostatnia podpowiedź:** ${hours}h ${minutes}m temu`;
