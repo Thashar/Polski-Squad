@@ -3045,8 +3045,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
 
         // Publiczny raport (wszystko widoczne dla wszystkich)
         const publicEmbed = new EmbedBuilder()
-            .setTitle('✅ Faza 1 - Dane zapisane pomyślnie')
-            .setDescription(`Wyniki dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** zostały zapisane.`)
+            .setTitle(`Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
+            .setDescription(`Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`)
             .setColor('#00FF00')
             .addFields(
                 { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
@@ -3599,8 +3599,8 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         let secondsLeft = 5;
 
         const publicEmbed = new EmbedBuilder()
-            .setTitle('✅ Faza 2 - Dane zapisane pomyślnie')
-            .setDescription(`Wyniki dla tygodnia **${weekInfo.weekNumber}/${weekInfo.year}** zostały zapisane.`)
+            .setTitle(`Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
+            .setDescription(`Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`)
             .setColor('#00FF00')
             .addFields(
                 { name: '⭕ Wynik = 0 (suma z 3 rund)', value: `${totalZeroCount} wystąpień`, inline: false },
