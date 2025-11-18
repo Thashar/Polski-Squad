@@ -3102,6 +3102,22 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         // Poczekaj 5 sekund
         await new Promise(resolve => setTimeout(resolve, 5000));
 
+        // Wyślij powiadomienie na kanał ostrzeżeń przed zwolnieniem kolejki
+        try {
+            const clanRoleId = sharedState.config.targetRoles[session.clan];
+            const warningChannelId = sharedState.config.warningChannels[clanRoleId];
+
+            if (warningChannelId) {
+                const warningChannel = await interaction.client.channels.fetch(warningChannelId);
+                if (warningChannel) {
+                    await warningChannel.send(`## Dane Fazy 1 dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year} zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
+                    logger.info(`[PHASE1] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
+                }
+            }
+        } catch (error) {
+            logger.error(`[PHASE1] ⚠️ Błąd wysyłania powiadomienia na kanał ostrzeżeń: ${error.message}`);
+        }
+
         // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase1)`);
@@ -3633,6 +3649,22 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
 
         // Poczekaj 5 sekund
         await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // Wyślij powiadomienie na kanał ostrzeżeń przed zwolnieniem kolejki
+        try {
+            const clanRoleId = sharedState.config.targetRoles[session.clan];
+            const warningChannelId = sharedState.config.warningChannels[clanRoleId];
+
+            if (warningChannelId) {
+                const warningChannel = await interaction.client.channels.fetch(warningChannelId);
+                if (warningChannel) {
+                    await warningChannel.send(`## Dane Fazy 2 dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year} zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
+                    logger.info(`[PHASE2] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
+                }
+            }
+        } catch (error) {
+            logger.error(`[PHASE2] ⚠️ Błąd wysyłania powiadomienia na kanał ostrzeżeń: ${error.message}`);
+        }
 
         // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
