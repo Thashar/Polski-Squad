@@ -76,15 +76,24 @@ function generatePaginationId() {
  * @returns {boolean}
  */
 function isAllowedChannel(interaction, allowedChannelIds) {
-    // Support both single string and array of channel IDs
-    if (typeof allowedChannelIds === 'string') {
-        return interaction.channelId === allowedChannelIds;
+    const channelId = interaction.channelId;
+    const channel = interaction.channel;
+
+    // Normalize to array
+    const allowedIds = typeof allowedChannelIds === 'string'
+        ? [allowedChannelIds]
+        : (Array.isArray(allowedChannelIds) ? allowedChannelIds : []);
+
+    // Check if current channel is directly allowed
+    if (allowedIds.includes(channelId)) {
+        return true;
     }
-    
-    if (Array.isArray(allowedChannelIds)) {
-        return allowedChannelIds.includes(interaction.channelId);
+
+    // Check if this is a thread and its parent channel is allowed
+    if (channel && channel.isThread && channel.isThread() && channel.parentId) {
+        return allowedIds.includes(channel.parentId);
     }
-    
+
     return false;
 }
 
