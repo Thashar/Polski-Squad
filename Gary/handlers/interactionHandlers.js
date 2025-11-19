@@ -645,6 +645,113 @@ class InteractionHandler {
         return new ActionRowBuilder().addComponents(previousButton, pageButton, nextButton);
     }
 
+    /**
+     * Run scheduled Lunar Mine analysis and send results to a channel
+     * @param {Object} channel - Discord channel/thread to send results to
+     * @param {Array} guildIds - Array of guild IDs to analyze
+     */
+    async runScheduledLunarMine(channel, guildIds) {
+        try {
+            this.logger.info(`📅 Running scheduled Lunar Mine analysis for Guild IDs: ${guildIds.join(', ')}`);
+
+            const groupId = await this.garrytoolsService.getGroupId(guildIds);
+            this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
+
+            const details = await this.garrytoolsService.fetchGroupDetails(groupId);
+
+            if (!details.guilds || details.guilds.length === 0) {
+                await channel.send('❌ No Lunar Mine Expedition data found for the scheduled analysis.');
+                return;
+            }
+
+            const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower);
+
+            const overviewEmbed = new EmbedBuilder()
+                .setTitle(`🌙 Lunar Mine Expedition - Weekly Analysis`)
+                .setColor(0x8B4513)
+                .setDescription(`📊 ${sortedClans.length} guilds sorted by total attack power\n📅 Scheduled weekly report`)
+                .setTimestamp();
+
+            sortedClans.forEach((guild, index) => {
+                const powerRankPosition = `${index + 1}.`;
+
+                const guildSummary =
+                    `**👥 Members:** ${guild.members.length}\n` +
+                    `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
+                    `**<:II_RC:1385139885924421653> RC:** ${guild.totalRelicCores}+\n` +
+                    `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
+                    `**⭐ Level:** ${guild.level || 'N/A'}\n` +
+                    `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
+                    `**💥 Grade:** ${guild.grade || 'N/A'}\n` +
+                    `**🆔 Guild ID:** ${guild.guildId || 'N/A'}`;
+
+                overviewEmbed.addFields({
+                    name: `${powerRankPosition} ${guild.title}`,
+                    value: guildSummary,
+                    inline: true
+                });
+            });
+
+            await channel.send({ embeds: [overviewEmbed] });
+
+            for (const guild of sortedClans) {
+                await this.sendGuildMembersListToChannel(channel, guild);
+                await new Promise(resolve => setTimeout(resolve, this.config.botSettings?.delayBetweenClans || 1500));
+            }
+
+            this.logger.info('📅 Scheduled Lunar Mine analysis completed successfully!');
+
+        } catch (error) {
+            this.logger.error('Error during scheduled Lunar Mine analysis:', error);
+            await channel.send('❌ An error occurred during scheduled expedition analysis.');
+        }
+    }
+
+    /**
+     * Send guild members list to a channel (without interaction)
+     * @param {Object} channel - Discord channel to send to
+     * @param {Object} guild - Guild data object
+     */
+    async sendGuildMembersListToChannel(channel, guild) {
+        if (!guild.members || guild.members.length === 0) return;
+
+        const sortedMembers = guild.members.sort((a, b) => b.attack - a.attack);
+        const membersPerPage = this.config.botSettings?.membersPerPage || 20;
+        const totalPages = Math.ceil(sortedMembers.length / membersPerPage);
+
+        // For scheduled tasks, send all pages without pagination buttons
+        for (let page = 0; page < totalPages; page++) {
+            const startIndex = page * membersPerPage;
+            const endIndex = Math.min(startIndex + membersPerPage, sortedMembers.length);
+            const pageMembers = sortedMembers.slice(startIndex, endIndex);
+
+            const memberText = pageMembers.map(member =>
+                `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
+            ).join('\n');
+
+            const memberEmbed = new EmbedBuilder()
+                .setTitle(`👥 Members - ${guild.title}`)
+                .setColor(0x3498DB)
+                .setDescription(totalPages > 1
+                    ? `Page ${page + 1}/${totalPages} • Players ${startIndex + 1}-${endIndex} of ${sortedMembers.length}`
+                    : `All ${sortedMembers.length} guild members sorted by attack power`)
+                .addFields({
+                    name: `📋 Member List`,
+                    value: memberText || 'No data',
+                    inline: false
+                })
+                .setFooter({ text: `ID: ${guild.guildId}` })
+                .setTimestamp();
+
+            await channel.send({ embeds: [memberEmbed] });
+
+            // Small delay between pages
+            if (page < totalPages - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    }
+
     cleanup() {
         // Clean up pagination data
         const now = Date.now();

@@ -98,6 +98,65 @@ cron.schedule('*/10 * * * *', () => {
     interactionHandler.cleanup();
 });
 
+// Weekly Lunar Mine analysis - every Wednesday at 18:45
+// Thread ID: 1440754021207117894
+// Guild IDs: 42578, 202226, 125634, 11616
+cron.schedule('45 18 * * 3', async () => {
+    try {
+        logger.info('📅 Starting weekly Lunar Mine analysis...');
+
+        const threadId = '1440754021207117894';
+        const guildIds = [42578, 202226, 125634, 11616];
+
+        // Fetch the thread
+        const thread = await client.channels.fetch(threadId);
+
+        if (!thread) {
+            logger.error('❌ Could not find thread for weekly analysis');
+            return;
+        }
+
+        // Delete all messages in the thread (bulk delete)
+        logger.info('🗑️ Clearing thread messages...');
+        let deleted;
+        do {
+            const messages = await thread.messages.fetch({ limit: 100 });
+            if (messages.size === 0) break;
+
+            // Filter messages younger than 14 days (Discord limitation)
+            const deletable = messages.filter(msg =>
+                Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+            );
+
+            if (deletable.size > 0) {
+                deleted = await thread.bulkDelete(deletable, true);
+                logger.info(`🗑️ Deleted ${deleted.size} messages`);
+            } else {
+                // For older messages, delete one by one
+                for (const [, msg] of messages) {
+                    try {
+                        await msg.delete();
+                    } catch (e) {
+                        // Ignore errors for already deleted messages
+                    }
+                }
+                break;
+            }
+        } while (deleted && deleted.size >= 2);
+
+        logger.info('✅ Thread cleared, running analysis...');
+
+        // Run the scheduled Lunar Mine analysis
+        await interactionHandler.runScheduledLunarMine(thread, guildIds);
+
+        await logService.logInfo('📅 Weekly Lunar Mine analysis completed');
+
+    } catch (error) {
+        logger.error('❌ Error during weekly Lunar Mine analysis:', error);
+        await logService.logError(error, 'weekly Lunar Mine analysis');
+    }
+});
+
 /**
  * Start the Gary bot
  */
