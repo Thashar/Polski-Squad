@@ -105,14 +105,6 @@ client.once(Events.ClientReady, async () => {
         timezone: config.timezone
     });
 
-    // Uruchomienie zadania cron dla czyszczenia plików tymczasowych (codziennie o 02:00)
-    cron.schedule('0 2 * * *', async () => {
-        logger.info('Rozpoczynam czyszczenie plików tymczasowych...');
-        await ocrService.cleanupTempFiles();
-    }, {
-        timezone: config.timezone
-    });
-
     // Uruchomienie zadania cron dla czyszczenia starych danych przypomnień (codziennie o 03:00)
     cron.schedule('0 3 * * *', async () => {
         logger.info('Rozpoczynam czyszczenie starych danych przypomnień...');

@@ -185,6 +185,39 @@ class RoleConflictService {
 
             const currentRoleIds = member.roles.cache.map(role => role.id);
 
+            // Sprawdź czy użytkownik dostał rolę klanową (main) - jeśli tak, usuń role rekrutacyjne (secondary)
+            if (groups.includes('main') && oldRoles && oldRoles.length > 0) {
+                const mainRoles = this.exclusiveRoleGroups.main;
+                const secondaryRoles = this.exclusiveRoleGroups.secondary;
+
+                // Sprawdź czy dodano nową rolę z grupy main
+                const addedMainRoles = mainRoles.filter(roleId =>
+                    currentRoleIds.includes(roleId) && !oldRoles.includes(roleId)
+                );
+
+                if (addedMainRoles.length > 0) {
+                    // Usuń wszystkie role rekrutacyjne (secondary)
+                    const secondaryToRemove = secondaryRoles.filter(roleId => currentRoleIds.includes(roleId));
+
+                    if (secondaryToRemove.length > 0) {
+                        const removedNames = secondaryToRemove.map(roleId =>
+                            guild.roles.cache.get(roleId)?.name || `ID:${roleId}`
+                        );
+                        const addedName = guild.roles.cache.get(addedMainRoles[0])?.name || `ID:${addedMainRoles[0]}`;
+
+                        this.logger.info(`🎯 ${member.user.tag} otrzymał rolę klanową "${addedName}" - usuwam role rekrutacyjne: ${removedNames.join(', ')}`);
+
+                        for (const roleId of secondaryToRemove) {
+                            try {
+                                await member.roles.remove(roleId);
+                            } catch (error) {
+                                this.logger.error(`❌ Błąd usuwania roli rekrutacyjnej ${roleId}:`, error);
+                            }
+                        }
+                    }
+                }
+            }
+
             // Sprawdź każdą grupę ekskluzywną - LOGUJ TYLKO KONFLIKTY
             for (const groupName of groups) {
                 const groupRoles = this.exclusiveRoleGroups[groupName];
