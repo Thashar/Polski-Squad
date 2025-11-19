@@ -1807,7 +1807,7 @@ function hasPermission(member, allowedRoles) {
 }
 
 /**
- * Wysyła "ghost ping" - wiadomość z pingiem, która jest usuwana po 5 sekundach
+ * Wysyła "ghost ping" - wiadomość z pingiem, która jest usuwana po 3 sekundach
  * Jeśli użytkownik nie kliknie przycisku, ping jest ponawiany co 30 sekund
  * @param {Object} channel - Kanał Discord
  * @param {string} userId - ID użytkownika do pingowania
@@ -1819,14 +1819,14 @@ async function sendGhostPing(channel, userId, session = null) {
             content: `<@${userId}> Analiza zdjęć została zakończona, kontynuuj!`
         });
 
-        // Usuń wiadomość po 5 sekundach
+        // Usuń wiadomość po 3 sekundach
         setTimeout(async () => {
             try {
                 await pingMessage.delete();
             } catch (error) {
                 logger.error('[GHOST_PING] ❌ Nie udało się usunąć ghost pingu:', error.message);
             }
-        }, 5000);
+        }, 3000);
 
         logger.info(`[GHOST_PING] 📨 Wysłano ghost ping do użytkownika ${userId}`);
 
@@ -1850,7 +1850,7 @@ async function sendGhostPing(channel, userId, session = null) {
                         } catch (error) {
                             logger.error('[GHOST_PING] ❌ Nie udało się usunąć powtarzanego ghost pingu:', error.message);
                         }
-                    }, 5000);
+                    }, 3000);
 
                     logger.info(`[GHOST_PING] 🔄 Powtórzono ghost ping do użytkownika ${userId}`);
                 } catch (error) {
