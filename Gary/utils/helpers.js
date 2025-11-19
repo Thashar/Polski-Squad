@@ -90,8 +90,9 @@ function isAllowedChannel(interaction, allowedChannelIds) {
     }
 
     // Check if this is a thread and its parent channel is allowed
-    if (channel && channel.isThread && channel.isThread() && channel.parentId) {
-        return allowedIds.includes(channel.parentId);
+    // Only threads have parentId property set to the parent channel ID
+    if (channel?.parentId && allowedIds.includes(channel.parentId)) {
+        return true;
     }
 
     return false;
