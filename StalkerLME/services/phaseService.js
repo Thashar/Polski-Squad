@@ -1162,9 +1162,9 @@ class PhaseService {
         const row = new ActionRowBuilder();
         const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
 
-        // Dodaj przyciski dla każdej wartości (max 5)
+        // Dodaj przyciski dla każdej wartości (max 4, bo 5. miejsce dla "Wpisz ręcznie")
         // CustomId format: phase1_resolve_{nick}_{value}
-        for (let i = 0; i < Math.min(conflict.values.length, 5); i++) {
+        for (let i = 0; i < Math.min(conflict.values.length, 4); i++) {
             const value = conflict.values[i];
             row.addComponents(
                 new ButtonBuilder()
@@ -1173,6 +1173,14 @@ class PhaseService {
                     .setStyle(ButtonStyle.Secondary)
             );
         }
+
+        // Dodaj przycisk "Wpisz ręcznie" w kolorze czerwonym
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`${phasePrefix}_manual_${conflict.nick}`)
+                .setLabel('Wpisz ręcznie')
+                .setStyle(ButtonStyle.Danger)
+        );
 
         return { embed, row };
     }

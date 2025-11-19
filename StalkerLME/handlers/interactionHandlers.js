@@ -1772,6 +1772,9 @@ async function handleButton(interaction, sharedState) {
     } else if (interaction.customId.startsWith('phase1_resolve_')) {
         // Obsługa przycisków rozstrzygania konfliktów
         await handlePhase1ConflictResolveButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase1_manual_')) {
+        // Obsługa przycisku "Wpisz ręcznie" dla Phase 1
+        await handlePhase1ManualInputButton(interaction, sharedState);
     } else if (interaction.customId === 'phase1_confirm_save' || interaction.customId === 'phase1_cancel_save') {
         // Obsługa przycisków finalnego potwierdzenia zapisu
         await handlePhase1FinalConfirmButton(interaction, sharedState);
@@ -1791,6 +1794,9 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2OverwriteButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_complete_') || interaction.customId.startsWith('phase2_resolve_') || interaction.customId === 'phase2_cancel_session') {
         await handlePhase2CompleteButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase2_manual_')) {
+        // Obsługa przycisku "Wpisz ręcznie" dla Phase 2
+        await handlePhase2ManualInputButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_confirm_save' || interaction.customId === 'phase2_cancel_save') {
         await handlePhase2FinalConfirmButton(interaction, sharedState);
     } else if (interaction.customId === 'phase2_round_continue') {
@@ -2539,6 +2545,10 @@ async function handleModalSubmit(interaction, sharedState) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
         await handleDodajModalSubmit(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase1_manual_modal_')) {
+        await handlePhase1ManualModalSubmit(interaction, sharedState);
+    } else if (interaction.customId.startsWith('phase2_manual_modal_')) {
+        await handlePhase2ManualModalSubmit(interaction, sharedState);
     }
 }
 
@@ -2948,6 +2958,128 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
 
     // Rozstrzygnij konflikt
     phaseService.resolveConflict(session, nick, parseInt(value) || 0);
+
+    logger.info(`[PHASE1] Rozstrzygnięto konfliktów: ${session.resolvedConflicts.size}/${session.conflicts.length}`);
+
+    // Sprawdź czy są jeszcze konflikty
+    const nextConflict = phaseService.getNextUnresolvedConflict(session);
+
+    if (nextConflict) {
+        // Pokaż następny konflikt
+        const currentIndex = session.resolvedConflicts.size + 1;
+        const totalConflicts = session.conflicts.length;
+
+        logger.info(`[PHASE1] Następny konflikt: nick="${nextConflict.nick}", index=${currentIndex}/${totalConflicts}`);
+
+        const conflictEmbed = phaseService.createConflictEmbed(nextConflict, currentIndex, totalConflicts, 1);
+        await interaction.update({
+            embeds: [conflictEmbed.embed],
+            components: [conflictEmbed.row]
+        });
+    } else {
+        logger.info(`[PHASE1] Wszystkie konflikty rozstrzygnięte!`);
+        // Wszystkie konflikty rozstrzygnięte - pokaż finalne podsumowanie
+        await interaction.update({
+            content: '🔄 Przygotowuję podsumowanie...',
+            embeds: [],
+            components: []
+        });
+
+        await showPhase1FinalSummary(interaction, session, phaseService);
+    }
+}
+
+async function handlePhase1ManualInputButton(interaction, sharedState) {
+    const { phaseService, ocrService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Tylko osoba, która uruchomiła komendę może rozstrzygać konflikty.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Odśwież timeout sesji OCR
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+
+    // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+    stopGhostPing(session);
+
+    // Wyciągnij nick z customId
+    // Format: phase1_manual_{nick}
+    const parts = interaction.customId.split('_');
+    const nick = parts.slice(2).join('_');
+
+    logger.info(`[PHASE1] Otwieranie modala ręcznego wpisu dla nick="${nick}"`);
+
+    // Stwórz modal do wpisania wyniku
+    const modal = new ModalBuilder()
+        .setCustomId(`phase1_manual_modal_${nick}`)
+        .setTitle(`Wpisz wynik dla: ${nick}`);
+
+    const scoreInput = new TextInputBuilder()
+        .setCustomId('manual_score')
+        .setLabel('Wynik')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz liczbę (np. 1234)')
+        .setRequired(true)
+        .setMinLength(1)
+        .setMaxLength(10);
+
+    const actionRow = new ActionRowBuilder().addComponents(scoreInput);
+    modal.addComponents(actionRow);
+
+    await interaction.showModal(modal);
+}
+
+async function handlePhase1ManualModalSubmit(interaction, sharedState) {
+    const { phaseService, ocrService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Odśwież timeout sesji OCR
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+
+    // Wyciągnij nick z customId
+    // Format: phase1_manual_modal_{nick}
+    const parts = interaction.customId.split('_');
+    const nick = parts.slice(3).join('_');
+
+    // Pobierz wartość z modala
+    const scoreValue = interaction.fields.getTextInputValue('manual_score');
+    const score = parseInt(scoreValue);
+
+    if (isNaN(score) || score < 0) {
+        await interaction.reply({
+            content: '❌ Nieprawidłowa wartość. Wpisz liczbę całkowitą nieujemną.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    logger.info(`[PHASE1] Ręczny wpis dla nick="${nick}", value="${score}"`);
+
+    // Rozstrzygnij konflikt
+    phaseService.resolveConflict(session, nick, score);
 
     logger.info(`[PHASE1] Rozstrzygnięto konfliktów: ${session.resolvedConflicts.size}/${session.conflicts.length}`);
 
@@ -3677,6 +3809,125 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisywania danych.'
         });
+    }
+}
+
+async function handlePhase2ManualInputButton(interaction, sharedState) {
+    const { phaseService, ocrService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (session.userId !== interaction.user.id) {
+        await interaction.reply({
+            content: '❌ Tylko osoba, która uruchomiła komendę może rozstrzygać konflikty.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Odśwież timeout sesji OCR
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+
+    // Zatrzymaj ghost ping - użytkownik kliknął przycisk
+    stopGhostPing(session);
+
+    // Wyciągnij nick z customId
+    // Format: phase2_manual_{nick}
+    const parts = interaction.customId.split('_');
+    const nick = parts.slice(2).join('_');
+
+    logger.info(`[PHASE2] Otwieranie modala ręcznego wpisu dla nick="${nick}"`);
+
+    // Stwórz modal do wpisania wyniku
+    const modal = new ModalBuilder()
+        .setCustomId(`phase2_manual_modal_${nick}`)
+        .setTitle(`Wpisz wynik dla: ${nick}`);
+
+    const scoreInput = new TextInputBuilder()
+        .setCustomId('manual_score')
+        .setLabel('Wynik')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz liczbę (np. 1234)')
+        .setRequired(true)
+        .setMinLength(1)
+        .setMaxLength(10);
+
+    const actionRow = new ActionRowBuilder().addComponents(scoreInput);
+    modal.addComponents(actionRow);
+
+    await interaction.showModal(modal);
+}
+
+async function handlePhase2ManualModalSubmit(interaction, sharedState) {
+    const { phaseService, ocrService } = sharedState;
+
+    const session = phaseService.getSessionByUserId(interaction.user.id);
+
+    if (!session) {
+        await interaction.reply({
+            content: '❌ Sesja wygasła lub nie istnieje.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Odśwież timeout sesji OCR
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+
+    // Wyciągnij nick z customId
+    // Format: phase2_manual_modal_{nick}
+    const parts = interaction.customId.split('_');
+    const nick = parts.slice(3).join('_');
+
+    // Pobierz wartość z modala
+    const scoreValue = interaction.fields.getTextInputValue('manual_score');
+    const score = parseInt(scoreValue);
+
+    if (isNaN(score) || score < 0) {
+        await interaction.reply({
+            content: '❌ Nieprawidłowa wartość. Wpisz liczbę całkowitą nieujemną.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    logger.info(`[PHASE2] Ręczny wpis dla nick="${nick}", value="${score}"`);
+
+    // Rozstrzygnij konflikt
+    const conflict = phaseService.getNextUnresolvedConflict(session);
+    if (conflict) {
+        phaseService.resolveConflict(session, conflict.nick, score);
+    }
+
+    logger.info(`[PHASE2] Rozstrzygnięto konfliktów: ${session.resolvedConflicts.size}/${session.conflicts.length}`);
+
+    // Sprawdź czy są jeszcze konflikty
+    const nextConflict = phaseService.getNextUnresolvedConflict(session);
+
+    if (nextConflict) {
+        // Pokaż następny konflikt
+        const conflictEmbed = phaseService.createConflictEmbed(
+            nextConflict,
+            session.resolvedConflicts.size + 1,
+            session.conflicts.length,
+            2
+        );
+        await interaction.update({
+            embeds: [conflictEmbed.embed],
+            components: [conflictEmbed.row]
+        });
+    } else {
+        // Wszystkie konflikty rozwiązane - pokaż podsumowanie rundy
+        logger.info(`[PHASE2] ✅ Wszystkie konflikty rozwiązane!`);
+        await showPhase2RoundSummary(interaction, session, phaseService);
     }
 }
 
