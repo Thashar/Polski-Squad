@@ -3110,7 +3110,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             if (warningChannelId) {
                 const warningChannel = await interaction.client.channels.fetch(warningChannelId);
                 if (warningChannel) {
-                    await warningChannel.send(`## <a:PepeCoding:1278014173321625819> Dane zostały zaktualizowane | Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`);
+                    await warningChannel.send(`## Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
                     logger.info(`[PHASE1] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
                 }
             }
@@ -3658,7 +3658,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             if (warningChannelId) {
                 const warningChannel = await interaction.client.channels.fetch(warningChannelId);
                 if (warningChannel) {
-                    await warningChannel.send(`## <a:PepeCoding:1278014173321625819> Dane zostały zaktualizowane | Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`);
+                    await warningChannel.send(`## Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
                     logger.info(`[PHASE2] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
                 }
             }
