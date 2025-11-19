@@ -427,8 +427,17 @@ class PhaseService {
         this.activeSessions.set(sessionId, session);
 
         // Auto-cleanup po 15 minutach
-        session.timeout = setTimeout(() => {
-            this.cleanupSession(sessionId);
+        session.timeout = setTimeout(async () => {
+            logger.info(`[PHASE${phase}] ⏰ Sesja wygasła przez timeout: ${sessionId}`);
+
+            // Zatrzymaj pingTimer przed cleanup (dodatkowe zabezpieczenie)
+            if (session.pingTimer) {
+                clearInterval(session.pingTimer);
+                session.pingTimer = null;
+                logger.info(`[PHASE${phase}] ⏹️ Zatrzymano ghost ping przy timeout sesji: ${sessionId}`);
+            }
+
+            await this.cleanupSession(sessionId);
         }, 15 * 60 * 1000);
 
         logger.info(`[PHASE${phase}] 📝 Utworzono sesję: ${sessionId}`);
@@ -465,8 +474,17 @@ class PhaseService {
             clearTimeout(session.timeout);
         }
 
-        session.timeout = setTimeout(() => {
-            this.cleanupSession(sessionId);
+        session.timeout = setTimeout(async () => {
+            logger.info(`[PHASE${session.phase || 1}] ⏰ Sesja wygasła przez timeout: ${sessionId}`);
+
+            // Zatrzymaj pingTimer przed cleanup (dodatkowe zabezpieczenie)
+            if (session.pingTimer) {
+                clearInterval(session.pingTimer);
+                session.pingTimer = null;
+                logger.info(`[PHASE${session.phase || 1}] ⏹️ Zatrzymano ghost ping przy timeout sesji: ${sessionId}`);
+            }
+
+            await this.cleanupSession(sessionId);
         }, 15 * 60 * 1000);
     }
 
