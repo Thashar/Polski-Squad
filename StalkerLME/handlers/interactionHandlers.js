@@ -6635,14 +6635,24 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 async function handleProgresCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
 
-    // Sprawdź czy kanał jest dozwolony (te same zasady co /wyniki)
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/progres` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Sprawdź czy kanał jest dozwolony
     const allowedChannels = [
         ...Object.values(config.warningChannels),
         '1348200849242984478'
     ];
-
-    // Administratorzy mogą używać komendy wszędzie
-    const isAdmin = interaction.member.permissions.has('Administrator');
 
     if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
         await interaction.reply({
@@ -6682,14 +6692,24 @@ async function handleProgresCommand(interaction, sharedState) {
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/wyniki` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
     // Sprawdź czy kanał jest dozwolony
     const allowedChannels = [
         ...Object.values(config.warningChannels),
         '1348200849242984478'
     ];
-
-    // Administratorzy mogą używać komendy wszędzie
-    const isAdmin = interaction.member.permissions.has('Administrator');
 
     if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
         await interaction.reply({

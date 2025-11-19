@@ -318,15 +318,15 @@
         },
         {
           "name": "/wyniki",
-          "description": "Wyświetla wyniki wszystkich faz ekspedycji",
+          "description": "Wyświetla wyniki wszystkich faz ekspedycji (tylko dla członków klanu)",
           "usage": "/wyniki",
-          "requiredPermission": "public"
+          "requiredPermission": "clan_member"
         },
         {
           "name": "/progres",
-          "description": "Wyświetla wykres progresów gracza z ostatnich 54 tygodni",
+          "description": "Wyświetla wykres progresów gracza z ostatnich 54 tygodni (tylko dla członków klanu)",
           "usage": "/progres nick:[wyszukaj gracza] - wpisz i wybierz z listy",
-          "requiredPermission": "public"
+          "requiredPermission": "clan_member"
         },
         {
           "name": "/clan-status",
