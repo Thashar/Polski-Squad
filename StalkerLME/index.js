@@ -394,6 +394,10 @@ client.on(Events.MessageCreate, async (message) => {
             await message.delete();
             logger.info(`[QUEUE-CLEANUP] 🧹 Usunięto wiadomość od ${message.author.tag} z kanału kolejki`);
         } catch (error) {
+            // Ignoruj błąd Unknown Message (10008) - wiadomość została już usunięta przez inny proces
+            if (error.code === 10008) {
+                return;
+            }
             logger.error(`[QUEUE-CLEANUP] ❌ Błąd usuwania wiadomości: ${error.message}`);
         }
     }
