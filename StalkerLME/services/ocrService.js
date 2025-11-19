@@ -1087,31 +1087,6 @@ class OCRService {
         return false;
     }
 
-    async cleanupTempFiles() {
-        try {
-            const files = await fs.readdir(this.tempDir);
-
-            for (const file of files) {
-                const filePath = path.join(this.tempDir, file);
-                const stats = await fs.stat(filePath);
-
-                const ageInHours = (Date.now() - stats.mtime.getTime()) / (1000 * 60 * 60);
-
-                if (ageInHours > 1) {
-                    await fs.unlink(filePath);
-                    logger.info(`[OCR] 🗑️ Usunięto stary plik tymczasowy: ${file}`);
-                }
-            }
-        } catch (error) {
-            logger.error('[OCR] ❌ Błąd czyszczenia plików tymczasowych');
-            logger.error('[OCR] ❌ Error name:', error?.name);
-            logger.error('[OCR] ❌ Error message:', error?.message);
-            logger.error('[OCR] ❌ Error code:', error?.code);
-            logger.error('[OCR] ❌ Error path:', error?.path);
-            logger.error('[OCR] ❌ Stack trace:', error?.stack);
-        }
-    }
-
     /**
      * Wyciąga wszystkich graczy z ich wynikami (nie tylko z zerem)
      * Używane dla komendy /faza1
