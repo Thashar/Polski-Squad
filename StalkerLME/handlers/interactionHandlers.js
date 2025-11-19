@@ -3110,28 +3110,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             if (warningChannelId) {
                 const warningChannel = await interaction.client.channels.fetch(warningChannelId);
                 if (warningChannel) {
-                    // Stwórz embed z pełnymi statystykami dla kanału ostrzeżeń
-                    const warningEmbed = new EmbedBuilder()
-                        .setTitle(`Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
-                        .setDescription(`Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`)
-                        .setColor('#00FF00')
-                        .addFields(
-                            { name: '👥 Unikalnych graczy', value: stats.uniqueNicks.toString(), inline: true },
-                            { name: '📈 Wynik > 0', value: `${stats.aboveZero} osób`, inline: true },
-                            { name: '⭕ Wynik = 0', value: `${stats.zeroCount} osób`, inline: true },
-                            { name: '🏆 Suma TOP30', value: `${stats.top30Sum.toLocaleString('pl-PL')} pkt`, inline: false },
-                            { name: '🎯 Klan', value: clanName, inline: false }
-                        )
-                        .setTimestamp()
-                        .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
-
-                    // Dodaj listę graczy z zerem jeśli są
-                    if (playersWithZero.length > 0) {
-                        const zeroList = playersWithZero.join(', ');
-                        warningEmbed.addFields({ name: '📋 Gracze z wynikiem 0', value: zeroList, inline: false });
-                    }
-
-                    await warningChannel.send({ embeds: [warningEmbed] });
+                    await warningChannel.send(`## Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
                     logger.info(`[PHASE1] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
                 }
             }
@@ -3679,19 +3658,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             if (warningChannelId) {
                 const warningChannel = await interaction.client.channels.fetch(warningChannelId);
                 if (warningChannel) {
-                    // Stwórz embed z pełnymi statystykami dla kanału ostrzeżeń
-                    const warningEmbed = new EmbedBuilder()
-                        .setTitle(`Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
-                        .setDescription(`Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`)
-                        .setColor('#00FF00')
-                        .addFields(
-                            { name: '⭕ Wynik = 0 (suma z 3 rund)', value: `${totalZeroCount} wystąpień`, inline: false },
-                            { name: '🎯 Klan', value: clanName, inline: false }
-                        )
-                        .setTimestamp()
-                        .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
-
-                    await warningChannel.send({ embeds: [warningEmbed] });
+                    await warningChannel.send(`## Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
                     logger.info(`[PHASE2] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
                 }
             }
