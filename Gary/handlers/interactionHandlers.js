@@ -1170,7 +1170,7 @@ class InteractionHandler {
             }
 
             // Add current thread ID check
-            const targetThreadId = '1440754021207117894';
+            const targetThreadId = '1441152540581564508';
             const foundTarget = threads.find(t => t.id === targetThreadId);
 
             if (foundTarget) {
@@ -1219,7 +1219,7 @@ class InteractionHandler {
         try {
             this.logger.info('🧪 TEST: Starting weekly Lunar Mine automation test...');
 
-            const threadId = '1440754021207117894';
+            const threadId = '1441152540581564508';
             const guildIds = [42578, 202226, 125634, 11616];
 
             this.logger.info(`🧪 TEST: Attempting to fetch thread ${threadId}...`);
