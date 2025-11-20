@@ -37,6 +37,12 @@ class BackupScheduler {
                 await this.backupManager.backupAll();
             } catch (error) {
                 logger.error('❌ Błąd podczas zaplanowanego backupu:', error.message);
+                logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+                logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+                logger.error(`   Harmonogram: ${this.cronSchedule}`);
+                if (error.stack) {
+                    logger.error(`   Stack trace: ${error.stack}`);
+                }
             }
         });
 
@@ -50,6 +56,11 @@ class BackupScheduler {
                     await this.backupManager.backupAll();
                 } catch (error) {
                     logger.error('❌ Błąd podczas startowego backupu:', error.message);
+                    logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+                    logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+                    if (error.stack) {
+                        logger.error(`   Stack trace: ${error.stack}`);
+                    }
                 }
             }, 5000); // Odczekaj 5 sekund po starcie botów
         }
@@ -74,6 +85,11 @@ class BackupScheduler {
             await this.backupManager.backupAll();
         } catch (error) {
             logger.error('❌ Błąd podczas manualnego backupu:', error.message);
+            logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+            logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack}`);
+            }
         }
     }
 }
