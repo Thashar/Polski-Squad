@@ -134,18 +134,50 @@ cron.schedule('45 18 * * 3', async () => {
         logger.info(`📅 Thread type: ${thread.type}`);
         logger.info(`📅 Thread parent: ${thread.parent?.name || 'No parent'}`);
 
+        // Try to join the thread if not already a member
+        try {
+            if (thread.joinable) {
+                logger.info('📅 Attempting to join thread...');
+                await thread.join();
+                logger.info('📅 ✅ Successfully joined thread');
+            }
+        } catch (joinError) {
+            logger.warn(`📅 Could not join thread: ${joinError.message}`);
+        }
+
         // Check permissions
         const permissions = thread.permissionsFor(client.user);
         logger.info(`📅 Checking bot permissions in thread...`);
-        logger.info(`📅 - Send Messages: ${permissions.has('SendMessages')}`);
-        logger.info(`📅 - Manage Messages: ${permissions.has('ManageMessages')}`);
-        logger.info(`📅 - Read Message History: ${permissions.has('ReadMessageHistory')}`);
+        logger.info(`📅 Permissions object: ${permissions ? 'exists' : 'null'}`);
 
-        if (!permissions.has('SendMessages') || !permissions.has('ManageMessages') || !permissions.has('ReadMessageHistory')) {
-            logger.error('📅 ❌ Insufficient permissions in thread');
-            logger.error('📅 Required permissions: SendMessages, ManageMessages, ReadMessageHistory');
-            await logService.logError(new Error('Insufficient permissions in thread'), 'weekly Lunar Mine cron');
-            return;
+        if (!permissions) {
+            logger.warn('📅 ⚠️ Could not get permissions, attempting to continue anyway...');
+        } else {
+            const hasSend = permissions.has('SendMessages');
+            const hasManage = permissions.has('ManageMessages');
+            const hasRead = permissions.has('ReadMessageHistory');
+
+            logger.info(`📅 - Send Messages: ${hasSend}`);
+            logger.info(`📅 - Manage Messages: ${hasManage}`);
+            logger.info(`📅 - Read Message History: ${hasRead}`);
+            logger.info(`📅 - All permissions bitfield: ${permissions.bitfield}`);
+
+            // Try to test actual permissions by attempting operations
+            if (!hasSend || !hasManage || !hasRead) {
+                logger.warn('📅 ⚠️ Permission check failed, attempting test message...');
+
+                try {
+                    // Try sending a test message
+                    const testMsg = await thread.send('📅 Testing permissions...');
+                    await testMsg.delete();
+                    logger.info('📅 ✅ Successfully sent and deleted test message - permissions are OK!');
+                } catch (testError) {
+                    logger.error(`📅 ❌ Failed to send test message: ${testError.message}`);
+                    logger.error('📅 Bot does not have required permissions in thread');
+                    await logService.logError(new Error(`Insufficient permissions: ${testError.message}`), 'weekly Lunar Mine cron');
+                    return;
+                }
+            }
         }
 
         // Delete all messages in the thread (bulk delete)

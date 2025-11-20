@@ -1245,27 +1245,73 @@ class InteractionHandler {
 
             this.logger.info(`🧪 TEST: ✅ Thread found: ${thread.name}`);
 
+            // Try to join the thread if not already a member
+            try {
+                if (thread.joinable) {
+                    this.logger.info('🧪 TEST: Attempting to join thread...');
+                    await thread.join();
+                    this.logger.info('🧪 TEST: ✅ Successfully joined thread');
+                }
+            } catch (joinError) {
+                this.logger.warn(`🧪 TEST: Could not join thread: ${joinError.message}`);
+            }
+
             // Check bot permissions
             const permissions = thread.permissionsFor(interaction.client.user);
             this.logger.info(`🧪 TEST: Checking permissions...`);
-            this.logger.info(`🧪 TEST: - Send Messages: ${permissions.has('SendMessages')}`);
-            this.logger.info(`🧪 TEST: - Manage Messages: ${permissions.has('ManageMessages')}`);
-            this.logger.info(`🧪 TEST: - Read Message History: ${permissions.has('ReadMessageHistory')}`);
+            this.logger.info(`🧪 TEST: Permissions object: ${permissions ? 'exists' : 'null'}`);
 
-            if (!permissions.has('SendMessages') || !permissions.has('ManageMessages') || !permissions.has('ReadMessageHistory')) {
-                this.logger.error('🧪 TEST: ❌ Insufficient permissions in thread');
+            if (!permissions) {
+                this.logger.error('🧪 TEST: ❌ Could not get permissions for bot in thread');
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
-                        .setTitle('❌ Test Failed - Insufficient Permissions')
-                        .setColor(0xff0000)
-                        .setDescription('Bot lacks required permissions in the target thread')
-                        .addFields([
-                            { name: 'Required Permissions', value: '• Send Messages\n• Manage Messages\n• Read Message History', inline: false },
-                            { name: 'Thread', value: `${thread.name} (${threadId})`, inline: false }
-                        ])
+                        .setTitle('⚠️ Test Warning')
+                        .setColor(0xffaa00)
+                        .setDescription('Could not verify permissions, attempting to continue anyway...')
                         .setTimestamp()]
                 });
-                return;
+            } else {
+                const hasSend = permissions.has('SendMessages');
+                const hasManage = permissions.has('ManageMessages');
+                const hasRead = permissions.has('ReadMessageHistory');
+
+                this.logger.info(`🧪 TEST: - Send Messages: ${hasSend}`);
+                this.logger.info(`🧪 TEST: - Manage Messages: ${hasManage}`);
+                this.logger.info(`🧪 TEST: - Read Message History: ${hasRead}`);
+                this.logger.info(`🧪 TEST: - All permissions bitfield: ${permissions.bitfield}`);
+
+                // Try to test actual permissions by attempting operations
+                if (!hasSend || !hasManage || !hasRead) {
+                    this.logger.warn('🧪 TEST: ⚠️ Permission check failed, but attempting test message...');
+
+                    try {
+                        // Try sending a test message
+                        const testMsg = await thread.send('🧪 Testing permissions...');
+                        await testMsg.delete();
+                        this.logger.info('🧪 TEST: ✅ Successfully sent and deleted test message - permissions are OK!');
+                    } catch (testError) {
+                        this.logger.error(`🧪 TEST: ❌ Failed to send test message: ${testError.message}`);
+
+                        const missingPerms = [];
+                        if (!hasSend) missingPerms.push('Send Messages');
+                        if (!hasManage) missingPerms.push('Manage Messages');
+                        if (!hasRead) missingPerms.push('Read Message History');
+
+                        await interaction.editReply({
+                            embeds: [new EmbedBuilder()
+                                .setTitle('❌ Test Failed - Insufficient Permissions')
+                                .setColor(0xff0000)
+                                .setDescription('Bot lacks required permissions in the target thread')
+                                .addFields([
+                                    { name: 'Missing Permissions', value: missingPerms.join('\n'), inline: false },
+                                    { name: 'Thread', value: `${thread.name} (${threadId})`, inline: false },
+                                    { name: 'Error', value: testError.message, inline: false }
+                                ])
+                                .setTimestamp()]
+                        });
+                        return;
+                    }
+                }
             }
 
             await interaction.editReply('⏳ Step 1/3: Permissions verified. Clearing thread messages...');
