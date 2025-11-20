@@ -223,6 +223,8 @@ class TimerService {
      */
     async setSecondHintReminder() {
         this.clearSecondHintReminderTimer();
+        // Czas od pierwszego do drugiego przypomnienia (15 minut)
+        const timeUntilSecondReminder = this.gameService.SECOND_HINT_REMINDER_TIME - this.gameService.FIRST_HINT_REMINDER_TIME;
         this.gameService.secondHintReminderTimer = setTimeout(async () => {
             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                 try {
@@ -243,7 +245,7 @@ class TimerService {
                     logger.error('Błąd podczas wysyłania drugiego przypomnienia o podpowiedzi:', error);
                 }
             }
-        }, this.gameService.FIRST_HINT_REMINDER_TIME);
+        }, timeUntilSecondReminder);
         this.gameService.saveTriggerState();
     }
 
@@ -494,7 +496,7 @@ class TimerService {
                     if (timeSincePassword < this.gameService.FIRST_HINT_REMINDER_TIME) {
                         // Ustaw bezpośrednio timer na wysłanie pierwszego przypomnienia
                         const remainingTime = this.gameService.FIRST_HINT_REMINDER_TIME - timeSincePassword;
-                        setTimeout(async () => {
+                        this.gameService.firstHintReminderTimer = setTimeout(async () => {
                             // Wysłanie pierwszego przypomnienia
                             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                                 try {
@@ -518,7 +520,7 @@ class TimerService {
                     } else if (timeSincePassword < this.gameService.SECOND_HINT_REMINDER_TIME) {
                         // Ustaw bezpośrednio timer na wysłanie drugiego przypomnienia
                         const remainingTime = this.gameService.SECOND_HINT_REMINDER_TIME - timeSincePassword;
-                        setTimeout(async () => {
+                        this.gameService.secondHintReminderTimer = setTimeout(async () => {
                             // Wysłanie drugiego przypomnienia
                             if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
                                 try {
