@@ -52,7 +52,11 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('proxy-refresh')
-                .setDescription('Refresh proxy list from Webshare API (Admin only)')
+                .setDescription('Refresh proxy list from Webshare API (Admin only)'),
+
+            new SlashCommandBuilder()
+                .setName('test')
+                .setDescription('Test weekly Lunar Mine automation (Admin only)')
         ];
     }
 
@@ -98,7 +102,7 @@ class InteractionHandler {
         const { commandName } = interaction;
         
         // Check permissions for admin-only commands
-        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh'];
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'test'];
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
@@ -145,6 +149,10 @@ class InteractionHandler {
 
                 case 'proxy-refresh':
                     await this.handleProxyRefreshCommand(interaction);
+                    break;
+
+                case 'test':
+                    await this.handleTestCommand(interaction);
                     break;
             }
         } catch (error) {
@@ -653,18 +661,24 @@ class InteractionHandler {
     async runScheduledLunarMine(channel, guildIds) {
         try {
             this.logger.info(`📅 Running scheduled Lunar Mine analysis for Guild IDs: ${guildIds.join(', ')}`);
+            this.logger.info(`📅 Target channel: ${channel.name} (${channel.id})`);
 
+            this.logger.info('📅 Step 1: Getting Group ID from Garrytools...');
             const groupId = await this.garrytoolsService.getGroupId(guildIds);
             this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
 
+            this.logger.info('📅 Step 2: Fetching group details...');
             const details = await this.garrytoolsService.fetchGroupDetails(groupId);
+            this.logger.info(`📊 Fetched details for ${details.guilds?.length || 0} guilds`);
 
             if (!details.guilds || details.guilds.length === 0) {
+                this.logger.error('📅 ❌ No guilds found in expedition data');
                 await channel.send('❌ No Lunar Mine Expedition data found for the scheduled analysis.');
                 return;
             }
 
             const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower);
+            this.logger.info(`📅 Step 3: Sorted ${sortedClans.length} guilds by total power`);
 
             const overviewEmbed = new EmbedBuilder()
                 .setTitle(`🌙 Lunar Mine Expedition - Weekly Analysis`)
@@ -692,18 +706,42 @@ class InteractionHandler {
                 });
             });
 
+            this.logger.info('📅 Step 4: Sending overview embed...');
             await channel.send({ embeds: [overviewEmbed] });
+            this.logger.info('📅 ✅ Overview embed sent');
 
-            for (const guild of sortedClans) {
+            this.logger.info('📅 Step 5: Sending guild member lists...');
+            for (let i = 0; i < sortedClans.length; i++) {
+                const guild = sortedClans[i];
+                this.logger.info(`📅 Sending members for guild ${i + 1}/${sortedClans.length}: ${guild.title}`);
                 await this.sendGuildMembersListToChannel(channel, guild);
                 await new Promise(resolve => setTimeout(resolve, this.config.botSettings?.delayBetweenClans || 1500));
             }
 
-            this.logger.info('📅 Scheduled Lunar Mine analysis completed successfully!');
+            this.logger.info('📅 ✅ Scheduled Lunar Mine analysis completed successfully!');
 
         } catch (error) {
-            this.logger.error('Error during scheduled Lunar Mine analysis:', error);
-            await channel.send('❌ An error occurred during scheduled expedition analysis.');
+            this.logger.error('📅 ❌ Error during scheduled Lunar Mine analysis:', error);
+            this.logger.error('📅 Error type:', error.name);
+            this.logger.error('📅 Error message:', error.message);
+            this.logger.error('📅 Error stack:', error.stack);
+
+            try {
+                await channel.send({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('❌ Scheduled Analysis Error')
+                        .setColor(0xff0000)
+                        .setDescription('An error occurred during the scheduled Lunar Mine analysis')
+                        .addFields([
+                            { name: 'Error Type', value: error.name || 'Unknown', inline: false },
+                            { name: 'Error Message', value: error.message || 'No message', inline: false },
+                            { name: 'Guild IDs', value: guildIds.join(', '), inline: false }
+                        ])
+                        .setTimestamp()]
+                });
+            } catch (sendError) {
+                this.logger.error('📅 ❌ Failed to send error message to channel:', sendError);
+            }
         }
     }
 
@@ -1014,6 +1052,151 @@ class InteractionHandler {
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
+        }
+    }
+
+    async handleTestCommand(interaction) {
+        // Check if user is administrator
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            await interaction.reply({
+                content: '❌ This command requires administrator permissions!',
+                ephemeral: true
+            });
+            return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            this.logger.info('🧪 TEST: Starting weekly Lunar Mine automation test...');
+
+            const threadId = '1440754021207117894';
+            const guildIds = [42578, 202226, 125634, 11616];
+
+            this.logger.info(`🧪 TEST: Attempting to fetch thread ${threadId}...`);
+
+            // Fetch the thread
+            const thread = await interaction.client.channels.fetch(threadId);
+
+            if (!thread) {
+                this.logger.error(`🧪 TEST: ❌ Could not find thread ${threadId}`);
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('❌ Test Failed')
+                        .setColor(0xff0000)
+                        .setDescription(`Could not find thread with ID: ${threadId}`)
+                        .addFields([
+                            { name: 'Error', value: 'Thread not found or bot lacks access', inline: false },
+                            { name: 'Thread ID', value: threadId, inline: false }
+                        ])
+                        .setTimestamp()]
+                });
+                return;
+            }
+
+            this.logger.info(`🧪 TEST: ✅ Thread found: ${thread.name}`);
+
+            // Check bot permissions
+            const permissions = thread.permissionsFor(interaction.client.user);
+            this.logger.info(`🧪 TEST: Checking permissions...`);
+            this.logger.info(`🧪 TEST: - Send Messages: ${permissions.has('SendMessages')}`);
+            this.logger.info(`🧪 TEST: - Manage Messages: ${permissions.has('ManageMessages')}`);
+            this.logger.info(`🧪 TEST: - Read Message History: ${permissions.has('ReadMessageHistory')}`);
+
+            if (!permissions.has('SendMessages') || !permissions.has('ManageMessages') || !permissions.has('ReadMessageHistory')) {
+                this.logger.error('🧪 TEST: ❌ Insufficient permissions in thread');
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('❌ Test Failed - Insufficient Permissions')
+                        .setColor(0xff0000)
+                        .setDescription('Bot lacks required permissions in the target thread')
+                        .addFields([
+                            { name: 'Required Permissions', value: '• Send Messages\n• Manage Messages\n• Read Message History', inline: false },
+                            { name: 'Thread', value: `${thread.name} (${threadId})`, inline: false }
+                        ])
+                        .setTimestamp()]
+                });
+                return;
+            }
+
+            await interaction.editReply('⏳ Step 1/3: Permissions verified. Clearing thread messages...');
+
+            // Delete all messages in the thread (bulk delete)
+            this.logger.info('🧪 TEST: 🗑️ Clearing thread messages...');
+            let deletedTotal = 0;
+            let deleted;
+            do {
+                const messages = await thread.messages.fetch({ limit: 100 });
+                if (messages.size === 0) break;
+
+                // Filter messages younger than 14 days (Discord limitation)
+                const deletable = messages.filter(msg =>
+                    Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+                );
+
+                if (deletable.size > 0) {
+                    deleted = await thread.bulkDelete(deletable, true);
+                    deletedTotal += deleted.size;
+                    this.logger.info(`🧪 TEST: 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal})`);
+                } else {
+                    // For older messages, delete one by one
+                    for (const [, msg] of messages) {
+                        try {
+                            await msg.delete();
+                            deletedTotal++;
+                        } catch (e) {
+                            this.logger.warn(`🧪 TEST: Could not delete old message: ${e.message}`);
+                        }
+                    }
+                    break;
+                }
+            } while (deleted && deleted.size >= 2);
+
+            this.logger.info(`🧪 TEST: ✅ Thread cleared, deleted ${deletedTotal} messages`);
+
+            await interaction.editReply(`✅ Step 2/3: Cleared ${deletedTotal} messages. Running Lunar Mine analysis...`);
+
+            // Run the scheduled Lunar Mine analysis
+            this.logger.info('🧪 TEST: Running Lunar Mine analysis...');
+            await this.runScheduledLunarMine(thread, guildIds);
+
+            this.logger.info('🧪 TEST: ✅ Weekly Lunar Mine automation test completed successfully!');
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Test Completed Successfully')
+                    .setColor(0x00ff00)
+                    .setDescription('Weekly Lunar Mine automation test executed successfully')
+                    .addFields([
+                        { name: '🗑️ Messages Deleted', value: deletedTotal.toString(), inline: true },
+                        { name: '🎯 Guilds Analyzed', value: guildIds.length.toString(), inline: true },
+                        { name: '📍 Thread', value: `${thread.name}`, inline: false },
+                        { name: '🆔 Guild IDs', value: guildIds.join(', '), inline: false }
+                    ])
+                    .setTimestamp()]
+            });
+
+            await this.logService.logInfo('🧪 TEST: Weekly Lunar Mine automation test completed');
+
+        } catch (error) {
+            this.logger.error('🧪 TEST: ❌ Error during test:', error);
+            this.logger.error('🧪 TEST: Error stack:', error.stack);
+            this.logger.error('🧪 TEST: Error message:', error.message);
+
+            await this.logService.logError(error, 'weekly Lunar Mine test');
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('❌ Test Failed')
+                    .setColor(0xff0000)
+                    .setDescription('An error occurred during the automation test')
+                    .addFields([
+                        { name: 'Error Type', value: error.name || 'Unknown', inline: true },
+                        { name: 'Error Message', value: error.message || 'No message', inline: false },
+                        { name: 'Stack Trace', value: '```' + (error.stack?.substring(0, 900) || 'No stack trace') + '```', inline: false }
+                    ])
+                    .setTimestamp()]
+            });
         }
     }
 

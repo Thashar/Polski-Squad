@@ -103,21 +103,54 @@ cron.schedule('*/10 * * * *', () => {
 // Guild IDs: 42578, 202226, 125634, 11616
 cron.schedule('45 18 * * 3', async () => {
     try {
+        logger.info('📅 ========================================');
         logger.info('📅 Starting weekly Lunar Mine analysis...');
+        logger.info('📅 ========================================');
 
         const threadId = '1440754021207117894';
         const guildIds = [42578, 202226, 125634, 11616];
 
+        logger.info(`📅 Configuration:`);
+        logger.info(`📅 - Thread ID: ${threadId}`);
+        logger.info(`📅 - Guild IDs: ${guildIds.join(', ')}`);
+        logger.info(`📅 - Client ready: ${client.isReady()}`);
+        logger.info(`📅 - Client user: ${client.user?.tag || 'Not logged in'}`);
+
         // Fetch the thread
+        logger.info(`📅 Attempting to fetch thread ${threadId}...`);
         const thread = await client.channels.fetch(threadId);
 
         if (!thread) {
-            logger.error('❌ Could not find thread for weekly analysis');
+            logger.error(`📅 ❌ Could not find thread ${threadId}`);
+            logger.error('📅 Possible reasons:');
+            logger.error('📅 - Thread ID is incorrect');
+            logger.error('📅 - Bot does not have access to the thread');
+            logger.error('📅 - Thread has been deleted or archived');
+            await logService.logError(new Error(`Thread ${threadId} not found`), 'weekly Lunar Mine cron');
+            return;
+        }
+
+        logger.info(`📅 ✅ Thread found: ${thread.name} (ID: ${thread.id})`);
+        logger.info(`📅 Thread type: ${thread.type}`);
+        logger.info(`📅 Thread parent: ${thread.parent?.name || 'No parent'}`);
+
+        // Check permissions
+        const permissions = thread.permissionsFor(client.user);
+        logger.info(`📅 Checking bot permissions in thread...`);
+        logger.info(`📅 - Send Messages: ${permissions.has('SendMessages')}`);
+        logger.info(`📅 - Manage Messages: ${permissions.has('ManageMessages')}`);
+        logger.info(`📅 - Read Message History: ${permissions.has('ReadMessageHistory')}`);
+
+        if (!permissions.has('SendMessages') || !permissions.has('ManageMessages') || !permissions.has('ReadMessageHistory')) {
+            logger.error('📅 ❌ Insufficient permissions in thread');
+            logger.error('📅 Required permissions: SendMessages, ManageMessages, ReadMessageHistory');
+            await logService.logError(new Error('Insufficient permissions in thread'), 'weekly Lunar Mine cron');
             return;
         }
 
         // Delete all messages in the thread (bulk delete)
-        logger.info('🗑️ Clearing thread messages...');
+        logger.info('📅 🗑️ Clearing thread messages...');
+        let deletedTotal = 0;
         let deleted;
         do {
             const messages = await thread.messages.fetch({ limit: 100 });
@@ -130,30 +163,42 @@ cron.schedule('45 18 * * 3', async () => {
 
             if (deletable.size > 0) {
                 deleted = await thread.bulkDelete(deletable, true);
-                logger.info(`🗑️ Deleted ${deleted.size} messages`);
+                deletedTotal += deleted.size;
+                logger.info(`📅 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal})`);
             } else {
                 // For older messages, delete one by one
                 for (const [, msg] of messages) {
                     try {
                         await msg.delete();
+                        deletedTotal++;
                     } catch (e) {
-                        // Ignore errors for already deleted messages
+                        logger.warn(`📅 Could not delete old message: ${e.message}`);
                     }
                 }
                 break;
             }
         } while (deleted && deleted.size >= 2);
 
-        logger.info('✅ Thread cleared, running analysis...');
+        logger.info(`📅 ✅ Thread cleared, deleted ${deletedTotal} messages`);
+        logger.info('📅 Running scheduled analysis...');
 
         // Run the scheduled Lunar Mine analysis
         await interactionHandler.runScheduledLunarMine(thread, guildIds);
 
+        logger.info('📅 ========================================');
+        logger.info('📅 ✅ Weekly Lunar Mine analysis completed');
+        logger.info('📅 ========================================');
         await logService.logInfo('📅 Weekly Lunar Mine analysis completed');
 
     } catch (error) {
-        logger.error('❌ Error during weekly Lunar Mine analysis:', error);
-        await logService.logError(error, 'weekly Lunar Mine analysis');
+        logger.error('📅 ========================================');
+        logger.error('📅 ❌ Error during weekly Lunar Mine analysis');
+        logger.error('📅 ========================================');
+        logger.error('📅 Error type:', error.name);
+        logger.error('📅 Error message:', error.message);
+        logger.error('📅 Error stack:', error.stack);
+        logger.error('📅 ========================================');
+        await logService.logError(error, 'weekly Lunar Mine cron job');
     }
 });
 
