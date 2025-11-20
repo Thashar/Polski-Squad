@@ -218,6 +218,12 @@ class BackupManager {
 
                 archive.on('error', (err) => {
                     logger.error(`❌ Błąd tworzenia archiwum ${botName}:`, err.message);
+                    logger.error(`   Kod błędu: ${err.code || 'brak'}`);
+                    logger.error(`   Ścieżka archiwum: ${archivePath}`);
+                    logger.error(`   Ścieżka danych: ${dataFolder}`);
+                    if (err.stack) {
+                        logger.error(`   Stack trace: ${err.stack}`);
+                    }
                     reject(err);
                 });
 
@@ -227,6 +233,18 @@ class BackupManager {
 
             } catch (error) {
                 logger.error(`❌ Błąd podczas tworzenia archiwum ${botName}:`, error.message);
+                logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+                logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+                if (error.code === 'ENOSPC') {
+                    logger.error(`   Przyczyna: Brak miejsca na dysku`);
+                } else if (error.code === 'EACCES' || error.code === 'EPERM') {
+                    logger.error(`   Przyczyna: Brak uprawnień do pliku/folderu`);
+                } else if (error.code === 'ENOENT') {
+                    logger.error(`   Przyczyna: Plik lub folder nie istnieje`);
+                }
+                if (error.stack) {
+                    logger.error(`   Stack trace: ${error.stack}`);
+                }
                 reject(error);
             }
         });
@@ -281,7 +299,32 @@ class BackupManager {
             return folder.data.id;
 
         } catch (error) {
-            logger.error('❌ Błąd tworzenia folderu na Google Drive:', error.message);
+            logger.error(`❌ Błąd tworzenia folderu na Google Drive: ${folderName}`, error.message);
+            logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+            logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+            logger.error(`   Folder nadrzędny: ${parentFolderId || 'root'}`);
+
+            // Szczegółowe logowanie błędów Google Drive API
+            if (error.response) {
+                logger.error(`   Status HTTP: ${error.response.status}`);
+                logger.error(`   Dane odpowiedzi: ${JSON.stringify(error.response.data || {})}`);
+            }
+            if (error.errors && Array.isArray(error.errors)) {
+                error.errors.forEach((err, idx) => {
+                    logger.error(`   Błąd API [${idx}]: ${err.message || err.reason || JSON.stringify(err)}`);
+                });
+            }
+
+            // Klasyfikacja błędów
+            if (error.code === 403) {
+                logger.error(`   Przyczyna: Brak uprawnień do tworzenia folderu`);
+            } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                logger.error(`   Przyczyna: Problem z połączeniem sieciowym`);
+            }
+
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack}`);
+            }
             throw error;
         }
     }
@@ -337,8 +380,36 @@ class BackupManager {
             };
 
         } catch (error) {
-            logger.error('❌ Błąd przesyłania do Google Drive:', error);
-            console.error('Pełny błąd:', error);
+            logger.error(`❌ Błąd przesyłania do Google Drive dla ${botName}:`, error.message);
+            logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+            logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+            logger.error(`   Plik: ${path.basename(archivePath)}`);
+
+            // Szczegółowe logowanie błędów Google Drive API
+            if (error.response) {
+                logger.error(`   Status HTTP: ${error.response.status}`);
+                logger.error(`   Dane odpowiedzi: ${JSON.stringify(error.response.data || {})}`);
+            }
+            if (error.errors && Array.isArray(error.errors)) {
+                error.errors.forEach((err, idx) => {
+                    logger.error(`   Błąd API [${idx}]: ${err.message || err.reason || JSON.stringify(err)}`);
+                });
+            }
+
+            // Klasyfikacja błędów
+            if (error.code === 403) {
+                logger.error(`   Przyczyna: Brak uprawnień lub przekroczony limit API`);
+            } else if (error.code === 404) {
+                logger.error(`   Przyczyna: Folder docelowy nie istnieje`);
+            } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                logger.error(`   Przyczyna: Problem z połączeniem sieciowym`);
+            } else if (error.code === 507 || error.message?.includes('storage')) {
+                logger.error(`   Przyczyna: Brak miejsca na Google Drive`);
+            }
+
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack}`);
+            }
             return null;
         }
     }
@@ -382,6 +453,31 @@ class BackupManager {
 
         } catch (error) {
             logger.error(`❌ Błąd tworzenia folderu bota ${botName}:`, error.message);
+            logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+            logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+            logger.error(`   Folder nadrzędny ID: ${parentFolderId}`);
+
+            // Szczegółowe logowanie błędów Google Drive API
+            if (error.response) {
+                logger.error(`   Status HTTP: ${error.response.status}`);
+                logger.error(`   Dane odpowiedzi: ${JSON.stringify(error.response.data || {})}`);
+            }
+            if (error.errors && Array.isArray(error.errors)) {
+                error.errors.forEach((err, idx) => {
+                    logger.error(`   Błąd API [${idx}]: ${err.message || err.reason || JSON.stringify(err)}`);
+                });
+            }
+
+            // Klasyfikacja błędów
+            if (error.code === 403) {
+                logger.error(`   Przyczyna: Brak uprawnień do tworzenia folderu bota`);
+            } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                logger.error(`   Przyczyna: Problem z połączeniem sieciowym`);
+            }
+
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack}`);
+            }
             throw error;
         }
     }
@@ -427,6 +523,31 @@ class BackupManager {
 
         } catch (error) {
             logger.error(`❌ Błąd czyszczenia starych backupów dla ${botName}:`, error.message);
+            logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+            logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+
+            // Szczegółowe logowanie błędów Google Drive API
+            if (error.response) {
+                logger.error(`   Status HTTP: ${error.response.status}`);
+            }
+            if (error.errors && Array.isArray(error.errors)) {
+                error.errors.forEach((err, idx) => {
+                    logger.error(`   Błąd API [${idx}]: ${err.message || err.reason || JSON.stringify(err)}`);
+                });
+            }
+
+            // Klasyfikacja błędów
+            if (error.code === 403) {
+                logger.error(`   Przyczyna: Brak uprawnień do usunięcia plików`);
+            } else if (error.code === 404) {
+                logger.error(`   Przyczyna: Plik do usunięcia nie istnieje`);
+            } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                logger.error(`   Przyczyna: Problem z połączeniem sieciowym`);
+            }
+
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack}`);
+            }
         }
     }
 
@@ -469,6 +590,28 @@ class BackupManager {
 
             } catch (error) {
                 logger.error(`❌ Błąd podczas backupu ${botName}:`, error.message);
+                logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+                logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+
+                // Klasyfikacja błędów dla łatwiejszej diagnostyki
+                let errorCategory = 'Nieznany';
+                if (error.code === 'ENOSPC') {
+                    errorCategory = 'Brak miejsca na dysku';
+                } else if (error.code === 'EACCES' || error.code === 'EPERM') {
+                    errorCategory = 'Brak uprawnień';
+                } else if (error.code === 'ENOENT') {
+                    errorCategory = 'Plik/folder nie istnieje';
+                } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                    errorCategory = 'Problem sieciowy';
+                } else if (error.code === 403) {
+                    errorCategory = 'Brak uprawnień API';
+                }
+                logger.error(`   Kategoria błędu: ${errorCategory}`);
+
+                if (error.stack) {
+                    logger.error(`   Stack trace: ${error.stack}`);
+                }
+
                 results.failed.push({ bot: botName, reason: error.message });
             }
         }
@@ -517,6 +660,29 @@ class BackupManager {
 
             } catch (error) {
                 logger.error(`❌ Błąd podczas manualnego backupu ${botName}:`, error.message);
+                logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+                logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+                logger.error(`   Wywołany przez: ${triggerUser}`);
+
+                // Klasyfikacja błędów dla łatwiejszej diagnostyki
+                let errorCategory = 'Nieznany';
+                if (error.code === 'ENOSPC') {
+                    errorCategory = 'Brak miejsca na dysku';
+                } else if (error.code === 'EACCES' || error.code === 'EPERM') {
+                    errorCategory = 'Brak uprawnień';
+                } else if (error.code === 'ENOENT') {
+                    errorCategory = 'Plik/folder nie istnieje';
+                } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                    errorCategory = 'Problem sieciowy';
+                } else if (error.code === 403) {
+                    errorCategory = 'Brak uprawnień API';
+                }
+                logger.error(`   Kategoria błędu: ${errorCategory}`);
+
+                if (error.stack) {
+                    logger.error(`   Stack trace: ${error.stack}`);
+                }
+
                 results.failed.push({ bot: botName, reason: error.message });
             }
         }
@@ -583,8 +749,37 @@ class BackupManager {
             };
 
         } catch (error) {
-            logger.error('❌ Błąd przesyłania manualnego backupu do Google Drive:', error);
-            console.error('Pełny błąd:', error); // Dodatkowe logowanie do konsoli
+            logger.error(`❌ Błąd przesyłania manualnego backupu do Google Drive dla ${botName}:`, error.message);
+            logger.error(`   Typ błędu: ${error.name || 'Unknown'}`);
+            logger.error(`   Kod błędu: ${error.code || 'brak'}`);
+            logger.error(`   Plik: ${path.basename(archivePath)}`);
+            logger.error(`   Wywołany przez: ${triggerUser}`);
+
+            // Szczegółowe logowanie błędów Google Drive API
+            if (error.response) {
+                logger.error(`   Status HTTP: ${error.response.status}`);
+                logger.error(`   Dane odpowiedzi: ${JSON.stringify(error.response.data || {})}`);
+            }
+            if (error.errors && Array.isArray(error.errors)) {
+                error.errors.forEach((err, idx) => {
+                    logger.error(`   Błąd API [${idx}]: ${err.message || err.reason || JSON.stringify(err)}`);
+                });
+            }
+
+            // Klasyfikacja błędów
+            if (error.code === 403) {
+                logger.error(`   Przyczyna: Brak uprawnień lub przekroczony limit API`);
+            } else if (error.code === 404) {
+                logger.error(`   Przyczyna: Folder docelowy nie istnieje`);
+            } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                logger.error(`   Przyczyna: Problem z połączeniem sieciowym`);
+            } else if (error.code === 507 || error.message?.includes('storage')) {
+                logger.error(`   Przyczyna: Brak miejsca na Google Drive`);
+            }
+
+            if (error.stack) {
+                logger.error(`   Stack trace: ${error.stack}`);
+            }
             return null;
         }
     }
