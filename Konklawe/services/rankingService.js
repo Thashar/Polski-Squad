@@ -274,7 +274,31 @@ class RankingService {
     async removeRoleFromAllMembers(guild, roleId) {
         try {
             logger.info(`Rozpoczynam usuwanie roli ${roleId} wszystkim użytkownikom...`);
-            const allMembers = await guild.members.fetch();
+
+            // Sprawdź czy guild jest prawidłowe
+            if (!guild) {
+                logger.error(`❌ Guild jest null lub undefined dla roli ${roleId}`);
+                return;
+            }
+
+            // Fetch członków z cache (nie force fetch aby uniknąć rate limitu)
+            let allMembers;
+            try {
+                // Użyj cache jeśli dostępny, w przeciwnym razie fetch
+                allMembers = guild.members.cache.size > 0
+                    ? guild.members.cache
+                    : await guild.members.fetch({ force: false });
+            } catch (fetchError) {
+                logger.error(`❌ Błąd podczas pobierania członków dla roli ${roleId}:`, fetchError.message);
+                // Spróbuj użyć cache jako fallback
+                allMembers = guild.members.cache;
+                if (allMembers.size === 0) {
+                    logger.error(`❌ Cache członków jest pusty, nie można usunąć roli ${roleId}`);
+                    return;
+                }
+                logger.info(`ℹ️ Użyto cache członków (${allMembers.size} członków)`);
+            }
+
             const membersWithRole = allMembers.filter(member => member.roles.cache.has(roleId));
             logger.info(`Znaleziono ${membersWithRole.size} użytkowników z rolą ${roleId}`);
 
@@ -289,12 +313,12 @@ class RankingService {
                     logger.info(`✅ Usunięto rolę ${roleId} od ${member.user.tag}`);
                     await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (err) {
-                    logger.error(`❌ Błąd usuwania roli ${roleId} od ${member.user.tag}:`, err);
+                    logger.error(`❌ Błąd usuwania roli ${roleId} od ${member.user.tag}:`, err.message || err);
                 }
             }
             logger.info(`✅ Zakończono usuwanie roli ${roleId} wszystkim użytkownikom`);
         } catch (error) {
-            logger.error(`❌ Błąd podczas usuwania ról ${roleId}:`, error);
+            logger.error(`❌ Błąd podczas usuwania ról ${roleId}:`, error.message || error.stack || error);
         }
     }
 }
