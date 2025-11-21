@@ -565,14 +565,17 @@ class InteractionHandler {
 
         const sortedMembers = guild.members.sort((a, b) => b.attack - a.attack);
         const totalPages = Math.ceil(sortedMembers.length / (this.config.botSettings?.membersPerPage || 20));
-        
+
+        // Get clan name from config mapping (Stalker names)
+        const clanName = this.config.guildNames?.[guild.guildId] || guild.title;
+
         if (totalPages <= 1) {
-            const memberText = sortedMembers.map(member => 
+            const memberText = sortedMembers.map(member =>
                 `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
             ).join('\n');
-            
+
             const memberEmbed = new EmbedBuilder()
-                .setTitle(`👥 Members - ${guild.title}`)
+                .setTitle(`👥 ${clanName}`)
                 .setColor(0x3498DB)
                 .setDescription(`All ${sortedMembers.length} guild members sorted by attack power`)
                 .addFields({
@@ -581,7 +584,7 @@ class InteractionHandler {
                     inline: false
                 })
                 .setTimestamp();
-            
+
             await interaction.followUp({ embeds: [memberEmbed] });
         } else {
             const paginationId = generatePaginationId();
@@ -617,13 +620,16 @@ class InteractionHandler {
         const startIndex = currentPage * (this.config.botSettings?.membersPerPage || 20);
         const endIndex = Math.min(startIndex + (this.config.botSettings?.membersPerPage || 20), members.length);
         const pageMembers = members.slice(startIndex, endIndex);
-        
-        const memberText = pageMembers.map(member => 
+
+        // Get clan name from config mapping (Stalker names)
+        const clanName = this.config.guildNames?.[guild.guildId] || guild.title;
+
+        const memberText = pageMembers.map(member =>
             `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
         ).join('\n');
-        
+
         const embed = new EmbedBuilder()
-            .setTitle(`👥 Members - ${guild.title}`)
+            .setTitle(`👥 ${clanName}`)
             .setColor(0x3498DB)
             .setDescription(`Page ${currentPage + 1}/${totalPages} • Players ${startIndex + 1}-${endIndex} of ${members.length}`)
             .addFields({
@@ -631,11 +637,11 @@ class InteractionHandler {
                 value: memberText || 'No data',
                 inline: false
             })
-            .setFooter({ 
-                text: `ID: ${guild.guildId}`
+            .setFooter({
+                text: `Guild ID: ${guild.guildId}`
             })
             .setTimestamp();
-        
+
         return embed;
     }
 
@@ -762,40 +768,39 @@ class InteractionHandler {
         if (!guild.members || guild.members.length === 0) return;
 
         const sortedMembers = guild.members.sort((a, b) => b.attack - a.attack);
-        const membersPerPage = this.config.botSettings?.membersPerPage || 20;
-        const totalPages = Math.ceil(sortedMembers.length / membersPerPage);
 
-        // For scheduled tasks, send all pages without pagination buttons
-        for (let page = 0; page < totalPages; page++) {
-            const startIndex = page * membersPerPage;
-            const endIndex = Math.min(startIndex + membersPerPage, sortedMembers.length);
-            const pageMembers = sortedMembers.slice(startIndex, endIndex);
+        // Get clan name from config mapping (Stalker names)
+        const clanName = this.config.guildNames?.[guild.guildId] || guild.title;
 
-            const memberText = pageMembers.map(member =>
+        // Split members into chunks if there are too many (max ~25 members per field due to Discord limits)
+        const maxMembersPerField = 25;
+        const chunks = [];
+        for (let i = 0; i < sortedMembers.length; i += maxMembersPerField) {
+            chunks.push(sortedMembers.slice(i, i + maxMembersPerField));
+        }
+
+        // Create a single embed with all members
+        const memberEmbed = new EmbedBuilder()
+            .setTitle(`👥 ${clanName}`)
+            .setColor(0x3498DB)
+            .setDescription(`Total members: ${sortedMembers.length} • Sorted by attack power`)
+            .setFooter({ text: `Guild ID: ${guild.guildId}` })
+            .setTimestamp();
+
+        // Add all chunks as separate fields
+        chunks.forEach((chunk, chunkIndex) => {
+            const memberText = chunk.map(member =>
                 `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
             ).join('\n');
 
-            const memberEmbed = new EmbedBuilder()
-                .setTitle(`👥 Members - ${guild.title}`)
-                .setColor(0x3498DB)
-                .setDescription(totalPages > 1
-                    ? `Page ${page + 1}/${totalPages} • Players ${startIndex + 1}-${endIndex} of ${sortedMembers.length}`
-                    : `All ${sortedMembers.length} guild members sorted by attack power`)
-                .addFields({
-                    name: `📋 Member List`,
-                    value: memberText || 'No data',
-                    inline: false
-                })
-                .setFooter({ text: `ID: ${guild.guildId}` })
-                .setTimestamp();
+            memberEmbed.addFields({
+                name: chunks.length > 1 ? `📋 Members (Part ${chunkIndex + 1}/${chunks.length})` : `📋 Member List`,
+                value: memberText || 'No data',
+                inline: false
+            });
+        });
 
-            await channel.send({ embeds: [memberEmbed] });
-
-            // Small delay between pages
-            if (page < totalPages - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-        }
+        await channel.send({ embeds: [memberEmbed] });
     }
 
     cleanup() {
@@ -1319,23 +1324,33 @@ class InteractionHandler {
             // Delete all messages in the thread (bulk delete)
             this.logger.info('🧪 TEST: 🗑️ Clearing thread messages...');
             let deletedTotal = 0;
+            let skippedSystem = 0;
             let deleted;
             do {
                 const messages = await thread.messages.fetch({ limit: 100 });
                 if (messages.size === 0) break;
 
-                // Filter messages younger than 14 days (Discord limitation)
+                // Count system messages
+                const systemMessages = messages.filter(msg => msg.system);
+                skippedSystem += systemMessages.size;
+
+                // Filter messages younger than 14 days (Discord limitation) AND exclude system messages
                 const deletable = messages.filter(msg =>
-                    Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+                    Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000 &&
+                    !msg.system  // Exclude system messages (join, pin, etc.)
                 );
 
                 if (deletable.size > 0) {
                     deleted = await thread.bulkDelete(deletable, true);
                     deletedTotal += deleted.size;
-                    this.logger.info(`🧪 TEST: 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal})`);
+                    this.logger.info(`🧪 TEST: 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal}, skipped ${skippedSystem} system messages)`);
                 } else {
-                    // For older messages, delete one by one
+                    // For older messages, delete one by one (skip system messages)
                     for (const [, msg] of messages) {
+                        if (msg.system) {
+                            skippedSystem++;
+                            continue;
+                        }
                         try {
                             await msg.delete();
                             deletedTotal++;
@@ -1364,6 +1379,7 @@ class InteractionHandler {
                     .setDescription('Weekly Lunar Mine automation test executed successfully')
                     .addFields([
                         { name: '🗑️ Messages Deleted', value: deletedTotal.toString(), inline: true },
+                        { name: '⏭️ System Messages Skipped', value: skippedSystem.toString(), inline: true },
                         { name: '🎯 Guilds Analyzed', value: guildIds.length.toString(), inline: true },
                         { name: '📍 Thread', value: `${thread.name}`, inline: false },
                         { name: '🆔 Guild IDs', value: guildIds.join(', '), inline: false }

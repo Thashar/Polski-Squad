@@ -35,6 +35,14 @@ module.exports = {
         connectionTimeout: 20000,
         maxRetries: 3
     },
+
+    // Guild ID to Clan Name mapping (from Stalker config)
+    guildNames: {
+        42578: '🔥Polski Squad🔥',      // Main clan
+        202226: '⚡PolskiSquad¹⚡',      // Squad 1
+        125634: '💥PolskiSquad²💥',     // Squad 2
+        11616: '🎮PolskiSquad⁰🎮'       // Squad 0
+    },
     
     // Search Settings
     searchSettings: {
