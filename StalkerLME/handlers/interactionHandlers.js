@@ -719,6 +719,51 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    // ============ OBSŁUGA DECYZJI O URLOPOWICZACH - REMIND ============
+
+    if (interaction.customId === 'remind_vacation_include' || interaction.customId === 'remind_vacation_exclude') {
+        const session = sharedState.reminderService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        if (!session.vacationDecisionData) {
+            await interaction.reply({ content: '❌ Brak danych o decyzjach urlopowych.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const { vacationDecisionData } = session;
+        const { playersWithVacation, currentVacationIndex } = vacationDecisionData;
+
+        if (currentVacationIndex >= playersWithVacation.length) {
+            await interaction.reply({ content: '❌ Wszystkie decyzje zostały już podjęte.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const currentPlayer = playersWithVacation[currentVacationIndex];
+        const userId = currentPlayer.user.member.id;
+        const decision = interaction.customId === 'remind_vacation_include';
+
+        // Zapisz decyzję
+        vacationDecisionData.vacationDecisions[userId] = decision;
+
+        logger.info(`[REMIND] 🏖️ Decyzja o ${currentPlayer.user.member.displayName}: ${decision ? 'UWZGLĘDNIJ' : 'POMIŃ'}`);
+
+        // Przejdź do następnej osoby
+        vacationDecisionData.currentVacationIndex++;
+
+        // Pokaż pytanie o następną osobę lub finalizuj
+        await showVacationDecisionPrompt(session, 'remind', interaction, sharedState);
+        return;
+    }
+
     // ============ OBSŁUGA PRZYCISKÓW /REMIND (SYSTEM SESJI) ============
 
     if (interaction.customId === 'remind_cancel_session') {
@@ -896,32 +941,22 @@ async function handleButton(interaction, sharedState) {
                     }
                 }
 
-                // Usuń urlopowiczów z listy
+                // Jeśli są urlopowicze, zapisz ich w sesji i pytaj o każdego z osobna
                 if (playersWithVacation.length > 0) {
-                    const vacationUserIds = new Set(playersWithVacation.map(u => u.user.member.id));
-                    const filteredUsers = foundUsers.filter(u => !vacationUserIds.has(u.user.member.id));
+                    logger.info(`[REMIND] 🏖️ Znaleziono ${playersWithVacation.length} urlopowiczów - rozpoczynam pytanie o każdego z osobna`);
 
-                    logger.info(`[REMIND] 🏖️ Usunięto ${playersWithVacation.length} urlopowiczów z listy`);
-                    logger.info(`[REMIND] 📊 ${foundUsers.length} znalezionych → ${filteredUsers.length} po odfiltrowaniu urlopów`);
+                    // Zapisz dane w sesji dla późniejszego użycia
+                    session.vacationDecisionData = {
+                        playersWithVacation: playersWithVacation,
+                        allFoundUsers: foundUsers,
+                        currentVacationIndex: 0,
+                        vacationDecisions: {}, // userId -> true (include) / false (exclude)
+                        interaction: interaction
+                    };
 
-                    // Aktualizuj foundUsers
-                    foundUsers.splice(0, foundUsers.length, ...filteredUsers);
-
-                    if (foundUsers.length === 0) {
-                        // Zatrzymaj ghost ping
-                        stopGhostPing(session);
-
-                        await interaction.editReply({
-                            content: '✅ Wszyscy znalezieni gracze mają aktywny urlop - nie wysłano żadnych przypomnień.',
-                            embeds: [],
-                            components: []
-                        });
-
-                        // Zakończ sesję OCR i wyczyść
-                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-                        await sharedState.reminderService.cleanupSession(session.sessionId);
-                        return;
-                    }
+                    // Pokaż pytanie o pierwszą osobę na urlopie
+                    await showVacationDecisionPrompt(session, 'remind', interaction, sharedState);
+                    return; // Czekamy na decyzję użytkownika
                 }
             }
         } catch (vacationError) {
@@ -1163,6 +1198,51 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    // ============ OBSŁUGA DECYZJI O URLOPOWICZACH - PUNISH ============
+
+    if (interaction.customId === 'punish_vacation_include' || interaction.customId === 'punish_vacation_exclude') {
+        const session = sharedState.punishmentService.getSessionByUserId(interaction.user.id);
+
+        if (!session) {
+            await interaction.reply({ content: '❌ Nie znaleziono aktywnej sesji.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: '❌ To nie jest Twoja sesja.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        if (!session.vacationDecisionData) {
+            await interaction.reply({ content: '❌ Brak danych o decyzjach urlopowych.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const { vacationDecisionData } = session;
+        const { playersWithVacation, currentVacationIndex } = vacationDecisionData;
+
+        if (currentVacationIndex >= playersWithVacation.length) {
+            await interaction.reply({ content: '❌ Wszystkie decyzje zostały już podjęte.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const currentPlayer = playersWithVacation[currentVacationIndex];
+        const userId = currentPlayer.user.member.id;
+        const decision = interaction.customId === 'punish_vacation_include';
+
+        // Zapisz decyzję
+        vacationDecisionData.vacationDecisions[userId] = decision;
+
+        logger.info(`[PUNISH] 🏖️ Decyzja o ${currentPlayer.user.member.displayName}: ${decision ? 'UWZGLĘDNIJ' : 'POMIŃ'}`);
+
+        // Przejdź do następnej osoby
+        vacationDecisionData.currentVacationIndex++;
+
+        // Pokaż pytanie o następną osobę lub finalizuj
+        await showVacationDecisionPrompt(session, 'punish', interaction, sharedState);
+        return;
+    }
+
     // ============ OBSŁUGA PRZYCISKÓW /PUNISH (SYSTEM SESJI) ============
 
     if (interaction.customId === 'punish_cancel_session') {
@@ -1340,32 +1420,22 @@ async function handleButton(interaction, sharedState) {
                     }
                 }
 
-                // Usuń urlopowiczów z listy
+                // Jeśli są urlopowicze, zapisz ich w sesji i pytaj o każdego z osobna
                 if (playersWithVacation.length > 0) {
-                    const vacationUserIds = new Set(playersWithVacation.map(u => u.user.member.id));
-                    const filteredUsers = foundUsers.filter(u => !vacationUserIds.has(u.user.member.id));
+                    logger.info(`[PUNISH] 🏖️ Znaleziono ${playersWithVacation.length} urlopowiczów - rozpoczynam pytanie o każdego z osobna`);
 
-                    logger.info(`[PUNISH] 🏖️ Usunięto ${playersWithVacation.length} urlopowiczów z listy`);
-                    logger.info(`[PUNISH] 📊 ${foundUsers.length} znalezionych → ${filteredUsers.length} po odfiltrowaniu urlopów`);
+                    // Zapisz dane w sesji dla późniejszego użycia
+                    session.vacationDecisionData = {
+                        playersWithVacation: playersWithVacation,
+                        allFoundUsers: foundUsers,
+                        currentVacationIndex: 0,
+                        vacationDecisions: {}, // userId -> true (include) / false (exclude)
+                        interaction: interaction
+                    };
 
-                    // Aktualizuj foundUsers
-                    foundUsers.splice(0, foundUsers.length, ...filteredUsers);
-
-                    if (foundUsers.length === 0) {
-                        // Zatrzymaj ghost ping
-                        stopGhostPing(session);
-
-                        await interaction.editReply({
-                            content: '✅ Wszyscy znalezieni gracze mają aktywny urlop - nie dodano żadnych punktów karnych.',
-                            embeds: [],
-                            components: []
-                        });
-
-                        // Zakończ sesję OCR i wyczyść
-                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-                        await sharedState.punishmentService.cleanupSession(session.sessionId);
-                        return;
-                    }
+                    // Pokaż pytanie o pierwszą osobę na urlopie
+                    await showVacationDecisionPrompt(session, 'punish', interaction, sharedState);
+                    return; // Czekamy na decyzję użytkownika
                 }
             }
         } catch (vacationError) {
@@ -7278,6 +7348,249 @@ async function handleClanStatusPageButton(interaction, sharedState) {
             content: '❌ Wystąpił błąd podczas zmiany strony.',
             flags: MessageFlags.Ephemeral
         });
+    }
+}
+
+// ============ FUNKCJE POMOCNICZE DLA DECYZJI O URLOPOWICZACH ============
+
+/**
+ * Pokazuje pytanie o konkretną osobę na urlopie
+ */
+async function showVacationDecisionPrompt(session, type, interaction, sharedState) {
+    const { vacationDecisionData } = session;
+    const { playersWithVacation, currentVacationIndex } = vacationDecisionData;
+
+    if (currentVacationIndex >= playersWithVacation.length) {
+        // Wszystkie decyzje podjęte - finalizuj
+        await finalizeAfterVacationDecisions(session, type, interaction, sharedState);
+        return;
+    }
+
+    const currentPlayer = playersWithVacation[currentVacationIndex];
+    const member = currentPlayer.user.member;
+    const detectedNick = currentPlayer.detectedNick;
+
+    const embed = new EmbedBuilder()
+        .setTitle('🏖️ Gracz ma aktywny urlop')
+        .setDescription(
+            `**Gracz:** ${member.toString()} (${member.displayName})\n` +
+            `**Wykryty nick:** ${detectedNick}\n\n` +
+            `Ten gracz ma aktywny urlop (znaleziono wiadomość z reakcjami na kanale urlopów).\n\n` +
+            `**Czy chcesz uwzględnić tego gracza?**\n` +
+            `• **Tak** - gracz zostanie ${type === 'remind' ? 'powiadomiony' : 'ukarany'} pomimo urlopu\n` +
+            `• **Nie** - gracz zostanie pominięty\n\n` +
+            `**(${currentVacationIndex + 1}/${playersWithVacation.length})**`
+        )
+        .setColor('#FFA500')
+        .setTimestamp()
+        .setThumbnail(member.user.displayAvatarURL());
+
+    const includeButton = new ButtonBuilder()
+        .setCustomId(`${type}_vacation_include`)
+        .setLabel('✅ Tak, uwzględnij')
+        .setStyle(ButtonStyle.Success);
+
+    const excludeButton = new ButtonBuilder()
+        .setCustomId(`${type}_vacation_exclude`)
+        .setLabel('❌ Nie, pomiń')
+        .setStyle(ButtonStyle.Danger);
+
+    const row = new ActionRowBuilder()
+        .addComponents(includeButton, excludeButton);
+
+    await interaction.editReply({
+        content: `⏳ **Pytanie o urlopowiczów** (${currentVacationIndex + 1}/${playersWithVacation.length})`,
+        embeds: [embed],
+        components: [row]
+    });
+
+    logger.info(`[${type.toUpperCase()}] 🏖️ Pytanie o ${member.displayName} (${currentVacationIndex + 1}/${playersWithVacation.length})`);
+}
+
+/**
+ * Finalizuje proces po podjęciu wszystkich decyzji o urlopowiczach
+ */
+async function finalizeAfterVacationDecisions(session, type, interaction, sharedState) {
+    const { vacationDecisionData } = session;
+    const { allFoundUsers, vacationDecisions, playersWithVacation } = vacationDecisionData;
+
+    // Filtruj użytkowników na podstawie decyzji
+    const finalUsers = allFoundUsers.filter(userData => {
+        const userId = userData.user.member.id;
+
+        // Jeśli użytkownik nie ma urlopu, zawsze go uwzględnij
+        if (!vacationDecisions.hasOwnProperty(userId)) {
+            return true;
+        }
+
+        // Jeśli ma urlop, uwzględnij tylko jeśli decyzja to true
+        return vacationDecisions[userId] === true;
+    });
+
+    const includedVacationers = playersWithVacation.filter(p => vacationDecisions[p.user.member.id] === true);
+    const excludedVacationers = playersWithVacation.filter(p => vacationDecisions[p.user.member.id] === false);
+
+    logger.info(`[${type.toUpperCase()}] 🏖️ Decyzje o urlopowiczach zakończone:`);
+    logger.info(`[${type.toUpperCase()}] 🏖️ Uwzględnieni (${includedVacationers.length}): ${includedVacationers.map(p => p.user.member.displayName).join(', ') || 'brak'}`);
+    logger.info(`[${type.toUpperCase()}] 🏖️ Pominięci (${excludedVacationers.length}): ${excludedVacationers.map(p => p.user.member.displayName).join(', ') || 'brak'}`);
+    logger.info(`[${type.toUpperCase()}] 📊 ${allFoundUsers.length} znalezionych → ${finalUsers.length} po uwzględnieniu decyzji`);
+
+    if (finalUsers.length === 0) {
+        // Zatrzymaj ghost ping
+        stopGhostPing(session);
+
+        const message = type === 'remind'
+            ? '✅ Wszyscy znalezieni gracze zostali pominięci - nie wysłano żadnych przypomnień.'
+            : '✅ Wszyscy znalezieni gracze zostali pominięci - nie dodano żadnych punktów karnych.';
+
+        await interaction.editReply({
+            content: message,
+            embeds: [],
+            components: []
+        });
+
+        // Zakończ sesję OCR i wyczyść
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+
+        if (type === 'remind') {
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+        } else {
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+        }
+
+        return;
+    }
+
+    // Wyczyść dane decyzji urlopowych z sesji
+    delete session.vacationDecisionData;
+
+    // Kontynuuj proces z przefiltrowaną listą użytkowników
+    if (type === 'remind') {
+        // Wyślij przypomnienia
+        await interaction.editReply({
+            content: '⏳ **Wysyłanie powiadomień...**\n\nWysyłam wiadomości do użytkowników.',
+            embeds: [],
+            components: []
+        });
+
+        try {
+            const reminderResult = await sharedState.reminderService.sendReminders(interaction.guild, finalUsers);
+
+            // Zapisz użycie /remind przez klan (dla limitów czasowych)
+            await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
+
+            // Przekształć finalUsers do formatu oczekiwanego przez recordPingedUsers
+            const pingData = finalUsers
+                .filter(userData => userData.user && userData.user.member)
+                .map(userData => ({
+                    member: userData.user.member,
+                    detectedNick: userData.detectedNick
+                }));
+
+            await sharedState.ocrService.recordPingedUsers(interaction.guild.id, pingData);
+
+            const summaryEmbed = new EmbedBuilder()
+                .setTitle('✅ Przypomnienia wysłane')
+                .setDescription(
+                    `Pomyślnie wysłano **${reminderResult.sentMessages}** ${reminderResult.sentMessages === 1 ? 'przypomnienie' : 'przypomnień'} ` +
+                    `dla **${reminderResult.totalUsers}** ${reminderResult.totalUsers === 1 ? 'użytkownika' : 'użytkowników'}.`
+                )
+                .setColor('#00FF00')
+                .setTimestamp()
+                .setFooter({ text: `Wysłano do ${reminderResult.roleGroups} ${reminderResult.roleGroups === 1 ? 'grupy' : 'grup'} ról` });
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
+            await interaction.editReply({
+                content: null,
+                embeds: [summaryEmbed],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+
+            logger.info(`[REMIND] ✅ Zakończono wysyłanie przypomnień dla ${finalUsers.length} użytkowników`);
+        } catch (error) {
+            stopGhostPing(session);
+
+            logger.error('[REMIND] ❌ Błąd wysyłania przypomnień:', error);
+
+            await interaction.editReply({
+                content: `❌ Wystąpił błąd podczas wysyłania przypomnień: ${error.message}`,
+                embeds: [],
+                components: []
+            });
+
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+        }
+
+    } else {
+        // Dodaj punkty karne
+        await interaction.editReply({
+            content: '⏳ **Dodawanie punktów karnych...**\n\nDodaję punkty użytkownikom.',
+            embeds: [],
+            components: []
+        });
+
+        try {
+            const punishmentResults = await sharedState.punishmentService.processPunishments(interaction.guild, finalUsers);
+
+            // Przekształć finalUsers do formatu oczekiwanego przez recordPunishedUsers
+            const punishData = finalUsers
+                .filter(userData => userData.user && userData.user.member)
+                .map(userData => ({
+                    member: userData.user.member,
+                    detectedNick: userData.detectedNick
+                }));
+
+            await sharedState.ocrService.recordPunishedUsers(interaction.guild.id, punishData);
+
+            let summaryText = `Pomyślnie dodano punkty karne dla **${punishmentResults.length}** ${punishmentResults.length === 1 ? 'użytkownika' : 'użytkowników'}.\n\n`;
+            summaryText += `**📊 Lista ukaranych graczy:**\n`;
+
+            for (const result of punishmentResults) {
+                summaryText += `• ${result.user.displayName} → **${result.points}** ${result.points === 1 ? 'punkt' : result.points < 5 ? 'punkty' : 'punktów'}\n`;
+            }
+
+            const summaryEmbed = new EmbedBuilder()
+                .setTitle('✅ Punkty karne dodane')
+                .setDescription(summaryText)
+                .setColor('#00FF00')
+                .setTimestamp()
+                .setFooter({ text: 'System automatycznego karania' });
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
+            await interaction.editReply({
+                content: null,
+                embeds: [summaryEmbed],
+                components: []
+            });
+
+            // Zakończ sesję OCR i wyczyść
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+
+            logger.info(`[PUNISH] ✅ Zakończono dodawanie punktów karnych dla ${finalUsers.length} użytkowników`);
+        } catch (error) {
+            stopGhostPing(session);
+
+            logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych:', error);
+
+            await interaction.editReply({
+                content: `❌ Wystąpił błąd podczas dodawania punktów karnych: ${error.message}`,
+                embeds: [],
+                components: []
+            });
+
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+        }
     }
 }
 
