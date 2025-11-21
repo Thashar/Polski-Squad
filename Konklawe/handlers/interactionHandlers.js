@@ -1461,12 +1461,12 @@ class InteractionHandler {
             // Zaktualizuj embed
             if (this.passwordEmbedService) {
                 await this.passwordEmbedService.updateEmbed(false);
-                // Dodaj podpowiedź jako osobną wiadomość
-                await this.passwordEmbedService.addHintMessage(hintText, interaction.user.tag);
+                // Wyślij podpowiedź na kanał command
+                await this.passwordEmbedService.sendHintToCommandChannel(hintText, interaction.user.tag);
             }
 
             await interaction.editReply({
-                content: `✅ Podpowiedź została dodana!`
+                content: `✅ Podpowiedź została dodana i wysłana na kanał!`
             });
 
             logger.info(`💡 ${interaction.user.tag} dodał podpowiedź: ${hintText}`);

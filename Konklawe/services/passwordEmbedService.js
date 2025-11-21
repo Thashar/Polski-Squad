@@ -108,11 +108,10 @@ class PasswordEmbedService {
 
             // Timestamp ile czasu minęło od wyczyszczenia hasła
             if (this.gameService.triggerClearedTimestamp) {
-                const timeSinceCleared = new Date() - this.gameService.triggerClearedTimestamp;
-                const timeText = formatTimeDifference(timeSinceCleared);
+                const timestamp = Math.floor(this.gameService.triggerClearedTimestamp.getTime() / 1000);
                 embed.addFields({
                     name: '⏱️ Czas oczekiwania',
-                    value: `${timeText}`,
+                    value: `Od <t:${timestamp}:R>`,
                     inline: false
                 });
             }
@@ -151,25 +150,51 @@ class PasswordEmbedService {
             embed.setTitle('🔑 Konklawe - Aktywne hasło');
             embed.setDescription('Hasło zostało ustawione. Papież musi dodać pierwszą podpowiedź.');
 
-            // Timestamp ile czasu minęło od ustawienia hasła
+            const fields = [];
+
+            // POLE 1: Czas od ustawienia hasła (inline)
             if (this.gameService.triggerSetTimestamp) {
-                const timeSinceSet = new Date() - this.gameService.triggerSetTimestamp;
-                const timeText = formatTimeDifference(timeSinceSet);
-                embed.addFields({
+                const timestamp = Math.floor(this.gameService.triggerSetTimestamp.getTime() / 1000);
+                fields.push({
                     name: '⏱️ Czas od ustawienia hasła',
-                    value: `${timeText}`,
-                    inline: false
+                    value: `<t:${timestamp}:R>`,
+                    inline: true
                 });
             }
 
-            embed.addFields({
-                name: '⚠️ Ważne',
-                value: 'Papież musi dodać pierwszą podpowiedź!\n' +
-                       '• Przypomnienie po **15 minutach**\n' +
-                       '• Drugie przypomnienie po **30 minutach**\n' +
-                       '• Utrata roli papieskiej po **1 godzinie** bez podpowiedzi',
-                inline: false
+            // POLE 2: Ostatnia podpowiedź - brak (inline)
+            fields.push({
+                name: '🕐 Ostatnia podpowiedź',
+                value: 'Brak podpowiedzi',
+                inline: true
             });
+
+            // POLE 3: Podpowiedzi (inline) - brak
+            fields.push({
+                name: '💡 Podpowiedzi (0)',
+                value: 'Brak podpowiedzi',
+                inline: true
+            });
+
+            // POLE 4: Liczba graczy (inline)
+            const activePlayers = Object.keys(this.gameService.attempts).length;
+            const totalAttempts = Object.values(this.gameService.attempts).reduce((sum, attempts) => sum + attempts, 0);
+            fields.push({
+                name: '👥 Liczba graczy',
+                value: activePlayers > 0 ? `${activePlayers} graczy\n${totalAttempts} prób` : 'Brak prób',
+                inline: true
+            });
+
+            // POLE 5: System powiadomień (inline)
+            fields.push({
+                name: '📢 System powiadomień',
+                value: '• Przypomnienie po **15 minutach**\n' +
+                       '• Drugie przypomnienie po **30 minutach**\n' +
+                       '• Utrata roli po **1 godzinie**',
+                inline: true
+            });
+
+            embed.addFields(fields);
 
             // Przyciski: Zmień hasło i Dodaj podpowiedź
             const changePasswordButton = new ButtonBuilder()
@@ -188,46 +213,78 @@ class PasswordEmbedService {
         }
         // PRZYPADEK 4: Hasło ustawione, są podpowiedzi
         else {
-            embed.setTitle('🔑 Konklawe - Aktywne hasło');
+            const hintsCount = this.gameService.hints.length;
+            embed.setTitle(`🔑 Konklawe - Aktywne hasło | 💡 Podpowiedzi (${hintsCount})`);
             embed.setDescription('Hasło aktywne z podpowiedziami. Gra w toku!');
 
-            // Timestamp ile czasu minęło od ustawienia hasła
+            const fields = [];
+
+            // POLE 1: Czas od ustawienia hasła (inline)
             if (this.gameService.triggerSetTimestamp) {
-                const timeSinceSet = new Date() - this.gameService.triggerSetTimestamp;
-                const timeText = formatTimeDifference(timeSinceSet);
-                embed.addFields({
+                const timestamp = Math.floor(this.gameService.triggerSetTimestamp.getTime() / 1000);
+                fields.push({
                     name: '⏱️ Czas od ustawienia hasła',
-                    value: `${timeText}`,
+                    value: `<t:${timestamp}:R>`,
                     inline: true
                 });
             }
 
-            // Liczba podpowiedzi
-            embed.addFields({
-                name: '💡 Podpowiedzi',
-                value: `Dodano **${this.gameService.hints.length}** ${this.gameService.hints.length === 1 ? 'podpowiedź' : 'podpowiedzi'}`,
+            // POLE 2: Ostatnia podpowiedź (inline)
+            if (this.gameService.lastHintTimestamp) {
+                const timestamp = Math.floor(this.gameService.lastHintTimestamp.getTime() / 1000);
+                fields.push({
+                    name: '🕐 Ostatnia podpowiedź',
+                    value: `<t:${timestamp}:R>`,
+                    inline: true
+                });
+            }
+
+            // POLE 3: Podpowiedzi (inline) - wyświetl treść wszystkich podpowiedzi
+            const hintsText = this.gameService.hints.map((hint, index) => {
+                return `**${index + 1}.** ${hint}`;
+            }).join('\n');
+
+            fields.push({
+                name: `💡 Podpowiedzi (${hintsCount})`,
+                value: hintsText.length > 1024 ? hintsText.substring(0, 1021) + '...' : hintsText,
                 inline: true
             });
 
-            // Informacje o systemie powiadomień
-            embed.addFields({
-                name: '📢 System powiadomień',
-                value: '• Powiadomienia o następnej podpowiedzi **co 6 godzin**\n' +
-                       '• Po **24 godzinach** bez nowej podpowiedzi hasło zostanie zresetowane do "Konklawe"\n' +
-                       '• Papież straci rolę papieską przy resecie',
-                inline: false
+            // POLE 4: Liczba graczy (inline) - wyświetl listę graczy z próbami
+            const activePlayers = Object.entries(this.gameService.attempts)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 5); // Top 5 graczy
+
+            let playersText = '';
+            if (activePlayers.length > 0) {
+                playersText = activePlayers.map(([userId, attempts]) => {
+                    return `<@${userId}>: ${attempts} ${attempts === 1 ? 'próba' : attempts < 5 ? 'próby' : 'prób'}`;
+                }).join('\n');
+
+                const totalPlayers = Object.keys(this.gameService.attempts).length;
+                if (totalPlayers > 5) {
+                    playersText += `\n\n...i ${totalPlayers - 5} więcej`;
+                }
+            } else {
+                playersText = 'Brak prób';
+            }
+
+            fields.push({
+                name: '👥 Liczba graczy',
+                value: playersText.length > 1024 ? playersText.substring(0, 1021) + '...' : playersText,
+                inline: true
             });
 
-            // Ostatnia podpowiedź
-            if (this.gameService.lastHintTimestamp) {
-                const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
-                const timeText = formatTimeDifference(timeSinceLastHint);
-                embed.addFields({
-                    name: '🕐 Ostatnia podpowiedź',
-                    value: `${timeText} temu`,
-                    inline: false
-                });
-            }
+            // POLE 5: System powiadomień (inline)
+            fields.push({
+                name: '📢 System powiadomień',
+                value: '• Powiadomienia **co 6 godzin**\n' +
+                       '• Reset po **24h** bez podpowiedzi\n' +
+                       '• Papież traci rolę przy resecie',
+                inline: true
+            });
+
+            embed.addFields(fields);
 
             // Przyciski: Zmień hasło i Dodaj podpowiedź
             const changePasswordButton = new ButtonBuilder()
@@ -249,15 +306,15 @@ class PasswordEmbedService {
     }
 
     /**
-     * Dodaje podpowiedź jako osobną wiadomość na kanale
+     * Wysyła podpowiedź jako wiadomość na kanale command
      * @param {string} hintText - Tekst podpowiedzi
      * @param {string} authorTag - Tag autora (np. "User#1234")
      */
-    async addHintMessage(hintText, authorTag) {
+    async sendHintToCommandChannel(hintText, authorTag) {
         try {
-            const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
-            if (!triggerChannel || !triggerChannel.isTextBased()) {
-                logger.error('❌ Nie znaleziono kanału trigger lub nie jest to kanał tekstowy');
+            const commandChannel = await this.client.channels.fetch(this.config.channels.command);
+            if (!commandChannel || !commandChannel.isTextBased()) {
+                logger.error('❌ Nie znaleziono kanału command lub nie jest to kanał tekstowy');
                 return;
             }
 
@@ -269,10 +326,10 @@ class PasswordEmbedService {
                 .setTimestamp()
                 .setFooter({ text: `Dodał: ${authorTag}` });
 
-            await triggerChannel.send({ embeds: [embed] });
-            logger.info(`✅ Dodano podpowiedź #${hintNumber} na kanale trigger`);
+            await commandChannel.send({ embeds: [embed] });
+            logger.info(`✅ Wysłano podpowiedź #${hintNumber} na kanale command`);
         } catch (error) {
-            logger.error('❌ Błąd podczas dodawania podpowiedzi:', error);
+            logger.error('❌ Błąd podczas wysyłania podpowiedzi:', error);
         }
     }
 
