@@ -33,7 +33,6 @@ Thumbs.db
 
 # Claude Files
 .claude
-Claude.md
 
 # Tests
 tests/
