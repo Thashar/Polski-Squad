@@ -580,7 +580,7 @@ class InteractionHandler {
                 .addFields({
                     name: '\u200b', // Zero-width space for invisible field name
                     value: memberText || 'No data',
-                    inline: false
+                    inline: true
                 })
                 .setTimestamp();
 
@@ -633,7 +633,7 @@ class InteractionHandler {
             .addFields({
                 name: '\u200b', // Zero-width space for invisible field name
                 value: memberText || 'No data',
-                inline: false
+                inline: true
             })
             .setFooter({
                 text: `Guild ID: ${guild.guildId}`
@@ -784,7 +784,7 @@ class InteractionHandler {
             .setFooter({ text: `Guild ID: ${guild.guildId}` })
             .setTimestamp();
 
-        // Add all chunks as separate fields
+        // Add all chunks as separate fields (inline for left-to-right layout)
         chunks.forEach((chunk, chunkIndex) => {
             const memberText = chunk.map(member =>
                 `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
@@ -793,7 +793,7 @@ class InteractionHandler {
             memberEmbed.addFields({
                 name: '\u200b', // Zero-width space for invisible field name
                 value: memberText || 'No data',
-                inline: false
+                inline: true
             });
         });
 
