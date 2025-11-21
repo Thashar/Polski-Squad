@@ -416,7 +416,7 @@ class ReminderService {
             .setColor('#FFA500')
             .setTimestamp();
 
-        // Dodaj zdjęcia jako załączniki do embeda
+        // Przygotuj zdjęcia jako osobne załączniki (poza embedem)
         const files = [];
         for (let i = 0; i < session.processedImages.length; i++) {
             const imagePath = session.processedImages[i].filepath;
@@ -430,10 +430,7 @@ class ReminderService {
             }
         }
 
-        // Dodaj obrazy do embeda (tylko jeśli są jakieś zdjęcia)
-        if (files.length > 0) {
-            embed.setImage(`attachment://screenshot_1.png`);
-        }
+        // Zdjęcia są teraz poza embedem - jako osobne załączniki w wiadomości
 
         let row;
         if (uniqueNicks.length === 0) {

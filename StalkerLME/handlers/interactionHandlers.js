@@ -7588,6 +7588,24 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
 
     // Kontynuuj proces z przefiltrowaną listą użytkowników
     if (type === 'remind') {
+        // Pokaż progress bar z odliczaniem 5 sekund
+        for (let i = 5; i >= 0; i--) {
+            const progress = ((5 - i) / 5) * 100;
+            const filledBars = Math.floor(progress / 10);
+            const emptyBars = 10 - filledBars;
+            const progressBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
+
+            await interaction.editReply({
+                content: `⏳ **Wysyłanie powiadomień za ${i} sekund...**\n\n${progressBar} ${Math.floor(progress)}%`,
+                embeds: [],
+                components: []
+            });
+
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+
         // Wyślij przypomnienia
         await interaction.editReply({
             content: '⏳ **Wysyłanie powiadomień...**\n\nWysyłam wiadomości do użytkowników.',
