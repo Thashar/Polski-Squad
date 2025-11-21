@@ -149,7 +149,7 @@ async function handleSlashCommand(interaction, sharedState) {
 }
 
 async function handlePunishCommand(interaction, config, ocrService, punishmentService) {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
     try {
         // ===== SPRAWDZENIE KOLEJKI OCR =====
@@ -219,7 +219,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 }
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
     try {
         // Znajdź rolę klanu użytkownika (do sprawdzania limitów)
@@ -2762,7 +2762,7 @@ async function handlePhase1Command(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
     try {
         // Wykryj klan użytkownika
@@ -3520,7 +3520,7 @@ async function handlePhase2Command(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
     try {
         // Wykryj klan użytkownika
