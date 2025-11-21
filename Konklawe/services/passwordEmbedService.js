@@ -10,6 +10,9 @@ class PasswordEmbedService {
         this.gameService = gameService;
         this.client = null;
         this.embedMessageId = null; // ID wiadomości z embedem
+        this.lastUpdateTimestamp = 0; // Timestamp ostatniej aktualizacji
+        this.pendingUpdate = false; // Czy jest zaplanowana aktualizacja
+        this.updateCooldown = 1000; // Cooldown w milisekundach (1 sekunda)
     }
 
     /**
@@ -84,10 +87,46 @@ class PasswordEmbedService {
             const { embed, components } = this.createPasswordEmbed();
             await embedMessage.edit({ embeds: [embed], components });
 
+            // Zapisz timestamp aktualizacji
+            this.lastUpdateTimestamp = Date.now();
+            this.pendingUpdate = false;
+
             logger.info('✅ Zaktualizowano embed statusu hasła');
         } catch (error) {
             logger.error('❌ Błąd podczas aktualizacji embeda:', error);
+            this.pendingUpdate = false;
         }
+    }
+
+    /**
+     * Planuje aktualizację embeda z cooldownem
+     * Jeśli minęła 1 sekunda od ostatniej aktualizacji, aktualizuje natychmiast
+     * W przeciwnym razie planuje aktualizację po upływie cooldownu
+     */
+    async scheduleUpdate() {
+        const now = Date.now();
+        const timeSinceLastUpdate = now - this.lastUpdateTimestamp;
+
+        // Jeśli minął cooldown, aktualizuj natychmiast
+        if (timeSinceLastUpdate >= this.updateCooldown) {
+            await this.updateEmbed(false);
+            return;
+        }
+
+        // Jeśli już jest zaplanowana aktualizacja, nie planuj kolejnej
+        if (this.pendingUpdate) {
+            return;
+        }
+
+        // Zaplanuj aktualizację po upływie pozostałego czasu cooldownu
+        this.pendingUpdate = true;
+        const remainingCooldown = this.updateCooldown - timeSinceLastUpdate;
+
+        setTimeout(async () => {
+            if (this.pendingUpdate) {
+                await this.updateEmbed(false);
+            }
+        }, remainingCooldown);
     }
 
     /**
@@ -171,7 +210,7 @@ class PasswordEmbedService {
 
             // POLE 3: Podpowiedzi (inline) - brak
             fields.push({
-                name: '💡 Podpowiedzi (0)',
+                name: '💡 Podpowiedzi',
                 value: 'Brak podpowiedzi',
                 inline: true
             });
@@ -245,7 +284,7 @@ class PasswordEmbedService {
             }).join('\n');
 
             fields.push({
-                name: `💡 Podpowiedzi (${hintsCount})`,
+                name: '💡 Podpowiedzi',
                 value: hintsText.length > 1024 ? hintsText.substring(0, 1021) + '...' : hintsText,
                 inline: true
             });

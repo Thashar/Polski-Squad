@@ -44,8 +44,14 @@ class MessageHandler {
                 isSingleWord(message.content) &&
                 !message.member.roles.cache.has(this.config.roles.papal) &&
                 message.content.toLowerCase() !== this.gameService.trigger.toLowerCase()) {
-                
+
                 this.gameService.registerAttempt(message.author.id, message.content, false);
+
+                // Zaplanuj aktualizację embeda (z cooldownem 1 sekundy)
+                if (this.passwordEmbedService) {
+                    this.passwordEmbedService.scheduleUpdate();
+                }
+
                 return;
             }
 
