@@ -56,11 +56,7 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('test')
-                .setDescription('Test weekly Lunar Mine automation (Admin only)'),
-
-            new SlashCommandBuilder()
-                .setName('find-thread')
-                .setDescription('Find available threads in current server (Admin only)')
+                .setDescription('Test weekly Lunar Mine automation (Admin only)')
         ];
     }
 
@@ -106,7 +102,7 @@ class InteractionHandler {
         const { commandName } = interaction;
         
         // Check permissions for admin-only commands
-        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'test', 'find-thread'];
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'test'];
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
@@ -157,10 +153,6 @@ class InteractionHandler {
 
                 case 'test':
                     await this.handleTestCommand(interaction);
-                    break;
-
-                case 'find-thread':
-                    await this.handleFindThreadCommand(interaction);
                     break;
             }
         } catch (error) {
@@ -1062,147 +1054,6 @@ class InteractionHandler {
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
-        }
-    }
-
-    async handleFindThreadCommand(interaction) {
-        // Check if user is administrator
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            await interaction.reply({
-                content: '❌ This command requires administrator permissions!',
-                ephemeral: true
-            });
-            return;
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-            this.logger.info('🔍 Finding threads in current server...');
-
-            const guild = interaction.guild;
-            if (!guild) {
-                await interaction.editReply('❌ This command must be used in a server!');
-                return;
-            }
-
-            this.logger.info(`🔍 Server: ${guild.name} (${guild.id})`);
-
-            // Fetch all channels including threads
-            const channels = await guild.channels.fetch();
-
-            const threads = [];
-            const textChannels = [];
-
-            for (const [channelId, channel] of channels) {
-                if (channel.isThread()) {
-                    threads.push({
-                        id: channelId,
-                        name: channel.name,
-                        type: channel.type,
-                        parent: channel.parent?.name || 'Unknown',
-                        archived: channel.archived
-                    });
-                } else if (channel.isTextBased()) {
-                    textChannels.push({
-                        id: channelId,
-                        name: channel.name,
-                        type: channel.type
-                    });
-
-                    // Try to fetch active threads in text channels
-                    try {
-                        const activeThreads = await channel.threads.fetchActive();
-                        for (const [threadId, thread] of activeThreads.threads) {
-                            threads.push({
-                                id: threadId,
-                                name: thread.name,
-                                type: thread.type,
-                                parent: channel.name,
-                                archived: false
-                            });
-                        }
-                    } catch (e) {
-                        this.logger.warn(`Could not fetch threads for channel ${channel.name}: ${e.message}`);
-                    }
-                }
-            }
-
-            this.logger.info(`🔍 Found ${threads.length} threads and ${textChannels.length} text channels`);
-
-            const embed = new EmbedBuilder()
-                .setTitle('🔍 Available Threads & Channels')
-                .setColor(0x00AE86)
-                .setDescription(`Found **${threads.length}** threads and **${textChannels.length}** text channels in **${guild.name}**`)
-                .setTimestamp();
-
-            // Add threads
-            if (threads.length > 0) {
-                const threadList = threads.slice(0, 20).map(t =>
-                    `${t.archived ? '📁' : '📌'} **${t.name}**\n  ID: \`${t.id}\`\n  Parent: ${t.parent}`
-                ).join('\n\n');
-
-                embed.addFields({
-                    name: `📌 Threads (${threads.length})`,
-                    value: threadList || 'No threads found',
-                    inline: false
-                });
-
-                if (threads.length > 20) {
-                    embed.setFooter({ text: `Showing 20 of ${threads.length} threads` });
-                }
-            }
-
-            // Add main text channels
-            if (textChannels.length > 0) {
-                const channelList = textChannels.slice(0, 10).map(c =>
-                    `💬 **${c.name}**\n  ID: \`${c.id}\``
-                ).join('\n\n');
-
-                embed.addFields({
-                    name: `💬 Text Channels (${textChannels.length})`,
-                    value: channelList || 'No channels found',
-                    inline: false
-                });
-
-                if (textChannels.length > 10) {
-                    const footer = embed.data.footer?.text || '';
-                    embed.setFooter({ text: `${footer}${footer ? ' • ' : ''}Showing 10 of ${textChannels.length} channels` });
-                }
-            }
-
-            // Add current thread ID check
-            const targetThreadId = '1441152540581564508';
-            const foundTarget = threads.find(t => t.id === targetThreadId);
-
-            if (foundTarget) {
-                embed.addFields({
-                    name: '✅ Target Thread Found',
-                    value: `The configured thread \`${targetThreadId}\` exists:\n**${foundTarget.name}** (Parent: ${foundTarget.parent})`,
-                    inline: false
-                });
-            } else {
-                embed.addFields({
-                    name: '❌ Target Thread Not Found',
-                    value: `The configured thread \`${targetThreadId}\` was not found in this server.\nPlease update the thread ID in the code.`,
-                    inline: false
-                });
-            }
-
-            await interaction.editReply({ embeds: [embed] });
-
-        } catch (error) {
-            this.logger.error('🔍 Error finding threads:', error);
-            await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setTitle('❌ Error Finding Threads')
-                    .setColor(0xff0000)
-                    .setDescription(`An error occurred while searching for threads`)
-                    .addFields([
-                        { name: 'Error', value: error.message || 'Unknown error', inline: false }
-                    ])
-                    .setTimestamp()]
-            });
         }
     }
 
