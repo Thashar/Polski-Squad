@@ -575,11 +575,10 @@ class InteractionHandler {
             ).join('\n');
 
             const memberEmbed = new EmbedBuilder()
-                .setTitle(`👥 ${clanName}`)
                 .setColor(0x3498DB)
-                .setDescription(`All ${sortedMembers.length} guild members sorted by attack power`)
+                .setDescription(`# ${clanName}\nAll ${sortedMembers.length} guild members sorted by attack power`)
                 .addFields({
-                    name: `📋 Member List`,
+                    name: '\u200b', // Zero-width space for invisible field name
                     value: memberText || 'No data',
                     inline: false
                 })
@@ -629,11 +628,10 @@ class InteractionHandler {
         ).join('\n');
 
         const embed = new EmbedBuilder()
-            .setTitle(`👥 ${clanName}`)
             .setColor(0x3498DB)
-            .setDescription(`Page ${currentPage + 1}/${totalPages} • Players ${startIndex + 1}-${endIndex} of ${members.length}`)
+            .setDescription(`# ${clanName}\nPage ${currentPage + 1}/${totalPages} • Players ${startIndex + 1}-${endIndex} of ${members.length}`)
             .addFields({
-                name: `📋 Member List`,
+                name: '\u200b', // Zero-width space for invisible field name
                 value: memberText || 'No data',
                 inline: false
             })
@@ -772,8 +770,8 @@ class InteractionHandler {
         // Get clan name from config mapping (Stalker names)
         const clanName = this.config.guildNames?.[guild.guildId] || guild.title;
 
-        // Split members into chunks if there are too many (max ~25 members per field due to Discord limits)
-        const maxMembersPerField = 25;
+        // Split members into chunks of 10 per field
+        const maxMembersPerField = 10;
         const chunks = [];
         for (let i = 0; i < sortedMembers.length; i += maxMembersPerField) {
             chunks.push(sortedMembers.slice(i, i + maxMembersPerField));
@@ -781,9 +779,8 @@ class InteractionHandler {
 
         // Create a single embed with all members
         const memberEmbed = new EmbedBuilder()
-            .setTitle(`👥 ${clanName}`)
             .setColor(0x3498DB)
-            .setDescription(`Total members: ${sortedMembers.length} • Sorted by attack power`)
+            .setDescription(`# ${clanName}\nTotal members: ${sortedMembers.length} • Sorted by attack power`)
             .setFooter({ text: `Guild ID: ${guild.guildId}` })
             .setTimestamp();
 
@@ -794,7 +791,7 @@ class InteractionHandler {
             ).join('\n');
 
             memberEmbed.addFields({
-                name: chunks.length > 1 ? `📋 Members (Part ${chunkIndex + 1}/${chunks.length})` : `📋 Member List`,
+                name: '\u200b', // Zero-width space for invisible field name
                 value: memberText || 'No data',
                 inline: false
             });
