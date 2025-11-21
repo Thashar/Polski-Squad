@@ -8,6 +8,7 @@ class TimerService {
         this.config = config;
         this.gameService = gameService;
         this.client = null;
+        this.passwordEmbedService = null;
     }
 
     /**
@@ -27,6 +28,14 @@ class TimerService {
      */
     setClient(client) {
         this.client = client;
+    }
+
+    /**
+     * Ustawia passwordEmbedService
+     * @param {PasswordEmbedService} passwordEmbedService - Serwis embeda
+     */
+    setPasswordEmbedService(passwordEmbedService) {
+        this.passwordEmbedService = passwordEmbedService;
     }
 
     /**
@@ -144,11 +153,11 @@ class TimerService {
                     }
 
                     try {
-                        const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
                         const startChannel = await this.client.channels.fetch(this.config.channels.start);
 
-                        if (triggerChannel && triggerChannel.isTextBased()) {
-                            await triggerChannel.send(`Aktualne hasło: ${this.gameService.trigger}`);
+                        // Zaktualizuj embed
+                        if (this.passwordEmbedService) {
+                            await this.passwordEmbedService.updateEmbed(true);
                         }
 
                         if (startChannel && startChannel.isTextBased()) {
@@ -412,8 +421,9 @@ class TimerService {
 
             this.gameService.resetToDefaultPassword();
 
-            if (triggerChannel && triggerChannel.isTextBased()) {
-                await triggerChannel.send(`Aktualne hasło: ${this.gameService.trigger}`);
+            // Zaktualizuj embed
+            if (this.passwordEmbedService) {
+                await this.passwordEmbedService.updateEmbed(true);
             }
 
             if (startChannel && startChannel.isTextBased()) {

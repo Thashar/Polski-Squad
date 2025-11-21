@@ -9,6 +9,7 @@ const GameService = require('./services/gameService');
 const TimerService = require('./services/timerService');
 const RankingService = require('./services/rankingService');
 const CommandService = require('./services/commandService');
+const PasswordEmbedService = require('./services/passwordEmbedService');
 
 // Import handlerów
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -30,7 +31,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService;
 let interactionHandler, messageHandler;
 
 /**
@@ -42,18 +43,21 @@ async function initializeServices() {
     timerService = new TimerService(config, gameService);
     rankingService = new RankingService(config, gameService);
     commandService = new CommandService(config);
-    
+    passwordEmbedService = new PasswordEmbedService(config, gameService);
+
     // Inicjalizacja centralnego systemu zarządzania nickami
     nicknameManager = new NicknameManager();
     await nicknameManager.initialize();
-    
-    // Ustawienie klienta w timerService
+
+    // Ustawienie klienta w timerService i passwordEmbedService
     timerService.setClient(client);
-    
-    // Inicjalizacja handlerów z nickname manager
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager);
-    messageHandler = new MessageHandler(config, gameService, rankingService, timerService);
-    
+    passwordEmbedService.setClient(client);
+    timerService.setPasswordEmbedService(passwordEmbedService);
+
+    // Inicjalizacja handlerów z nickname manager i passwordEmbedService
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService);
+    messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService);
+
     // Inicjalizacja danych gry
     gameService.initializeGameData();
 }
@@ -87,21 +91,10 @@ async function onReady() {
             }
         }
 
-        // Wysyłanie informacji o haśle (tylko jeśli hasło istnieje)
-        if (gameService.trigger && triggerChannel && triggerChannel.isTextBased()) {
-            // Sprawdź ostatnią wiadomość - wyślij tylko jeśli nie jest wiadomością o haśle
-            const lastMessages = await triggerChannel.messages.fetch({ limit: 1 });
-            const lastMessage = lastMessages.first();
-
-            const shouldSendPasswordMessage = !lastMessage ||
-                !lastMessage.content.startsWith('🔑 Aktualne hasło:');
-
-            if (shouldSendPasswordMessage) {
-                await triggerChannel.send(`🔑 Aktualne hasło: ${gameService.trigger}`);
-                logger.info(`📤 Wysłano wiadomość o aktualnym haśle: ${gameService.trigger}`);
-            } else {
-                logger.info(`⏭️ Pominięto wysyłanie wiadomości - ostatnia wiadomość to już info o haśle`);
-            }
+        // Inicjalizacja embeda na kanale trigger
+        if (triggerChannel && triggerChannel.isTextBased()) {
+            await passwordEmbedService.initializeEmbed();
+            logger.info('✅ Zainicjalizowano embed statusu hasła');
         }
 
         // Ustawienie odpowiednich timerów
@@ -148,6 +141,8 @@ async function onInteraction(interaction) {
             await interactionHandler.handleSlashCommand(interaction);
         } else if (interaction.isStringSelectMenu()) {
             await interactionHandler.handleSelectMenuInteraction(interaction);
+        } else if (interaction.isModalSubmit()) {
+            await interactionHandler.handleModalSubmit(interaction);
         }
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);

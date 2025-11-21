@@ -17,13 +17,6 @@ class CommandService {
     createCommands() {
         return [
             new SlashCommandBuilder()
-                .setName('podpowiedz')
-                .setDescription('Dodaj podpowiedź do aktualnego hasła')
-                .addStringOption(option =>
-                    option.setName('tekst')
-                        .setDescription('Treść podpowiedzi')
-                        .setRequired(true)),
-            new SlashCommandBuilder()
                 .setName('podpowiedzi')
                 .setDescription('Pokaż wszystkie aktualne podpowiedzi'),
             new SlashCommandBuilder()

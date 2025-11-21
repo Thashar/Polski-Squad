@@ -4,11 +4,12 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
 class MessageHandler {
-    constructor(config, gameService, rankingService, timerService) {
+    constructor(config, gameService, rankingService, timerService, passwordEmbedService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
+        this.passwordEmbedService = passwordEmbedService;
     }
 
     /**
@@ -48,9 +49,15 @@ class MessageHandler {
                 return;
             }
 
-            // Ustawianie nowego hasła w kanale trigger
+            // Kanał trigger jest teraz zarządzany przez przyciski - ignoruj wiadomości
             if (message.channel.id === this.config.channels.trigger) {
-                await this.handleTriggerChannel(message);
+                // Usuwaj wszystkie wiadomości użytkowników na kanale trigger
+                try {
+                    await message.delete();
+                    logger.info(`🗑️ Usunięto wiadomość od ${message.author.tag} na kanale trigger (kanał zarządzany przez przyciski)`);
+                } catch (error) {
+                    logger.error(`❌ Nie udało się usunąć wiadomości: ${error.message}`);
+                }
                 return;
             }
 
@@ -81,44 +88,6 @@ class MessageHandler {
         }
     }
 
-    /**
-     * Obsługuje wiadomości w kanale trigger
-     * @param {Message} message - Wiadomość Discord
-     */
-    async handleTriggerChannel(message) {
-        let newTrigger = message.content.trim();
-
-        if (newTrigger.includes(' ')) {
-            await message.channel.send(`${this.config.emojis.warning} Hasło nie zostało przyjęte! ${this.config.emojis.warning} Możesz ustawić tylko JEDNOWYRAZOWE hasło.`);
-            return;
-        }
-
-        if (newTrigger.length === 0) {
-            await message.channel.send('Hasło nie może być puste!');
-            return;
-        }
-
-        if (this.gameService.trigger && newTrigger.toLowerCase() === this.gameService.trigger.toLowerCase()) {
-            await message.channel.send('To hasło jest już ustawione!');
-            return;
-        }
-
-        this.timerService.clearAllTimers();
-        this.gameService.setNewPassword(newTrigger, message.author.id);
-
-        await message.channel.send(`✅ Nowe hasło zostało ustawione jako: ${this.gameService.trigger}`);
-
-        const startChannel = await message.client.channels.fetch(this.config.channels.start);
-        if (startChannel && startChannel.isTextBased() && message.channel.id !== this.config.channels.start) {
-            const passwordMessage = this.config.messages.passwordSet.replace(/{emoji}/g, this.config.emojis.warning2);
-            await startChannel.send(passwordMessage);
-        }
-
-        if (this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
-            // Ustaw timery dla przypominania o pierwszej podpowiedzi
-            await this.timerService.setFirstHintReminder();
-        }
-    }
 
     /**
      * Obsługuje odgadnięcie hasła
@@ -169,18 +138,9 @@ class MessageHandler {
             await message.channel.send(`Liczba prób: **${userAttempts + 1}** 🎯`);
         }
 
-        // Czyszczenie kanału trigger i instrukcje
-        const triggerChannel = guild.channels.cache.get(this.config.channels.trigger);
-        if (triggerChannel && triggerChannel.isTextBased()) {
-            try {
-                const fetchedMessages = await triggerChannel.messages.fetch({ limit: 100 });
-                await triggerChannel.bulkDelete(fetchedMessages, true);
-            } catch (error) {
-                logger.error(`❌ Błąd czyszczenia kanału ${this.config.channels.trigger}:`, error);
-            }
-
-            await triggerChannel.send(`<@${message.author.id}> nadaj tu nowe hasło konklawe.`);
-            await triggerChannel.send('Zawsze ostatnia wpisana fraza będzie hasłem, dlatego jeżeli popełnisz błąd możesz poprawić.');
+        // Zaktualizuj embed na kanale trigger (wyczyść podpowiedzi)
+        if (this.passwordEmbedService) {
+            await this.passwordEmbedService.updateEmbed(true);
         }
 
         // Reset stanu gry

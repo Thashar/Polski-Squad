@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const VirtuttiService = require('../services/virtuttiService');
@@ -7,12 +7,13 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
         this.nicknameManager = nicknameManager;
+        this.passwordEmbedService = passwordEmbedService;
         this.virtuttiService = new VirtuttiService(config);
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
         
@@ -34,6 +35,20 @@ class InteractionHandler {
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleButtonInteraction(interaction) {
+        const customId = interaction.customId;
+
+        // Obsługa przycisków zarządzania hasłem i podpowiedziami
+        if (customId === 'password_set_new' || customId === 'password_change') {
+            await this.handlePasswordButton(interaction, customId);
+            return;
+        }
+
+        if (customId === 'hint_add') {
+            await this.handleHintButton(interaction);
+            return;
+        }
+
+        // Stara logika przycisków
         const [action, ...params] = interaction.customId.split('_');
         const userId = params[params.length - 1];
 
@@ -128,9 +143,7 @@ class InteractionHandler {
                 return;
             }
 
-            if (commandName === 'podpowiedz') {
-                await this.handleHintCommand(interaction);
-            } else if (commandName === 'podpowiedzi') {
+            if (commandName === 'podpowiedzi') {
                 await this.handleHintsCommand(interaction);
             } else if (commandName === 'statystyki') {
                 await this.handleStatisticsCommand(interaction);
@@ -153,49 +166,6 @@ class InteractionHandler {
         }
     }
 
-    /**
-     * Obsługuje komendę /podpowiedz
-     * @param {Interaction} interaction - Interakcja Discord
-     */
-    async handleHintCommand(interaction) {
-        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: 'Nie masz uprawnień do dodawania podpowiedzi.',
-                    flags: 64
-                });
-            }
-            return;
-        }
-
-        const hintText = interaction.options.getString('tekst');
-        this.gameService.addHint(hintText);
-
-        // Wyczyść wszystkie timery związane z przypomnieniami o podpowiedziach
-        this.timerService.clearHintReminderTimer();
-        this.timerService.clearFirstHintReminderTimer();
-        this.timerService.clearSecondHintReminderTimer();
-        this.timerService.clearPapalRoleRemovalTimer();
-        this.timerService.clearRecurringReminderTimer();
-        this.timerService.clearHintTimeoutTimer();
-
-        // Ustaw nowy timer dla kolejnej podpowiedzi (6 godzin) i 24h timeout
-        await this.timerService.setHintReminderTimer();
-        await this.timerService.setHintTimeoutTimer();
-
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.deferReply();
-            
-            const embed = new EmbedBuilder()
-                .setTitle(`${this.config.emojis.warning} Podpowiedź dodana ${this.config.emojis.warning}`)
-                .setDescription(`\`\`\`${hintText}\`\`\``)
-                .setColor('#00FF00')
-                .setTimestamp()
-                .setFooter({ text: `Dodał: ${interaction.user.tag}` });
-            
-            await interaction.editReply({ embeds: [embed] });
-        }
-    }
 
     /**
      * Obsługuje komendę /podpowiedzi
@@ -1277,6 +1247,234 @@ class InteractionHandler {
             await fs.writeFile(this.cursesFile, JSON.stringify(cursesToSave, null, 2));
         } catch (error) {
             logger.error(`❌ Błąd zapisywania aktywnych klątw: ${error.message}`);
+        }
+    }
+
+    /**
+     * Obsługuje przyciski do ustawiania/zmiany hasła
+     * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} buttonType - Typ przycisku ('password_set_new' lub 'password_change')
+     */
+    async handlePasswordButton(interaction, buttonType) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może ustawiać hasło!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy użytkownik jest na kanale trigger
+        if (interaction.channel.id !== this.config.channels.trigger) {
+            return await interaction.reply({
+                content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
+                ephemeral: true
+            });
+        }
+
+        // Utwórz modal z polem do wpisania hasła
+        const modal = new ModalBuilder()
+            .setCustomId(buttonType === 'password_set_new' ? 'password_set_modal' : 'password_change_modal')
+            .setTitle(buttonType === 'password_set_new' ? 'Nadaj nowe hasło' : 'Zmień aktualne hasło');
+
+        const passwordInput = new TextInputBuilder()
+            .setCustomId('password_input')
+            .setLabel('Wpisz hasło (tylko jedno słowo)')
+            .setStyle(TextInputStyle.Short)
+            .setMinLength(1)
+            .setMaxLength(50)
+            .setRequired(true)
+            .setPlaceholder('np. Papież');
+
+        const actionRow = new ActionRowBuilder().addComponents(passwordInput);
+        modal.addComponents(actionRow);
+
+        await interaction.showModal(modal);
+    }
+
+    /**
+     * Obsługuje przycisk do dodawania podpowiedzi
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleHintButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może dodawać podpowiedzi!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy użytkownik jest na kanale trigger
+        if (interaction.channel.id !== this.config.channels.trigger) {
+            return await interaction.reply({
+                content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy jest aktywne hasło
+        if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
+            return await interaction.reply({
+                content: '⚠️ Brak aktywnego hasła do którego można dodać podpowiedź!',
+                ephemeral: true
+            });
+        }
+
+        // Utwórz modal z polem do wpisania podpowiedzi
+        const modal = new ModalBuilder()
+            .setCustomId('hint_add_modal')
+            .setTitle('Dodaj podpowiedź do hasła');
+
+        const hintInput = new TextInputBuilder()
+            .setCustomId('hint_input')
+            .setLabel('Wpisz podpowiedź')
+            .setStyle(TextInputStyle.Paragraph)
+            .setMinLength(1)
+            .setMaxLength(500)
+            .setRequired(true)
+            .setPlaceholder('Treść podpowiedzi...');
+
+        const actionRow = new ActionRowBuilder().addComponents(hintInput);
+        modal.addComponents(actionRow);
+
+        await interaction.showModal(modal);
+    }
+
+    /**
+     * Obsługuje submity modali
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleModalSubmit(interaction) {
+        const modalId = interaction.customId;
+
+        if (modalId === 'password_set_modal' || modalId === 'password_change_modal') {
+            await this.handlePasswordModalSubmit(interaction, modalId);
+        } else if (modalId === 'hint_add_modal') {
+            await this.handleHintModalSubmit(interaction);
+        }
+    }
+
+    /**
+     * Obsługuje submit modalu ustawiania/zmiany hasła
+     * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} modalId - ID modalu
+     */
+    async handlePasswordModalSubmit(interaction, modalId) {
+        const newPassword = interaction.fields.getTextInputValue('password_input').trim();
+
+        // Walidacja hasła
+        if (newPassword.includes(' ')) {
+            return await interaction.reply({
+                content: `${this.config.emojis.warning} Hasło nie zostało przyjęte! ${this.config.emojis.warning} Możesz ustawić tylko JEDNOWYRAZOWE hasło.`,
+                ephemeral: true
+            });
+        }
+
+        if (newPassword.length === 0) {
+            return await interaction.reply({
+                content: '⚠️ Hasło nie może być puste!',
+                ephemeral: true
+            });
+        }
+
+        if (this.gameService.trigger && newPassword.toLowerCase() === this.gameService.trigger.toLowerCase()) {
+            return await interaction.reply({
+                content: '⚠️ To hasło jest już ustawione!',
+                ephemeral: true
+            });
+        }
+
+        // Defer reply
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Wyczyść wszystkie timery
+            this.timerService.clearAllTimers();
+
+            // Ustaw nowe hasło
+            this.gameService.setNewPassword(newPassword, interaction.user.id);
+
+            // Wyczyść kanał i zaktualizuj embed
+            if (this.passwordEmbedService) {
+                await this.passwordEmbedService.updateEmbed(true);
+            }
+
+            // Wyślij informację na kanał start
+            const startChannel = await interaction.client.channels.fetch(this.config.channels.start);
+            if (startChannel && startChannel.isTextBased() && interaction.channel.id !== this.config.channels.start) {
+                const passwordMessage = this.config.messages.passwordSet.replace(/{emoji}/g, this.config.emojis.warning2);
+                await startChannel.send(passwordMessage);
+            }
+
+            // Ustaw timery dla przypominania o pierwszej podpowiedzi
+            if (this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase()) {
+                await this.timerService.setFirstHintReminder();
+            }
+
+            await interaction.editReply({
+                content: `✅ Nowe hasło zostało ustawione!`
+            });
+
+            logger.info(`🔑 ${interaction.user.tag} ustawił nowe hasło: ${newPassword}`);
+        } catch (error) {
+            logger.error('❌ Błąd podczas ustawiania hasła:', error);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas ustawiania hasła.'
+            });
+        }
+    }
+
+    /**
+     * Obsługuje submit modalu dodawania podpowiedzi
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleHintModalSubmit(interaction) {
+        const hintText = interaction.fields.getTextInputValue('hint_input').trim();
+
+        if (hintText.length === 0) {
+            return await interaction.reply({
+                content: '⚠️ Podpowiedź nie może być pusta!',
+                ephemeral: true
+            });
+        }
+
+        // Defer reply
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Dodaj podpowiedź
+            this.gameService.addHint(hintText);
+
+            // Wyczyść wszystkie timery związane z przypomnieniami o podpowiedziach
+            this.timerService.clearHintReminderTimer();
+            this.timerService.clearFirstHintReminderTimer();
+            this.timerService.clearSecondHintReminderTimer();
+            this.timerService.clearPapalRoleRemovalTimer();
+            this.timerService.clearRecurringReminderTimer();
+            this.timerService.clearHintTimeoutTimer();
+
+            // Ustaw nowy timer dla kolejnej podpowiedzi (6 godzin) i 24h timeout
+            await this.timerService.setHintReminderTimer();
+            await this.timerService.setHintTimeoutTimer();
+
+            // Zaktualizuj embed
+            if (this.passwordEmbedService) {
+                await this.passwordEmbedService.updateEmbed(false);
+                // Dodaj podpowiedź jako osobną wiadomość
+                await this.passwordEmbedService.addHintMessage(hintText, interaction.user.tag);
+            }
+
+            await interaction.editReply({
+                content: `✅ Podpowiedź została dodana!`
+            });
+
+            logger.info(`💡 ${interaction.user.tag} dodał podpowiedź: ${hintText}`);
+        } catch (error) {
+            logger.error('❌ Błąd podczas dodawania podpowiedzi:', error);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas dodawania podpowiedzi.'
+            });
         }
     }
 
