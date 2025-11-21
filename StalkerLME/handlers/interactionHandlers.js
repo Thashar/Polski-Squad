@@ -1179,6 +1179,10 @@ async function handleButton(interaction, sharedState) {
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
 
+        // Sprawdź czy użytkownik ma aktywną sesję
+        const activeSession = sharedState.ocrService.activeProcessing.get(guildId);
+        const hasActiveSession = activeSession && activeSession.userId === userId;
+
         // Sprawdź czy użytkownik ma rezerwację
         const hasReservation = sharedState.ocrService.hasReservation(guildId, userId);
 
@@ -1186,9 +1190,39 @@ async function handleButton(interaction, sharedState) {
         const queue = sharedState.ocrService.waitingQueue.get(guildId) || [];
         const isInQueue = queue.find(item => item.userId === userId);
 
-        if (!hasReservation && !isInQueue) {
+        if (!hasActiveSession && !hasReservation && !isInQueue) {
             await interaction.reply({
-                content: '❌ Nie jesteś w kolejce ani nie masz rezerwacji.',
+                content: '❌ Nie jesteś w systemie kolejki OCR.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Jeśli ma aktywną sesję, zakończ ją
+        if (hasActiveSession) {
+            logger.info(`[OCR-QUEUE] 🚪 ${userId} opuszcza aktywną sesję (${activeSession.commandName})`);
+
+            // Znajdź sesję remind/punish i zatrzymaj ghost ping
+            const reminderSession = sharedState.reminderService.getSessionByUserId(userId);
+            const punishSession = sharedState.punishmentService.getSessionByUserId(userId);
+
+            if (reminderSession) {
+                stopGhostPing(reminderSession);
+                await sharedState.reminderService.cleanupSession(reminderSession.sessionId);
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /remind dla ${userId}`);
+            }
+
+            if (punishSession) {
+                stopGhostPing(punishSession);
+                await sharedState.punishmentService.cleanupSession(punishSession.sessionId);
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /punish dla ${userId}`);
+            }
+
+            // Zakończ sesję OCR (to automatycznie powiadomi następną osobę)
+            await sharedState.ocrService.endOCRSession(guildId, userId, true);
+
+            await interaction.reply({
+                content: '✅ Opuściłeś aktywną sesję OCR.',
                 flags: MessageFlags.Ephemeral
             });
             return;

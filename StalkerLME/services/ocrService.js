@@ -6,6 +6,7 @@ const { calculateNameSimilarity } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 const { EmbedBuilder } = require('discord.js');
+const { stopGhostPing } = require('../handlers/interactionHandlers');
 
 const logger = createBotLogger('StalkerLME');
 
@@ -24,6 +25,10 @@ class OCRService {
         // Wyświetlanie kolejki
         this.queueMessageId = null; // ID wiadomości z embdem kolejki
         this.queueChannelId = this.config.queueChannelId;
+
+        // Referencje do innych serwisów (ustawiane później przez setServices)
+        this.reminderService = null;
+        this.punishmentService = null;
     }
 
     /**
@@ -31,6 +36,14 @@ class OCRService {
      */
     setClient(client) {
         this.client = client;
+    }
+
+    /**
+     * Ustaw referencje do innych serwisów (wywoływane z index.js po inicjalizacji wszystkich serwisów)
+     */
+    setServices(reminderService, punishmentService) {
+        this.reminderService = reminderService;
+        this.punishmentService = punishmentService;
     }
 
     async initializeOCR() {
@@ -1742,6 +1755,24 @@ class OCRService {
         // Usuń z aktywnego przetwarzania
         this.activeProcessing.delete(guildId);
         logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
+
+        // Zatrzymaj ghost pingi i wyczyść sesje remind/punish
+        if (this.reminderService && this.punishmentService) {
+            const reminderSession = this.reminderService.getSessionByUserId(userId);
+            const punishSession = this.punishmentService.getSessionByUserId(userId);
+
+            if (reminderSession) {
+                stopGhostPing(reminderSession);
+                await this.reminderService.cleanupSession(reminderSession.sessionId);
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /remind dla ${userId} (timeout)`);
+            }
+
+            if (punishSession) {
+                stopGhostPing(punishSession);
+                await this.punishmentService.cleanupSession(punishSession.sessionId);
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /punish dla ${userId} (timeout)`);
+            }
+        }
 
         // Powiadom użytkownika
         try {

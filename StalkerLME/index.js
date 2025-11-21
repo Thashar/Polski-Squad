@@ -38,6 +38,9 @@ const messageCleanupService = new MessageCleanupService(config, logger);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
+// Połącz serwisy - daj ocrService dostęp do reminderService i punishmentService
+ocrService.setServices(reminderService, punishmentService);
+
 // Obiekt zawierający wszystkie współdzielone stany
 // Ustaw globalny dostęp do klienta dla messageCleanupService
 global.stalkerLMEClient = client;
