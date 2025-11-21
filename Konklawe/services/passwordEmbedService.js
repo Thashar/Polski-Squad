@@ -169,11 +169,23 @@ class PasswordEmbedService {
             embed.setTitle('🔑 Konklawe - Hasło domyślne');
             embed.setDescription('Hasło domyślne "Konklawe" zostało ustawione.');
 
-            embed.addFields({
+            const fields = [];
+
+            // POLE 1: Hasło (inline)
+            fields.push({
+                name: '🔑 Hasło',
+                value: `**${this.gameService.trigger}**`,
+                inline: true
+            });
+
+            // POLE 2: Jak rozpocząć
+            fields.push({
                 name: '📌 Jak rozpocząć?',
                 value: `Napisz **"${this.config.messages.defaultPassword}"** na odpowiednim kanale aby rozpocząć grę i zostać papieżem!`,
                 inline: false
             });
+
+            embed.addFields(fields);
 
             // Przycisk: Zmień hasło (tylko dla papieża)
             const changePasswordButton = new ButtonBuilder()
@@ -191,7 +203,14 @@ class PasswordEmbedService {
 
             const fields = [];
 
-            // POLE 1: Czas od ustawienia hasła (inline)
+            // POLE 1: Hasło (inline)
+            fields.push({
+                name: '🔑 Hasło',
+                value: `**${this.gameService.trigger}**`,
+                inline: true
+            });
+
+            // POLE 2: Czas od ustawienia hasła (inline)
             if (this.gameService.triggerSetTimestamp) {
                 const timestamp = Math.floor(this.gameService.triggerSetTimestamp.getTime() / 1000);
                 fields.push({
@@ -201,21 +220,21 @@ class PasswordEmbedService {
                 });
             }
 
-            // POLE 2: Ostatnia podpowiedź - brak (inline)
+            // POLE 3: Ostatnia podpowiedź - brak (inline)
             fields.push({
                 name: '🕐 Ostatnia podpowiedź',
                 value: 'Brak podpowiedzi',
                 inline: true
             });
 
-            // POLE 3: Podpowiedzi (inline) - brak
+            // POLE 4: Podpowiedzi (inline) - brak
             fields.push({
                 name: '💡 Podpowiedzi',
                 value: 'Brak podpowiedzi',
                 inline: true
             });
 
-            // POLE 4: Liczba graczy (inline)
+            // POLE 5: Liczba graczy (inline)
             const activePlayers = Object.keys(this.gameService.attempts).length;
             const totalAttempts = Object.values(this.gameService.attempts).reduce((sum, attempts) => sum + attempts, 0);
             fields.push({
@@ -224,9 +243,9 @@ class PasswordEmbedService {
                 inline: true
             });
 
-            // POLE 5: System powiadomień (inline)
+            // POLE 6: Ważne informacje (inline)
             fields.push({
-                name: '📢 System powiadomień',
+                name: '📢 Ważne informacje',
                 value: '• Przypomnienie po **15 minutach**\n' +
                        '• Drugie przypomnienie po **30 minutach**\n' +
                        '• Utrata roli po **1 godzinie**',
@@ -258,7 +277,14 @@ class PasswordEmbedService {
 
             const fields = [];
 
-            // POLE 1: Czas od ustawienia hasła (inline)
+            // POLE 1: Hasło (inline)
+            fields.push({
+                name: '🔑 Hasło',
+                value: `**${this.gameService.trigger}**`,
+                inline: true
+            });
+
+            // POLE 2: Czas od ustawienia hasła (inline)
             if (this.gameService.triggerSetTimestamp) {
                 const timestamp = Math.floor(this.gameService.triggerSetTimestamp.getTime() / 1000);
                 fields.push({
@@ -268,7 +294,7 @@ class PasswordEmbedService {
                 });
             }
 
-            // POLE 2: Ostatnia podpowiedź (inline)
+            // POLE 3: Ostatnia podpowiedź (inline)
             if (this.gameService.lastHintTimestamp) {
                 const timestamp = Math.floor(this.gameService.lastHintTimestamp.getTime() / 1000);
                 fields.push({
@@ -278,7 +304,7 @@ class PasswordEmbedService {
                 });
             }
 
-            // POLE 3: Podpowiedzi (inline) - wyświetl treść wszystkich podpowiedzi
+            // POLE 4: Podpowiedzi (inline) - wyświetl treść wszystkich podpowiedzi
             const hintsText = this.gameService.hints.map((hint, index) => {
                 return `**${index + 1}.** ${hint}`;
             }).join('\n');
@@ -289,7 +315,7 @@ class PasswordEmbedService {
                 inline: true
             });
 
-            // POLE 4: Liczba graczy (inline) - wyświetl listę graczy z próbami
+            // POLE 5: Liczba graczy (inline) - wyświetl listę graczy z próbami
             const activePlayers = Object.entries(this.gameService.attempts)
                 .sort(([,a], [,b]) => b - a)
                 .slice(0, 5); // Top 5 graczy
@@ -314,9 +340,9 @@ class PasswordEmbedService {
                 inline: true
             });
 
-            // POLE 5: System powiadomień (inline)
+            // POLE 6: Ważne informacje (inline)
             fields.push({
-                name: '📢 System powiadomień',
+                name: '📢 Ważne informacje',
                 value: '• Powiadomienia **co 6 godzin**\n' +
                        '• Reset po **24h** bez podpowiedzi\n' +
                        '• Papież traci rolę przy resecie',
