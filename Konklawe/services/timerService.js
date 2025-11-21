@@ -465,103 +465,39 @@ class TimerService {
 
     /**
      * Przywraca timery po restarcie bota
+     * ZASADA: Resetuj timery od początku gdy brak hasła lub brak podpowiedzi
      */
     async restoreRemindersAfterRestart() {
-        if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
+        // Trigger === null jest obsłużony w index.js (setAutoResetTimer + setReminderTimer)
+        if (!this.gameService.trigger) {
             return;
         }
 
-        const now = new Date();
-        const timeSincePassword = now - this.gameService.triggerSetTimestamp;
+        // Hasło domyślne "Konklawe" - brak timerów
+        if (this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
+            logger.info('ℹ️ Restart: hasło domyślne "Konklawe" - brak timerów');
+            return;
+        }
 
-        // Jeśli brak podpowiedzi
+        // SCENARIUSZ 1: Hasło ustawione, BRAK podpowiedzi → RESETUJ timery od początku
         if (this.gameService.hints.length === 0) {
-            if (timeSincePassword >= this.gameService.ROLE_REMOVAL_TIME) {
-                // Godzina minęła - usuń rolę natychmiast
-                logger.info('⚠️ Minęła godzina bez podpowiedzi - usuwanie roli papieskiej');
-                const guild = this.client.guilds.cache.first();
-                const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
-                if (membersWithRole.size > 0) {
-                    const papalMember = membersWithRole.first();
-                    await papalMember.roles.remove(this.config.roles.papal);
-                    await this.resetToDefaultPassword('1h');
-                }
-            } else {
-                // Ustaw odpowiednie timery na pozostały czas
-                const guild = this.client.guilds.cache.first();
-                const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(this.config.roles.papal));
-                if (membersWithRole.size > 0) {
-                    const papalMember = membersWithRole.first();
-                    
-                    if (timeSincePassword < this.gameService.FIRST_HINT_REMINDER_TIME) {
-                        // Ustaw bezpośrednio timer na wysłanie pierwszego przypomnienia
-                        const remainingTime = this.gameService.FIRST_HINT_REMINDER_TIME - timeSincePassword;
-                        this.gameService.firstHintReminderTimer = setTimeout(async () => {
-                            // Wysłanie pierwszego przypomnienia
-                            if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
-                                try {
-                                    const guild = this.client.guilds.cache.first();
-                                    const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
-                                    if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                                        const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                                        if (membersWithRole.size > 0) {
-                                            const papalMember = membersWithRole.first();
-                                            const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
-                                            const timeText = formatTimeDifference(timeSincePassword);
-                                            await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Przypomnienie: Minęło już **${timeText}** od ustawienia hasła. Dodaj podpowiedź dla graczy. 💡`);
-                                            await this.setSecondHintReminder();
-                                        }
-                                    }
-                                } catch (error) {
-                                    logger.error('Błąd podczas wysyłania pierwszego przypomnienia o podpowiedzi:', error);
-                                }
-                            }
-                        }, remainingTime);
-                    } else if (timeSincePassword < this.gameService.SECOND_HINT_REMINDER_TIME) {
-                        // Ustaw bezpośrednio timer na wysłanie drugiego przypomnienia
-                        const remainingTime = this.gameService.SECOND_HINT_REMINDER_TIME - timeSincePassword;
-                        this.gameService.secondHintReminderTimer = setTimeout(async () => {
-                            // Wysłanie drugiego przypomnienia
-                            if (this.gameService.trigger && this.gameService.trigger.toLowerCase() !== this.config.messages.defaultPassword.toLowerCase() && this.gameService.hints.length === 0) {
-                                try {
-                                    const guild = this.client.guilds.cache.first();
-                                    const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
-                                    if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                                        const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                                        if (membersWithRole.size > 0) {
-                                            const papalMember = membersWithRole.first();
-                                            const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
-                                            const timeText = formatTimeDifference(timeSincePassword);
-                                            await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Drugie przypomnienie: Minęło już **${timeText}** od ustawienia hasła bez podpowiedzi. Za **30 minut** stracisz rolę papieską! 🚨`);
-                                            await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
-                                            await this.setRecurringReminders(papalMember.user.id);
-                                        }
-                                    }
-                                } catch (error) {
-                                    logger.error('Błąd podczas wysyłania drugiego przypomnienia o podpowiedzi:', error);
-                                }
-                            }
-                        }, remainingTime);
-                    } else {
-                        // Już po drugim przypomnieniu - ustaw usuwanie roli na pozostały czas
-                        const remainingTime = this.gameService.ROLE_REMOVAL_TIME - timeSincePassword;
-                        if (remainingTime > 0) {
-                            setTimeout(async () => {
-                                await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
-                                await this.setRecurringReminders(papalMember.user.id);
-                            }, remainingTime);
-                        } else {
-                            // Czas już minął - ustaw natychmiast
-                            await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
-                            await this.setRecurringReminders(papalMember.user.id);
-                        }
-                    }
-                }
-            }
-        } else if (this.gameService.lastHintTimestamp) {
-            // Są podpowiedzi - ustaw timer dla kolejnej podpowiedzi i 24h timeout
-            const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
+            logger.info('🔄 Restart: hasło bez podpowiedzi - resetowanie timerów od POCZĄTKU');
 
+            // RESETUJ triggerSetTimestamp na teraz (aby timery były liczone od restartu)
+            this.gameService.triggerSetTimestamp = new Date();
+            this.gameService.saveTriggerState();
+
+            // Ustaw timery od początku (15 min, 30 min, 60 min od TERAZ)
+            await this.setFirstHintReminder();
+            logger.info('✅ Timery przypominania o podpowiedziach zresetowane od początku');
+            return;
+        }
+
+        // SCENARIUSZ 2: Hasło + są podpowiedzi → odtwórz na podstawie lastHintTimestamp
+        if (this.gameService.lastHintTimestamp) {
+            logger.info('♻️ Restart: odtwarzanie timerów na podstawie lastHintTimestamp');
+            const now = new Date();
+            const timeSinceLastHint = now - this.gameService.lastHintTimestamp;
 
             // Timer 6h dla przypomnienia o kolejnej podpowiedzi
             if (timeSinceLastHint >= this.gameService.EXISTING_HINT_REMINDER_TIME) {
@@ -585,7 +521,7 @@ class TimerService {
             } else {
                 // Ustaw timer na pozostały czas do wysłania przypomnienia
                 const remainingTime = this.gameService.EXISTING_HINT_REMINDER_TIME - timeSinceLastHint;
-                setTimeout(async () => {
+                this.gameService.hintReminderTimer = setTimeout(async () => {
                     try {
                         const guild = this.client.guilds.cache.first();
                         const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
@@ -637,7 +573,6 @@ class TimerService {
                 await this.setHintTimeoutTimer();
             }
         }
-        
     }
 }
 

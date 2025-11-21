@@ -87,21 +87,8 @@ async function onReady() {
             }
         }
 
-        // Jeśli nadal brak triggera, ustaw domyślny
-        if (!gameService.trigger) {
-            gameService.resetToDefaultPassword();
-            
-            try {
-                const guild = client.guilds.cache.first();
-                if (guild) {
-                    await timerService.removeRoleFromAllMembers(guild, config.roles.papal);
-                }
-            } catch (error) {
-                logger.error('❌ Błąd podczas usuwania ról papieskich:', error);
-            }
-        }
-
-        if (triggerChannel && triggerChannel.isTextBased()) {
+        // Wysyłanie informacji o haśle (tylko jeśli hasło istnieje)
+        if (gameService.trigger && triggerChannel && triggerChannel.isTextBased()) {
             // Sprawdź ostatnią wiadomość - wyślij tylko jeśli nie jest wiadomością o haśle
             const lastMessages = await triggerChannel.messages.fetch({ limit: 1 });
             const lastMessage = lastMessages.first();
@@ -119,7 +106,24 @@ async function onReady() {
 
         // Ustawienie odpowiednich timerów
         if (gameService.trigger === null) {
+            // Brak hasła - ustaw timery od początku
             await timerService.setAutoResetTimer();
+
+            // Znajdź papieża i ustaw timer przypomnienia
+            try {
+                const guild = client.guilds.cache.first();
+                if (guild) {
+                    await guild.members.fetch();
+                    const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(config.roles.papal));
+                    if (membersWithRole.size > 0) {
+                        const papalMember = membersWithRole.first();
+                        await timerService.setReminderTimer(papalMember.user.id);
+                        logger.info(`⏰ Ustawiono timer przypomnienia dla papieża ${papalMember.user.tag}`);
+                    }
+                }
+            } catch (error) {
+                logger.error('❌ Błąd podczas ustawiania timera przypomnienia:', error);
+            }
         } else {
             // Przywróć timery przypominania po restarcie z opóźnieniem
             setTimeout(async () => {
