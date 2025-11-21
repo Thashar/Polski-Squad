@@ -22,7 +22,7 @@ const client = new Client({
 const ocrService = new OCRService(config);
 const rankingService = new RankingService(config);
 const logService = new LogService(config);
-const roleService = new RoleService(config);
+const roleService = new RoleService(config, rankingService);
 const interactionHandler = new InteractionHandler(config, ocrService, rankingService, logService, roleService);
 
 /**

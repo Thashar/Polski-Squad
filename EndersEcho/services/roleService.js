@@ -2,8 +2,9 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 class RoleService {
-    constructor(config) {
+    constructor(config, rankingService) {
         this.config = config;
+        this.rankingService = rankingService;
     }
 
     /**
@@ -14,23 +15,26 @@ class RoleService {
     async updateTopRoles(guild, sortedPlayers) {
         try {
             // Rozpoczynam aktualizację ról TOP (bez logowania)
-            
+
             // Pobierz role z serwera
             const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
             const top2Role = guild.roles.cache.get(this.config.topRoles.top2);
             const top3Role = guild.roles.cache.get(this.config.topRoles.top3);
             const top4to10Role = guild.roles.cache.get(this.config.topRoles.top4to10);
             const top11to30Role = guild.roles.cache.get(this.config.topRoles.top11to30);
-            
+
             if (!top1Role || !top2Role || !top3Role || !top4to10Role || !top11to30Role) {
                 logger.error('❌ Nie znaleziono wszystkich ról TOP na serwerze');
                 return false;
             }
-            
+
             const allTopRoles = [top1Role, top2Role, top3Role, top4to10Role, top11to30Role];
-            
+
             // Zbierz ID graczy w rankingu
             const playerIds = new Set(sortedPlayers.map(player => player.userId));
+
+            // Flaga informująca czy usunieto kogoś z rankingu
+            let playersRemovedFromRanking = false;
             
             // Usuń role TOP od graczy którzy zniknęli z rankingu
             for (const role of allTopRoles) {
@@ -92,13 +96,37 @@ class RoleService {
                         }
                     } catch (error) {
                         logger.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userName || `ID:${player.userId}`}:`, error.message);
+
+                        // Jeśli błąd to "Unknown Member" lub "Unknown User", oznacza to że użytkownik nie jest na serwerze
+                        if (error.code === 10007 || error.message.includes('Unknown Member') || error.message.includes('Unknown User')) {
+                            logger.warn(`⚠️ Użytkownik ${player.userName || `ID:${player.userId}`} nie jest na serwerze - usuwanie z rankingu`);
+
+                            if (this.rankingService) {
+                                try {
+                                    await this.rankingService.removePlayerFromRanking(player.userId);
+                                    logger.success(`✅ Usunięto użytkownika ${player.userName || `ID:${player.userId}`} z rankingu`);
+                                    playersRemovedFromRanking = true;
+                                } catch (removeError) {
+                                    logger.error(`❌ Błąd podczas usuwania użytkownika z rankingu:`, removeError.message);
+                                }
+                            }
+                        }
                     }
                 }
             }
-            
+
+            // Jeśli ktoś został usunięty z rankingu, przeładuj ranking i zaktualizuj role ponownie
+            if (playersRemovedFromRanking && this.rankingService) {
+                logger.info('🔄 Przeładowywanie rankingu i aktualizacja ról po usunięciu nieaktywnych użytkowników');
+                const updatedPlayers = await this.rankingService.getSortedPlayers();
+
+                // Rekurencyjne wywołanie z zaktualizowanym rankingiem
+                return await this.updateTopRoles(guild, updatedPlayers);
+            }
+
             logger.info('✅ Aktualizacja ról TOP zakończona pomyślnie');
             return true;
-            
+
         } catch (error) {
             logger.error('❌ Błąd podczas aktualizacji ról TOP:', error);
             return false;
