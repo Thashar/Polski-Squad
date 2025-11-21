@@ -759,8 +759,34 @@ async function handleButton(interaction, sharedState) {
         // Przejdź do następnej osoby
         vacationDecisionData.currentVacationIndex++;
 
-        // Pokaż pytanie o następną osobę lub finalizuj
-        await showVacationDecisionPrompt(session, 'remind', interaction, sharedState);
+        // Defer update żeby acknowledged button click
+        await interaction.deferUpdate();
+
+        // Pokaż pytanie o następną osobę lub finalizuj (używając oryginalnej interakcji z sesji)
+        try {
+            await showVacationDecisionPrompt(session, 'remind', sharedState);
+        } catch (error) {
+            logger.error('[REMIND] ❌ Błąd przetwarzania decyzji o urlopy:', error);
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
+            // Wyczyść sesje
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+
+            // Użyj oryginalnej interakcji z sesji do pokazania błędu
+            const originalInteraction = session.vacationDecisionData?.interaction || interaction;
+            try {
+                await originalInteraction.editReply({
+                    content: `❌ Wystąpił błąd podczas przetwarzania decyzji o urlopy: ${error.message}`,
+                    embeds: [],
+                    components: []
+                });
+            } catch (replyError) {
+                logger.error('[REMIND] ❌ Nie można zaktualizować wiadomości po błędzie:', replyError);
+            }
+        }
         return;
     }
 
@@ -955,7 +981,25 @@ async function handleButton(interaction, sharedState) {
                     };
 
                     // Pokaż pytanie o pierwszą osobę na urlopie
-                    await showVacationDecisionPrompt(session, 'remind', interaction, sharedState);
+                    try {
+                        await showVacationDecisionPrompt(session, 'remind', sharedState);
+                    } catch (error) {
+                        logger.error('[REMIND] ❌ Błąd wyświetlania pytania o urlopy:', error);
+
+                        // Zatrzymaj ghost ping
+                        stopGhostPing(session);
+
+                        // Wyczyść sesje
+                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+                        await sharedState.reminderService.cleanupSession(session.sessionId);
+
+                        await interaction.editReply({
+                            content: `❌ Wystąpił błąd podczas przetwarzania urlopów: ${error.message}`,
+                            embeds: [],
+                            components: []
+                        });
+                        return;
+                    }
                     return; // Czekamy na decyzję użytkownika
                 }
             }
@@ -1238,8 +1282,34 @@ async function handleButton(interaction, sharedState) {
         // Przejdź do następnej osoby
         vacationDecisionData.currentVacationIndex++;
 
-        // Pokaż pytanie o następną osobę lub finalizuj
-        await showVacationDecisionPrompt(session, 'punish', interaction, sharedState);
+        // Defer update żeby acknowledged button click
+        await interaction.deferUpdate();
+
+        // Pokaż pytanie o następną osobę lub finalizuj (używając oryginalnej interakcji z sesji)
+        try {
+            await showVacationDecisionPrompt(session, 'punish', sharedState);
+        } catch (error) {
+            logger.error('[PUNISH] ❌ Błąd przetwarzania decyzji o urlopy:', error);
+
+            // Zatrzymaj ghost ping
+            stopGhostPing(session);
+
+            // Wyczyść sesje
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.punishmentService.cleanupSession(session.sessionId);
+
+            // Użyj oryginalnej interakcji z sesji do pokazania błędu
+            const originalInteraction = session.vacationDecisionData?.interaction || interaction;
+            try {
+                await originalInteraction.editReply({
+                    content: `❌ Wystąpił błąd podczas przetwarzania decyzji o urlopy: ${error.message}`,
+                    embeds: [],
+                    components: []
+                });
+            } catch (replyError) {
+                logger.error('[PUNISH] ❌ Nie można zaktualizować wiadomości po błędzie:', replyError);
+            }
+        }
         return;
     }
 
@@ -1434,7 +1504,25 @@ async function handleButton(interaction, sharedState) {
                     };
 
                     // Pokaż pytanie o pierwszą osobę na urlopie
-                    await showVacationDecisionPrompt(session, 'punish', interaction, sharedState);
+                    try {
+                        await showVacationDecisionPrompt(session, 'punish', sharedState);
+                    } catch (error) {
+                        logger.error('[PUNISH] ❌ Błąd wyświetlania pytania o urlopy:', error);
+
+                        // Zatrzymaj ghost ping
+                        stopGhostPing(session);
+
+                        // Wyczyść sesje
+                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+                        await sharedState.punishmentService.cleanupSession(session.sessionId);
+
+                        await interaction.editReply({
+                            content: `❌ Wystąpił błąd podczas przetwarzania urlopów: ${error.message}`,
+                            embeds: [],
+                            components: []
+                        });
+                        return;
+                    }
                     return; // Czekamy na decyzję użytkownika
                 }
             }
@@ -7356,13 +7444,13 @@ async function handleClanStatusPageButton(interaction, sharedState) {
 /**
  * Pokazuje pytanie o konkretną osobę na urlopie
  */
-async function showVacationDecisionPrompt(session, type, interaction, sharedState) {
+async function showVacationDecisionPrompt(session, type, sharedState) {
     const { vacationDecisionData } = session;
-    const { playersWithVacation, currentVacationIndex } = vacationDecisionData;
+    const { playersWithVacation, currentVacationIndex, interaction } = vacationDecisionData;
 
     if (currentVacationIndex >= playersWithVacation.length) {
         // Wszystkie decyzje podjęte - finalizuj
-        await finalizeAfterVacationDecisions(session, type, interaction, sharedState);
+        await finalizeAfterVacationDecisions(session, type, sharedState);
         return;
     }
 
@@ -7410,9 +7498,9 @@ async function showVacationDecisionPrompt(session, type, interaction, sharedStat
 /**
  * Finalizuje proces po podjęciu wszystkich decyzji o urlopowiczach
  */
-async function finalizeAfterVacationDecisions(session, type, interaction, sharedState) {
+async function finalizeAfterVacationDecisions(session, type, sharedState) {
     const { vacationDecisionData } = session;
-    const { allFoundUsers, vacationDecisions, playersWithVacation } = vacationDecisionData;
+    const { allFoundUsers, vacationDecisions, playersWithVacation, interaction } = vacationDecisionData;
 
     // Filtruj użytkowników na podstawie decyzji
     const finalUsers = allFoundUsers.filter(userData => {
