@@ -149,8 +149,6 @@ async function handleSlashCommand(interaction, sharedState) {
 }
 
 async function handlePunishCommand(interaction, config, ocrService, punishmentService) {
-    await interaction.deferReply({ ephemeral: true });
-
     try {
         // ===== SPRAWDZENIE KOLEJKI OCR =====
         const guildId = interaction.guild.id;
@@ -166,8 +164,15 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         // Sprawdź czy kolejka jest pusta
         const isQueueEmpty = ocrService.isQueueEmpty(guildId);
 
+        // Określ czy użytkownik będzie dodany do kolejki
+        const willBeQueued = !hasReservation && (isOCRActive || !isQueueEmpty);
+
+        // Defer reply z odpowiednim ephemeral flag
+        // TYLKO powiadomienie o kolejce jest ephemeral, embeddy analizy OCR są publiczne
+        await interaction.deferReply({ ephemeral: willBeQueued });
+
         // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
-        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+        if (willBeQueued) {
             // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
@@ -219,9 +224,28 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 }
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
-    await interaction.deferReply({ ephemeral: true });
-
     try {
+        // ===== SPRAWDZENIE KOLEJKI OCR (przed deferReply) =====
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        const commandName = '/remind';
+
+        // Sprawdź czy użytkownik ma rezerwację
+        const hasReservation = ocrService.hasReservation(guildId, userId);
+
+        // Sprawdź czy ktoś inny używa OCR
+        const isOCRActive = ocrService.isOCRActive(guildId);
+
+        // Sprawdź czy kolejka jest pusta
+        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+        // Określ czy użytkownik będzie dodany do kolejki
+        const willBeQueued = !hasReservation && (isOCRActive || !isQueueEmpty);
+
+        // Defer reply z odpowiednim ephemeral flag
+        // TYLKO powiadomienie o kolejce jest ephemeral, embeddy analizy OCR są publiczne
+        await interaction.deferReply({ ephemeral: willBeQueued });
+
         // Znajdź rolę klanu użytkownika (do sprawdzania limitów)
         let userClanRoleId = null;
         for (const [roleKey, roleId] of Object.entries(config.targetRoles)) {
@@ -256,22 +280,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             return;
         }
 
-        // ===== SPRAWDZENIE KOLEJKI OCR =====
-        const guildId = interaction.guild.id;
-        const userId = interaction.user.id;
-        const commandName = '/remind';
-
-        // Sprawdź czy użytkownik ma rezerwację
-        const hasReservation = ocrService.hasReservation(guildId, userId);
-
-        // Sprawdź czy ktoś inny używa OCR
-        const isOCRActive = ocrService.isOCRActive(guildId);
-
-        // Sprawdź czy kolejka jest pusta
-        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
-
         // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
-        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+        if (willBeQueued) {
             // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
@@ -2762,7 +2772,22 @@ async function handlePhase1Command(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    // ===== SPRAWDZENIE KOLEJKI OCR (przed deferReply) =====
+    // Sprawdź czy użytkownik ma rezerwację
+    const hasReservation = ocrService.hasReservation(guildId, userId);
+
+    // Sprawdź czy ktoś inny używa OCR
+    const isOCRActive = ocrService.isOCRActive(guildId);
+
+    // Sprawdź czy kolejka jest pusta
+    const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+    // Określ czy użytkownik będzie dodany do kolejki
+    const willBeQueued = !hasReservation && (isOCRActive || !isQueueEmpty);
+
+    // Defer reply z odpowiednim ephemeral flag
+    // TYLKO powiadomienie o kolejce jest ephemeral, embeddy analizy OCR są publiczne
+    await interaction.deferReply({ ephemeral: willBeQueued });
 
     try {
         // Wykryj klan użytkownika
@@ -2785,18 +2810,8 @@ async function handlePhase1Command(interaction, sharedState) {
             return;
         }
 
-        // ===== SPRAWDZENIE KOLEJKI OCR (globalny system) =====
-        // Sprawdź czy użytkownik ma rezerwację
-        const hasReservation = ocrService.hasReservation(guildId, userId);
-
-        // Sprawdź czy ktoś inny używa OCR
-        const isOCRActive = ocrService.isOCRActive(guildId);
-
-        // Sprawdź czy kolejka jest pusta
-        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
-
         // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
-        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+        if (willBeQueued) {
             // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
@@ -3520,7 +3535,22 @@ async function handlePhase2Command(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    // ===== SPRAWDZENIE KOLEJKI OCR (przed deferReply) =====
+    // Sprawdź czy użytkownik ma rezerwację
+    const hasReservation = ocrService.hasReservation(guildId, userId);
+
+    // Sprawdź czy ktoś inny używa OCR
+    const isOCRActive = ocrService.isOCRActive(guildId);
+
+    // Sprawdź czy kolejka jest pusta
+    const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+
+    // Określ czy użytkownik będzie dodany do kolejki
+    const willBeQueued = !hasReservation && (isOCRActive || !isQueueEmpty);
+
+    // Defer reply z odpowiednim ephemeral flag
+    // TYLKO powiadomienie o kolejce jest ephemeral, embeddy analizy OCR są publiczne
+    await interaction.deferReply({ ephemeral: willBeQueued });
 
     try {
         // Wykryj klan użytkownika
@@ -3543,18 +3573,8 @@ async function handlePhase2Command(interaction, sharedState) {
             return;
         }
 
-        // ===== SPRAWDZENIE KOLEJKI OCR (globalny system) =====
-        // Sprawdź czy użytkownik ma rezerwację
-        const hasReservation = ocrService.hasReservation(guildId, userId);
-
-        // Sprawdź czy ktoś inny używa OCR
-        const isOCRActive = ocrService.isOCRActive(guildId);
-
-        // Sprawdź czy kolejka jest pusta
-        const isQueueEmpty = ocrService.isQueueEmpty(guildId);
-
         // Jeśli nie ma rezerwacji I (ktoś używa OCR LUB kolejka nie jest pusta) -> dodaj do kolejki
-        if (!hasReservation && (isOCRActive || !isQueueEmpty)) {
+        if (willBeQueued) {
             // Ktoś inny używa OCR lub jest kolejka, dodaj do kolejki
             const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
 
