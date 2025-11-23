@@ -41,7 +41,8 @@ module.exports = {
     // Pliki bazy danych
     database: {
         punishments: './StalkerLME/data/punishments.json',
-        weeklyRemoval: './StalkerLME/data/weekly_removal.json'
+        weeklyRemoval: './StalkerLME/data/weekly_removal.json',
+        reminderConfirmations: './StalkerLME/data/reminder_confirmations.json'
     },
     
     // Strefa czasowa i deadline

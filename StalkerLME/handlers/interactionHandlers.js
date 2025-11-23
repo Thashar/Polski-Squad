@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const fs = require('fs').promises;
 
 const logger = createBotLogger('StalkerLME');
 
@@ -477,6 +478,10 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             const userIds = Array.from(members.keys());
             const reminderStats = await reminderUsageService.getMultipleUserStats(userIds);
 
+            // Pobierz statystyki potwierdzeń odbioru
+            const confirmations = await loadConfirmations(config);
+            const confirmationStats = confirmations.userStats || {};
+
             // Najpierw zlicz wszystkie punkty LIFETIME dla wszystkich członków (nie tylko widocznych)
             for (const [userId, member] of members) {
                 const userPunishment = guildPunishments[userId];
@@ -501,6 +506,10 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 const reminderCount = reminderStats[userId] || 0;
                 const reminderBadge = reminderCount > 0 ? ` [📢 ${reminderCount}]` : '';
 
+                // Dodaj licznik potwierdzeń odbioru przy nicku
+                const confirmationCount = confirmationStats[userId]?.totalConfirmations || 0;
+                const confirmationBadge = confirmationCount > 0 ? ` [🔔 ${confirmationCount}]` : '';
+
                 // Sprawdź role karania i zakazu loterii
                 const hasPunishmentRole = member.roles.cache.has(config.punishmentRoleId);
                 const hasLotteryBanRole = member.roles.cache.has(config.lotteryBanRoleId);
@@ -510,7 +519,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 // Dodaj punkty LIFETIME przy nicku jeśli ma jakieś punkty
                 const pointsBadge = lifetimePoints > 0 ? ` [💀 ${lifetimePoints}]` : '';
 
-                membersList += `${count + 1}. ${member.displayName}${punishmentBadge}${lotteryBanBadge}${pointsBadge}${reminderBadge}\n`;
+                membersList += `${count + 1}. ${member.displayName}${punishmentBadge}${lotteryBanBadge}${pointsBadge}${reminderBadge}${confirmationBadge}\n`;
                 count++;
             }
         }
@@ -7772,6 +7781,28 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
     }
 }
 
+// Helper: Wczytaj potwierdzenia z JSON
+async function loadConfirmations(config) {
+    try {
+        const data = await fs.readFile(config.database.reminderConfirmations, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        // Jeśli plik nie istnieje lub jest pusty, zwróć pustą strukturę
+        return { sessions: {}, userStats: {} };
+    }
+}
+
+// Helper: Zapisz potwierdzenia do JSON
+async function saveConfirmations(config, data) {
+    await fs.writeFile(config.database.reminderConfirmations, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Helper: Utwórz klucz sesji (zaokrąglony do 30 minut, żeby grupować potwierdzenia z tego samego przypomnienia)
+function createSessionKey(roleId, timestamp = Date.now()) {
+    const roundedTime = Math.floor(timestamp / (30 * 60 * 1000)) * (30 * 60 * 1000);
+    return `${roleId}_${roundedTime}`;
+}
+
 // Handler dla przycisku "Potwierdź odbiór" z przypomnienia o bossie
 async function handleConfirmReminderButton(interaction, sharedState) {
     const { config } = sharedState;
@@ -7781,6 +7812,22 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         const parts = interaction.customId.split('_');
         const userId = parts[2];
         const roleId = parts[3];
+
+        // Wczytaj dane potwierdzeń
+        const confirmations = await loadConfirmations(config);
+
+        // Utwórz klucz sesji
+        const sessionKey = createSessionKey(roleId);
+
+        // Sprawdź czy użytkownik już potwierdził w tej sesji
+        if (confirmations.sessions[sessionKey]?.confirmedUsers?.includes(userId)) {
+            await interaction.reply({
+                content: '✅ Już potwierdziłeś odbiór tego przypomnienia!',
+                flags: MessageFlags.Ephemeral
+            });
+            logger.info(`⚠️ ${interaction.user.tag} próbował potwierdzić ponownie (już potwierdził)`);
+            return;
+        }
 
         // Znajdź kanał potwierdzenia dla danej roli
         const confirmationChannelId = config.confirmationChannels[roleId];
@@ -7815,6 +7862,33 @@ async function handleConfirmReminderButton(interaction, sharedState) {
             }
         }
 
+        // Zapisz potwierdzenie do JSON
+        const now = new Date().toISOString();
+
+        // Utwórz sesję jeśli nie istnieje
+        if (!confirmations.sessions[sessionKey]) {
+            confirmations.sessions[sessionKey] = {
+                createdAt: now,
+                confirmedUsers: []
+            };
+        }
+
+        // Dodaj userId do potwierdzeń w tej sesji
+        confirmations.sessions[sessionKey].confirmedUsers.push(userId);
+
+        // Zaktualizuj statystyki użytkownika
+        if (!confirmations.userStats[userId]) {
+            confirmations.userStats[userId] = {
+                totalConfirmations: 0,
+                lastConfirmedAt: null
+            };
+        }
+        confirmations.userStats[userId].totalConfirmations += 1;
+        confirmations.userStats[userId].lastConfirmedAt = now;
+
+        // Zapisz do pliku
+        await saveConfirmations(config, confirmations);
+
         // Wyślij wiadomość potwierdzenia na kanał
         const timestamp = Math.floor(Date.now() / 1000);
         await confirmationChannel.send({
@@ -7827,7 +7901,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
             components: []
         });
 
-        logger.info(`✅ ${interaction.user.tag} potwierdził odbiór przypomnienia (klan: ${clanName})`);
+        logger.info(`✅ ${interaction.user.tag} potwierdził odbiór przypomnienia (klan: ${clanName}, łącznie: ${confirmations.userStats[userId].totalConfirmations})`);
 
     } catch (error) {
         logger.error('[CONFIRM_REMINDER] ❌ Błąd obsługi potwierdzenia:', error);
