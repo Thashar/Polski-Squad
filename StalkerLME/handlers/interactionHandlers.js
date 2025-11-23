@@ -3072,18 +3072,18 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     if (interaction.customId === 'phase1_cancel_session') {
-        // Anuluj sesję i zwolnij kolejkę OCR
-        await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
-
-
+        // WAŻNE: Najpierw zaktualizuj wiadomość, potem usuń sesję
         await interaction.update({
             content: '❌ Sesja anulowana.',
             embeds: [],
             components: []
         });
 
+        // Anuluj sesję i zwolnij kolejkę OCR
+        await phaseService.cleanupSession(session.sessionId);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
         logger.info(`[PHASE1] ❌ Sesja anulowana przez użytkownika: ${interaction.user.tag}`);
         return;
     }
@@ -3750,17 +3750,18 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
     if (interaction.customId === 'phase2_cancel_session') {
-        // Anuluj sesję i zakończ sesję OCR
-        await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
-
+        // WAŻNE: Najpierw zaktualizuj wiadomość, potem usuń sesję
         await interaction.update({
             content: '❌ Sesja anulowana.',
             embeds: [],
             components: []
         });
 
+        // Anuluj sesję i zakończ sesję OCR
+        await phaseService.cleanupSession(session.sessionId);
+        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
         logger.info(`[PHASE2] ❌ Sesja anulowana przez użytkownika: ${interaction.user.tag}`);
         return;
     }
