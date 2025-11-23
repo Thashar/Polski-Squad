@@ -59,6 +59,39 @@ class ReminderService {
                         sentMessages++;
 
                         logger.info(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} dla ${members.length} użytkowników`);
+
+                        // Wyślij wiadomości prywatne do każdego użytkownika
+                        let dmsSent = 0;
+                        let dmsFailed = 0;
+
+                        for (const member of members) {
+                            try {
+                                const userMention = member.toString();
+                                const dmMessage = messages.reminderMessage(timeMessage, userMention);
+
+                                // Utwórz przycisk "Potwierdź odbiór"
+                                const confirmButton = new ButtonBuilder()
+                                    .setCustomId(`confirm_reminder_${member.id}_${roleId}`)
+                                    .setLabel('Potwierdź odbiór')
+                                    .setStyle(ButtonStyle.Danger)
+                                    .setEmoji('✅');
+
+                                const row = new ActionRowBuilder()
+                                    .addComponents(confirmButton);
+
+                                await member.send({
+                                    content: dmMessage,
+                                    components: [row]
+                                });
+                                dmsSent++;
+                                logger.info(`📨 Wysłano DM do ${member.user.tag}`);
+                            } catch (dmError) {
+                                dmsFailed++;
+                                logger.warn(`⚠️ Nie udało się wysłać DM do ${member.user.tag}: ${dmError.message}`);
+                            }
+                        }
+
+                        logger.info(`📬 Podsumowanie DM: ${dmsSent} wysłane, ${dmsFailed} niepowodzeń`);
                     }
                 }
             }

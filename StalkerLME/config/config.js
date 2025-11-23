@@ -20,7 +20,11 @@ const requiredEnvVars = [
     'STALKER_LME_WARNING_CHANNEL_0',
     'STALKER_LME_WARNING_CHANNEL_1',
     'STALKER_LME_WARNING_CHANNEL_2',
-    'STALKER_LME_WARNING_CHANNEL_MAIN'
+    'STALKER_LME_WARNING_CHANNEL_MAIN',
+    'STALKER_LME_CONFIRMATION_CHANNEL_0',
+    'STALKER_LME_CONFIRMATION_CHANNEL_1',
+    'STALKER_LME_CONFIRMATION_CHANNEL_2',
+    'STALKER_LME_CONFIRMATION_CHANNEL_MAIN'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -83,6 +87,14 @@ module.exports = {
         [process.env.STALKER_LME_TARGET_ROLE_1]: process.env.STALKER_LME_WARNING_CHANNEL_1,
         [process.env.STALKER_LME_TARGET_ROLE_2]: process.env.STALKER_LME_WARNING_CHANNEL_2,
         [process.env.STALKER_LME_TARGET_ROLE_MAIN]: process.env.STALKER_LME_WARNING_CHANNEL_MAIN
+    },
+
+    // Kanały potwierdzenia odbioru przypomnień dla poszczególnych ról
+    confirmationChannels: {
+        [process.env.STALKER_LME_TARGET_ROLE_0]: process.env.STALKER_LME_CONFIRMATION_CHANNEL_0,
+        [process.env.STALKER_LME_TARGET_ROLE_1]: process.env.STALKER_LME_CONFIRMATION_CHANNEL_1,
+        [process.env.STALKER_LME_TARGET_ROLE_2]: process.env.STALKER_LME_CONFIRMATION_CHANNEL_2,
+        [process.env.STALKER_LME_TARGET_ROLE_MAIN]: process.env.STALKER_LME_CONFIRMATION_CHANNEL_MAIN
     },
     
     // Konfiguracja OCR

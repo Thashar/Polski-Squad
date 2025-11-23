@@ -421,7 +421,9 @@ class PhaseService {
             downloadedFiles: [], // ścieżki do pobranych plików
             messageToDelete: null, // wiadomość ze zdjęciami do usunięcia
             publicInteraction: null, // interakcja do aktualizacji postępu (PUBLICZNA)
-            roleNicksSnapshotPath: null // ścieżka do snapshotu nicków z roli
+            roleNicksSnapshotPath: null, // ścieżka do snapshotu nicków z roli
+            isProcessing: false, // flaga czy aktualnie przetwarza zdjęcia (blokuje anulowanie)
+            cancelled: false // flaga czy sesja została anulowana (do sprawdzania w pętli)
         };
 
         this.activeSessions.set(sessionId, session);
@@ -496,6 +498,13 @@ class PhaseService {
         if (!session) return;
 
         logger.info(`[PHASE${session.phase || 1}] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
+
+        // Jeśli sesja jest w trakcie przetwarzania, tylko ustaw flagę cancelled
+        if (session.isProcessing) {
+            logger.warn(`[PHASE${session.phase || 1}] ⚠️ Sesja jest w trakcie przetwarzania - ustawiam flagę cancelled`);
+            session.cancelled = true;
+            return; // Pętla przetwarzania sama się zatrzyma i wyczyści
+        }
 
         if (session.timeout) {
             clearTimeout(session.timeout);
@@ -575,6 +584,8 @@ class PhaseService {
             throw new Error('Sesja nie istnieje lub wygasła');
         }
 
+        // Ustaw flagę przetwarzania
+        session.isProcessing = true;
         session.publicInteraction = publicInteraction;
 
         // Inicjalizuj stan migania
@@ -624,6 +635,18 @@ class PhaseService {
         });
 
         for (let i = 0; i < downloadedFiles.length; i++) {
+            // Sprawdź czy sesja została anulowana
+            if (session.cancelled) {
+                logger.warn(`[PHASE${session.phase}] ⚠️ Sesja została anulowana podczas przetwarzania - przerywam pętlę`);
+                break;
+            }
+
+            // Sprawdź czy struktury danych nadal istnieją (dodatkowe zabezpieczenie)
+            if (!session.processedImages || !session.aggregatedResults) {
+                logger.error(`[PHASE${session.phase}] ❌ Struktury danych sesji zostały zniszczone - przerywam przetwarzanie`);
+                break;
+            }
+
             const fileData = downloadedFiles[i];
             const attachment = fileData.originalAttachment;
 
@@ -728,6 +751,15 @@ class PhaseService {
         // Wyczyść aktualnie przetwarzane zdjęcie
         session.currentProcessingImage = null;
 
+        // Wyłącz flagę przetwarzania
+        session.isProcessing = false;
+
+        // Jeśli sesja została anulowana podczas przetwarzania, wyczyść ją teraz
+        if (session.cancelled) {
+            logger.info(`[PHASE${session.phase}] 🧹 Sesja została anulowana - czyszczę po zakończeniu przetwarzania`);
+            await this.cleanupSession(sessionId);
+        }
+
         return results;
     }
 
@@ -784,11 +816,19 @@ class PhaseService {
                 .setTimestamp()
                 .setFooter({ text: 'Przetwarzanie...' });
 
-            // Spróbuj zaktualizować przez editReply
+            // Spróbuj zaktualizować - obsługuje zarówno Interaction jak i Message
             try {
-                await session.publicInteraction.editReply({
-                    embeds: [embed]
-                });
+                if (session.publicInteraction.editReply) {
+                    // To jest Interaction
+                    await session.publicInteraction.editReply({
+                        embeds: [embed]
+                    });
+                } else {
+                    // To jest Message
+                    await session.publicInteraction.edit({
+                        embeds: [embed]
+                    });
+                }
             } catch (editError) {
                 // Interakcja wygasła - anuluj sesję i odblokuj kolejkę
                 if (editError.code === 10015 || editError.message?.includes('Unknown Webhook') || editError.message?.includes('Invalid Webhook Token')) {

@@ -1997,6 +1997,8 @@ async function handleButton(interaction, sharedState) {
         await handleProgresNavButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('clan_status_prev|') || interaction.customId.startsWith('clan_status_next|')) {
         await handleClanStatusPageButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('confirm_reminder_')) {
+        await handleConfirmReminderButton(interaction, sharedState);
     }
 }
 
@@ -4200,7 +4202,7 @@ async function showPhase2FinalSummary(interaction, session, phaseService) {
 }
 
 async function handlePhase2RoundContinue(interaction, sharedState) {
-    const { phaseService } = sharedState;
+    const { phaseService, ocrService } = sharedState;
 
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
@@ -4212,6 +4214,9 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
         return;
     }
 
+    // Odśwież timeout sesji OCR
+    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
 
@@ -4219,13 +4224,26 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
     if (session.currentRound < 3) {
         // Zapisz wyniki bieżącej rundy i przejdź do następnej
         phaseService.startNextRound(session);
-        const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+
+        // Zaktualizuj starą wiadomość (usuń przyciski)
         await interaction.update({
+            content: `✅ Runda ${session.currentRound - 1}/3 zakończona!`,
+            components: []
+        });
+
+        // Wyślij NOWĄ wiadomość do kanału dla następnej rundy
+        const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+        const channel = await interaction.guild.channels.fetch(session.channelId);
+        const newMessage = await channel.send({
             content: '',
             embeds: [awaitingEmbed.embed],
             components: [awaitingEmbed.row]
         });
-        logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3`);
+
+        // Zaktualizuj session.publicInteraction na nową wiadomość
+        session.publicInteraction = newMessage;
+
+        logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3 (nowa wiadomość: ${newMessage.id})`);
     } else {
         // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
         logger.info(`[PHASE2] 💾 Zapisywanie wyników rundy 3 przed podsumowaniem...`);
@@ -7730,6 +7748,83 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
 
             await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
             await sharedState.punishmentService.cleanupSession(session.sessionId);
+        }
+    }
+}
+
+// Handler dla przycisku "Potwierdź odbiór" z przypomnienia o bossie
+async function handleConfirmReminderButton(interaction, sharedState) {
+    const { config } = sharedState;
+
+    try {
+        // Parsuj customId: confirm_reminder_{userId}_{roleId}
+        const parts = interaction.customId.split('_');
+        const userId = parts[2];
+        const roleId = parts[3];
+
+        // Znajdź kanał potwierdzenia dla danej roli
+        const confirmationChannelId = config.confirmationChannels[roleId];
+
+        if (!confirmationChannelId) {
+            logger.error(`❌ Brak kanału potwierdzenia dla roli: ${roleId}`);
+            await interaction.reply({
+                content: '❌ Błąd konfiguracji - brak kanału potwierdzenia.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Pobierz kanał potwierdzenia
+        const confirmationChannel = await interaction.client.channels.fetch(confirmationChannelId);
+
+        if (!confirmationChannel) {
+            logger.error(`❌ Nie znaleziono kanału potwierdzenia: ${confirmationChannelId}`);
+            await interaction.reply({
+                content: '❌ Błąd - nie znaleziono kanału potwierdzenia.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Znajdź nazwę klanu na podstawie roleId
+        let clanName = 'nieznany';
+        for (const [key, id] of Object.entries(config.targetRoles)) {
+            if (id === roleId) {
+                clanName = config.roleDisplayNames[key] || key;
+                break;
+            }
+        }
+
+        // Wyślij wiadomość potwierdzenia na kanał
+        const timestamp = Math.floor(Date.now() / 1000);
+        await confirmationChannel.send({
+            content: `✅ <@${userId}> potwierdził odbiór przypomnienia o bossie (<t:${timestamp}:T>)\n**Klan:** ${clanName}`
+        });
+
+        // Zaktualizuj wiadomość DM - usuń przycisk i pokaż potwierdzenie
+        await interaction.update({
+            content: interaction.message.content + '\n\n✅ **Odbiór potwierdzony!**',
+            components: []
+        });
+
+        logger.info(`✅ ${interaction.user.tag} potwierdził odbiór przypomnienia (klan: ${clanName})`);
+
+    } catch (error) {
+        logger.error('[CONFIRM_REMINDER] ❌ Błąd obsługi potwierdzenia:', error);
+        try {
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({
+                    content: '❌ Wystąpił błąd podczas potwierdzania odbioru.',
+                    flags: MessageFlags.Ephemeral
+                });
+            } else {
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas potwierdzania odbioru.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        } catch (replyError) {
+            logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
     }
 }

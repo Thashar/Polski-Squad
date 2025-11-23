@@ -218,10 +218,18 @@ client.on(Events.MessageCreate, async (message) => {
                 phaseService.refreshSessionTimeout(session.sessionId);
 
                 if (session.publicInteraction) {
-                    await session.publicInteraction.editReply({
-                        embeds: [confirmation.embed],
-                        components: [confirmation.row]
-                    });
+                    // Obsługa zarówno Interaction jak i Message
+                    if (session.publicInteraction.editReply) {
+                        await session.publicInteraction.editReply({
+                            embeds: [confirmation.embed],
+                            components: [confirmation.row]
+                        });
+                    } else {
+                        await session.publicInteraction.edit({
+                            embeds: [confirmation.embed],
+                            components: [confirmation.row]
+                        });
+                    }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
                     const channel = await client.channels.fetch(session.channelId);
@@ -294,11 +302,20 @@ client.on(Events.MessageCreate, async (message) => {
                 reminderService.refreshSessionTimeout(session.sessionId);
 
                 if (session.publicInteraction) {
-                    await session.publicInteraction.editReply({
-                        embeds: [confirmation.embed],
-                        components: [confirmation.row],
-                        files: confirmation.files
-                    });
+                    // Obsługa zarówno Interaction jak i Message
+                    if (session.publicInteraction.editReply) {
+                        await session.publicInteraction.editReply({
+                            embeds: [confirmation.embed],
+                            components: [confirmation.row],
+                            files: confirmation.files
+                        });
+                    } else {
+                        await session.publicInteraction.edit({
+                            embeds: [confirmation.embed],
+                            components: [confirmation.row],
+                            files: confirmation.files
+                        });
+                    }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
                     const channel = await client.channels.fetch(session.channelId);
@@ -371,11 +388,20 @@ client.on(Events.MessageCreate, async (message) => {
                 punishmentService.refreshSessionTimeout(session.sessionId);
 
                 if (session.publicInteraction) {
-                    await session.publicInteraction.editReply({
-                        embeds: [confirmation.embed],
-                        components: [confirmation.row],
-                        files: confirmation.files
-                    });
+                    // Obsługa zarówno Interaction jak i Message
+                    if (session.publicInteraction.editReply) {
+                        await session.publicInteraction.editReply({
+                            embeds: [confirmation.embed],
+                            components: [confirmation.row],
+                            files: confirmation.files
+                        });
+                    } else {
+                        await session.publicInteraction.edit({
+                            embeds: [confirmation.embed],
+                            components: [confirmation.row],
+                            files: confirmation.files
+                        });
+                    }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
                     const channel = await client.channels.fetch(session.channelId);
