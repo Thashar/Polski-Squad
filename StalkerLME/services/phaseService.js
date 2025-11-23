@@ -590,17 +590,26 @@ class PhaseService {
 
         // Inicjalizuj stan migania
         session.blinkState = false;
+        session.isUpdatingProgress = false; // Flaga zapobiegająca nakładaniu się wywołań
 
         // Uruchom timer migania (co 1 sekundę)
         session.blinkTimer = setInterval(async () => {
+            // Pomiń jeśli poprzednie wywołanie się jeszcze nie zakończyło
+            if (session.isUpdatingProgress) {
+                return;
+            }
+
             session.blinkState = !session.blinkState;
 
             // Aktualizuj embed jeśli jest w trakcie przetwarzania
             if (session.publicInteraction && session.currentProcessingImage) {
                 try {
+                    session.isUpdatingProgress = true;
                     await this.updateProgress(session, session.currentProcessingImage);
                 } catch (error) {
                     logger.error('[PHASE] ❌ Błąd aktualizacji migania:', error.message);
+                } finally {
+                    session.isUpdatingProgress = false;
                 }
             }
         }, 1000);
@@ -658,32 +667,30 @@ class PhaseService {
                     stage: 'loading',
                     action: 'Ładowanie zdjęcia'
                 };
-
-                // Aktualizuj postęp - ładowanie
-                await this.updateProgress(session, session.currentProcessingImage);
+                // Miganie w setInterval automatycznie pokaże ten stan
 
                 logger.info(`[PHASE1] 📷 Przetwarzanie zdjęcia ${i + 1}/${totalImages}: ${attachment.name}`);
 
-                // Aktualizuj postęp - OCR
+                // Zmiana stanu na OCR
                 session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'ocr',
                     action: 'Rozpoznawanie tekstu (OCR)'
                 };
-                await this.updateProgress(session, session.currentProcessingImage);
+                // Miganie w setInterval automatycznie pokaże ten stan
 
                 // Przetwórz OCR z pliku lokalnego
                 const text = await this.ocrService.processImageFromFile(fileData.filepath);
 
-                // Aktualizuj postęp - ekstrakcja
+                // Zmiana stanu na ekstrakcję
                 session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'extracting',
                     action: 'Wyciąganie wyników graczy'
                 };
-                await this.updateProgress(session, session.currentProcessingImage);
+                // Miganie w setInterval automatycznie pokaże ten stan
 
                 // Wyciągnij wszystkich graczy z wynikami (nie tylko zerami)
                 // Użyj snapshotu jeśli istnieje
@@ -707,14 +714,14 @@ class PhaseService {
                     results: playersWithScores
                 });
 
-                // Aktualizuj postęp - agregacja
+                // Zmiana stanu na agregację
                 session.currentProcessingImage = {
                     currentImage: i + 1,
                     totalImages: totalImages,
                     stage: 'aggregating',
                     action: 'Agregacja wyników'
                 };
-                await this.updateProgress(session, session.currentProcessingImage);
+                // Miganie w setInterval automatycznie pokaże ten stan
 
                 // Tymczasowa agregacja dla statystyk postępu
                 this.aggregateResults(session);

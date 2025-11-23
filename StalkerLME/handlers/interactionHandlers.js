@@ -1789,9 +1789,9 @@ async function handleButton(interaction, sharedState) {
                         .setTimestamp()
                         .setFooter({ text: `Kary dodane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${formattedDate} ${formattedTime}` });
                     
-                    await interaction.followUp({ 
+                    await interaction.followUp({
                         embeds: [punishEmbed],
-                        ephemeral: false
+                        flags: []
                     });
                     break;
                 case 'remind':
@@ -1866,9 +1866,9 @@ async function handleButton(interaction, sharedState) {
                         .setTimestamp()
                         .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${reminderFormattedDate} ${reminderFormattedTime}` });
                     
-                    await interaction.followUp({ 
+                    await interaction.followUp({
                         embeds: [reminderEmbed],
-                        ephemeral: false
+                        flags: []
                     });
                     break;
             }
