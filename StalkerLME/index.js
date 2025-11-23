@@ -209,10 +209,7 @@ client.on(Events.MessageCreate, async (message) => {
                 );
 
                 // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
-                const processedCount = results.length;
-                const totalImages = session.processedImages.length;
-
-                const confirmation = phaseService.createProcessedImagesEmbed(processedCount, totalImages, session.phase);
+                const confirmation = phaseService.createProcessedImagesEmbed(session);
 
                 session.stage = 'confirming_complete';
                 phaseService.refreshSessionTimeout(session.sessionId);

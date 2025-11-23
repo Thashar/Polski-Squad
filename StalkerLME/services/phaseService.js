@@ -1167,14 +1167,43 @@ class PhaseService {
     /**
      * Tworzy embed z potwierdzeniem przetworzonych zdjęć
      */
-    createProcessedImagesEmbed(processedCount, totalImages, phase = 1) {
-        const embed = new EmbedBuilder()
-            .setTitle('✅ Zdjęcia przetworzone')
-            .setDescription(`Przetworzono **${processedCount}** zdjęć.\nŁącznie w sesji: **${totalImages}** zdjęć.`)
-            .setColor('#00FF00')
-            .setTimestamp();
+    createProcessedImagesEmbed(session) {
+        // Oblicz statystyki (tak samo jak w updateProgress)
+        const uniqueNicks = session.aggregatedResults.size;
+        const confirmedResults = Array.from(session.aggregatedResults.values())
+            .filter(scores => scores.length >= 2 && new Set(scores).size === 1).length;
+        const unconfirmedResults = uniqueNicks - confirmedResults;
 
-        const phasePrefix = phase === 2 ? 'phase2' : 'phase1';
+        // Oblicz konflikty
+        const conflictsCount = Array.from(session.aggregatedResults.values())
+            .filter(scores => new Set(scores).size > 1).length;
+
+        // Oblicz graczy z zerem
+        const playersWithZero = Array.from(session.aggregatedResults.entries())
+            .filter(([nick, scores]) => scores.some(score => score === 0 || score === '0'))
+            .length;
+
+        const totalImages = session.processedImages.length;
+        const progressBar = this.createProgressBar(totalImages, totalImages, 'completed', true);
+
+        const phaseTitle = session.phase === 2 ? 'Faza 2' : 'Faza 1';
+        const roundText = session.phase === 2 ? ` - Runda ${session.currentRound}/3` : '';
+
+        const embed = new EmbedBuilder()
+            .setTitle(`✅ Analiza zakończona - ${phaseTitle}${roundText}`)
+            .setDescription(`${progressBar}\n\n📸 Przeanalizowano **${totalImages}/${totalImages}** zdjęć`)
+            .setColor('#00FF00')
+            .addFields(
+                { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
+                { name: '✅ Potwierdzone', value: confirmedResults.toString(), inline: true },
+                { name: '❓ Niepotwierdzone', value: unconfirmedResults.toString(), inline: true },
+                { name: '⚠️ Konflikty', value: conflictsCount.toString(), inline: true },
+                { name: '🥚 Graczy z zerem', value: playersWithZero.toString(), inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Czy chcesz analizować wyniki czy dodać więcej zdjęć?' });
+
+        const phasePrefix = session.phase === 2 ? 'phase2' : 'phase1';
 
         const row = new ActionRowBuilder()
             .addComponents(
@@ -1185,7 +1214,11 @@ class PhaseService {
                 new ButtonBuilder()
                     .setCustomId(`${phasePrefix}_complete_no`)
                     .setLabel('➕ Dodaj więcej')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`${phasePrefix}_cancel_session`)
+                    .setLabel('❌ Anuluj sesję')
+                    .setStyle(ButtonStyle.Danger)
             );
 
         return { embed, row };
