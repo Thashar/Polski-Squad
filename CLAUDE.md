@@ -25,6 +25,13 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 
 To jest kolekcja botów Discord dla Polski Squad, zawierająca **9 oddzielnych botów** z zaawansowanym systemem logowania i zarządzania:
 
+### ⚠️ WAŻNE - Środowisko Produkcyjne
+
+**KRYTYCZNE:** Boty działają na SERWERZE PRODUKCYJNYM, NIE lokalnie.
+- Logi w folderze `logs/` to logi LOKALNE z testów - NIE używaj ich do diagnostyki produkcji
+- Problemy z backupami, crashami lub działaniem botów muszą być diagnozowane na podstawie logów serwera
+- Jeśli użytkownik zgłasza problem "wczoraj działało, dziś nie" - to problem produkcyjny, nie lokalny
+
 ### Lista Botów
 1. **Rekruter Bot** - Zaawansowany system rekrutacji z OCR i kwalifikacjami klanowymi
 2. **Szkolenia Bot** - Zarządzanie wątkami treningowymi z automatycznymi przypomnieniami
@@ -454,6 +461,13 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_fallback
 2. Uruchom: `node authorize-google.js`
 3. Kliknij w link i autoryzuj aplikację
 4. Token zostanie zapisany w `token.json`
+5. **WAŻNE:** Token jest automatycznie odświeżany i zapisywany przy każdym użyciu (event listener na 'tokens')
+
+**Automatyczne Odświeżanie Tokenów:**
+- BackupManager nasłuchuje na zdarzenie `tokens` z oAuth2Client
+- Gdy Google API odświeża `access_token`, nowy token jest automatycznie zapisywany do `token.json`
+- Zapobiega to problemom z wygasłymi tokenami przy codziennych backupach
+- Logi: `🔄 Odświeżono access_token - zapisuję do pliku`
 
 #### Podsumowanie na Webhook
 
@@ -2083,6 +2097,30 @@ process.on('SIGINT', async () => {
 3. Sprawdź uprawnienia Discorda
 4. Testuj pojedynczo: `npm run botname`
 
+### Backup Google Drive Nie Działa
+
+**Problem: "Backup działał pierwszy dzień, potem przestał"**
+- **Przyczyna:** Token OAuth wygasł i nie został automatycznie odświeżony
+- **Rozwiązanie:** BackupManager ma teraz automatyczne odświeżanie tokenów (event listener na 'tokens')
+- **Weryfikacja:** Sprawdź logi czy widzisz `🔄 Odświeżono access_token - zapisuję do pliku`
+
+**Problem: "Invalid credentials" lub "401 Unauthorized"**
+1. Wygeneruj nowy token: `node authorize-google.js`
+2. Skopiuj nowy `token.json` na serwer
+3. Restart aplikacji
+4. Sprawdź czy `GOOGLE_CREDENTIALS_PATH` wskazuje na poprawny plik
+
+**Problem: "403 Forbidden"**
+1. Sprawdź uprawnienia w Google Cloud Console
+2. Upewnij się że Google Drive API jest włączone
+3. Sprawdź czy nie przekroczono limitu API (quota)
+4. Sprawdź czy aplikacja ma dostęp do Google Drive w ustawieniach konta
+
+**Problem: "Token ma więcej niż 50 refresh tokenów"**
+- Google ma limit 50 refresh tokenów per użytkownik/aplikacja
+- Stare tokeny są automatycznie unieważniane
+- **Rozwiązanie:** Użyj tylko jednego tokenu na produkcji, nie generuj nowych co dzień
+
 ---
 
 ## Historia Zmian
@@ -2090,13 +2128,14 @@ process.on('SIGINT', async () => {
 ### Listopad 2025
 
 **System Backup do Google Drive:**
-- Dodano automatyczne backupy codzienne o 2:00 w nocy
+- Dodano automatyczne backupy codzienne o 3:00 w nocy
 - Dodano manualne backupy przez komendę `/backup`
 - Integracja z Google Drive API
 - Dwa foldery: `Polski_Squad_Backups` (automatyczne, 7 dni retencji) i `Polski_Squad_Manual_Backups` (permanentne)
 - Szczegółowe logowanie błędów z klasyfikacją
 - Automatyczne podsumowania na webhook po zakończeniu backupu
 - Kompresja ZIP z poziomem 9 dla wszystkich folderów `data/` botów
+- **FIX:** Automatyczne zapisywanie odświeżonych tokenów OAuth - zapobiega wygasaniu tokenów przy codziennych backupach
 
 **StalkerLME Bot - System Kolejkowania i Faz:**
 - Globalny system kolejkowania OCR - jeden użytkownik na raz per guild

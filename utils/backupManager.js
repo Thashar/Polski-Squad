@@ -64,6 +64,25 @@ class BackupManager {
             const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
             oAuth2Client.setCredentials(token);
 
+            // Automatyczne zapisywanie odświeżonych tokenów
+            oAuth2Client.on('tokens', (tokens) => {
+                try {
+                    if (tokens.refresh_token) {
+                        // Zapisz pełny nowy token
+                        logger.info('🔄 Odświeżono token OAuth - zapisuję do pliku');
+                        fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
+                    } else {
+                        // Zaktualizuj tylko access_token (refresh_token został zachowany)
+                        const existingToken = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
+                        const updatedToken = { ...existingToken, ...tokens };
+                        logger.info('🔄 Odświeżono access_token - zapisuję do pliku');
+                        fs.writeFileSync(tokenPath, JSON.stringify(updatedToken, null, 2));
+                    }
+                } catch (error) {
+                    logger.error('❌ Błąd zapisywania odświeżonego tokenu:', error.message);
+                }
+            });
+
             this.drive = google.drive({ version: 'v3', auth: oAuth2Client });
             logger.info('✅ Google Drive API zainicjalizowane');
         } catch (error) {
