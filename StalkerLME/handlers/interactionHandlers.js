@@ -4155,6 +4155,104 @@ async function handlePhase2ManualModalSubmit(interaction, sharedState) {
     }
 }
 
+async function showPhase2FinalSummaryNewMessage(channel, session, phaseService, ocrService) {
+    logger.info(`[PHASE2] 📋 Tworzenie finalnego podsumowania ze wszystkich 3 rund...`);
+
+    try {
+        logger.info(`[PHASE2] 🔢 Rozpoczynam sumowanie wyników z 3 rund...`);
+        const summedResults = phaseService.sumPhase2Results(session);
+
+        logger.info(`[PHASE2] 📊 Obliczam statystyki...`);
+        const stats = phaseService.calculateStatistics(summedResults);
+
+        // Oblicz unikalnych użytkowników ze wszystkich 3 rund
+        const allUniqueNicks = new Set();
+        for (const roundData of session.roundsData) {
+            for (const [nick] of roundData.results) {
+                allUniqueNicks.add(nick);
+            }
+        }
+        const totalUniqueUsers = allUniqueNicks.size;
+
+        // Oblicz sumę zer z wszystkich 3 rund
+        let totalZeroCount = 0;
+        for (const roundData of session.roundsData) {
+            for (const [nick, score] of roundData.results) {
+                if (score === 0) {
+                    totalZeroCount++;
+                }
+            }
+        }
+
+        // Oblicz sumę TOP30 z 3 rund
+        let top30Sum = 0;
+        for (const roundData of session.roundsData) {
+            if (roundData.results) {
+                const roundPlayers = Array.from(roundData.results.entries())
+                    .map(([nick, score]) => ({ nick, score }))
+                    .sort((a, b) => b.score - a.score);
+
+                const roundTop30 = roundPlayers.slice(0, 30);
+                const roundTop30Sum = roundTop30.reduce((sum, player) => sum + player.score, 0);
+                top30Sum += roundTop30Sum;
+            }
+        }
+
+        logger.info(`[PHASE2] 🏆 Statystyki finalne - TOP30: ${top30Sum}, Unikalni: ${totalUniqueUsers}, Zera: ${totalZeroCount}`);
+
+        const weekInfo = phaseService.getCurrentWeekInfo();
+        const clanName = phaseService.config.roleDisplayNames[session.clan] || session.clan;
+
+        // Przygotuj opis z najważniejszymi informacjami
+        const description =
+            `**Klan:** ${clanName}\n` +
+            `**Tydzień:** ${weekInfo.weekNumber}/${weekInfo.year}\n\n` +
+            `📊 **Suma TOP30 z 3 rund:** ${top30Sum.toLocaleString('pl-PL')} pkt\n` +
+            `👥 **Unikalnych użytkowników:** ${totalUniqueUsers}\n` +
+            `🥚 **Wykrytych zer (łącznie):** ${totalZeroCount}\n\n` +
+            `✅ Przeanalizowano wszystkie 3 rundy.\n\n` +
+            `**⚠️ Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze.**\n` +
+            `**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!**`;
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Faza 2 - Finalne podsumowanie (Rundy 1-3)')
+            .setDescription(description)
+            .setColor('#00FF00')
+            .setTimestamp()
+            .setFooter({ text: 'Czy zatwierdzić i zapisać dane?' });
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('phase2_confirm_save')
+                    .setLabel('🟢 Zatwierdź')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('phase2_cancel_save')
+                    .setLabel('🔴 Anuluj')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+        // Wyślij NOWĄ wiadomość
+        const newMessage = await channel.send({
+            content: '',
+            embeds: [embed],
+            components: [row]
+        });
+
+        // Zaktualizuj session.publicInteraction na nową wiadomość
+        session.publicInteraction = newMessage;
+        session.stage = 'final_confirmation';
+
+        logger.info(`[PHASE2] ✅ Finalne podsumowanie wysłane jako nowa wiadomość: ${newMessage.id}`);
+
+    } catch (error) {
+        logger.error(`[PHASE2] ❌ Błąd w showPhase2FinalSummaryNewMessage:`, error);
+        logger.error(`[PHASE2] ❌ Error stack:`, error.stack);
+        throw error;
+    }
+}
+
 async function showPhase2FinalSummary(interaction, session, phaseService) {
     logger.info(`[PHASE2] 📋 Tworzenie finalnego podsumowania...`);
 
@@ -4275,8 +4373,9 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
 
         logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3 (nowa wiadomość: ${newMessage.id})`);
     } else {
-        // Zapisz wyniki ostatniej rundy przed pokazaniem podsumowania
-        logger.info(`[PHASE2] 💾 Zapisywanie wyników rundy 3 przed podsumowaniem...`);
+        // Runda 3 - NIE przechodzimy od razu do finalnego podsumowania
+        // Najpierw zapisz wyniki rundy 3 (tak jak rundy 1 i 2 w startNextRound)
+        logger.info(`[PHASE2] 💾 Zapisywanie wyników rundy 3...`);
         const lastRoundData = {
             round: session.currentRound,
             results: phaseService.getFinalResults(session)
@@ -4285,17 +4384,26 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
         session.roundsData.push(lastRoundData);
         logger.info(`[PHASE2] ✅ Zapisano wyniki rundy ${session.currentRound}/3. Łącznie ${session.roundsData.length} rund w roundsData`);
 
-        // Pokaż finalne podsumowanie
+        // Wyczyść dane aktualnej rundy (tak jak w startNextRound)
+        session.processedImages = [];
+        session.aggregatedResults = new Map();
+        session.conflicts = [];
+        session.resolvedConflicts = new Map();
+        session.downloadedFiles = [];
+
+        // Zaktualizuj starą wiadomość (usuń przyciski)
         await interaction.update({
-            content: '✅ Wszystkie rundy zakończone! Przygotowuję finalne podsumowanie...',
-            embeds: [],
+            content: `✅ Runda 3/3 zakończona!`,
             components: []
         });
 
+        // Wyślij NOWĄ wiadomość z finalnym podsumowaniem ze wszystkich 3 rund
+        const channel = await interaction.guild.channels.fetch(session.channelId);
+
         try {
-            await showPhase2FinalSummary(interaction, session, phaseService);
+            await showPhase2FinalSummaryNewMessage(channel, session, phaseService, ocrService);
         } catch (error) {
-            logger.error(`[PHASE2] ❌ Błąd podczas wyświetlania podsumowania:`, error);
+            logger.error(`[PHASE2] ❌ Błąd podczas wyświetlania finalnego podsumowania:`, error);
             throw error;
         }
     }
