@@ -197,8 +197,12 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
+        // Pobierz timestamp wygaśnięcia OCR z kolejki
+        const activeOCR = ocrService.activeProcessing.get(guildId);
+        const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
         // Utwórz sesję punishment
-        const sessionId = punishmentService.createSession(userId, guildId, interaction.channelId);
+        const sessionId = punishmentService.createSession(userId, guildId, interaction.channelId, ocrExpiresAt);
         const session = punishmentService.getSession(sessionId);
         session.publicInteraction = interaction;
 
@@ -306,8 +310,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
+        // Pobierz timestamp wygaśnięcia OCR z kolejki
+        const activeOCR = ocrService.activeProcessing.get(guildId);
+        const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
         // Utwórz sesję przypomnienia
-        const sessionId = reminderService.createSession(userId, guildId, interaction.channelId, userClanRoleId);
+        const sessionId = reminderService.createSession(userId, guildId, interaction.channelId, userClanRoleId, ocrExpiresAt);
         const session = reminderService.getSession(sessionId);
         session.publicInteraction = interaction;
 
@@ -2846,6 +2854,10 @@ async function handlePhase1Command(interaction, sharedState) {
         await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
+        // Pobierz timestamp wygaśnięcia OCR z kolejki
+        const activeOCR = ocrService.activeProcessing.get(guildId);
+        const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
         const existingData = await databaseService.checkPhase1DataExists(
@@ -2878,7 +2890,9 @@ async function handlePhase1Command(interaction, sharedState) {
         const sessionId = phaseService.createSession(
             interaction.user.id,
             interaction.guild.id,
-            interaction.channelId
+            interaction.channelId,
+            1, // phase
+            ocrExpiresAt // timestamp OCR
         );
 
         const session = phaseService.getSession(sessionId);
@@ -3028,10 +3042,16 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
 
     // Nadpisz - sesja OCR już aktywna (została rozpoczęta w handlePhase1Command)
 
+    // Pobierz timestamp wygaśnięcia OCR z kolejki
+    const activeOCR = ocrService.activeProcessing.get(interaction.guild.id);
+    const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
     const sessionId = phaseService.createSession(
         interaction.user.id,
         interaction.guild.id,
-        interaction.channelId
+        interaction.channelId,
+        1, // phase
+        ocrExpiresAt // timestamp OCR
     );
 
     const session = phaseService.getSession(sessionId);
@@ -3609,6 +3629,10 @@ async function handlePhase2Command(interaction, sharedState) {
         await ocrService.startOCRSession(guildId, userId, commandName);
         logger.info(`[OCR-QUEUE] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
+        // Pobierz timestamp wygaśnięcia OCR z kolejki
+        const activeOCR = ocrService.activeProcessing.get(guildId);
+        const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
         // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
         const weekInfo = phaseService.getCurrentWeekInfo();
         const existingData = await databaseService.checkPhase2DataExists(
@@ -3642,7 +3666,8 @@ async function handlePhase2Command(interaction, sharedState) {
             interaction.user.id,
             interaction.guild.id,
             interaction.channelId,
-            2 // phase 2
+            2, // phase 2
+            ocrExpiresAt // timestamp OCR
         );
 
         const session = phaseService.getSession(sessionId);
@@ -3713,11 +3738,16 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
 
     // Sesja OCR już aktywna (została rozpoczęta w handlePhase2Command)
 
+    // Pobierz timestamp wygaśnięcia OCR z kolejki
+    const activeOCR = ocrService.activeProcessing.get(interaction.guild.id);
+    const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
     const sessionId = phaseService.createSession(
         interaction.user.id,
         interaction.guild.id,
         interaction.channelId,
-        2
+        2, // phase 2
+        ocrExpiresAt // timestamp OCR
     );
 
     const session = phaseService.getSession(sessionId);

@@ -332,7 +332,7 @@ class PunishmentService {
     /**
      * Tworzy nową sesję dla /punish
      */
-    createSession(userId, guildId, channelId) {
+    createSession(userId, guildId, channelId, ocrExpiresAt = null) {
         const sessionId = `punish_${userId}_${Date.now()}`;
 
         const session = {
@@ -346,7 +346,8 @@ class PunishmentService {
             uniqueNicks: new Set(), // unikalne nicki znalezione
             createdAt: Date.now(),
             timeout: null,
-            publicInteraction: null
+            publicInteraction: null,
+            ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
         };
 
         this.activeSessions.set(sessionId, session);

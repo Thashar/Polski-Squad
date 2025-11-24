@@ -274,7 +274,7 @@ class ReminderService {
     /**
      * Tworzy nową sesję dla /remind
      */
-    createSession(userId, guildId, channelId, userClanRoleId) {
+    createSession(userId, guildId, channelId, userClanRoleId, ocrExpiresAt = null) {
         const sessionId = `remind_${userId}_${Date.now()}`;
 
         const session = {
@@ -289,7 +289,8 @@ class ReminderService {
             uniqueNicks: new Set(), // unikalne nicki znalezione
             createdAt: Date.now(),
             timeout: null,
-            publicInteraction: null
+            publicInteraction: null,
+            ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
         };
 
         this.activeSessions.set(sessionId, session);

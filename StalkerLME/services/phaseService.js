@@ -400,7 +400,7 @@ class PhaseService {
     /**
      * Tworzy nową sesję Fazy 1
      */
-    createSession(userId, guildId, channelId, phase = 1) {
+    createSession(userId, guildId, channelId, phase = 1, ocrExpiresAt = null) {
         const sessionId = `${userId}_${Date.now()}`;
 
         const session = {
@@ -423,7 +423,8 @@ class PhaseService {
             publicInteraction: null, // interakcja do aktualizacji postępu (PUBLICZNA)
             roleNicksSnapshotPath: null, // ścieżka do snapshotu nicków z roli
             isProcessing: false, // flaga czy aktualnie przetwarza zdjęcia (blokuje anulowanie)
-            cancelled: false // flaga czy sesja została anulowana (do sprawdzania w pętli)
+            cancelled: false, // flaga czy sesja została anulowana (do sprawdzania w pętli)
+            ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
         };
 
         this.activeSessions.set(sessionId, session);
@@ -819,8 +820,17 @@ class PhaseService {
                     { name: '❓ Niepotwierdzone', value: unconfirmedResults.toString(), inline: true },
                     { name: '⚠️ Konflikty', value: conflictsCount.toString(), inline: true },
                     { name: '🥚 Graczy z zerem', value: playersWithZero.toString(), inline: true }
-                )
-                .setTimestamp()
+                );
+
+            // Dodaj timestamp OCR jeśli dostępny
+            if (session.ocrExpiresAt) {
+                const ocrExpiryTimestamp = Math.floor(session.ocrExpiresAt / 1000);
+                embed.addFields(
+                    { name: '⏱️ OCR wygasa', value: `<t:${ocrExpiryTimestamp}:R>`, inline: false }
+                );
+            }
+
+            embed.setTimestamp()
                 .setFooter({ text: 'Przetwarzanie...' });
 
             // Spróbuj zaktualizować - obsługuje zarówno Interaction jak i Message
@@ -1145,8 +1155,7 @@ class PhaseService {
                 '   • Rób screeny zgodnie z zasadą 1-9, +4, +5, +4, +5... 31-39, 32-40.\n' +
                 '**3.** Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze.\n' +
                 '**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!**\n\n' +
-                '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**\n\n' +
-                `⏱️ Czas wygaśnięcia: <t:${expiryTimestamp}:R>`
+                '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**'
             )
             .setColor('#0099FF')
             .setTimestamp()
