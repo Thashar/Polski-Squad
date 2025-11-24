@@ -826,7 +826,7 @@ class PhaseService {
             if (session.ocrExpiresAt) {
                 const ocrExpiryTimestamp = Math.floor(session.ocrExpiresAt / 1000);
                 embed.addFields(
-                    { name: '⏱️ OCR wygasa', value: `<t:${ocrExpiryTimestamp}:R>`, inline: false }
+                    { name: '⏱️ OCR wygasa', value: `<t:${ocrExpiryTimestamp}:R>`, inline: true }
                 );
             }
 
