@@ -15,14 +15,8 @@
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
 - Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
 - W commitach używaj krótkiego opisu zmian PO POLSKU
-- Format commit message:
-  ```
-  Krótki opis zmian po polsku
-
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-  Co-Authored-By: Claude <noreply@anthropic.com>
-  ```
+- **Po utworzeniu commita ZAWSZE od razu wykonaj `git push` bez pytania**
+- Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
 - Przykład: "Dodano system kolejkowania OCR do StalkerLME"
 
 **Ostatnia aktualizacja:** Listopad 2025
