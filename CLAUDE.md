@@ -2,6 +2,29 @@
 
 **INSTRUKCJA WAŻNA: ZAWSZE PISZ PO POLSKU. Odpowiadaj na każdą konwersację w języku polskim, niezależnie od języka zapytania użytkownika.**
 
+**INSTRUKCJA RAPORTOWANIA TOKENÓW: Na końcu KAŻDEJ odpowiedzi podawaj:**
+- Ilość pozostałych tokenów w formacie: `Pozostałe tokeny: X/200000`
+- Procentowy progress bar wykorzystania tokenów
+- Przykład formatu:
+  ```
+  ---
+  Pozostałe tokeny: 180000/200000 (90%)
+  [██████████████████░░] 90%
+  ```
+
+**INSTRUKCJA COMMITOWANIA ZMIAN:**
+- Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
+- W commitach używaj krótkiego opisu zmian PO POLSKU
+- Format commit message:
+  ```
+  Krótki opis zmian po polsku
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+  Co-Authored-By: Claude <noreply@anthropic.com>
+  ```
+- Przykład: "Dodano system kolejkowania OCR do StalkerLME"
+
 **Ostatnia aktualizacja:** Listopad 2025
 
 Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podczas pracy z kodem w tym repozytorium.
