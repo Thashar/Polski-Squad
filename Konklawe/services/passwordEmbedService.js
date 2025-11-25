@@ -243,7 +243,7 @@ class PasswordEmbedService {
                 inline: true
             });
 
-            // POLE 5: Liczba graczy (inline)
+            // POLE 6: Liczba graczy (inline) - wyświetl listę graczy z próbami
             const activePlayers = Object.keys(this.gameService.attempts).length;
             const totalAttempts = Object.values(this.gameService.attempts).reduce((sum, attempts) => sum + attempts, 0);
             fields.push({
@@ -252,32 +252,37 @@ class PasswordEmbedService {
                 inline: true
             });
 
-            // POLE 6: Ważne informacje (inline)
-            fields.push({
-                name: '📢 Ważne informacje',
-                value: '• Przypomnienie po **15 minutach**\n' +
-                       '• Drugie przypomnienie po **30 minutach**\n' +
-                       '• Utrata roli po **1 godzinie**',
-                inline: true
-            });
-
-            // POLE 7: Zaplanowane podpowiedzi (tylko jeśli są)
+            // POLE 7: Zaplanowane podpowiedzi (zawsze widoczne)
             if (this.scheduledHintsService) {
                 const scheduledHints = this.scheduledHintsService.getActiveScheduledHints();
+                let scheduledText;
+
                 if (scheduledHints.length > 0) {
-                    const scheduledText = scheduledHints.map((hint, index) => {
+                    scheduledText = scheduledHints.map((hint, index) => {
                         const date = new Date(hint.scheduledFor);
                         const timestamp = Math.floor(date.getTime() / 1000);
                         return `**${index + 1}.** <t:${timestamp}:f> - "${hint.hint.substring(0, 50)}${hint.hint.length > 50 ? '...' : ''}"`;
                     }).join('\n');
-
-                    fields.push({
-                        name: `📅 Zaplanowane podpowiedzi (${scheduledHints.length})`,
-                        value: scheduledText.length > 1024 ? scheduledText.substring(0, 1021) + '...' : scheduledText,
-                        inline: false
-                    });
+                } else {
+                    scheduledText = 'Brak zaplanowanych podpowiedzi';
                 }
+
+                fields.push({
+                    name: `📅 Zaplanowane podpowiedzi (${scheduledHints.length}/10)`,
+                    value: scheduledText.length > 1024 ? scheduledText.substring(0, 1021) + '...' : scheduledText,
+                    inline: false
+                });
             }
+
+            // POLE 8: Ważne informacje (inline)
+            fields.push({
+                name: '📢 Ważne informacje',
+                value: '• Przypomnienie po **15 minutach**\n' +
+                       '• Drugie przypomnienie po **30 minutach**\n' +
+                       '• Utrata roli po **1 godzinie**\n' +
+                       '• Planowanie: max **10**, do **24h** od ostatniej',
+                inline: true
+            });
 
             embed.addFields(fields);
 
@@ -381,32 +386,37 @@ class PasswordEmbedService {
                 inline: true
             });
 
-            // POLE 6: Ważne informacje (inline)
-            fields.push({
-                name: '📢 Ważne informacje',
-                value: '• Powiadomienia **co 6 godzin**\n' +
-                       '• Reset po **24h** bez podpowiedzi\n' +
-                       '• Papież traci rolę przy resecie',
-                inline: true
-            });
-
-            // POLE 7: Zaplanowane podpowiedzi (tylko jeśli są)
+            // POLE 6: Zaplanowane podpowiedzi (zawsze widoczne)
             if (this.scheduledHintsService) {
                 const scheduledHints = this.scheduledHintsService.getActiveScheduledHints();
+                let scheduledText;
+
                 if (scheduledHints.length > 0) {
-                    const scheduledText = scheduledHints.map((hint, index) => {
+                    scheduledText = scheduledHints.map((hint, index) => {
                         const date = new Date(hint.scheduledFor);
                         const timestamp = Math.floor(date.getTime() / 1000);
                         return `**${index + 1}.** <t:${timestamp}:f> - "${hint.hint.substring(0, 50)}${hint.hint.length > 50 ? '...' : ''}"`;
                     }).join('\n');
-
-                    fields.push({
-                        name: `📅 Zaplanowane podpowiedzi (${scheduledHints.length})`,
-                        value: scheduledText.length > 1024 ? scheduledText.substring(0, 1021) + '...' : scheduledText,
-                        inline: false
-                    });
+                } else {
+                    scheduledText = 'Brak zaplanowanych podpowiedzi';
                 }
+
+                fields.push({
+                    name: `📅 Zaplanowane podpowiedzi (${scheduledHints.length}/10)`,
+                    value: scheduledText.length > 1024 ? scheduledText.substring(0, 1021) + '...' : scheduledText,
+                    inline: false
+                });
             }
+
+            // POLE 7: Ważne informacje (inline)
+            fields.push({
+                name: '📢 Ważne informacje',
+                value: '• Powiadomienia **co 6 godzin**\n' +
+                       '• Reset po **24h** bez podpowiedzi\n' +
+                       '• Papież traci rolę przy resecie\n' +
+                       '• Planowanie: max **10**, do **24h** od ostatniej',
+                inline: true
+            });
 
             embed.addFields(fields);
 

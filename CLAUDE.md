@@ -3,13 +3,13 @@
 **INSTRUKCJA WAŻNA: ZAWSZE PISZ PO POLSKU. Odpowiadaj na każdą konwersację w języku polskim, niezależnie od języka zapytania użytkownika.**
 
 **INSTRUKCJA RAPORTOWANIA TOKENÓW: Na końcu KAŻDEJ odpowiedzi podawaj:**
-- Ilość pozostałych tokenów w formacie: `Pozostałe tokeny: X/200000`
+- Ilość zużytych tokenów w formacie: `Zużyte tokeny: X/200000`
 - Procentowy progress bar wykorzystania tokenów
 - Przykład formatu:
   ```
   ---
-  Pozostałe tokeny: 180000/200000 (90%)
-  [██████████████████░░] 90%
+  Zużyte tokeny: 20000/200000 (10%)
+  [██░░░░░░░░░░░░░░░░░░] 10%
   ```
 
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
