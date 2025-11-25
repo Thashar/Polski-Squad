@@ -279,7 +279,8 @@ class PasswordEmbedService {
                 name: '📢 Ważne informacje',
                 value: '• Przypomnienie po **15 minutach**\n' +
                        '• Drugie przypomnienie po **30 minutach**\n' +
-                       '• Utrata roli po **1 godzinie**',
+                       '• Utrata roli po **1 godzinie**\n' +
+                       '• Planowanie: max **10**, do **24h** od ostatniej',
                 inline: true
             });
 
@@ -412,7 +413,8 @@ class PasswordEmbedService {
                 name: '📢 Ważne informacje',
                 value: '• Powiadomienia **co 6 godzin**\n' +
                        '• Reset po **24h** bez podpowiedzi\n' +
-                       '• Papież traci rolę przy resecie',
+                       '• Papież traci rolę przy resecie\n' +
+                       '• Planowanie: max **10**, do **24h** od ostatniej',
                 inline: true
             });
 
