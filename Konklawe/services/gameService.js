@@ -4,9 +4,10 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
 class GameService {
-    constructor(config, dataService) {
+    constructor(config, dataService, scheduledHintsService = null) {
         this.config = config;
         this.dataService = dataService;
+        this.scheduledHintsService = scheduledHintsService;
 
         // Zmienne stanu gry
         this.trigger = null;
@@ -204,15 +205,29 @@ class GameService {
      * @param {string} newTrigger - Nowe hasło
      * @param {string} setByUserId - ID użytkownika który ustawił hasło
      */
-    setNewPassword(newTrigger, setByUserId = null) {
+    async setNewPassword(newTrigger, setByUserId = null) {
         this.trigger = newTrigger;
         this.triggerSetTimestamp = new Date();
         this.triggerClearedTimestamp = null;
         this.triggerSetBy = setByUserId;
         this.clearAttempts();
         this.resetHints();
+
+        // Wyczyść zaplanowane podpowiedzi przy zmianie hasła
+        if (this.scheduledHintsService) {
+            await this.scheduledHintsService.clearAllScheduled();
+        }
+
         this.saveTriggerState();
         logger.info(`🔑 Nowe hasło: ${this.trigger} (ustawione o ${this.triggerSetTimestamp.toISOString()}) przez ${setByUserId || 'system'}`);
+    }
+
+    /**
+     * Ustawia scheduledHintsService
+     * @param {ScheduledHintsService} scheduledHintsService - Serwis zaplanowanych podpowiedzi
+     */
+    setScheduledHintsService(scheduledHintsService) {
+        this.scheduledHintsService = scheduledHintsService;
     }
 
     /**

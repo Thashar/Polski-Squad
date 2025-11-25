@@ -10,6 +10,7 @@ const TimerService = require('./services/timerService');
 const RankingService = require('./services/rankingService');
 const CommandService = require('./services/commandService');
 const PasswordEmbedService = require('./services/passwordEmbedService');
+const ScheduledHintsService = require('./services/scheduledHintsService');
 
 // Import handlerów
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -31,7 +32,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService;
 let interactionHandler, messageHandler;
 
 /**
@@ -39,27 +40,45 @@ let interactionHandler, messageHandler;
  */
 async function initializeServices() {
     dataService = new DataService();
+
+    // Najpierw utwórz serwisy podstawowe
     gameService = new GameService(config, dataService);
     timerService = new TimerService(config, gameService);
     rankingService = new RankingService(config, gameService);
     commandService = new CommandService(config);
-    passwordEmbedService = new PasswordEmbedService(config, gameService);
+
+    // Utwórz scheduledHintsService (wymaga gameService, timerService, passwordEmbedService)
+    // passwordEmbedService będzie ustawiony później
+    scheduledHintsService = new ScheduledHintsService(config, gameService, timerService, null);
+
+    // Utwórz passwordEmbedService z scheduledHintsService
+    passwordEmbedService = new PasswordEmbedService(config, gameService, scheduledHintsService);
+
+    // Ustaw passwordEmbedService w scheduledHintsService
+    scheduledHintsService.passwordEmbedService = passwordEmbedService;
 
     // Inicjalizacja centralnego systemu zarządzania nickami
     nicknameManager = new NicknameManager();
     await nicknameManager.initialize();
 
-    // Ustawienie klienta w timerService i passwordEmbedService
+    // Ustawienie klienta w serwisach
     timerService.setClient(client);
     passwordEmbedService.setClient(client);
+    scheduledHintsService.setClient(client);
     timerService.setPasswordEmbedService(passwordEmbedService);
 
-    // Inicjalizacja handlerów z nickname manager i passwordEmbedService
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService);
+    // Ustaw scheduledHintsService w gameService
+    gameService.setScheduledHintsService(scheduledHintsService);
+
+    // Inicjalizacja handlerów z wszystkimi serwisami
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService);
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService);
 
     // Inicjalizacja danych gry
     gameService.initializeGameData();
+
+    // Sprawdź przegapione podpowiedzi przy starcie
+    await scheduledHintsService.checkMissedHints();
 }
 
 /**
