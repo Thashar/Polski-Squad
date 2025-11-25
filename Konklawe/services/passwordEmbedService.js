@@ -5,14 +5,23 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Konklawe');
 
 class PasswordEmbedService {
-    constructor(config, gameService) {
+    constructor(config, gameService, scheduledHintsService = null) {
         this.config = config;
         this.gameService = gameService;
+        this.scheduledHintsService = scheduledHintsService;
         this.client = null;
         this.embedMessageId = null; // ID wiadomości z embedem
         this.lastUpdateTimestamp = 0; // Timestamp ostatniej aktualizacji
         this.pendingUpdate = false; // Czy jest zaplanowana aktualizacja
         this.updateCooldown = 1000; // Cooldown w milisekundach (1 sekunda)
+    }
+
+    /**
+     * Ustawia scheduledHintsService
+     * @param {ScheduledHintsService} scheduledHintsService - Serwis zaplanowanych podpowiedzi
+     */
+    setScheduledHintsService(scheduledHintsService) {
+        this.scheduledHintsService = scheduledHintsService;
     }
 
     /**
@@ -252,12 +261,30 @@ class PasswordEmbedService {
                 inline: true
             });
 
+            // POLE 7: Zaplanowane podpowiedzi (tylko jeśli są)
+            if (this.scheduledHintsService) {
+                const scheduledHints = this.scheduledHintsService.getActiveScheduledHints();
+                if (scheduledHints.length > 0) {
+                    const scheduledText = scheduledHints.map((hint, index) => {
+                        const date = new Date(hint.scheduledFor);
+                        const timestamp = Math.floor(date.getTime() / 1000);
+                        return `**${index + 1}.** <t:${timestamp}:f> - "${hint.hint.substring(0, 50)}${hint.hint.length > 50 ? '...' : ''}"`;
+                    }).join('\n');
+
+                    fields.push({
+                        name: `📅 Zaplanowane podpowiedzi (${scheduledHints.length})`,
+                        value: scheduledText.length > 1024 ? scheduledText.substring(0, 1021) + '...' : scheduledText,
+                        inline: false
+                    });
+                }
+            }
+
             embed.addFields(fields);
 
-            // Przyciski: Zmień hasło i Dodaj podpowiedź
+            // Przyciski: Zmień hasło, Dodaj podpowiedź, Zaplanuj podpowiedź, Usuń zaplanowane
             const changePasswordButton = new ButtonBuilder()
                 .setCustomId('password_change')
-                .setLabel('Zmień aktualne hasło')
+                .setLabel('Zmień hasło')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('🔄');
 
@@ -267,7 +294,21 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💡');
 
-            components = [new ActionRowBuilder().addComponents(changePasswordButton, addHintButton)];
+            const scheduleHintButton = new ButtonBuilder()
+                .setCustomId('hint_schedule')
+                .setLabel('Zaplanuj podpowiedź')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('📅');
+
+            const removeScheduledButton = new ButtonBuilder()
+                .setCustomId('hint_remove_scheduled')
+                .setLabel('Usuń zaplanowane')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🗑️');
+
+            components = [
+                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, scheduleHintButton, removeScheduledButton)
+            ];
         }
         // PRZYPADEK 4: Hasło ustawione, są podpowiedzi
         else {
@@ -349,12 +390,30 @@ class PasswordEmbedService {
                 inline: true
             });
 
+            // POLE 7: Zaplanowane podpowiedzi (tylko jeśli są)
+            if (this.scheduledHintsService) {
+                const scheduledHints = this.scheduledHintsService.getActiveScheduledHints();
+                if (scheduledHints.length > 0) {
+                    const scheduledText = scheduledHints.map((hint, index) => {
+                        const date = new Date(hint.scheduledFor);
+                        const timestamp = Math.floor(date.getTime() / 1000);
+                        return `**${index + 1}.** <t:${timestamp}:f> - "${hint.hint.substring(0, 50)}${hint.hint.length > 50 ? '...' : ''}"`;
+                    }).join('\n');
+
+                    fields.push({
+                        name: `📅 Zaplanowane podpowiedzi (${scheduledHints.length})`,
+                        value: scheduledText.length > 1024 ? scheduledText.substring(0, 1021) + '...' : scheduledText,
+                        inline: false
+                    });
+                }
+            }
+
             embed.addFields(fields);
 
-            // Przyciski: Zmień hasło i Dodaj podpowiedź
+            // Przyciski: Zmień hasło, Dodaj podpowiedź, Zaplanuj podpowiedź, Usuń zaplanowane
             const changePasswordButton = new ButtonBuilder()
                 .setCustomId('password_change')
-                .setLabel('Zmień aktualne hasło')
+                .setLabel('Zmień hasło')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('🔄');
 
@@ -364,7 +423,21 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💡');
 
-            components = [new ActionRowBuilder().addComponents(changePasswordButton, addHintButton)];
+            const scheduleHintButton = new ButtonBuilder()
+                .setCustomId('hint_schedule')
+                .setLabel('Zaplanuj podpowiedź')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('📅');
+
+            const removeScheduledButton = new ButtonBuilder()
+                .setCustomId('hint_remove_scheduled')
+                .setLabel('Usuń zaplanowane')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🗑️');
+
+            components = [
+                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, scheduleHintButton, removeScheduledButton)
+            ];
         }
 
         return { embed, components };

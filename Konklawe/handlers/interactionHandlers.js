@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const VirtuttiService = require('../services/virtuttiService');
@@ -7,13 +7,14 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
         this.nicknameManager = nicknameManager;
         this.passwordEmbedService = passwordEmbedService;
+        this.scheduledHintsService = scheduledHintsService;
         this.virtuttiService = new VirtuttiService(config);
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
         
@@ -45,6 +46,16 @@ class InteractionHandler {
 
         if (customId === 'hint_add') {
             await this.handleHintButton(interaction);
+            return;
+        }
+
+        if (customId === 'hint_schedule') {
+            await this.handleScheduleHintButton(interaction);
+            return;
+        }
+
+        if (customId === 'hint_remove_scheduled') {
+            await this.handleRemoveScheduledButton(interaction);
             return;
         }
 
@@ -115,7 +126,9 @@ class InteractionHandler {
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleSelectMenuInteraction(interaction) {
-        // Usunięto obsługę select menu - używamy tylko przycisków
+        if (interaction.customId === 'remove_scheduled_select') {
+            await this.handleRemoveScheduledSelect(interaction);
+        }
     }
 
     /**
@@ -182,7 +195,7 @@ class InteractionHandler {
                 .setFooter({ text: 'Konklawe - System podpowiedzi' });
             
             if (this.gameService.hints.length === 0) {
-                embed.setDescription('🚫 Brak aktualnych podpowiedzi.\n\nPapież może dodać podpowiedź używając `/podpowiedz`.');
+                embed.setDescription('🚫 Brak aktualnych podpowiedzi.\n\nPapież może dodać podpowiedź używając przycisku "Dodaj podpowiedź" na kanale z hasłem.');
             } else {
                 const hintsList = this.gameService.hints.map((hint, index) => {
                     const hintNumber = (index + 1).toString().padStart(2, '0');
@@ -1352,6 +1365,8 @@ class InteractionHandler {
             await this.handlePasswordModalSubmit(interaction, modalId);
         } else if (modalId === 'hint_add_modal') {
             await this.handleHintModalSubmit(interaction);
+        } else if (modalId === 'hint_schedule_modal') {
+            await this.handleScheduleHintModalSubmit(interaction);
         }
     }
 
@@ -1484,7 +1499,7 @@ class InteractionHandler {
     async applyNicknameCurse(targetMember, interaction, durationMinutes) {
         const userId = targetMember.user.id; // POPRAWKA: używaj user.id jak w innych botach
         const durationMs = durationMinutes * 60 * 1000;
-        
+
         try {
             // Zapisz oryginalny nick w centralnym systemie
             await this.nicknameManager.saveOriginalNickname(
@@ -1493,14 +1508,14 @@ class InteractionHandler {
                 targetMember,
                 durationMs
             );
-            
+
             // Aplikuj klątwę
             const originalDisplayName = targetMember.displayName;
             const cursedNickname = `${this.config.virtuttiPapajlari.forcedNickname} ${originalDisplayName}`;
-            
+
             await targetMember.setNickname(cursedNickname);
             logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${cursedNickname}"`);
-            
+
             // Timer do automatycznego przywrócenia
             setTimeout(async () => {
                 try {
@@ -1512,10 +1527,265 @@ class InteractionHandler {
                     logger.error(`❌ Błąd automatycznego przywracania nicku: ${error.message}`);
                 }
             }, durationMs);
-            
+
         } catch (error) {
             // Rzuć błąd dalej - zostanie obsłużony w funkcji wywołującej
             throw error;
+        }
+    }
+
+    /**
+     * Obsługuje przycisk "Zaplanuj podpowiedź"
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleScheduleHintButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może planować podpowiedzi!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy użytkownik jest na kanale trigger
+        if (interaction.channel.id !== this.config.channels.trigger) {
+            return await interaction.reply({
+                content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy jest aktywne hasło
+        if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
+            return await interaction.reply({
+                content: '⚠️ Brak aktywnego hasła do którego można dodać podpowiedź!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź limit zaplanowanych
+        if (this.scheduledHintsService) {
+            const activeScheduled = this.scheduledHintsService.getActiveScheduledHints();
+            if (activeScheduled.length >= 10) {
+                return await interaction.reply({
+                    content: '⚠️ Osiągnięto limit 10 zaplanowanych podpowiedzi!',
+                    ephemeral: true
+                });
+            }
+        }
+
+        // Utwórz modal z polami: data, czas, treść
+        const modal = new ModalBuilder()
+            .setCustomId('hint_schedule_modal')
+            .setTitle('Zaplanuj podpowiedź');
+
+        const dateInput = new TextInputBuilder()
+            .setCustomId('schedule_date')
+            .setLabel('Data ujawnienia (DD.MM.RRRR)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('np. 25.11.2025')
+            .setMinLength(10)
+            .setMaxLength(10)
+            .setRequired(true);
+
+        const timeInput = new TextInputBuilder()
+            .setCustomId('schedule_time')
+            .setLabel('Godzina ujawnienia (HH:MM)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('np. 18:00')
+            .setMinLength(5)
+            .setMaxLength(5)
+            .setRequired(true);
+
+        const hintInput = new TextInputBuilder()
+            .setCustomId('hint_text')
+            .setLabel('Treść podpowiedzi')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Treść podpowiedzi...')
+            .setMinLength(1)
+            .setMaxLength(500)
+            .setRequired(true);
+
+        const row1 = new ActionRowBuilder().addComponents(dateInput);
+        const row2 = new ActionRowBuilder().addComponents(timeInput);
+        const row3 = new ActionRowBuilder().addComponents(hintInput);
+
+        modal.addComponents(row1, row2, row3);
+
+        await interaction.showModal(modal);
+    }
+
+    /**
+     * Obsługuje submit modalu planowania podpowiedzi
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleScheduleHintModalSubmit(interaction) {
+        const dateString = interaction.fields.getTextInputValue('schedule_date').trim();
+        const timeString = interaction.fields.getTextInputValue('schedule_time').trim();
+        const hintText = interaction.fields.getTextInputValue('hint_text').trim();
+
+        if (!this.scheduledHintsService) {
+            return await interaction.reply({
+                content: '❌ Serwis planowania podpowiedzi nie jest dostępny!',
+                ephemeral: true
+            });
+        }
+
+        // Defer reply
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            // Parsuj datę i czas
+            const scheduledDate = this.scheduledHintsService.parseDateTime(dateString, timeString);
+
+            if (!scheduledDate) {
+                return await interaction.editReply({
+                    content: `❌ Nieprawidłowy format daty lub czasu!\n\nUżyj formatu:\n• Data: **DD.MM.RRRR** (np. 25.11.2025)\n• Czas: **HH:MM** (np. 18:00)`
+                });
+            }
+
+            // Zaplanuj podpowiedź
+            const result = await this.scheduledHintsService.scheduleHint(
+                hintText,
+                scheduledDate,
+                interaction.user.id,
+                interaction.user.tag
+            );
+
+            if (!result.success) {
+                return await interaction.editReply({
+                    content: `❌ ${result.error}`
+                });
+            }
+
+            // Zaktualizuj embed
+            if (this.passwordEmbedService) {
+                await this.passwordEmbedService.updateEmbed(false);
+            }
+
+            const timestamp = Math.floor(scheduledDate.getTime() / 1000);
+            await interaction.editReply({
+                content: `✅ Podpowiedź została zaplanowana!\n\n📅 Ujawnienie: <t:${timestamp}:F> (<t:${timestamp}:R>)\n💡 Treść: "${hintText}"`
+            });
+
+            logger.info(`📅 ${interaction.user.tag} zaplanował podpowiedź na ${scheduledDate.toISOString()}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas planowania podpowiedzi: ${error.message}`);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas planowania podpowiedzi.'
+            });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk "Usuń zaplanowane"
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleRemoveScheduledButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może usuwać zaplanowane podpowiedzi!',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy użytkownik jest na kanale trigger
+        if (interaction.channel.id !== this.config.channels.trigger) {
+            return await interaction.reply({
+                content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
+                ephemeral: true
+            });
+        }
+
+        if (!this.scheduledHintsService) {
+            return await interaction.reply({
+                content: '❌ Serwis planowania podpowiedzi nie jest dostępny!',
+                ephemeral: true
+            });
+        }
+
+        // Pobierz zaplanowane podpowiedzi
+        const scheduledHints = this.scheduledHintsService.getActiveScheduledHints();
+
+        if (scheduledHints.length === 0) {
+            return await interaction.reply({
+                content: '⚠️ Brak zaplanowanych podpowiedzi do usunięcia!',
+                ephemeral: true
+            });
+        }
+
+        // Utwórz select menu
+        const options = scheduledHints.map((hint, index) => {
+            const date = new Date(hint.scheduledFor);
+            const dateStr = date.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+            const hintPreview = hint.hint.substring(0, 50) + (hint.hint.length > 50 ? '...' : '');
+
+            return {
+                label: `${index + 1}. ${dateStr}`,
+                description: hintPreview,
+                value: hint.id
+            };
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('remove_scheduled_select')
+            .setPlaceholder('Wybierz podpowiedź do usunięcia')
+            .addOptions(options);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        await interaction.reply({
+            content: '🗑️ **Wybierz zaplanowaną podpowiedź do usunięcia:**',
+            components: [row],
+            ephemeral: true
+        });
+    }
+
+    /**
+     * Obsługuje wybór z select menu usuwania zaplanowanych
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleRemoveScheduledSelect(interaction) {
+        const hintId = interaction.values[0];
+
+        if (!this.scheduledHintsService) {
+            return await interaction.reply({
+                content: '❌ Serwis planowania podpowiedzi nie jest dostępny!',
+                ephemeral: true
+            });
+        }
+
+        // Defer update
+        await interaction.deferUpdate();
+
+        try {
+            const removed = await this.scheduledHintsService.removeScheduledHint(hintId);
+
+            if (!removed) {
+                return await interaction.followUp({
+                    content: '❌ Nie znaleziono podpowiedzi do usunięcia!',
+                    ephemeral: true
+                });
+            }
+
+            // Zaktualizuj embed
+            if (this.passwordEmbedService) {
+                await this.passwordEmbedService.updateEmbed(false);
+            }
+
+            await interaction.editReply({
+                content: '✅ Zaplanowana podpowiedź została usunięta!',
+                components: []
+            });
+
+            logger.info(`🗑️ ${interaction.user.tag} usunął zaplanowaną podpowiedź ${hintId}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas usuwania zaplanowanej podpowiedzi: ${error.message}`);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas usuwania podpowiedzi.',
+                components: []
+            });
         }
     }
 
