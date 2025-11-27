@@ -94,7 +94,17 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj centralny system zarządzania nickami
     nicknameManager = new NicknameManager();
     await nicknameManager.initialize();
-    
+
+    // Przywróć nicki dla wygasłych efektów (klątwy z Konklawe)
+    try {
+        const result = await nicknameManager.restoreExpiredEffects(client);
+        if (result.restored > 0) {
+            logger.info(`✅ Przywrócono ${result.restored} nicków po restarcie bota (wygasłe efekty)`);
+        }
+    } catch (error) {
+        logger.error('❌ Błąd przywracania wygasłych efektów:', error);
+    }
+
     // Inicjalizuj reactionRoleService z nickname manager
     reactionRoleService = new ReactionRoleService(config, nicknameManager);
     

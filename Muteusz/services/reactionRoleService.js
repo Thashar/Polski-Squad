@@ -66,6 +66,9 @@ class ReactionRoleService {
         this.client = client;
         await this.restoreTimersFromFile();
         // USUNIĘTO: restoreNicknamesFromFile() - zastąpione centralnym NicknameManager
+
+        // Synchronizuj wygasłe flagi (efekty FLAG bez timerów)
+        await this.syncExpiredFlags();
     }
 
     /**
@@ -735,6 +738,79 @@ class ReactionRoleService {
         this.roleRemovalTimers.clear();
         
         // USUNIĘTO: Zapis nicków przy cleanup - centralny system obsługuje to automatycznie
+    }
+
+    /**
+     * Synchronizuje wygasłe flagi - przywraca nicki dla efektów FLAG bez timerów
+     * Wywoływane przy starcie bota, po przywróceniu timerów z pliku
+     */
+    async syncExpiredFlags() {
+        try {
+            if (!this.client) {
+                this.logger.error('❌ Klient Discord nie jest dostępny podczas synchronizacji flag');
+                return;
+            }
+
+            // Pobierz wszystkie aktywne efekty z nicknameManager
+            const stats = this.nicknameManager.getStats();
+            if (stats.flags === 0) {
+                this.logger.info('✅ Brak aktywnych efektów FLAG do synchronizacji');
+                return;
+            }
+
+            this.logger.info(`🔍 Sprawdzam ${stats.flags} aktywnych efektów FLAG...`);
+
+            let restored = 0;
+            let errors = 0;
+
+            // Sprawdź każdy aktywny efekt FLAG
+            for (const [userId, effectData] of this.nicknameManager.activeEffects.entries()) {
+                if (effectData.effectType !== NicknameManager.EFFECTS.FLAG) {
+                    continue; // Pomijamy efekty niebędące flagami
+                }
+
+                // Sprawdź czy istnieje aktywny timer dla tego użytkownika
+                const userHasTimer = this.persistentTimers.some(timer => timer.userId === userId);
+
+                if (!userHasTimer) {
+                    // Brak timera - flaga wygasła podczas offline bota
+                    try {
+                        const guild = await this.client.guilds.fetch(effectData.guildId);
+                        if (!guild) {
+                            this.logger.warn(`⚠️ Nie znaleziono guild ${effectData.guildId} dla użytkownika ${userId}`);
+                            errors++;
+                            continue;
+                        }
+
+                        const member = await guild.members.fetch(userId);
+                        if (!member) {
+                            this.logger.warn(`⚠️ Nie znaleziono członka ${userId} w guild ${effectData.guildId}`);
+                            errors++;
+                            continue;
+                        }
+
+                        // Przywróć oryginalny nick
+                        await this.restoreOriginalNickname(member);
+                        restored++;
+
+                        this.logger.info(`🔄 Przywrócono nick dla ${member.user.tag} (wygasła flaga bez timera)`);
+
+                    } catch (error) {
+                        this.logger.error(`❌ Błąd synchronizacji flagi dla ${userId}:`, error.message);
+                        errors++;
+                    }
+                }
+            }
+
+            if (restored > 0) {
+                this.logger.info(`✅ Synchronizacja flag: przywrócono ${restored} nicków, błędów: ${errors}`);
+            } else if (stats.flags > 0) {
+                this.logger.info('✅ Wszystkie flagi mają aktywne timery - brak synchronizacji');
+            }
+
+        } catch (error) {
+            this.logger.error('❌ Błąd podczas synchronizacji flag:', error);
+        }
     }
 
     /**
