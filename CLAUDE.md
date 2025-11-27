@@ -3,14 +3,16 @@
 **INSTRUKCJA WAŻNA: ZAWSZE PISZ PO POLSKU. Odpowiadaj na każdą konwersację w języku polskim, niezależnie od języka zapytania użytkownika.**
 
 **INSTRUKCJA RAPORTOWANIA TOKENÓW: Na końcu KAŻDEJ odpowiedzi podawaj:**
-- Ilość zużytych tokenów w formacie: `Zużyte tokeny: X/200000`
-- Procentowy progress bar wykorzystania tokenów
+- Użyj wartości z ostatniego `<system_warning>Token usage: X/200000` + dodaj ~500-1500 tokenów estymacji dla odpowiedzi (w zależności od długości)
+- Format: `Zużyte tokeny: X/200000 (Y%)`
+- Progress bar z 20 kratkami: każda kratka = 5% (█ = zużyte, ░ = wolne)
 - Przykład formatu:
   ```
   ---
   Zużyte tokeny: 20000/200000 (10%)
   [██░░░░░░░░░░░░░░░░░░] 10%
   ```
+- **WAŻNE:** Wartość MUSI być realna z `<system_warning>`, NIE wymyślona!
 
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
 - Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
