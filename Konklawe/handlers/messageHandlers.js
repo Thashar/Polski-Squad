@@ -149,6 +149,21 @@ class MessageHandler {
             await this.passwordEmbedService.updateEmbed(true);
         }
 
+        // Wyślij ping do nowego papieża z przypomnieniem
+        try {
+            const triggerChannel = await message.client.channels.fetch(this.config.channels.trigger);
+            if (triggerChannel && triggerChannel.isTextBased()) {
+                const autoResetMinutes = this.config.timers.autoResetMinutes;
+                await triggerChannel.send(
+                    `<@${message.author.id}> **Dodaj nowe hasło by rozpocząć grę. Pospiesz się!**\n\n` +
+                    `⏰ Masz na to **${autoResetMinutes} minut**, po tym czasie zostanie ustawione domyślne hasło, a Ty stracisz rolę papieską!`
+                );
+                logger.info(`📢 Wysłano ping do nowego papieża ${message.author.tag}`);
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd wysyłania pinga do nowego papieża: ${error.message}`);
+        }
+
         // Reset stanu gry
         this.gameService.resetHints();
         this.gameService.clearAttempts();

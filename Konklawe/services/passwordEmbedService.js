@@ -154,12 +154,13 @@ class PasswordEmbedService {
             embed.setTitle('⚔️ Konklawe - Oczekiwanie na hasło');
             embed.setDescription('Papież musi nadać nowe hasło aby rozpocząć grę.');
 
-            // Timestamp ile czasu minęło od wyczyszczenia hasła
+            // Timestamp odliczający DO auto-resetu (15 minut od wyczyszczenia)
             if (this.gameService.triggerClearedTimestamp) {
-                const timestamp = Math.floor(this.gameService.triggerClearedTimestamp.getTime() / 1000);
+                const autoResetTime = new Date(this.gameService.triggerClearedTimestamp.getTime() + (this.config.timers.autoResetMinutes * 60 * 1000));
+                const timestamp = Math.floor(autoResetTime.getTime() / 1000);
                 embed.addFields({
-                    name: '⏱️ Czas oczekiwania',
-                    value: `Od <t:${timestamp}:R>`,
+                    name: '⏱️ Auto-reset hasła',
+                    value: `<t:${timestamp}:R>`,
                     inline: false
                 });
             }
