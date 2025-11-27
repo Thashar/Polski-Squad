@@ -88,6 +88,16 @@ async function onReady() {
     logger.success('✅ Konklawe gotowy - gra w hasła, błogosławienia JP2');
     await commandService.registerSlashCommands();
 
+    // Przywróć nicki dla wygasłych klątw (efektów które wygasły podczas offline bota)
+    try {
+        const result = await nicknameManager.restoreExpiredEffects(client);
+        if (result.restored > 0) {
+            logger.info(`✅ Przywrócono ${result.restored} nicków po restarcie bota`);
+        }
+    } catch (error) {
+        logger.error('❌ Błąd przywracania wygasłych efektów:', error);
+    }
+
     try {
         const commandChannel = await client.channels.fetch(config.channels.command);
         const triggerChannel = await client.channels.fetch(config.channels.trigger);

@@ -364,20 +364,103 @@ class NicknameManagerService {
     async cleanupExpiredEffects() {
         const now = Date.now();
         let cleaned = 0;
-        
+
         for (const [userId, effectData] of this.activeEffects.entries()) {
             if (effectData.expiresAt && effectData.expiresAt < now) {
                 this.activeEffects.delete(userId);
                 cleaned++;
             }
         }
-        
+
         if (cleaned > 0) {
             await this.persistActiveEffects();
             logger.info(`🧹 Wyczyszczono ${cleaned} wygasłych efektów`);
         }
-        
+
         return cleaned;
+    }
+
+    /**
+     * Przywraca nicki dla wygasłych efektów po restarcie bota
+     * @param {Client} client - Discord client do pobierania guild/member
+     */
+    async restoreExpiredEffects(client) {
+        try {
+            // Wczytaj dane z pliku (bez filtrowania wygasłych)
+            const data = await fs.readFile(this.activeEffectsFile, 'utf8');
+            const effectsData = JSON.parse(data);
+
+            const now = Date.now();
+            let restored = 0;
+            let errors = 0;
+            const expiredEffects = [];
+
+            // Znajdź wygasłe efekty
+            for (const [userId, effectData] of Object.entries(effectsData)) {
+                if (effectData.expiresAt && effectData.expiresAt < now) {
+                    expiredEffects.push({ userId, effectData });
+                }
+            }
+
+            if (expiredEffects.length === 0) {
+                logger.info('✅ Brak wygasłych efektów do przywrócenia');
+                return { restored: 0, errors: 0 };
+            }
+
+            logger.info(`🔍 Znaleziono ${expiredEffects.length} wygasłych efektów - przywracam nicki...`);
+
+            // Przywróć nicki dla wygasłych efektów
+            for (const { userId, effectData } of expiredEffects) {
+                try {
+                    // Pobierz guild
+                    const guild = await client.guilds.fetch(effectData.guildId);
+                    if (!guild) {
+                        logger.warn(`⚠️ Nie znaleziono guild ${effectData.guildId} dla użytkownika ${userId}`);
+                        errors++;
+                        continue;
+                    }
+
+                    // Pobierz członka
+                    const member = await guild.members.fetch(userId);
+                    if (!member) {
+                        logger.warn(`⚠️ Nie znaleziono członka ${userId} w guild ${effectData.guildId}`);
+                        errors++;
+                        continue;
+                    }
+
+                    // Przywróć nick
+                    if (effectData.wasUsingMainNick) {
+                        await member.setNickname(null);
+                        logger.info(`🔄 Przywrócono nick główny dla ${member.user.tag} (wygasły efekt: ${effectData.effectType})`);
+                    } else {
+                        await member.setNickname(effectData.originalNickname);
+                        logger.info(`🔄 Przywrócono nick "${effectData.originalNickname}" dla ${member.user.tag} (wygasły efekt: ${effectData.effectType})`);
+                    }
+
+                    restored++;
+
+                } catch (error) {
+                    logger.error(`❌ Błąd przywracania nicku dla ${userId}:`, error.message);
+                    errors++;
+                }
+            }
+
+            logger.info(`✅ Przywrócono ${restored} nicków, błędów: ${errors}`);
+
+            // Teraz standardowo wczytaj aktywne efekty (automatycznie pominie wygasłe)
+            await this.loadActiveEffects();
+
+            return { restored, errors };
+
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                logger.info('📁 Brak pliku efektów - nic do przywrócenia');
+                return { restored: 0, errors: 0 };
+            }
+
+            logger.error('❌ Błąd przywracania wygasłych efektów:', error);
+            return { restored: 0, errors: 1 };
+        }
     }
     
     /**
