@@ -98,10 +98,10 @@ cron.schedule('*/10 * * * *', () => {
     interactionHandler.cleanup();
 });
 
-// Weekly Lunar Mine analysis - every Wednesday at 18:45
+// Weekly Lunar Mine analysis - every Thursday at 20:00
 // Thread ID: 1441152540581564508
 // Guild IDs: 42578, 202226, 125634, 11616
-cron.schedule('45 18 * * 3', async () => {
+cron.schedule('0 20 * * 4', async () => {
     try {
         logger.info('📅 ========================================');
         logger.info('📅 Starting weekly Lunar Mine analysis...');

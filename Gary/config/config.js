@@ -39,8 +39,8 @@ module.exports = {
     // Guild ID to Clan Name mapping (from Stalker config)
     guildNames: {
         42578: '🔥Polski Squad🔥',      // Main clan
-        202226: '⚡PolskiSquad¹⚡',      // Squad 1
-        125634: '💥PolskiSquad²💥',     // Squad 2
+        202226: '💥PolskiSquad²💥',     // Squad 2
+        125634: '⚡PolskiSquad¹⚡',      // Squad 1
         11616: '🎮PolskiSquad⁰🎮'       // Squad 0
     },
     
