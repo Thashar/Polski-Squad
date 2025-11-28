@@ -556,55 +556,38 @@ class InteractionHandler {
         if (!guild.members || guild.members.length === 0) return;
 
         const sortedMembers = guild.members.sort((a, b) => b.attack - a.attack);
-        const totalPages = Math.ceil(sortedMembers.length / (this.config.botSettings?.membersPerPage || 20));
 
         // Get clan name from config mapping (Stalker names)
         const clanName = this.config.guildNames?.[guild.guildId] || guild.title;
 
-        if (totalPages <= 1) {
-            const memberText = sortedMembers.map(member =>
+        // Split members into chunks of 10 per field
+        const maxMembersPerField = 10;
+        const chunks = [];
+        for (let i = 0; i < sortedMembers.length; i += maxMembersPerField) {
+            chunks.push(sortedMembers.slice(i, i + maxMembersPerField));
+        }
+
+        // Create a single embed with all members
+        const memberEmbed = new EmbedBuilder()
+            .setColor(0x3498DB)
+            .setDescription(`# ${clanName}\nTotal members: ${sortedMembers.length} • Sorted by attack power`)
+            .setFooter({ text: `Guild ID: ${guild.guildId}` })
+            .setTimestamp();
+
+        // Add all chunks as separate fields (inline for left-to-right layout)
+        chunks.forEach((chunk, chunkIndex) => {
+            const memberText = chunk.map(member =>
                 `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
             ).join('\n');
 
-            const memberEmbed = new EmbedBuilder()
-                .setColor(0x3498DB)
-                .setDescription(`# ${clanName}\nAll ${sortedMembers.length} guild members sorted by attack power`)
-                .addFields({
-                    name: '\u200b', // Zero-width space for invisible field name
-                    value: memberText || 'No data',
-                    inline: true
-                })
-                .setTimestamp();
-
-            await interaction.followUp({ embeds: [memberEmbed] });
-        } else {
-            const paginationId = generatePaginationId();
-            
-            const pageData = {
-                guild: guild,
-                members: sortedMembers,
-                totalPages: totalPages,
-                currentPage: 0,
-                userId: interaction.user.id,
-                createdAt: Date.now()
-            };
-            
-            this.paginationData.set(paginationId, pageData);
-            
-            const initialEmbed = this.createPaginatedMemberEmbed(guild, sortedMembers, 0, totalPages, paginationId);
-            const buttons = this.createNavigationButtons(0, totalPages, paginationId);
-            
-            await interaction.followUp({ 
-                embeds: [initialEmbed], 
-                components: [buttons] 
+            memberEmbed.addFields({
+                name: '\u200b', // Zero-width space for invisible field name
+                value: memberText || 'No data',
+                inline: true
             });
-            
-            setTimeout(() => {
-                if (this.paginationData.has(paginationId)) {
-                    this.paginationData.delete(paginationId);
-                }
-            }, this.config.botSettings?.paginationTimeout || 600000);
-        }
+        });
+
+        await interaction.followUp({ embeds: [memberEmbed] });
     }
 
     createPaginatedMemberEmbed(guild, members, currentPage, totalPages, paginationId) {
