@@ -34,7 +34,7 @@ class LogService {
     }
 
     async logCommand(interaction, commandName, details = '') {
-        const message = `**${interaction.user.tag}** used command \`/${commandName}\` in ${interaction.channel.name}${details ? ` - ${details}` : ''}`;
+        const message = `**${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}** used command \`/${commandName}\` in ${interaction.channel.name}${details ? ` - ${details}` : ''}`;
         await this.logToChannel(message);
         this.logger.info(`Command used: /${commandName} by ${interaction.user.tag}${details ? ` - ${details}` : ''}`);
     }

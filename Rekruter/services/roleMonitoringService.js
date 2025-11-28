@@ -174,7 +174,7 @@ class RoleMonitoringService {
         try {
             const warningMessage = `🚨 **Ostrzeżenie** 🚨
 
-Witaj ${member.user.username}!
+Witaj ${member.displayName || member.user.username}!
 
 Od **24 godzin** nie wypełniłeś ankiety na kanale **${this.config.roleMonitoring.waitingRoomChannel}** na serwerze **${member.guild.name}**.
 

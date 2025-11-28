@@ -719,7 +719,7 @@ class InteractionHandler {
                 .setTitle(this.config.messages.specialRolesListTitle)
                 .setColor('#0099FF')
                 .setTimestamp()
-                .setFooter({ text: `Żądanie od ${interaction.user.tag}` });
+                .setFooter({ text: `Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
             
             // Role ENV zostały przeniesione do special_roles.json
             
@@ -2350,7 +2350,7 @@ class InteractionHandler {
             if (result.success) {
                 const successMessage = `✅ Zablokowano wrzucanie zdjęć na kanale **${channel.id}**\n` +
                     `🕒 Blokada będzie aktywna do: **${parsedTime.formatted}**\n` +
-                    `👮 Zablokowane przez: **${interaction.user.tag}**`;
+                    `👮 Zablokowane przez: **${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}**`;
                 
                 await interaction.editReply({ content: successMessage });
                 
@@ -2535,7 +2535,7 @@ class InteractionHandler {
                 }
                 
                 successMessage += `🔍 Tryb blokady: **${inside ? 'Również jako część innych słów' : 'Tylko jako całe słowo'}**\n`;
-                successMessage += `👮 Zablokowane przez: **${interaction.user.tag}**`;
+                successMessage += `👮 Zablokowane przez: **${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}**`;
                 
                 await interaction.editReply({ content: successMessage });
                 

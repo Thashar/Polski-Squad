@@ -1477,7 +1477,7 @@ class InteractionHandler {
             if (this.passwordEmbedService) {
                 await this.passwordEmbedService.updateEmbed(false);
                 // Wyślij podpowiedź na kanał command
-                await this.passwordEmbedService.sendHintToCommandChannel(hintText, interaction.user.tag);
+                await this.passwordEmbedService.sendHintToCommandChannel(hintText, interaction.member?.displayName || interaction.user.displayName || interaction.user.tag);
             }
 
             await interaction.editReply({
@@ -1649,7 +1649,7 @@ class InteractionHandler {
                 hintText,
                 scheduledDate,
                 interaction.user.id,
-                interaction.user.tag
+                interaction.member?.displayName || interaction.user.displayName || interaction.user.tag
             );
 
             if (!result.success) {

@@ -179,7 +179,7 @@ async function handleNotPolish(interaction, config) {
 /* --------------------------- przycisk „Jestem Polakiem” ------------------ */
 async function handleYesPolish(interaction, state, config) {
   state.userInfo.set(interaction.user.id, {
-    username:        interaction.user.username,
+    username:        interaction.member?.displayName || interaction.user.displayName || interaction.user.username,
     isPolish:        true,
     purpose:         null,
     rcAmount:        null,

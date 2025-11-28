@@ -553,7 +553,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             )
             .setColor('#0099FF')
             .setTimestamp()
-            .setFooter({ text: `Debug wykonany przez ${interaction.user.tag}` });
+            .setFooter({ text: `Debug wykonany przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
         
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {
@@ -1097,7 +1097,7 @@ async function handleButton(interaction, sharedState) {
                     `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
                 )
                 .setColor('#00ff00')
-                .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+                .setFooter({ text: `Wykonano przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
             await interaction.editReply({
                 embeds: [successEmbed],
@@ -1634,7 +1634,7 @@ async function handleButton(interaction, sharedState) {
                     `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
                 )
                 .setColor('#00ff00')
-                .setFooter({ text: `${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
+                .setFooter({ text: `${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
 
             await interaction.editReply({
                 embeds: [successEmbed],
@@ -1755,7 +1755,7 @@ async function handleButton(interaction, sharedState) {
                         .setDescription('Pomyślnie dodano punkty karne dla znalezionych graczy.')
                         .setColor('#00ff00')
                         .setTimestamp()
-                        .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+                        .setFooter({ text: `Wykonano przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
                     
                     await interaction.update({ 
                         embeds: [punishConfirmation],
@@ -1817,7 +1817,7 @@ async function handleButton(interaction, sharedState) {
                         .setDescription('Pomyślnie wysłano przypomnienia dla znalezionych graczy.')
                         .setColor('#00ff00')
                         .setTimestamp()
-                        .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+                        .setFooter({ text: `Wykonano przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
                     await interaction.update({
                         embeds: [confirmationSuccess],
@@ -2453,7 +2453,7 @@ async function showUncertaintyQuestion(interaction, uncertainPlayers, allPlayers
         .setColor('#FFA500')
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.user.tag}` });
+        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
     
     await interaction.editReply({
         embeds: [embed],
@@ -2501,7 +2501,7 @@ async function showUncertaintyQuestionWithUpdate(interaction, uncertainPlayers, 
         .setColor('#FFA500')
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.user.tag}` });
+        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
     
     await interaction.update({
         embeds: [embed],
@@ -2607,7 +2607,7 @@ async function showFinalConfirmation(interaction, finalPlayers, imageUrl, config
         )
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
+        .setFooter({ text: `Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
     
     await interaction.editReply({ 
         embeds: [confirmationEmbed],
@@ -2672,7 +2672,7 @@ async function showFinalConfirmationWithUpdate(interaction, finalPlayers, imageU
         )
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
+        .setFooter({ text: `Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
     
     await interaction.update({ 
         embeds: [confirmationEmbed],
@@ -3426,7 +3426,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
                 { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
+            .setFooter({ text: `Zapisane przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
         // Dodaj listę graczy z zerem jeśli są
         if (playersWithZero.length > 0) {
@@ -4010,7 +4010,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
                 { name: '⏳ Zamknięcie sesji', value: `${createProgressBar(secondsLeft)} ${secondsLeft}s`, inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
+            .setFooter({ text: `Zapisane przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
         await phaseService.cleanupSession(session.sessionId);
@@ -4629,7 +4629,7 @@ async function showUserSelectMenu(interaction, sharedState, phase, clan, weekNum
         new StringSelectMenuOptionBuilder()
             .setLabel(member.displayName)
             .setValue(member.id)
-            .setDescription(`@${member.user.username}`)
+            .setDescription(`ID: ${member.id}`)
     );
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -6016,7 +6016,7 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
                 { name: '📈 Nowy wynik', value: newScoreNum.toString(), inline: true }
             )
             .setTimestamp()
-            .setFooter({ text: `Zmodyfikowane przez ${interaction.user.tag}` });
+            .setFooter({ text: `Zmodyfikowane przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
         await interaction.update({
             embeds: [embed],
