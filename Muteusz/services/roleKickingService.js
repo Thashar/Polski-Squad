@@ -233,7 +233,7 @@ class RoleKickingService {
             
             const kickMessage = `🚨 **Automatyczny kick z serwera** 🚨
 
-Witaj ${member.user.username}!
+Witaj ${member.displayName || member.user.username}!
 
 Zostałeś usunięty z serwera **${member.guild.name}** z następującego powodu:
 
@@ -394,7 +394,7 @@ Bot Muteusz`;
 
             const kickMessage = `🚨 **Automatyczny kick z serwera** 🚨
 
-Witaj ${member.user.username}!
+Witaj ${member.displayName || member.user.username}!
 
 Zostałeś usunięty z serwera **${member.guild.name}** z następującego powodu:
 
