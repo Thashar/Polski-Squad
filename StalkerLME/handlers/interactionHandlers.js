@@ -8159,31 +8159,30 @@ function calculatePlayerPercentile(playerTotalScore, allPlayerScores) {
 }
 
 // ============ FUNKCJA POMOCNICZA: Oblicz progres gracza ============
-function calculatePlayerProgress(weeklyScores, weeksToAnalyze, baseWeekOffset) {
+function calculatePlayerProgress(weeklyScores, baseWeekIndex) {
     // weeklyScores: [{week, score}] - posortowane od najnowszego
-    // weeksToAnalyze: ile tygodni analizować (4 dla miesiąca, 12 dla kwartału)
-    // baseWeekOffset: tydzień bazowy (dla miesiąca: 4, dla kwartału: 12)
+    // baseWeekIndex: indeks tygodnia bazowego (dla miesiąca: 3, dla kwartału: 12)
+    // Progres = najnowszy tydzień - tydzień bazowy (tak jak w /progres)
 
     if (weeklyScores.length === 0) {
-        return { progress: 0, progressPercent: 0, periodTotal: 0, baseScore: 0 };
+        return { progress: 0, progressPercent: 0, newestScore: 0, baseScore: 0 };
     }
 
-    // Pobierz wyniki z okresu do analizy (ostatnie N tygodni)
-    const periodScores = weeklyScores.slice(0, weeksToAnalyze);
-    const periodTotal = periodScores.reduce((sum, w) => sum + (w.score || 0), 0);
+    // Najnowszy tydzień (indeks 0)
+    const newestScore = weeklyScores[0] ? (weeklyScores[0].score || 0) : 0;
 
-    // Pobierz wynik bazowy (tydzień przed okresem)
-    const baseWeek = weeklyScores[baseWeekOffset];
+    // Tydzień bazowy (np. indeks 3 dla miesiąca, 12 dla kwartału)
+    const baseWeek = weeklyScores[baseWeekIndex];
     const baseScore = baseWeek ? (baseWeek.score || 0) : 0;
 
-    // Oblicz progres
-    const progress = periodTotal - baseScore;
-    const progressPercent = baseScore > 0 ? ((progress / baseScore) * 100) : (periodTotal > 0 ? 100 : 0);
+    // Oblicz progres (różnica między najnowszym a bazowym)
+    const progress = newestScore - baseScore;
+    const progressPercent = baseScore > 0 ? ((progress / baseScore) * 100) : (newestScore > 0 ? 100 : 0);
 
     return {
         progress,
         progressPercent,
-        periodTotal,
+        newestScore,
         baseScore
     };
 }
@@ -8349,11 +8348,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const last12Phase2 = last12Weeks.reduce((sum, w) => sum + w.phase2, 0);
         const avgPerWeek = last12Weeks.length > 0 ? Math.round(last12Total / last12Weeks.length) : 0;
 
-        // Progres miesiąc (ostatnie 4 tygodnie vs tydzień 4)
-        const monthProgress = calculatePlayerProgress(playerWeeklyScores, 4, 4);
+        // Progres miesiąc (najnowszy tydzień vs tydzień sprzed 4 tygodni - indeks 3)
+        const monthProgress = calculatePlayerProgress(playerWeeklyScores, 3);
 
-        // Progres kwartał (ostatnie 12 tygodni vs tydzień 12)
-        const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 12, 12);
+        // Progres kwartał (najnowszy tydzień vs tydzień sprzed 13 tygodni - indeks 12)
+        const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 12);
 
         // Najlepszy i najgorszy tydzień (z ostatnich 12)
         let bestWeek = null;
@@ -8438,15 +8437,15 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             embed.addFields({ name: '📊 OSTATNIE 12 TYGODNI', value: statsInfo, inline: false });
         }
 
-        // POLE 3 i 4: Progres miesiąc i kwartał
-        if (monthProgress.periodTotal > 0) {
+        // POLE 3 i 4: Progres miesiąc i kwartał (identycznie jak w /progres)
+        if (playerWeeklyScores.length >= 4) {
             const monthSign = monthProgress.progress >= 0 ? '+' : '';
             const monthArrow = monthProgress.progress >= 0 ? '↗️' : '↘️';
             const monthInfo = `${monthSign}${monthProgress.progress.toLocaleString('pl-PL')} pkt (${monthSign}${Math.round(monthProgress.progressPercent)}%) ${monthArrow}`;
             embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
         }
 
-        if (quarterProgress.periodTotal > 0) {
+        if (playerWeeklyScores.length >= 13) {
             const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
             const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
             const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
