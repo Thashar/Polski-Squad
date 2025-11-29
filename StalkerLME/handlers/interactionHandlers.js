@@ -6833,8 +6833,8 @@ async function handleAutocomplete(interaction, sharedState) {
                 return;
             }
 
-            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
-            const playerNames = new Set();
+            // Zbierz wszystkich unikalnych graczy (userId) ze wszystkich klanów i tygodni
+            const playerUserIds = new Set();
 
             for (const week of allWeeks) {
                 for (const clan of week.clans) {
@@ -6847,43 +6847,52 @@ async function handleAutocomplete(interaction, sharedState) {
 
                     if (weekData && weekData.players) {
                         weekData.players.forEach(player => {
-                            if (player.displayName) {
-                                playerNames.add(player.displayName);
+                            if (player.userId) {
+                                playerUserIds.add(player.userId);
                             }
                         });
                     }
                 }
             }
 
-            // Filtruj i sortuj graczy według dopasowania
-            const choices = Array.from(playerNames)
-                .filter(name => name.toLowerCase().includes(focusedValueLower))
+            // Pobierz aktualny nick z Discord dla każdego userId
+            const playerChoices = [];
+            for (const userId of playerUserIds) {
+                try {
+                    const member = await interaction.guild.members.fetch(userId);
+                    const currentNick = member.displayName;
+
+                    // Filtruj według wpisanego tekstu
+                    if (currentNick.toLowerCase().includes(focusedValueLower)) {
+                        playerChoices.push({
+                            name: currentNick,
+                            value: userId,
+                            nickLower: currentNick.toLowerCase()
+                        });
+                    }
+                } catch (error) {
+                    // Użytkownik nie jest już na serwerze, pomijamy
+                }
+            }
+
+            // Sortuj graczy według dopasowania
+            const choices = playerChoices
                 .sort((a, b) => {
                     // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
-                    const aLower = a.toLowerCase();
-                    const bLower = b.toLowerCase();
-                    const aStartsWith = aLower.startsWith(focusedValueLower);
-                    const bStartsWith = bLower.startsWith(focusedValueLower);
+                    const aStartsWith = a.nickLower.startsWith(focusedValueLower);
+                    const bStartsWith = b.nickLower.startsWith(focusedValueLower);
 
                     if (aStartsWith && !bStartsWith) return -1;
                     if (!aStartsWith && bStartsWith) return 1;
 
                     // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
-                    return aLower.localeCompare(bLower);
+                    return a.nickLower.localeCompare(b.nickLower);
                 })
-                .map(name => ({
-                    name: name,
-                    value: name
+                .map(player => ({
+                    name: player.name,
+                    value: player.value
                 }))
-                .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
-
-            // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
-            if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
-                choices.unshift({
-                    name: `📝 Użyj wpisanego: "${focusedValue}"`,
-                    value: focusedValue
-                });
-            }
+                .slice(0, 25); // Discord limit: max 25 opcji
 
             await interaction.respond(choices);
         } else if (interaction.commandName === 'player-status') {
@@ -6898,8 +6907,8 @@ async function handleAutocomplete(interaction, sharedState) {
                 return;
             }
 
-            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
-            const playerNames = new Set();
+            // Zbierz wszystkich unikalnych graczy (userId) ze wszystkich klanów i tygodni
+            const playerUserIds = new Set();
 
             for (const week of allWeeks) {
                 for (const clan of week.clans) {
@@ -6912,43 +6921,52 @@ async function handleAutocomplete(interaction, sharedState) {
 
                     if (weekData && weekData.players) {
                         weekData.players.forEach(player => {
-                            if (player.displayName) {
-                                playerNames.add(player.displayName);
+                            if (player.userId) {
+                                playerUserIds.add(player.userId);
                             }
                         });
                     }
                 }
             }
 
-            // Filtruj i sortuj graczy według dopasowania
-            const choices = Array.from(playerNames)
-                .filter(name => name.toLowerCase().includes(focusedValueLower))
+            // Pobierz aktualny nick z Discord dla każdego userId
+            const playerChoices = [];
+            for (const userId of playerUserIds) {
+                try {
+                    const member = await interaction.guild.members.fetch(userId);
+                    const currentNick = member.displayName;
+
+                    // Filtruj według wpisanego tekstu
+                    if (currentNick.toLowerCase().includes(focusedValueLower)) {
+                        playerChoices.push({
+                            name: currentNick,
+                            value: userId,
+                            nickLower: currentNick.toLowerCase()
+                        });
+                    }
+                } catch (error) {
+                    // Użytkownik nie jest już na serwerze, pomijamy
+                }
+            }
+
+            // Sortuj graczy według dopasowania
+            const choices = playerChoices
                 .sort((a, b) => {
                     // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
-                    const aLower = a.toLowerCase();
-                    const bLower = b.toLowerCase();
-                    const aStartsWith = aLower.startsWith(focusedValueLower);
-                    const bStartsWith = bLower.startsWith(focusedValueLower);
+                    const aStartsWith = a.nickLower.startsWith(focusedValueLower);
+                    const bStartsWith = b.nickLower.startsWith(focusedValueLower);
 
                     if (aStartsWith && !bStartsWith) return -1;
                     if (!aStartsWith && bStartsWith) return 1;
 
                     // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
-                    return aLower.localeCompare(bLower);
+                    return a.nickLower.localeCompare(b.nickLower);
                 })
-                .map(name => ({
-                    name: name,
-                    value: name
+                .map(player => ({
+                    name: player.name,
+                    value: player.value
                 }))
-                .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
-
-            // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
-            if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
-                choices.unshift({
-                    name: `📝 Użyj wpisanego: "${focusedValue}"`,
-                    value: focusedValue
-                });
-            }
+                .slice(0, 25); // Discord limit: max 25 opcji
 
             await interaction.respond(choices);
         }
@@ -7051,16 +7069,24 @@ async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
 }
 
 // Funkcja wyświetlająca progres gracza
-async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedState) {
+async function showPlayerProgress(interaction, playerUserId, ownerId, sharedState) {
     const { config, databaseService } = sharedState;
 
     try {
+        // Pobierz aktualny nick gracza z Discord
+        let playerName = 'Nieznany gracz';
+        try {
+            const member = await interaction.guild.members.fetch(playerUserId);
+            playerName = member.displayName;
+        } catch (error) {
+            logger.warn(`[PROGRES] Nie znaleziono użytkownika ${playerUserId} na serwerze`);
+        }
 
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
         const last54Weeks = allWeeks.slice(0, 54);
 
-        // Zbierz dane gracza ze wszystkich tygodni i klanów
+        // Zbierz dane gracza ze wszystkich tygodni i klanów (po userId)
         const playerProgressData = [];
 
         for (const week of last54Weeks) {
@@ -7074,7 +7100,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
                 if (weekData && weekData.players) {
                     const player = weekData.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === selectedPlayer.toLowerCase()
+                        p.userId === playerUserId
                     );
 
                     if (player) {
@@ -7095,13 +7121,13 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         if (playerProgressData.length === 0) {
             if (isUpdate) {
                 await interaction.update({
-                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${playerName}**.`,
                     embeds: [],
                     components: []
                 });
             } else {
                 await interaction.followUp({
-                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${playerName}**.`,
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -7215,9 +7241,9 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const resultsText = resultsLines.join('\n');
 
-        // Stwórz ranking all-time i znajdź pozycję gracza
+        // Stwórz ranking all-time i znajdź pozycję gracza (po aktualnym nicku)
         const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
-        const currentPlayerIndex = allTimeRanking.findIndex(p => p.playerName.toLowerCase() === selectedPlayer.toLowerCase());
+        const currentPlayerIndex = allTimeRanking.findIndex(p => p.playerName.toLowerCase() === playerName.toLowerCase());
 
         // Gracze sąsiedzi w rankingu (lepszy i gorszy)
         const betterPlayer = currentPlayerIndex > 0 ? allTimeRanking[currentPlayerIndex - 1] : null;
@@ -7275,7 +7301,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         const playerClan = playerProgressData.length > 0 ? playerProgressData[0].clanName : 'Brak';
 
         const embed = new EmbedBuilder()
-            .setTitle(`📈 Progres gracza: ${selectedPlayer} (${playerClan})`)
+            .setTitle(`📈 Progres gracza: ${playerName} (${playerClan})`)
             .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${last54Weeks.length} tygodni):\n\n${resultsText}${expiryInfo}`)
             .setColor('#00FF00')
             .setFooter({ text: `Tygodni z danymi: ${playerProgressData.length}/${last54Weeks.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
@@ -8233,8 +8259,17 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
     await interaction.deferReply();
 
     try {
-        const playerName = interaction.options.getString('nick');
+        const playerUserId = interaction.options.getString('nick'); // Teraz to jest userId z autocomplete
         const guild = interaction.guild;
+
+        // Pobierz aktualny nick gracza z Discord
+        let playerName = 'Nieznany gracz';
+        try {
+            const member = await guild.members.fetch(playerUserId);
+            playerName = member.displayName;
+        } catch (error) {
+            logger.warn(`[PLAYER-STATUS] Nie znaleziono użytkownika ${playerUserId} na serwerze`);
+        }
 
         // Pobierz wszystkie dostępne tygodnie (ostatnie 54 - cały rok)
         const allWeeks = await databaseService.getAvailableWeeks(guild.id);
@@ -8249,8 +8284,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Ogranicz do ostatnich 54 tygodni (rok)
         const last54Weeks = allWeeks.slice(0, 54);
 
-        // ===== ZBIERANIE DANYCH GRACZA =====
-        let playerUserId = null;
+        // ===== ZBIERANIE DANYCH GRACZA (po userId) =====
         const playerWeeklyScores = []; // [{week, weekNumber, year, phase1, phase2, total}]
 
         // Pobierz wyniki z ostatnich 54 tygodni
@@ -8264,11 +8298,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const phase1Data = await databaseService.getPhase1Results(guild.id, week.weekNumber, week.year, clan);
                 if (phase1Data && phase1Data.players) {
                     const player = phase1Data.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === playerName.toLowerCase()
+                        p.userId === playerUserId
                     );
                     if (player) {
                         weekPhase1Total += player.score || 0;
-                        if (!playerUserId) playerUserId = player.userId;
                     }
                 }
 
@@ -8276,11 +8309,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const phase2Data = await databaseService.getPhase2Results(guild.id, week.weekNumber, week.year, clan);
                 if (phase2Data && phase2Data.players) {
                     const player = phase2Data.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === playerName.toLowerCase()
+                        p.userId === playerUserId
                     );
                     if (player) {
                         weekPhase2Total += player.score || 0;
-                        if (!playerUserId) playerUserId = player.userId;
                     }
                 }
             }
@@ -8428,9 +8460,9 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         if (playerUserId) {
             try {
-                // Pobierz punkty karne
+                // Pobierz punkty karne (lifetime_points jak w /debug-roles)
                 const userPunishment = await databaseService.getUserPunishments(guild.id, playerUserId);
-                punishmentPoints = userPunishment.points || 0;
+                punishmentPoints = userPunishment.lifetime_points || 0;
 
                 if (userPunishment.history && userPunishment.history.length > 0) {
                     const lastPunishment = userPunishment.history[userPunishment.history.length - 1];
@@ -8467,11 +8499,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // POLE 1: Informacje podstawowe
         let basicInfo = `**Klan:** ${currentClan}\n`;
-        if (playerRank) {
-            basicInfo += `**Pozycja w strukturach:** #${playerRank} / ${totalPlayersInRanking} członków\n`;
-        }
         if (playerClanRank) {
             basicInfo += `**Pozycja w klanie:** #${playerClanRank} / ${totalClanMembers} członków\n`;
+        }
+        if (playerRank) {
+            basicInfo += `**Pozycja w strukturach:** #${playerRank} / ${totalPlayersInRanking} członków\n`;
         }
         basicInfo += `**Percentyl:** TOP ${Math.round(playerPercentile)}% ${percentileIcon}`;
         embed.addFields({ name: '👤 INFORMACJE PODSTAWOWE', value: basicInfo, inline: false });
@@ -8516,7 +8548,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // POLE 6: Kary i przypomnienia
         const penaltiesInfo = punishmentPoints > 0 || reminderCount > 0 || hasLotteryBan || hasPunishmentRole
-            ? `💀 **Punkty karne:** ${punishmentPoints > 0 ? `${punishmentPoints} czaszki${lastPunishmentDate ? ` (${lastPunishmentDate.toLocaleDateString('pl-PL')})` : ''}` : 'Brak'}\n` +
+            ? `💀 **Punkty karne:** ${punishmentPoints > 0 ? `${punishmentPoints} razy${lastPunishmentDate ? ` (${lastPunishmentDate.toLocaleDateString('pl-PL')})` : ''}` : 'Brak'}\n` +
               `📢 **Przypomnienia:** ${reminderCount > 0 ? `${reminderCount} razy` : 'Brak'}\n` +
               `🎭 **Rola karania:** ${hasPunishmentRole ? 'TAK' : 'NIE'}\n` +
               `🚫 **Ban loterii:** ${hasLotteryBan ? 'TAK' : 'NIE'}`
