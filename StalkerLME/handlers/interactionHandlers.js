@@ -8332,12 +8332,30 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const ranking = await createGlobalPlayerRanking(guild, databaseService, config, last54Weeks);
         totalPlayersInRanking = ranking.length;
 
-        // Znajdź pozycję gracza w rankingu
+        // Znajdź pozycję gracza w rankingu globalnym (wszystkie struktury)
         const playerInRanking = ranking.find(p =>
             p.playerName.toLowerCase() === playerName.toLowerCase()
         );
         if (playerInRanking) {
             playerRank = ranking.indexOf(playerInRanking) + 1;
+        }
+
+        // ===== OBLICZANIE FAKTYCZNEJ POZYCJI W KLANIE =====
+        let playerClanRank = null;
+        let totalClanMembers = 0;
+
+        if (currentClanKey) {
+            // Przefiltruj ranking tylko do graczy z tego samego klanu
+            const clanRanking = ranking.filter(p => p.clanKey === currentClanKey);
+            totalClanMembers = clanRanking.length;
+
+            // Znajdź pozycję gracza w rankingu klanowym
+            const playerInClanRanking = clanRanking.find(p =>
+                p.playerName.toLowerCase() === playerName.toLowerCase()
+            );
+            if (playerInClanRanking) {
+                playerClanRank = clanRanking.indexOf(playerInClanRanking) + 1;
+            }
         }
 
         // ===== OBLICZANIE STATYSTYK =====
@@ -8438,34 +8456,35 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // POLE 1: Informacje podstawowe
         let basicInfo = `**Klan:** ${currentClan}\n`;
         if (playerRank) {
-            basicInfo += `**Pozycja w klanie:** #${playerRank} / ${totalPlayersInRanking} członków\n`;
+            basicInfo += `**Pozycja w strukturach:** #${playerRank} / ${totalPlayersInRanking} członków\n`;
+        }
+        if (playerClanRank) {
+            basicInfo += `**Pozycja w klanie:** #${playerClanRank} / ${totalClanMembers} członków\n`;
         }
         basicInfo += `**Percentyl:** TOP ${Math.round(playerPercentile)}% ${percentileIcon}`;
         embed.addFields({ name: '👤 INFORMACJE PODSTAWOWE', value: basicInfo, inline: false });
 
-        // POLE 2: Progres kwartalny (ostatnie 12 tygodni)
-        if (last12Weeks.length > 0) {
-            const statsInfo =
-                `**Faza 1:** ${last12Phase1.toLocaleString('pl-PL')} pkt (${last12Weeks.length} tyg.)\n` +
-                `**Faza 2:** ${last12Phase2.toLocaleString('pl-PL')} pkt (${last12Weeks.length} tyg.)\n` +
-                `**Łącznie:** ${last12Total.toLocaleString('pl-PL')} pkt\n` +
-                `**Średnia/tyg.:** ${avgPerWeek.toLocaleString('pl-PL')} pkt`;
-            embed.addFields({ name: '📊 PROGRES KWARTALNY', value: statsInfo, inline: false });
+        // POLE 2: Progres kwartalny (tylko progres + %, jak w progresie miesięcznym)
+        if (playerWeeklyScores.length >= 12) {
+            const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
+            const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
+            const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
+            embed.addFields({ name: '📊 PROGRES KWARTALNY', value: quarterInfo, inline: false });
         }
 
-        // POLE 3 i 4: Progres miesiąc i kwartał
-        if (playerWeeklyScores.length >= 4) {
-            const monthSign = monthProgress.progress >= 0 ? '+' : '';
-            const monthArrow = monthProgress.progress >= 0 ? '↗️' : '↘️';
-            const monthInfo = `${monthSign}${monthProgress.progress.toLocaleString('pl-PL')} pkt (${monthSign}${Math.round(monthProgress.progressPercent)}%) ${monthArrow}`;
-            embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
-        }
-
+        // POLE 3 i 4: Progres kwartał i miesiąc (zamienione miejscami)
         if (playerWeeklyScores.length >= 12) {
             const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
             const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
             const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
             embed.addFields({ name: '📈 PROGRES KWARTAŁ', value: quarterInfo, inline: true });
+        }
+
+        if (playerWeeklyScores.length >= 4) {
+            const monthSign = monthProgress.progress >= 0 ? '+' : '';
+            const monthArrow = monthProgress.progress >= 0 ? '↗️' : '↘️';
+            const monthInfo = `${monthSign}${monthProgress.progress.toLocaleString('pl-PL')} pkt (${monthSign}${Math.round(monthProgress.progressPercent)}%) ${monthArrow}`;
+            embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
         }
 
         // POLE 5: Rekordy
@@ -8486,40 +8505,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
               `🚫 **Ban loterii:** ${hasLotteryBan ? 'TAK' : 'NIE'}`
             : `💀 **Punkty karne:** Brak\n⏰ **Przypomnienia:** Brak\n🚫 **Ban loterii:** NIE`;
         embed.addFields({ name: '⚠️ KARY I PRZYPOMNIENIA', value: penaltiesInfo, inline: false });
-
-        // POLE 7: Ranking międzyklanowy (jeśli gracz jest w rankingu globalnym)
-        if (playerInRanking && playerRank) {
-            // Pobierz najlepszy wynik gracza z każdego klanu
-            const playerClanScores = [];
-            for (const [clanKey, clanName] of Object.entries(config.roleDisplayNames)) {
-                let clanTotal = 0;
-                for (const week of last54Weeks) {
-                    const phase1Data = await databaseService.getPhase1Results(guild.id, week.weekNumber, week.year, clanKey);
-                    if (phase1Data && phase1Data.players) {
-                        const player = phase1Data.players.find(p =>
-                            p.displayName && p.displayName.toLowerCase() === playerName.toLowerCase()
-                        );
-                        if (player) {
-                            clanTotal += player.score || 0;
-                        }
-                    }
-                }
-                if (clanTotal > 0) {
-                    playerClanScores.push({ clanKey, clanName, score: clanTotal });
-                }
-            }
-
-            // Sortuj według wyniku
-            playerClanScores.sort((a, b) => b.score - a.score);
-
-            if (playerClanScores.length > 0) {
-                const rankingInfo = playerClanScores.map((clan, index) => {
-                    const icon = clan.clanKey === currentClanKey ? '← Tu jesteś' : '';
-                    return `${index + 1}. ${clan.clanName}: ${clan.score.toLocaleString('pl-PL')} pkt ${icon}`;
-                }).join('\n');
-                embed.addFields({ name: '🌍 RANKING MIĘDZYKLANOWY', value: rankingInfo, inline: false });
-            }
-        }
 
         embed.setFooter({ text: `📅 Dane z ostatnich ${last54Weeks.length} tygodni` });
 
