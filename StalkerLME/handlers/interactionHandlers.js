@@ -6821,131 +6821,33 @@ async function handleAutocomplete(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        if (interaction.commandName === 'progres') {
+        if (interaction.commandName === 'progres' || interaction.commandName === 'player-status') {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
-            // Pobierz wszystkie dostępne tygodnie
-            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+            // Pobierz wszystkich członków serwera z rolami klanowymi
+            const clanRoleIds = Object.values(config.targetRoles);
+            const allMembers = await interaction.guild.members.fetch();
 
-            if (allWeeks.length === 0) {
-                await interaction.respond([]);
-                return;
-            }
-
-            // Zbierz wszystkich unikalnych graczy (userId) ze wszystkich klanów i tygodni
-            const playerUserIds = new Set();
-
-            for (const week of allWeeks) {
-                for (const clan of week.clans) {
-                    const weekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        week.weekNumber,
-                        week.year,
-                        clan
-                    );
-
-                    if (weekData && weekData.players) {
-                        weekData.players.forEach(player => {
-                            if (player.userId) {
-                                playerUserIds.add(player.userId);
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Pobierz aktualny nick z Discord dla każdego userId
             const playerChoices = [];
-            for (const userId of playerUserIds) {
-                try {
-                    const member = await interaction.guild.members.fetch(userId);
-                    const currentNick = member.displayName;
 
-                    // Filtruj według wpisanego tekstu
-                    if (currentNick.toLowerCase().includes(focusedValueLower)) {
-                        playerChoices.push({
-                            name: currentNick,
-                            value: userId,
-                            nickLower: currentNick.toLowerCase()
-                        });
-                    }
-                } catch (error) {
-                    // Użytkownik nie jest już na serwerze, pomijamy
-                }
-            }
+            for (const [userId, member] of allMembers) {
+                // Sprawdź czy użytkownik ma przynajmniej jedną rolę klanową
+                const hasClanRole = member.roles.cache.some(role =>
+                    clanRoleIds.includes(role.id)
+                );
 
-            // Sortuj graczy według dopasowania
-            const choices = playerChoices
-                .sort((a, b) => {
-                    // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
-                    const aStartsWith = a.nickLower.startsWith(focusedValueLower);
-                    const bStartsWith = b.nickLower.startsWith(focusedValueLower);
+                if (!hasClanRole) continue;
 
-                    if (aStartsWith && !bStartsWith) return -1;
-                    if (!aStartsWith && bStartsWith) return 1;
+                const currentNick = member.displayName;
 
-                    // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
-                    return a.nickLower.localeCompare(b.nickLower);
-                })
-                .map(player => ({
-                    name: player.name,
-                    value: player.value
-                }))
-                .slice(0, 25); // Discord limit: max 25 opcji
-
-            await interaction.respond(choices);
-        } else if (interaction.commandName === 'player-status') {
-            const focusedValue = interaction.options.getFocused();
-            const focusedValueLower = focusedValue.toLowerCase();
-
-            // Pobierz wszystkie dostępne tygodnie
-            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-
-            if (allWeeks.length === 0) {
-                await interaction.respond([]);
-                return;
-            }
-
-            // Zbierz wszystkich unikalnych graczy (userId) ze wszystkich klanów i tygodni
-            const playerUserIds = new Set();
-
-            for (const week of allWeeks) {
-                for (const clan of week.clans) {
-                    const weekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        week.weekNumber,
-                        week.year,
-                        clan
-                    );
-
-                    if (weekData && weekData.players) {
-                        weekData.players.forEach(player => {
-                            if (player.userId) {
-                                playerUserIds.add(player.userId);
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Pobierz aktualny nick z Discord dla każdego userId
-            const playerChoices = [];
-            for (const userId of playerUserIds) {
-                try {
-                    const member = await interaction.guild.members.fetch(userId);
-                    const currentNick = member.displayName;
-
-                    // Filtruj według wpisanego tekstu
-                    if (currentNick.toLowerCase().includes(focusedValueLower)) {
-                        playerChoices.push({
-                            name: currentNick,
-                            value: userId,
-                            nickLower: currentNick.toLowerCase()
-                        });
-                    }
-                } catch (error) {
-                    // Użytkownik nie jest już na serwerze, pomijamy
+                // Filtruj według wpisanego tekstu
+                if (currentNick.toLowerCase().includes(focusedValueLower)) {
+                    playerChoices.push({
+                        name: currentNick,
+                        value: userId,
+                        nickLower: currentNick.toLowerCase()
+                    });
                 }
             }
 
