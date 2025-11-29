@@ -7546,6 +7546,37 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
+        // Oblicz największy progres i regres w całej historii
+        let biggestProgress = null;
+        let biggestProgressWeek = null;
+        let biggestRegress = null;
+        let biggestRegressWeek = null;
+
+        if (playerProgressData.length >= 2) {
+            let maxProgressDiff = 0;
+            let maxRegressDiff = 0;
+
+            for (let i = 0; i < playerProgressData.length - 1; i++) {
+                const currentWeek = playerProgressData[i];
+                const previousWeek = playerProgressData[i + 1];
+                const diff = currentWeek.score - previousWeek.score;
+
+                // Największy progres (dodatnia różnica)
+                if (diff > maxProgressDiff) {
+                    maxProgressDiff = diff;
+                    biggestProgress = diff;
+                    biggestProgressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
+                }
+
+                // Największy regres (ujemna różnica)
+                if (diff < maxRegressDiff) {
+                    maxRegressDiff = diff;
+                    biggestRegress = diff;
+                    biggestRegressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
+                }
+            }
+        }
+
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
         const barLength = 10;
@@ -7645,7 +7676,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
-        if (monthlyProgress !== null || quarterlyProgress !== null) {
+        if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
             let progressInfo = '';
 
             if (monthlyProgress !== null) {
@@ -7659,7 +7690,21 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const arrow = quarterlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
                 const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
-                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)`;
+                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)\n`;
+            }
+
+            if (biggestProgress !== null || biggestRegress !== null) {
+                progressInfo += '\n';
+            }
+
+            if (biggestProgress !== null) {
+                const absProgress = Math.abs(biggestProgress).toLocaleString('pl-PL');
+                progressInfo += `**🚀 Największy progres:** ▲ ${absProgress} (tydzień ${biggestProgressWeek})\n`;
+            }
+
+            if (biggestRegress !== null) {
+                const absRegress = Math.abs(biggestRegress).toLocaleString('pl-PL');
+                progressInfo += `**📉 Największy regres:** ▼ ${absRegress} (tydzień ${biggestRegressWeek})`;
             }
 
             if (progressInfo) {
