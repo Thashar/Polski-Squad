@@ -336,7 +336,7 @@ class InteractionHandler {
                 return;
             }
             
-            const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower);
+            const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower).reverse();
 
             const overviewEmbed = new EmbedBuilder()
                 .setTitle(`🌙 Lunar Mine Expedition - Guild Overview`)
@@ -664,7 +664,7 @@ class InteractionHandler {
                 return;
             }
 
-            const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower);
+            const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower).reverse();
             this.logger.info(`📅 Step 3: Sorted ${sortedClans.length} guilds by total power`);
 
             const overviewEmbed = new EmbedBuilder()
@@ -759,7 +759,7 @@ class InteractionHandler {
             .setFooter({ text: `Guild ID: ${guild.guildId}` })
             .setTimestamp();
 
-        // Add all chunks as separate fields (inline for left-to-right layout)
+        // Add all chunks as separate fields (top to bottom layout)
         chunks.forEach((chunk, chunkIndex) => {
             const memberText = chunk.map(member =>
                 `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
@@ -768,7 +768,7 @@ class InteractionHandler {
             memberEmbed.addFields({
                 name: '\u200b', // Zero-width space for invisible field name
                 value: memberText || 'No data',
-                inline: true
+                inline: false
             });
         });
 
