@@ -7451,12 +7451,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const hasLotteryBanRole = member ? member.roles.cache.has(config.lotteryBanRoleId) : false;
 
         // Oblicz współczynnik wyjebania
-        // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.2) / liczba_tygodni × 100%)
+        // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.25) / liczba_tygodni × 100%)
         const numberOfWeeksWithData = playerProgressData.length;
         let wyjebanieFactor = null;
 
         if (numberOfWeeksWithData > 0) {
-            const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.2);
+            const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.25);
             const rawFactor = (penaltyScore / numberOfWeeksWithData) * 100;
             wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
         }
