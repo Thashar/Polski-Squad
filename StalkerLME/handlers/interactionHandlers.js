@@ -144,6 +144,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'clan-status':
             await handleClanStatusCommand(interaction, sharedState);
             break;
+        case 'player-status':
+            await handlePlayerStatusCommand(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -553,7 +556,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             )
             .setColor('#0099FF')
             .setTimestamp()
-            .setFooter({ text: `Debug wykonany przez ${interaction.user.tag}` });
+            .setFooter({ text: `Debug wykonany przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
         
         await interaction.editReply({ embeds: [embed] });
     } catch (error) {
@@ -1097,7 +1100,7 @@ async function handleButton(interaction, sharedState) {
                     `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
                 )
                 .setColor('#00ff00')
-                .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+                .setFooter({ text: `Wykonano przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
             await interaction.editReply({
                 embeds: [successEmbed],
@@ -1634,7 +1637,7 @@ async function handleButton(interaction, sharedState) {
                     `**Zamknięcie sesji:** ${createProgressBar(secondsLeft)} ${secondsLeft}s`
                 )
                 .setColor('#00ff00')
-                .setFooter({ text: `${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
+                .setFooter({ text: `${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
 
             await interaction.editReply({
                 embeds: [successEmbed],
@@ -1755,7 +1758,7 @@ async function handleButton(interaction, sharedState) {
                         .setDescription('Pomyślnie dodano punkty karne dla znalezionych graczy.')
                         .setColor('#00ff00')
                         .setTimestamp()
-                        .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+                        .setFooter({ text: `Wykonano przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
                     
                     await interaction.update({ 
                         embeds: [punishConfirmation],
@@ -1817,7 +1820,7 @@ async function handleButton(interaction, sharedState) {
                         .setDescription('Pomyślnie wysłano przypomnienia dla znalezionych graczy.')
                         .setColor('#00ff00')
                         .setTimestamp()
-                        .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
+                        .setFooter({ text: `Wykonano przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
                     await interaction.update({
                         embeds: [confirmationSuccess],
@@ -2263,7 +2266,17 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('clan-status')
-            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów')
+            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów'),
+
+        new SlashCommandBuilder()
+            .setName('player-status')
+            .setDescription('Wyświetla kompletny status gracza (progres, kary, ranking, klan)')
+            .addStringOption(option =>
+                option.setName('nick')
+                    .setDescription('Nick gracza (wyszukaj z listy lub wpisz własny)')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
     ];
 
     try {
@@ -2453,7 +2466,7 @@ async function showUncertaintyQuestion(interaction, uncertainPlayers, allPlayers
         .setColor('#FFA500')
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.user.tag}` });
+        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
     
     await interaction.editReply({
         embeds: [embed],
@@ -2501,7 +2514,7 @@ async function showUncertaintyQuestionWithUpdate(interaction, uncertainPlayers, 
         .setColor('#FFA500')
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.user.tag}` });
+        .setFooter({ text: `Sprawdź obraz i zdecyduj • Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
     
     await interaction.update({
         embeds: [embed],
@@ -2607,7 +2620,7 @@ async function showFinalConfirmation(interaction, finalPlayers, imageUrl, config
         )
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
+        .setFooter({ text: `Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
     
     await interaction.editReply({ 
         embeds: [confirmationEmbed],
@@ -2672,7 +2685,7 @@ async function showFinalConfirmationWithUpdate(interaction, finalPlayers, imageU
         )
         .setImage(imageUrl)
         .setTimestamp()
-        .setFooter({ text: `Żądanie od ${interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
+        .setFooter({ text: `Żądanie od ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag} | Potwierdź lub anuluj w ciągu 5 minut` });
     
     await interaction.update({ 
         embeds: [confirmationEmbed],
@@ -3426,7 +3439,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
                 { name: '🎯 Klan', value: clanName, inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
+            .setFooter({ text: `Zapisane przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
         // Dodaj listę graczy z zerem jeśli są
         if (playersWithZero.length > 0) {
@@ -4010,7 +4023,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
                 { name: '⏳ Zamknięcie sesji', value: `${createProgressBar(secondsLeft)} ${secondsLeft}s`, inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
+            .setFooter({ text: `Zapisane przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
         await interaction.editReply({ embeds: [publicEmbed], components: [] });
         await phaseService.cleanupSession(session.sessionId);
@@ -4629,7 +4642,7 @@ async function showUserSelectMenu(interaction, sharedState, phase, clan, weekNum
         new StringSelectMenuOptionBuilder()
             .setLabel(member.displayName)
             .setValue(member.id)
-            .setDescription(`@${member.user.username}`)
+            .setDescription(`ID: ${member.id}`)
     );
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -6016,7 +6029,7 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
                 { name: '📈 Nowy wynik', value: newScoreNum.toString(), inline: true }
             )
             .setTimestamp()
-            .setFooter({ text: `Zmodyfikowane przez ${interaction.user.tag}` });
+            .setFooter({ text: `Zmodyfikowane przez ${interaction.member?.displayName || interaction.user.displayName || interaction.user.tag}` });
 
         await interaction.update({
             embeds: [embed],
@@ -6805,78 +6818,83 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
 // Funkcja obsługująca autocomplete
 async function handleAutocomplete(interaction, sharedState) {
-    const { databaseService, config } = sharedState;
+    const { databaseService } = sharedState;
 
     try {
-        if (interaction.commandName === 'progres') {
+        if (interaction.commandName === 'progres' || interaction.commandName === 'player-status') {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
-            // Pobierz wszystkie dostępne tygodnie
-            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+            logger.info(`[AUTOCOMPLETE] Wyszukiwanie dla: "${focusedValue}"`);
 
-            if (allWeeks.length === 0) {
+            // ===== KROK 1: Pobierz userId graczy z wynikami w bazie (SZYBKA METODA) =====
+            const playerUserIds = await databaseService.getAllPlayersWithResultsFast(interaction.guild.id);
+            logger.info(`[AUTOCOMPLETE] Graczy w bazie: ${playerUserIds.size}`);
+
+            if (playerUserIds.size === 0) {
+                logger.warn('[AUTOCOMPLETE] Brak graczy w bazie');
                 await interaction.respond([]);
                 return;
             }
 
-            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
-            const playerNames = new Set();
+            // ===== KROK 2: Pobierz członków serwera którzy mają wyniki =====
+            const allMembers = await interaction.guild.members.fetch();
+            logger.info(`[AUTOCOMPLETE] Pobrano ${allMembers.size} członków serwera`);
 
-            for (const week of allWeeks) {
-                for (const clan of week.clans) {
-                    const weekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        week.weekNumber,
-                        week.year,
-                        clan
-                    );
+            // ===== KROK 3: Filtruj tylko po: =====
+            // - Wyniki w bazie
+            // - Nick pasujący do wpisanego tekstu
+            // NIE filtrujemy po roli klanowej - pokazujemy wszystkich z wynikami
+            const playerChoices = [];
 
-                    if (weekData && weekData.players) {
-                        weekData.players.forEach(player => {
-                            if (player.displayName) {
-                                playerNames.add(player.displayName);
-                            }
-                        });
-                    }
+            for (const [userId, member] of allMembers) {
+                // Sprawdź czy ma wyniki w bazie
+                if (!playerUserIds.has(userId)) continue;
+
+                // Filtruj według wpisanego tekstu
+                const currentNick = member.displayName;
+                if (currentNick.toLowerCase().includes(focusedValueLower)) {
+                    playerChoices.push({
+                        name: currentNick,           // AKTUALNY nick serwerowy
+                        value: userId,                // userId do wyszukiwania
+                        nickLower: currentNick.toLowerCase()
+                    });
                 }
             }
 
-            // Filtruj i sortuj graczy według dopasowania
-            const choices = Array.from(playerNames)
-                .filter(name => name.toLowerCase().includes(focusedValueLower))
+            logger.info(`[AUTOCOMPLETE] Znaleziono ${playerChoices.length} graczy pasujących do "${focusedValue}"`);
+
+            // ===== KROK 4: Sortuj i wyświetl =====
+            const choices = playerChoices
                 .sort((a, b) => {
-                    // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
-                    const aLower = a.toLowerCase();
-                    const bLower = b.toLowerCase();
-                    const aStartsWith = aLower.startsWith(focusedValueLower);
-                    const bStartsWith = bLower.startsWith(focusedValueLower);
+                    const aStartsWith = a.nickLower.startsWith(focusedValueLower);
+                    const bStartsWith = b.nickLower.startsWith(focusedValueLower);
 
                     if (aStartsWith && !bStartsWith) return -1;
                     if (!aStartsWith && bStartsWith) return 1;
 
-                    // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
-                    return aLower.localeCompare(bLower);
+                    return a.nickLower.localeCompare(b.nickLower);
                 })
-                .map(name => ({
-                    name: name,
-                    value: name
+                .map(player => ({
+                    name: player.name,
+                    value: player.value
                 }))
-                .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
+                .slice(0, 25); // Discord limit
 
-            // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
-            if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
-                choices.unshift({
-                    name: `📝 Użyj wpisanego: "${focusedValue}"`,
-                    value: focusedValue
-                });
-            }
-
+            logger.info(`[AUTOCOMPLETE] Zwracam ${choices.length} opcji`);
             await interaction.respond(choices);
         }
     } catch (error) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
-        await interaction.respond([]);
+        // Sprawdź czy interaction już nie został acknowledged/responded
+        try {
+            if (!interaction.responded) {
+                await interaction.respond([]);
+            }
+        } catch (innerError) {
+            // Ignoruj błąd jeśli interaction już wygasł
+            logger.error('[AUTOCOMPLETE] ⚠️ Nie można wysłać pustej odpowiedzi (interaction wygasł)');
+        }
     }
 }
 
@@ -6939,91 +6957,51 @@ async function handleProgresNavButton(interaction, sharedState) {
 
 // Funkcja tworząca ranking graczy po all-time max
 async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
-    // Mapa: playerName -> maxScore
-    const playerMaxScores = new Map();
-
-    for (const week of last54Weeks) {
-        for (const clan of week.clans) {
-            const weekData = await databaseService.getPhase1Results(
-                guildId,
-                week.weekNumber,
-                week.year,
-                clan
-            );
-
-            if (weekData && weekData.players) {
-                weekData.players.forEach(player => {
-                    if (player.displayName && player.score > 0) {
-                        const currentMax = playerMaxScores.get(player.displayName) || 0;
-                        if (player.score > currentMax) {
-                            playerMaxScores.set(player.displayName, player.score);
-                        }
-                    }
-                });
-            }
-        }
-    }
-
-    // Konwertuj do tablicy i posortuj po maxScore (malejąco - najlepsi na początku)
-    const ranking = Array.from(playerMaxScores.entries())
-        .map(([playerName, maxScore]) => ({ playerName, maxScore }))
-        .sort((a, b) => b.maxScore - a.maxScore);
-
-    return ranking;
+    // SZYBKA METODA - używa Promise.all dla równoległego czytania klanów
+    return await databaseService.getAllTimeRankingFast(guildId, last54Weeks.length);
 }
 
 // Funkcja wyświetlająca progres gracza
-async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedState) {
+async function showPlayerProgress(interaction, playerUserId, ownerId, sharedState) {
     const { config, databaseService } = sharedState;
 
     try {
+        // Pobierz aktualny nick gracza z Discord
+        let playerName = 'Nieznany gracz';
+        try {
+            const member = await interaction.guild.members.fetch(playerUserId);
+            playerName = member.displayName;
+        } catch (error) {
+            logger.warn(`[PROGRES] Nie znaleziono użytkownika ${playerUserId} na serwerze`);
+        }
 
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
         const last54Weeks = allWeeks.slice(0, 54);
 
-        // Zbierz dane gracza ze wszystkich tygodni i klanów
-        const playerProgressData = [];
+        // SZYBKA METODA - Zbierz dane gracza (zamiast 216 wywołań)
+        const playerProgressDataRaw = await databaseService.getPlayerProgressDataFast(
+            interaction.guild.id,
+            playerUserId,
+            54
+        );
 
-        for (const week of last54Weeks) {
-            for (const clan of week.clans) {
-                const weekData = await databaseService.getPhase1Results(
-                    interaction.guild.id,
-                    week.weekNumber,
-                    week.year,
-                    clan
-                );
-
-                if (weekData && weekData.players) {
-                    const player = weekData.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === selectedPlayer.toLowerCase()
-                    );
-
-                    if (player) {
-                        playerProgressData.push({
-                            weekNumber: week.weekNumber,
-                            year: week.year,
-                            clan: clan,
-                            clanName: config.roleDisplayNames[clan],
-                            score: player.score,
-                            createdAt: weekData.createdAt
-                        });
-                        break;
-                    }
-                }
-            }
-        }
+        // Dodaj clanName do danych
+        const playerProgressData = playerProgressDataRaw.map(data => ({
+            ...data,
+            clanName: config.roleDisplayNames[data.clan]
+        }));
 
         if (playerProgressData.length === 0) {
             if (isUpdate) {
                 await interaction.update({
-                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${playerName}**.`,
                     embeds: [],
                     components: []
                 });
             } else {
                 await interaction.followUp({
-                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${playerName}**.`,
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -7137,9 +7115,9 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const resultsText = resultsLines.join('\n');
 
-        // Stwórz ranking all-time i znajdź pozycję gracza
+        // Stwórz ranking all-time i znajdź pozycję gracza (po aktualnym nicku)
         const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
-        const currentPlayerIndex = allTimeRanking.findIndex(p => p.playerName.toLowerCase() === selectedPlayer.toLowerCase());
+        const currentPlayerIndex = allTimeRanking.findIndex(p => p.playerName.toLowerCase() === playerName.toLowerCase());
 
         // Gracze sąsiedzi w rankingu (lepszy i gorszy)
         const betterPlayer = currentPlayerIndex > 0 ? allTimeRanking[currentPlayerIndex - 1] : null;
@@ -7197,7 +7175,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         const playerClan = playerProgressData.length > 0 ? playerProgressData[0].clanName : 'Brak';
 
         const embed = new EmbedBuilder()
-            .setTitle(`📈 Progres gracza: ${selectedPlayer} (${playerClan})`)
+            .setTitle(`📈 Progres gracza: ${playerName} (${playerClan})`)
             .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${last54Weeks.length} tygodni):\n\n${resultsText}${expiryInfo}`)
             .setColor('#00FF00')
             .setFooter({ text: `Tygodni z danymi: ${playerProgressData.length}/${last54Weeks.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
@@ -7354,37 +7332,17 @@ async function handleWynikiCommand(interaction, sharedState) {
 
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
 async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks) {
-    // Przechowuj najwyższy wynik globalny dla każdego gracza (ze wszystkich klanów)
+    // SZYBKA METODA - użyj zoptymalizowanej metody
+    const allTimeRanking = await databaseService.getAllTimeRankingFast(guild.id, last54Weeks.length);
+
+    // Stwórz mapę playerName -> { score, displayName }
     const playerMaxScores = new Map();
-
-    // Iterujemy po wszystkich tygodniach i wszystkich klanach aby znaleźć najlepsze wyniki
-    for (const week of last54Weeks) {
-        for (const clan of week.clans) {
-            const weekData = await databaseService.getPhase1Results(
-                guild.id,
-                week.weekNumber,
-                week.year,
-                clan
-            );
-
-            if (weekData && weekData.players) {
-                weekData.players.forEach(player => {
-                    if (player.displayName && player.score > 0) {
-                        const playerKey = player.displayName.toLowerCase();
-                        const currentData = playerMaxScores.get(playerKey);
-                        const currentMaxScore = currentData ? currentData.score : 0;
-
-                        if (player.score > currentMaxScore) {
-                            playerMaxScores.set(playerKey, {
-                                score: player.score,
-                                displayName: player.displayName
-                            });
-                        }
-                    }
-                });
-            }
-        }
-    }
+    allTimeRanking.forEach(entry => {
+        playerMaxScores.set(entry.playerName.toLowerCase(), {
+            score: entry.maxScore,
+            displayName: entry.playerName
+        });
+    });
 
     // Pobierz wszystkich członków serwera
     const members = await guild.members.fetch();
@@ -8059,6 +8017,407 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         } catch (replyError) {
             logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
+    }
+}
+
+// ============ FUNKCJA POMOCNICZA: Oblicz percentyl gracza ============
+function calculatePlayerPercentile(playerTotalScore, allPlayerScores) {
+    if (allPlayerScores.length === 0) return 0;
+
+    // Sortuj malejąco
+    const sortedScores = allPlayerScores.sort((a, b) => b - a);
+
+    // Znajdź pozycję gracza
+    const playerRank = sortedScores.findIndex(score => score === playerTotalScore) + 1;
+
+    if (playerRank === 0) return 100; // Gracz nie ma wyniku
+
+    // Oblicz percentyl: (pozycja / łączna liczba) * 100
+    const percentile = (playerRank / sortedScores.length) * 100;
+
+    return percentile;
+}
+
+// ============ FUNKCJA POMOCNICZA: Oblicz progres gracza ============
+function calculatePlayerProgress(weeklyScores, baseWeekIndex) {
+    // weeklyScores: [{week, score}] - posortowane od najnowszego
+    // baseWeekIndex: indeks tygodnia bazowego (dla miesiąca: 3, dla kwartału: 12)
+    // Progres = najnowszy tydzień - tydzień bazowy (tak jak w /progres)
+
+    if (weeklyScores.length === 0) {
+        return { progress: 0, progressPercent: 0, newestScore: 0, baseScore: 0 };
+    }
+
+    // Najnowszy tydzień (indeks 0)
+    const newestScore = weeklyScores[0] ? (weeklyScores[0].score || 0) : 0;
+
+    // Tydzień bazowy (np. indeks 3 dla miesiąca, 12 dla kwartału)
+    const baseWeek = weeklyScores[baseWeekIndex];
+    const baseScore = baseWeek ? (baseWeek.score || 0) : 0;
+
+    // Oblicz progres (różnica między najnowszym a bazowym)
+    const progress = newestScore - baseScore;
+    const progressPercent = baseScore > 0 ? ((progress / baseScore) * 100) : (newestScore > 0 ? 100 : 0);
+
+    return {
+        progress,
+        progressPercent,
+        newestScore,
+        baseScore
+    };
+}
+
+// ============ FUNKCJA POMOCNICZA: Oblicz kolor embeda według percentyla ============
+function getEmbedColorByPercentile(percentile) {
+    if (percentile <= 25) {
+        return 0x00FF00; // Zielony - TOP 25%
+    } else if (percentile <= 50) {
+        return 0xFFFF00; // Żółty - 25-50%
+    } else if (percentile <= 75) {
+        return 0xFF8800; // Pomarańczowy - 50-75%
+    } else {
+        return 0xFF0000; // Czerwony - 75-100%
+    }
+}
+
+// ============ FUNKCJA POMOCNICZA: Formatuj ikona percentyla ============
+function getPercentileIcon(percentile) {
+    if (percentile <= 25) {
+        return '🟢'; // Zielony
+    } else if (percentile <= 50) {
+        return '🟡'; // Żółty
+    } else if (percentile <= 75) {
+        return '🟠'; // Pomarańczowy
+    } else {
+        return '🔴'; // Czerwony
+    }
+}
+
+// ============ FUNKCJA GŁÓWNA: /player-status ============
+async function handlePlayerStatusCommand(interaction, sharedState) {
+    const { config, databaseService, reminderUsageService } = sharedState;
+
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/player-status` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    try {
+        const playerUserId = interaction.options.getString('nick'); // Teraz to jest userId z autocomplete
+        const guild = interaction.guild;
+
+        // Pobierz aktualny nick gracza z Discord
+        let playerName = 'Nieznany gracz';
+        try {
+            const member = await guild.members.fetch(playerUserId);
+            playerName = member.displayName;
+        } catch (error) {
+            logger.warn(`[PLAYER-STATUS] Nie znaleziono użytkownika ${playerUserId} na serwerze`);
+        }
+
+        // Pobierz wszystkie dostępne tygodnie (ostatnie 54 - cały rok)
+        const allWeeks = await databaseService.getAvailableWeeks(guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
+            });
+            return;
+        }
+
+        // Ogranicz do ostatnich 54 tygodni (rok)
+        const last54Weeks = allWeeks.slice(0, 54);
+
+        // ===== ZBIERANIE DANYCH GRACZA (po userId) =====
+        const playerWeeklyScores = []; // [{week, weekNumber, year, phase1, phase2, total}]
+
+        // Pobierz wyniki z ostatnich 54 tygodni
+        for (const week of last54Weeks) {
+            let weekPhase1Total = 0;
+            let weekPhase2Total = 0;
+
+            // Sprawdź wszystkie klany w tym tygodniu
+            for (const clan of week.clans) {
+                // Faza 1
+                const phase1Data = await databaseService.getPhase1Results(guild.id, week.weekNumber, week.year, clan);
+                if (phase1Data && phase1Data.players) {
+                    const player = phase1Data.players.find(p =>
+                        p.userId === playerUserId
+                    );
+                    if (player) {
+                        weekPhase1Total += player.score || 0;
+                    }
+                }
+
+                // Faza 2
+                const phase2Data = await databaseService.getPhase2Results(guild.id, week.weekNumber, week.year, clan);
+                if (phase2Data && phase2Data.players) {
+                    const player = phase2Data.players.find(p =>
+                        p.userId === playerUserId
+                    );
+                    if (player) {
+                        weekPhase2Total += player.score || 0;
+                    }
+                }
+            }
+
+            // Dodaj tydzień do historii (tylko jeśli gracz miał jakiekolwiek wyniki)
+            if (weekPhase1Total > 0 || weekPhase2Total > 0) {
+                playerWeeklyScores.push({
+                    week: `${week.year}-W${week.weekNumber}`,
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    phase1: weekPhase1Total,
+                    phase2: weekPhase2Total,
+                    score: weekPhase1Total + weekPhase2Total
+                });
+            }
+        }
+
+        // Sprawdź czy znaleziono gracza
+        if (playerWeeklyScores.length === 0) {
+            await interaction.editReply({
+                content: `❌ Nie znaleziono gracza **${playerName}** w bazie danych z ostatnich 54 tygodni.`
+            });
+            return;
+        }
+
+        // ===== KLAN I POZYCJA W RANKINGU =====
+        let currentClan = 'Aktualnie poza strukturami';
+        let currentClanKey = null;
+        let playerRank = null;
+        let totalPlayersInRanking = 0;
+
+        // Znajdź aktualny klan gracza (z ról Discord)
+        if (playerUserId) {
+            try {
+                const member = await guild.members.fetch(playerUserId);
+                for (const [key, roleId] of Object.entries(config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        currentClan = config.roleDisplayNames[key] || key;
+                        currentClanKey = key;
+                        break;
+                    }
+                }
+            } catch (error) {
+                logger.warn(`[PLAYER-STATUS] Nie znaleziono użytkownika ${playerUserId} na serwerze`);
+            }
+        }
+
+        // Pobierz globalny ranking (tak samo jak w /clan-status)
+        const ranking = await createGlobalPlayerRanking(guild, databaseService, config, last54Weeks);
+        totalPlayersInRanking = ranking.length;
+
+        // Znajdź pozycję gracza w rankingu globalnym (wszystkie struktury)
+        const playerInRanking = ranking.find(p =>
+            p.playerName.toLowerCase() === playerName.toLowerCase()
+        );
+        if (playerInRanking) {
+            playerRank = ranking.indexOf(playerInRanking) + 1;
+        }
+
+        // ===== OBLICZANIE FAKTYCZNEJ POZYCJI W KLANIE =====
+        let playerClanRank = null;
+        let totalClanMembers = 0;
+
+        if (currentClanKey) {
+            // Przefiltruj ranking tylko do graczy z tego samego klanu
+            const clanRanking = ranking.filter(p => p.clanKey === currentClanKey);
+            totalClanMembers = clanRanking.length;
+
+            // Znajdź pozycję gracza w rankingu klanowym
+            const playerInClanRanking = clanRanking.find(p =>
+                p.playerName.toLowerCase() === playerName.toLowerCase()
+            );
+            if (playerInClanRanking) {
+                playerClanRank = clanRanking.indexOf(playerInClanRanking) + 1;
+            }
+        }
+
+        // ===== OBLICZANIE STATYSTYK =====
+        // Ostatnie 12 tygodni
+        const last12Weeks = playerWeeklyScores.slice(0, 12);
+        const last12Total = last12Weeks.reduce((sum, w) => sum + w.score, 0);
+        const last12Phase1 = last12Weeks.reduce((sum, w) => sum + w.phase1, 0);
+        const last12Phase2 = last12Weeks.reduce((sum, w) => sum + w.phase2, 0);
+        const avgPerWeek = last12Weeks.length > 0 ? Math.round(last12Total / last12Weeks.length) : 0;
+
+        // Progres miesiąc (najnowszy tydzień vs tydzień sprzed 4 tygodni - indeks 3)
+        const monthProgress = calculatePlayerProgress(playerWeeklyScores, 3);
+
+        // Progres kwartał (najnowszy tydzień vs tydzień sprzed 12 tygodni - indeks 11)
+        const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 11);
+
+        // Najwyższy wynik, najwyższy progres i najwyższy regres (z ostatnich 12 tygodni)
+        let bestWeek = null;
+        let bestProgressWeek = null;
+        let maxProgress = 0;
+        let worstRegressWeek = null;
+        let maxRegress = 0;
+
+        for (let i = 0; i < last12Weeks.length; i++) {
+            const week = last12Weeks[i];
+
+            // Najwyższy wynik
+            if (!bestWeek || week.score > bestWeek.score) {
+                bestWeek = week;
+            }
+
+            // Najwyższy progres i regres (różnica między tym tygodniem a poprzednim)
+            if (i < last12Weeks.length - 1) {
+                const previousWeek = last12Weeks[i + 1];
+                const progress = week.score - previousWeek.score;
+
+                // Progres (wzrost)
+                if (progress > maxProgress) {
+                    maxProgress = progress;
+                    bestProgressWeek = week;
+                }
+
+                // Regres (spadek)
+                if (progress < maxRegress) {
+                    maxRegress = progress;
+                    worstRegressWeek = week;
+                }
+            }
+        }
+
+        // ===== OBLICZANIE PERCENTYLA =====
+        // Zbierz wszystkie wyniki graczy z ostatnich 54 tygodni
+        const allPlayerScores = [];
+        for (const playerData of ranking) {
+            if (playerData.maxScore > 0) {
+                allPlayerScores.push(playerData.maxScore);
+            }
+        }
+        const playerPercentile = calculatePlayerPercentile(
+            playerInRanking ? playerInRanking.maxScore : 0,
+            allPlayerScores
+        );
+
+        // ===== KARY I PRZYPOMNIENIA =====
+        let punishmentPoints = 0;
+        let lastPunishmentDate = null;
+        let reminderCount = 0;
+        let hasLotteryBan = false;
+        let hasPunishmentRole = false;
+
+        if (playerUserId) {
+            try {
+                // Pobierz punkty karne (lifetime_points jak w /debug-roles)
+                const userPunishment = await databaseService.getUserPunishments(guild.id, playerUserId);
+                punishmentPoints = userPunishment.lifetime_points || 0;
+
+                if (userPunishment.history && userPunishment.history.length > 0) {
+                    const lastPunishment = userPunishment.history[userPunishment.history.length - 1];
+                    if (lastPunishment.points > 0) {
+                        lastPunishmentDate = new Date(lastPunishment.date);
+                    }
+                }
+
+                // Sprawdź role (ban loterii i rola karania)
+                const member = await guild.members.fetch(playerUserId);
+                hasLotteryBan = member.roles.cache.has(config.lotteryBanRoleId);
+                hasPunishmentRole = member.roles.cache.has(config.punishmentRoleId);
+
+                // Pobierz liczbę przypomnień (z reminderUsageService) - totalPings jak w /debug-roles
+                if (reminderUsageService.usageData && reminderUsageService.usageData.receivers) {
+                    const receiverData = reminderUsageService.usageData.receivers[playerUserId];
+                    if (receiverData) {
+                        reminderCount = receiverData.totalPings || 0;
+                    }
+                }
+            } catch (error) {
+                logger.warn(`[PLAYER-STATUS] Błąd pobierania kar dla ${playerUserId}:`, error.message);
+            }
+        }
+
+        // ===== TWORZENIE EMBEDA =====
+        const embedColor = getEmbedColorByPercentile(playerPercentile);
+        const percentileIcon = getPercentileIcon(playerPercentile);
+
+        const embed = new EmbedBuilder()
+            .setTitle(`🎯 STATUS GRACZA - ${playerName}`)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // POLE 1: Informacje podstawowe
+        let basicInfo = `**Klan:** ${currentClan}\n`;
+        if (playerClanRank) {
+            basicInfo += `**Pozycja w klanie:** #${playerClanRank} / ${totalClanMembers} członków\n`;
+        }
+        if (playerRank) {
+            basicInfo += `**Pozycja w strukturach:** #${playerRank} / ${totalPlayersInRanking} członków\n`;
+        }
+        basicInfo += `**Percentyl:** TOP ${Math.round(playerPercentile)}% ${percentileIcon}`;
+        embed.addFields({ name: '👤 INFORMACJE PODSTAWOWE', value: basicInfo, inline: false });
+
+        // POLE 2: Progres kwartalny (tylko progres + %, jak w progresie miesięcznym)
+        if (playerWeeklyScores.length >= 12) {
+            const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
+            const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
+            const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
+            embed.addFields({ name: '📊 PROGRES KWARTALNY', value: quarterInfo, inline: false });
+        }
+
+        // POLE 3 i 4: Progres kwartał i miesiąc (zamienione miejscami)
+        if (playerWeeklyScores.length >= 12) {
+            const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
+            const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
+            const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
+            embed.addFields({ name: '📈 PROGRES KWARTAŁ', value: quarterInfo, inline: true });
+        }
+
+        if (playerWeeklyScores.length >= 4) {
+            const monthSign = monthProgress.progress >= 0 ? '+' : '';
+            const monthArrow = monthProgress.progress >= 0 ? '↗️' : '↘️';
+            const monthInfo = `${monthSign}${monthProgress.progress.toLocaleString('pl-PL')} pkt (${monthSign}${Math.round(monthProgress.progressPercent)}%) ${monthArrow}`;
+            embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
+        }
+
+        // POLE 5: Wyniki
+        if (bestWeek) {
+            let resultsInfo = `**Najwyższy wynik:** ${bestWeek.weekNumber}/${bestWeek.year} - **${bestWeek.score.toLocaleString('pl-PL')} pkt**`;
+
+            if (bestProgressWeek && maxProgress > 0) {
+                resultsInfo += `\n**Najwyższy progres:** ${bestProgressWeek.weekNumber}/${bestProgressWeek.year} - **+${maxProgress.toLocaleString('pl-PL')} pkt**`;
+            }
+
+            if (worstRegressWeek && maxRegress < 0) {
+                resultsInfo += `\n**Najwyższy regres:** ${worstRegressWeek.weekNumber}/${worstRegressWeek.year} - **${maxRegress.toLocaleString('pl-PL')} pkt**`;
+            }
+
+            embed.addFields({ name: '🏆 WYNIKI', value: resultsInfo, inline: false });
+        }
+
+        // POLE 6: Kary i przypomnienia
+        const penaltiesInfo = punishmentPoints > 0 || reminderCount > 0 || hasLotteryBan || hasPunishmentRole
+            ? `💀 **Punkty karne:** ${punishmentPoints > 0 ? `${punishmentPoints} razy${lastPunishmentDate ? ` (${lastPunishmentDate.toLocaleDateString('pl-PL')})` : ''}` : 'Brak'}\n` +
+              `📢 **Przypomnienia:** ${reminderCount > 0 ? `${reminderCount} razy` : 'Brak'}\n` +
+              `🎭 **Rola karania:** ${hasPunishmentRole ? 'TAK' : 'NIE'}\n` +
+              `🚫 **Ban loterii:** ${hasLotteryBan ? 'TAK' : 'NIE'}`
+            : `💀 **Punkty karne:** Brak\n📢 **Przypomnienia:** Brak\n🎭 **Rola karania:** NIE\n🚫 **Ban loterii:** NIE`;
+        embed.addFields({ name: '⚠️ KARY I PRZYPOMNIENIA', value: penaltiesInfo, inline: false });
+
+        embed.setFooter({ text: `📅 Dane z ostatnich ${last54Weeks.length} tygodni` });
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        logger.error('[PLAYER-STATUS] ❌ Błąd komendy /player-status:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania statusu gracza.'
+        });
     }
 }
 

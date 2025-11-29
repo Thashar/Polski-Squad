@@ -135,7 +135,7 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
                     
                     // Wyślij wiadomość informacyjną (bez pingu żeby uniknąć pętli)
                     const warningMsg = await thread.send(
-                        `⚠️ **${member.user?.username || 'Użytkownik'}** został usunięty z wątku - dołączenie możliwe tylko przez system akceptacji!`
+                        `⚠️ **${member.displayName || member.user?.username || 'Użytkownik'}** został usunięty z wątku - dołączenie możliwe tylko przez system akceptacji!`
                     );
                     
                     // Usuń wiadomość po 10 sekundach
