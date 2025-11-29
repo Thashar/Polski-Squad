@@ -7699,12 +7699,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             if (biggestProgress !== null) {
                 const absProgress = Math.abs(biggestProgress).toLocaleString('pl-PL');
-                progressInfo += `**🚀 Największy progres:** ▲ ${absProgress} (tydzień ${biggestProgressWeek})\n`;
+                progressInfo += `**↗️ Największy progres:** ${absProgress} (tydzień ${biggestProgressWeek})\n`;
             }
 
             if (biggestRegress !== null) {
                 const absRegress = Math.abs(biggestRegress).toLocaleString('pl-PL');
-                progressInfo += `**📉 Największy regres:** ▼ ${absRegress} (tydzień ${biggestRegressWeek})`;
+                progressInfo += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})`;
             }
 
             if (progressInfo) {
