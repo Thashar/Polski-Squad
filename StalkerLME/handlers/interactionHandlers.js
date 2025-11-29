@@ -8354,12 +8354,28 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Progres kwartał (najnowszy tydzień vs tydzień sprzed 12 tygodni - indeks 11)
         const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 11);
 
-        // Najlepszy i najgorszy tydzień (z ostatnich 12)
+        // Najwyższy wynik i najwyższy progres (z ostatnich 12 tygodni)
         let bestWeek = null;
-        let worstWeek = null;
-        for (const week of last12Weeks) {
-            if (!bestWeek || week.score > bestWeek.score) bestWeek = week;
-            if (!worstWeek || week.score < worstWeek.score) worstWeek = week;
+        let bestProgressWeek = null;
+        let maxProgress = 0;
+
+        for (let i = 0; i < last12Weeks.length; i++) {
+            const week = last12Weeks[i];
+
+            // Najwyższy wynik
+            if (!bestWeek || week.score > bestWeek.score) {
+                bestWeek = week;
+            }
+
+            // Najwyższy progres (różnica między tym tygodniem a poprzednim)
+            if (i < last12Weeks.length - 1) {
+                const previousWeek = last12Weeks[i + 1];
+                const progress = week.score - previousWeek.score;
+                if (progress > maxProgress) {
+                    maxProgress = progress;
+                    bestProgressWeek = week;
+                }
+            }
         }
 
         // ===== OBLICZANIE PERCENTYLA =====
@@ -8427,14 +8443,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         basicInfo += `**Percentyl:** TOP ${Math.round(playerPercentile)}% ${percentileIcon}`;
         embed.addFields({ name: '👤 INFORMACJE PODSTAWOWE', value: basicInfo, inline: false });
 
-        // POLE 2: Statystyki ostatnich 12 tygodni
+        // POLE 2: Progres kwartalny (ostatnie 12 tygodni)
         if (last12Weeks.length > 0) {
             const statsInfo =
                 `**Faza 1:** ${last12Phase1.toLocaleString('pl-PL')} pkt (${last12Weeks.length} tyg.)\n` +
                 `**Faza 2:** ${last12Phase2.toLocaleString('pl-PL')} pkt (${last12Weeks.length} tyg.)\n` +
                 `**Łącznie:** ${last12Total.toLocaleString('pl-PL')} pkt\n` +
                 `**Średnia/tyg.:** ${avgPerWeek.toLocaleString('pl-PL')} pkt`;
-            embed.addFields({ name: '📊 OSTATNIE 12 TYGODNI', value: statsInfo, inline: false });
+            embed.addFields({ name: '📊 PROGRES KWARTALNY', value: statsInfo, inline: false });
         }
 
         // POLE 3 i 4: Progres miesiąc i kwartał
@@ -8453,10 +8469,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
 
         // POLE 5: Rekordy
-        if (bestWeek && worstWeek) {
-            const recordsInfo =
-                `**Najlepszy tydzień:** Tyg. ${bestWeek.weekNumber} - ${bestWeek.score.toLocaleString('pl-PL')} pkt\n` +
-                `**Najgorszy tydzień:** Tyg. ${worstWeek.weekNumber} - ${worstWeek.score.toLocaleString('pl-PL')} pkt`;
+        if (bestWeek) {
+            let recordsInfo = `**Najwyższy wynik:** Tyg. ${bestWeek.weekNumber} - ${bestWeek.score.toLocaleString('pl-PL')} pkt`;
+
+            if (bestProgressWeek && maxProgress > 0) {
+                recordsInfo += `\n**Najwyższy progres:** Tyg. ${bestProgressWeek.weekNumber} - +${maxProgress.toLocaleString('pl-PL')} pkt`;
+            }
+
             embed.addFields({ name: '🏆 REKORDY', value: recordsInfo, inline: false });
         }
 
