@@ -7450,6 +7450,17 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const hasPunishmentRole = member ? member.roles.cache.has(config.punishmentRoleId) : false;
         const hasLotteryBanRole = member ? member.roles.cache.has(config.lotteryBanRoleId) : false;
 
+        // Oblicz współczynnik wyjebania
+        // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.2) / liczba_tygodni × 100%)
+        const numberOfWeeksWithData = playerProgressData.length;
+        let wyjebanieFactor = null;
+
+        if (numberOfWeeksWithData > 0) {
+            const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.2);
+            const rawFactor = (penaltyScore / numberOfWeeksWithData) * 100;
+            wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
+        }
+
         // Oblicz progres miesięczny (idealnie ostatnie 4 tygodnie vs tydzień 5, ale pokaż co jest dostępne)
         let monthlyProgress = null;
         let monthlyProgressPercent = null;
@@ -7714,14 +7725,23 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        // Pole 3: Wykresy (ostatnie 12 tygodni)
+        // Pole 3: Współczynniki
+        if (wyjebanieFactor !== null) {
+            const factorFormatted = wyjebanieFactor.toFixed(2);
+            const wyjebanieInfo = `**Rzetelność:** ${factorFormatted}%\n` +
+                `*Tygodni z danymi: ${numberOfWeeksWithData} | Przypomnienia: ${reminderCount} | Punkty kar: ${lifetimePoints}*`;
+
+            embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: wyjebanieInfo, inline: false });
+        }
+
+        // Pole 4: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
             name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
             value: resultsText,
             inline: false
         });
 
-        // Pole 4: Kary i status
+        // Pole 5: Kary i status
         let penaltiesInfo = '';
 
         penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
