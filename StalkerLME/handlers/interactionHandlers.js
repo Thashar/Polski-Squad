@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres i /player-status
-    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki i /progres
+    const publicCommands = ['decode', 'wyniki', 'progres'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -7691,11 +7691,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
                 const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
                 progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)\n`;
-            }
-
-            // Dodaj separator jeśli są dane monthly/quarterly
-            if (monthlyProgress !== null || quarterlyProgress !== null) {
-                progressInfo += '\n';
             }
 
             // Największy progres
