@@ -571,6 +571,66 @@ class DatabaseService {
     }
 
     /**
+     * SZYBKA metoda dla autocomplete - zwraca Set wszystkich userId z wynikami w bazie
+     * Skanuje TYLKO nazwy plików bez czytania zawartości dla maksymalnej szybkości
+     */
+    async getAllPlayersWithResultsFast(guildId) {
+        const guildBaseDir = path.join(this.phasesBaseDir, `guild_${guildId}`, 'phase1');
+        const playerUserIds = new Set();
+
+        try {
+            await fs.access(guildBaseDir);
+        } catch {
+            return playerUserIds; // Pusty Set jeśli brak katalogu
+        }
+
+        try {
+            // Odczytaj wszystkie lata
+            const years = await fs.readdir(guildBaseDir);
+
+            for (const yearDir of years) {
+                const yearPath = path.join(guildBaseDir, yearDir);
+                const stat = await fs.stat(yearPath);
+
+                if (!stat.isDirectory()) continue;
+
+                // Odczytaj wszystkie pliki w danym roku
+                const files = await fs.readdir(yearPath);
+
+                // Czytaj pliki w partiach dla szybkości
+                for (const filename of files) {
+                    const match = filename.match(/^week-(\d+)_(.+)\.json$/);
+                    if (!match) continue;
+
+                    const filePath = path.join(yearPath, filename);
+
+                    try {
+                        const fileContent = await fs.readFile(filePath, 'utf8');
+                        const weekData = JSON.parse(fileContent);
+
+                        if (weekData.players) {
+                            weekData.players.forEach(player => {
+                                if (player.userId) {
+                                    playerUserIds.add(player.userId);
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        // Pomiń uszkodzone pliki
+                        logger.warn(`[DB] ⚠️ Nie można odczytać pliku: ${filename}`);
+                    }
+                }
+            }
+
+            return playerUserIds;
+
+        } catch (error) {
+            logger.error('[DB] ❌ Błąd odczytu graczy z wynikami:', error);
+            return playerUserIds;
+        }
+    }
+
+    /**
      * Pobiera najwyższy historyczny wynik gracza przed określonym tygodniem
      * Przeszukuje wszystkie klany z danego serwera
      * @param {string} guildId - ID serwera

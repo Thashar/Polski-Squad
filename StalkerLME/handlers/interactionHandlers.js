@@ -6834,38 +6834,15 @@ async function handleAutocomplete(interaction, sharedState) {
             const allMembers = await interaction.guild.members.fetch(); // JEDEN call do API
             logger.info(`[AUTOCOMPLETE] Pobrano ${allMembers.size} członków serwera`);
 
-            // ===== KROK 2: Zbierz userId graczy z wynikami w bazie =====
-            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-            logger.info(`[AUTOCOMPLETE] Dostępne tygodnie: ${allWeeks.length}`);
+            // ===== KROK 2: Zbierz userId graczy z wynikami w bazie (SZYBKA METODA) =====
+            const playerUserIds = await databaseService.getAllPlayersWithResultsFast(interaction.guild.id);
+            logger.info(`[AUTOCOMPLETE] Graczy w bazie: ${playerUserIds.size}`);
 
-            if (allWeeks.length === 0) {
-                logger.warn('[AUTOCOMPLETE] Brak tygodni w bazie');
+            if (playerUserIds.size === 0) {
+                logger.warn('[AUTOCOMPLETE] Brak graczy w bazie');
                 await interaction.respond([]);
                 return;
             }
-
-            const playerUserIds = new Set();
-
-            for (const week of allWeeks) {
-                for (const clan of week.clans) {
-                    const weekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        week.weekNumber,
-                        week.year,
-                        clan
-                    );
-
-                    if (weekData?.players) {
-                        weekData.players.forEach(player => {
-                            if (player.userId) {
-                                playerUserIds.add(player.userId);
-                            }
-                        });
-                    }
-                }
-            }
-
-            logger.info(`[AUTOCOMPLETE] Graczy w bazie: ${playerUserIds.size}`);
 
             // ===== KROK 3: Filtruj członków którzy mają: =====
             // - Rolę klanową NA SERWERZE
@@ -6922,7 +6899,15 @@ async function handleAutocomplete(interaction, sharedState) {
         }
     } catch (error) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
-        await interaction.respond([]);
+        // Sprawdź czy interaction już nie został acknowledged/responded
+        try {
+            if (!interaction.responded) {
+                await interaction.respond([]);
+            }
+        } catch (innerError) {
+            // Ignoruj błąd jeśli interaction już wygasł
+            logger.error('[AUTOCOMPLETE] ⚠️ Nie można wysłać pustej odpowiedzi (interaction wygasł)');
+        }
     }
 }
 
