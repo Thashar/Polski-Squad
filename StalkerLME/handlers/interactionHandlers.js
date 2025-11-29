@@ -6825,14 +6825,21 @@ async function handleAutocomplete(interaction, sharedState) {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
+            logger.info(`[AUTOCOMPLETE] Wyszukiwanie dla: "${focusedValue}"`);
+
             // ===== KROK 1: Pobierz WSZYSTKICH członków z rolami klanowymi (SZYBKIE - 1 call) =====
             const clanRoleIds = Object.values(config.targetRoles);
+            logger.info(`[AUTOCOMPLETE] Role klanowe: ${clanRoleIds.join(', ')}`);
+
             const allMembers = await interaction.guild.members.fetch(); // JEDEN call do API
+            logger.info(`[AUTOCOMPLETE] Pobrano ${allMembers.size} członków serwera`);
 
             // ===== KROK 2: Zbierz userId graczy z wynikami w bazie =====
             const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+            logger.info(`[AUTOCOMPLETE] Dostępne tygodnie: ${allWeeks.length}`);
 
             if (allWeeks.length === 0) {
+                logger.warn('[AUTOCOMPLETE] Brak tygodni w bazie');
                 await interaction.respond([]);
                 return;
             }
@@ -6858,23 +6865,31 @@ async function handleAutocomplete(interaction, sharedState) {
                 }
             }
 
+            logger.info(`[AUTOCOMPLETE] Graczy w bazie: ${playerUserIds.size}`);
+
             // ===== KROK 3: Filtruj członków którzy mają: =====
             // - Rolę klanową NA SERWERZE
             // - Wyniki w bazie
             // - Nick pasujący do wpisanego tekstu
             const playerChoices = [];
+            let withClanRole = 0;
+            let withResults = 0;
+            let matchingNick = 0;
 
             for (const [userId, member] of allMembers) {
                 // Sprawdź czy ma rolę klanową
                 const hasClanRole = member.roles.cache.some(r => clanRoleIds.includes(r.id));
                 if (!hasClanRole) continue;
+                withClanRole++;
 
                 // Sprawdź czy ma wyniki w bazie
                 if (!playerUserIds.has(userId)) continue;
+                withResults++;
 
                 // Filtruj według wpisanego tekstu
                 const currentNick = member.displayName;
                 if (currentNick.toLowerCase().includes(focusedValueLower)) {
+                    matchingNick++;
                     playerChoices.push({
                         name: currentNick,           // AKTUALNY nick serwerowy
                         value: userId,                // userId do wyszukiwania
@@ -6882,6 +6897,8 @@ async function handleAutocomplete(interaction, sharedState) {
                     });
                 }
             }
+
+            logger.info(`[AUTOCOMPLETE] Z rolą klanową: ${withClanRole}, z wynikami: ${withResults}, pasujący nick: ${matchingNick}`);
 
             // ===== KROK 4: Sortuj i wyświetl =====
             const choices = playerChoices
@@ -6900,6 +6917,7 @@ async function handleAutocomplete(interaction, sharedState) {
                 }))
                 .slice(0, 25); // Discord limit
 
+            logger.info(`[AUTOCOMPLETE] Zwracam ${choices.length} opcji`);
             await interaction.respond(choices);
         }
     } catch (error) {
