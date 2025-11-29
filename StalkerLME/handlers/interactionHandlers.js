@@ -7403,7 +7403,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             interaction.guild,
             databaseService,
             config,
-            last54Weeks
+            last54Weeks,
+            members  // Przekaż już pobrane members
         );
 
         const globalPosition = globalRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
@@ -7680,7 +7681,7 @@ async function handleWynikiCommand(interaction, sharedState) {
 }
 
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
-async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks) {
+async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks, members = null) {
     // Przechowuj najwyższy wynik globalny dla każdego gracza (ze wszystkich klanów)
     const playerMaxScores = new Map();
 
@@ -7713,8 +7714,10 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
         }
     }
 
-    // Pobierz wszystkich członków serwera
-    const members = await guild.members.fetch();
+    // Pobierz wszystkich członków serwera (tylko jeśli nie przekazano)
+    if (!members) {
+        members = await guild.members.fetch();
+    }
 
     // Stwórz ranking z aktywnych członków klanów
     const ranking = [];
