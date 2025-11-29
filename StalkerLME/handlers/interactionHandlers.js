@@ -7629,7 +7629,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Stwórz embed
         const embed = new EmbedBuilder()
-            .setTitle(`# 👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
+            .setTitle(`👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
             .setColor('#00BFFF') // Tymczasowo niebieski, później dodamy kolorowanie
             .setTimestamp();
 
@@ -7678,7 +7678,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let penaltiesInfo = '';
 
         penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
-        penaltiesInfo += `💀 **Punkty kary (kariera):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
+        penaltiesInfo += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
