@@ -7642,7 +7642,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         rankingInfo += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
 
-        embed.addFields({ name: '🏆 Ranking', value: rankingInfo, inline: false });
+        embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null) {
@@ -7663,13 +7663,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             if (progressInfo) {
-                embed.addFields({ name: '📊 Statystyki', value: progressInfo, inline: false });
+                embed.addFields({ name: '📊 STATYSTYKI', value: progressInfo, inline: false });
             }
         }
 
         // Pole 3: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
-            name: '📈 Progres (ostatnie 12 tygodni)',
+            name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
             value: resultsText,
             inline: false
         });
@@ -7682,7 +7682,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        embed.addFields({ name: '⚖️ Kary i status', value: penaltiesInfo, inline: false });
+        embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
 
         // Footer
         embed.setFooter({
