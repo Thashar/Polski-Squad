@@ -2,22 +2,10 @@
 
 **INSTRUKCJA WAŻNA: ZAWSZE PISZ PO POLSKU. Odpowiadaj na każdą konwersację w języku polskim, niezależnie od języka zapytania użytkownika.**
 
-**INSTRUKCJA RAPORTOWANIA TOKENÓW: Na końcu KAŻDEJ odpowiedzi podawaj:**
-- Użyj wartości z ostatniego `<system_warning>Token usage: X/200000` + dodaj ~500-1500 tokenów estymacji dla odpowiedzi (w zależności od długości)
-- Format: `Zużyte tokeny: X/200000 (Y%)`
-- Progress bar z 20 kratkami: każda kratka = 5% (█ = zużyte, ░ = wolne)
-- Przykład formatu:
-  ```
-  ---
-  Zużyte tokeny: 20000/200000 (10%)
-  [██░░░░░░░░░░░░░░░░░░] 10%
-  ```
-- **WAŻNE:** Wartość MUSI być realna z `<system_warning>`, NIE wymyślona!
-
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
 - Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
 - W commitach używaj krótkiego opisu zmian PO POLSKU
-- **Po utworzeniu commita ZAWSZE od razu wykonaj `git push` bez pytania**
+- Po utworzeniu commita ZAWSZE od razu wykonaj `git push` bez pytania
 - Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
 - Przykład: "Dodano system kolejkowania OCR do StalkerLME"
 
