@@ -7693,18 +7693,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)\n`;
             }
 
-            if (biggestProgress !== null || biggestRegress !== null) {
+            // Dodaj separator jeśli są dane monthly/quarterly
+            if (monthlyProgress !== null || quarterlyProgress !== null) {
                 progressInfo += '\n';
             }
 
-            if (biggestProgress !== null) {
+            // Największy progres
+            if (biggestProgress !== null && biggestProgress > 0) {
                 const absProgress = Math.abs(biggestProgress).toLocaleString('pl-PL');
                 progressInfo += `**↗️ Największy progres:** ${absProgress} (tydzień ${biggestProgressWeek})\n`;
+            } else {
+                progressInfo += `**↗️ Największy progres:** brak\n`;
             }
 
-            if (biggestRegress !== null) {
+            // Największy regres
+            if (biggestRegress !== null && biggestRegress < 0) {
                 const absRegress = Math.abs(biggestRegress).toLocaleString('pl-PL');
                 progressInfo += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})`;
+            } else {
+                progressInfo += `**↘️ Największy regres:** brak`;
             }
 
             if (progressInfo) {
