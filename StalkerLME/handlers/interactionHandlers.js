@@ -7588,7 +7588,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Stwórz embed
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Status gracza: ${latestNick}`)
+            .setTitle(`👤 Status gracza: ${latestNick}`)
             .setColor('#00BFFF') // Tymczasowo niebieski, później dodamy kolorowanie
             .setTimestamp();
 
@@ -7600,7 +7600,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             rankingInfo += `🎯 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}`;
         }
 
-        embed.addFields({ name: '📈 Ranking', value: rankingInfo, inline: false });
+        embed.addFields({ name: '🏆 Ranking', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null) {
@@ -7621,13 +7621,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             if (progressInfo) {
-                embed.addFields({ name: '📊 Progres', value: progressInfo, inline: false });
+                embed.addFields({ name: '📊 Statystyki', value: progressInfo, inline: false });
             }
         }
 
         // Pole 3: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
-            name: '📈 Wyniki z Fazy 1 (ostatnie 12 tygodni)',
+            name: '📈 Progres (ostatnie 12 tygodni)',
             value: resultsText,
             inline: false
         });
