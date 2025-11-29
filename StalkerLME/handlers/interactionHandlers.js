@@ -8372,10 +8372,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Progres kwartał (najnowszy tydzień vs tydzień sprzed 12 tygodni - indeks 11)
         const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 11);
 
-        // Najwyższy wynik i najwyższy progres (z ostatnich 12 tygodni)
+        // Najwyższy wynik, najwyższy progres i najwyższy regres (z ostatnich 12 tygodni)
         let bestWeek = null;
         let bestProgressWeek = null;
         let maxProgress = 0;
+        let worstRegressWeek = null;
+        let maxRegress = 0;
 
         for (let i = 0; i < last12Weeks.length; i++) {
             const week = last12Weeks[i];
@@ -8385,13 +8387,21 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 bestWeek = week;
             }
 
-            // Najwyższy progres (różnica między tym tygodniem a poprzednim)
+            // Najwyższy progres i regres (różnica między tym tygodniem a poprzednim)
             if (i < last12Weeks.length - 1) {
                 const previousWeek = last12Weeks[i + 1];
                 const progress = week.score - previousWeek.score;
+
+                // Progres (wzrost)
                 if (progress > maxProgress) {
                     maxProgress = progress;
                     bestProgressWeek = week;
+                }
+
+                // Regres (spadek)
+                if (progress < maxRegress) {
+                    maxRegress = progress;
+                    worstRegressWeek = week;
                 }
             }
         }
@@ -8414,6 +8424,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let lastPunishmentDate = null;
         let reminderCount = 0;
         let hasLotteryBan = false;
+        let hasPunishmentRole = false;
 
         if (playerUserId) {
             try {
@@ -8428,15 +8439,16 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     }
                 }
 
-                // Sprawdź ban loterii
+                // Sprawdź role (ban loterii i rola karania)
                 const member = await guild.members.fetch(playerUserId);
                 hasLotteryBan = member.roles.cache.has(config.lotteryBanRoleId);
+                hasPunishmentRole = member.roles.cache.has(config.punishmentRoleId);
 
-                // Pobierz liczbę przypomnień (z reminderUsageService)
+                // Pobierz liczbę przypomnień (z reminderUsageService) - totalPings jak w /debug-roles
                 if (reminderUsageService.usageData && reminderUsageService.usageData.receivers) {
                     const receiverData = reminderUsageService.usageData.receivers[playerUserId];
                     if (receiverData) {
-                        reminderCount = receiverData.totalReminders || 0;
+                        reminderCount = receiverData.totalPings || 0;
                     }
                 }
             } catch (error) {
@@ -8487,23 +8499,28 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
         }
 
-        // POLE 5: Rekordy
+        // POLE 5: Wyniki
         if (bestWeek) {
-            let recordsInfo = `**Najwyższy wynik:** Tyg. ${bestWeek.weekNumber} - ${bestWeek.score.toLocaleString('pl-PL')} pkt`;
+            let resultsInfo = `**Najwyższy wynik:** ${bestWeek.weekNumber}/${bestWeek.year} - **${bestWeek.score.toLocaleString('pl-PL')} pkt**`;
 
             if (bestProgressWeek && maxProgress > 0) {
-                recordsInfo += `\n**Najwyższy progres:** Tyg. ${bestProgressWeek.weekNumber} - +${maxProgress.toLocaleString('pl-PL')} pkt`;
+                resultsInfo += `\n**Najwyższy progres:** ${bestProgressWeek.weekNumber}/${bestProgressWeek.year} - **+${maxProgress.toLocaleString('pl-PL')} pkt**`;
             }
 
-            embed.addFields({ name: '🏆 REKORDY', value: recordsInfo, inline: false });
+            if (worstRegressWeek && maxRegress < 0) {
+                resultsInfo += `\n**Najwyższy regres:** ${worstRegressWeek.weekNumber}/${worstRegressWeek.year} - **${maxRegress.toLocaleString('pl-PL')} pkt**`;
+            }
+
+            embed.addFields({ name: '🏆 WYNIKI', value: resultsInfo, inline: false });
         }
 
         // POLE 6: Kary i przypomnienia
-        const penaltiesInfo = punishmentPoints > 0 || reminderCount > 0 || hasLotteryBan
+        const penaltiesInfo = punishmentPoints > 0 || reminderCount > 0 || hasLotteryBan || hasPunishmentRole
             ? `💀 **Punkty karne:** ${punishmentPoints > 0 ? `${punishmentPoints} czaszki${lastPunishmentDate ? ` (${lastPunishmentDate.toLocaleDateString('pl-PL')})` : ''}` : 'Brak'}\n` +
-              `⏰ **Przypomnienia:** ${reminderCount > 0 ? `${reminderCount} razy` : 'Brak'}\n` +
+              `📢 **Przypomnienia:** ${reminderCount > 0 ? `${reminderCount} razy` : 'Brak'}\n` +
+              `🎭 **Rola karania:** ${hasPunishmentRole ? 'TAK' : 'NIE'}\n` +
               `🚫 **Ban loterii:** ${hasLotteryBan ? 'TAK' : 'NIE'}`
-            : `💀 **Punkty karne:** Brak\n⏰ **Przypomnienia:** Brak\n🚫 **Ban loterii:** NIE`;
+            : `💀 **Punkty karne:** Brak\n📢 **Przypomnienia:** Brak\n🎭 **Rola karania:** NIE\n🚫 **Ban loterii:** NIE`;
         embed.addFields({ name: '⚠️ KARY I PRZYPOMNIENIA', value: penaltiesInfo, inline: false });
 
         embed.setFooter({ text: `📅 Dane z ostatnich ${last54Weeks.length} tygodni` });
