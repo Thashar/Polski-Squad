@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres i /rebuild-index
-    const publicCommands = ['decode', 'wyniki', 'progres', 'rebuild-index'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki i /progres
+    const publicCommands = ['decode', 'wyniki', 'progres'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -143,9 +143,6 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'clan-status':
             await handleClanStatusCommand(interaction, sharedState);
-            break;
-        case 'rebuild-index':
-            await handleRebuildIndexCommand(interaction, sharedState);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
@@ -2266,11 +2263,7 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('clan-status')
-            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów'),
-
-        new SlashCommandBuilder()
-            .setName('rebuild-index')
-            .setDescription('[ADMIN] Przebudowuje indeks graczy na podstawie wszystkich zapisanych danych')
+            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów')
     ];
 
     try {
@@ -6827,18 +6820,8 @@ async function handleAutocomplete(interaction, sharedState) {
                 return;
             }
 
-            // Zbierz WSZYSTKIE nicki (stare i nowe) dla wszystkich graczy
-            const allNicks = new Set();
-            for (const data of Object.values(playerIndex)) {
-                // Dodaj wszystkie nicki tego gracza
-                if (data.allNicks && data.allNicks.length > 0) {
-                    data.allNicks.forEach(nick => allNicks.add(nick));
-                } else {
-                    // Fallback - jeśli allNicks nie istnieje, użyj latestNick
-                    allNicks.add(data.latestNick);
-                }
-            }
-            const playerNames = Array.from(allNicks);
+            // Zbierz tylko najnowsze nicki graczy
+            const playerNames = Object.values(playerIndex).map(data => data.latestNick);
 
             // Filtruj i sortuj graczy według dopasowania
             const choices = playerNames
@@ -7294,55 +7277,6 @@ async function handleProgresCommand(interaction, sharedState) {
         logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas pobierania danych progresu.'
-        });
-    }
-}
-
-// Funkcja obsługująca komendę /rebuild-index
-async function handleRebuildIndexCommand(interaction, sharedState) {
-    const { databaseService } = sharedState;
-
-    // Sprawdź czy użytkownik jest adminem
-    const isAdmin = interaction.member.permissions.has('Administrator');
-
-    if (!isAdmin) {
-        await interaction.reply({
-            content: '❌ Ta komenda jest dostępna tylko dla administratorów.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    try {
-        const startTime = Date.now();
-        const result = await databaseService.rebuildPlayerIndex(interaction.guild.id);
-        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-
-        if (result.success) {
-            const embed = new EmbedBuilder()
-                .setTitle('✅ Indeks graczy przebudowany pomyślnie')
-                .setDescription(
-                    `📂 **Przeskanowano plików:** ${result.filesScanned}\n` +
-                    `👥 **Znaleziono graczy:** ${result.playerCount}\n` +
-                    `⏱️ **Czas wykonania:** ${duration}s`
-                )
-                .setColor('#00FF00')
-                .setTimestamp();
-
-            await interaction.editReply({
-                embeds: [embed]
-            });
-        } else {
-            await interaction.editReply({
-                content: `❌ Błąd przebudowy indeksu: ${result.error}`
-            });
-        }
-    } catch (error) {
-        logger.error('[REBUILD-INDEX] ❌ Błąd wykonania komendy:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas przebudowy indeksu.'
         });
     }
 }
