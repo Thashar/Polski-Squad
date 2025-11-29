@@ -7466,7 +7466,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             } else {
                 // Za mało danych: porównaj z ostatnim dostępnym tygodniem
                 comparisonScore = playerProgressData[playerProgressData.length - 1].score;
-                monthlyWeeksCount = playerProgressData.length - 1;
+
+                // Oblicz zakres tygodni od pierwszego do ostatniego (nie liczbę tygodni z danymi)
+                const firstWeek = playerProgressData[playerProgressData.length - 1];
+                const lastWeek = playerProgressData[0];
+
+                // Oblicz różnicę w tygodniach
+                if (firstWeek.year === lastWeek.year) {
+                    monthlyWeeksCount = lastWeek.weekNumber - firstWeek.weekNumber;
+                } else {
+                    // Obsługa przejścia między latami
+                    const weeksInFirstYear = 52 - firstWeek.weekNumber;
+                    monthlyWeeksCount = weeksInFirstYear + lastWeek.weekNumber;
+                }
             }
 
             if (comparisonScore > 0) {
@@ -7518,7 +7530,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (comparisonScore > 0) {
                 quarterlyProgress = currentScore - comparisonScore;
                 quarterlyProgressPercent = ((quarterlyProgress / comparisonScore) * 100).toFixed(1);
-                quarterlyWeeksCount = playerProgressData.length - 1;
+
+                // Oblicz zakres tygodni od pierwszego do ostatniego (nie liczbę tygodni z danymi)
+                const firstWeek = playerProgressData[playerProgressData.length - 1];
+                const lastWeek = playerProgressData[0];
+
+                // Oblicz różnicę w tygodniach
+                if (firstWeek.year === lastWeek.year) {
+                    quarterlyWeeksCount = lastWeek.weekNumber - firstWeek.weekNumber;
+                } else {
+                    // Obsługa przejścia między latami
+                    const weeksInFirstYear = 52 - firstWeek.weekNumber;
+                    quarterlyWeeksCount = weeksInFirstYear + lastWeek.weekNumber;
+                }
             }
         }
 
@@ -7550,7 +7574,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             return '';
         };
 
-        for (let i = 0; i < last12Weeks.length; i++) {
+        // Znajdź indeks pierwszego tygodnia z danymi gracza (najstarszy tydzień z danymi)
+        let firstPlayerWeekIndex = -1;
+        for (let i = last12Weeks.length - 1; i >= 0; i--) {
+            const week = last12Weeks[i];
+            const weekKey = `${week.weekNumber}-${week.year}`;
+            const score = playerScoreMap.get(weekKey);
+            if (score !== undefined) {
+                firstPlayerWeekIndex = i;
+                break;
+            }
+        }
+
+        // Jeśli gracz nie ma danych w żadnym tygodniu, pokaż wszystkie tygodnie jako puste
+        if (firstPlayerWeekIndex === -1) {
+            firstPlayerWeekIndex = 0;
+        }
+
+        for (let i = firstPlayerWeekIndex; i >= 0; i--) {
             const week = last12Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = playerScoreMap.get(weekKey);
@@ -7600,7 +7641,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             rankingInfo += `🎯 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}`;
         }
 
-        embed.addFields({ name: '🏆 Ranking', value: rankingInfo, inline: false });
+        embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null) {
@@ -7621,13 +7662,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             if (progressInfo) {
-                embed.addFields({ name: '📊 Statystyki', value: progressInfo, inline: false });
+                embed.addFields({ name: '📊 STATYSTYKI', value: progressInfo, inline: false });
             }
         }
 
         // Pole 3: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
-            name: '📈 Progres (ostatnie 12 tygodni)',
+            name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
             value: resultsText,
             inline: false
         });
@@ -7640,7 +7681,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        embed.addFields({ name: '⚖️ Kary i Status', value: penaltiesInfo, inline: false });
+        embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
 
         // Footer
         embed.setFooter({
