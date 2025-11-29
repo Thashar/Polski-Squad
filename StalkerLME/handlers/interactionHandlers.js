@@ -7629,20 +7629,20 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Stwórz embed
         const embed = new EmbedBuilder()
-            .setTitle(`👤 Status gracza: ${latestNick}`)
+            .setTitle(`# 👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
             .setColor('#00BFFF') // Tymczasowo niebieski, później dodamy kolorowanie
             .setTimestamp();
 
-        // Pole 1: Klan i pozycje w rankingu
-        let rankingInfo = `🏠 **KLAN:** ${clanDisplay}\n`;
+        // Pole 1: Pozycje w rankingu
+        let rankingInfo = '';
 
         if (clanPosition && clanTotalPlayers) {
-            rankingInfo += `🎯 **POZYCJA W KLANIE:** ${clanPosition}/${clanTotalPlayers}\n`;
+            rankingInfo += `🎯 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
         }
 
-        rankingInfo += `🌍 **POZYCJA W STRUKTURACH:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
+        rankingInfo += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
 
-        embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
+        embed.addFields({ name: '🏆 Ranking', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null) {
@@ -7651,25 +7651,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (monthlyProgress !== null) {
                 const arrow = monthlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(monthlyProgress).toLocaleString('pl-PL');
-                const monthLabel = monthlyWeeksCount === 4 ? 'MIESIĄC (4 TYG)' : `DOSTĘPNE DANE (${monthlyWeeksCount} TYG)`;
+                const monthLabel = monthlyWeeksCount === 4 ? 'Miesiąc (4 tyg)' : `Dostępne dane (${monthlyWeeksCount} tyg)`;
                 progressInfo += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)\n`;
             }
 
             if (quarterlyProgress !== null) {
                 const arrow = quarterlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
-                const quarterLabel = quarterlyWeeksCount === 12 ? 'KWARTAŁ (12 TYG)' : `DOSTĘPNE DANE (${quarterlyWeeksCount} TYG)`;
+                const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
                 progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)`;
             }
 
             if (progressInfo) {
-                embed.addFields({ name: '📊 STATYSTYKI', value: progressInfo, inline: false });
+                embed.addFields({ name: '📊 Statystyki', value: progressInfo, inline: false });
             }
         }
 
         // Pole 3: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
-            name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
+            name: '📈 Progres (ostatnie 12 tygodni)',
             value: resultsText,
             inline: false
         });
@@ -7677,12 +7677,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Pole 4: Kary i status
         let penaltiesInfo = '';
 
-        penaltiesInfo += `📢 **PRZYPOMNIENIA:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
-        penaltiesInfo += `💀 **PUNKTY KARY (KARIERA):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
-        penaltiesInfo += `🎭 **ROLA KARANIA:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
-        penaltiesInfo += `🚨 **BLOKADA LOTERII:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
+        penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
+        penaltiesInfo += `💀 **Punkty kary (kariera):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
+        penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
+        penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
+        embed.addFields({ name: '⚖️ Kary i status', value: penaltiesInfo, inline: false });
 
         // Footer
         embed.setFooter({
