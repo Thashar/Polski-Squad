@@ -144,6 +144,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'clan-status':
             await handleClanStatusCommand(interaction, sharedState);
             break;
+        case 'player-status':
+            await handlePlayerStatusCommand(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -2263,7 +2266,17 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('clan-status')
-            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów')
+            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów'),
+
+        new SlashCommandBuilder()
+            .setName('player-status')
+            .setDescription('Wyświetla kompletny status gracza (progres, kary, ranking, klan)')
+            .addStringOption(option =>
+                option.setName('nick')
+                    .setDescription('Nick gracza (wyszukaj z listy lub wpisz własny)')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
     ];
 
     try {
@@ -6873,6 +6886,71 @@ async function handleAutocomplete(interaction, sharedState) {
             }
 
             await interaction.respond(choices);
+        } else if (interaction.commandName === 'player-status') {
+            const focusedValue = interaction.options.getFocused();
+            const focusedValueLower = focusedValue.toLowerCase();
+
+            // Pobierz wszystkie dostępne tygodnie
+            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+            if (allWeeks.length === 0) {
+                await interaction.respond([]);
+                return;
+            }
+
+            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
+            const playerNames = new Set();
+
+            for (const week of allWeeks) {
+                for (const clan of week.clans) {
+                    const weekData = await databaseService.getPhase1Results(
+                        interaction.guild.id,
+                        week.weekNumber,
+                        week.year,
+                        clan
+                    );
+
+                    if (weekData && weekData.players) {
+                        weekData.players.forEach(player => {
+                            if (player.displayName) {
+                                playerNames.add(player.displayName);
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Filtruj i sortuj graczy według dopasowania
+            const choices = Array.from(playerNames)
+                .filter(name => name.toLowerCase().includes(focusedValueLower))
+                .sort((a, b) => {
+                    // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
+                    const aLower = a.toLowerCase();
+                    const bLower = b.toLowerCase();
+                    const aStartsWith = aLower.startsWith(focusedValueLower);
+                    const bStartsWith = bLower.startsWith(focusedValueLower);
+
+                    if (aStartsWith && !bStartsWith) return -1;
+                    if (!aStartsWith && bStartsWith) return 1;
+
+                    // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
+                    return aLower.localeCompare(bLower);
+                })
+                .map(name => ({
+                    name: name,
+                    value: name
+                }))
+                .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
+
+            // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
+            if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
+                choices.unshift({
+                    name: `📝 Użyj wpisanego: "${focusedValue}"`,
+                    value: focusedValue
+                });
+            }
+
+            await interaction.respond(choices);
         }
     } catch (error) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
@@ -8059,6 +8137,381 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         } catch (replyError) {
             logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
+    }
+}
+
+// ============ FUNKCJA POMOCNICZA: Oblicz percentyl gracza ============
+function calculatePlayerPercentile(playerTotalScore, allPlayerScores) {
+    if (allPlayerScores.length === 0) return 0;
+
+    // Sortuj malejąco
+    const sortedScores = allPlayerScores.sort((a, b) => b - a);
+
+    // Znajdź pozycję gracza
+    const playerRank = sortedScores.findIndex(score => score === playerTotalScore) + 1;
+
+    if (playerRank === 0) return 100; // Gracz nie ma wyniku
+
+    // Oblicz percentyl: (pozycja / łączna liczba) * 100
+    const percentile = (playerRank / sortedScores.length) * 100;
+
+    return percentile;
+}
+
+// ============ FUNKCJA POMOCNICZA: Oblicz progres gracza ============
+function calculatePlayerProgress(weeklyScores, weeksToAnalyze, baseWeekOffset) {
+    // weeklyScores: [{week, score}] - posortowane od najnowszego
+    // weeksToAnalyze: ile tygodni analizować (4 dla miesiąca, 12 dla kwartału)
+    // baseWeekOffset: tydzień bazowy (dla miesiąca: 4, dla kwartału: 12)
+
+    if (weeklyScores.length === 0) {
+        return { progress: 0, progressPercent: 0, periodTotal: 0, baseScore: 0 };
+    }
+
+    // Pobierz wyniki z okresu do analizy (ostatnie N tygodni)
+    const periodScores = weeklyScores.slice(0, weeksToAnalyze);
+    const periodTotal = periodScores.reduce((sum, w) => sum + (w.score || 0), 0);
+
+    // Pobierz wynik bazowy (tydzień przed okresem)
+    const baseWeek = weeklyScores[baseWeekOffset];
+    const baseScore = baseWeek ? (baseWeek.score || 0) : 0;
+
+    // Oblicz progres
+    const progress = periodTotal - baseScore;
+    const progressPercent = baseScore > 0 ? ((progress / baseScore) * 100) : (periodTotal > 0 ? 100 : 0);
+
+    return {
+        progress,
+        progressPercent,
+        periodTotal,
+        baseScore
+    };
+}
+
+// ============ FUNKCJA POMOCNICZA: Oblicz kolor embeda według percentyla ============
+function getEmbedColorByPercentile(percentile) {
+    if (percentile <= 25) {
+        return 0x00FF00; // Zielony - TOP 25%
+    } else if (percentile <= 50) {
+        return 0xFFFF00; // Żółty - 25-50%
+    } else if (percentile <= 75) {
+        return 0xFF8800; // Pomarańczowy - 50-75%
+    } else {
+        return 0xFF0000; // Czerwony - 75-100%
+    }
+}
+
+// ============ FUNKCJA POMOCNICZA: Formatuj ikona percentyla ============
+function getPercentileIcon(percentile) {
+    if (percentile <= 25) {
+        return '🟢'; // Zielony
+    } else if (percentile <= 50) {
+        return '🟡'; // Żółty
+    } else if (percentile <= 75) {
+        return '🟠'; // Pomarańczowy
+    } else {
+        return '🔴'; // Czerwony
+    }
+}
+
+// ============ FUNKCJA GŁÓWNA: /player-status ============
+async function handlePlayerStatusCommand(interaction, sharedState) {
+    const { config, databaseService, reminderUsageService } = sharedState;
+
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/player-status` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    try {
+        const playerName = interaction.options.getString('nick');
+        const guild = interaction.guild;
+
+        // Pobierz wszystkie dostępne tygodnie (ostatnie 54 - cały rok)
+        const allWeeks = await databaseService.getAvailableWeeks(guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
+            });
+            return;
+        }
+
+        // Ogranicz do ostatnich 54 tygodni (rok)
+        const last54Weeks = allWeeks.slice(0, 54);
+
+        // ===== ZBIERANIE DANYCH GRACZA =====
+        let playerUserId = null;
+        const playerWeeklyScores = []; // [{week, weekNumber, year, phase1, phase2, total}]
+
+        // Pobierz wyniki z ostatnich 54 tygodni
+        for (const week of last54Weeks) {
+            let weekPhase1Total = 0;
+            let weekPhase2Total = 0;
+
+            // Sprawdź wszystkie klany w tym tygodniu
+            for (const clan of week.clans) {
+                // Faza 1
+                const phase1Data = await databaseService.getPhase1Results(guild.id, week.weekNumber, week.year, clan);
+                if (phase1Data && phase1Data.players) {
+                    const player = phase1Data.players.find(p =>
+                        p.displayName && p.displayName.toLowerCase() === playerName.toLowerCase()
+                    );
+                    if (player) {
+                        weekPhase1Total += player.score || 0;
+                        if (!playerUserId) playerUserId = player.userId;
+                    }
+                }
+
+                // Faza 2
+                const phase2Data = await databaseService.getPhase2Results(guild.id, week.weekNumber, week.year, clan);
+                if (phase2Data && phase2Data.players) {
+                    const player = phase2Data.players.find(p =>
+                        p.displayName && p.displayName.toLowerCase() === playerName.toLowerCase()
+                    );
+                    if (player) {
+                        weekPhase2Total += player.score || 0;
+                        if (!playerUserId) playerUserId = player.userId;
+                    }
+                }
+            }
+
+            // Dodaj tydzień do historii (tylko jeśli gracz miał jakiekolwiek wyniki)
+            if (weekPhase1Total > 0 || weekPhase2Total > 0) {
+                playerWeeklyScores.push({
+                    week: `${week.year}-W${week.weekNumber}`,
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    phase1: weekPhase1Total,
+                    phase2: weekPhase2Total,
+                    score: weekPhase1Total + weekPhase2Total
+                });
+            }
+        }
+
+        // Sprawdź czy znaleziono gracza
+        if (playerWeeklyScores.length === 0) {
+            await interaction.editReply({
+                content: `❌ Nie znaleziono gracza **${playerName}** w bazie danych z ostatnich 54 tygodni.`
+            });
+            return;
+        }
+
+        // ===== KLAN I POZYCJA W RANKINGU =====
+        let currentClan = 'Aktualnie poza strukturami';
+        let currentClanKey = null;
+        let playerRank = null;
+        let totalPlayersInRanking = 0;
+
+        // Znajdź aktualny klan gracza (z ról Discord)
+        if (playerUserId) {
+            try {
+                const member = await guild.members.fetch(playerUserId);
+                for (const [key, roleId] of Object.entries(config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        currentClan = config.roleDisplayNames[key] || key;
+                        currentClanKey = key;
+                        break;
+                    }
+                }
+            } catch (error) {
+                logger.warn(`[PLAYER-STATUS] Nie znaleziono użytkownika ${playerUserId} na serwerze`);
+            }
+        }
+
+        // Pobierz globalny ranking (tak samo jak w /clan-status)
+        const ranking = await createGlobalPlayerRanking(guild, databaseService, config, last54Weeks);
+        totalPlayersInRanking = ranking.length;
+
+        // Znajdź pozycję gracza w rankingu
+        const playerInRanking = ranking.find(p =>
+            p.playerName.toLowerCase() === playerName.toLowerCase()
+        );
+        if (playerInRanking) {
+            playerRank = ranking.indexOf(playerInRanking) + 1;
+        }
+
+        // ===== OBLICZANIE STATYSTYK =====
+        // Ostatnie 12 tygodni
+        const last12Weeks = playerWeeklyScores.slice(0, 12);
+        const last12Total = last12Weeks.reduce((sum, w) => sum + w.score, 0);
+        const last12Phase1 = last12Weeks.reduce((sum, w) => sum + w.phase1, 0);
+        const last12Phase2 = last12Weeks.reduce((sum, w) => sum + w.phase2, 0);
+        const avgPerWeek = last12Weeks.length > 0 ? Math.round(last12Total / last12Weeks.length) : 0;
+
+        // Progres miesiąc (ostatnie 4 tygodnie vs tydzień 4)
+        const monthProgress = calculatePlayerProgress(playerWeeklyScores, 4, 4);
+
+        // Progres kwartał (ostatnie 12 tygodni vs tydzień 12)
+        const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 12, 12);
+
+        // Najlepszy i najgorszy tydzień (z ostatnich 12)
+        let bestWeek = null;
+        let worstWeek = null;
+        for (const week of last12Weeks) {
+            if (!bestWeek || week.score > bestWeek.score) bestWeek = week;
+            if (!worstWeek || week.score < worstWeek.score) worstWeek = week;
+        }
+
+        // ===== OBLICZANIE PERCENTYLA =====
+        // Zbierz wszystkie wyniki graczy z ostatnich 54 tygodni
+        const allPlayerScores = [];
+        for (const playerData of ranking) {
+            if (playerData.maxScore > 0) {
+                allPlayerScores.push(playerData.maxScore);
+            }
+        }
+        const playerPercentile = calculatePlayerPercentile(
+            playerInRanking ? playerInRanking.maxScore : 0,
+            allPlayerScores
+        );
+
+        // ===== KARY I PRZYPOMNIENIA =====
+        let punishmentPoints = 0;
+        let lastPunishmentDate = null;
+        let reminderCount = 0;
+        let hasLotteryBan = false;
+
+        if (playerUserId) {
+            try {
+                // Pobierz punkty karne
+                const userPunishment = await databaseService.getUserPunishments(guild.id, playerUserId);
+                punishmentPoints = userPunishment.points || 0;
+
+                if (userPunishment.history && userPunishment.history.length > 0) {
+                    const lastPunishment = userPunishment.history[userPunishment.history.length - 1];
+                    if (lastPunishment.points > 0) {
+                        lastPunishmentDate = new Date(lastPunishment.date);
+                    }
+                }
+
+                // Sprawdź ban loterii
+                const member = await guild.members.fetch(playerUserId);
+                hasLotteryBan = member.roles.cache.has(config.lotteryBanRoleId);
+
+                // Pobierz liczbę przypomnień (z reminderUsageService)
+                if (reminderUsageService.usageData && reminderUsageService.usageData.receivers) {
+                    const receiverData = reminderUsageService.usageData.receivers[playerUserId];
+                    if (receiverData) {
+                        reminderCount = receiverData.totalReminders || 0;
+                    }
+                }
+            } catch (error) {
+                logger.warn(`[PLAYER-STATUS] Błąd pobierania kar dla ${playerUserId}:`, error.message);
+            }
+        }
+
+        // ===== TWORZENIE EMBEDA =====
+        const embedColor = getEmbedColorByPercentile(playerPercentile);
+        const percentileIcon = getPercentileIcon(playerPercentile);
+
+        const embed = new EmbedBuilder()
+            .setTitle(`🎯 STATUS GRACZA - ${playerName}`)
+            .setColor(embedColor)
+            .setTimestamp();
+
+        // POLE 1: Informacje podstawowe
+        let basicInfo = `**Klan:** ${currentClan}\n`;
+        if (playerRank) {
+            basicInfo += `**Pozycja w klanie:** #${playerRank} / ${totalPlayersInRanking} członków\n`;
+        }
+        basicInfo += `**Percentyl:** TOP ${Math.round(playerPercentile)}% ${percentileIcon}`;
+        embed.addFields({ name: '👤 INFORMACJE PODSTAWOWE', value: basicInfo, inline: false });
+
+        // POLE 2: Statystyki ostatnich 12 tygodni
+        if (last12Weeks.length > 0) {
+            const statsInfo =
+                `**Faza 1:** ${last12Phase1.toLocaleString('pl-PL')} pkt (${last12Weeks.length} tyg.)\n` +
+                `**Faza 2:** ${last12Phase2.toLocaleString('pl-PL')} pkt (${last12Weeks.length} tyg.)\n` +
+                `**Łącznie:** ${last12Total.toLocaleString('pl-PL')} pkt\n` +
+                `**Średnia/tyg.:** ${avgPerWeek.toLocaleString('pl-PL')} pkt`;
+            embed.addFields({ name: '📊 OSTATNIE 12 TYGODNI', value: statsInfo, inline: false });
+        }
+
+        // POLE 3 i 4: Progres miesiąc i kwartał
+        if (monthProgress.periodTotal > 0) {
+            const monthSign = monthProgress.progress >= 0 ? '+' : '';
+            const monthArrow = monthProgress.progress >= 0 ? '↗️' : '↘️';
+            const monthInfo = `${monthSign}${monthProgress.progress.toLocaleString('pl-PL')} pkt (${monthSign}${Math.round(monthProgress.progressPercent)}%) ${monthArrow}`;
+            embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
+        }
+
+        if (quarterProgress.periodTotal > 0) {
+            const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
+            const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
+            const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
+            embed.addFields({ name: '📈 PROGRES KWARTAŁ', value: quarterInfo, inline: true });
+        }
+
+        // POLE 5: Rekordy
+        if (bestWeek && worstWeek) {
+            const recordsInfo =
+                `**Najlepszy tydzień:** Tyg. ${bestWeek.weekNumber} - ${bestWeek.score.toLocaleString('pl-PL')} pkt\n` +
+                `**Najgorszy tydzień:** Tyg. ${worstWeek.weekNumber} - ${worstWeek.score.toLocaleString('pl-PL')} pkt`;
+            embed.addFields({ name: '🏆 REKORDY', value: recordsInfo, inline: false });
+        }
+
+        // POLE 6: Kary i przypomnienia
+        const penaltiesInfo = punishmentPoints > 0 || reminderCount > 0 || hasLotteryBan
+            ? `💀 **Punkty karne:** ${punishmentPoints > 0 ? `${punishmentPoints} czaszki${lastPunishmentDate ? ` (${lastPunishmentDate.toLocaleDateString('pl-PL')})` : ''}` : 'Brak'}\n` +
+              `⏰ **Przypomnienia:** ${reminderCount > 0 ? `${reminderCount} razy` : 'Brak'}\n` +
+              `🚫 **Ban loterii:** ${hasLotteryBan ? 'TAK' : 'NIE'}`
+            : `💀 **Punkty karne:** Brak\n⏰ **Przypomnienia:** Brak\n🚫 **Ban loterii:** NIE`;
+        embed.addFields({ name: '⚠️ KARY I PRZYPOMNIENIA', value: penaltiesInfo, inline: false });
+
+        // POLE 7: Ranking międzyklanowy (jeśli gracz jest w rankingu globalnym)
+        if (playerInRanking && playerRank) {
+            // Pobierz najlepszy wynik gracza z każdego klanu
+            const playerClanScores = [];
+            for (const [clanKey, clanName] of Object.entries(config.roleDisplayNames)) {
+                let clanTotal = 0;
+                for (const week of last54Weeks) {
+                    const phase1Data = await databaseService.getPhase1Results(guild.id, week.weekNumber, week.year, clanKey);
+                    if (phase1Data && phase1Data.players) {
+                        const player = phase1Data.players.find(p =>
+                            p.displayName && p.displayName.toLowerCase() === playerName.toLowerCase()
+                        );
+                        if (player) {
+                            clanTotal += player.score || 0;
+                        }
+                    }
+                }
+                if (clanTotal > 0) {
+                    playerClanScores.push({ clanKey, clanName, score: clanTotal });
+                }
+            }
+
+            // Sortuj według wyniku
+            playerClanScores.sort((a, b) => b.score - a.score);
+
+            if (playerClanScores.length > 0) {
+                const rankingInfo = playerClanScores.map((clan, index) => {
+                    const icon = clan.clanKey === currentClanKey ? '← Tu jesteś' : '';
+                    return `${index + 1}. ${clan.clanName}: ${clan.score.toLocaleString('pl-PL')} pkt ${icon}`;
+                }).join('\n');
+                embed.addFields({ name: '🌍 RANKING MIĘDZYKLANOWY', value: rankingInfo, inline: false });
+            }
+        }
+
+        embed.setFooter({ text: `📅 Dane z ostatnich ${last54Weeks.length} tygodni` });
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        logger.error('[PLAYER-STATUS] ❌ Błąd komendy /player-status:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania statusu gracza.'
+        });
     }
 }
 
