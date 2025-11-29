@@ -7591,7 +7591,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             firstPlayerWeekIndex = 0;
         }
 
-        for (let i = firstPlayerWeekIndex; i >= 0; i--) {
+        for (let i = 0; i <= firstPlayerWeekIndex; i++) {
             const week = last12Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = playerScoreMap.get(weekKey);
