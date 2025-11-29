@@ -631,6 +631,127 @@ class DatabaseService {
     }
 
     /**
+     * SZYBKA metoda dla /progres - zwraca dane progresu konkretnego gracza
+     * Zamiast czytać wszystkie pliki (216 dla 54 tygodni × 4 klany),
+     * czyta tylko pliki i szuka gracza w nich
+     */
+    async getPlayerProgressDataFast(guildId, playerUserId, lastNWeeks = 54) {
+        const guildBaseDir = path.join(this.phasesBaseDir, `guild_${guildId}`, 'phase1');
+        const playerProgressData = [];
+
+        try {
+            await fs.access(guildBaseDir);
+        } catch {
+            return playerProgressData; // Pusta tablica jeśli brak katalogu
+        }
+
+        try {
+            // Pobierz dostępne tygodnie
+            const allWeeks = await this.getAvailableWeeks(guildId);
+            const weeksToCheck = allWeeks.slice(0, lastNWeeks);
+
+            // Dla każdego tygodnia, sprawdź każdy klan
+            for (const week of weeksToCheck) {
+                for (const clan of week.clans) {
+                    const filePath = this.getPhaseFilePath(guildId, 1, week.weekNumber, week.year, clan);
+
+                    try {
+                        const fileContent = await fs.readFile(filePath, 'utf8');
+                        const weekData = JSON.parse(fileContent);
+
+                        if (weekData && weekData.players) {
+                            const player = weekData.players.find(p => p.userId === playerUserId);
+
+                            if (player) {
+                                playerProgressData.push({
+                                    weekNumber: week.weekNumber,
+                                    year: week.year,
+                                    clan: clan,
+                                    score: player.score,
+                                    createdAt: weekData.createdAt
+                                });
+                                // WAŻNE: break po znalezieniu gracza w klanie (gracz może być tylko w 1 klanie per tydzień)
+                                break;
+                            }
+                        }
+                    } catch (error) {
+                        // Plik nie istnieje lub jest uszkodzony - pomiń
+                        continue;
+                    }
+                }
+            }
+
+            return playerProgressData;
+
+        } catch (error) {
+            logger.error('[DB] ❌ Błąd odczytu danych progresu gracza:', error);
+            return playerProgressData;
+        }
+    }
+
+    /**
+     * SZYBKA metoda dla all-time ranking - zwraca najlepsze wyniki wszystkich graczy
+     * Zamiast 216 osobnych wywołań, czyta wszystkie pliki równolegle (Promise.all)
+     */
+    async getAllTimeRankingFast(guildId, lastNWeeks = 54) {
+        const playerMaxScores = new Map(); // playerName -> maxScore
+
+        try {
+            // Pobierz dostępne tygodnie
+            const allWeeks = await this.getAvailableWeeks(guildId);
+            const weeksToCheck = allWeeks.slice(0, lastNWeeks);
+
+            // Dla każdego tygodnia, czytaj WSZYSTKIE klany równolegle
+            for (const week of weeksToCheck) {
+                // Przygotuj tablicę Promise dla wszystkich klanów w tym tygodniu
+                const weekPromises = week.clans.map(async clan => {
+                    const filePath = this.getPhaseFilePath(guildId, 1, week.weekNumber, week.year, clan);
+
+                    try {
+                        const fileContent = await fs.readFile(filePath, 'utf8');
+                        const weekData = JSON.parse(fileContent);
+
+                        if (weekData && weekData.players) {
+                            return weekData.players;
+                        }
+                    } catch (error) {
+                        // Plik nie istnieje lub uszkodzony
+                        return [];
+                    }
+
+                    return [];
+                });
+
+                // Czekaj na wszystkie klany z tego tygodnia
+                const weekResults = await Promise.all(weekPromises);
+
+                // Przetwórz wyniki
+                weekResults.forEach(players => {
+                    players.forEach(player => {
+                        if (player.displayName && player.score > 0) {
+                            const currentMax = playerMaxScores.get(player.displayName) || 0;
+                            if (player.score > currentMax) {
+                                playerMaxScores.set(player.displayName, player.score);
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Konwertuj do tablicy i posortuj
+            const ranking = Array.from(playerMaxScores.entries())
+                .map(([playerName, maxScore]) => ({ playerName, maxScore }))
+                .sort((a, b) => b.maxScore - a.maxScore);
+
+            return ranking;
+
+        } catch (error) {
+            logger.error('[DB] ❌ Błąd odczytu all-time ranking:', error);
+            return [];
+        }
+    }
+
+    /**
      * Pobiera najwyższy historyczny wynik gracza przed określonym tygodniem
      * Przeszukuje wszystkie klany z danego serwera
      * @param {string} guildId - ID serwera
