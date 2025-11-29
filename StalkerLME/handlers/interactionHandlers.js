@@ -6818,7 +6818,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
 // Funkcja obsługująca autocomplete
 async function handleAutocomplete(interaction, sharedState) {
-    const { databaseService, config } = sharedState;
+    const { databaseService } = sharedState;
 
     try {
         if (interaction.commandName === 'progres' || interaction.commandName === 'player-status') {
@@ -6827,14 +6827,7 @@ async function handleAutocomplete(interaction, sharedState) {
 
             logger.info(`[AUTOCOMPLETE] Wyszukiwanie dla: "${focusedValue}"`);
 
-            // ===== KROK 1: Pobierz WSZYSTKICH członków z rolami klanowymi (SZYBKIE - 1 call) =====
-            const clanRoleIds = Object.values(config.targetRoles);
-            logger.info(`[AUTOCOMPLETE] Role klanowe: ${clanRoleIds.join(', ')}`);
-
-            const allMembers = await interaction.guild.members.fetch(); // JEDEN call do API
-            logger.info(`[AUTOCOMPLETE] Pobrano ${allMembers.size} członków serwera`);
-
-            // ===== KROK 2: Zbierz userId graczy z wynikami w bazie (SZYBKA METODA) =====
+            // ===== KROK 1: Pobierz userId graczy z wynikami w bazie (SZYBKA METODA) =====
             const playerUserIds = await databaseService.getAllPlayersWithResultsFast(interaction.guild.id);
             logger.info(`[AUTOCOMPLETE] Graczy w bazie: ${playerUserIds.size}`);
 
@@ -6844,29 +6837,23 @@ async function handleAutocomplete(interaction, sharedState) {
                 return;
             }
 
-            // ===== KROK 3: Filtruj członków którzy mają: =====
-            // - Rolę klanową NA SERWERZE
+            // ===== KROK 2: Pobierz członków serwera którzy mają wyniki =====
+            const allMembers = await interaction.guild.members.fetch();
+            logger.info(`[AUTOCOMPLETE] Pobrano ${allMembers.size} członków serwera`);
+
+            // ===== KROK 3: Filtruj tylko po: =====
             // - Wyniki w bazie
             // - Nick pasujący do wpisanego tekstu
+            // NIE filtrujemy po roli klanowej - pokazujemy wszystkich z wynikami
             const playerChoices = [];
-            let withClanRole = 0;
-            let withResults = 0;
-            let matchingNick = 0;
 
             for (const [userId, member] of allMembers) {
-                // Sprawdź czy ma rolę klanową
-                const hasClanRole = member.roles.cache.some(r => clanRoleIds.includes(r.id));
-                if (!hasClanRole) continue;
-                withClanRole++;
-
                 // Sprawdź czy ma wyniki w bazie
                 if (!playerUserIds.has(userId)) continue;
-                withResults++;
 
                 // Filtruj według wpisanego tekstu
                 const currentNick = member.displayName;
                 if (currentNick.toLowerCase().includes(focusedValueLower)) {
-                    matchingNick++;
                     playerChoices.push({
                         name: currentNick,           // AKTUALNY nick serwerowy
                         value: userId,                // userId do wyszukiwania
@@ -6875,7 +6862,7 @@ async function handleAutocomplete(interaction, sharedState) {
                 }
             }
 
-            logger.info(`[AUTOCOMPLETE] Z rolą klanową: ${withClanRole}, z wynikami: ${withResults}, pasujący nick: ${matchingNick}`);
+            logger.info(`[AUTOCOMPLETE] Znaleziono ${playerChoices.length} graczy pasujących do "${focusedValue}"`);
 
             // ===== KROK 4: Sortuj i wyświetl =====
             const choices = playerChoices
@@ -6970,37 +6957,8 @@ async function handleProgresNavButton(interaction, sharedState) {
 
 // Funkcja tworząca ranking graczy po all-time max
 async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
-    // Mapa: playerName -> maxScore
-    const playerMaxScores = new Map();
-
-    for (const week of last54Weeks) {
-        for (const clan of week.clans) {
-            const weekData = await databaseService.getPhase1Results(
-                guildId,
-                week.weekNumber,
-                week.year,
-                clan
-            );
-
-            if (weekData && weekData.players) {
-                weekData.players.forEach(player => {
-                    if (player.displayName && player.score > 0) {
-                        const currentMax = playerMaxScores.get(player.displayName) || 0;
-                        if (player.score > currentMax) {
-                            playerMaxScores.set(player.displayName, player.score);
-                        }
-                    }
-                });
-            }
-        }
-    }
-
-    // Konwertuj do tablicy i posortuj po maxScore (malejąco - najlepsi na początku)
-    const ranking = Array.from(playerMaxScores.entries())
-        .map(([playerName, maxScore]) => ({ playerName, maxScore }))
-        .sort((a, b) => b.maxScore - a.maxScore);
-
-    return ranking;
+    // SZYBKA METODA - używa Promise.all dla równoległego czytania klanów
+    return await databaseService.getAllTimeRankingFast(guildId, last54Weeks.length);
 }
 
 // Funkcja wyświetlająca progres gracza
@@ -7021,37 +6979,18 @@ async function showPlayerProgress(interaction, playerUserId, ownerId, sharedStat
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
         const last54Weeks = allWeeks.slice(0, 54);
 
-        // Zbierz dane gracza ze wszystkich tygodni i klanów (po userId)
-        const playerProgressData = [];
+        // SZYBKA METODA - Zbierz dane gracza (zamiast 216 wywołań)
+        const playerProgressDataRaw = await databaseService.getPlayerProgressDataFast(
+            interaction.guild.id,
+            playerUserId,
+            54
+        );
 
-        for (const week of last54Weeks) {
-            for (const clan of week.clans) {
-                const weekData = await databaseService.getPhase1Results(
-                    interaction.guild.id,
-                    week.weekNumber,
-                    week.year,
-                    clan
-                );
-
-                if (weekData && weekData.players) {
-                    const player = weekData.players.find(p =>
-                        p.userId === playerUserId
-                    );
-
-                    if (player) {
-                        playerProgressData.push({
-                            weekNumber: week.weekNumber,
-                            year: week.year,
-                            clan: clan,
-                            clanName: config.roleDisplayNames[clan],
-                            score: player.score,
-                            createdAt: weekData.createdAt
-                        });
-                        break;
-                    }
-                }
-            }
-        }
+        // Dodaj clanName do danych
+        const playerProgressData = playerProgressDataRaw.map(data => ({
+            ...data,
+            clanName: config.roleDisplayNames[data.clan]
+        }));
 
         if (playerProgressData.length === 0) {
             if (isUpdate) {
@@ -7393,37 +7332,17 @@ async function handleWynikiCommand(interaction, sharedState) {
 
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
 async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks) {
-    // Przechowuj najwyższy wynik globalny dla każdego gracza (ze wszystkich klanów)
+    // SZYBKA METODA - użyj zoptymalizowanej metody
+    const allTimeRanking = await databaseService.getAllTimeRankingFast(guild.id, last54Weeks.length);
+
+    // Stwórz mapę playerName -> { score, displayName }
     const playerMaxScores = new Map();
-
-    // Iterujemy po wszystkich tygodniach i wszystkich klanach aby znaleźć najlepsze wyniki
-    for (const week of last54Weeks) {
-        for (const clan of week.clans) {
-            const weekData = await databaseService.getPhase1Results(
-                guild.id,
-                week.weekNumber,
-                week.year,
-                clan
-            );
-
-            if (weekData && weekData.players) {
-                weekData.players.forEach(player => {
-                    if (player.displayName && player.score > 0) {
-                        const playerKey = player.displayName.toLowerCase();
-                        const currentData = playerMaxScores.get(playerKey);
-                        const currentMaxScore = currentData ? currentData.score : 0;
-
-                        if (player.score > currentMaxScore) {
-                            playerMaxScores.set(playerKey, {
-                                score: player.score,
-                                displayName: player.displayName
-                            });
-                        }
-                    }
-                });
-            }
-        }
-    }
+    allTimeRanking.forEach(entry => {
+        playerMaxScores.set(entry.playerName.toLowerCase(), {
+            score: entry.maxScore,
+            displayName: entry.playerName
+        });
+    });
 
     // Pobierz wszystkich członków serwera
     const members = await guild.members.fetch();
