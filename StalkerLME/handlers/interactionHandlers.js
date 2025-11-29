@@ -7546,6 +7546,37 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
+        // Oblicz największy progres i regres w całej historii
+        let biggestProgress = null;
+        let biggestProgressWeek = null;
+        let biggestRegress = null;
+        let biggestRegressWeek = null;
+
+        if (playerProgressData.length >= 2) {
+            let maxProgressDiff = 0;
+            let maxRegressDiff = 0;
+
+            for (let i = 0; i < playerProgressData.length - 1; i++) {
+                const currentWeek = playerProgressData[i];
+                const previousWeek = playerProgressData[i + 1];
+                const diff = currentWeek.score - previousWeek.score;
+
+                // Największy progres (dodatnia różnica)
+                if (diff > maxProgressDiff) {
+                    maxProgressDiff = diff;
+                    biggestProgress = diff;
+                    biggestProgressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
+                }
+
+                // Największy regres (ujemna różnica)
+                if (diff < maxRegressDiff) {
+                    maxRegressDiff = diff;
+                    biggestRegress = diff;
+                    biggestRegressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
+                }
+            }
+        }
+
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
         const barLength = 10;
@@ -7629,7 +7660,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Stwórz embed
         const embed = new EmbedBuilder()
-            .setTitle(`# 👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
+            .setTitle(`👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
             .setColor('#00BFFF') // Tymczasowo niebieski, później dodamy kolorowanie
             .setTimestamp();
 
@@ -7642,10 +7673,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         rankingInfo += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
 
-        embed.addFields({ name: '🏆 Ranking', value: rankingInfo, inline: false });
+        embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
-        if (monthlyProgress !== null || quarterlyProgress !== null) {
+        if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
             let progressInfo = '';
 
             if (monthlyProgress !== null) {
@@ -7659,17 +7690,31 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const arrow = quarterlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
                 const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
-                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)`;
+                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)\n`;
+            }
+
+            if (biggestProgress !== null || biggestRegress !== null) {
+                progressInfo += '\n';
+            }
+
+            if (biggestProgress !== null) {
+                const absProgress = Math.abs(biggestProgress).toLocaleString('pl-PL');
+                progressInfo += `**↗️ Największy progres:** ${absProgress} (tydzień ${biggestProgressWeek})\n`;
+            }
+
+            if (biggestRegress !== null) {
+                const absRegress = Math.abs(biggestRegress).toLocaleString('pl-PL');
+                progressInfo += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})`;
             }
 
             if (progressInfo) {
-                embed.addFields({ name: '📊 Statystyki', value: progressInfo, inline: false });
+                embed.addFields({ name: '📊 STATYSTYKI', value: progressInfo, inline: false });
             }
         }
 
         // Pole 3: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
-            name: '📈 Progres (ostatnie 12 tygodni)',
+            name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
             value: resultsText,
             inline: false
         });
@@ -7678,11 +7723,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let penaltiesInfo = '';
 
         penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
-        penaltiesInfo += `💀 **Punkty kary (kariera):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
+        penaltiesInfo += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        embed.addFields({ name: '⚖️ Kary i status', value: penaltiesInfo, inline: false });
+        embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
 
         // Footer
         embed.setFooter({
