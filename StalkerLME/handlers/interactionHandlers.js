@@ -7728,8 +7728,18 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Pole 3: Współczynniki
         if (wyjebanieFactor !== null) {
             const factorFormatted = wyjebanieFactor.toFixed(2);
-            const wyjebanieInfo = `**Rzetelność:** ${factorFormatted}%\n` +
-                `*Tygodni z danymi: ${numberOfWeeksWithData} | Przypomnienia: ${reminderCount} | Punkty kar: ${lifetimePoints}*`;
+
+            // Wybierz kolor kółka na podstawie wartości
+            let colorCircle = '🔴'; // Czerwone (poniżej 90%)
+            if (wyjebanieFactor >= 99) {
+                colorCircle = '🟢'; // Zielone (100-99%)
+            } else if (wyjebanieFactor >= 95) {
+                colorCircle = '🟡'; // Żółte (98.99-95%)
+            } else if (wyjebanieFactor >= 90) {
+                colorCircle = '🟠'; // Pomarańczowe (94.99-90%)
+            }
+
+            const wyjebanieInfo = `**Rzetelność:** ${factorFormatted}% ${colorCircle}`;
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: wyjebanieInfo, inline: false });
         }
