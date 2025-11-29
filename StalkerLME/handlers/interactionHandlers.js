@@ -7737,21 +7737,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             const reliabilityFormatted = wyjebanieFactor.toFixed(2);
             const timingFormatted = timingFactor.toFixed(2);
 
-            // Funkcja do wyboru koloru kółka na podstawie wartości
-            const getColorCircle = (value) => {
-                if (value >= 90) {
-                    return '🟢'; // Zielone (90% i więcej)
-                } else if (value >= 80) {
-                    return '🟡'; // Żółte (80-89.99%)
-                } else if (value >= 70) {
-                    return '🟠'; // Pomarańczowe (70-79.99%)
-                } else {
-                    return '🔴'; // Czerwone (poniżej 70%)
-                }
-            };
+            // Kolory dla Rzetelności (stare progi)
+            let reliabilityCircle = '🔴'; // Czerwone (poniżej 90%)
+            if (wyjebanieFactor >= 99) {
+                reliabilityCircle = '🟢'; // Zielone (99%+)
+            } else if (wyjebanieFactor >= 95) {
+                reliabilityCircle = '🟡'; // Żółte (95-98.99%)
+            } else if (wyjebanieFactor >= 90) {
+                reliabilityCircle = '🟠'; // Pomarańczowe (90-94.99%)
+            }
 
-            const reliabilityCircle = getColorCircle(wyjebanieFactor);
-            const timingCircle = getColorCircle(timingFactor);
+            // Kolory dla Timing (nowe progi)
+            let timingCircle = '🔴'; // Czerwone (poniżej 70%)
+            if (timingFactor >= 90) {
+                timingCircle = '🟢'; // Zielone (90%+)
+            } else if (timingFactor >= 80) {
+                timingCircle = '🟡'; // Żółte (80-89.99%)
+            } else if (timingFactor >= 70) {
+                timingCircle = '🟠'; // Pomarańczowe (70-79.99%)
+            }
 
             const coefficientsInfo = `**Rzetelność:** ${reliabilityFormatted}% ${reliabilityCircle}\n**Timing:** ${timingFormatted}% ${timingCircle}`;
 
