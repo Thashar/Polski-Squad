@@ -7069,19 +7069,37 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         let cumulativeSection = '';
 
-        if (playerProgressData.length >= 4) {
-            const diff = playerProgressData[0].score - playerProgressData[3].score;
-            cumulativeSection += `**🔹 Miesiąc:** ${formatDifference(diff)}\n`;
-        }
+        // Wyświetl dostępne dane nawet jeśli jest ich mniej niż idealnie
+        if (playerProgressData.length >= 2) {
+            // Miesiąc (idealnie 4 tygodnie, ale pokaż co jest dostępne)
+            if (playerProgressData.length >= 4) {
+                const diff = playerProgressData[0].score - playerProgressData[3].score;
+                cumulativeSection += `**🔹 Miesiąc (4 tyg):** ${formatDifference(diff)}\n`;
+            } else if (playerProgressData.length >= 2) {
+                const weeksCount = playerProgressData.length - 1;
+                const diff = playerProgressData[0].score - playerProgressData[weeksCount].score;
+                cumulativeSection += `**🔹 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
+            }
 
-        if (playerProgressData.length >= 13) {
-            const diff = playerProgressData[0].score - playerProgressData[12].score;
-            cumulativeSection += `**🔷 Kwartał:** ${formatDifference(diff)}\n`;
-        }
+            // Kwartał (idealnie 13 tygodni)
+            if (playerProgressData.length >= 13) {
+                const diff = playerProgressData[0].score - playerProgressData[12].score;
+                cumulativeSection += `**🔷 Kwartał (13 tyg):** ${formatDifference(diff)}\n`;
+            } else if (playerProgressData.length >= 8) {
+                const weeksCount = Math.min(12, playerProgressData.length - 1);
+                const diff = playerProgressData[0].score - playerProgressData[weeksCount].score;
+                cumulativeSection += `**🔷 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
+            }
 
-        if (playerProgressData.length >= 26) {
-            const diff = playerProgressData[0].score - playerProgressData[25].score;
-            cumulativeSection += `**🔶 Pół roku:** ${formatDifference(diff)}\n`;
+            // Pół roku (idealnie 26 tygodni)
+            if (playerProgressData.length >= 26) {
+                const diff = playerProgressData[0].score - playerProgressData[25].score;
+                cumulativeSection += `**🔶 Pół roku (26 tyg):** ${formatDifference(diff)}\n`;
+            } else if (playerProgressData.length >= 14) {
+                const weeksCount = Math.min(25, playerProgressData.length - 1);
+                const diff = playerProgressData[0].score - playerProgressData[weeksCount].score;
+                cumulativeSection += `**🔶 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
+            }
         }
 
         if (cumulativeSection) {
@@ -7432,13 +7450,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const hasPunishmentRole = member ? member.roles.cache.has(config.punishmentRoleId) : false;
         const hasLotteryBanRole = member ? member.roles.cache.has(config.lotteryBanRoleId) : false;
 
-        // Oblicz progres miesięczny (ostatnie 4 tygodnie vs tydzień 5)
+        // Oblicz progres miesięczny (idealnie ostatnie 4 tygodnie vs tydzień 5, ale pokaż co jest dostępne)
         let monthlyProgress = null;
         let monthlyProgressPercent = null;
+        let monthlyWeeksCount = 0;
 
-        if (playerProgressData.length >= 5) {
+        if (playerProgressData.length >= 2) {
             const currentScore = playerProgressData[0].score;
-            const comparisonScore = playerProgressData[4].score;
+            let comparisonScore = 0;
+
+            if (playerProgressData.length >= 5) {
+                // Idealnie: porównaj z tygodniem 5
+                comparisonScore = playerProgressData[4].score;
+                monthlyWeeksCount = 4;
+            } else {
+                // Za mało danych: porównaj z ostatnim dostępnym tygodniem
+                comparisonScore = playerProgressData[playerProgressData.length - 1].score;
+                monthlyWeeksCount = playerProgressData.length - 1;
+            }
 
             if (comparisonScore > 0) {
                 monthlyProgress = currentScore - comparisonScore;
@@ -7446,12 +7475,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        // Oblicz progres kwartalny (ostatnie 12 tygodni vs tydzień 13)
+        // Oblicz progres kwartalny (idealnie ostatnie 12 tygodni vs tydzień 13, ale pokaż co jest dostępne)
         let quarterlyProgress = null;
         let quarterlyProgressPercent = null;
+        let quarterlyWeeksCount = 0;
 
         const allWeeksForQuarterly = allWeeks.slice(0, 13);
         if (allWeeksForQuarterly.length === 13) {
+            // Idealnie: mamy 13 tygodni
             // Znajdź wynik z tygodnia 13
             let week13Score = 0;
 
@@ -7477,6 +7508,17 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const currentScore = playerProgressData[0].score;
                 quarterlyProgress = currentScore - week13Score;
                 quarterlyProgressPercent = ((quarterlyProgress / week13Score) * 100).toFixed(1);
+                quarterlyWeeksCount = 12;
+            }
+        } else if (playerProgressData.length >= 2) {
+            // Za mało danych: użyj tego co jest dostępne
+            const currentScore = playerProgressData[0].score;
+            const comparisonScore = playerProgressData[playerProgressData.length - 1].score;
+
+            if (comparisonScore > 0) {
+                quarterlyProgress = currentScore - comparisonScore;
+                quarterlyProgressPercent = ((quarterlyProgress / comparisonScore) * 100).toFixed(1);
+                quarterlyWeeksCount = playerProgressData.length - 1;
             }
         }
 
@@ -7567,13 +7609,15 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (monthlyProgress !== null) {
                 const arrow = monthlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(monthlyProgress).toLocaleString('pl-PL');
-                progressInfo += `**🔹 Miesiąc (4 tyg):** ${arrow} ${absProgress} (${monthlyProgressPercent}%)\n`;
+                const monthLabel = monthlyWeeksCount === 4 ? 'Miesiąc (4 tyg)' : `Dostępne dane (${monthlyWeeksCount} tyg)`;
+                progressInfo += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)\n`;
             }
 
             if (quarterlyProgress !== null) {
                 const arrow = quarterlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
-                progressInfo += `**🔷 Kwartał (12 tyg):** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)`;
+                const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
+                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)`;
             }
 
             if (progressInfo) {
