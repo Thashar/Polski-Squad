@@ -8351,8 +8351,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Progres miesiąc (najnowszy tydzień vs tydzień sprzed 4 tygodni - indeks 3)
         const monthProgress = calculatePlayerProgress(playerWeeklyScores, 3);
 
-        // Progres kwartał (najnowszy tydzień vs tydzień sprzed 13 tygodni - indeks 12)
-        const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 12);
+        // Progres kwartał (najnowszy tydzień vs tydzień sprzed 12 tygodni - indeks 11)
+        const quarterProgress = calculatePlayerProgress(playerWeeklyScores, 11);
 
         // Najlepszy i najgorszy tydzień (z ostatnich 12)
         let bestWeek = null;
@@ -8437,7 +8437,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             embed.addFields({ name: '📊 OSTATNIE 12 TYGODNI', value: statsInfo, inline: false });
         }
 
-        // POLE 3 i 4: Progres miesiąc i kwartał (identycznie jak w /progres)
+        // POLE 3 i 4: Progres miesiąc i kwartał
         if (playerWeeklyScores.length >= 4) {
             const monthSign = monthProgress.progress >= 0 ? '+' : '';
             const monthArrow = monthProgress.progress >= 0 ? '↗️' : '↘️';
@@ -8445,7 +8445,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             embed.addFields({ name: '📈 PROGRES MIESIĄC', value: monthInfo, inline: true });
         }
 
-        if (playerWeeklyScores.length >= 13) {
+        if (playerWeeklyScores.length >= 12) {
             const quarterSign = quarterProgress.progress >= 0 ? '+' : '';
             const quarterArrow = quarterProgress.progress >= 0 ? '↗️' : '↘️';
             const quarterInfo = `${quarterSign}${quarterProgress.progress.toLocaleString('pl-PL')} pkt (${quarterSign}${Math.round(quarterProgress.progressPercent)}%) ${quarterArrow}`;
