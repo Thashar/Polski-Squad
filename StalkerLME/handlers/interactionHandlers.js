@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki i /progres
-    const publicCommands = ['decode', 'wyniki', 'progres'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres i /rebuild-index
+    const publicCommands = ['decode', 'wyniki', 'progres', 'rebuild-index'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -143,6 +143,9 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'clan-status':
             await handleClanStatusCommand(interaction, sharedState);
+            break;
+        case 'rebuild-index':
+            await handleRebuildIndexCommand(interaction, sharedState);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
@@ -2263,7 +2266,11 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('clan-status')
-            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów')
+            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów'),
+
+        new SlashCommandBuilder()
+            .setName('rebuild-index')
+            .setDescription('[ADMIN] Przebudowuje indeks graczy na podstawie wszystkich zapisanych danych')
     ];
 
     try {
@@ -6812,38 +6819,29 @@ async function handleAutocomplete(interaction, sharedState) {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
-            // Pobierz wszystkie dostępne tygodnie
-            const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+            // Pobierz indeks graczy (szybkie - tylko 1 plik)
+            const playerIndex = await databaseService.loadPlayerIndex(interaction.guild.id);
 
-            if (allWeeks.length === 0) {
+            if (Object.keys(playerIndex).length === 0) {
                 await interaction.respond([]);
                 return;
             }
 
-            // Zbierz wszystkich unikalnych graczy ze wszystkich klanów i tygodni
-            const playerNames = new Set();
-
-            for (const week of allWeeks) {
-                for (const clan of week.clans) {
-                    const weekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        week.weekNumber,
-                        week.year,
-                        clan
-                    );
-
-                    if (weekData && weekData.players) {
-                        weekData.players.forEach(player => {
-                            if (player.displayName) {
-                                playerNames.add(player.displayName);
-                            }
-                        });
-                    }
+            // Zbierz WSZYSTKIE nicki (stare i nowe) dla wszystkich graczy
+            const allNicks = new Set();
+            for (const data of Object.values(playerIndex)) {
+                // Dodaj wszystkie nicki tego gracza
+                if (data.allNicks && data.allNicks.length > 0) {
+                    data.allNicks.forEach(nick => allNicks.add(nick));
+                } else {
+                    // Fallback - jeśli allNicks nie istnieje, użyj latestNick
+                    allNicks.add(data.latestNick);
                 }
             }
+            const playerNames = Array.from(allNicks);
 
             // Filtruj i sortuj graczy według dopasowania
-            const choices = Array.from(playerNames)
+            const choices = playerNames
                 .filter(name => name.toLowerCase().includes(focusedValueLower))
                 .sort((a, b) => {
                     // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
@@ -6939,7 +6937,7 @@ async function handleProgresNavButton(interaction, sharedState) {
 
 // Funkcja tworząca ranking graczy po all-time max
 async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
-    // Mapa: playerName -> maxScore
+    // Mapa: userId -> { latestNick, maxScore }
     const playerMaxScores = new Map();
 
     for (const week of last54Weeks) {
@@ -6953,10 +6951,13 @@ async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
 
             if (weekData && weekData.players) {
                 weekData.players.forEach(player => {
-                    if (player.displayName && player.score > 0) {
-                        const currentMax = playerMaxScores.get(player.displayName) || 0;
-                        if (player.score > currentMax) {
-                            playerMaxScores.set(player.displayName, player.score);
+                    if (player.userId && player.score > 0) {
+                        const current = playerMaxScores.get(player.userId);
+                        if (!current || player.score > current.maxScore) {
+                            playerMaxScores.set(player.userId, {
+                                latestNick: player.displayName,
+                                maxScore: player.score
+                            });
                         }
                     }
                 });
@@ -6966,7 +6967,11 @@ async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
 
     // Konwertuj do tablicy i posortuj po maxScore (malejąco - najlepsi na początku)
     const ranking = Array.from(playerMaxScores.entries())
-        .map(([playerName, maxScore]) => ({ playerName, maxScore }))
+        .map(([userId, data]) => ({
+            userId,
+            playerName: data.latestNick,
+            maxScore: data.maxScore
+        }))
         .sort((a, b) => b.maxScore - a.maxScore);
 
     return ranking;
@@ -6978,11 +6983,25 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
     try {
 
+        // Znajdź userId dla wybranego nicku (może być stary lub nowy nick)
+        const userInfo = await databaseService.findUserIdByNick(interaction.guild.id, selectedPlayer);
+
+        if (!userInfo) {
+            // Fallback - nie znaleziono w indeksie, nie ma danych
+            await interaction.followUp({
+                content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const { userId, latestNick } = userInfo;
+
         // Pobierz wszystkie dostępne tygodnie
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
         const last54Weeks = allWeeks.slice(0, 54);
 
-        // Zbierz dane gracza ze wszystkich tygodni i klanów
+        // Zbierz dane gracza ze wszystkich tygodni i klanów (po userId, nie po nicku)
         const playerProgressData = [];
 
         for (const week of last54Weeks) {
@@ -6995,9 +7014,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                 );
 
                 if (weekData && weekData.players) {
-                    const player = weekData.players.find(p =>
-                        p.displayName && p.displayName.toLowerCase() === selectedPlayer.toLowerCase()
-                    );
+                    const player = weekData.players.find(p => p.userId === userId);
 
                     if (player) {
                         playerProgressData.push({
@@ -7006,6 +7023,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                             clan: clan,
                             clanName: config.roleDisplayNames[clan],
                             score: player.score,
+                            displayName: player.displayName,
                             createdAt: weekData.createdAt
                         });
                         break;
@@ -7015,18 +7033,10 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         }
 
         if (playerProgressData.length === 0) {
-            if (isUpdate) {
-                await interaction.update({
-                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
-                    embeds: [],
-                    components: []
-                });
-            } else {
-                await interaction.followUp({
-                    content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`,
-                    flags: MessageFlags.Ephemeral
-                });
-            }
+            await interaction.followUp({
+                content: `❌ Nie znaleziono żadnych wyników dla gracza **${latestNick}**.`,
+                flags: MessageFlags.Ephemeral
+            });
             return;
         }
 
@@ -7137,9 +7147,9 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const resultsText = resultsLines.join('\n');
 
-        // Stwórz ranking all-time i znajdź pozycję gracza
+        // Stwórz ranking all-time i znajdź pozycję gracza (po userId)
         const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
-        const currentPlayerIndex = allTimeRanking.findIndex(p => p.playerName.toLowerCase() === selectedPlayer.toLowerCase());
+        const currentPlayerIndex = allTimeRanking.findIndex(p => p.userId === userId);
 
         // Gracze sąsiedzi w rankingu (lepszy i gorszy)
         const betterPlayer = currentPlayerIndex > 0 ? allTimeRanking[currentPlayerIndex - 1] : null;
@@ -7196,8 +7206,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         // Pobierz klan gracza z najnowszych danych
         const playerClan = playerProgressData.length > 0 ? playerProgressData[0].clanName : 'Brak';
 
+        // Użyj najnowszego nicku z danych
+        const displayNick = playerProgressData.length > 0 ? playerProgressData[0].displayName : latestNick;
+
         const embed = new EmbedBuilder()
-            .setTitle(`📈 Progres gracza: ${selectedPlayer} (${playerClan})`)
+            .setTitle(`📈 Progres gracza: ${displayNick} (${playerClan})`)
             .setDescription(`${cumulativeSection}**Wyniki z Fazy 1** (ostatnie ${last54Weeks.length} tygodni):\n\n${resultsText}${expiryInfo}`)
             .setColor('#00FF00')
             .setFooter({ text: `Tygodni z danymi: ${playerProgressData.length}/${last54Weeks.length} | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}` })
@@ -7281,6 +7294,55 @@ async function handleProgresCommand(interaction, sharedState) {
         logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas pobierania danych progresu.'
+        });
+    }
+}
+
+// Funkcja obsługująca komendę /rebuild-index
+async function handleRebuildIndexCommand(interaction, sharedState) {
+    const { databaseService } = sharedState;
+
+    // Sprawdź czy użytkownik jest adminem
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!isAdmin) {
+        await interaction.reply({
+            content: '❌ Ta komenda jest dostępna tylko dla administratorów.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        const startTime = Date.now();
+        const result = await databaseService.rebuildPlayerIndex(interaction.guild.id);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+        if (result.success) {
+            const embed = new EmbedBuilder()
+                .setTitle('✅ Indeks graczy przebudowany pomyślnie')
+                .setDescription(
+                    `📂 **Przeskanowano plików:** ${result.filesScanned}\n` +
+                    `👥 **Znaleziono graczy:** ${result.playerCount}\n` +
+                    `⏱️ **Czas wykonania:** ${duration}s`
+                )
+                .setColor('#00FF00')
+                .setTimestamp();
+
+            await interaction.editReply({
+                embeds: [embed]
+            });
+        } else {
+            await interaction.editReply({
+                content: `❌ Błąd przebudowy indeksu: ${result.error}`
+            });
+        }
+    } catch (error) {
+        logger.error('[REBUILD-INDEX] ❌ Błąd wykonania komendy:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas przebudowy indeksu.'
         });
     }
 }

@@ -83,11 +83,244 @@ class DatabaseService {
     }
 
     /**
+     * Zwraca ścieżkę do pliku indeksu graczy
+     * Przykład: data/phases/guild_123456/player_index.json
+     */
+    getPlayerIndexPath(guildId) {
+        return path.join(
+            this.phasesBaseDir,
+            `guild_${guildId}`,
+            'player_index.json'
+        );
+    }
+
+    /**
      * Tworzy katalogi jeśli nie istnieją
      */
     async ensurePhaseDirectories(guildId, phase, year) {
         const dir = this.getPhaseWeekDir(guildId, phase, year);
         await fs.mkdir(dir, { recursive: true });
+    }
+
+    /**
+     * Ładuje indeks graczy dla danego serwera
+     * Struktura: { userId: { latestNick, lastSeen, allNicks[] } }
+     * Jeśli indeks nie istnieje, automatycznie go buduje z istniejących danych
+     */
+    async loadPlayerIndex(guildId) {
+        const indexPath = this.getPlayerIndexPath(guildId);
+        try {
+            const data = await fs.readFile(indexPath, 'utf8');
+            return JSON.parse(data);
+        } catch (error) {
+            // Plik nie istnieje - zbuduj indeks automatycznie z istniejących danych
+            logger.info(`[INDEX] 📂 Indeks nie istnieje dla guild ${guildId}, budowanie automatycznie...`);
+            const result = await this.rebuildPlayerIndex(guildId);
+
+            if (result.success) {
+                logger.info(`[INDEX] ✅ Indeks zbudowany automatycznie (${result.playerCount} graczy, ${result.filesScanned} plików)`);
+                // Wczytaj świeżo zbudowany indeks
+                try {
+                    const data = await fs.readFile(indexPath, 'utf8');
+                    return JSON.parse(data);
+                } catch (err) {
+                    return {};
+                }
+            } else {
+                logger.error(`[INDEX] ❌ Nie udało się zbudować indeksu: ${result.error}`);
+                return {};
+            }
+        }
+    }
+
+    /**
+     * Zapisuje indeks graczy dla danego serwera
+     */
+    async savePlayerIndex(guildId, index) {
+        const indexPath = this.getPlayerIndexPath(guildId);
+        const indexDir = path.dirname(indexPath);
+
+        // Upewnij się że katalog istnieje
+        await fs.mkdir(indexDir, { recursive: true });
+
+        await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf8');
+    }
+
+    /**
+     * Aktualizuje indeks gracza po zapisaniu nowych danych
+     * Zbiera wszystkie nicki jakie użytkownik miał (bez modyfikacji historycznych danych)
+     */
+    async updatePlayerIndex(guildId, userId, displayName, timestamp = new Date().toISOString()) {
+        const index = await this.loadPlayerIndex(guildId);
+
+        // Sprawdź czy to nowy gracz lub nick się zmienił
+        if (!index[userId]) {
+            // Nowy gracz
+            index[userId] = {
+                latestNick: displayName,
+                lastSeen: timestamp,
+                allNicks: [displayName]
+            };
+            logger.info(`[INDEX] ➕ Nowy gracz: ${displayName} (${userId})`);
+        } else if (index[userId].latestNick !== displayName) {
+            // Nick się zmienił - dodaj do listy nicków
+            const oldNick = index[userId].latestNick;
+            logger.info(`[INDEX] 🔄 Zmiana nicku: "${oldNick}" → "${displayName}" (${userId})`);
+
+            // Aktualizuj indeks
+            index[userId].latestNick = displayName;
+            index[userId].lastSeen = timestamp;
+
+            // Dodaj do listy wszystkich nicków jeśli jeszcze nie ma
+            if (!index[userId].allNicks.includes(displayName)) {
+                index[userId].allNicks.push(displayName);
+            }
+        } else {
+            // Ten sam nick - tylko aktualizuj lastSeen
+            index[userId].lastSeen = timestamp;
+        }
+
+        await this.savePlayerIndex(guildId, index);
+    }
+
+    /**
+     * Znajduje userId dla danego nicku (może być stary lub nowy nick)
+     * Zwraca { userId, latestNick } lub null jeśli nie znaleziono
+     */
+    async findUserIdByNick(guildId, searchNick) {
+        const index = await this.loadPlayerIndex(guildId);
+        const searchNickLower = searchNick.toLowerCase();
+
+        // Szukaj w indeksie
+        for (const [userId, data] of Object.entries(index)) {
+            // Sprawdź czy to aktualny nick
+            if (data.latestNick.toLowerCase() === searchNickLower) {
+                return { userId, latestNick: data.latestNick };
+            }
+
+            // Sprawdź czy to jeden z historycznych nicków
+            if (data.allNicks && data.allNicks.some(nick => nick.toLowerCase() === searchNickLower)) {
+                return { userId, latestNick: data.latestNick };
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Przebudowuje indeks graczy od zera na podstawie wszystkich plików phase1
+     * Przydatne do migracji istniejących danych
+     */
+    async rebuildPlayerIndex(guildId) {
+        logger.info(`[REBUILD] 🔄 Rozpoczynam przebudowę indeksu graczy dla guild ${guildId}`);
+
+        const guildBaseDir = path.join(this.phasesBaseDir, `guild_${guildId}`, 'phase1');
+
+        try {
+            await fs.access(guildBaseDir);
+        } catch {
+            logger.info(`[REBUILD] ⚠️ Katalog phase1 nie istnieje, tworzę pusty indeks`);
+            await this.savePlayerIndex(guildId, {});
+            return { success: true, playerCount: 0, filesScanned: 0 };
+        }
+
+        // Mapa: userId -> { nicks: Set, lastSeen: timestamp, weekNumber, year }
+        const playerData = new Map();
+        let filesScanned = 0;
+
+        try {
+            // Odczytaj wszystkie lata
+            const years = await fs.readdir(guildBaseDir);
+
+            for (const yearDir of years) {
+                const yearPath = path.join(guildBaseDir, yearDir);
+                const stat = await fs.stat(yearPath);
+
+                if (!stat.isDirectory()) continue;
+
+                const year = parseInt(yearDir);
+
+                // Odczytaj wszystkie pliki w danym roku
+                const files = await fs.readdir(yearPath);
+
+                for (const filename of files) {
+                    // Parsuj nazwę pliku: week-40_clan1.json
+                    const match = filename.match(/^week-(\d+)_(.+)\.json$/);
+                    if (!match) continue;
+
+                    const weekNumber = parseInt(match[1]);
+                    const filePath = path.join(yearPath, filename);
+                    const fileContent = await fs.readFile(filePath, 'utf8');
+                    const weekData = JSON.parse(fileContent);
+
+                    if (!weekData.players) continue;
+
+                    filesScanned++;
+
+                    // Zbierz dane z tego pliku
+                    for (const player of weekData.players) {
+                        if (!player.userId || !player.displayName) continue;
+
+                        const userId = player.userId;
+                        const displayName = player.displayName;
+                        const timestamp = weekData.updatedAt || weekData.createdAt || new Date().toISOString();
+
+                        if (!playerData.has(userId)) {
+                            playerData.set(userId, {
+                                nicks: new Set([displayName]),
+                                lastSeen: timestamp,
+                                weekNumber: weekNumber,
+                                year: year,
+                                latestNick: displayName
+                            });
+                        } else {
+                            const data = playerData.get(userId);
+                            data.nicks.add(displayName);
+
+                            // Sprawdź czy ten wpis jest nowszy (większy rok lub większy tydzień)
+                            const isNewer = (year > data.year) || (year === data.year && weekNumber > data.weekNumber);
+
+                            if (isNewer) {
+                                data.lastSeen = timestamp;
+                                data.weekNumber = weekNumber;
+                                data.year = year;
+                                data.latestNick = displayName;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Stwórz indeks w docelowym formacie
+            const index = {};
+            for (const [userId, data] of playerData.entries()) {
+                index[userId] = {
+                    latestNick: data.latestNick,
+                    lastSeen: data.lastSeen,
+                    allNicks: Array.from(data.nicks)
+                };
+            }
+
+            // Zapisz indeks
+            await this.savePlayerIndex(guildId, index);
+
+            logger.info(`[REBUILD] ✅ Indeks przebudowany pomyślnie:`);
+            logger.info(`[REBUILD]    📂 Przeskanowano plików: ${filesScanned}`);
+            logger.info(`[REBUILD]    👥 Znaleziono graczy: ${playerData.size}`);
+
+            return {
+                success: true,
+                playerCount: playerData.size,
+                filesScanned: filesScanned
+            };
+
+        } catch (error) {
+            logger.error('[REBUILD] ❌ Błąd przebudowy indeksu:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 
     // =============== KONIEC NOWYCH METOD POMOCNICZYCH ===============
@@ -446,6 +679,9 @@ class DatabaseService {
         // Zapisz do pliku
         await fs.writeFile(filePath, JSON.stringify(weekData, null, 2), 'utf8');
         logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan}, tydzień: ${weekNumber}/${year})`);
+
+        // Aktualizuj indeks graczy (normalizuje nicki jeśli się zmienił)
+        await this.updatePlayerIndex(guildId, userId, displayName, weekData.updatedAt);
     }
 
     /**
