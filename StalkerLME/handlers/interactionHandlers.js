@@ -7451,14 +7451,21 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const hasLotteryBanRole = member ? member.roles.cache.has(config.lotteryBanRoleId) : false;
 
         // Oblicz współczynnik wyjebania
-        // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.25) / liczba_tygodni × 100%)
+        // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.2) / liczba_tygodni × 100%)
         const numberOfWeeksWithData = playerProgressData.length;
         let wyjebanieFactor = null;
+        let timingFactor = null;
 
         if (numberOfWeeksWithData > 0) {
-            const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.25);
+            const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.2);
             const rawFactor = (penaltyScore / numberOfWeeksWithData) * 100;
             wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
+
+            // Oblicz współczynnik Timing (bez punktów kary)
+            // Wzór: 100% - ((przypomnienia × 0.125) / liczba_tygodni × 100%)
+            const timingPenaltyScore = reminderCount * 0.125;
+            const rawTimingFactor = (timingPenaltyScore / numberOfWeeksWithData) * 100;
+            timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
         // Oblicz progres miesięczny (idealnie ostatnie 4 tygodnie vs tydzień 5, ale pokaż co jest dostępne)
@@ -7726,22 +7733,29 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
 
         // Pole 3: Współczynniki
-        if (wyjebanieFactor !== null) {
-            const factorFormatted = wyjebanieFactor.toFixed(2);
+        if (wyjebanieFactor !== null && timingFactor !== null) {
+            const reliabilityFormatted = wyjebanieFactor.toFixed(2);
+            const timingFormatted = timingFactor.toFixed(2);
 
-            // Wybierz kolor kółka na podstawie wartości
-            let colorCircle = '🔴'; // Czerwone (poniżej 90%)
-            if (wyjebanieFactor >= 99) {
-                colorCircle = '🟢'; // Zielone (100-99%)
-            } else if (wyjebanieFactor >= 95) {
-                colorCircle = '🟡'; // Żółte (98.99-95%)
-            } else if (wyjebanieFactor >= 90) {
-                colorCircle = '🟠'; // Pomarańczowe (94.99-90%)
-            }
+            // Funkcja do wyboru koloru kółka na podstawie wartości
+            const getColorCircle = (value) => {
+                if (value >= 90) {
+                    return '🟢'; // Zielone (90% i więcej)
+                } else if (value >= 80) {
+                    return '🟡'; // Żółte (80-89.99%)
+                } else if (value >= 70) {
+                    return '🟠'; // Pomarańczowe (70-79.99%)
+                } else {
+                    return '🔴'; // Czerwone (poniżej 70%)
+                }
+            };
 
-            const wyjebanieInfo = `**Rzetelność:** ${factorFormatted}% ${colorCircle}`;
+            const reliabilityCircle = getColorCircle(wyjebanieFactor);
+            const timingCircle = getColorCircle(timingFactor);
 
-            embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: wyjebanieInfo, inline: false });
+            const coefficientsInfo = `**Rzetelność:** ${reliabilityFormatted}% ${reliabilityCircle}\n**Timing:** ${timingFormatted}% ${timingCircle}`;
+
+            embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
         }
 
         // Pole 4: Wykresy (ostatnie 12 tygodni)
