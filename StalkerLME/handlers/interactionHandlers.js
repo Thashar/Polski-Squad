@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki i /progres
-    const publicCommands = ['decode', 'wyniki', 'progres'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres i /player-status
+    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -131,6 +131,9 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'progres':
             await handleProgresCommand(interaction, sharedState);
+            break;
+        case 'player-status':
+            await handlePlayerStatusCommand(interaction, sharedState);
             break;
         case 'modyfikuj':
             await handleModyfikujCommand(interaction, sharedState);
@@ -2263,7 +2266,17 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('clan-status')
-            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów')
+            .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów'),
+
+        new SlashCommandBuilder()
+            .setName('player-status')
+            .setDescription('Kompleksowy raport o graczu: progres, kary, status w klanie i ranking')
+            .addStringOption(option =>
+                option.setName('nick')
+                    .setDescription('Nick gracza (wyszukaj z listy lub wpisz własny)')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
     ];
 
     try {
@@ -6808,7 +6821,7 @@ async function handleAutocomplete(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        if (interaction.commandName === 'progres') {
+        if (interaction.commandName === 'progres' || interaction.commandName === 'player-status') {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
@@ -7277,6 +7290,324 @@ async function handleProgresCommand(interaction, sharedState) {
         logger.error('[PROGRES] ❌ Błąd wyświetlania progresu:', error);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas pobierania danych progresu.'
+        });
+    }
+}
+
+// Funkcja obsługująca komendę /player-status
+async function handlePlayerStatusCommand(interaction, sharedState) {
+    const { config, databaseService, reminderUsageService } = sharedState;
+
+    await interaction.deferReply();
+
+    try {
+        // Pobierz nick z parametru
+        const selectedPlayer = interaction.options.getString('nick');
+
+        // Znajdź userId dla wybranego nicku
+        const userInfo = await databaseService.findUserIdByNick(interaction.guild.id, selectedPlayer);
+
+        if (!userInfo) {
+            await interaction.editReply({
+                content: `❌ Nie znaleziono żadnych wyników dla gracza **${selectedPlayer}**.`
+            });
+            return;
+        }
+
+        const { userId, latestNick } = userInfo;
+
+        // Pobierz wszystkie dostępne tygodnie (ostatnie 12)
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
+            });
+            return;
+        }
+
+        const last12Weeks = allWeeks.slice(0, 12);
+
+        // Zbierz dane gracza ze wszystkich tygodni i klanów (ostatnie 12 tygodni)
+        const playerProgressData = [];
+
+        for (const week of last12Weeks) {
+            for (const clan of week.clans) {
+                const weekData = await databaseService.getPhase1Results(
+                    interaction.guild.id,
+                    week.weekNumber,
+                    week.year,
+                    clan
+                );
+
+                if (weekData && weekData.players) {
+                    const player = weekData.players.find(p => p.userId === userId);
+
+                    if (player) {
+                        playerProgressData.push({
+                            weekNumber: week.weekNumber,
+                            year: week.year,
+                            clan: clan,
+                            clanName: config.roleDisplayNames[clan],
+                            score: player.score,
+                            displayName: player.displayName,
+                            createdAt: weekData.createdAt
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (playerProgressData.length === 0) {
+            await interaction.editReply({
+                content: `❌ Nie znaleziono żadnych wyników dla gracza **${latestNick}** w ostatnich 12 tygodniach.`
+            });
+            return;
+        }
+
+        // Posortuj dane od najnowszych do najstarszych
+        playerProgressData.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
+
+        // Pobierz obecny klan gracza i jego członka Discord
+        const members = await interaction.guild.members.fetch();
+        const member = members.get(userId);
+
+        let currentClan = null;
+        let currentClanKey = null;
+
+        if (member) {
+            for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+                if (member.roles.cache.has(roleId)) {
+                    currentClan = config.roleDisplayNames[clanKey];
+                    currentClanKey = clanKey;
+                    break;
+                }
+            }
+        }
+
+        // Jeśli nie ma klanu, użyj info z najnowszych danych lub "Aktualnie poza strukturami"
+        if (!currentClan && playerProgressData.length > 0) {
+            currentClan = playerProgressData[0].clanName;
+            currentClanKey = playerProgressData[0].clan;
+        }
+
+        const clanDisplay = currentClan || 'Aktualnie poza strukturami';
+
+        // Oblicz globalną pozycję w rankingu
+        const last54Weeks = allWeeks.slice(0, 54); // Dla globalnego rankingu używamy 54 tygodni
+        const globalRanking = await createGlobalPlayerRanking(
+            interaction.guild,
+            databaseService,
+            config,
+            last54Weeks
+        );
+
+        const globalPosition = globalRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
+        const totalPlayers = globalRanking.length;
+
+        // Oblicz pozycję w klanie (jeśli ma klan)
+        let clanPosition = null;
+        let clanTotalPlayers = null;
+
+        if (currentClanKey) {
+            const clanRanking = globalRanking.filter(p => p.clanKey === currentClanKey);
+            clanPosition = clanRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
+            clanTotalPlayers = clanRanking.length;
+        }
+
+        // Pobierz dane o karach
+        const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
+        const userPunishment = guildPunishments[userId];
+        const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
+
+        // Pobierz liczbę przypomnień
+        const reminderCount = (await reminderUsageService.getMultipleUserStats([userId]))[userId] || 0;
+
+        // Sprawdź role
+        const hasPunishmentRole = member ? member.roles.cache.has(config.punishmentRoleId) : false;
+        const hasLotteryBanRole = member ? member.roles.cache.has(config.lotteryBanRoleId) : false;
+
+        // Oblicz progres miesięczny (ostatnie 4 tygodnie vs tydzień 5)
+        let monthlyProgress = null;
+        let monthlyProgressPercent = null;
+
+        if (playerProgressData.length >= 5) {
+            const currentScore = playerProgressData[0].score;
+            const comparisonScore = playerProgressData[4].score;
+
+            if (comparisonScore > 0) {
+                monthlyProgress = currentScore - comparisonScore;
+                monthlyProgressPercent = ((monthlyProgress / comparisonScore) * 100).toFixed(1);
+            }
+        }
+
+        // Oblicz progres kwartalny (ostatnie 12 tygodni vs tydzień 13)
+        let quarterlyProgress = null;
+        let quarterlyProgressPercent = null;
+
+        const allWeeksForQuarterly = allWeeks.slice(0, 13);
+        if (allWeeksForQuarterly.length === 13) {
+            // Znajdź wynik z tygodnia 13
+            let week13Score = 0;
+
+            const week13 = allWeeksForQuarterly[12];
+            for (const clan of week13.clans) {
+                const weekData = await databaseService.getPhase1Results(
+                    interaction.guild.id,
+                    week13.weekNumber,
+                    week13.year,
+                    clan
+                );
+
+                if (weekData && weekData.players) {
+                    const player = weekData.players.find(p => p.userId === userId);
+                    if (player) {
+                        week13Score = player.score;
+                        break;
+                    }
+                }
+            }
+
+            if (week13Score > 0 && playerProgressData.length > 0) {
+                const currentScore = playerProgressData[0].score;
+                quarterlyProgress = currentScore - week13Score;
+                quarterlyProgressPercent = ((quarterlyProgress / week13Score) * 100).toFixed(1);
+            }
+        }
+
+        // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
+        const maxScore = Math.max(...playerProgressData.map(d => d.score));
+        const barLength = 10;
+
+        // Stwórz mapę wyników gracza
+        const playerScoreMap = new Map();
+        playerProgressData.forEach(data => {
+            const key = `${data.weekNumber}-${data.year}`;
+            playerScoreMap.set(key, data.score);
+        });
+
+        const resultsLines = [];
+
+        // Małe liczby dla progress barów
+        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+
+        const formatSmallDifference = (difference) => {
+            if (difference > 0) {
+                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                return ` ▲${superscriptNumber}`;
+            } else if (difference < 0) {
+                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                return ` ▼${subscriptNumber}`;
+            }
+            return '';
+        };
+
+        for (let i = 0; i < last12Weeks.length; i++) {
+            const week = last12Weeks[i];
+            const weekKey = `${week.weekNumber}-${week.year}`;
+            const score = playerScoreMap.get(weekKey);
+            const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
+
+            // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
+            let bestScoreUpToNow = 0;
+            for (let j = i + 1; j < last12Weeks.length; j++) {
+                const pastWeek = last12Weeks[j];
+                const pastWeekKey = `${pastWeek.weekNumber}-${pastWeek.year}`;
+                const pastScore = playerScoreMap.get(pastWeekKey);
+                if (pastScore !== undefined && pastScore > bestScoreUpToNow) {
+                    bestScoreUpToNow = pastScore;
+                }
+            }
+
+            if (score !== undefined) {
+                const filledLength = score > 0 ? Math.max(1, Math.round((score / maxScore) * barLength)) : 0;
+                const progressBar = score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+                let differenceText = '';
+                if (bestScoreUpToNow > 0 && score !== bestScoreUpToNow) {
+                    const difference = score - bestScoreUpToNow;
+                    differenceText = formatSmallDifference(difference);
+                }
+
+                resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
+            } else {
+                const progressBar = '░'.repeat(barLength);
+                resultsLines.push(`${progressBar} ${weekLabel} - `);
+            }
+        }
+
+        const resultsText = resultsLines.join('\n');
+
+        // Stwórz embed
+        const embed = new EmbedBuilder()
+            .setTitle(`📊 Status gracza: ${latestNick}`)
+            .setColor('#00BFFF') // Tymczasowo niebieski, później dodamy kolorowanie
+            .setTimestamp();
+
+        // Pole 1: Klan i pozycje w rankingu
+        let rankingInfo = `🏠 **Klan:** ${clanDisplay}\n`;
+        rankingInfo += `🌍 **Pozycja globalna:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n`;
+
+        if (clanPosition && clanTotalPlayers) {
+            rankingInfo += `🎯 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}`;
+        }
+
+        embed.addFields({ name: '📈 Ranking', value: rankingInfo, inline: false });
+
+        // Pole 2: Progres (tylko jeśli są dane)
+        if (monthlyProgress !== null || quarterlyProgress !== null) {
+            let progressInfo = '';
+
+            if (monthlyProgress !== null) {
+                const arrow = monthlyProgress >= 0 ? '▲' : '▼';
+                const absProgress = Math.abs(monthlyProgress).toLocaleString('pl-PL');
+                progressInfo += `**🔹 Miesiąc (4 tyg):** ${arrow} ${absProgress} (${monthlyProgressPercent}%)\n`;
+            }
+
+            if (quarterlyProgress !== null) {
+                const arrow = quarterlyProgress >= 0 ? '▲' : '▼';
+                const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
+                progressInfo += `**🔷 Kwartał (12 tyg):** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)`;
+            }
+
+            if (progressInfo) {
+                embed.addFields({ name: '📊 Progres', value: progressInfo, inline: false });
+            }
+        }
+
+        // Pole 3: Wykresy (ostatnie 12 tygodni)
+        embed.addFields({
+            name: '📈 Wyniki z Fazy 1 (ostatnie 12 tygodni)',
+            value: resultsText,
+            inline: false
+        });
+
+        // Pole 4: Kary i status
+        let penaltiesInfo = '';
+
+        penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
+        penaltiesInfo += `💀 **Punkty kary (kariera):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
+        penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
+        penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
+
+        embed.addFields({ name: '⚖️ Kary i Status', value: penaltiesInfo, inline: false });
+
+        // Footer
+        embed.setFooter({
+            text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}`
+        });
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        logger.error('[PLAYER-STATUS] ❌ Błąd wyświetlania statusu gracza:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania danych gracza.'
         });
     }
 }
