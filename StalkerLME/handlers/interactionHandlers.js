@@ -7316,16 +7316,43 @@ async function handleProgresCommand(interaction, sharedState) {
 async function handlePlayerStatusCommand(interaction, sharedState) {
     const { config, databaseService, reminderUsageService } = sharedState;
 
-    // Sprawdź uprawnienia - wszyscy z rangą klanową
-    const clanRoleIds = Object.values(config.targetRoles);
-    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    // Sprawdź czy użytkownik jest moderatorem lub administratorem
+    const isModerator = hasPermission(interaction.member, config.allowedPunishRoles);
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasModeratorOrAdminPermissions = isModerator || isAdmin;
 
-    if (!hasClanRole) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
+    // Jeśli użytkownik NIE jest moderatorem/adminem, sprawdź uprawnienia klanowe i kanał
+    if (!hasModeratorOrAdminPermissions) {
+        // Sprawdź uprawnienia - wszyscy z rangą klanową
+        const clanRoleIds = Object.values(config.targetRoles);
+        const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+
+        if (!hasClanRole) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Znajdź rolę klanową użytkownika
+        let userClanRoleId = null;
+        for (const roleId of clanRoleIds) {
+            if (interaction.member.roles.cache.has(roleId)) {
+                userClanRoleId = roleId;
+                break;
+            }
+        }
+
+        // Sprawdź czy kanał jest dozwolony dla tej roli
+        const allowedChannelId = config.confirmationChannels[userClanRoleId];
+        if (interaction.channelId !== allowedChannelId) {
+            await interaction.reply({
+                content: `❌ Możesz używać tej komendy tylko na kanale <#${allowedChannelId}>`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
     }
 
     await interaction.deferReply();
@@ -7922,12 +7949,27 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
 
-        // Footer
+        // Ustaw auto-usuwanie po 5 minutach
+        const deleteAt = Date.now() + (5 * 60 * 1000);
+        const deleteTimestamp = Math.floor(deleteAt / 1000);
+
+        // Footer z informacją o wygaśnięciu
         embed.setFooter({
-            text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')}`
+            text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')} | Wygasa: za 5 min`
         });
 
-        await interaction.editReply({ embeds: [embed] });
+        const response = await interaction.editReply({ embeds: [embed] });
+
+        // Zaplanuj usunięcie wiadomości
+        const messageCleanupService = interaction.client.messageCleanupService;
+        if (response && messageCleanupService) {
+            await messageCleanupService.scheduleMessageDeletion(
+                response.id,
+                response.channelId,
+                deleteAt,
+                interaction.user.id
+            );
+        }
 
     } catch (error) {
         logger.error('[PLAYER-STATUS] ❌ Błąd wyświetlania statusu gracza:', error);
@@ -8166,16 +8208,43 @@ async function showClanStatusPage(interaction, ranking, currentPage, deleteTimes
 async function handleClanStatusCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
 
-    // Sprawdź uprawnienia - wszyscy z rangą klanową
-    const clanRoleIds = Object.values(config.targetRoles);
-    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    // Sprawdź czy użytkownik jest moderatorem lub administratorem
+    const isModerator = hasPermission(interaction.member, config.allowedPunishRoles);
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasModeratorOrAdminPermissions = isModerator || isAdmin;
 
-    if (!hasClanRole) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
+    // Jeśli użytkownik NIE jest moderatorem/adminem, sprawdź uprawnienia klanowe i kanał
+    if (!hasModeratorOrAdminPermissions) {
+        // Sprawdź uprawnienia - wszyscy z rangą klanową
+        const clanRoleIds = Object.values(config.targetRoles);
+        const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+
+        if (!hasClanRole) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Znajdź rolę klanową użytkownika
+        let userClanRoleId = null;
+        for (const roleId of clanRoleIds) {
+            if (interaction.member.roles.cache.has(roleId)) {
+                userClanRoleId = roleId;
+                break;
+            }
+        }
+
+        // Sprawdź czy kanał jest dozwolony dla tej roli
+        const allowedChannelId = config.confirmationChannels[userClanRoleId];
+        if (interaction.channelId !== allowedChannelId) {
+            await interaction.reply({
+                content: `❌ Możesz używać tej komendy tylko na kanale <#${allowedChannelId}>`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
     }
 
     await interaction.deferReply();
