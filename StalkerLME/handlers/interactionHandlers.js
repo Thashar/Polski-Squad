@@ -7626,6 +7626,73 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
+        // Oblicz współczynnik Trend (tempo progresu)
+        // Porównuje średnie tempo z miesiąca ze średnim tempem z dłuższego okresu
+        let trendFactor = null;
+        let trendDescription = null;
+        let trendIcon = null;
+
+        if (monthlyProgressPercent !== null) {
+            let monthlyAvgPerWeek = null;
+            let longerTermAvgPerWeek = null;
+
+            // Scenariusz 1: Mamy pełne dane kwartalne (13 tygodni)
+            if (quarterlyProgressPercent !== null && quarterlyWeeksCount === 12) {
+                // Miesięczny progres już jest za 4 tygodnie
+                const monthlyPercent = parseFloat(monthlyProgressPercent);
+                // Kwartalny progres jest za 12 tygodni, dzielimy przez 3 aby uzyskać równowartość 4 tygodni
+                const quarterlyPercentNormalized = parseFloat(quarterlyProgressPercent) / 3;
+
+                trendFactor = monthlyPercent - quarterlyPercentNormalized;
+            }
+            // Scenariusz 2: Nie mamy pełnych danych kwartalnych, liczymy średni tygodniowy progres
+            else if (playerProgressData.length >= 2) {
+                // Średni tygodniowy progres z miesiąca (miesięczny % / 4)
+                monthlyAvgPerWeek = parseFloat(monthlyProgressPercent) / (monthlyWeeksCount || 4);
+
+                // Średni tygodniowy progres z całości (całkowity % / liczba tygodni między pierwszym a ostatnim)
+                const firstScore = playerProgressData[playerProgressData.length - 1].score;
+                const lastScore = playerProgressData[0].score;
+
+                if (firstScore > 0) {
+                    const totalProgressPercent = ((lastScore - firstScore) / firstScore) * 100;
+
+                    // Oblicz zakres tygodni (nie liczbę tygodni z danymi, ale zakres czasowy)
+                    const firstWeek = playerProgressData[playerProgressData.length - 1];
+                    const lastWeek = playerProgressData[0];
+                    let totalWeeksSpan = 0;
+
+                    if (firstWeek.year === lastWeek.year) {
+                        totalWeeksSpan = lastWeek.weekNumber - firstWeek.weekNumber;
+                    } else {
+                        const weeksInFirstYear = 52 - firstWeek.weekNumber;
+                        totalWeeksSpan = weeksInFirstYear + lastWeek.weekNumber;
+                    }
+
+                    if (totalWeeksSpan > 0) {
+                        longerTermAvgPerWeek = totalProgressPercent / totalWeeksSpan;
+                        trendFactor = monthlyAvgPerWeek - longerTermAvgPerWeek;
+                    }
+                }
+            }
+
+            // Określ opis i ikonę trendu
+            if (trendFactor !== null) {
+                const tolerance = 0.5; // Tolerancja dla uznania za "constans"
+
+                if (Math.abs(trendFactor) < tolerance) {
+                    trendDescription = 'Constans';
+                    trendIcon = '⚖️';
+                } else if (trendFactor > 0) {
+                    trendDescription = 'Rosnący';
+                    trendIcon = '↗️';
+                } else {
+                    trendDescription = 'Malejący';
+                    trendIcon = '↘️';
+                }
+            }
+        }
+
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
         const barLength = 10;
@@ -7803,6 +7870,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 }
 
                 coefficientsInfo += `\n💪 **Zaangażowanie:** ${engagementCircle}`;
+            }
+
+            // Dodaj współczynnik Trend jeśli dostępny
+            if (trendIcon !== null && trendDescription !== null) {
+                coefficientsInfo += `\n📈 **Trend:** ${trendIcon} ${trendDescription}`;
             }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
