@@ -7631,10 +7631,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let trendRatio = null;
         let trendDescription = null;
         let trendIcon = null;
+        let monthlyValue = null;
+        let longerTermValue = null;
+        let adjustedLongerTermValue = null;
 
         if (monthlyProgressPercent !== null) {
-            let monthlyValue = null;
-            let longerTermValue = null;
 
             // Scenariusz 1: Mamy pełne dane kwartalne (13 tygodni)
             if (quarterlyProgressPercent !== null && quarterlyWeeksCount === 12) {
@@ -7677,7 +7678,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (monthlyValue !== null && longerTermValue !== null && longerTermValue !== 0) {
                 // Jeżeli longerTermValue jest ujemny, traktuj go jako dodatni
                 // aby uniknąć błędnej klasyfikacji trendu (dwa minusy dają plus)
-                const adjustedLongerTermValue = longerTermValue < 0 ? Math.abs(longerTermValue) : longerTermValue;
+                adjustedLongerTermValue = longerTermValue < 0 ? Math.abs(longerTermValue) : longerTermValue;
                 trendRatio = monthlyValue / adjustedLongerTermValue;
 
                 // Progi dla klasyfikacji trendu
@@ -7886,8 +7887,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             // Dodaj współczynnik Trend jeśli dostępny
             if (trendIcon !== null && trendDescription !== null) {
-                const trendRatioFormatted = trendRatio !== null ? ` (${trendRatio.toFixed(2)})` : '';
-                coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}${trendRatioFormatted}`;
+                let trendCalculation = '';
+                if (trendRatio !== null && monthlyValue !== null && adjustedLongerTermValue !== null) {
+                    trendCalculation = ` (${monthlyValue.toFixed(2)} / ${adjustedLongerTermValue.toFixed(2)} = ${trendRatio.toFixed(2)})`;
+                }
+                coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}${trendCalculation}`;
             }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
