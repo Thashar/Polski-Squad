@@ -7681,7 +7681,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 if (trendRatio >= 2.0) {
                     // Gwałtownie rosnący - miesięczny co najmniej 2x szybszy
                     trendDescription = 'Gwałtownie rosnący';
-                    trendIcon = '⬆️';
+                    trendIcon = '🚀';
                 } else if (trendRatio > 1.05) {
                     // Rosnący - miesięczny wyraźnie szybszy
                     trendDescription = 'Rosnący';
@@ -7697,7 +7697,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 } else {
                     // Gwałtownie malejący - miesięczny co najmniej 2x wolniejszy
                     trendDescription = 'Gwałtownie malejący';
-                    trendIcon = '⬇️';
+                    trendIcon = '🪦';
                 }
             }
         }
