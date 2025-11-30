@@ -7774,13 +7774,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 timingCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
 
-            let coefficientsInfo = `**Rzetelność:** ${reliabilityFormatted}% ${reliabilityCircle}\n**Timing:** ${timingFormatted}% ${timingCircle}`;
+            let coefficientsInfo = `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}`;
 
             // Dodaj współczynnik Zaangażowanie jeśli dostępny
             if (engagementFactor !== null) {
-                const engagementFormatted = engagementFactor.toFixed(2);
-
-                // Kolory dla Zaangażowanie (takie same progi jak Timing)
+                // Kolory dla Zaangażowanie (takie same progi jak Punktualność)
                 let engagementCircle = '🔴'; // Czerwone (poniżej 70%)
                 if (engagementFactor >= 90) {
                     engagementCircle = '🟢'; // Zielone (90%+)
@@ -7790,7 +7788,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
                 }
 
-                coefficientsInfo += `\n**Zaangażowanie:** ${engagementFormatted}% ${engagementCircle}`;
+                coefficientsInfo += `\n💪 **Zaangażowanie:** ${engagementCircle}`;
             }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
