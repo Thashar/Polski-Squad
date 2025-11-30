@@ -7674,7 +7674,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             // Określ opis i ikonę trendu na podstawie stosunku
-            if (monthlyValue !== null && longerTermValue !== null && longerTermValue > 0) {
+            if (monthlyValue !== null && longerTermValue !== null && longerTermValue !== 0) {
                 trendRatio = monthlyValue / longerTermValue;
 
                 // Progi dla klasyfikacji trendu
