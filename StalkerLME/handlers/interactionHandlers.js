@@ -7585,9 +7585,16 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const diff = currentWeek.score - previousWeek.score;
 
                 // Zlicz tygodnie z progresem dla współczynnika Zaangażowanie
-                if (diff > 0) {
-                    progressWeeksCount++;
+                if (currentWeek.score === 0) {
+                    // Jeśli wynik = 0, daj 0 punktów (nie dodawaj nic)
+                } else if (diff > 0) {
+                    // Progres - pełny punkt
+                    progressWeeksCount += 1.0;
+                } else if (diff === 0) {
+                    // Wyrównanie wyniku - częściowy punkt (0.9 zamiast 1.0)
+                    progressWeeksCount += 0.9;
                 }
+                // diff < 0 (regres) → 0 punktów (nie dodawaj nic)
 
                 // Największy progres (dodatnia różnica)
                 if (diff > maxProgressDiff) {
