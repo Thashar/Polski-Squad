@@ -7628,27 +7628,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Oblicz współczynnik Trend (tempo progresu)
         // Porównuje średnie tempo z miesiąca ze średnim tempem z dłuższego okresu
-        let trendFactor = null;
+        let trendRatio = null;
         let trendDescription = null;
         let trendIcon = null;
 
         if (monthlyProgressPercent !== null) {
-            let monthlyAvgPerWeek = null;
-            let longerTermAvgPerWeek = null;
+            let monthlyValue = null;
+            let longerTermValue = null;
 
             // Scenariusz 1: Mamy pełne dane kwartalne (13 tygodni)
             if (quarterlyProgressPercent !== null && quarterlyWeeksCount === 12) {
                 // Miesięczny progres już jest za 4 tygodnie
-                const monthlyPercent = parseFloat(monthlyProgressPercent);
+                monthlyValue = parseFloat(monthlyProgressPercent);
                 // Kwartalny progres jest za 12 tygodni, dzielimy przez 3 aby uzyskać równowartość 4 tygodni
-                const quarterlyPercentNormalized = parseFloat(quarterlyProgressPercent) / 3;
-
-                trendFactor = monthlyPercent - quarterlyPercentNormalized;
+                longerTermValue = parseFloat(quarterlyProgressPercent) / 3;
             }
             // Scenariusz 2: Nie mamy pełnych danych kwartalnych, liczymy średni tygodniowy progres
             else if (playerProgressData.length >= 2) {
                 // Średni tygodniowy progres z miesiąca (miesięczny % / 4)
-                monthlyAvgPerWeek = parseFloat(monthlyProgressPercent) / (monthlyWeeksCount || 4);
+                monthlyValue = parseFloat(monthlyProgressPercent) / (monthlyWeeksCount || 4);
 
                 // Średni tygodniowy progres z całości (całkowity % / liczba tygodni między pierwszym a ostatnim)
                 const firstScore = playerProgressData[playerProgressData.length - 1].score;
@@ -7670,25 +7668,36 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     }
 
                     if (totalWeeksSpan > 0) {
-                        longerTermAvgPerWeek = totalProgressPercent / totalWeeksSpan;
-                        trendFactor = monthlyAvgPerWeek - longerTermAvgPerWeek;
+                        longerTermValue = totalProgressPercent / totalWeeksSpan;
                     }
                 }
             }
 
-            // Określ opis i ikonę trendu
-            if (trendFactor !== null) {
-                const tolerance = 0.5; // Tolerancja dla uznania za "constans"
+            // Określ opis i ikonę trendu na podstawie stosunku
+            if (monthlyValue !== null && longerTermValue !== null && longerTermValue > 0) {
+                trendRatio = monthlyValue / longerTermValue;
 
-                if (Math.abs(trendFactor) < tolerance) {
-                    trendDescription = 'Constans';
-                    trendIcon = '⚖️';
-                } else if (trendFactor > 0) {
+                // Progi dla klasyfikacji trendu
+                if (trendRatio >= 2.0) {
+                    // Gwałtownie rosnący - miesięczny co najmniej 2x szybszy
+                    trendDescription = 'Gwałtownie rosnący';
+                    trendIcon = '🚀';
+                } else if (trendRatio > 1.05) {
+                    // Rosnący - miesięczny wyraźnie szybszy
                     trendDescription = 'Rosnący';
                     trendIcon = '↗️';
-                } else {
+                } else if (trendRatio >= 0.95) {
+                    // Constans - stabilne tempo
+                    trendDescription = 'Constans';
+                    trendIcon = '⚖️';
+                } else if (trendRatio > 0.5) {
+                    // Malejący - miesięczny wyraźnie wolniejszy
                     trendDescription = 'Malejący';
                     trendIcon = '↘️';
+                } else {
+                    // Gwałtownie malejący - miesięczny co najmniej 2x wolniejszy
+                    trendDescription = 'Gwałtownie malejący';
+                    trendIcon = '🪦';
                 }
             }
         }
@@ -7874,7 +7883,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             // Dodaj współczynnik Trend jeśli dostępny
             if (trendIcon !== null && trendDescription !== null) {
-                coefficientsInfo += `\n📈 **Trend:** ${trendIcon} ${trendDescription}`;
+                coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}`;
             }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
