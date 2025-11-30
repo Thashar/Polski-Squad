@@ -7887,11 +7887,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             // Dodaj współczynnik Trend jeśli dostępny
             if (trendIcon !== null && trendDescription !== null) {
-                let trendCalculation = '';
-                if (trendRatio !== null && monthlyValue !== null && adjustedLongerTermValue !== null) {
-                    trendCalculation = ` (${monthlyValue.toFixed(2)} / ${adjustedLongerTermValue.toFixed(2)} = ${trendRatio.toFixed(2)})`;
-                }
-                coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}${trendCalculation}`;
+                coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}`;
             }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
