@@ -330,9 +330,9 @@
         },
         {
           "name": "/clan-status",
-          "description": "Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów (tylko moderatorzy i administratorzy)",
+          "description": "Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów (tylko członkowie klanu)",
           "usage": "/clan-status",
-          "requiredPermission": "moderator"
+          "requiredPermission": "clan_member"
         },
         {
           "name": "/player-status",

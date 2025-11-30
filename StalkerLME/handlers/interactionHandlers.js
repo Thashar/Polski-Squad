@@ -8166,13 +8166,13 @@ async function showClanStatusPage(interaction, ranking, currentPage, deleteTimes
 async function handleClanStatusCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
 
-    // Sprawdź uprawnienia - tylko moderatorzy i administratorzy
-    const hasModeratorRole = hasPermission(interaction.member, config.allowedPunishRoles);
-    const hasAdminPermission = interaction.member.permissions.has('Administrator');
+    // Sprawdź uprawnienia - wszyscy z rangą klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
 
-    if (!hasModeratorRole && !hasAdminPermission) {
+    if (!hasClanRole) {
         await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Moderator** lub **Administrator**',
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
             flags: MessageFlags.Ephemeral
         });
         return;
