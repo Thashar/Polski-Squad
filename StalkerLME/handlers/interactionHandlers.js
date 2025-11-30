@@ -7686,16 +7686,16 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     // Gwałtownie rosnący - miesięczny co najmniej 1.5x szybszy
                     trendDescription = 'Gwałtownie rosnący';
                     trendIcon = '🚀';
-                } else if (trendRatio > 1.05) {
-                    // Rosnący - miesięczny wyraźnie szybszy
+                } else if (trendRatio > 1.1) {
+                    // Rosnący - miesięczny wyraźnie szybszy (powyżej 110%)
                     trendDescription = 'Rosnący';
                     trendIcon = '↗️';
-                } else if (trendRatio >= 0.95) {
-                    // Constans - stabilne tempo
+                } else if (trendRatio >= 0.9) {
+                    // Constans - stabilne tempo (+/-10%: 90%-110%)
                     trendDescription = 'Constans';
                     trendIcon = '⚖️';
                 } else if (trendRatio > 0.5) {
-                    // Malejący - miesięczny wyraźnie wolniejszy
+                    // Malejący - miesięczny wyraźnie wolniejszy (poniżej 90%)
                     trendDescription = 'Malejący';
                     trendIcon = '↘️';
                 } else {
