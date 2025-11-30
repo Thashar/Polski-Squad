@@ -7678,8 +7678,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 trendRatio = monthlyValue / longerTermValue;
 
                 // Progi dla klasyfikacji trendu
-                if (trendRatio >= 2.0) {
-                    // Gwałtownie rosnący - miesięczny co najmniej 2x szybszy
+                if (trendRatio >= 1.5) {
+                    // Gwałtownie rosnący - miesięczny co najmniej 1.5x szybszy
                     trendDescription = 'Gwałtownie rosnący';
                     trendIcon = '🚀';
                 } else if (trendRatio > 1.05) {
