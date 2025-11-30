@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres i /player-status
-    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres, /player-status i /clan-status
+    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'clan-status'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -7316,43 +7316,31 @@ async function handleProgresCommand(interaction, sharedState) {
 async function handlePlayerStatusCommand(interaction, sharedState) {
     const { config, databaseService, reminderUsageService } = sharedState;
 
-    // Sprawdź czy użytkownik jest moderatorem lub administratorem
-    const isModerator = hasPermission(interaction.member, config.allowedPunishRoles);
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
     const isAdmin = interaction.member.permissions.has('Administrator');
-    const hasModeratorOrAdminPermissions = isModerator || isAdmin;
 
-    // Jeśli użytkownik NIE jest moderatorem/adminem, sprawdź uprawnienia klanowe i kanał
-    if (!hasModeratorOrAdminPermissions) {
-        // Sprawdź uprawnienia - wszyscy z rangą klanową
-        const clanRoleIds = Object.values(config.targetRoles);
-        const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/player-status` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
 
-        if (!hasClanRole) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
+    // Sprawdź czy kanał jest dozwolony
+    const allowedChannels = [
+        ...Object.values(config.warningChannels),
+        '1348200849242984478'
+    ];
 
-        // Znajdź rolę klanową użytkownika
-        let userClanRoleId = null;
-        for (const roleId of clanRoleIds) {
-            if (interaction.member.roles.cache.has(roleId)) {
-                userClanRoleId = roleId;
-                break;
-            }
-        }
-
-        // Sprawdź czy kanał jest dozwolony dla tej roli
-        const allowedChannelId = config.confirmationChannels[userClanRoleId];
-        if (interaction.channelId !== allowedChannelId) {
-            await interaction.reply({
-                content: `❌ Możesz używać tej komendy tylko na kanale <#${allowedChannelId}>`,
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+        await interaction.reply({
+            content: `❌ Komenda \`/player-status\` jest dostępna tylko na określonych kanałach.`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
     }
 
     await interaction.deferReply();
@@ -8208,43 +8196,31 @@ async function showClanStatusPage(interaction, ranking, currentPage, deleteTimes
 async function handleClanStatusCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
 
-    // Sprawdź czy użytkownik jest moderatorem lub administratorem
-    const isModerator = hasPermission(interaction.member, config.allowedPunishRoles);
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
     const isAdmin = interaction.member.permissions.has('Administrator');
-    const hasModeratorOrAdminPermissions = isModerator || isAdmin;
 
-    // Jeśli użytkownik NIE jest moderatorem/adminem, sprawdź uprawnienia klanowe i kanał
-    if (!hasModeratorOrAdminPermissions) {
-        // Sprawdź uprawnienia - wszyscy z rangą klanową
-        const clanRoleIds = Object.values(config.targetRoles);
-        const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/clan-status` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
 
-        if (!hasClanRole) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
+    // Sprawdź czy kanał jest dozwolony
+    const allowedChannels = [
+        ...Object.values(config.warningChannels),
+        '1348200849242984478'
+    ];
 
-        // Znajdź rolę klanową użytkownika
-        let userClanRoleId = null;
-        for (const roleId of clanRoleIds) {
-            if (interaction.member.roles.cache.has(roleId)) {
-                userClanRoleId = roleId;
-                break;
-            }
-        }
-
-        // Sprawdź czy kanał jest dozwolony dla tej roli
-        const allowedChannelId = config.confirmationChannels[userClanRoleId];
-        if (interaction.channelId !== allowedChannelId) {
-            await interaction.reply({
-                content: `❌ Możesz używać tej komendy tylko na kanale <#${allowedChannelId}>`,
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+        await interaction.reply({
+            content: `❌ Komenda \`/clan-status\` jest dostępna tylko na określonych kanałach.`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
     }
 
     await interaction.deferReply();
