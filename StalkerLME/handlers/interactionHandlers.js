@@ -7874,7 +7874,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             // Dodaj współczynnik Trend jeśli dostępny
             if (trendIcon !== null && trendDescription !== null) {
-                coefficientsInfo += `\n📈 **Trend:** ${trendIcon} ${trendDescription}`;
+                coefficientsInfo += `\n🌊 **Trend:** ${trendDescription} ${trendIcon}`;
             }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
