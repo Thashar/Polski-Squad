@@ -7453,18 +7453,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Oblicz współczynnik wyjebania
         // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.2) / liczba_tygodni × 100%)
         const numberOfWeeksWithData = playerProgressData.length;
+
+        // Dla współczynników Rzetelność i Punktualność liczymy tylko od tygodnia 45/2025
+        // (wcześniej nie było zliczania powiadomień)
+        const weeksSince45_2025 = playerProgressData.filter(data => {
+            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
+        }).length;
+
         let wyjebanieFactor = null;
         let timingFactor = null;
 
-        if (numberOfWeeksWithData > 0) {
+        if (weeksSince45_2025 > 0) {
             const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.2);
-            const rawFactor = (penaltyScore / numberOfWeeksWithData) * 100;
+            const rawFactor = (penaltyScore / weeksSince45_2025) * 100;
             wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
 
             // Oblicz współczynnik Timing (bez punktów kary)
             // Wzór: 100% - ((przypomnienia × 0.125) / liczba_tygodni × 100%)
             const timingPenaltyScore = reminderCount * 0.125;
-            const rawTimingFactor = (timingPenaltyScore / numberOfWeeksWithData) * 100;
+            const rawTimingFactor = (timingPenaltyScore / weeksSince45_2025) * 100;
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
