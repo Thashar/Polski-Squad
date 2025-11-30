@@ -7468,6 +7468,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
+        // Oblicz współczynnik Zaangażowanie (liczba tygodni z progresem)
+        // Ten współczynnik będzie obliczony później, po analizie progresów tydzień do tygodnia
+        let engagementFactor = null;
+
         // Oblicz progres miesięczny (idealnie ostatnie 4 tygodnie vs tydzień 5, ale pokaż co jest dostępne)
         let monthlyProgress = null;
         let monthlyProgressPercent = null;
@@ -7573,11 +7577,17 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         if (playerProgressData.length >= 2) {
             let maxProgressDiff = 0;
             let maxRegressDiff = 0;
+            let progressWeeksCount = 0; // Liczba tygodni z progresem
 
             for (let i = 0; i < playerProgressData.length - 1; i++) {
                 const currentWeek = playerProgressData[i];
                 const previousWeek = playerProgressData[i + 1];
                 const diff = currentWeek.score - previousWeek.score;
+
+                // Zlicz tygodnie z progresem dla współczynnika Zaangażowanie
+                if (diff > 0) {
+                    progressWeeksCount++;
+                }
 
                 // Największy progres (dodatnia różnica)
                 if (diff > maxProgressDiff) {
@@ -7592,6 +7602,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     biggestRegress = diff;
                     biggestRegressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
                 }
+            }
+
+            // Oblicz współczynnik Zaangażowanie
+            // Wzór: (liczba_tygodni_z_progresem / liczba_porównań) × 100%
+            const totalComparisons = playerProgressData.length - 1;
+            if (totalComparisons > 0) {
+                engagementFactor = (progressWeeksCount / totalComparisons) * 100;
             }
         }
 
@@ -7757,7 +7774,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 timingCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
 
-            const coefficientsInfo = `**Rzetelność:** ${reliabilityFormatted}% ${reliabilityCircle}\n**Timing:** ${timingFormatted}% ${timingCircle}`;
+            let coefficientsInfo = `**Rzetelność:** ${reliabilityFormatted}% ${reliabilityCircle}\n**Timing:** ${timingFormatted}% ${timingCircle}`;
+
+            // Dodaj współczynnik Zaangażowanie jeśli dostępny
+            if (engagementFactor !== null) {
+                const engagementFormatted = engagementFactor.toFixed(2);
+
+                // Kolory dla Zaangażowanie (takie same progi jak Timing)
+                let engagementCircle = '🔴'; // Czerwone (poniżej 70%)
+                if (engagementFactor >= 90) {
+                    engagementCircle = '🟢'; // Zielone (90%+)
+                } else if (engagementFactor >= 80) {
+                    engagementCircle = '🟡'; // Żółte (80-89.99%)
+                } else if (engagementFactor >= 70) {
+                    engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
+                }
+
+                coefficientsInfo += `\n**Zaangażowanie:** ${engagementFormatted}% ${engagementCircle}`;
+            }
 
             embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
         }
