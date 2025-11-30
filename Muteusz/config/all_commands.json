@@ -330,9 +330,15 @@
         },
         {
           "name": "/clan-status",
-          "description": "Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów (max 40 na stronę)",
+          "description": "Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów (tylko członkowie klanu)",
           "usage": "/clan-status",
-          "requiredPermission": "moderator"
+          "requiredPermission": "clan_member"
+        },
+        {
+          "name": "/player-status",
+          "description": "Kompleksowy raport o graczu: progres, kary, status w klanie i ranking (tylko członkowie klanu)",
+          "usage": "/player-status nick:[wyszukaj gracza] - wpisz i wybierz z listy",
+          "requiredPermission": "clan_member"
         },
         {
           "name": "/modyfikuj",
