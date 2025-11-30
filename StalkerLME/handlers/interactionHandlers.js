@@ -7675,7 +7675,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             // Określ opis i ikonę trendu na podstawie stosunku
             if (monthlyValue !== null && longerTermValue !== null && longerTermValue !== 0) {
-                trendRatio = monthlyValue / longerTermValue;
+                // Jeżeli longerTermValue jest ujemny, traktuj go jako dodatni
+                // aby uniknąć błędnej klasyfikacji trendu (dwa minusy dają plus)
+                const adjustedLongerTermValue = longerTermValue < 0 ? Math.abs(longerTermValue) : longerTermValue;
+                trendRatio = monthlyValue / adjustedLongerTermValue;
 
                 // Progi dla klasyfikacji trendu
                 if (trendRatio >= 1.5) {
