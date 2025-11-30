@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki i /progres
-    const publicCommands = ['decode', 'wyniki', 'progres'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres i /player-status
+    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -7316,6 +7316,18 @@ async function handleProgresCommand(interaction, sharedState) {
 async function handlePlayerStatusCommand(interaction, sharedState) {
     const { config, databaseService, reminderUsageService } = sharedState;
 
+    // Sprawdź uprawnienia - wszyscy z rangą klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+
+    if (!hasClanRole) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Ranga klanowa** (Clan0, Clan1, Clan2 lub Main Clan)',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
     await interaction.deferReply();
 
     try {
@@ -8153,6 +8165,18 @@ async function showClanStatusPage(interaction, ranking, currentPage, deleteTimes
 // Handler dla komendy /clan-status
 async function handleClanStatusCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
+
+    // Sprawdź uprawnienia - tylko moderatorzy i administratorzy
+    const hasModeratorRole = hasPermission(interaction.member, config.allowedPunishRoles);
+    const hasAdminPermission = interaction.member.permissions.has('Administrator');
+
+    if (!hasModeratorRole && !hasAdminPermission) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Moderator** lub **Administrator**',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
 
     await interaction.deferReply();
 
