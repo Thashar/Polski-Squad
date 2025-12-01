@@ -669,7 +669,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
 
                 // Dodaj licznik potwierdzeń odbioru przy nicku
                 const confirmationCount = confirmationStats[userId]?.totalConfirmations || 0;
-                const confirmationBadge = confirmationCount > 0 ? ` [🔔 ${confirmationCount}]` : '';
+                const confirmationBadge = confirmationCount > 0 ? ` [✅ ${confirmationCount}]` : '';
 
                 // Sprawdź role karania i zakazu loterii
                 const hasPunishmentRole = member.roles.cache.has(config.punishmentRoleId);
@@ -694,6 +694,21 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         const warningChannel = interaction.guild.channels.cache.get(warningChannelId);
         const warningChannelInfo = warningChannel ? `<#${warningChannelId}>` : 'Nie znaleziono';
         
+        // Oblicz statystyki potwierdzeń dla całego klanu
+        let totalConfirmations = 0;
+        let usersWithConfirmations = 0;
+        for (const [userId, member] of members) {
+            const confirmationCount = confirmationStats[userId]?.totalConfirmations || 0;
+            if (confirmationCount > 0) {
+                totalConfirmations += confirmationCount;
+                usersWithConfirmations++;
+            }
+        }
+
+        const confirmationSummary = totalConfirmations > 0
+            ? `**Suma potwierdzeń:** ${totalConfirmations}\n**Użytkowników z potwierdzeniami:** ${usersWithConfirmations}/${members.size}\n**Średnia na osobę:** ${(totalConfirmations / members.size).toFixed(1)}`
+            : 'Brak potwierdzeń dla tego klanu';
+
         const embed = new EmbedBuilder()
             .setTitle(`🔧 Debug - ${roleName}`)
             .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}\n**🏆 Suma punktów kary (kariera):** ${totalPunishmentPoints}`)
@@ -702,6 +717,8 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 { name: '🎭 Rola karania (2+ pkt)', value: punishmentRoleInfo, inline: true },
                 { name: '🚨 Rola blokady loterii (3+ pkt)', value: `<@&${config.lotteryBanRoleId}>`, inline: true },
                 { name: '📢 Kanał ostrzeżeń', value: warningChannelInfo, inline: true },
+                { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false },
+                { name: '📖 Legenda ikon', value: '🎭 - Rola karania (2+ punkty)\n🚨 - Blokada loterii (3+ punkty)\n💀 - Punkty kary (lifetime)\n📢 - Liczba otrzymanych przypomnień\n✅ - Liczba potwierdzeń odbioru', inline: false },
                 { name: '⚙️ Konfiguracja', value: `Kategoria: ${category}\nStrefa czasowa: ${config.timezone}\nDeadline bossa: ${config.bossDeadline.hour}:${config.bossDeadline.minute.toString().padStart(2, '0')}`, inline: false }
             )
             .setColor('#0099FF')
@@ -8817,6 +8834,23 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         const parts = interaction.customId.split('_');
         const userId = parts[2];
         const roleId = parts[3];
+
+        // Sprawdź czy użytkownik potwierdza przed deadline
+        const now = new Date();
+        const polandTime = new Date(now.toLocaleString('en-US', { timeZone: config.timezone }));
+
+        const deadline = new Date(polandTime);
+        deadline.setHours(config.bossDeadline.hour, config.bossDeadline.minute, 0, 0);
+
+        // Jeśli już po deadline dzisiaj
+        if (polandTime >= deadline) {
+            await interaction.reply({
+                content: `⏰ **Za późno by potwierdzić odbiór!**\n\nPotwierdzenia można wysyłać tylko do godziny **${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}**.\n\nDeadline już minął - potwierdzenie nie zostało zapisane.`,
+                flags: MessageFlags.Ephemeral
+            });
+            logger.info(`⏰ ${interaction.user.tag} próbował potwierdzić po deadline (${polandTime.toLocaleTimeString('pl-PL')})`);
+            return;
+        }
 
         // Wczytaj dane potwierdzeń
         const confirmations = await loadConfirmations(config);
