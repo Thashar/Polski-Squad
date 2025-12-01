@@ -408,6 +408,15 @@ async function handleDmCommand(interaction, config) {
             };
         }
 
+        // Usuń userId z listy potwierdzeń (jeśli tam jest) - dla wielokrotnego testowania
+        if (confirmations.sessions[sessionKey].confirmedUsers) {
+            const userIndex = confirmations.sessions[sessionKey].confirmedUsers.indexOf(interaction.user.id);
+            if (userIndex > -1) {
+                confirmations.sessions[sessionKey].confirmedUsers.splice(userIndex, 1);
+                logger.info(`[DM-TEST] 🗑️ Usunięto poprzednie potwierdzenie użytkownika ${interaction.user.tag} z sesji ${sessionKey}`);
+            }
+        }
+
         // Zapisz sesję do pliku
         await saveConfirmations(config, confirmations);
         logger.info(`[DM-TEST] 📝 Utworzono sesję potwierdzenia: ${sessionKey}`);
