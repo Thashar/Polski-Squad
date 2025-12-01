@@ -389,11 +389,28 @@ async function handleDmCommand(interaction, config) {
             }
         }
 
-        // Przygotuj wiadomość przypomnienia
+        // Przygotuj wiadomość przypomnienia (BEZ PINGU)
         const timeUntilDeadline = calculateTimeUntilDeadline(config);
         const timeMessage = messages.formatTimeMessage(timeUntilDeadline);
-        const userMention = interaction.user.toString();
-        const dmMessage = messages.reminderMessage(timeMessage, userMention);
+        const dmMessage = `# <a:X_Uwaga:1297531538186965003> PRZYPOMNIENIE O BOSSIE (TEST) <a:X_Uwaga:1297531538186965003>\n${timeMessage}\n\n**To jest testowe przypomnienie z przyciskom potwierdzenia.**`;
+
+        // Wczytaj potwierdzenia i utwórz sesję
+        const confirmations = await loadConfirmations(config);
+        const sessionKey = createSessionKey(userClanRoleId);
+        const now = new Date().toISOString();
+
+        // Utwórz sesję dla potwierdzenia (żeby działała po restarcie bota)
+        if (!confirmations.sessions[sessionKey]) {
+            confirmations.sessions[sessionKey] = {
+                createdAt: now,
+                confirmedUsers: [],
+                isTestSession: true // oznacz jako sesję testową
+            };
+        }
+
+        // Zapisz sesję do pliku
+        await saveConfirmations(config, confirmations);
+        logger.info(`[DM-TEST] 📝 Utworzono sesję potwierdzenia: ${sessionKey}`);
 
         // Utwórz przycisk "Potwierdź odbiór"
         const confirmButton = new ButtonBuilder()
@@ -413,10 +430,10 @@ async function handleDmCommand(interaction, config) {
             });
 
             await interaction.editReply({
-                content: `✅ Wysłano testowe przypomnienie na Twoją skrzynkę prywatną!\n\n**Klan:** ${clanName}\n**Uwaga:** To jest test - kliknięcie "Potwierdź odbiór" zostanie zapisane normalnie.`
+                content: `✅ Wysłano testowe przypomnienie na Twoją skrzynkę prywatną!\n\n**Klan:** ${clanName}\n**Sesja:** \`${sessionKey}\`\n**Uwaga:** Kliknięcie "Potwierdź odbiór" zostanie zapisane normalnie.`
             });
 
-            logger.info(`[DM-TEST] ✅ ${interaction.user.tag} wysłał sobie testowe przypomnienie (klan: ${clanName})`);
+            logger.info(`[DM-TEST] ✅ ${interaction.user.tag} wysłał sobie testowe przypomnienie (klan: ${clanName}, sesja: ${sessionKey})`);
 
         } catch (dmError) {
             await interaction.editReply({
@@ -8794,8 +8811,43 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         // Wczytaj dane potwierdzeń
         const confirmations = await loadConfirmations(config);
 
-        // Utwórz klucz sesji
-        const sessionKey = createSessionKey(roleId);
+        // Utwórz klucz sesji (aktualny czas)
+        const currentSessionKey = createSessionKey(roleId);
+
+        // Znajdź aktywną sesję dla tej roli (w ostatnich 24h)
+        let sessionKey = currentSessionKey;
+        let foundExistingSession = false;
+
+        // Jeśli sesja dla aktualnego okna nie istnieje, szukaj w ostatnich 24h
+        if (!confirmations.sessions[currentSessionKey]) {
+            const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+            let latestSessionTime = 0;
+            let latestSessionKey = null;
+
+            // Przeszukaj wszystkie sesje
+            for (const [key, session] of Object.entries(confirmations.sessions)) {
+                // Sprawdź czy sesja jest dla tej roli
+                if (key.startsWith(roleId + '_')) {
+                    // Wyciągnij timestamp z klucza sesji
+                    const sessionTime = parseInt(key.split('_')[1]);
+
+                    // Sprawdź czy sesja jest w ostatnich 24h i jest nowsza niż poprzednie
+                    if (sessionTime >= oneDayAgo && sessionTime > latestSessionTime) {
+                        latestSessionTime = sessionTime;
+                        latestSessionKey = key;
+                    }
+                }
+            }
+
+            // Jeśli znaleziono sesję w ostatnich 24h, użyj jej
+            if (latestSessionKey) {
+                sessionKey = latestSessionKey;
+                foundExistingSession = true;
+                logger.info(`[CONFIRM_REMINDER] 🔍 Znaleziono istniejącą sesję: ${sessionKey} (zamiast ${currentSessionKey})`);
+            }
+        } else {
+            foundExistingSession = true;
+        }
 
         // Sprawdź czy użytkownik już potwierdził w tej sesji
         if (confirmations.sessions[sessionKey]?.confirmedUsers?.includes(userId)) {
