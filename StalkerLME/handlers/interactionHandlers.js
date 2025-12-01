@@ -1868,7 +1868,8 @@ async function handleButton(interaction, sharedState) {
         // Obsługa przycisku "Nie otwieraj wniosku"
         await sharedState.vacationService.handleVacationCancel(interaction);
         return;
-    } else if (interaction.customId.startsWith('confirm_')) {
+    } else if (interaction.customId.startsWith('confirm_') && !interaction.customId.startsWith('confirm_reminder_')) {
+        // Obsługa przycisków confirm_* (ale NIE confirm_reminder_* - to ma osobny handler)
         const parts = interaction.customId.split('_');
         const action = parts[1];
         const confirmationId = parts[2];
