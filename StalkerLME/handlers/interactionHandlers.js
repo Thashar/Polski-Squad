@@ -620,7 +620,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         const roleName = config.roleDisplayNames[category];
 
         if (!role) {
-            await interaction.editReply({ content: 'Nie znaleziono roli!', flags: MessageFlags.Ephemeral });
+            await interaction.editReply({ content: 'Nie znaleziono roli!' });
             return;
         }
 
@@ -632,16 +632,16 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         // Pobierz wszystkie punkty kary z bazy danych
         const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
 
+        // Pobierz statystyki potwierdzeń odbioru (zawsze, niezależnie od liczby członków)
+        const confirmations = await loadConfirmations(config);
+        const confirmationStats = confirmations.userStats || {};
+
         if (members.size === 0) {
             membersList = 'Brak członków z tą rolą.';
         } else {
             // Pobierz statystyki przypomnień dla wszystkich członków
             const userIds = Array.from(members.keys());
             const reminderStats = await reminderUsageService.getMultipleUserStats(userIds);
-
-            // Pobierz statystyki potwierdzeń odbioru
-            const confirmations = await loadConfirmations(config);
-            const confirmationStats = confirmations.userStats || {};
 
             // Najpierw zlicz wszystkie punkty LIFETIME dla wszystkich członków (nie tylko widocznych)
             for (const [userId, member] of members) {
@@ -712,7 +712,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         // Bezpieczne obcięcie membersList na granicy linii
         let membersListValue = membersList;
         if (membersList.length > 1024) {
-            const lines = membersList.split('\n');
+            const lines = membersList.split('\n').filter(line => line.trim().length > 0);
             membersListValue = '';
             for (const line of lines) {
                 if ((membersListValue + line + '\n').length > 1020) {
@@ -721,6 +721,15 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 }
                 membersListValue += line + '\n';
             }
+            // Zabezpieczenie - jeśli lista jest pusta po obcięciu, użyj oryginalnej wiadomości
+            if (membersListValue.trim().length === 0 || membersListValue === '...') {
+                membersListValue = 'Lista zbyt długa do wyświetlenia';
+            }
+        }
+
+        // Dodatkowe zabezpieczenie - wartość nie może być pusta
+        if (!membersListValue || membersListValue.trim().length === 0) {
+            membersListValue = 'Brak danych';
         }
 
         const embed = new EmbedBuilder()
@@ -740,9 +749,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             )
             .addFields(
                 { name: '👥 Członkowie', value: membersListValue, inline: false },
-                { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false }
-            )
-            .addFields(
+                { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false },
                 { name: '📖 Legenda ikon', value: '🎭 - Rola karania (2+ punkty)\n🚨 - Blokada loterii (3+ punkty)\n💀 - Punkty kary (lifetime)\n📢 - Liczba otrzymanych przypomnień\n✅ - Liczba potwierdzeń odbioru', inline: false }
             )
             .setColor('#0099FF')
