@@ -693,21 +693,6 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
         const warningChannelId = config.warningChannels[roleId];
         const warningChannel = interaction.guild.channels.cache.get(warningChannelId);
         const warningChannelInfo = warningChannel ? `<#${warningChannelId}>` : 'Nie znaleziono';
-        
-        // Oblicz statystyki potwierdzeń dla całego klanu
-        let totalConfirmations = 0;
-        let usersWithConfirmations = 0;
-        for (const [userId, member] of members) {
-            const confirmationCount = confirmationStats[userId]?.totalConfirmations || 0;
-            if (confirmationCount > 0) {
-                totalConfirmations += confirmationCount;
-                usersWithConfirmations++;
-            }
-        }
-
-        const confirmationSummary = totalConfirmations > 0
-            ? `**Suma potwierdzeń:** ${totalConfirmations}\n**Użytkowników z potwierdzeniami:** ${usersWithConfirmations}/${members.size}\n**Średnia na osobę:** ${(totalConfirmations / members.size).toFixed(1)}`
-            : 'Brak potwierdzeń dla tego klanu';
 
         // Bezpieczne obcięcie membersList na granicy linii
         let membersListValue = membersList;
@@ -749,7 +734,6 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
             )
             .addFields(
                 { name: '👥 Członkowie', value: membersListValue, inline: false },
-                { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false },
                 { name: '📖 Legenda ikon', value: '🎭 - Rola karania (2+ punkty)\n🚨 - Blokada loterii (3+ punkty)\n💀 - Punkty kary (lifetime)\n📢 - Liczba otrzymanych przypomnień\n✅ - Liczba potwierdzeń odbioru', inline: false }
             )
             .setColor('#0099FF')
