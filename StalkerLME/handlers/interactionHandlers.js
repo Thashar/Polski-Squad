@@ -8937,12 +8937,12 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         }
 
         // Zapisz potwierdzenie do JSON
-        const timestamp = new Date().toISOString();
+        const times = new Date().toISOString();
 
         // Utwórz sesję jeśli nie istnieje
         if (!confirmations.sessions[sessionKey]) {
             confirmations.sessions[sessionKey] = {
-                createdAt: timestamp,
+                createdAt: times,
                 confirmedUsers: []
             };
         }
@@ -8958,13 +8958,13 @@ async function handleConfirmReminderButton(interaction, sharedState) {
             };
         }
         confirmations.userStats[userId].totalConfirmations += 1;
-        confirmations.userStats[userId].lastConfirmedAt = timestamp;
+        confirmations.userStats[userId].lastConfirmedAt = times;
 
         // Zapisz do pliku
         await saveConfirmations(config, confirmations);
 
         // Wyślij wiadomość potwierdzenia na kanał
-        const timestamp = Math.floor(Date.now() / 1000);
+        const times = Math.floor(Date.now() / 1000);
         await confirmationChannel.send({
             content: `✅ <@${userId}> potwierdził odbiór przypomnienia o bossie (<t:${timestamp}:T>)\n**Klan:** ${clanName}`
         });
