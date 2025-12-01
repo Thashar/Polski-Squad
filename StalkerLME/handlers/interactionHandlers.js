@@ -725,15 +725,25 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
 
         const embed = new EmbedBuilder()
             .setTitle(`🔧 Debug - ${roleName}`)
-            .setDescription(`**Rola:** <@&${roleId}>\n**ID Roli:** ${roleId}\n**Liczba członków:** ${members.size}\n**🏆 Suma punktów kary (kariera):** ${totalPunishmentPoints}`)
+            .setDescription(
+                `**Rola:** <@&${roleId}>\n` +
+                `**ID Roli:** ${roleId}\n` +
+                `**Liczba członków:** ${members.size}\n` +
+                `**🏆 Suma punktów kary (kariera):** ${totalPunishmentPoints}\n\n` +
+                `**🎭 Rola karania (2+ pkt):** ${punishmentRoleInfo}\n` +
+                `**🚨 Rola blokady loterii (3+ pkt):** <@&${config.lotteryBanRoleId}>\n` +
+                `**📢 Kanał ostrzeżeń:** ${warningChannelInfo}\n\n` +
+                `**⚙️ Konfiguracja**\n` +
+                `Kategoria: ${category}\n` +
+                `Strefa czasowa: ${config.timezone}\n` +
+                `Deadline bossa: ${config.bossDeadline.hour}:${config.bossDeadline.minute.toString().padStart(2, '0')}`
+            )
             .addFields(
                 { name: '👥 Członkowie', value: membersListValue, inline: false },
-                { name: '🎭 Rola karania (2+ pkt)', value: punishmentRoleInfo, inline: true },
-                { name: '🚨 Rola blokady loterii (3+ pkt)', value: `<@&${config.lotteryBanRoleId}>`, inline: true },
-                { name: '📢 Kanał ostrzeżeń', value: warningChannelInfo, inline: true },
-                { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false },
-                { name: '📖 Legenda ikon', value: '🎭 - Rola karania (2+ punkty)\n🚨 - Blokada loterii (3+ punkty)\n💀 - Punkty kary (lifetime)\n📢 - Liczba otrzymanych przypomnień\n✅ - Liczba potwierdzeń odbioru', inline: false },
-                { name: '⚙️ Konfiguracja', value: `Kategoria: ${category}\nStrefa czasowa: ${config.timezone}\nDeadline bossa: ${config.bossDeadline.hour}:${config.bossDeadline.minute.toString().padStart(2, '0')}`, inline: false }
+                { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false }
+            )
+            .addFields(
+                { name: '📖 Legenda ikon', value: '🎭 - Rola karania (2+ punkty)\n🚨 - Blokada loterii (3+ punkty)\n💀 - Punkty kary (lifetime)\n📢 - Liczba otrzymanych przypomnień\n✅ - Liczba potwierdzeń odbioru', inline: false }
             )
             .setColor('#0099FF')
             .setTimestamp()
