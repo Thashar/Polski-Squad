@@ -718,6 +718,7 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
                 { name: '🚨 Rola blokady loterii (3+ pkt)', value: `<@&${config.lotteryBanRoleId}>`, inline: true },
                 { name: '📢 Kanał ostrzeżeń', value: warningChannelInfo, inline: true },
                 { name: '✅ Statystyki potwierdzeń odbioru', value: confirmationSummary, inline: false },
+                { name: '📖 Legenda ikon', value: '🎭 - Rola karania (2+ punkty)\n🚨 - Blokada loterii (3+ punkty)\n💀 - Punkty kary (lifetime)\n📢 - Liczba otrzymanych przypomnień\n✅ - Liczba potwierdzeń odbioru', inline: false },
                 { name: '⚙️ Konfiguracja', value: `Kategoria: ${category}\nStrefa czasowa: ${config.timezone}\nDeadline bossa: ${config.bossDeadline.hour}:${config.bossDeadline.minute.toString().padStart(2, '0')}`, inline: false }
             )
             .setColor('#0099FF')
