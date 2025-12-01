@@ -8937,12 +8937,12 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         }
 
         // Zapisz potwierdzenie do JSON
-        const now = new Date().toISOString();
+        const timestamp = new Date().toISOString();
 
         // Utwórz sesję jeśli nie istnieje
         if (!confirmations.sessions[sessionKey]) {
             confirmations.sessions[sessionKey] = {
-                createdAt: now,
+                createdAt: timestamp,
                 confirmedUsers: []
             };
         }
@@ -8958,7 +8958,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
             };
         }
         confirmations.userStats[userId].totalConfirmations += 1;
-        confirmations.userStats[userId].lastConfirmedAt = now;
+        confirmations.userStats[userId].lastConfirmedAt = timestamp;
 
         // Zapisz do pliku
         await saveConfirmations(config, confirmations);
