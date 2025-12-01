@@ -8964,7 +8964,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         await saveConfirmations(config, confirmations);
 
         // Wyślij wiadomość potwierdzenia na kanał
-        const times = Math.floor(Date.now() / 1000);
+        const timestamp = Math.floor(Date.now() / 1000);
         await confirmationChannel.send({
             content: `✅ <@${userId}> potwierdził odbiór przypomnienia o bossie (<t:${timestamp}:T>)\n**Klan:** ${clanName}`
         });
