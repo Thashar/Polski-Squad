@@ -7697,6 +7697,32 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
+        // Dla współczynnika Responsywność liczymy tylko od tygodnia 49/2025
+        const weeksSince49_2025 = playerProgressData.filter(data => {
+            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
+        }).length;
+
+        let responsivenessFactor = null;
+
+        if (weeksSince49_2025 > 0) {
+            // Pobierz dane o potwierdzeniach
+            const confirmations = await loadConfirmations(config);
+            const confirmationCount = confirmations.userStats[userId]?.totalConfirmations || 0;
+
+            // Oblicz współczynnik Responsywność
+            // Wzór: (liczba_potwierdzeń / liczba_pingów) × 100%
+            if (reminderCount > 0) {
+                responsivenessFactor = (confirmationCount / reminderCount) * 100;
+                responsivenessFactor = Math.min(100, responsivenessFactor); // Nie może być więcej niż 100%
+            } else if (reminderCount === 0 && confirmationCount === 0) {
+                // Jeśli nie było ani pingów, ani potwierdzeń - 100%
+                responsivenessFactor = 100;
+            } else {
+                // Nie powinno się zdarzyć, ale dla bezpieczeństwa
+                responsivenessFactor = 0;
+            }
+        }
+
         // Oblicz współczynnik Zaangażowanie (liczba tygodni z progresem)
         // Ten współczynnik będzie obliczony później, po analizie progresów tydzień do tygodnia
         let engagementFactor = null;
@@ -7849,7 +7875,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
 
         // Oblicz współczynnik Trend (tempo progresu)
-        // Porównuje średnie tempo z miesiąca ze średnim tempem z dłuższego okresu
+        // Porównuje średnie tempo z miesiąca ze średnim tempem z dłuższego okresu (WARTOŚCI PUNKTOWE, NIE PROCENTOWE)
         let trendRatio = null;
         let trendDescription = null;
         let trendIcon = null;
@@ -7857,42 +7883,40 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let longerTermValue = null;
         let adjustedLongerTermValue = null;
 
-        if (monthlyProgressPercent !== null) {
+        if (monthlyProgress !== null) {
 
             // Scenariusz 1: Mamy pełne dane kwartalne (13 tygodni)
-            if (quarterlyProgressPercent !== null && quarterlyWeeksCount === 12) {
-                // Miesięczny progres już jest za 4 tygodnie
-                monthlyValue = parseFloat(monthlyProgressPercent);
-                // Kwartalny progres jest za 12 tygodni, dzielimy przez 3 aby uzyskać równowartość 4 tygodni
-                longerTermValue = parseFloat(quarterlyProgressPercent) / 3;
+            if (quarterlyProgress !== null && quarterlyWeeksCount === 12) {
+                // Miesięczny progres już jest za 4 tygodnie (wartość punktowa)
+                monthlyValue = monthlyProgress;
+                // Kwartalny progres jest za 12 tygodni, dzielimy przez 3 aby uzyskać równowartość 4 tygodni (wartość punktowa)
+                longerTermValue = quarterlyProgress / 3;
             }
             // Scenariusz 2: Nie mamy pełnych danych kwartalnych, liczymy średni tygodniowy progres
             else if (playerProgressData.length >= 2) {
-                // Średni tygodniowy progres z miesiąca (miesięczny % / 4)
-                monthlyValue = parseFloat(monthlyProgressPercent) / (monthlyWeeksCount || 4);
+                // Średni tygodniowy progres z miesiąca (miesięczny progres punktowy / liczba tygodni)
+                monthlyValue = monthlyProgress / (monthlyWeeksCount || 4);
 
-                // Średni tygodniowy progres z całości (całkowity % / liczba tygodni między pierwszym a ostatnim)
+                // Średni tygodniowy progres z całości (całkowity progres punktowy / liczba tygodni między pierwszym a ostatnim)
                 const firstScore = playerProgressData[playerProgressData.length - 1].score;
                 const lastScore = playerProgressData[0].score;
 
-                if (firstScore > 0) {
-                    const totalProgressPercent = ((lastScore - firstScore) / firstScore) * 100;
+                const totalProgressPoints = lastScore - firstScore;
 
-                    // Oblicz zakres tygodni (nie liczbę tygodni z danymi, ale zakres czasowy)
-                    const firstWeek = playerProgressData[playerProgressData.length - 1];
-                    const lastWeek = playerProgressData[0];
-                    let totalWeeksSpan = 0;
+                // Oblicz zakres tygodni (nie liczbę tygodni z danymi, ale zakres czasowy)
+                const firstWeek = playerProgressData[playerProgressData.length - 1];
+                const lastWeek = playerProgressData[0];
+                let totalWeeksSpan = 0;
 
-                    if (firstWeek.year === lastWeek.year) {
-                        totalWeeksSpan = lastWeek.weekNumber - firstWeek.weekNumber;
-                    } else {
-                        const weeksInFirstYear = 52 - firstWeek.weekNumber;
-                        totalWeeksSpan = weeksInFirstYear + lastWeek.weekNumber;
-                    }
+                if (firstWeek.year === lastWeek.year) {
+                    totalWeeksSpan = lastWeek.weekNumber - firstWeek.weekNumber;
+                } else {
+                    const weeksInFirstYear = 52 - firstWeek.weekNumber;
+                    totalWeeksSpan = weeksInFirstYear + lastWeek.weekNumber;
+                }
 
-                    if (totalWeeksSpan > 0) {
-                        longerTermValue = totalProgressPercent / totalWeeksSpan;
-                    }
+                if (totalWeeksSpan > 0) {
+                    longerTermValue = totalProgressPoints / totalWeeksSpan;
                 }
             }
 
@@ -8091,6 +8115,21 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             let coefficientsInfo = `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}`;
+
+            // Dodaj współczynnik Responsywność jeśli dostępny
+            if (responsivenessFactor !== null) {
+                // Kolory dla Responsywności
+                let responsivenessCircle = '🔴'; // Czerwone (poniżej 25%)
+                if (responsivenessFactor >= 75) {
+                    responsivenessCircle = '🟢'; // Zielone (75%+)
+                } else if (responsivenessFactor >= 50) {
+                    responsivenessCircle = '🟡'; // Żółte (50-74.99%)
+                } else if (responsivenessFactor >= 25) {
+                    responsivenessCircle = '🟠'; // Pomarańczowe (25-49.99%)
+                }
+
+                coefficientsInfo += `\n📱 **Responsywność:** ${responsivenessCircle}`;
+            }
 
             // Dodaj współczynnik Zaangażowanie jeśli dostępny
             if (engagementFactor !== null) {
