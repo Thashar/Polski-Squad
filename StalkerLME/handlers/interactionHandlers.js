@@ -8076,18 +8076,18 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const absProgress = Math.abs(monthlyProgress).toLocaleString('pl-PL');
                 const monthLabel = monthlyWeeksCount === 4 ? 'Miesiąc (4 tyg)' : `Dostępne dane (${monthlyWeeksCount} tyg)`;
 
-                // Określ ikonę na podstawie % progresu miesięcznego
+                // Określ ikonę na podstawie bezwzględnej wartości progresu miesięcznego (medali)
                 let monthIcon = '';
-                const monthPercent = parseFloat(monthlyProgressPercent);
-                if (monthPercent > 20) {
+                if (monthlyProgress > 250) {
                     monthIcon = ' <a:PepeOklaski:1259556219312410760>';
-                } else if (monthPercent >= 10) {
+                } else if (monthlyProgress > 100) {
                     monthIcon = ' <:PFrog_yes:1368668680845787156>';
-                } else if (monthPercent >= 5) {
+                } else if (monthlyProgress > 50) {
                     monthIcon = ' <:PepeMyliciel:1278017456258027620>';
-                } else if (monthPercent < 5 && monthPercent >= 0) {
+                } else if (monthlyProgress >= 0) {
                     monthIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
+                // Dla ujemnego progresu nie pokazuj ikony
 
                 description += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)${monthIcon}\n`;
             }
@@ -8097,18 +8097,18 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
                 const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
 
-                // Określ ikonę na podstawie % progresu kwartalnego
+                // Określ ikonę na podstawie bezwzględnej wartości progresu kwartalnego (medali, 2x większe progi)
                 let quarterIcon = '';
-                const quarterPercent = parseFloat(quarterlyProgressPercent);
-                if (quarterPercent > 50) {
+                if (quarterlyProgress > 500) {
                     quarterIcon = ' <a:PepeOklaski:1259556219312410760>';
-                } else if (quarterPercent >= 20) {
+                } else if (quarterlyProgress > 200) {
                     quarterIcon = ' <:PFrog_yes:1368668680845787156>';
-                } else if (quarterPercent >= 10) {
+                } else if (quarterlyProgress > 100) {
                     quarterIcon = ' <:PepeMyliciel:1278017456258027620>';
-                } else if (quarterPercent < 10 && quarterPercent >= 0) {
+                } else if (quarterlyProgress >= 0) {
                     quarterIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
+                // Dla ujemnego progresu nie pokazuj ikony
 
                 description += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)${quarterIcon}\n`;
             }
