@@ -8043,10 +8043,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
 
         // Główny nagłówek
-        description += `# ${playerIcon} STATUS GRACZA: ${latestNick} (${clanDisplay})\n\n`;
+        description += `## ${playerIcon} STATUS GRACZA: ${latestNick} (${clanDisplay})\n\n`;
 
         // Sekcja 1: Ranking
-        description += `## 🏆 RANKING\n`;
+        description += `### 🏆 RANKING\n`;
         if (clanPosition && clanTotalPlayers) {
             description += `🏰 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
         }
@@ -8054,7 +8054,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Sekcja 2: Statystyki (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
-            description += `## 📊 STATYSTYKI\n`;
+            description += `### 📊 STATYSTYKI\n`;
 
             if (monthlyProgress !== null) {
                 const arrow = monthlyProgress >= 0 ? '▲' : '▼';
@@ -8116,7 +8116,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
 
         // Sekcja 3: Współczynniki (zawsze pokazuj)
-        description += `## 🌡️ WSPÓŁCZYNNIKI\n`;
+        description += `### 🌡️ WSPÓŁCZYNNIKI\n`;
 
         // Rzetelność - jeśli null, pokaż zieloną kropkę
         let reliabilityCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -8181,10 +8181,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `\n`;
 
         // Sekcja 4: Progres (ostatnie 12 tygodni)
-        description += `## 📈 PROGRES (OSTATNIE 12 TYGODNI)\n${resultsText}\n\n`;
+        description += `### 📈 PROGRES (OSTATNIE 12 TYGODNI)\n${resultsText}\n\n`;
 
         // Sekcja 5: Kary i status
-        description += `## ⚖️ KARY I STATUS\n`;
+        description += `### ⚖️ KARY I STATUS\n`;
         description += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
         description += `✅ **Potwierdzenia:** ${confirmationCount > 0 ? confirmationCount : 'brak'}\n`;
         description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
