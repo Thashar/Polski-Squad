@@ -8036,8 +8036,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Stwórz embed - wszystkie sekcje w description z nagłówkami
         let description = '';
 
+        // Określ ikonę dla głównego nagłówka na podstawie progresu miesięcznego
+        let playerIcon = '👤'; // Domyślna ikona
+        if (monthlyProgressPercent !== null && parseFloat(monthlyProgressPercent) < 0) {
+            playerIcon = '🧑🏻‍🦽'; // Ikona wózka dla ujemnego progresu
+        }
+
         // Główny nagłówek
-        description += `# 👤 STATUS GRACZA: ${latestNick} (${clanDisplay})\n\n`;
+        description += `# ${playerIcon} STATUS GRACZA: ${latestNick} (${clanDisplay})\n\n`;
 
         // Sekcja 1: Ranking
         description += `## 🏆 RANKING\n`;
