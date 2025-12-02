@@ -8048,7 +8048,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         rankingInfo += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
 
-        embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
+        embed.addFields({ name: '## 🏆 RANKING', value: rankingInfo, inline: false });
 
         // Pole 2: Progres (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
@@ -8113,7 +8113,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             if (progressInfo) {
-                embed.addFields({ name: '📊 STATYSTYKI', value: progressInfo, inline: false });
+                embed.addFields({ name: '## 📊 STATYSTYKI', value: progressInfo, inline: false });
             }
         }
 
@@ -8181,11 +8181,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}`;
         }
 
-        embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
+        embed.addFields({ name: '## 🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
 
         // Pole 4: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
-            name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
+            name: '## 📈 PROGRES (OSTATNIE 12 TYGODNI)',
             value: resultsText,
             inline: false
         });
@@ -8199,7 +8199,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
+        embed.addFields({ name: '## ⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
 
         // Ustaw auto-usuwanie po 5 minutach
         const deleteAt = Date.now() + (5 * 60 * 1000);
