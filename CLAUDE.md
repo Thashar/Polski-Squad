@@ -4,6 +4,7 @@
 
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
 - Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
+- Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pishnij. 
 - W commitach używaj krótkiego opisu zmian PO POLSKU
 - Po utworzeniu commita ZAWSZE od razu wykonaj `git push` bez pytania
 - Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
