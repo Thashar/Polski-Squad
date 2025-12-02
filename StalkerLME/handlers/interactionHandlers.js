@@ -8043,7 +8043,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
 
         // Główny nagłówek
-        description += `## ${playerIcon} STATUS GRACZA: ${latestNick} (${clanDisplay})\n\n`;
+        description += `## ${playerIcon} STATUS GRACZA\n${latestNick} (${clanDisplay})\n\n`;
 
         // Sekcja 1: Ranking
         description += `### 🏆 RANKING\n`;
