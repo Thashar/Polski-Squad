@@ -8087,7 +8087,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 } else {
                     monthIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
-                // Dla ujemnego progresu nie pokazuj ikony
+                
 
                 description += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)${monthIcon}\n`;
             }
@@ -8105,10 +8105,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     quarterIcon = ' <:PFrog_yes:1368668680845787156>';
                 } else if (quarterlyProgress > 100) {
                     quarterIcon = ' <:PepeMyliciel:1278017456258027620>';
-                } else if (quarterlyProgress >= 0) {
+                } else {
                     quarterIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
-                // Dla ujemnego progresu nie pokazuj ikony
+                
 
                 description += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)${quarterIcon}\n`;
             }
