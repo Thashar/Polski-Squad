@@ -8084,7 +8084,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     monthIcon = ' <:PFrog_yes:1368668680845787156>';
                 } else if (monthlyProgress > 50) {
                     monthIcon = ' <:PepeMyliciel:1278017456258027620>';
-                } else if (monthlyProgress >= 0) {
+                } else {
                     monthIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
                 // Dla ujemnego progresu nie pokazuj ikony
