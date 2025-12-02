@@ -7834,32 +7834,46 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             let maxRegressDiff = 0;
             let progressWeeksCount = 0; // Liczba tygodni z progresem
 
-            for (let i = 0; i < playerProgressData.length - 1; i++) {
+            for (let i = 0; i < playerProgressData.length; i++) {
                 const currentWeek = playerProgressData[i];
-                const previousWeek = playerProgressData[i + 1];
-                const diff = currentWeek.score - previousWeek.score;
 
-                // Zlicz tygodnie z progresem dla współczynnika Zaangażowanie
-                if (currentWeek.score === 0) {
-                    // Jeśli wynik = 0, daj 0 punktów (nie dodawaj nic)
-                } else if (diff > 0) {
-                    // Progres - pełny punkt
-                    progressWeeksCount += 1.0;
-                } else if (diff === 0) {
-                    // Wyrównanie wyniku - częściowy punkt (0.9 zamiast 1.0)
-                    progressWeeksCount += 0.9;
+                // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
+                // playerProgressData jest posortowane od najnowszych do najstarszych
+                // więc dla tygodnia i, wcześniejsze tygodnie to j > i
+                let bestScoreUpToNow = 0;
+                for (let j = i + 1; j < playerProgressData.length; j++) {
+                    const pastWeek = playerProgressData[j];
+                    if (pastWeek.score > bestScoreUpToNow) {
+                        bestScoreUpToNow = pastWeek.score;
+                    }
                 }
-                // diff < 0 (regres) → 0 punktów (nie dodawaj nic)
 
-                // Największy progres (dodatnia różnica)
-                if (diff > maxProgressDiff) {
+                // Oblicz różnicę względem najlepszego wyniku do tej pory
+                const diff = currentWeek.score - bestScoreUpToNow;
+
+                // Zlicz tygodnie z progresem dla współczynnika Zaangażowanie (tylko jeśli są poprzednie tygodnie)
+                if (i < playerProgressData.length - 1) {
+                    if (currentWeek.score === 0) {
+                        // Jeśli wynik = 0, daj 0 punktów (nie dodawaj nic)
+                    } else if (diff > 0) {
+                        // Progres - pełny punkt
+                        progressWeeksCount += 1.0;
+                    } else if (diff === 0 && bestScoreUpToNow > 0) {
+                        // Wyrównanie wyniku - częściowy punkt (0.9 zamiast 1.0)
+                        progressWeeksCount += 0.9;
+                    }
+                    // diff < 0 (regres) → 0 punktów (nie dodawaj nic)
+                }
+
+                // Największy progres (dodatnia różnica od najlepszego wyniku)
+                if (bestScoreUpToNow > 0 && diff > maxProgressDiff) {
                     maxProgressDiff = diff;
                     biggestProgress = diff;
                     biggestProgressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
                 }
 
-                // Największy regres (ujemna różnica)
-                if (diff < maxRegressDiff) {
+                // Największy regres (ujemna różnica od najlepszego wyniku)
+                if (bestScoreUpToNow > 0 && diff < maxRegressDiff) {
                     maxRegressDiff = diff;
                     biggestRegress = diff;
                     biggestRegressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
