@@ -7697,14 +7697,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
-        // Dla współczynnika Responsywność liczymy tylko od tygodnia 49/2025
-        const weeksSince49_2025 = playerProgressData.filter(data => {
-            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
+        // Dla współczynnika Responsywność liczymy tylko od tygodnia 48/2025
+        const weeksSince48_2025 = playerProgressData.filter(data => {
+            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 48);
         }).length;
 
         let responsivenessFactor = null;
 
-        if (weeksSince49_2025 > 0) {
+        if (weeksSince48_2025 > 0) {
             // Pobierz dane o potwierdzeniach
             const confirmations = await loadConfirmations(config);
             const confirmationCount = confirmations.userStats[userId]?.totalConfirmations || 0;
