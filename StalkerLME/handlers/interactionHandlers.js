@@ -8120,20 +8120,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         coefficientsInfo = `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}`;
 
-        // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
-        let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
-        if (responsivenessFactor !== null) {
-            responsivenessCircle = '🔴'; // Czerwone (poniżej 25%)
-            if (responsivenessFactor >= 75) {
-                responsivenessCircle = '🟢'; // Zielone (75%+)
-            } else if (responsivenessFactor >= 50) {
-                responsivenessCircle = '🟡'; // Żółte (50-74.99%)
-            } else if (responsivenessFactor >= 25) {
-                responsivenessCircle = '🟠'; // Pomarańczowe (25-49.99%)
-            }
-        }
-        coefficientsInfo += `\n📱 **Responsywność:** ${responsivenessCircle}`;
-
         // Zaangażowanie - jeśli null, pokaż zieloną kropkę
         let engagementCircle = '🟢'; // Domyślnie zielone (brak danych)
         if (engagementFactor !== null) {
@@ -8147,6 +8133,20 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
         coefficientsInfo += `\n💪 **Zaangażowanie:** ${engagementCircle}`;
+
+        // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
+        let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
+        if (responsivenessFactor !== null) {
+            responsivenessCircle = '🔴'; // Czerwone (poniżej 25%)
+            if (responsivenessFactor >= 75) {
+                responsivenessCircle = '🟢'; // Zielone (75%+)
+            } else if (responsivenessFactor >= 50) {
+                responsivenessCircle = '🟡'; // Żółte (50-74.99%)
+            } else if (responsivenessFactor >= 25) {
+                responsivenessCircle = '🟠'; // Pomarańczowe (25-49.99%)
+            }
+        }
+        coefficientsInfo += `\n📨 **Responsywność:** ${responsivenessCircle}`;
 
         // Trend - tylko jeśli dostępny
         if (trendIcon !== null && trendDescription !== null) {
