@@ -7665,56 +7665,104 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const userPunishment = guildPunishments[userId];
         const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
 
-        // Pobierz liczbę przypomnień
-        const reminderCount = (await reminderUsageService.getMultipleUserStats([userId]))[userId] || 0;
-
         // Sprawdź role
         const hasPunishmentRole = member ? member.roles.cache.has(config.punishmentRoleId) : false;
         const hasLotteryBanRole = member ? member.roles.cache.has(config.lotteryBanRoleId) : false;
 
-        // Oblicz współczynnik wyjebania
-        // Wzór: 100% - ((przypomnienia × 0.025 + punkty_kar × 0.2) / liczba_tygodni × 100%)
+        // Pobierz dane o przypomnieniach i potwierdzeniach
+        await reminderUsageService.loadUsageData();
+        const reminderData = reminderUsageService.usageData;
+        const confirmations = await loadConfirmations(config);
+
+        // Całkowite liczby (z całej historii) - do wyświetlenia w sekcji "Kary i Status"
+        const reminderCountTotal = reminderData.receivers?.[userId]?.totalPings || 0;
+        const confirmationCountTotal = confirmations.userStats?.[userId]?.totalConfirmations || 0;
+
+        // Oblicz zakres dat dla ostatnich 12 tygodni (tylko do współczynników)
         const numberOfWeeksWithData = playerProgressData.length;
+        let reminderCountLast12Weeks = 0;
+        let confirmationCountLast12Weeks = 0;
 
-        // Dla współczynników Rzetelność i Punktualność liczymy tylko od tygodnia 45/2025
-        // (wcześniej nie było zliczania powiadomień)
-        const weeksSince45_2025 = playerProgressData.filter(data => {
-            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
-        }).length;
+        if (numberOfWeeksWithData > 0) {
+            // Znajdź najstarszy i najnowszy tydzień w danych gracza
+            const oldestWeek = playerProgressData[playerProgressData.length - 1];
+            const newestWeek = playerProgressData[0];
 
+            // Oblicz przybliżone daty dla zakresu (używamy początku tygodnia)
+            const getWeekStartDate = (weekNumber, year) => {
+                // Przybliżone obliczenie: 1 stycznia + (numer_tygodnia - 1) * 7 dni
+                const date = new Date(year, 0, 1);
+                const dayOfWeek = date.getDay();
+                const diff = (weekNumber - 1) * 7 - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+                date.setDate(date.getDate() + diff);
+                return date;
+            };
+
+            const startDate = getWeekStartDate(oldestWeek.weekNumber, oldestWeek.year);
+            const endDate = new Date(); // Do dzisiaj
+
+            // Konwertuj na format YYYY-MM-DD dla porównań
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            const startDateStr = formatDate(startDate);
+
+            // Zlicz pingi z ostatnich 12 tygodni (tylko do współczynników)
+            if (reminderData.receivers && reminderData.receivers[userId]) {
+                const userPings = reminderData.receivers[userId].dailyPings || {};
+
+                for (const dateStr in userPings) {
+                    if (dateStr >= startDateStr) {
+                        reminderCountLast12Weeks += userPings[dateStr].length;
+                    }
+                }
+            }
+
+            // Zlicz potwierdzenia z ostatnich 12 tygodni (tylko do współczynników)
+            const startTimestamp = startDate.getTime();
+            for (const sessionKey in confirmations.sessions) {
+                const session = confirmations.sessions[sessionKey];
+                const sessionDate = new Date(session.createdAt);
+
+                if (sessionDate.getTime() >= startTimestamp) {
+                    // Sprawdź czy użytkownik potwierdził w tej sesji
+                    if (session.confirmedUsers && session.confirmedUsers.includes(userId)) {
+                        confirmationCountLast12Weeks++;
+                    }
+                }
+            }
+        }
+
+        // Oblicz współczynniki używając danych z ostatnich 12 tygodni
         let wyjebanieFactor = null;
         let timingFactor = null;
 
-        if (weeksSince45_2025 > 0) {
-            const penaltyScore = (reminderCount * 0.025) + (lifetimePoints * 0.2);
-            const rawFactor = (penaltyScore / weeksSince45_2025) * 100;
+        if (numberOfWeeksWithData > 0) {
+            const penaltyScore = (reminderCountLast12Weeks * 0.025) + (lifetimePoints * 0.2);
+            const rawFactor = (penaltyScore / numberOfWeeksWithData) * 100;
             wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
 
             // Oblicz współczynnik Timing (bez punktów kary)
             // Wzór: 100% - ((przypomnienia × 0.125) / liczba_tygodni × 100%)
-            const timingPenaltyScore = reminderCount * 0.125;
-            const rawTimingFactor = (timingPenaltyScore / weeksSince45_2025) * 100;
+            const timingPenaltyScore = reminderCountLast12Weeks * 0.125;
+            const rawTimingFactor = (timingPenaltyScore / numberOfWeeksWithData) * 100;
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
-        // Pobierz dane o potwierdzeniach (zawsze, nie tylko dla współczynnika)
-        const confirmations = await loadConfirmations(config);
-        const confirmationCount = confirmations.userStats[userId]?.totalConfirmations || 0;
-
-        // Dla współczynnika Responsywność liczymy tylko od tygodnia 49/2025
-        const weeksSince49_2025 = playerProgressData.filter(data => {
-            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
-        }).length;
-
+        // Oblicz współczynnik Responsywność
         let responsivenessFactor = null;
 
-        if (weeksSince49_2025 > 0) {
+        if (numberOfWeeksWithData > 0) {
             // Oblicz współczynnik Responsywność
             // Wzór: (liczba_potwierdzeń / liczba_pingów) × 100%
-            if (reminderCount > 0) {
-                responsivenessFactor = (confirmationCount / reminderCount) * 100;
+            if (reminderCountLast12Weeks > 0) {
+                responsivenessFactor = (confirmationCountLast12Weeks / reminderCountLast12Weeks) * 100;
                 responsivenessFactor = Math.min(100, responsivenessFactor); // Nie może być więcej niż 100%
-            } else if (reminderCount === 0 && confirmationCount === 0) {
+            } else if (reminderCountLast12Weeks === 0 && confirmationCountLast12Weeks === 0) {
                 // Jeśli nie było ani pingów, ani potwierdzeń - 100%
                 responsivenessFactor = 100;
             } else {
@@ -7859,8 +7907,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                         // Progres - pełny punkt
                         progressWeeksCount += 1.0;
                     } else if (diff === 0 && bestScoreUpToNow > 0) {
-                        // Wyrównanie wyniku - częściowy punkt (0.9 zamiast 1.0)
-                        progressWeeksCount += 0.9;
+                        // Wyrównanie wyniku - częściowy punkt (0.8 zamiast 1.0)
+                        progressWeeksCount += 0.8;
                     }
                     // diff < 0 (regres) → 0 punktów (nie dodawaj nic)
                 }
@@ -8200,8 +8248,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Sekcja 5: Kary i status
         description += `### ⚖️ KARY I STATUS\n`;
-        description += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
-        description += `✅ **Potwierdzenia:** ${confirmationCount > 0 ? confirmationCount : 'brak'}\n`;
+        description += `📢 **Przypomnienia:** ${reminderCountTotal > 0 ? reminderCountTotal : 'brak'}\n`;
+        description += `✅ **Potwierdzenia:** ${confirmationCountTotal > 0 ? confirmationCountTotal : 'brak'}\n`;
         description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
