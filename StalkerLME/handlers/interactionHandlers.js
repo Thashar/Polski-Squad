@@ -8033,26 +8033,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         const resultsText = resultsLines.join('\n');
 
-        // Stwórz embed
-        const embed = new EmbedBuilder()
-            .setTitle(`👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
-            .setColor('#00BFFF') // Tymczasowo niebieski, później dodamy kolorowanie
-            .setTimestamp();
+        // Stwórz embed - wszystkie sekcje w description z nagłówkami
+        let description = '';
 
-        // Pole 1: Pozycje w rankingu
-        let rankingInfo = '';
-
+        // Sekcja 1: Ranking
+        description += `# 🏆 RANKING\n`;
         if (clanPosition && clanTotalPlayers) {
-            rankingInfo += `🏰 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
+            description += `🏰 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
         }
+        description += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n\n`;
 
-        rankingInfo += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
-
-        embed.addFields({ name: '🏆 RANKING', value: rankingInfo, inline: false });
-
-        // Pole 2: Progres (tylko jeśli są dane)
+        // Sekcja 2: Statystyki (tylko jeśli są dane)
         if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
-            let progressInfo = '';
+            description += `# 📊 STATYSTYKI\n`;
 
             if (monthlyProgress !== null) {
                 const arrow = monthlyProgress >= 0 ? '▲' : '▼';
@@ -8072,7 +8065,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     monthIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
 
-                progressInfo += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)${monthIcon}\n`;
+                description += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)${monthIcon}\n`;
             }
 
             if (quarterlyProgress !== null) {
@@ -8093,32 +8086,28 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     quarterIcon = ' <:PFrogLaczek:1425166409461268510>';
                 }
 
-                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)${quarterIcon}\n`;
+                description += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)${quarterIcon}\n`;
             }
 
             // Największy progres
             if (biggestProgress !== null && biggestProgress > 0) {
                 const absProgress = Math.abs(biggestProgress).toLocaleString('pl-PL');
-                progressInfo += `**↗️ Największy progres:** ${absProgress} (tydzień ${biggestProgressWeek})\n`;
+                description += `**↗️ Największy progres:** ${absProgress} (tydzień ${biggestProgressWeek})\n`;
             } else {
-                progressInfo += `**↗️ Największy progres:** brak\n`;
+                description += `**↗️ Największy progres:** brak\n`;
             }
 
             // Największy regres
             if (biggestRegress !== null && biggestRegress < 0) {
                 const absRegress = Math.abs(biggestRegress).toLocaleString('pl-PL');
-                progressInfo += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})`;
+                description += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})\n\n`;
             } else {
-                progressInfo += `**↘️ Największy regres:** brak`;
-            }
-
-            if (progressInfo) {
-                embed.addFields({ name: '📊 STATYSTYKI', value: progressInfo, inline: false });
+                description += `**↘️ Największy regres:** brak\n\n`;
             }
         }
 
-        // Pole 3: Współczynniki (zawsze pokazuj)
-        let coefficientsInfo = '';
+        // Sekcja 3: Współczynniki (zawsze pokazuj)
+        description += `# 🌡️ WSPÓŁCZYNNIKI\n`;
 
         // Rzetelność - jeśli null, pokaż zieloną kropkę
         let reliabilityCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -8146,7 +8135,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        coefficientsInfo = `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}`;
+        description += `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}\n`;
 
         // Zaangażowanie - jeśli null, pokaż zieloną kropkę
         let engagementCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -8160,7 +8149,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
         }
-        coefficientsInfo += `\n💪 **Zaangażowanie:** ${engagementCircle}`;
+        description += `💪 **Zaangażowanie:** ${engagementCircle}\n`;
 
         // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
         let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -8174,32 +8163,31 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 responsivenessCircle = '🟠'; // Pomarańczowe (25-49.99%)
             }
         }
-        coefficientsInfo += `\n📨 **Responsywność:** ${responsivenessCircle}`;
+        description += `📨 **Responsywność:** ${responsivenessCircle}\n`;
 
         // Trend - tylko jeśli dostępny
         if (trendIcon !== null && trendDescription !== null) {
-            coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}`;
+            description += `💨 **Trend:** ${trendDescription} ${trendIcon}\n`;
         }
+        description += `\n`;
 
-        embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
+        // Sekcja 4: Progres (ostatnie 12 tygodni)
+        description += `# 📈 PROGRES (OSTATNIE 12 TYGODNI)\n${resultsText}\n\n`;
 
-        // Pole 4: Wykresy (ostatnie 12 tygodni)
-        embed.addFields({
-            name: '📈 PROGRES (OSTATNIE 12 TYGODNI)',
-            value: resultsText,
-            inline: false
-        });
+        // Sekcja 5: Kary i status
+        description += `# ⚖️ KARY I STATUS\n`;
+        description += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
+        description += `✅ **Potwierdzenia:** ${confirmationCount > 0 ? confirmationCount : 'brak'}\n`;
+        description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
+        description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
+        description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        // Pole 5: Kary i status
-        let penaltiesInfo = '';
-
-        penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
-        penaltiesInfo += `✅ **Potwierdzenia:** ${confirmationCount > 0 ? confirmationCount : 'brak'}\n`;
-        penaltiesInfo += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
-        penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
-        penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
-
-        embed.addFields({ name: '⚖️ KARY I STATUS', value: penaltiesInfo, inline: false });
+        // Stwórz embed z pełnym description
+        const embed = new EmbedBuilder()
+            .setTitle(`👤 STATUS GRACZA: ${latestNick} (${clanDisplay})`)
+            .setDescription(description)
+            .setColor('#00BFFF')
+            .setTimestamp();
 
         // Ustaw auto-usuwanie po 5 minutach
         const deleteAt = Date.now() + (5 * 60 * 1000);
