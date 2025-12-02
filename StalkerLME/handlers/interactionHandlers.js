@@ -7678,15 +7678,45 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const reminderCountTotal = reminderData.receivers?.[userId]?.totalPings || 0;
         const confirmationCountTotal = confirmations.userStats?.[userId]?.totalConfirmations || 0;
 
+        // Helper do obliczania różnicy tygodni
+        const getWeeksDifference = (weekNum1, year1, weekNum2, year2) => {
+            if (year1 === year2) {
+                return weekNum1 - weekNum2;
+            } else {
+                // Przejście między latami (przybliżone - zakładamy 52 tygodnie w roku)
+                return (year1 - year2) * 52 + (weekNum1 - weekNum2);
+            }
+        };
+
         // Oblicz zakres dat dla ostatnich 12 tygodni (tylko do współczynników)
         const numberOfWeeksWithData = playerProgressData.length;
         let reminderCountLast12Weeks = 0;
         let confirmationCountLast12Weeks = 0;
+        let reminderCountForReliability = 0;  // Dla Rzetelności i Punktualności (próg 45/2025)
+        let reminderCountForResponsiveness = 0;  // Dla Responsywności - pingi (próg 49/2025)
+        let confirmationCountForResponsiveness = 0;  // Dla Responsywności - potwierdzenia (próg 49/2025)
+
+        // Dla Rzetelności i Punktualności - filtr 45/2025
+        const weeksSince45_2025 = playerProgressData.filter(data => {
+            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
+        }).length;
+
+        // Dla Responsywności - filtr 49/2025
+        const weeksSince49_2025 = playerProgressData.filter(data => {
+            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
+        }).length;
 
         if (numberOfWeeksWithData > 0) {
             // Znajdź najstarszy i najnowszy tydzień w danych gracza
             const oldestWeek = playerProgressData[playerProgressData.length - 1];
             const newestWeek = playerProgressData[0];
+
+            // Sprawdź czy używać progów 45/2025 i 49/2025
+            const weeksSinceThreshold45 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 45, 2025);
+            const weeksSinceThreshold49 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 49, 2025);
+
+            const useThreshold45 = weeksSinceThreshold45 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 45));
+            const useThreshold49 = weeksSinceThreshold49 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 49));
 
             // Oblicz przybliżone daty dla zakresu (używamy początku tygodnia)
             const getWeekStartDate = (weekNumber, year) => {
@@ -7699,6 +7729,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             };
 
             const startDate = getWeekStartDate(oldestWeek.weekNumber, oldestWeek.year);
+            const startDate45 = useThreshold45 ? getWeekStartDate(45, 2025) : startDate;
+            const startDate49 = useThreshold49 ? getWeekStartDate(49, 2025) : startDate;
             const endDate = new Date(); // Do dzisiaj
 
             // Konwertuj na format YYYY-MM-DD dla porównań
@@ -7710,59 +7742,78 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             };
 
             const startDateStr = formatDate(startDate);
+            const startDate45Str = formatDate(startDate45);
+            const startDate49Str = formatDate(startDate49);
 
-            // Zlicz pingi z ostatnich 12 tygodni (tylko do współczynników)
+            // Zlicz pingi z różnych zakresów
             if (reminderData.receivers && reminderData.receivers[userId]) {
                 const userPings = reminderData.receivers[userId].dailyPings || {};
 
                 for (const dateStr in userPings) {
+                    // Dla ostatnich 12 tygodni (Zaangażowanie)
                     if (dateStr >= startDateStr) {
                         reminderCountLast12Weeks += userPings[dateStr].length;
+                    }
+                    // Dla Rzetelności i Punktualności (próg 45/2025 lub 12 tygodni)
+                    if (dateStr >= startDate45Str) {
+                        reminderCountForReliability += userPings[dateStr].length;
+                    }
+                    // Dla Responsywności - pingi (próg 49/2025 lub 12 tygodni)
+                    if (dateStr >= startDate49Str) {
+                        reminderCountForResponsiveness += userPings[dateStr].length;
                     }
                 }
             }
 
-            // Zlicz potwierdzenia z ostatnich 12 tygodni (tylko do współczynników)
+            // Zlicz potwierdzenia z różnych zakresów
             const startTimestamp = startDate.getTime();
+            const startTimestamp45 = startDate45.getTime();
+            const startTimestamp49 = startDate49.getTime();
+
             for (const sessionKey in confirmations.sessions) {
                 const session = confirmations.sessions[sessionKey];
                 const sessionDate = new Date(session.createdAt);
+                const sessionTimestamp = sessionDate.getTime();
 
-                if (sessionDate.getTime() >= startTimestamp) {
-                    // Sprawdź czy użytkownik potwierdził w tej sesji
-                    if (session.confirmedUsers && session.confirmedUsers.includes(userId)) {
+                if (session.confirmedUsers && session.confirmedUsers.includes(userId)) {
+                    // Dla ostatnich 12 tygodni (Zaangażowanie)
+                    if (sessionTimestamp >= startTimestamp) {
                         confirmationCountLast12Weeks++;
+                    }
+                    // Dla Responsywności (próg 49/2025 lub 12 tygodni)
+                    if (sessionTimestamp >= startTimestamp49) {
+                        confirmationCountForResponsiveness++;
                     }
                 }
             }
         }
 
-        // Oblicz współczynniki używając danych z ostatnich 12 tygodni
+        // Oblicz współczynniki Rzetelność i Punktualność (używając progu 45/2025 jeśli dotyczy)
         let wyjebanieFactor = null;
         let timingFactor = null;
 
-        if (numberOfWeeksWithData > 0) {
-            const penaltyScore = (reminderCountLast12Weeks * 0.025) + (lifetimePoints * 0.2);
-            const rawFactor = (penaltyScore / numberOfWeeksWithData) * 100;
+        if (weeksSince45_2025 > 0) {
+            const penaltyScore = (reminderCountForReliability * 0.025) + (lifetimePoints * 0.2);
+            const rawFactor = (penaltyScore / weeksSince45_2025) * 100;
             wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
 
             // Oblicz współczynnik Timing (bez punktów kary)
             // Wzór: 100% - ((przypomnienia × 0.125) / liczba_tygodni × 100%)
-            const timingPenaltyScore = reminderCountLast12Weeks * 0.125;
-            const rawTimingFactor = (timingPenaltyScore / numberOfWeeksWithData) * 100;
+            const timingPenaltyScore = reminderCountForReliability * 0.125;
+            const rawTimingFactor = (timingPenaltyScore / weeksSince45_2025) * 100;
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
-        // Oblicz współczynnik Responsywność
+        // Oblicz współczynnik Responsywność (używając progu 49/2025 jeśli dotyczy)
         let responsivenessFactor = null;
 
-        if (numberOfWeeksWithData > 0) {
+        if (weeksSince49_2025 > 0) {
             // Oblicz współczynnik Responsywność
             // Wzór: (liczba_potwierdzeń / liczba_pingów) × 100%
-            if (reminderCountLast12Weeks > 0) {
-                responsivenessFactor = (confirmationCountLast12Weeks / reminderCountLast12Weeks) * 100;
+            if (reminderCountForResponsiveness > 0) {
+                responsivenessFactor = (confirmationCountForResponsiveness / reminderCountForResponsiveness) * 100;
                 responsivenessFactor = Math.min(100, responsivenessFactor); // Nie może być więcej niż 100%
-            } else if (reminderCountLast12Weeks === 0 && confirmationCountLast12Weeks === 0) {
+            } else if (reminderCountForResponsiveness === 0 && confirmationCountForResponsiveness === 0) {
                 // Jeśli nie było ani pingów, ani potwierdzeń - 100%
                 responsivenessFactor = 100;
             } else {
