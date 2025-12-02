@@ -334,34 +334,55 @@ class ConsoleLogger {
         this.botName = botName;
     }
     
-    log(message) {
+    log(...args) {
+        const message = this._formatArgs(args);
         console.log(formatMessage(this.botName, message, 'info'));
         writeToLogFile(this.botName, message, 'info');
         sendToDiscordWebhook(this.botName, message, 'info');
     }
-    
-    error(message) {
+
+    error(...args) {
+        const message = this._formatArgs(args);
         console.error(formatMessage(this.botName, message, 'error'));
         writeToLogFile(this.botName, message, 'error');
         sendToDiscordWebhook(this.botName, message, 'error');
     }
-    
-    warn(message) {
+
+    warn(...args) {
+        const message = this._formatArgs(args);
         console.warn(formatMessage(this.botName, message, 'warn'));
         writeToLogFile(this.botName, message, 'warn');
         sendToDiscordWebhook(this.botName, message, 'warn');
     }
-    
-    success(message) {
+
+    success(...args) {
+        const message = this._formatArgs(args);
         console.log(formatMessage(this.botName, message, 'success'));
         writeToLogFile(this.botName, message, 'success');
         sendToDiscordWebhook(this.botName, message, 'success');
     }
-    
-    info(message) {
+
+    info(...args) {
+        const message = this._formatArgs(args);
         console.info(formatMessage(this.botName, message, 'info'));
         writeToLogFile(this.botName, message, 'info');
         sendToDiscordWebhook(this.botName, message, 'info');
+    }
+
+    _formatArgs(args) {
+        return args.map(arg => {
+            if (arg instanceof Error) {
+                return `${arg.message}\n${arg.stack}`;
+            }
+            if (typeof arg === 'object') {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch {
+                    return String(arg);
+                }
+            }
+            return String(arg);
+        }).join(' ');
     }
 }
 
