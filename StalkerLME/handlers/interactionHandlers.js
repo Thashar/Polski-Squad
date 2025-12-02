@@ -8043,7 +8043,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let rankingInfo = '';
 
         if (clanPosition && clanTotalPlayers) {
-            rankingInfo += `🔒 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
+            rankingInfo += `🏰 **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
         }
 
         rankingInfo += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}`;
