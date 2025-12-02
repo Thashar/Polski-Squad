@@ -9042,13 +9042,28 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         // Dodaj userId do potwierdzeń w tej sesji
         confirmations.sessions[sessionKey].confirmedUsers.push(userId);
 
+        // Pobierz aktualny nick użytkownika z serwera
+        const member = await interaction.guild.members.fetch(userId);
+        const currentDisplayName = member ? member.displayName : interaction.user.username;
+
         // Zaktualizuj statystyki użytkownika
         if (!confirmations.userStats[userId]) {
             confirmations.userStats[userId] = {
                 totalConfirmations: 0,
-                lastConfirmedAt: null
+                lastConfirmedAt: null,
+                displayName: currentDisplayName
             };
+            logger.info(`[CONFIRM_REMINDER] 📝 Utworzono nowe statystyki dla ${currentDisplayName} (${userId})`);
+        } else {
+            // Sprawdź czy nick się zmienił
+            const oldDisplayName = confirmations.userStats[userId].displayName;
+            if (oldDisplayName && oldDisplayName !== currentDisplayName) {
+                logger.info(`[CONFIRM_REMINDER] 🔄 Zmiana nicku: ${oldDisplayName} → ${currentDisplayName} (${userId})`);
+            }
+            // Zaktualizuj nick (nawet jeśli się nie zmienił)
+            confirmations.userStats[userId].displayName = currentDisplayName;
         }
+
         confirmations.userStats[userId].totalConfirmations += 1;
         confirmations.userStats[userId].lastConfirmedAt = times;
 
