@@ -638,8 +638,9 @@ class InteractionHandler {
      */
     async handleVirtueCheckCommand(interaction) {
         const targetUser = interaction.options.getUser('użytkownik');
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
         const userId = interaction.user.id;
-        
+
         // Sprawdź cooldown i limity
         const canUse = this.virtuttiService.canUseCommand(userId, 'virtueCheck');
         if (!canUse.canUse) {
@@ -655,15 +656,15 @@ class InteractionHandler {
         // Pobierz losowe cnoty i radę
         const virtues = this.virtuttiService.getRandomVirtues();
         const advice = this.virtuttiService.getRandomPapalAdvice();
-        
+
         // Stwórz embed z wynikami
         const embed = new EmbedBuilder()
-            .setTitle(`🔍 **Sprawdzenie cnót dla ${targetUser.displayName}**`)
+            .setTitle(`🔍 **Sprawdzenie cnót dla ${targetMember.displayName}**`)
             .setColor('#FFD700')
             .setThumbnail(targetUser.displayAvatarURL())
             .setTimestamp()
-            .setFooter({ 
-                text: `Sprawdził: ${interaction.user.displayName} | Cooldown: ${this.config.virtuttiPapajlari.cooldownMinutes} min`,
+            .setFooter({
+                text: `Sprawdził: ${interaction.member.displayName} | Cooldown: ${this.config.virtuttiPapajlari.cooldownMinutes} min`,
                 iconURL: interaction.user.displayAvatarURL()
             });
 
@@ -1477,7 +1478,7 @@ class InteractionHandler {
             if (this.passwordEmbedService) {
                 await this.passwordEmbedService.updateEmbed(false);
                 // Wyślij podpowiedź na kanał command
-                await this.passwordEmbedService.sendHintToCommandChannel(hintText, interaction.user.tag);
+                await this.passwordEmbedService.sendHintToCommandChannel(hintText, interaction.member.displayName);
             }
 
             await interaction.editReply({
@@ -1649,7 +1650,7 @@ class InteractionHandler {
                 hintText,
                 scheduledDate,
                 interaction.user.id,
-                interaction.user.tag
+                interaction.member.displayName
             );
 
             if (!result.success) {

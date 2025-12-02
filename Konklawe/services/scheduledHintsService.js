@@ -74,10 +74,10 @@ class ScheduledHintsService {
      * @param {string} hintText - Treść podpowiedzi
      * @param {Date} scheduledFor - Data i czas ujawnienia
      * @param {string} addedBy - ID użytkownika
-     * @param {string} addedByUsername - Username użytkownika
+     * @param {string} addedByDisplayName - Wyświetlana nazwa użytkownika na serwerze
      * @returns {Object} - Wynik operacji
      */
-    async scheduleHint(hintText, scheduledFor, addedBy, addedByUsername) {
+    async scheduleHint(hintText, scheduledFor, addedBy, addedByDisplayName) {
         // Walidacja: max 10 zaplanowanych
         const activeScheduled = this.scheduledHints.filter(h => !h.revealed);
         if (activeScheduled.length >= 10) {
@@ -116,7 +116,7 @@ class ScheduledHintsService {
             hint: hintText,
             scheduledFor: scheduledFor.getTime(),
             addedBy,
-            addedByUsername,
+            addedByDisplayName,
             revealed: false
         };
 
@@ -126,7 +126,7 @@ class ScheduledHintsService {
         // Ustaw timer
         this.setTimer(scheduledHint);
 
-        logger.info(`📅 Zaplanowano podpowiedź na ${scheduledFor.toISOString()} przez ${addedByUsername}`);
+        logger.info(`📅 Zaplanowano podpowiedź na ${scheduledFor.toISOString()} przez ${addedByDisplayName}`);
 
         return {
             success: true,
@@ -199,7 +199,7 @@ class ScheduledHintsService {
                 // Wyślij podpowiedź na kanał command
                 await this.passwordEmbedService.sendHintToCommandChannel(
                     hint.hint,
-                    `${hint.addedByUsername} (zaplanowane)`
+                    `${hint.addedByDisplayName} (zaplanowane)`
                 );
             }
 
@@ -210,7 +210,7 @@ class ScheduledHintsService {
                 this.activeTimers.delete(hintId);
             }
 
-            logger.info(`✅ Ujawniono zaplanowaną podpowiedź: "${hint.hint}" (przez ${hint.addedByUsername})`);
+            logger.info(`✅ Ujawniono zaplanowaną podpowiedź: "${hint.hint}" (przez ${hint.addedByDisplayName})`);
         } catch (error) {
             logger.error(`❌ Błąd podczas ujawniania podpowiedzi: ${error.message}`);
         }

@@ -457,9 +457,9 @@ class PasswordEmbedService {
     /**
      * Wysyła podpowiedź jako wiadomość na kanale command
      * @param {string} hintText - Tekst podpowiedzi
-     * @param {string} authorTag - Tag autora (np. "User#1234")
+     * @param {string} authorDisplayName - Wyświetlana nazwa autora na serwerze
      */
-    async sendHintToCommandChannel(hintText, authorTag) {
+    async sendHintToCommandChannel(hintText, authorDisplayName) {
         try {
             const commandChannel = await this.client.channels.fetch(this.config.channels.command);
             if (!commandChannel || !commandChannel.isTextBased()) {
@@ -473,7 +473,7 @@ class PasswordEmbedService {
                 .setDescription(`\`\`\`${hintText}\`\`\``)
                 .setColor('#00FF00')
                 .setTimestamp()
-                .setFooter({ text: `Dodał: ${authorTag}` });
+                .setFooter({ text: `Dodał: ${authorDisplayName}` });
 
             await commandChannel.send({ embeds: [embed] });
             logger.info(`✅ Wysłano podpowiedź #${hintNumber} na kanale command`);
