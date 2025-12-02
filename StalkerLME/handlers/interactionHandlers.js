@@ -7697,14 +7697,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
-        // Dla współczynnika Responsywność liczymy tylko od tygodnia 48/2025
-        const weeksSince48_2025 = playerProgressData.filter(data => {
-            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 48);
+        // Dla współczynnika Responsywność liczymy tylko od tygodnia 49/2025
+        const weeksSince49_2025 = playerProgressData.filter(data => {
+            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
         }).length;
 
         let responsivenessFactor = null;
 
-        if (weeksSince48_2025 > 0) {
+        if (weeksSince49_2025 > 0) {
             // Pobierz dane o potwierdzeniach
             const confirmations = await loadConfirmations(config);
             const confirmationCount = confirmations.userStats[userId]?.totalConfirmations || 0;
@@ -8089,13 +8089,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        // Pole 3: Współczynniki
-        if (wyjebanieFactor !== null && timingFactor !== null) {
-            const reliabilityFormatted = wyjebanieFactor.toFixed(2);
-            const timingFormatted = timingFactor.toFixed(2);
+        // Pole 3: Współczynniki (zawsze pokazuj)
+        let coefficientsInfo = '';
 
-            // Kolory dla Rzetelności (stare progi)
-            let reliabilityCircle = '🔴'; // Czerwone (poniżej 90%)
+        // Rzetelność - jeśli null, pokaż zieloną kropkę
+        let reliabilityCircle = '🟢'; // Domyślnie zielone (brak danych)
+        if (wyjebanieFactor !== null) {
+            reliabilityCircle = '🔴'; // Czerwone (poniżej 90%)
             if (wyjebanieFactor >= 99) {
                 reliabilityCircle = '🟢'; // Zielone (99%+)
             } else if (wyjebanieFactor >= 95) {
@@ -8103,9 +8103,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             } else if (wyjebanieFactor >= 90) {
                 reliabilityCircle = '🟠'; // Pomarańczowe (90-94.99%)
             }
+        }
 
-            // Kolory dla Timing (nowe progi)
-            let timingCircle = '🔴'; // Czerwone (poniżej 70%)
+        // Punktualność - jeśli null, pokaż zieloną kropkę
+        let timingCircle = '🟢'; // Domyślnie zielone (brak danych)
+        if (timingFactor !== null) {
+            timingCircle = '🔴'; // Czerwone (poniżej 70%)
             if (timingFactor >= 90) {
                 timingCircle = '🟢'; // Zielone (90%+)
             } else if (timingFactor >= 80) {
@@ -8113,46 +8116,44 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             } else if (timingFactor >= 70) {
                 timingCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
-
-            let coefficientsInfo = `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}`;
-
-            // Dodaj współczynnik Responsywność jeśli dostępny
-            if (responsivenessFactor !== null) {
-                // Kolory dla Responsywności
-                let responsivenessCircle = '🔴'; // Czerwone (poniżej 25%)
-                if (responsivenessFactor >= 75) {
-                    responsivenessCircle = '🟢'; // Zielone (75%+)
-                } else if (responsivenessFactor >= 50) {
-                    responsivenessCircle = '🟡'; // Żółte (50-74.99%)
-                } else if (responsivenessFactor >= 25) {
-                    responsivenessCircle = '🟠'; // Pomarańczowe (25-49.99%)
-                }
-
-                coefficientsInfo += `\n📱 **Responsywność:** ${responsivenessCircle}`;
-            }
-
-            // Dodaj współczynnik Zaangażowanie jeśli dostępny
-            if (engagementFactor !== null) {
-                // Kolory dla Zaangażowanie (takie same progi jak Punktualność)
-                let engagementCircle = '🔴'; // Czerwone (poniżej 70%)
-                if (engagementFactor >= 90) {
-                    engagementCircle = '🟢'; // Zielone (90%+)
-                } else if (engagementFactor >= 80) {
-                    engagementCircle = '🟡'; // Żółte (80-89.99%)
-                } else if (engagementFactor >= 70) {
-                    engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
-                }
-
-                coefficientsInfo += `\n💪 **Zaangażowanie:** ${engagementCircle}`;
-            }
-
-            // Dodaj współczynnik Trend jeśli dostępny
-            if (trendIcon !== null && trendDescription !== null) {
-                coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}`;
-            }
-
-            embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
         }
+
+        coefficientsInfo = `🎯 **Rzetelność:** ${reliabilityCircle}\n⏱️ **Punktualność:** ${timingCircle}`;
+
+        // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
+        let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
+        if (responsivenessFactor !== null) {
+            responsivenessCircle = '🔴'; // Czerwone (poniżej 25%)
+            if (responsivenessFactor >= 75) {
+                responsivenessCircle = '🟢'; // Zielone (75%+)
+            } else if (responsivenessFactor >= 50) {
+                responsivenessCircle = '🟡'; // Żółte (50-74.99%)
+            } else if (responsivenessFactor >= 25) {
+                responsivenessCircle = '🟠'; // Pomarańczowe (25-49.99%)
+            }
+        }
+        coefficientsInfo += `\n📱 **Responsywność:** ${responsivenessCircle}`;
+
+        // Zaangażowanie - jeśli null, pokaż zieloną kropkę
+        let engagementCircle = '🟢'; // Domyślnie zielone (brak danych)
+        if (engagementFactor !== null) {
+            engagementCircle = '🔴'; // Czerwone (poniżej 70%)
+            if (engagementFactor >= 90) {
+                engagementCircle = '🟢'; // Zielone (90%+)
+            } else if (engagementFactor >= 80) {
+                engagementCircle = '🟡'; // Żółte (80-89.99%)
+            } else if (engagementFactor >= 70) {
+                engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
+            }
+        }
+        coefficientsInfo += `\n💪 **Zaangażowanie:** ${engagementCircle}`;
+
+        // Trend - tylko jeśli dostępny
+        if (trendIcon !== null && trendDescription !== null) {
+            coefficientsInfo += `\n💨 **Trend:** ${trendDescription} ${trendIcon}`;
+        }
+
+        embed.addFields({ name: '🌡️ WSPÓŁCZYNNIKI', value: coefficientsInfo, inline: false });
 
         // Pole 4: Wykresy (ostatnie 12 tygodni)
         embed.addFields({
