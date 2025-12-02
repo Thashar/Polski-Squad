@@ -7697,6 +7697,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
         }
 
+        // Pobierz dane o potwierdzeniach (zawsze, nie tylko dla współczynnika)
+        const confirmations = await loadConfirmations(config);
+        const confirmationCount = confirmations.userStats[userId]?.totalConfirmations || 0;
+
         // Dla współczynnika Responsywność liczymy tylko od tygodnia 49/2025
         const weeksSince49_2025 = playerProgressData.filter(data => {
             return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
@@ -7705,10 +7709,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let responsivenessFactor = null;
 
         if (weeksSince49_2025 > 0) {
-            // Pobierz dane o potwierdzeniach
-            const confirmations = await loadConfirmations(config);
-            const confirmationCount = confirmations.userStats[userId]?.totalConfirmations || 0;
-
             // Oblicz współczynnik Responsywność
             // Wzór: (liczba_potwierdzeń / liczba_pingów) × 100%
             if (reminderCount > 0) {
@@ -8166,6 +8166,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let penaltiesInfo = '';
 
         penaltiesInfo += `📢 **Przypomnienia:** ${reminderCount > 0 ? reminderCount : 'brak'}\n`;
+        penaltiesInfo += `✅ **Potwierdzenia:** ${confirmationCount > 0 ? confirmationCount : 'brak'}\n`;
         penaltiesInfo += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         penaltiesInfo += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         penaltiesInfo += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
