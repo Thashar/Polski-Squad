@@ -8058,14 +8058,42 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const arrow = monthlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(monthlyProgress).toLocaleString('pl-PL');
                 const monthLabel = monthlyWeeksCount === 4 ? 'Miesiąc (4 tyg)' : `Dostępne dane (${monthlyWeeksCount} tyg)`;
-                progressInfo += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)\n`;
+
+                // Określ ikonę na podstawie % progresu miesięcznego
+                let monthIcon = '';
+                const monthPercent = parseFloat(monthlyProgressPercent);
+                if (monthPercent > 20) {
+                    monthIcon = ' <a:PepeOklaski:1259556219312410760>';
+                } else if (monthPercent >= 10) {
+                    monthIcon = ' <:PFrog_yes:1368668680845787156>';
+                } else if (monthPercent >= 5) {
+                    monthIcon = ' <:PepeMyliciel:1278017456258027620>';
+                } else if (monthPercent < 5 && monthPercent >= 0) {
+                    monthIcon = ' <:PFrogLaczek:1425166409461268510>';
+                }
+
+                progressInfo += `**🔹 ${monthLabel}:** ${arrow} ${absProgress} (${monthlyProgressPercent}%)${monthIcon}\n`;
             }
 
             if (quarterlyProgress !== null) {
                 const arrow = quarterlyProgress >= 0 ? '▲' : '▼';
                 const absProgress = Math.abs(quarterlyProgress).toLocaleString('pl-PL');
                 const quarterLabel = quarterlyWeeksCount === 12 ? 'Kwartał (12 tyg)' : `Dostępne dane (${quarterlyWeeksCount} tyg)`;
-                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)\n`;
+
+                // Określ ikonę na podstawie % progresu kwartalnego
+                let quarterIcon = '';
+                const quarterPercent = parseFloat(quarterlyProgressPercent);
+                if (quarterPercent > 50) {
+                    quarterIcon = ' <a:PepeOklaski:1259556219312410760>';
+                } else if (quarterPercent >= 20) {
+                    quarterIcon = ' <:PFrog_yes:1368668680845787156>';
+                } else if (quarterPercent >= 10) {
+                    quarterIcon = ' <:PepeMyliciel:1278017456258027620>';
+                } else if (quarterPercent < 10 && quarterPercent >= 0) {
+                    quarterIcon = ' <:PFrogLaczek:1425166409461268510>';
+                }
+
+                progressInfo += `**🔷 ${quarterLabel}:** ${arrow} ${absProgress} (${quarterlyProgressPercent}%)${quarterIcon}\n`;
             }
 
             // Największy progres
