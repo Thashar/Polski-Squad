@@ -9226,6 +9226,12 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         // Zapisz do pliku
         await saveConfirmations(config, confirmations);
 
+        // Usuń użytkownika z aktywnych sesji DM (przestań monitorować jego wiadomości)
+        if (sharedState.reminderService) {
+            await sharedState.reminderService.removeActiveReminderDM(userId);
+            logger.info(`[CONFIRM_REMINDER] 🔕 Przestano monitorować wiadomości DM od użytkownika ${userId}`);
+        }
+
         // Wyślij wiadomość potwierdzenia na kanał
         const unixTimestamp = Math.floor(Date.now() / 1000);
         await confirmationChannel.send({
