@@ -10,10 +10,16 @@ class VirtuttiService {
         this.cooldowns = new Map(); // userId -> { blessing: timestamp, virtueCheck: timestamp, curse: timestamp }
         this.dailyUsage = new Map(); // userId -> { date: string, blessing: count, virtueCheck: count, curse: count }
 
+        // Lucyfer - tracking odbić klątw
+        this.lucyferCurses = new Map(); // userId -> { date: string, cursesThrown: count, reflectionChance: number }
+        this.lucyferTargetCooldowns = new Map(); // userId -> Map(targetId -> timestamp)
+
         // Ścieżki do plików danych
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
         this.dailyUsageFile = path.join(this.dataDir, 'virtutti_daily_usage.json');
+        this.lucyferCursesFile = path.join(this.dataDir, 'lucyfer_curses.json');
+        this.lucyferTargetCooldownsFile = path.join(this.dataDir, 'lucyfer_target_cooldowns.json');
 
         // Wczytaj dane przy starcie
         this.loadData();
@@ -32,18 +38,48 @@ class VirtuttiService {
      * Sprawdza czy użytkownik może użyć komendy
      * @param {string} userId - ID użytkownika
      * @param {string} commandType - 'blessing', 'virtueCheck' lub 'curse'
+     * @param {string} roleType - 'virtutti', 'gabriel' lub 'lucyfer'
+     * @param {string} targetUserId - ID celu (dla curse Lucyfera)
      * @returns {Object} - { canUse: boolean, reason?: string }
      */
-    canUseCommand(userId, commandType) {
+    canUseCommand(userId, commandType, roleType = 'virtutti', targetUserId = null) {
         const now = Date.now();
         const today = this.getPolishTime().toDateString();
 
+        // Gabriel - brak limitów na blessing
+        if (roleType === 'gabriel' && commandType === 'blessing') {
+            return { canUse: true };
+        }
+
+        // Lucyfer - specjalna logika curse
+        if (roleType === 'lucyfer' && commandType === 'curse') {
+            // Sprawdź cooldown tylko dla tego samego targetu
+            if (targetUserId) {
+                const targetCooldowns = this.lucyferTargetCooldowns.get(userId);
+                if (targetCooldowns && targetCooldowns.has(targetUserId)) {
+                    const lastCurseTime = targetCooldowns.get(targetUserId);
+                    const timeSince = now - lastCurseTime;
+                    const cooldownMs = 5 * 60 * 1000; // 5 minut
+
+                    if (timeSince < cooldownMs) {
+                        const remainingMinutes = Math.ceil((cooldownMs - timeSince) / (60 * 1000));
+                        return {
+                            canUse: false,
+                            reason: `Musisz poczekać jeszcze ${remainingMinutes} minut przed kolejną klątwą na tę samą osobę.`
+                        };
+                    }
+                }
+            }
+            return { canUse: true };
+        }
+
+        // Standardowa logika dla pozostałych (Virtutti/Gabriel)
         // Sprawdź cooldown
         const userCooldowns = this.cooldowns.get(userId);
         if (userCooldowns && userCooldowns[commandType]) {
             const timeSinceLastUse = now - userCooldowns[commandType];
             const cooldownMs = this.config.virtuttiPapajlari.cooldownMinutes * 60 * 1000;
-            
+
             if (timeSinceLastUse < cooldownMs) {
                 const remainingMinutes = Math.ceil((cooldownMs - timeSinceLastUse) / (60 * 1000));
                 return {
@@ -248,6 +284,71 @@ class VirtuttiService {
     }
 
     /**
+     * Rejestruje rzuconą klątwę przez Lucyfera
+     * @param {string} userId - ID Lucyfera
+     * @param {string} targetUserId - ID celu
+     */
+    registerLucyferCurse(userId, targetUserId) {
+        const today = this.getPolishTime().toDateString();
+        const now = Date.now();
+
+        // Aktualizuj tracking klątw
+        if (!this.lucyferCurses.has(userId) || this.lucyferCurses.get(userId).date !== today) {
+            this.lucyferCurses.set(userId, {
+                date: today,
+                cursesThrown: 0,
+                reflectionChance: 0
+            });
+        }
+
+        const userCurses = this.lucyferCurses.get(userId);
+        userCurses.cursesThrown++;
+        userCurses.reflectionChance = userCurses.cursesThrown; // 1% za każdą klątwę
+
+        // Aktualizuj cooldown dla tego targetu
+        if (!this.lucyferTargetCooldowns.has(userId)) {
+            this.lucyferTargetCooldowns.set(userId, new Map());
+        }
+        this.lucyferTargetCooldowns.get(userId).set(targetUserId, now);
+
+        logger.info(`💀 Lucyfer ${userId} rzucił klątwę. Łącznie dzisiaj: ${userCurses.cursesThrown}, szansa odbicia: ${userCurses.reflectionChance}%`);
+
+        this.saveData();
+    }
+
+    /**
+     * Pobiera szansę na odbicie klątwy dla Lucyfera
+     * @param {string} userId - ID Lucyfera
+     * @returns {number} - Szansa w procentach (0-100)
+     */
+    getLucyferReflectionChance(userId) {
+        const today = this.getPolishTime().toDateString();
+        const userCurses = this.lucyferCurses.get(userId);
+
+        if (!userCurses || userCurses.date !== today) {
+            return 0;
+        }
+
+        return userCurses.reflectionChance;
+    }
+
+    /**
+     * Resetuje klątwy Lucyfera (wywoływane o północy)
+     */
+    resetLucyferCursesDaily() {
+        const today = this.getPolishTime().toDateString();
+
+        for (const [userId, curses] of this.lucyferCurses.entries()) {
+            if (curses.date !== today) {
+                this.lucyferCurses.delete(userId);
+                logger.info(`🔄 Reset klątw Lucyfera dla ${userId}`);
+            }
+        }
+
+        this.saveData();
+    }
+
+    /**
      * Czyszczenie starych danych (opcjonalne)
      */
     cleanup() {
@@ -278,6 +379,9 @@ class VirtuttiService {
                 dataChanged = true;
             }
         }
+
+        // Resetuj klątwy Lucyfera
+        this.resetLucyferCursesDaily();
 
         // Zapisz dane jeśli coś się zmieniło
         if (dataChanged) {
@@ -317,6 +421,34 @@ class VirtuttiService {
                 }
             }
 
+            // Wczytaj dane Lucyfera - klątwy
+            try {
+                const lucyferCursesData = await fs.readFile(this.lucyferCursesFile, 'utf8');
+                const parsedLucyferCurses = JSON.parse(lucyferCursesData);
+                this.lucyferCurses = new Map(Object.entries(parsedLucyferCurses));
+                logger.info(`📂 Wczytano ${this.lucyferCurses.size} danych klątw Lucyfera`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania danych Lucyfera: ${error.message}`);
+                }
+            }
+
+            // Wczytaj dane Lucyfera - target cooldowny
+            try {
+                const lucyferTargetCooldownsData = await fs.readFile(this.lucyferTargetCooldownsFile, 'utf8');
+                const parsedTargetCooldowns = JSON.parse(lucyferTargetCooldownsData);
+                // Konwertuj zagnieżdżone obiekty na Maps
+                this.lucyferTargetCooldowns = new Map();
+                for (const [userId, targets] of Object.entries(parsedTargetCooldowns)) {
+                    this.lucyferTargetCooldowns.set(userId, new Map(Object.entries(targets)));
+                }
+                logger.info(`📂 Wczytano ${this.lucyferTargetCooldowns.size} target cooldownów Lucyfera`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania target cooldownów Lucyfera: ${error.message}`);
+                }
+            }
+
         } catch (error) {
             logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
         }
@@ -330,12 +462,23 @@ class VirtuttiService {
             // Konwertuj Maps na obiekty
             const cooldownsObj = Object.fromEntries(this.cooldowns);
             const dailyUsageObj = Object.fromEntries(this.dailyUsage);
+            const lucyferCursesObj = Object.fromEntries(this.lucyferCurses);
+
+            // Konwertuj zagnieżdżone Maps dla target cooldownów
+            const lucyferTargetCooldownsObj = {};
+            for (const [userId, targets] of this.lucyferTargetCooldowns.entries()) {
+                lucyferTargetCooldownsObj[userId] = Object.fromEntries(targets);
+            }
 
             // Zapisz cooldowny
             await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownsObj, null, 2));
 
             // Zapisz dzienne użycia
             await fs.writeFile(this.dailyUsageFile, JSON.stringify(dailyUsageObj, null, 2));
+
+            // Zapisz dane Lucyfera
+            await fs.writeFile(this.lucyferCursesFile, JSON.stringify(lucyferCursesObj, null, 2));
+            await fs.writeFile(this.lucyferTargetCooldownsFile, JSON.stringify(lucyferTargetCooldownsObj, null, 2));
 
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);

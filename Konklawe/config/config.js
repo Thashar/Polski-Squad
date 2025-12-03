@@ -11,11 +11,14 @@ module.exports = {
         start: "1377633547028005027",
         command: "1377633547028005027",
         attempts: "1377633547028005027",
-        reminder: "1377633547028005027"
+        reminder: "1377633547028005027",
+        judgment: process.env.KONKLAWE_JUDGMENT_CHANNEL_ID
     },
     roles: {
         papal: "1298897770844786699",
-        virtuttiPapajlari: "1387383527653376081"
+        virtuttiPapajlari: "1387383527653376081",
+        gabriel: process.env.KONKLAWE_GABRIEL_ROLE_ID,
+        lucyfer: process.env.KONKLAWE_LUCYFER_ROLE_ID
     },
     timers: {
         autoResetMinutes: 15,
@@ -33,11 +36,12 @@ module.exports = {
     messages: {
         defaultPassword: "Konklawe",
         habemusPapam: "# HABEMUS PAPAM!",
+        papaDeadAnnouncement: "# **VERTE PAPA MORTUUS EST!** 💀",
         passwordSet: "## {emoji} Nowe hasło zostało ustawione! {emoji}",
         hintAdded: "## {emoji} Podpowiedź została dodana! {emoji}",
         autoReset: "## {emoji} Hasło zostało automatycznie ustawione na \"Konklawe\" po {minutes} minutach bezczynności! {emoji}",
         roleRemoved: "## {emoji} Rola papieska została usunięta za brak podpowiedzi przez 24 godziny! {emoji}",
-        virtuttiPapajlariAchieved: "## 🏆 {user} osiągnął 10 poprawnych odpowiedzi i otrzymuje medal Virtutti Papajlari! {emoji} 🏆",
+        virtuttiPapajlariAchieved: "## 💀 {user} osiągnął 10 poprawnych odpowiedzi! Papież umarł zaraz po wybraniu, otrzymał medal Virtutti Papajlari! {emoji} Hasło zostało zresetowane na \"Konklawe\".",
         rankingReset: "## 🔄 Ranking został zresetowany! Nowy cykl rozpoczyna się teraz! 🔄"
     },
     achievements: {

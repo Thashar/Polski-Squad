@@ -212,7 +212,11 @@ class RankingService {
      */
     async checkVirtuttiPapajlariAchievement(userId, guild, channel) {
         if (this.gameService.hasAchievedVirtuttiPapajlari(userId)) {
+            // Usuń wszystkie role specjalne (Virtutti Papajlari, Gabriel, Lucyfer) od wszystkich użytkowników
             await this.removeRoleFromAllMembers(guild, this.config.roles.virtuttiPapajlari);
+            await this.removeRoleFromAllMembers(guild, this.config.roles.gabriel);
+            await this.removeRoleFromAllMembers(guild, this.config.roles.lucyfer);
+
             try {
                 const member = await guild.members.fetch(userId);
                 await member.roles.add(this.config.roles.virtuttiPapajlari);
