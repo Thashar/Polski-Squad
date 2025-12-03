@@ -144,6 +144,33 @@ class InteractionHandler {
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleSelectMenuInteraction(interaction) {
+        // Obsługa user select menu dla Sądu Bożego
+        if (interaction.customId === 'judgment_angel_select') {
+            if (this.judgmentService && interaction.isUserSelectMenu()) {
+                const chosenUser = interaction.users.first();
+                await this.judgmentService.finalizeJudgmentChoice(
+                    interaction,
+                    interaction.user,
+                    chosenUser,
+                    'angel'
+                );
+            }
+            return;
+        }
+
+        if (interaction.customId === 'judgment_demon_select') {
+            if (this.judgmentService && interaction.isUserSelectMenu()) {
+                const chosenUser = interaction.users.first();
+                await this.judgmentService.finalizeJudgmentChoice(
+                    interaction,
+                    interaction.user,
+                    chosenUser,
+                    'demon'
+                );
+            }
+            return;
+        }
+
         if (interaction.customId === 'remove_scheduled_select') {
             await this.handleRemoveScheduledSelect(interaction);
         }
@@ -654,9 +681,68 @@ class InteractionHandler {
 
         try {
             // Wyślij błogosławieństwo
-            const roleEmoji = roleType === 'gabriel' ? '☁️' : '⛪';
+            const roleEmoji = roleType === 'gabriel' ? '☁️' : '⛛';
+            let blessingMessage = `${roleEmoji} **${targetUser.toString()} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`;
+
+            // === SPECJALNA MECHANIKA GABRIEL ===
+            if (roleType === 'gabriel') {
+                // 1. Sprawdź czy target ma klątwę - 50% szansa na usunięcie
+                if (this.activeCurses.has(targetUser.id)) {
+                    const randomChance = Math.random() * 100;
+                    if (randomChance < 50) {
+                        // Usuń klątwę
+                        const curseData = this.activeCurses.get(targetUser.id);
+                        this.activeCurses.delete(targetUser.id);
+                        await this.saveActiveCurses();
+
+                        // Usuń klątwę z nickname managera jeśli to curse nick
+                        if (curseData.type === 'nickname' || curseData.type === 'forced_caps') {
+                            const nicknameManager = this.nicknameManager;
+                            if (nicknameManager && curseData.data && curseData.data.effectId) {
+                                await nicknameManager.removeEffect(targetUser.id, curseData.data.effectId);
+                            }
+                        }
+
+                        blessingMessage += `\n\n✨ **Klątwa została ściągnięta przez moc Gabriela!** ✨`;
+                        logger.info(`✨ Gabriel (${interaction.user.tag}) usunął klątwę z ${targetUser.tag}`);
+                    }
+                }
+
+                // 2. 1% szansa na nałożenie specjalnego debuffu na Lucyfera
+                const lucyferChance = Math.random() * 100;
+                if (lucyferChance < 1) {
+                    // Znajdź użytkownika z rolą Lucyfer
+                    const guild = interaction.guild;
+                    const lucyferRole = this.config.roles.lucyfer;
+                    const lucyferMember = guild.members.cache.find(member => member.roles.cache.has(lucyferRole));
+
+                    if (lucyferMember) {
+                        // Nałóż debuff
+                        const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(lucyferMember.id);
+
+                        // Wybierz losową klątwę dla początkowej 5-minutowej fazy
+                        const curses = [
+                            'slow_mode',
+                            'auto_delete',
+                            'random_ping',
+                            'emoji_spam',
+                            'forced_caps',
+                            'random_timeout',
+                            'special_role'
+                        ];
+                        const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+
+                        // Nałóż początkową klątwę (5 min)
+                        await this.applyCurse(lucyferMember, randomCurse, guild, debuffData.initialCurseEndTime);
+
+                        blessingMessage += `\n\n⚡ **Moc Gabriela dosięgła Lucyfera! Klątwa nałożona!** ⚡`;
+                        logger.info(`⚡ Gabriel (${interaction.user.tag}) nałożył specjalną klątwę na Lucyfera (${lucyferMember.user.tag})`);
+                    }
+                }
+            }
+
             await interaction.reply({
-                content: `${roleEmoji} **${targetUser.toString()} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`,
+                content: blessingMessage,
                 ephemeral: false
             });
 
@@ -1956,6 +2042,134 @@ class InteractionHandler {
                 content: '❌ Wystąpił błąd podczas usuwania podpowiedzi.',
                 components: []
             });
+        }
+    }
+
+    /**
+     * Aplikuje klątwę bezpośrednio na członka (dla Gabriel blessing → Lucyfer)
+     * @param {GuildMember} targetMember - Cel klątwy
+     * @param {string} curseType - Typ klątwy
+     * @param {Guild} guild - Guild
+     * @param {number} customEndTime - Opcjonalny custom timestamp końca klątwy
+     */
+    async applyCurse(targetMember, curseType, guild, customEndTime = null) {
+        const userId = targetMember.id;
+        const now = Date.now();
+        const endTime = customEndTime || (now + (5 * 60 * 1000)); // 5 minut defaultowo
+
+        try {
+            // 1. Aplikuj nickname curse (Przeklęty prefix)
+            try {
+                const forcedPrefix = this.config.virtuttiPapajlari.forcedNickname || 'Przeklęty';
+                const newNick = `${forcedPrefix} ${targetMember.displayName}`.substring(0, 32);
+
+                const effectId = await this.nicknameManager.applyEffect(
+                    userId,
+                    'CURSE',
+                    endTime - now,
+                    {
+                        guildId: guild.id,
+                        appliedBy: 'Gabriel Divine Power'
+                    }
+                );
+
+                await targetMember.setNickname(newNick);
+                logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${newNick}"`);
+
+                // Zapisz do activeCurses
+                this.activeCurses.set(userId, {
+                    type: 'nickname',
+                    data: { effectId },
+                    endTime
+                });
+            } catch (error) {
+                logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
+            }
+
+            // 2. Wykonaj dodatkową klątwę na podstawie typu
+            switch (curseType) {
+                case 'slow_mode':
+                    this.activeCurses.set(userId, {
+                        type: 'slowMode',
+                        data: { lastMessage: 0 },
+                        endTime
+                    });
+                    break;
+
+                case 'auto_delete':
+                    this.activeCurses.set(userId, {
+                        type: 'autoDelete',
+                        data: { chance: 3.33 },
+                        endTime
+                    });
+                    break;
+
+                case 'random_ping':
+                    this.activeCurses.set(userId, {
+                        type: 'randomPing',
+                        data: { channel: null }, // channel nie jest dostępny
+                        endTime
+                    });
+                    // startRandomPing wymaga kanału, pominięte
+                    break;
+
+                case 'emoji_spam':
+                    this.activeCurses.set(userId, {
+                        type: 'emojiSpam',
+                        data: { chance: 3.33 },
+                        endTime
+                    });
+                    break;
+
+                case 'forced_caps':
+                    this.activeCurses.set(userId, {
+                        type: 'forcedCaps',
+                        data: { chance: 100 },
+                        endTime
+                    });
+                    break;
+
+                case 'random_timeout':
+                    this.activeCurses.set(userId, {
+                        type: 'randomTimeout',
+                        data: { isTimedOut: false },
+                        endTime
+                    });
+                    this.startRandomTimeout(userId, targetMember);
+                    break;
+
+                case 'special_role':
+                    try {
+                        const specialRole = guild.roles.cache.get(this.config.virtuttiPapajlari.specialRoleId);
+                        if (specialRole) {
+                            await targetMember.roles.add(specialRole);
+                            logger.info(`🎭 Nadano specjalną rolę ${targetMember.user.tag} (klątwa Gabriel)`);
+
+                            // Usuń rolę po zakończeniu klątwy
+                            const duration = endTime - now;
+                            setTimeout(async () => {
+                                try {
+                                    const memberToUpdate = await guild.members.fetch(targetMember.id);
+                                    if (memberToUpdate && memberToUpdate.roles.cache.has(this.config.virtuttiPapajlari.specialRoleId)) {
+                                        await memberToUpdate.roles.remove(specialRole);
+                                        logger.info(`🎭 Usunięto specjalną rolę ${targetMember.user.tag} (koniec klątwy Gabriel)`);
+                                    }
+                                } catch (error) {
+                                    logger.error(`❌ Błąd usuwania specjalnej roli: ${error.message}`);
+                                }
+                            }, duration);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Błąd nakładania specjalnej roli: ${error.message}`);
+                    }
+                    break;
+            }
+
+            await this.saveActiveCurses();
+            logger.info(`⚡ Nałożono klątwę typu ${curseType} na ${targetMember.user.tag} (Gabriel power)`);
+
+        } catch (error) {
+            logger.error(`❌ Błąd aplikowania klątwy: ${error.message}`);
         }
     }
 
