@@ -583,25 +583,24 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendy specjalne dla Virtutti Papajlari, Gabriel i Lucyfer
+     * Obsługuje komendy specjalne dla Gabriel i Lucyfer
+     * WAŻNE: Virtutti Papajlari to tylko medal kosmetyczny bez uprawnień do komend!
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleVirtuttiPapajlariCommand(interaction) {
-        // Sprawdź czy użytkownik ma jedną z uprzywilejowanych ról
-        const hasVirtutti = interaction.member.roles.cache.has(this.config.roles.virtuttiPapajlari);
+        // Sprawdź czy użytkownik ma jedną z uprzywilejowanych ról (Gabriel lub Lucyfer)
         const hasGabriel = interaction.member.roles.cache.has(this.config.roles.gabriel);
         const hasLucyfer = interaction.member.roles.cache.has(this.config.roles.lucyfer);
 
-        if (!hasVirtutti && !hasGabriel && !hasLucyfer) {
+        if (!hasGabriel && !hasLucyfer) {
             return await interaction.reply({
-                content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy ról: Virtutti Papajlari, Gabriel lub Lucyfer!',
+                content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy ról: Gabriel lub Lucyfer!\n\n💡 Virtutti Papajlari to medal kosmetyczny bez uprawnień do komend.',
                 ephemeral: true
             });
         }
 
         // Określ typ roli
-        let roleType = 'virtutti';
-        if (hasGabriel) roleType = 'gabriel';
+        let roleType = 'gabriel';
         if (hasLucyfer) roleType = 'lucyfer';
 
         const { commandName } = interaction;
