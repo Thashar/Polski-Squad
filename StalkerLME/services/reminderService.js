@@ -94,7 +94,8 @@ class ReminderService {
                                     roleId: roleId,
                                     guildId: guild.id,
                                     confirmationChannelId: confirmationChannelId,
-                                    sentAt: Date.now()
+                                    sentAt: Date.now(),
+                                    repliedToMessage: false // Czy bot już odpowiedział na wiadomość użytkownika
                                 });
                                 // Zapisz do pliku
                                 await this.saveActiveReminderDMs();
@@ -964,6 +965,20 @@ class ReminderService {
      */
     getActiveReminderDM(userId) {
         return this.activeReminderDMs.get(userId);
+    }
+
+    /**
+     * Oznacza że bot już odpowiedział użytkownikowi na DM
+     */
+    async markReminderDMAsReplied(userId) {
+        const sessionData = this.activeReminderDMs.get(userId);
+        if (sessionData) {
+            sessionData.repliedToMessage = true;
+            await this.saveActiveReminderDMs();
+            logger.info(`[REMINDER-DM] ✅ Oznaczono że bot odpowiedział użytkownikowi ${userId}`);
+            return true;
+        }
+        return false;
     }
 }
 

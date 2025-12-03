@@ -177,10 +177,32 @@ client.on(Events.MessageCreate, async (message) => {
                     logger.info(`[REMINDER-DM] 📤 Przekazano wiadomość na kanał potwierdzenia`);
                 }
 
-                // Wyślij użytkownikowi odpowiedź
-                await message.reply('**Nie leć w chuja, kliknij przycisk i bij tego bossa xD**');
+                // Wyślij użytkownikowi odpowiedź TYLKO RAZ
+                if (!sessionData.repliedToMessage) {
+                    // Tablica losowych odpowiedzi
+                    const responses = [
+                        '**Nie leć w chuja, kliknij przycisk i bij tego bossa xD**',
+                        '**Skończ to pierdolenie, kliknij przycisk i lej tego bossa xD**',
+                        '**Ale Ty dupisz, weź kliknij ten przycisk i nadupcaj bossa, a nie xD**',
+                        '**Weź nie pierdol tylko zbij tego bossa xD Nie zapomnij kliknąć potwierdzenia powyżej ;)**',
+                        '**Bla, bla, bla xD Nakurwiaj bossa, a nie jakieś kocopoły mi tu piszesz. Tak poza tym, potwierdź odbiór wiadomości ;)**',
+                        '**Ta, a krowy latają... Potwierdź komunikat i nakurwiaj bossa xD**',
+                        '**Zwal bossa, a później możesz sobie tu pierdolić co chcesz xD Przy okazji kliknij potwierdzenie odbioru ;)**'
+                    ];
 
-                logger.info(`[REMINDER-DM] 💬 Wysłano odpowiedź do użytkownika`);
+                    // Wybierz losową odpowiedź
+                    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+
+                    // Wyślij odpowiedź
+                    await message.reply(randomResponse);
+
+                    // Oznacz że użytkownik już dostał odpowiedź
+                    await reminderService.markReminderDMAsReplied(userId);
+
+                    logger.info(`[REMINDER-DM] 💬 Wysłano odpowiedź do użytkownika (losowa #${responses.indexOf(randomResponse) + 1})`);
+                } else {
+                    logger.info(`[REMINDER-DM] 🔇 Użytkownik już dostał odpowiedź - pomijam`);
+                }
             }
         } catch (error) {
             logger.error(`[REMINDER-DM] ❌ Błąd obsługi wiadomości DM: ${error.message}`);
