@@ -290,6 +290,46 @@ class JudgmentService {
                 await gameChannel.send({ embeds: [announcement] });
             }
 
+            // Wyczyść kanał Sądu Bożego, ale zostaw główny embed
+            try {
+                const judgmentChannel = await this.client.channels.fetch(this.config.channels.judgment);
+                if (judgmentChannel && judgmentChannel.isTextBased()) {
+                    const messages = await judgmentChannel.messages.fetch({ limit: 100 });
+
+                    // Usuń wszystkie wiadomości OPRÓCZ głównego embeda Sądu Bożego
+                    const messagesToDelete = messages.filter(msg =>
+                        msg.id !== this.judgmentMessageId
+                    );
+
+                    if (messagesToDelete.size > 0) {
+                        // Bulk delete dla wiadomości młodszych niż 14 dni
+                        const recentMessages = messagesToDelete.filter(msg =>
+                            Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+                        );
+
+                        if (recentMessages.size > 0) {
+                            await judgmentChannel.bulkDelete(recentMessages, true);
+                            logger.info(`🧹 Wyczyszczono ${recentMessages.size} wiadomości z kanału Sądu Bożego`);
+                        }
+
+                        // Usuń starsze wiadomości pojedynczo
+                        const oldMessages = messagesToDelete.filter(msg =>
+                            Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000
+                        );
+
+                        for (const [, msg] of oldMessages) {
+                            try {
+                                await msg.delete();
+                            } catch (err) {
+                                logger.warn(`⚠️ Nie udało się usunąć starej wiadomości: ${err.message}`);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                logger.warn(`⚠️ Błąd podczas czyszczenia kanału Sądu Bożego: ${error.message}`);
+            }
+
             logger.info(
                 `⚖️ Sąd Boży: ${chooser.tag} (${chooserRoleName}) wybrał ${chosenUser.tag} (${chosenRoleName})`
             );
