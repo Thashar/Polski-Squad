@@ -8632,7 +8632,7 @@ async function handleClanProgresCommand(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferReply();
 
     try {
         // Utwórz select menu z klanami
@@ -8657,8 +8657,7 @@ async function handleClanProgresCommand(interaction, sharedState) {
 
         await interaction.editReply({
             embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
+            components: [row]
         });
 
     } catch (error) {
@@ -8858,7 +8857,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
             .setTitle(`📊 Progres TOP30 - ${clanName}`)
             .setDescription(
                 `**Skumulowany progres/regres:**\n${cumulativeSection}` +
-                `**Historia wyników TOP30 (Faza 1):**\n\`\`\`\n${resultsText}\n\`\`\``
+                `**Historia wyników TOP30 (Faza 1):**\n${resultsText}`
             )
             .setColor('#00FF00')
             .setFooter({ text: `Klan: ${clanName} | Ostatnie ${clanProgressData.length} tygodni` })
