@@ -8160,8 +8160,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Sekcja 1: Ranking
         description += `### 🏆 RANKING\n`;
-        description += `🏰 **Klan:** ${clanDisplay}\n`;
-        if (clanPosition && clanTotalPlayers) {
+        description += `🏰 **Klan:** ${globalPosition > 0 ? clanDisplay : 'Brak danych'}\n`;
+        if (clanPosition && clanTotalPlayers && globalPosition > 0) {
             description += `🎖️ **Pozycja w klanie:** ${clanPosition}/${clanTotalPlayers}\n`;
         }
         description += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n\n`;
