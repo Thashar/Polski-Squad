@@ -421,9 +421,9 @@ async function handleDmCommand(interaction, config) {
         await saveConfirmations(config, confirmations);
         logger.info(`[DM-TEST] 📝 Utworzono sesję potwierdzenia: ${sessionKey}`);
 
-        // Utwórz przycisk "Potwierdź odbiór"
+        // Utwórz przycisk "Potwierdź odbiór" z guildId (dla obsługi DM)
         const confirmButton = new ButtonBuilder()
-            .setCustomId(`confirm_reminder_${interaction.user.id}_${userClanRoleId}`)
+            .setCustomId(`confirm_reminder_${interaction.user.id}_${userClanRoleId}_${interaction.guild.id}`)
             .setLabel('Potwierdź odbiór')
             .setStyle(ButtonStyle.Danger)
             .setEmoji('✅');
@@ -9032,10 +9032,11 @@ async function handleConfirmReminderButton(interaction, sharedState) {
     const { config } = sharedState;
 
     try {
-        // Parsuj customId: confirm_reminder_{userId}_{roleId}
+        // Parsuj customId: confirm_reminder_{userId}_{roleId}_{guildId}
         const parts = interaction.customId.split('_');
         const userId = parts[2];
         const roleId = parts[3];
+        const guildId = parts[4];
 
         // Sprawdź czy użytkownik potwierdza przed deadline
         const now = new Date();
@@ -9152,8 +9153,20 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         // Dodaj userId do potwierdzeń w tej sesji
         confirmations.sessions[sessionKey].confirmedUsers.push(userId);
 
+        // Pobierz guild (z DM interaction.guild jest null, więc pobieramy z client)
+        const guild = interaction.guild || await interaction.client.guilds.fetch(guildId);
+
+        if (!guild) {
+            logger.error(`[CONFIRM_REMINDER] ❌ Nie znaleziono serwera o ID: ${guildId}`);
+            await interaction.reply({
+                content: '❌ Błąd - nie znaleziono serwera.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
         // Pobierz aktualny nick użytkownika z serwera
-        const member = await interaction.guild.members.fetch(userId);
+        const member = await guild.members.fetch(userId);
         const currentDisplayName = member ? member.displayName : interaction.user.username;
 
         // Zaktualizuj statystyki użytkownika
