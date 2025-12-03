@@ -73,9 +73,10 @@ class JudgmentService {
                         value:
                             '**Moce:**\n' +
                             '• 🙏 Nieograniczone błogosławieństwa `/blessing`\n' +
+                            '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
                             '• 💀 Klątwy `/curse` (20% szans na niepowodzenie, 1% na odbicie na siebie)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n' +
-                            '• ✨ Specjalna moc: 1% szansa przy błogosławieństwie na nałożenie klątwy na Lucyfera\n\n' +
+                            '• ⚡ Specjalna moc: 1% szansa przy błogosławieństwie na nałożenie klątwy na Lucyfera\n\n' +
                             '**Ścieżka łaski i światła.**',
                         inline: false
                     },
