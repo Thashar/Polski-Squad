@@ -41,7 +41,7 @@ class JudgmentService {
                 return;
             }
 
-            // Sprawdź czy embed już istnieje
+            // Sprawdź czy embed już istnieje - jeśli tak, usuń go i stwórz nowy
             const messages = await judgmentChannel.messages.fetch({ limit: 10 });
             const existingEmbed = messages.find(msg =>
                 msg.author.id === this.client.user.id &&
@@ -50,10 +50,12 @@ class JudgmentService {
             );
 
             if (existingEmbed) {
-                this.judgmentMessage = existingEmbed;
-                this.judgmentMessageId = existingEmbed.id;
-                logger.info('✅ Znaleziono istniejący embed Sądu Bożego');
-                return;
+                try {
+                    await existingEmbed.delete();
+                    logger.info('🗑️ Usunięto stary embed Sądu Bożego');
+                } catch (error) {
+                    logger.warn(`⚠️ Nie udało się usunąć starego embeda: ${error.message}`);
+                }
             }
 
             // Utwórz nowy embed
@@ -286,6 +288,46 @@ class JudgmentService {
                     .setFooter({ text: 'Konklawe - Sąd Boży' });
 
                 await gameChannel.send({ embeds: [announcement] });
+            }
+
+            // Wyczyść kanał Sądu Bożego, ale zostaw główny embed
+            try {
+                const judgmentChannel = await this.client.channels.fetch(this.config.channels.judgment);
+                if (judgmentChannel && judgmentChannel.isTextBased()) {
+                    const messages = await judgmentChannel.messages.fetch({ limit: 100 });
+
+                    // Usuń wszystkie wiadomości OPRÓCZ głównego embeda Sądu Bożego
+                    const messagesToDelete = messages.filter(msg =>
+                        msg.id !== this.judgmentMessageId
+                    );
+
+                    if (messagesToDelete.size > 0) {
+                        // Bulk delete dla wiadomości młodszych niż 14 dni
+                        const recentMessages = messagesToDelete.filter(msg =>
+                            Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+                        );
+
+                        if (recentMessages.size > 0) {
+                            await judgmentChannel.bulkDelete(recentMessages, true);
+                            logger.info(`🧹 Wyczyszczono ${recentMessages.size} wiadomości z kanału Sądu Bożego`);
+                        }
+
+                        // Usuń starsze wiadomości pojedynczo
+                        const oldMessages = messagesToDelete.filter(msg =>
+                            Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000
+                        );
+
+                        for (const [, msg] of oldMessages) {
+                            try {
+                                await msg.delete();
+                            } catch (err) {
+                                logger.warn(`⚠️ Nie udało się usunąć starej wiadomości: ${err.message}`);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                logger.warn(`⚠️ Błąd podczas czyszczenia kanału Sądu Bożego: ${error.message}`);
             }
 
             logger.info(
