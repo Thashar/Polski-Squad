@@ -1091,6 +1091,25 @@ async function handleButton(interaction, sharedState) {
             // Zapisz użycie /remind przez klan (dla limitów czasowych)
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
 
+            // Utwórz tracking status potwierdzeń
+            const members = foundUsers
+                .filter(userData => userData.user && userData.user.member)
+                .map(userData => userData.user.member);
+
+            if (members.length > 0) {
+                try {
+                    await sharedState.reminderStatusTrackingService.createOrUpdateTracking(
+                        interaction.guild,
+                        session.userClanRoleId,
+                        members,
+                        sharedState.reminderUsageService
+                    );
+                    logger.info(`[REMIND] 📊 Utworzono tracking statusów dla ${members.length} użytkowników`);
+                } catch (trackingError) {
+                    logger.error(`[REMIND] ❌ Błąd tworzenia trackingu statusów: ${trackingError.message}`);
+                }
+            }
+
             // Przekształć foundUsers do formatu oczekiwanego przez recordPingedUsers
             const pingData = foundUsers
                 .filter(userData => userData.user && userData.user.member) // Pomiń użytkowników bez member
@@ -1858,6 +1877,25 @@ async function handleButton(interaction, sharedState) {
 
                     // Zapisz użycie /remind przez klan (dla limitów czasowych)
                     await data.reminderUsageService.recordRoleUsage(data.userClanRoleId, data.originalUserId);
+
+                    // Utwórz tracking status potwierdzeń
+                    const confirmMembers = data.foundUsers
+                        .filter(userData => userData.user && userData.user.member)
+                        .map(userData => userData.user.member);
+
+                    if (confirmMembers.length > 0) {
+                        try {
+                            await data.reminderStatusTrackingService.createOrUpdateTracking(
+                                interaction.guild,
+                                data.userClanRoleId,
+                                confirmMembers,
+                                data.reminderUsageService
+                            );
+                            logger.info(`[REMIND] 📊 Utworzono tracking statusów dla ${confirmMembers.length} użytkowników`);
+                        } catch (trackingError) {
+                            logger.error(`[REMIND] ❌ Błąd tworzenia trackingu statusów: ${trackingError.message}`);
+                        }
+                    }
 
                     // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
                     await data.reminderUsageService.recordPingedUsers(data.foundUsers);
@@ -9025,6 +9063,25 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
             // Zapisz użycie /remind przez klan (dla limitów czasowych)
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
 
+            // Utwórz tracking status potwierdzeń
+            const vacationMembers = finalUsers
+                .filter(userData => userData.user && userData.user.member)
+                .map(userData => userData.user.member);
+
+            if (vacationMembers.length > 0) {
+                try {
+                    await sharedState.reminderStatusTrackingService.createOrUpdateTracking(
+                        interaction.guild,
+                        session.userClanRoleId,
+                        vacationMembers,
+                        sharedState.reminderUsageService
+                    );
+                    logger.info(`[REMIND] 📊 Utworzono tracking statusów dla ${vacationMembers.length} użytkowników`);
+                } catch (trackingError) {
+                    logger.error(`[REMIND] ❌ Błąd tworzenia trackingu statusów: ${trackingError.message}`);
+                }
+            }
+
             // Przekształć finalUsers do formatu oczekiwanego przez recordPingedUsers
             const pingData = finalUsers
                 .filter(userData => userData.user && userData.user.member)
@@ -9365,6 +9422,16 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         if (sharedState.reminderService) {
             await sharedState.reminderService.removeActiveReminderDM(userId);
             logger.info(`[CONFIRM_REMINDER] 🔕 Przestano monitorować wiadomości DM od użytkownika ${userId}`);
+        }
+
+        // Zaktualizuj status w trackingu potwierdzeń
+        if (sharedState.reminderStatusTrackingService) {
+            try {
+                await sharedState.reminderStatusTrackingService.updateUserStatus(userId, roleId);
+                logger.info(`[CONFIRM_REMINDER] 📊 Zaktualizowano status trackingu dla użytkownika ${userId}`);
+            } catch (trackingError) {
+                logger.error(`[CONFIRM_REMINDER] ❌ Błąd aktualizacji trackingu: ${trackingError.message}`);
+            }
         }
 
         // Wyślij wiadomość potwierdzenia na kanał

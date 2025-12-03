@@ -41,9 +41,10 @@ class OCRService {
     /**
      * Ustaw referencje do innych serwisów (wywoływane z index.js po inicjalizacji wszystkich serwisów)
      */
-    setServices(reminderService, punishmentService) {
+    setServices(reminderService, punishmentService, phaseService) {
         this.reminderService = reminderService;
         this.punishmentService = punishmentService;
+        this.phaseService = phaseService;
     }
 
     async initializeOCR() {
@@ -1756,21 +1757,34 @@ class OCRService {
         this.activeProcessing.delete(guildId);
         logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
 
-        // Zatrzymaj ghost pingi i wyczyść sesje remind/punish
-        if (this.reminderService && this.punishmentService) {
+        // Zatrzymaj ghost pingi i wyczyść sesje remind/punish/phase
+        // REMINDER
+        if (this.reminderService) {
             const reminderSession = this.reminderService.getSessionByUserId(userId);
-            const punishSession = this.punishmentService.getSessionByUserId(userId);
-
             if (reminderSession) {
                 stopGhostPing(reminderSession);
                 await this.reminderService.cleanupSession(reminderSession.sessionId);
                 logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /remind dla ${userId} (timeout)`);
             }
+        }
 
+        // PUNISHMENT
+        if (this.punishmentService) {
+            const punishSession = this.punishmentService.getSessionByUserId(userId);
             if (punishSession) {
                 stopGhostPing(punishSession);
                 await this.punishmentService.cleanupSession(punishSession.sessionId);
                 logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /punish dla ${userId} (timeout)`);
+            }
+        }
+
+        // PHASE (faza1/faza2)
+        if (this.phaseService) {
+            const phaseSession = this.phaseService.getSessionByUserId(userId);
+            if (phaseSession) {
+                stopGhostPing(phaseSession);
+                await this.phaseService.cleanupSession(phaseSession.sessionId);
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję phase dla ${userId} (timeout)`);
             }
         }
 

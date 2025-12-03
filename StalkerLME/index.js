@@ -10,6 +10,7 @@ const OCRService = require('./services/ocrService');
 const PunishmentService = require('./services/punishmentService');
 const ReminderService = require('./services/reminderService');
 const ReminderUsageService = require('./services/reminderUsageService');
+const ReminderStatusTrackingService = require('./services/reminderStatusTrackingService');
 const VacationService = require('./services/vacationService');
 const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
@@ -32,18 +33,20 @@ const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config);
 const reminderUsageService = new ReminderUsageService(config);
+const reminderStatusTrackingService = new ReminderStatusTrackingService(config);
 const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
-// Połącz serwisy - daj ocrService dostęp do reminderService i punishmentService
-ocrService.setServices(reminderService, punishmentService);
+// Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
+ocrService.setServices(reminderService, punishmentService, phaseService);
 
 // Obiekt zawierający wszystkie współdzielone stany
-// Ustaw globalny dostęp do klienta dla messageCleanupService
+// Ustaw globalny dostęp do klienta dla messageCleanupService i reminderStatusTrackingService
 global.stalkerLMEClient = client;
+global.stalkerClient = client; // Alias dla reminderStatusTrackingService
 
 // Dodaj serwisy do klienta dla łatwego dostępu w handlerach
 client.messageCleanupService = messageCleanupService;
@@ -57,6 +60,7 @@ const sharedState = {
     punishmentService,
     reminderService,
     reminderUsageService,
+    reminderStatusTrackingService,
     vacationService,
     survivorService,
     messageCleanupService,
