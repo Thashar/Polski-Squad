@@ -631,7 +631,13 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleWynikiClanSelect(interaction, sharedState);
     } else if (interaction.customId === 'clan_progres_select_clan') {
         const selectedClan = interaction.values[0];
-        await interaction.deferUpdate();
+        // Aktualizuj pierwsze ephemeral reply
+        await interaction.update({
+            content: '⏳ Pobieram dane progresu klanu...',
+            embeds: [],
+            components: []
+        });
+        // Wyślij publiczne wyniki
         await showClanProgress(interaction, selectedClan, sharedState);
     } else if (interaction.customId === 'wyniki_select_week') {
         await handleWynikiWeekSelect(interaction, sharedState);
@@ -8670,7 +8676,8 @@ async function handleClanProgresCommand(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply();
+    // Defer jako ephemeral - wybór klanu jest prywatny
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Utwórz select menu z klanami
@@ -8716,7 +8723,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
 
         if (allWeeks.length === 0) {
-            await interaction.editReply({
+            await interaction.followUp({
                 content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
             });
             return;
@@ -8758,9 +8765,8 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
         }
 
         if (clanProgressData.length === 0) {
-            await interaction.editReply({
-                content: `❌ Brak wyników TOP30 dla klanu **${clanName}**.`,
-                components: []
+            await interaction.followUp({
+                content: `❌ Brak wyników TOP30 dla klanu **${clanName}**.`
             });
             return;
         }
@@ -8882,13 +8888,9 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
 
         const resultsText = resultsLines.join('\n');
 
-        // Oblicz timestamp wygaśnięcia (5 minut od teraz)
-        const deleteTimestamp = Math.floor((Date.now() + 5 * 60 * 1000) / 1000);
-
         const embed = new EmbedBuilder()
             .setTitle(`📊 Progres TOP30 - ${clanName}`)
             .setDescription(
-                `⏱️ **Wygasa:** <t:${deleteTimestamp}:R>\n\n` +
                 `**Skumulowany progres/regres:**\n${cumulativeSection}` +
                 `**Historia wyników TOP30 (Faza 1):**\n${resultsText}`
             )
@@ -8896,22 +8898,16 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
             .setFooter({ text: `Klan: ${clanName} | Wyświetlono ${last54Weeks.length} tygodni (${clanProgressData.length} z danymi)` })
             .setTimestamp();
 
-        const reply = await interaction.editReply({
-            embeds: [embed],
-            components: []
+        // Wyślij publiczne wyniki
+        await interaction.followUp({
+            embeds: [embed]
         });
 
-        // Zaplanuj usunięcie wiadomości po 5 minutach
-        const { messageCleanupService } = sharedState;
-        if (messageCleanupService && reply) {
-            const deleteAt = Date.now() + 5 * 60 * 1000; // 5 minut
-            await messageCleanupService.scheduleCleanup(reply.id, interaction.channelId, deleteAt);
-            logger.info(`[CLAN-PROGRES] ⏰ Zaplanowano usunięcie wiadomości ${reply.id} za 5 minut`);
-        }
+        logger.info(`[CLAN-PROGRES] ✅ Wyświetlono progres klanu ${clanName}`);
 
     } catch (error) {
         logger.error('[CLAN-PROGRES] ❌ Błąd wyświetlania progresu klanu:', error);
-        await interaction.editReply({
+        await interaction.followUp({
             content: '❌ Wystąpił błąd podczas pobierania danych progresu klanu.'
         });
     }
