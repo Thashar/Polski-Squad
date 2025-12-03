@@ -147,6 +147,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'clan-status':
             await handleClanStatusCommand(interaction, sharedState);
             break;
+        case 'clan-progres':
+            await handleClanProgresCommand(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -626,6 +629,10 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         }
     } else if (interaction.customId === 'wyniki_select_clan') {
         await handleWynikiClanSelect(interaction, sharedState);
+    } else if (interaction.customId === 'clan_progres_select_clan') {
+        const selectedClan = interaction.values[0];
+        await interaction.deferUpdate();
+        await showClanProgress(interaction, selectedClan, sharedState);
     } else if (interaction.customId === 'wyniki_select_week') {
         await handleWynikiWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_clan|')) {
@@ -2308,6 +2315,10 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('clan-status')
             .setDescription('Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów'),
+
+        new SlashCommandBuilder()
+            .setName('clan-progres')
+            .setDescription('Wyświetla progres TOP30 dla wybranego klanu przez ostatnie tygodnie'),
 
         new SlashCommandBuilder()
             .setName('player-status')
@@ -8586,6 +8597,282 @@ async function handleClanStatusPageButton(interaction, sharedState) {
         await interaction.reply({
             content: '❌ Wystąpił błąd podczas zmiany strony.',
             flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+// Handler dla komendy /clan-progres
+async function handleClanProgresCommand(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/clan-progres` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Sprawdź czy kanał jest dozwolony
+    const allowedChannels = [
+        ...Object.values(config.warningChannels),
+        '1348200849242984478'
+    ];
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+        await interaction.reply({
+            content: `❌ Komenda \`/clan-progres\` jest dostępna tylko na określonych kanałach.`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        // Utwórz select menu z klanami
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('clan_progres_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Progres Klanu - TOP30')
+            .setDescription('**Wybierz klan**, dla którego chcesz zobaczyć progres TOP30:')
+            .setColor('#0099FF')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+        logger.error('[CLAN-PROGRES] ❌ Błąd wyświetlania progresu klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania danych progresu klanu.'
+        });
+    }
+}
+
+// Funkcja pomocnicza wyświetlająca progres TOP30 dla klanu
+async function showClanProgress(interaction, selectedClan, sharedState) {
+    const { config, databaseService } = sharedState;
+    const clanName = config.roleDisplayNames[selectedClan];
+
+    try {
+        // Pobierz wszystkie dostępne tygodnie
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.editReply({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.'
+            });
+            return;
+        }
+
+        // Filtruj tylko tygodnie dla wybranego klanu
+        const weeksForClan = allWeeks
+            .filter(week => week.clans.includes(selectedClan))
+            .sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.weekNumber - a.weekNumber;
+            })
+            .slice(0, 54); // Max 54 tygodnie
+
+        if (weeksForClan.length === 0) {
+            await interaction.editReply({
+                content: `❌ Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`/faza1\` aby rozpocząć zbieranie danych.`,
+                components: []
+            });
+            return;
+        }
+
+        // Zbierz dane TOP30 dla każdego tygodnia
+        const clanProgressData = [];
+
+        for (const week of weeksForClan) {
+            const weekData = await databaseService.getPhase1Results(
+                interaction.guild.id,
+                week.weekNumber,
+                week.year,
+                selectedClan
+            );
+
+            if (weekData && weekData.players) {
+                // Oblicz sumę TOP30
+                const sortedPlayers = [...weekData.players].sort((a, b) => b.score - a.score);
+                const top30Players = sortedPlayers.slice(0, 30);
+                const top30Sum = top30Players.reduce((sum, player) => sum + player.score, 0);
+
+                clanProgressData.push({
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    top30Sum: top30Sum,
+                    playerCount: weekData.players.length,
+                    createdAt: weekData.createdAt
+                });
+            }
+        }
+
+        if (clanProgressData.length === 0) {
+            await interaction.editReply({
+                content: `❌ Brak wyników TOP30 dla klanu **${clanName}**.`,
+                components: []
+            });
+            return;
+        }
+
+        // Oblicz progres/regres skumulowany (podobnie jak w /progres)
+        const formatDifference = (difference) => {
+            if (difference > 0) {
+                return `▲ ${difference.toLocaleString('pl-PL')}`;
+            } else if (difference < 0) {
+                return `▼ ${Math.abs(difference).toLocaleString('pl-PL')}`;
+            }
+            return '━';
+        };
+
+        // Małe liczby dla progress barów (tydzień do tygodnia)
+        const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+        const subscriptMap = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉' };
+
+        const formatSmallDifference = (difference) => {
+            if (difference > 0) {
+                const superscriptNumber = ('' + difference).split('').map(c => superscriptMap[c] || c).join('');
+                return ` ▲${superscriptNumber}`;
+            } else if (difference < 0) {
+                const subscriptNumber = ('' + Math.abs(difference)).split('').map(c => subscriptMap[c] || c).join('');
+                return ` ▼${subscriptNumber}`;
+            }
+            return '';
+        };
+
+        let cumulativeSection = '';
+
+        // Wyświetl dostępne dane nawet jeśli jest ich mniej niż idealnie
+        if (clanProgressData.length >= 2) {
+            // Miesiąc (idealnie 4 tygodnie, ale pokaż co jest dostępne)
+            if (clanProgressData.length >= 4) {
+                const diff = clanProgressData[0].top30Sum - clanProgressData[3].top30Sum;
+                cumulativeSection += `**🔹 Miesiąc (4 tyg):** ${formatDifference(diff)}\n`;
+            } else if (clanProgressData.length >= 2) {
+                const weeksCount = clanProgressData.length - 1;
+                const diff = clanProgressData[0].top30Sum - clanProgressData[weeksCount].top30Sum;
+                cumulativeSection += `**🔹 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
+            }
+
+            // Kwartał (idealnie 13 tygodni)
+            if (clanProgressData.length >= 13) {
+                const diff = clanProgressData[0].top30Sum - clanProgressData[12].top30Sum;
+                cumulativeSection += `**🔷 Kwartał (13 tyg):** ${formatDifference(diff)}\n`;
+            } else if (clanProgressData.length >= 8) {
+                const weeksCount = Math.min(12, clanProgressData.length - 1);
+                const diff = clanProgressData[0].top30Sum - clanProgressData[weeksCount].top30Sum;
+                cumulativeSection += `**🔷 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
+            }
+
+            // Pół roku (idealnie 26 tygodni)
+            if (clanProgressData.length >= 26) {
+                const diff = clanProgressData[0].top30Sum - clanProgressData[25].top30Sum;
+                cumulativeSection += `**🔶 Pół roku (26 tyg):** ${formatDifference(diff)}\n`;
+            } else if (clanProgressData.length >= 14) {
+                const weeksCount = Math.min(25, clanProgressData.length - 1);
+                const diff = clanProgressData[0].top30Sum - clanProgressData[weeksCount].top30Sum;
+                cumulativeSection += `**🔶 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
+            }
+        }
+
+        if (cumulativeSection) {
+            cumulativeSection += '\n';
+        }
+
+        // Oblicz maksymalny wynik dla progress bara (do skalowania)
+        const maxScore = Math.max(...clanProgressData.map(d => d.top30Sum));
+
+        // Stwórz mapę wyników klanu dla szybkiego dostępu
+        const clanScoreMap = new Map();
+        clanProgressData.forEach(data => {
+            const key = `${data.weekNumber}-${data.year}`;
+            clanScoreMap.set(key, data.top30Sum);
+        });
+
+        // Przygotuj tekst z wynikami - iteruj po WSZYSTKICH tygodniach
+        const barLength = 10;
+        const resultsLines = [];
+
+        for (let i = 0; i < weeksForClan.length; i++) {
+            const week = weeksForClan[i];
+            const weekKey = `${week.weekNumber}-${week.year}`;
+            const score = clanScoreMap.get(weekKey);
+            const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
+
+            // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
+            let bestScoreUpToNow = 0;
+            for (let j = i + 1; j < weeksForClan.length; j++) {
+                const pastWeek = weeksForClan[j];
+                const pastWeekKey = `${pastWeek.weekNumber}-${pastWeek.year}`;
+                const pastScore = clanScoreMap.get(pastWeekKey);
+                if (pastScore !== undefined && pastScore > bestScoreUpToNow) {
+                    bestScoreUpToNow = pastScore;
+                }
+            }
+
+            if (score !== undefined) {
+                // Klan ma dane z tego tygodnia - pokaż normalny pasek
+                const filledLength = score > 0 ? Math.max(1, Math.round((score / maxScore) * barLength)) : 0;
+                const progressBar = score > 0 ? '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength) : '░'.repeat(barLength);
+
+                // Oblicz różnicę względem najlepszego wyniku DO TEGO MOMENTU
+                let differenceText = '';
+                if (bestScoreUpToNow > 0 && score !== bestScoreUpToNow) {
+                    const difference = score - bestScoreUpToNow;
+                    differenceText = formatSmallDifference(difference);
+                }
+
+                resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
+            } else {
+                // Klan nie ma danych z tego tygodnia - pokaż pusty pasek bez wartości
+                const progressBar = '░'.repeat(barLength);
+                resultsLines.push(`${progressBar} ${weekLabel} - `);
+            }
+        }
+
+        const resultsText = resultsLines.join('\n');
+
+        const embed = new EmbedBuilder()
+            .setTitle(`📊 Progres TOP30 - ${clanName}`)
+            .setDescription(
+                `**Skumulowany progres/regres:**\n${cumulativeSection}` +
+                `**Historia wyników TOP30 (Faza 1):**\n\`\`\`\n${resultsText}\n\`\`\``
+            )
+            .setColor('#00FF00')
+            .setFooter({ text: `Klan: ${clanName} | Ostatnie ${clanProgressData.length} tygodni` })
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: []
+        });
+
+    } catch (error) {
+        logger.error('[CLAN-PROGRES] ❌ Błąd wyświetlania progresu klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania danych progresu klanu.'
         });
     }
 }
