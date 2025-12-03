@@ -791,9 +791,13 @@ class PhaseService {
             const conflictsCount = Array.from(session.aggregatedResults.values())
                 .filter(scores => new Set(scores).size > 1).length;
 
-            // Oblicz graczy z zerem - nicki, które mają przynajmniej jedną wartość 0
+            // Oblicz graczy z zerem - TYLKO gdy wszystkie wartości to 0 (brak konfliktu)
             const playersWithZero = Array.from(session.aggregatedResults.entries())
-                .filter(([nick, scores]) => scores.some(score => score === 0 || score === '0'))
+                .filter(([nick, scores]) => {
+                    const uniqueScores = [...new Set(scores)];
+                    // Zlicz tylko gdy NIE MA konfliktu i wszystkie wartości to 0
+                    return uniqueScores.length === 1 && (uniqueScores[0] === 0 || uniqueScores[0] === '0');
+                })
                 .length;
 
             const progressBar = this.createProgressBar(currentImage, totalImages, stage, session.blinkState || false);
@@ -1187,9 +1191,13 @@ class PhaseService {
         const conflictsCount = Array.from(session.aggregatedResults.values())
             .filter(scores => new Set(scores).size > 1).length;
 
-        // Oblicz graczy z zerem
+        // Oblicz graczy z zerem - TYLKO gdy wszystkie wartości to 0 (brak konfliktu)
         const playersWithZero = Array.from(session.aggregatedResults.entries())
-            .filter(([nick, scores]) => scores.some(score => score === 0 || score === '0'))
+            .filter(([nick, scores]) => {
+                const uniqueScores = [...new Set(scores)];
+                // Zlicz tylko gdy NIE MA konfliktu i wszystkie wartości to 0
+                return uniqueScores.length === 1 && (uniqueScores[0] === 0 || uniqueScores[0] === '0');
+            })
             .length;
 
         const totalImages = session.processedImages.length;
