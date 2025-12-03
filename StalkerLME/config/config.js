@@ -42,7 +42,8 @@ module.exports = {
     database: {
         punishments: './StalkerLME/data/punishments.json',
         weeklyRemoval: './StalkerLME/data/weekly_removal.json',
-        reminderConfirmations: './StalkerLME/data/reminder_confirmations.json'
+        reminderConfirmations: './StalkerLME/data/reminder_confirmations.json',
+        activeReminderDMs: './StalkerLME/data/active_reminder_dms.json'
     },
     
     // Strefa czasowa i deadline

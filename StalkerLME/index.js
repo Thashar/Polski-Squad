@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
@@ -148,6 +148,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
+
+    // ============ OBSŁUGA WIADOMOŚCI DM OD UŻYTKOWNIKÓW Z AKTYWNYMI SESJAMI PRZYPOMNIENIA ============
+    if (message.channel.type === ChannelType.DM) {
+        try {
+            const userId = message.author.id;
+
+            // Sprawdź czy użytkownik ma aktywną sesję przypomnienia
+            if (reminderService.hasActiveReminderDM(userId)) {
+                const sessionData = reminderService.getActiveReminderDM(userId);
+
+                logger.info(`[REMINDER-DM] 📩 Użytkownik ${message.author.tag} napisał na DM zamiast kliknąć przycisk`);
+
+                // Pobierz guild i kanał potwierdzenia
+                const guild = await client.guilds.fetch(sessionData.guildId);
+                const confirmationChannel = await guild.channels.fetch(sessionData.confirmationChannelId);
+
+                if (confirmationChannel) {
+                    // Przekaż wiadomość użytkownika na kanał potwierdzenia
+                    await confirmationChannel.send({
+                        content: `📩 **${message.author.tag}** napisał na DM zamiast kliknąć przycisk:\n>>> ${message.content}`
+                    });
+
+                    logger.info(`[REMINDER-DM] 📤 Przekazano wiadomość na kanał potwierdzenia`);
+                }
+
+                // Wyślij użytkownikowi odpowiedź
+                await message.reply('**Nie leć w chuja, kliknij przycisk i bij tego bossa xD**');
+
+                logger.info(`[REMINDER-DM] 💬 Wysłano odpowiedź do użytkownika`);
+            }
+        } catch (error) {
+            logger.error(`[REMINDER-DM] ❌ Błąd obsługi wiadomości DM: ${error.message}`);
+        }
+    }
 
     try {
         await vacationService.handleVacationMessage(message);

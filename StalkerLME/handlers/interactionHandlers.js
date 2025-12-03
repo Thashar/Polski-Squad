@@ -9032,11 +9032,56 @@ async function handleConfirmReminderButton(interaction, sharedState) {
     const { config } = sharedState;
 
     try {
-        // Parsuj customId: confirm_reminder_{userId}_{roleId}_{guildId}
+        // Parsuj customId - obsługa dwóch formatów:
+        // - NOWY: confirm_reminder_{userId}_{roleId}_{guildId}
+        // - STARY: confirm_reminder_{userId}_{roleId} (bez guildId - backward compatibility)
         const parts = interaction.customId.split('_');
         const userId = parts[2];
         const roleId = parts[3];
-        const guildId = parts[4];
+        const guildId = parts[4]; // Może być undefined dla starych przycisków
+
+        logger.info(`[CONFIRM_REMINDER] 📝 Parsowanie customId: userId=${userId}, roleId=${roleId}, guildId=${guildId || 'BRAK (stary format)'}`);
+
+        // Pobierz guild
+        let guild = interaction.guild; // W kanale guild jest dostępny
+
+        // Jeśli guild jest null (DM) lub nie ma guildId w customId (stary przycisk)
+        if (!guild) {
+            if (guildId) {
+                // NOWY FORMAT - mamy guildId w customId
+                logger.info(`[CONFIRM_REMINDER] 🔍 Pobieranie guild z client (DM, nowy format)`);
+                guild = await interaction.client.guilds.fetch(guildId);
+            } else {
+                // STARY FORMAT - nie ma guildId, musimy znaleźć guild przez roleId
+                logger.info(`[CONFIRM_REMINDER] 🔍 Pobieranie guild z client (DM, stary format - szukanie przez roleId)`);
+
+                // Przeszukaj wszystkie guildy bota i znajdź ten który ma daną rolę
+                for (const [id, cachedGuild] of interaction.client.guilds.cache) {
+                    try {
+                        const role = await cachedGuild.roles.fetch(roleId);
+                        if (role) {
+                            guild = cachedGuild;
+                            logger.info(`[CONFIRM_REMINDER] ✅ Znaleziono guild: ${guild.name} (${guild.id})`);
+                            break;
+                        }
+                    } catch (error) {
+                        // Rola nie istnieje w tym guildzie, próbuj dalej
+                        continue;
+                    }
+                }
+            }
+        }
+
+        if (!guild) {
+            logger.error(`[CONFIRM_REMINDER] ❌ Nie znaleziono serwera (guildId: ${guildId || 'BRAK'})`);
+            await interaction.reply({
+                content: '❌ Błąd - nie znaleziono serwera.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        logger.info(`[CONFIRM_REMINDER] 🏰 Używam guild: ${guild.name} (${guild.id})`);
 
         // Sprawdź czy użytkownik potwierdza przed deadline
         const now = new Date();
@@ -9153,19 +9198,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         // Dodaj userId do potwierdzeń w tej sesji
         confirmations.sessions[sessionKey].confirmedUsers.push(userId);
 
-        // Pobierz guild (z DM interaction.guild jest null, więc pobieramy z client)
-        const guild = interaction.guild || await interaction.client.guilds.fetch(guildId);
-
-        if (!guild) {
-            logger.error(`[CONFIRM_REMINDER] ❌ Nie znaleziono serwera o ID: ${guildId}`);
-            await interaction.reply({
-                content: '❌ Błąd - nie znaleziono serwera.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        // Pobierz aktualny nick użytkownika z serwera
+        // Pobierz aktualny nick użytkownika z serwera (guild został już pobrany wcześniej)
         const member = await guild.members.fetch(userId);
         const currentDisplayName = member ? member.displayName : interaction.user.username;
 
@@ -9192,6 +9225,12 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         // Zapisz do pliku
         await saveConfirmations(config, confirmations);
+
+        // Usuń użytkownika z aktywnych sesji DM (przestań monitorować jego wiadomości)
+        if (sharedState.reminderService) {
+            await sharedState.reminderService.removeActiveReminderDM(userId);
+            logger.info(`[CONFIRM_REMINDER] 🔕 Przestano monitorować wiadomości DM od użytkownika ${userId}`);
+        }
 
         // Wyślij wiadomość potwierdzenia na kanał
         const unixTimestamp = Math.floor(Date.now() / 1000);

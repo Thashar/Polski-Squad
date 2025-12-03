@@ -11,7 +11,11 @@ class ReminderService {
     constructor(config) {
         this.config = config;
         this.activeSessions = new Map(); // sessionId → session
+        this.activeReminderDMs = new Map(); // userId → { roleId, guildId, confirmationChannelId, sentAt }
         this.tempDir = './StalkerLME/temp';
+
+        // Załaduj aktywne sesje DM z pliku
+        this.loadActiveReminderDMs();
     }
 
     async sendReminders(guild, foundUsers) {
@@ -83,6 +87,18 @@ class ReminderService {
                                     content: dmMessage,
                                     components: [row]
                                 });
+
+                                // Dodaj użytkownika do aktywnych sesji DM (do śledzenia wiadomości)
+                                const confirmationChannelId = this.config.confirmationChannels[roleId];
+                                this.activeReminderDMs.set(member.id, {
+                                    roleId: roleId,
+                                    guildId: guild.id,
+                                    confirmationChannelId: confirmationChannelId,
+                                    sentAt: Date.now()
+                                });
+                                // Zapisz do pliku
+                                await this.saveActiveReminderDMs();
+
                                 dmsSent++;
                                 logger.info(`📨 Wysłano DM do ${member.user.tag}`);
                             } catch (dmError) {
@@ -846,6 +862,89 @@ class ReminderService {
         }
 
         return `${bar} ${percentage}%`;
+    }
+
+    // ============ ZARZĄDZANIE AKTYWNYMI SESJAMI DM ============
+
+    /**
+     * Ładuje aktywne sesje DM z pliku i usuwa wygasłe
+     */
+    async loadActiveReminderDMs() {
+        try {
+            const data = await fs.readFile(this.config.database.activeReminderDMs, 'utf8');
+            const sessions = JSON.parse(data);
+
+            // Sprawdź czy deadline nie minął - jeśli tak, wyczyść wszystkie sesje
+            if (this.isDeadlinePassed()) {
+                logger.info('[REMINDER-DM] ⏰ Deadline minął - czyszczenie wszystkich aktywnych sesji DM');
+                this.activeReminderDMs.clear();
+                await this.saveActiveReminderDMs();
+                return;
+            }
+
+            // Załaduj sesje do Map
+            let loadedCount = 0;
+            for (const [userId, sessionData] of Object.entries(sessions)) {
+                this.activeReminderDMs.set(userId, sessionData);
+                loadedCount++;
+            }
+
+            logger.info(`[REMINDER-DM] 📂 Załadowano ${loadedCount} aktywnych sesji DM z pliku`);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                // Plik nie istnieje - utwórz pusty
+                logger.info('[REMINDER-DM] 📝 Brak pliku aktywnych sesji DM - utworzono nowy');
+                await this.saveActiveReminderDMs();
+            } else {
+                logger.error('[REMINDER-DM] ❌ Błąd ładowania aktywnych sesji DM:', error);
+            }
+        }
+    }
+
+    /**
+     * Zapisuje aktywne sesje DM do pliku
+     */
+    async saveActiveReminderDMs() {
+        try {
+            const sessions = {};
+            for (const [userId, sessionData] of this.activeReminderDMs.entries()) {
+                sessions[userId] = sessionData;
+            }
+
+            await fs.writeFile(
+                this.config.database.activeReminderDMs,
+                JSON.stringify(sessions, null, 2),
+                'utf8'
+            );
+        } catch (error) {
+            logger.error('[REMINDER-DM] ❌ Błąd zapisywania aktywnych sesji DM:', error);
+        }
+    }
+
+    /**
+     * Usuwa użytkownika z aktywnych sesji DM (gdy potwierdzi przycisk)
+     */
+    async removeActiveReminderDM(userId) {
+        const removed = this.activeReminderDMs.delete(userId);
+        if (removed) {
+            logger.info(`[REMINDER-DM] 🗑️ Usunięto aktywną sesję DM dla użytkownika ${userId}`);
+            await this.saveActiveReminderDMs();
+        }
+        return removed;
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma aktywną sesję DM przypomnienia
+     */
+    hasActiveReminderDM(userId) {
+        return this.activeReminderDMs.has(userId);
+    }
+
+    /**
+     * Pobiera dane aktywnej sesji DM użytkownika
+     */
+    getActiveReminderDM(userId) {
+        return this.activeReminderDMs.get(userId);
     }
 }
 
