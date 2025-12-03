@@ -66,12 +66,12 @@ class ReminderService {
 
                         for (const member of members) {
                             try {
-                                const userMention = member.toString();
-                                const dmMessage = messages.reminderMessage(timeMessage, userMention);
+                                // W wiadomościach prywatnych nie dodajemy pingu użytkownika
+                                const dmMessage = messages.reminderMessage(timeMessage, '');
 
-                                // Utwórz przycisk "Potwierdź odbiór"
+                                // Utwórz przycisk "Potwierdź odbiór" z guildId (dla obsługi DM)
                                 const confirmButton = new ButtonBuilder()
-                                    .setCustomId(`confirm_reminder_${member.id}_${roleId}`)
+                                    .setCustomId(`confirm_reminder_${member.id}_${roleId}_${guild.id}`)
                                     .setLabel('Potwierdź odbiór')
                                     .setStyle(ButtonStyle.Danger)
                                     .setEmoji('✅');
