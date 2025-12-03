@@ -2,12 +2,13 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder
 const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const VirtuttiService = require('../services/virtuttiService');
+const JudgmentService = require('../services/judgmentService');
 const fs = require('fs').promises;
 const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -15,15 +16,17 @@ class InteractionHandler {
         this.nicknameManager = nicknameManager;
         this.passwordEmbedService = passwordEmbedService;
         this.scheduledHintsService = scheduledHintsService;
+        this.judgmentService = judgmentService;
         this.virtuttiService = new VirtuttiService(config);
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
-        
+        this.lucyferReflectedCurses = new Map(); // userId -> { endTime: timestamp, intervalId: any }
+
         // Ścieżka do pliku aktywnych klątw
         this.cursesFile = path.join(__dirname, '../data/active_curses.json');
-        
+
         // Wczytaj aktywne klątwy przy starcie
         this.loadActiveCurses();
-        
+
         // Czyszczenie starych danych co godzinę
         setInterval(() => {
             this.virtuttiService.cleanup();
@@ -37,6 +40,21 @@ class InteractionHandler {
      */
     async handleButtonInteraction(interaction) {
         const customId = interaction.customId;
+
+        // Obsługa przycisków Sądu Bożego
+        if (customId === 'judgment_angel') {
+            if (this.judgmentService) {
+                await this.judgmentService.handleAngelChoice(interaction, interaction.member);
+            }
+            return;
+        }
+
+        if (customId === 'judgment_demon') {
+            if (this.judgmentService) {
+                await this.judgmentService.handleDemonChoice(interaction, interaction.member);
+            }
+            return;
+        }
 
         // Obsługa przycisków zarządzania hasłem i podpowiedziami
         if (customId === 'password_set_new' || customId === 'password_change') {
@@ -565,39 +583,57 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendy specjalne dla Virtutti Papajlari
+     * Obsługuje komendy specjalne dla Virtutti Papajlari, Gabriel i Lucyfer
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleVirtuttiPapajlariCommand(interaction) {
-        // Sprawdź czy użytkownik ma rolę Virtutti Papajlari
-        if (!interaction.member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
+        // Sprawdź czy użytkownik ma jedną z uprzywilejowanych ról
+        const hasVirtutti = interaction.member.roles.cache.has(this.config.roles.virtuttiPapajlari);
+        const hasGabriel = interaction.member.roles.cache.has(this.config.roles.gabriel);
+        const hasLucyfer = interaction.member.roles.cache.has(this.config.roles.lucyfer);
+
+        if (!hasVirtutti && !hasGabriel && !hasLucyfer) {
             return await interaction.reply({
-                content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy medalu Virtutti Papajlari!',
+                content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy ról: Virtutti Papajlari, Gabriel lub Lucyfer!',
                 ephemeral: true
             });
         }
 
+        // Określ typ roli
+        let roleType = 'virtutti';
+        if (hasGabriel) roleType = 'gabriel';
+        if (hasLucyfer) roleType = 'lucyfer';
+
         const { commandName } = interaction;
-        
+
         if (commandName === 'blessing') {
-            await this.handleBlessingCommand(interaction);
+            await this.handleBlessingCommand(interaction, roleType);
         } else if (commandName === 'virtue-check') {
-            await this.handleVirtueCheckCommand(interaction);
+            await this.handleVirtueCheckCommand(interaction, roleType);
         } else if (commandName === 'curse') {
-            await this.handleCurseCommand(interaction);
+            await this.handleCurseCommand(interaction, roleType);
         }
     }
 
     /**
      * Obsługuje komendę /blessing
      * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} roleType - Typ roli ('virtutti', 'gabriel', 'lucyfer')
      */
-    async handleBlessingCommand(interaction) {
+    async handleBlessingCommand(interaction, roleType = 'virtutti') {
         const targetUser = interaction.options.getUser('użytkownik');
         const userId = interaction.user.id;
-        
-        // Sprawdź cooldown i limity
-        const canUse = this.virtuttiService.canUseCommand(userId, 'blessing');
+
+        // Lucyfer nie może używać blessing
+        if (roleType === 'lucyfer') {
+            return await interaction.reply({
+                content: '🔥 Lucyfer nie może błogosławić! Twoja ścieżka to klątwy, nie łaska.',
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź cooldown i limity (Gabriel ma brak limitów)
+        const canUse = this.virtuttiService.canUseCommand(userId, 'blessing', roleType);
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
@@ -605,24 +641,27 @@ class InteractionHandler {
             });
         }
 
-        // Zarejestruj użycie
-        this.virtuttiService.registerUsage(userId, 'blessing', interaction.user.tag);
+        // Zarejestruj użycie (tylko dla Virtutti, Gabriel nie ma limitów)
+        if (roleType === 'virtutti') {
+            this.virtuttiService.registerUsage(userId, 'blessing', interaction.user.tag);
+        }
 
         // Pobierz losowe błogosławieństwo
         const blessing = this.virtuttiService.getRandomBlessing();
-        
+
         // Dodaj reakcje do oryginalnej wiadomości (jeśli to możliwe)
         const blessingReactions = ['🙏', '✨', '👑', '💫', '🕊️', '⭐', '🌟'];
         const randomReaction = blessingReactions[Math.floor(Math.random() * blessingReactions.length)];
 
         try {
             // Wyślij błogosławieństwo
+            const roleEmoji = roleType === 'gabriel' ? '☁️' : '⛪';
             await interaction.reply({
-                content: `**${targetUser.toString()} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`,
+                content: `${roleEmoji} **${targetUser.toString()} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`,
                 ephemeral: false
             });
 
-            logger.info(`🙏 ${interaction.user.tag} błogosławi ${targetUser.tag}`);
+            logger.info(`🙏 ${interaction.user.tag} (${roleType}) błogosławi ${targetUser.tag}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas wysyłania błogosławieństwa: ${error.message}`);
             await interaction.reply({
@@ -635,14 +674,15 @@ class InteractionHandler {
     /**
      * Obsługuje komendę /virtue-check
      * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} roleType - Typ roli ('virtutti', 'gabriel', 'lucyfer')
      */
-    async handleVirtueCheckCommand(interaction) {
+    async handleVirtueCheckCommand(interaction, roleType = 'virtutti') {
         const targetUser = interaction.options.getUser('użytkownik');
         const targetMember = await interaction.guild.members.fetch(targetUser.id);
         const userId = interaction.user.id;
 
         // Sprawdź cooldown i limity
-        const canUse = this.virtuttiService.canUseCommand(userId, 'virtueCheck');
+        const canUse = this.virtuttiService.canUseCommand(userId, 'virtueCheck', roleType);
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
@@ -716,19 +756,11 @@ class InteractionHandler {
     /**
      * Obsługuje komendę /curse
      * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} roleType - Typ roli ('virtutti', 'gabriel', 'lucyfer')
      */
-    async handleCurseCommand(interaction) {
+    async handleCurseCommand(interaction, roleType = 'virtutti') {
         const targetUser = interaction.options.getUser('użytkownik');
         const userId = interaction.user.id;
-        
-        // Sprawdź cooldown i limity (używamy tego samego systemu co blessing)
-        const canUse = this.virtuttiService.canUseCommand(userId, 'curse');
-        if (!canUse.canUse) {
-            return await interaction.reply({
-                content: `⏰ ${canUse.reason}`,
-                ephemeral: true
-            });
-        }
 
         // Nie można rzucić klątwy na siebie
         if (targetUser.id === interaction.user.id) {
@@ -738,61 +770,146 @@ class InteractionHandler {
             });
         }
 
-        // Sprawdź czy cel ma uprawnienia administratora - odbij klątwę!
+        // Sprawdź czy Lucyfer jest obecnie pod klątwą odbicia (blokada godzinna)
+        if (roleType === 'lucyfer') {
+            const reflectedCurse = this.lucyferReflectedCurses.get(userId);
+            if (reflectedCurse && Date.now() < reflectedCurse.endTime) {
+                const remainingMinutes = Math.ceil((reflectedCurse.endTime - Date.now()) / (60 * 1000));
+                return await interaction.reply({
+                    content: `🔥 Twoja własna klątwa została odbita! Nie możesz używać /curse przez jeszcze **${remainingMinutes} minut**!`,
+                    ephemeral: true
+                });
+            }
+        }
+
         const targetMember = await interaction.guild.members.fetch(targetUser.id);
+
+        // Sprawdź cooldown i limity
+        const canUse = this.virtuttiService.canUseCommand(userId, 'curse', roleType, targetUser.id);
+        if (!canUse.canUse) {
+            return await interaction.reply({
+                content: `⏰ ${canUse.reason}`,
+                ephemeral: true
+            });
+        }
+
+        // Sprawdź czy cel ma uprawnienia administratora - odbij klątwę!
         const hasAdminPermissions = targetMember.permissions.has('Administrator');
 
         let actualTarget = targetUser;
         let actualTargetMember = targetMember;
         let isReflected = false;
+        let failedCurse = false;
+        let curseReflectedByGabriel = false;
 
-        if (hasAdminPermissions) {
-            // Klątwa zostaje odbita na osobę rzucającą!
+        // GABRIEL - 20% fail, 1% reflect
+        if (roleType === 'gabriel') {
+            const randomChance = Math.random() * 100;
+
+            // 20% szans na niepowodzenie
+            if (randomChance < 20) {
+                failedCurse = true;
+                logger.info(`☁️ Klątwa Gabriela nie powiodła się (${randomChance.toFixed(2)}% < 20%)`);
+            }
+            // 1% szans na odbicie (21% total, bo 20% fail + 1% reflect)
+            else if (randomChance >= 20 && randomChance < 21) {
+                curseReflectedByGabriel = true;
+                actualTarget = interaction.user;
+                actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
+                logger.info(`☁️ Klątwa Gabriela została odbita! (${randomChance.toFixed(2)}% >= 20% && < 21%)`);
+            }
+        }
+
+        // LUCYFER - progresywne odbicie
+        if (roleType === 'lucyfer' && !hasAdminPermissions) {
+            const reflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
+            const randomChance = Math.random() * 100;
+
+            if (randomChance < reflectionChance) {
+                // Klątwa odbita! Lucyfer dostaje godzinną karę
+                isReflected = true;
+                actualTarget = interaction.user;
+                actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
+                logger.info(`🔥 Klątwa Lucyfera została odbita! (${randomChance.toFixed(2)}% < ${reflectionChance}%)`);
+
+                // Rozpocznij godzinną karę co 5 min losowa klątwa (12 total)
+                await this.startLucyferReflectionPunishment(userId, interaction.guild);
+            }
+        }
+
+        // Admin - standardowe odbicie
+        if (hasAdminPermissions && !curseReflectedByGabriel) {
             actualTarget = interaction.user;
             actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
             isReflected = true;
-            logger.info(`🛡️ Klątwa odbita! ${targetUser.tag} (administrator) odbija klątwę na ${interaction.user.tag}`);
+            logger.info(`🛡️ Klątwa odbita przez admina! ${targetUser.tag} odbija klątwę na ${interaction.user.tag}`);
         }
 
         // Zarejestruj użycie
-        this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
+        if (roleType === 'virtutti' || roleType === 'gabriel') {
+            this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
+        } else if (roleType === 'lucyfer' && !isReflected) {
+            // Lucyfer rejestruje tylko jeśli nie została odbita
+            this.virtuttiService.registerLucyferCurse(userId, targetUser.id);
+        }
+
+        // Jeśli Gabriel failnął, wyślij komunikat i zakończ
+        if (failedCurse) {
+            const failMessages = [
+                `☁️ **O nie!** Klątwa nie powiodła się! Moc Gabriela nie była wystarczająca...`,
+                `☁️ **Ups!** Klątwa rozwiała się w powietrzu! Spróbuj ponownie za ${this.config.virtuttiPapajlari.cooldownMinutes} minut.`,
+                `☁️ **Nieudane!** Nawet święci anieli mają swoje dni... Klątwa nie zadziałała!`,
+                `☁️ **Fiasko!** Łaska zablokowała klątwę! Może następnym razem się uda.`
+            ];
+            const randomFailMessage = failMessages[Math.floor(Math.random() * failMessages.length)];
+
+            return await interaction.reply({
+                content: randomFailMessage,
+                ephemeral: false
+            });
+        }
 
         // Pobierz losową klątwę
         const curse = this.virtuttiService.getRandomCurse();
 
         try {
-            // POPRAWKA: Najpierw defer, żeby zabezpieczyć interakcję
+            // Defer reply
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.deferReply({ ephemeral: false });
             }
 
             let nicknameError = null;
 
-            // Aplikuj klątwę na nick przy użyciu centralnego systemu
+            // Aplikuj klątwę na nick
             try {
                 await this.applyNicknameCurse(actualTargetMember, interaction, curse.duration);
                 logger.info(`😈 Aplikowano klątwę na nick ${actualTarget.tag}: "${this.config.virtuttiPapajlari.forcedNickname} ${actualTargetMember.displayName}"`);
             } catch (error) {
-                // Jeśli klątwa na nick nie może być aplikowana, kontynuuj z pozostałymi efektami
                 logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
                 nicknameError = error.message;
             }
 
-            // Wyślij klątwę
-            const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
-            const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
-
             // Wykonaj dodatkową klątwę
             await this.executeCurse(interaction, actualTargetMember, curse.additional);
 
-            // POPRAWKA: Użyj editReply zamiast reply po defer
+            // Przygotuj komunikat
+            const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
+            const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+
             let responseContent;
-            if (isReflected) {
-                // Komunikat o odbiciu klątwy
-                responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
-                    `💀 **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}`;
+            const roleEmoji = roleType === 'gabriel' ? '☁️' : (roleType === 'lucyfer' ? '🔥' : '💀');
+
+            if (curseReflectedByGabriel) {
+                responseContent = `${roleEmoji} **Klątwa została odbita!** Gabriel dostaje własną klątwę na 5 minut! ${randomReaction}`;
+            } else if (isReflected) {
+                if (roleType === 'lucyfer') {
+                    responseContent = `🔥 **O nie! Klątwa została odbita!** Lucyfer zostaje przeklęty na **1 godzinę**! Co 5 minut dostaniesz losową klątwę! ${randomReaction}`;
+                } else {
+                    responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
+                        `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}`;
+                }
             } else {
-                responseContent = `💀 **${actualTarget.toString()} zostałeś przeklęty!** ${randomReaction}`;
+                responseContent = `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty!** ${randomReaction}`;
             }
 
             if (nicknameError) {
@@ -803,16 +920,25 @@ class InteractionHandler {
                 content: responseContent
             });
 
-            // Wyślij ephemeral message z informacją o pozostałych użyciach
-            const dailyUsage = this.virtuttiService.dailyUsage.get(userId);
-            const remainingUses = this.config.virtuttiPapajlari.dailyLimit - (dailyUsage?.curse || 0);
+            // Wyślij ephemeral message z informacją o pozostałych użyciach (tylko dla Virtutti/Gabriel)
+            if (roleType !== 'lucyfer') {
+                const dailyUsage = this.virtuttiService.dailyUsage.get(userId);
+                const remainingUses = this.config.virtuttiPapajlari.dailyLimit - (dailyUsage?.curse || 0);
 
-            await interaction.followUp({
-                content: `📊 Pozostałe klątwy dzisiaj: **${remainingUses}/${this.config.virtuttiPapajlari.dailyLimit}**`,
-                ephemeral: true
-            });
+                await interaction.followUp({
+                    content: `📊 Pozostałe klątwy dzisiaj: **${remainingUses}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+                    ephemeral: true
+                });
+            } else {
+                // Lucyfer - pokaż szansę na odbicie
+                const reflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
+                await interaction.followUp({
+                    content: `🔥 Aktualna szansa na odbicie: **${reflectionChance}%** (resetuje się o północy)`,
+                    ephemeral: true
+                });
+            }
 
-            logger.info(`💀 ${interaction.user.tag} przeklął ${actualTarget.tag}${isReflected ? ' (odbita klątwa)' : ''}`);
+            logger.info(`💀 ${interaction.user.tag} (${roleType}) przeklął ${actualTarget.tag}${isReflected ? ' (odbita klątwa)' : ''}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas rzucania klątwy: ${error.message}`);
 
@@ -827,6 +953,50 @@ class InteractionHandler {
                 });
             }
         }
+    }
+
+    /**
+     * Rozpoczyna godzinną karę dla Lucyfera po odbiciu klątwy
+     * @param {string} userId - ID Lucyfera
+     * @param {Guild} guild - Serwer Discord
+     */
+    async startLucyferReflectionPunishment(userId, guild) {
+        const endTime = Date.now() + (60 * 60 * 1000); // 1 godzina
+
+        // Wyczyść poprzednią karę jeśli istnieje
+        const existingPunishment = this.lucyferReflectedCurses.get(userId);
+        if (existingPunishment && existingPunishment.intervalId) {
+            clearInterval(existingPunishment.intervalId);
+        }
+
+        // Ustaw interwał co 5 minut (12 klątw total przez godzinę)
+        const intervalId = setInterval(async () => {
+            if (Date.now() >= endTime) {
+                clearInterval(intervalId);
+                this.lucyferReflectedCurses.delete(userId);
+                logger.info(`🔥 Kara odbicia zakończona dla Lucyfera ${userId}`);
+                return;
+            }
+
+            try {
+                const member = await guild.members.fetch(userId);
+                const curse = this.virtuttiService.getRandomCurse();
+
+                // Aplikuj losową klątwę
+                await this.executeCurse({ guild, channel: member.guild.channels.cache.first() }, member, curse.additional);
+                logger.info(`🔥 Lucyfer ${userId} dostał losową klątwę odbicia: ${curse.additional}`);
+            } catch (error) {
+                logger.error(`❌ Błąd podczas aplikowania klątwy odbicia dla Lucyfera: ${error.message}`);
+            }
+        }, 5 * 60 * 1000); // Co 5 minut
+
+        // Zapisz karę
+        this.lucyferReflectedCurses.set(userId, {
+            endTime,
+            intervalId
+        });
+
+        logger.info(`🔥 Rozpoczęto godzinną karę odbicia dla Lucyfera ${userId} (12 klątw co 5 min)`);
     }
 
     /**

@@ -122,7 +122,18 @@ class MessageHandler {
 
         logger.info('🔄 Usuwanie roli papieskiej wszystkim użytkownikom...');
         await this.timerService.removeRoleFromAllMembers(guild, this.config.roles.papal);
-        await message.reply(`${this.config.messages.habemusPapam} ${this.config.emojis.jp2roll}`);
+
+        // Sprawdź czy to będzie 10. zwycięstwo (Virtutti Papajlari achievement)
+        const currentPoints = this.gameService.getPoints(userId) || 0;
+        const willGetVirtuttiPapajlari = (currentPoints + points) >= this.config.achievements.virtuttiPapajlariThreshold;
+
+        if (willGetVirtuttiPapajlari) {
+            // Użyj nowego komunikatu "VERTE PAPA MORTUUS EST!" dla 10. zwycięstwa
+            await message.reply(`${this.config.messages.papaDeadAnnouncement}`);
+        } else {
+            // Standardowy komunikat dla pozostałych zwycięstw
+            await message.reply(`${this.config.messages.habemusPapam} ${this.config.emojis.jp2roll}`);
+        }
 
         try {
             await message.member.roles.add(this.config.roles.papal);

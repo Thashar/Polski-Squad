@@ -11,6 +11,7 @@ const RankingService = require('./services/rankingService');
 const CommandService = require('./services/commandService');
 const PasswordEmbedService = require('./services/passwordEmbedService');
 const ScheduledHintsService = require('./services/scheduledHintsService');
+const JudgmentService = require('./services/judgmentService');
 
 // Import handlerów
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -32,7 +33,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService;
 let interactionHandler, messageHandler;
 
 /**
@@ -70,8 +71,11 @@ async function initializeServices() {
     // Ustaw scheduledHintsService w gameService
     gameService.setScheduledHintsService(scheduledHintsService);
 
+    // Inicjalizacja JudgmentService
+    judgmentService = new JudgmentService(config);
+
     // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService);
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService);
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService);
 
     // Inicjalizacja danych gry
@@ -125,6 +129,11 @@ async function onReady() {
             await passwordEmbedService.initializeEmbed();
             logger.info('✅ Zainicjalizowano embed statusu hasła');
         }
+
+        // Inicjalizacja embeda Sądu Bożego
+        judgmentService.setClient(client);
+        await judgmentService.initializeJudgmentEmbed();
+        logger.info('✅ Zainicjalizowano embed Sądu Bożego');
 
         // Ustawienie odpowiednich timerów
         if (gameService.trigger === null) {
