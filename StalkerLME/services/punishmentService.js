@@ -644,14 +644,21 @@ class PunishmentService {
 
         // Inicjalizuj stan migania
         session.blinkState = false;
+        session.isUpdatingProgress = false; // Flaga zapobiegająca nakładaniu się wywołań
 
         // Uruchom timer migania (co 1 sekundę)
         session.blinkTimer = setInterval(async () => {
+            // Pomiń jeśli poprzednie wywołanie się jeszcze nie zakończyło
+            if (session.isUpdatingProgress) {
+                return;
+            }
+
             session.blinkState = !session.blinkState;
 
             // Aktualizuj embed jeśli jest w trakcie przetwarzania
             if (session.publicInteraction && session.currentProcessingData) {
                 try {
+                    session.isUpdatingProgress = true;
                     const { imageIndex, totalImages } = session.currentProcessingData;
                     const progressBar = this.createProgressBar(imageIndex, totalImages, 'processing', session.blinkState);
 
@@ -682,6 +689,8 @@ class PunishmentService {
                     });
                 } catch (error) {
                     logger.error('[PUNISH] ❌ Błąd aktualizacji migania:', error.message);
+                } finally {
+                    session.isUpdatingProgress = false;
                 }
             }
         }, 1000);
@@ -841,6 +850,16 @@ class PunishmentService {
             clearInterval(session.blinkTimer);
             session.blinkTimer = null;
             logger.info('[PUNISH] ⏹️ Zatrzymano timer migania');
+        }
+
+        // Poczekaj na zakończenie ostatniego wywołania updateProgress (race condition fix)
+        let waitCount = 0;
+        while (session.isUpdatingProgress && waitCount < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms
+            waitCount++;
+        }
+        if (waitCount > 0) {
+            logger.info(`[PUNISH] ✅ Zakończono oczekiwanie na ostatnią aktualizację progress (${waitCount * 100}ms)`);
         }
 
         // Wyczyść aktualnie przetwarzane dane
