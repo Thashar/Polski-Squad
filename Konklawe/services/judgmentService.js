@@ -41,7 +41,7 @@ class JudgmentService {
                 return;
             }
 
-            // Sprawdź czy embed już istnieje
+            // Sprawdź czy embed już istnieje - jeśli tak, usuń go i stwórz nowy
             const messages = await judgmentChannel.messages.fetch({ limit: 10 });
             const existingEmbed = messages.find(msg =>
                 msg.author.id === this.client.user.id &&
@@ -50,10 +50,12 @@ class JudgmentService {
             );
 
             if (existingEmbed) {
-                this.judgmentMessage = existingEmbed;
-                this.judgmentMessageId = existingEmbed.id;
-                logger.info('✅ Znaleziono istniejący embed Sądu Bożego');
-                return;
+                try {
+                    await existingEmbed.delete();
+                    logger.info('🗑️ Usunięto stary embed Sądu Bożego');
+                } catch (error) {
+                    logger.warn(`⚠️ Nie udało się usunąć starego embeda: ${error.message}`);
+                }
             }
 
             // Utwórz nowy embed
