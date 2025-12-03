@@ -100,9 +100,6 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'remind':
             await handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService);
             break;
-        case 'dm':
-            await handleDmCommand(interaction, config);
-            break;
         case 'punishment':
             await handlePunishmentCommand(interaction, config, databaseService, punishmentService);
             break;
@@ -345,153 +342,6 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
 
         await interaction.editReply({ content: messages.errors.ocrError });
     }
-}
-
-async function handleDmCommand(interaction, config) {
-    try {
-        // Sprawdź uprawnienia moderatora
-        const hasPermission = config.allowedPunishRoles.some(roleId =>
-            interaction.member.roles.cache.has(roleId)
-        );
-
-        if (!hasPermission) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagana rola: **Moderator**',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-
-        // Znajdź rolę klanu użytkownika
-        let userClanRoleId = null;
-        for (const [roleKey, roleId] of Object.entries(config.targetRoles)) {
-            if (interaction.member.roles.cache.has(roleId)) {
-                userClanRoleId = roleId;
-                break;
-            }
-        }
-
-        if (!userClanRoleId) {
-            await interaction.editReply({
-                content: '❌ Nie masz żadnej z ról klanowych. Musisz mieć rolę klanu aby przetestować przypomnienie.'
-            });
-            return;
-        }
-
-        // Znajdź nazwę klanu
-        let clanName = 'nieznany';
-        for (const [key, id] of Object.entries(config.targetRoles)) {
-            if (id === userClanRoleId) {
-                clanName = config.roleDisplayNames[key] || key;
-                break;
-            }
-        }
-
-        // Przygotuj wiadomość przypomnienia (BEZ PINGU)
-        const timeUntilDeadline = calculateTimeUntilDeadline(config);
-        const timeMessage = messages.formatTimeMessage(timeUntilDeadline);
-        const dmMessage = `# <a:X_Uwaga:1297531538186965003> PRZYPOMNIENIE O BOSSIE (TEST) <a:X_Uwaga:1297531538186965003>\n${timeMessage}\n\n**To jest testowe przypomnienie z przyciskom potwierdzenia.**`;
-
-        // Wczytaj potwierdzenia i utwórz sesję
-        const confirmations = await loadConfirmations(config);
-        const sessionKey = createSessionKey(userClanRoleId);
-        const now = new Date().toISOString();
-
-        // Utwórz sesję dla potwierdzenia (żeby działała po restarcie bota)
-        if (!confirmations.sessions[sessionKey]) {
-            confirmations.sessions[sessionKey] = {
-                createdAt: now,
-                confirmedUsers: [],
-                isTestSession: true // oznacz jako sesję testową
-            };
-        }
-
-        // Usuń userId z listy potwierdzeń (jeśli tam jest) - dla wielokrotnego testowania
-        if (confirmations.sessions[sessionKey].confirmedUsers) {
-            const userIndex = confirmations.sessions[sessionKey].confirmedUsers.indexOf(interaction.user.id);
-            if (userIndex > -1) {
-                confirmations.sessions[sessionKey].confirmedUsers.splice(userIndex, 1);
-                logger.info(`[DM-TEST] 🗑️ Usunięto poprzednie potwierdzenie użytkownika ${interaction.user.tag} z sesji ${sessionKey}`);
-            }
-        }
-
-        // Zapisz sesję do pliku
-        await saveConfirmations(config, confirmations);
-        logger.info(`[DM-TEST] 📝 Utworzono sesję potwierdzenia: ${sessionKey}`);
-
-        // Utwórz przycisk "Potwierdź odbiór" z guildId (dla obsługi DM)
-        const confirmButton = new ButtonBuilder()
-            .setCustomId(`confirm_reminder_${interaction.user.id}_${userClanRoleId}_${interaction.guild.id}`)
-            .setLabel('Potwierdź odbiór')
-            .setStyle(ButtonStyle.Danger)
-            .setEmoji('✅');
-
-        const row = new ActionRowBuilder()
-            .addComponents(confirmButton);
-
-        // Wyślij DM
-        try {
-            await interaction.user.send({
-                content: dmMessage,
-                components: [row]
-            });
-
-            await interaction.editReply({
-                content: `✅ Wysłano testowe przypomnienie na Twoją skrzynkę prywatną!\n\n**Klan:** ${clanName}\n**Sesja:** \`${sessionKey}\`\n**Uwaga:** Kliknięcie "Potwierdź odbiór" zostanie zapisane normalnie.`
-            });
-
-            logger.info(`[DM-TEST] ✅ ${interaction.user.tag} wysłał sobie testowe przypomnienie (klan: ${clanName}, sesja: ${sessionKey})`);
-
-        } catch (dmError) {
-            await interaction.editReply({
-                content: '❌ Nie udało się wysłać wiadomości prywatnej. Sprawdź czy masz włączone DM od członków serwera.'
-            });
-            logger.warn(`[DM-TEST] ⚠️ Nie udało się wysłać DM do ${interaction.user.tag}: ${dmError.message}`);
-        }
-
-    } catch (error) {
-        logger.error('[DM-TEST] ❌ Błąd komendy /dm:', error);
-        try {
-            if (interaction.replied || interaction.deferred) {
-                await interaction.editReply({
-                    content: '❌ Wystąpił błąd podczas wysyłania testowego przypomnienia.'
-                });
-            } else {
-                await interaction.reply({
-                    content: '❌ Wystąpił błąd podczas wysyłania testowego przypomnienia.',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
-        } catch (replyError) {
-            logger.error('[DM-TEST] ❌ Nie udało się wysłać odpowiedzi:', replyError);
-        }
-    }
-}
-
-// Helper function dla /dm
-function calculateTimeUntilDeadline(config) {
-    const now = new Date();
-    const polandTime = new Date(now.toLocaleString('en-US', { timeZone: config.timezone }));
-
-    const deadline = new Date(polandTime);
-    deadline.setHours(config.bossDeadline.hour, config.bossDeadline.minute, 0, 0);
-
-    if (polandTime >= deadline) {
-        deadline.setDate(deadline.getDate() + 1);
-    }
-
-    const timeDiff = deadline - polandTime;
-    const totalMinutes = Math.floor(timeDiff / (1000 * 60));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-
-    return {
-        totalMinutes: totalMinutes,
-        hours: hours,
-        minutes: minutes
-    };
 }
 
 async function handlePunishmentCommand(interaction, config, databaseService, punishmentService) {
@@ -2347,10 +2197,6 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('remind')
             .setDescription('Wyślij przypomnienie o bossie dla graczy z wynikiem 0 (wrzuć screeny po uruchomieniu)'),
-
-        new SlashCommandBuilder()
-            .setName('dm')
-            .setDescription('Test przypomnienia - wysyła wiadomość prywatną z przyciskiem potwierdzenia (tylko admin)'),
 
         new SlashCommandBuilder()
             .setName('punishment')
