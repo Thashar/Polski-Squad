@@ -756,6 +756,16 @@ class PhaseService {
             logger.info('[PHASE] ⏹️ Zatrzymano timer migania');
         }
 
+        // Poczekaj na zakończenie ostatniego wywołania updateProgress (race condition fix)
+        let waitCount = 0;
+        while (session.isUpdatingProgress && waitCount < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms
+            waitCount++;
+        }
+        if (waitCount > 0) {
+            logger.info(`[PHASE] ✅ Zakończono oczekiwanie na ostatnią aktualizację progress (${waitCount * 100}ms)`);
+        }
+
         // Wyczyść aktualnie przetwarzane zdjęcie
         session.currentProcessingImage = null;
 

@@ -8684,27 +8684,18 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
             return;
         }
 
-        // Filtruj tylko tygodnie dla wybranego klanu
-        const weeksForClan = allWeeks
-            .filter(week => week.clans.includes(selectedClan))
+        // Pobierz ostatnie 54 tygodnie (wszystkie, nie tylko dla klanu)
+        const last54Weeks = allWeeks
             .sort((a, b) => {
                 if (a.year !== b.year) return b.year - a.year;
                 return b.weekNumber - a.weekNumber;
             })
             .slice(0, 54); // Max 54 tygodnie
 
-        if (weeksForClan.length === 0) {
-            await interaction.editReply({
-                content: `❌ Brak zapisanych wyników dla klanu **${clanName}**.\n\nUżyj \`/faza1\` aby rozpocząć zbieranie danych.`,
-                components: []
-            });
-            return;
-        }
-
-        // Zbierz dane TOP30 dla każdego tygodnia
+        // Zbierz dane TOP30 dla każdego tygodnia (tylko dla wybranego klanu)
         const clanProgressData = [];
 
-        for (const week of weeksForClan) {
+        for (const week of last54Weeks) {
             const weekData = await databaseService.getPhase1Results(
                 interaction.guild.id,
                 week.weekNumber,
@@ -8814,16 +8805,16 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
         const barLength = 10;
         const resultsLines = [];
 
-        for (let i = 0; i < weeksForClan.length; i++) {
-            const week = weeksForClan[i];
+        for (let i = 0; i < last54Weeks.length; i++) {
+            const week = last54Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = clanScoreMap.get(weekKey);
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
             // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
             let bestScoreUpToNow = 0;
-            for (let j = i + 1; j < weeksForClan.length; j++) {
-                const pastWeek = weeksForClan[j];
+            for (let j = i + 1; j < last54Weeks.length; j++) {
+                const pastWeek = last54Weeks[j];
                 const pastWeekKey = `${pastWeek.weekNumber}-${pastWeek.year}`;
                 const pastScore = clanScoreMap.get(pastWeekKey);
                 if (pastScore !== undefined && pastScore > bestScoreUpToNow) {
@@ -8853,20 +8844,32 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
 
         const resultsText = resultsLines.join('\n');
 
+        // Oblicz timestamp wygaśnięcia (5 minut od teraz)
+        const deleteTimestamp = Math.floor((Date.now() + 5 * 60 * 1000) / 1000);
+
         const embed = new EmbedBuilder()
             .setTitle(`📊 Progres TOP30 - ${clanName}`)
             .setDescription(
+                `⏱️ **Wygasa:** <t:${deleteTimestamp}:R>\n\n` +
                 `**Skumulowany progres/regres:**\n${cumulativeSection}` +
                 `**Historia wyników TOP30 (Faza 1):**\n${resultsText}`
             )
             .setColor('#00FF00')
-            .setFooter({ text: `Klan: ${clanName} | Ostatnie ${clanProgressData.length} tygodni` })
+            .setFooter({ text: `Klan: ${clanName} | Wyświetlono ${last54Weeks.length} tygodni (${clanProgressData.length} z danymi)` })
             .setTimestamp();
 
-        await interaction.editReply({
+        const reply = await interaction.editReply({
             embeds: [embed],
             components: []
         });
+
+        // Zaplanuj usunięcie wiadomości po 5 minutach
+        const { messageCleanupService } = sharedState;
+        if (messageCleanupService && reply) {
+            const deleteAt = Date.now() + 5 * 60 * 1000; // 5 minut
+            await messageCleanupService.scheduleCleanup(reply.id, interaction.channelId, deleteAt);
+            logger.info(`[CLAN-PROGRES] ⏰ Zaplanowano usunięcie wiadomości ${reply.id} za 5 minut`);
+        }
 
     } catch (error) {
         logger.error('[CLAN-PROGRES] ❌ Błąd wyświetlania progresu klanu:', error);
