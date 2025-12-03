@@ -25,6 +25,49 @@ class MessageHandler {
                 await interactionHandler.handleCurseEffects(message);
             }
 
+            // === GABRIEL DEBUFF NA LUCYFERA - 10% szansa na klątwę po fazie początkowej ===
+            if (interactionHandler && interactionHandler.virtuttiService && message.member) {
+                // Sprawdź czy użytkownik ma rolę Lucyfer
+                const hasLucyferRole = message.member.roles.cache.has(this.config.roles.lucyfer);
+
+                if (hasLucyferRole) {
+                    const debuffData = interactionHandler.virtuttiService.hasGabrielDebuff(message.author.id);
+
+                    // Jeśli ma debuff i przeszło 5 minut (po fazie początkowej)
+                    if (debuffData && Date.now() > debuffData.initialCurseEndTime) {
+                        const randomChance = Math.random() * 100;
+
+                        if (randomChance < 10) {
+                            // 10% szansa na nową losową klątwę
+                            const curses = [
+                                'slow_mode',
+                                'auto_delete',
+                                'random_ping',
+                                'emoji_spam',
+                                'forced_caps',
+                                'random_timeout',
+                                'special_role'
+                            ];
+                            const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+
+                            try {
+                                // Nałóż klątwę (5 minut)
+                                await interactionHandler.applyCurse(
+                                    message.member,
+                                    randomCurse,
+                                    message.guild,
+                                    Date.now() + (5 * 60 * 1000)
+                                );
+
+                                logger.info(`⚡ Gabriel debuff wywołał klątwę na Lucyfera ${message.author.tag} (10% szansa)`);
+                            } catch (error) {
+                                logger.error(`❌ Błąd nakładania klątwy przez Gabriel debuff: ${error.message}`);
+                            }
+                        }
+                    }
+                }
+            }
+
             // Losowa odpowiedź dla użytkowników z rolą Virtutti Papajlari
             if (message.member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
                 const randomChance = Math.floor(Math.random() * this.config.randomResponse.virtuttiPapajlariChance) + 1;

@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -61,11 +61,36 @@ class JudgmentService {
                 .setTitle('⚖️ SĄD BOŻY')
                 .setDescription(
                     '**Papież właśnie stoi przed Sądem Bożym i musi wybrać czy chce należeć do aniołów czy demonów.**\n\n' +
-                    '☁️ **Aniołowie** - Święci pełni łaski\n' +
-                    '🔥 **Demony** - Upadłe duchy pełne potęgi\n\n' +
+                    '**Każda frakcja posiada unikalne moce i ograniczenia.**\n' +
                     '**Wybierz swoją ścieżkę mądrze...**'
                 )
                 .setColor('#FFD700')
+                .addFields(
+                    {
+                        name: '☁️ **GABRIEL - Święty Anioł**',
+                        value:
+                            '**Moce:**\n' +
+                            '• 🙏 Nieograniczone błogosławieństwa `/blessing`\n' +
+                            '• 💀 Klątwy `/curse` (20% szans na niepowodzenie, 1% na odbicie na siebie)\n' +
+                            '• 🔍 Sprawdzanie cnót `/virtue-check`\n' +
+                            '• ✨ Specjalna moc: 1% szansa przy błogosławieństwie na nałożenie klątwy na Lucyfera\n\n' +
+                            '**Ścieżka łaski i światła.**',
+                        inline: false
+                    },
+                    {
+                        name: '🔥 **LUCYFER - Upadły Anioł**',
+                        value:
+                            '**Moce:**\n' +
+                            '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
+                            '• 🔍 Sprawdzanie cnót `/virtue-check`\n' +
+                            '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie (reset o północy)\n' +
+                            '• ⚠️ Przy odbiciu: 1h kara + losowa klątwa co 5 min + blokada `/curse`\n\n' +
+                            '**Ograniczenia:**\n' +
+                            '• ⛔ BRAK błogosławieństw\n\n' +
+                            '**Ścieżka potęgi i ciemności.**',
+                        inline: false
+                    }
+                )
                 .setFooter({ text: 'Konklawe - Sąd Boży' })
                 .setTimestamp();
 
@@ -111,18 +136,26 @@ class JudgmentService {
                 });
             }
 
-            // Usuń rolę Virtutti Papajlari
-            await member.roles.remove(this.config.roles.virtuttiPapajlari);
+            // Pokaż user select do wyboru osoby która dostanie rolę Lucyfer
+            const userSelect = new UserSelectMenuBuilder()
+                .setCustomId('judgment_angel_select')
+                .setPlaceholder('Wybierz osobę która otrzyma rolę Lucyfer')
+                .setMinValues(1)
+                .setMaxValues(1);
 
-            // Nadaj rolę Gabriel
-            await member.roles.add(this.config.roles.gabriel);
+            const row = new ActionRowBuilder().addComponents(userSelect);
 
             await interaction.reply({
-                content: `☁️ **${member.displayName}** wybrał ścieżkę aniołów! Otrzymujesz rolę **Gabriel** - święty anioł pełen łaski i błogosławieństw! 🙏`,
-                ephemeral: false
+                content:
+                    '☁️ **Wybrałeś ścieżkę aniołów - otrzymasz rolę Gabriel!**\n\n' +
+                    '⚖️ **Jednak równowaga wymaga ofiary...**\n\n' +
+                    '🔥 **Wybierz jedną osobę z serwera, która otrzyma rolę Lucyfer** (przeciwna frakcja).\n' +
+                    'Ta osoba nie będzie miała wyboru - los został przesądzony przez twój wybór.',
+                ephemeral: true,
+                components: [row]
             });
 
-            logger.info(`☁️ ${member.user.tag} wybrał ścieżkę aniołów (Gabriel)`);
+            logger.info(`☁️ ${member.user.tag} rozpoczął wybór frakcji anioła`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas obsługi wyboru anioła: ${error.message}`);
@@ -148,23 +181,122 @@ class JudgmentService {
                 });
             }
 
-            // Usuń rolę Virtutti Papajlari
-            await member.roles.remove(this.config.roles.virtuttiPapajlari);
+            // Pokaż user select do wyboru osoby która dostanie rolę Gabriel
+            const userSelect = new UserSelectMenuBuilder()
+                .setCustomId('judgment_demon_select')
+                .setPlaceholder('Wybierz osobę która otrzyma rolę Gabriel')
+                .setMinValues(1)
+                .setMaxValues(1);
 
-            // Nadaj rolę Lucyfer
-            await member.roles.add(this.config.roles.lucyfer);
+            const row = new ActionRowBuilder().addComponents(userSelect);
 
             await interaction.reply({
-                content: `🔥 **${member.displayName}** wybrał ścieżkę demonów! Otrzymujesz rolę **Lucyfer** - upadły anioł pełen potęgi i klątw! 💀`,
-                ephemeral: false
+                content:
+                    '🔥 **Wybrałeś ścieżkę demonów - otrzymasz rolę Lucyfer!**\n\n' +
+                    '⚖️ **Jednak równowaga wymaga ofiary...**\n\n' +
+                    '☁️ **Wybierz jedną osobę z serwera, która otrzyma rolę Gabriel** (przeciwna frakcja).\n' +
+                    'Ta osoba nie będzie miała wyboru - los został przesądzony przez twój wybór.',
+                ephemeral: true,
+                components: [row]
             });
 
-            logger.info(`🔥 ${member.user.tag} wybrał ścieżkę demonów (Lucyfer)`);
+            logger.info(`🔥 ${member.user.tag} rozpoczął wybór frakcji demona`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas obsługi wyboru demona: ${error.message}`);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Finalizuje wybór frakcji - nadaje role obu osobom i wysyła ogłoszenie
+     * @param {Interaction} interaction - Interakcja z user select menu
+     * @param {User} chooser - Osoba która wybiera (dostanie wybraną frakcję)
+     * @param {User} chosenUser - Wybrana osoba (dostanie przeciwną frakcję)
+     * @param {string} choiceType - Typ wyboru ('angel' lub 'demon')
+     */
+    async finalizeJudgmentChoice(interaction, chooser, chosenUser, choiceType) {
+        try {
+            const guild = interaction.guild;
+            const chooserMember = await guild.members.fetch(chooser.id);
+            const chosenMember = await guild.members.fetch(chosenUser.id);
+
+            // Sprawdź czy chooser nadal ma Virtutti Papajlari
+            if (!chooserMember.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
+                return await interaction.update({
+                    content: '⛪ Nie posiadasz już medalu Virtutti Papajlari!',
+                    components: [],
+                    ephemeral: true
+                });
+            }
+
+            let chooserRole, chosenRole, chooserRoleName, chosenRoleName;
+
+            if (choiceType === 'angel') {
+                chooserRole = this.config.roles.gabriel;
+                chosenRole = this.config.roles.lucyfer;
+                chooserRoleName = 'Gabriel';
+                chosenRoleName = 'Lucyfer';
+            } else { // demon
+                chooserRole = this.config.roles.lucyfer;
+                chosenRole = this.config.roles.gabriel;
+                chooserRoleName = 'Lucyfer';
+                chosenRoleName = 'Gabriel';
+            }
+
+            // Usuń Virtutti Papajlari od obu
+            if (chooserMember.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
+                await chooserMember.roles.remove(this.config.roles.virtuttiPapajlari);
+            }
+            if (chosenMember.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
+                await chosenMember.roles.remove(this.config.roles.virtuttiPapajlari);
+            }
+
+            // Nadaj role
+            await chooserMember.roles.add(chooserRole);
+            await chosenMember.roles.add(chosenRole);
+
+            // Wyślij potwierdzenie do wybierającego
+            await interaction.update({
+                content:
+                    `⚖️ **Sąd Boży został dokonany!**\n\n` +
+                    `✅ Otrzymałeś rolę: **${chooserRoleName}**\n` +
+                    `🎯 ${chosenUser.toString()} otrzymał rolę: **${chosenRoleName}**\n\n` +
+                    `**Los został przesądzony...**`,
+                components: [],
+                ephemeral: true
+            });
+
+            // Wyślij ogłoszenie na kanał gry
+            const gameChannel = await this.client.channels.fetch(this.config.channels.command);
+            if (gameChannel && gameChannel.isTextBased()) {
+                const announcement = new EmbedBuilder()
+                    .setTitle('⚖️ **SĄD BOŻY ZOSTAŁ DOKONANY!**')
+                    .setDescription(
+                        `**Równowaga została przywrócona. Dwie dusze zostały wybrane...**\n\n` +
+                        `☁️ **${chooserMember.displayName}** otrzymał rolę **${chooserRoleName}**!\n` +
+                        `🔥 **${chosenMember.displayName}** otrzymał rolę **${chosenRoleName}**!\n\n` +
+                        `*Niech ich moce służą zarówno światłu jak i ciemności.*`
+                    )
+                    .setColor(choiceType === 'angel' ? '#87CEEB' : '#FF4500')
+                    .setTimestamp()
+                    .setFooter({ text: 'Konklawe - Sąd Boży' });
+
+                await gameChannel.send({ embeds: [announcement] });
+            }
+
+            logger.info(
+                `⚖️ Sąd Boży: ${chooser.tag} (${chooserRoleName}) wybrał ${chosenUser.tag} (${chosenRoleName})`
+            );
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas finalizacji wyboru Sądu Bożego: ${error.message}`);
+            await interaction.update({
+                content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
+                components: [],
                 ephemeral: true
             });
         }

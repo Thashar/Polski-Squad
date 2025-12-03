@@ -14,12 +14,16 @@ class VirtuttiService {
         this.lucyferCurses = new Map(); // userId -> { date: string, cursesThrown: count, reflectionChance: number }
         this.lucyferTargetCooldowns = new Map(); // userId -> Map(targetId -> timestamp)
 
+        // Lucyfer - Gabriel debuff tracking
+        this.lucyferGabrielDebuff = new Map(); // userId -> { endTime: timestamp (24h), initialCurseEndTime: timestamp (5 min) }
+
         // Ścieżki do plików danych
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
         this.dailyUsageFile = path.join(this.dataDir, 'virtutti_daily_usage.json');
         this.lucyferCursesFile = path.join(this.dataDir, 'lucyfer_curses.json');
         this.lucyferTargetCooldownsFile = path.join(this.dataDir, 'lucyfer_target_cooldowns.json');
+        this.lucyferGabrielDebuffFile = path.join(this.dataDir, 'lucyfer_gabriel_debuff.json');
 
         // Wczytaj dane przy starcie
         this.loadData();
@@ -380,6 +384,15 @@ class VirtuttiService {
             }
         }
 
+        // Wyczyść wygasłe Gabriel debuffs na Lucyfera
+        for (const [userId, debuffData] of this.lucyferGabrielDebuff.entries()) {
+            if (now > debuffData.endTime) {
+                this.lucyferGabrielDebuff.delete(userId);
+                dataChanged = true;
+                logger.info(`🧹 Usunięto wygasły Gabriel debuff dla użytkownika ${userId}`);
+            }
+        }
+
         // Resetuj klątwy Lucyfera
         this.resetLucyferCursesDaily();
 
@@ -449,6 +462,18 @@ class VirtuttiService {
                 }
             }
 
+            // Wczytaj Gabriel debuff na Lucyfera
+            try {
+                const lucyferGabrielDebuffData = await fs.readFile(this.lucyferGabrielDebuffFile, 'utf8');
+                const parsedDebuff = JSON.parse(lucyferGabrielDebuffData);
+                this.lucyferGabrielDebuff = new Map(Object.entries(parsedDebuff));
+                logger.info(`📂 Wczytano ${this.lucyferGabrielDebuff.size} Gabriel debuff na Lucyfera`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania Gabriel debuff: ${error.message}`);
+                }
+            }
+
         } catch (error) {
             logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
         }
@@ -470,6 +495,9 @@ class VirtuttiService {
                 lucyferTargetCooldownsObj[userId] = Object.fromEntries(targets);
             }
 
+            // Konwertuj Gabriel debuff
+            const lucyferGabrielDebuffObj = Object.fromEntries(this.lucyferGabrielDebuff);
+
             // Zapisz cooldowny
             await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownsObj, null, 2));
 
@@ -479,9 +507,62 @@ class VirtuttiService {
             // Zapisz dane Lucyfera
             await fs.writeFile(this.lucyferCursesFile, JSON.stringify(lucyferCursesObj, null, 2));
             await fs.writeFile(this.lucyferTargetCooldownsFile, JSON.stringify(lucyferTargetCooldownsObj, null, 2));
+            await fs.writeFile(this.lucyferGabrielDebuffFile, JSON.stringify(lucyferGabrielDebuffObj, null, 2));
 
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);
+        }
+    }
+
+    /**
+     * Nakłada Gabriel debuff na Lucyfera
+     * @param {string} userId - ID użytkownika (Lucyfer)
+     * @returns {Object} - { initialCurseEndTime, debuffEndTime }
+     */
+    applyGabrielDebuffToLucyfer(userId) {
+        const now = Date.now();
+        const initialCurseEndTime = now + (5 * 60 * 1000); // 5 minut
+        const debuffEndTime = now + (24 * 60 * 60 * 1000); // 24 godziny
+
+        this.lucyferGabrielDebuff.set(userId, {
+            endTime: debuffEndTime,
+            initialCurseEndTime: initialCurseEndTime
+        });
+
+        logger.info(`⚡ Gabriel debuff nałożony na Lucyfera ${userId} (5 min klątwa + 24h debuff)`);
+        this.saveData();
+
+        return { initialCurseEndTime, debuffEndTime };
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma Gabriel debuff
+     * @param {string} userId - ID użytkownika
+     * @returns {Object|null} - Dane debuffu lub null
+     */
+    hasGabrielDebuff(userId) {
+        const debuffData = this.lucyferGabrielDebuff.get(userId);
+        if (!debuffData) return null;
+
+        const now = Date.now();
+        if (now > debuffData.endTime) {
+            this.lucyferGabrielDebuff.delete(userId);
+            this.saveData();
+            return null;
+        }
+
+        return debuffData;
+    }
+
+    /**
+     * Usuwa Gabriel debuff
+     * @param {string} userId - ID użytkownika
+     */
+    removeGabrielDebuff(userId) {
+        if (this.lucyferGabrielDebuff.has(userId)) {
+            this.lucyferGabrielDebuff.delete(userId);
+            logger.info(`🧹 Usunięto Gabriel debuff dla użytkownika ${userId}`);
+            this.saveData();
         }
     }
 }
