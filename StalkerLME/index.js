@@ -40,8 +40,8 @@ const messageCleanupService = new MessageCleanupService(config, logger);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
-// Połącz serwisy - daj ocrService dostęp do reminderService i punishmentService
-ocrService.setServices(reminderService, punishmentService);
+// Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
+ocrService.setServices(reminderService, punishmentService, phaseService);
 
 // Obiekt zawierający wszystkie współdzielone stany
 // Ustaw globalny dostęp do klienta dla messageCleanupService i reminderStatusTrackingService
