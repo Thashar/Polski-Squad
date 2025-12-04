@@ -80,6 +80,11 @@ class JudgmentService {
                             '**Limity klątw:**\n' +
                             '• 📊 10 klątw dziennie, cooldown 5 min\n' +
                             '• 🎯 Tylko jeden cel na raz\n\n' +
+                            '**Gabriel vs Lucyfer:**\n' +
+                            '• 33% Lucyfer urośnie w siłę (reset % odbicia)\n' +
+                            '• 33% Lucyfer odporny (nic)\n' +
+                            '• 33% Klątwa skuteczna (5 min)\n' +
+                            '• 1% Potężna klątwa (24h)\n\n' +
                             '**Ścieżka łaski i światła.**',
                         inline: false
                     },
@@ -93,6 +98,9 @@ class JudgmentService {
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ BRAK błogosławieństw\n\n' +
+                            '**Lucyfer vs Gabriel:**\n' +
+                            '• 100% odbicie klątw na siebie\n' +
+                            '• Każde odbicie +1% do progresywnego odbicia\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
                         inline: false
                     }
