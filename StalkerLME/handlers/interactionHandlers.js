@@ -9280,10 +9280,19 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         // Jeśli już po deadline dzisiaj
         if (polandTime >= deadline) {
-            await interaction.reply({
-                content: `⏰ **Za późno by potwierdzić odbiór!**\n\nPotwierdzenia można wysyłać tylko do godziny **${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}**.\n\nDeadline już minął - potwierdzenie nie zostało zapisane.`,
-                flags: MessageFlags.Ephemeral
-            });
+            // Zaktualizuj wiadomość - usuń przycisk i dodaj informację o wygaśnięciu
+            try {
+                await interaction.update({
+                    content: interaction.message.content + '\n\n⏰ **Czas na potwierdzenie minął!**',
+                    components: []
+                });
+            } catch (updateError) {
+                // Jeśli nie można zaktualizować wiadomości, wyślij odpowiedź ephemeral
+                await interaction.reply({
+                    content: `⏰ **Za późno by potwierdzić odbiór!**\n\nPotwierdzenia można wysyłać tylko do godziny **${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}**.\n\nDeadline już minął - potwierdzenie nie zostało zapisane.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
             logger.info(`⏰ ${interaction.user.tag} próbował potwierdzić po deadline (${polandTime.toLocaleTimeString('pl-PL')})`);
             return;
         }
@@ -9331,10 +9340,19 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         // Sprawdź czy użytkownik już potwierdził w tej sesji
         if (confirmations.sessions[sessionKey]?.confirmedUsers?.includes(userId)) {
-            await interaction.reply({
-                content: '✅ Już potwierdziłeś odbiór tego przypomnienia!',
-                flags: MessageFlags.Ephemeral
-            });
+            // Zaktualizuj wiadomość - usuń przycisk jeśli jeszcze istnieje
+            try {
+                await interaction.update({
+                    content: interaction.message.content + '\n\n✅ **Odbiór już został potwierdzony!**',
+                    components: []
+                });
+            } catch (updateError) {
+                // Jeśli nie można zaktualizować wiadomości, wyślij odpowiedź ephemeral
+                await interaction.reply({
+                    content: '✅ Już potwierdziłeś odbiór tego przypomnienia!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
             logger.info(`⚠️ ${interaction.user.tag} próbował potwierdzić ponownie (już potwierdził)`);
             return;
         }

@@ -120,8 +120,16 @@ client.once(Events.ClientReady, async () => {
         timezone: config.timezone
     });
 
+    // Uruchomienie zadania cron dla wyłączania przycisków potwierdzenia po deadline (codziennie o 16:51)
+    cron.schedule('51 16 * * *', async () => {
+        logger.info('⏰ Rozpoczynam wyłączanie wygasłych przycisków potwierdzenia...');
+        await reminderService.disableExpiredConfirmationButtons(client);
+    }, {
+        timezone: config.timezone
+    });
+
     // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
-    
+
 });
 
 // Obsługa interakcji

@@ -980,6 +980,84 @@ class ReminderService {
         }
         return false;
     }
+
+    /**
+     * Wyłącza przyciski potwierdzenia po wygaśnięciu deadline
+     * Wywołuje się automatycznie przez cron po deadline
+     */
+    async disableExpiredConfirmationButtons(client) {
+        try {
+            // Sprawdź czy deadline minął
+            if (!this.isDeadlinePassed()) {
+                logger.info('[REMINDER-EXPIRE] ⏰ Deadline jeszcze nie minął - pomijam');
+                return;
+            }
+
+            logger.info('[REMINDER-EXPIRE] 🔄 Rozpoczynam wyłączanie wygasłych przycisków potwierdzenia...');
+
+            let updatedCount = 0;
+            let failedCount = 0;
+
+            // Przejdź przez wszystkie aktywne sesje DM
+            for (const [userId, sessionData] of this.activeReminderDMs.entries()) {
+                try {
+                    // Pobierz użytkownika
+                    const user = await client.users.fetch(userId);
+
+                    if (!user) {
+                        logger.warn(`[REMINDER-EXPIRE] ⚠️ Nie znaleziono użytkownika ${userId}`);
+                        failedCount++;
+                        continue;
+                    }
+
+                    // Pobierz kanał DM
+                    const dmChannel = await user.createDM();
+
+                    // Znajdź ostatnią wiadomość z przyciskiem potwierdzenia
+                    // Szukamy wiadomości wysłanej około czasu sentAt
+                    const messages = await dmChannel.messages.fetch({ limit: 20 });
+
+                    let foundMessage = null;
+                    for (const message of messages.values()) {
+                        // Sprawdź czy wiadomość jest od bota i ma przyciski
+                        if (message.author.id === client.user.id &&
+                            message.components.length > 0 &&
+                            message.components[0].components.some(c => c.customId?.startsWith('confirm_reminder_'))) {
+                            foundMessage = message;
+                            break;
+                        }
+                    }
+
+                    if (foundMessage) {
+                        // Zaktualizuj wiadomość - usuń przyciski i dodaj tekst
+                        await foundMessage.edit({
+                            content: foundMessage.content + '\n\n⏰ **Czas na potwierdzenie minął!**',
+                            components: []
+                        });
+
+                        logger.info(`[REMINDER-EXPIRE] ✅ Zaktualizowano wiadomość dla użytkownika ${user.tag}`);
+                        updatedCount++;
+                    } else {
+                        logger.warn(`[REMINDER-EXPIRE] ⚠️ Nie znaleziono wiadomości z przyciskiem dla ${user.tag}`);
+                        failedCount++;
+                    }
+
+                } catch (error) {
+                    logger.error(`[REMINDER-EXPIRE] ❌ Błąd aktualizacji dla użytkownika ${userId}: ${error.message}`);
+                    failedCount++;
+                }
+            }
+
+            // Wyczyść wszystkie aktywne sesje DM po deadline
+            this.activeReminderDMs.clear();
+            await this.saveActiveReminderDMs();
+
+            logger.info(`[REMINDER-EXPIRE] ✅ Zakończono wyłączanie przycisków: ${updatedCount} zaktualizowanych, ${failedCount} błędów`);
+
+        } catch (error) {
+            logger.error('[REMINDER-EXPIRE] ❌ Błąd podczas wyłączania przycisków:', error);
+        }
+    }
 }
 
 module.exports = ReminderService;
