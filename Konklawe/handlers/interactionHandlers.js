@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const VirtuttiService = require('../services/virtuttiService');
@@ -84,7 +84,7 @@ class InteractionHandler {
         if (userId !== interaction.user.id) {
             return await interaction.reply({
                 content: 'Możesz używać tylko swoich przycisków!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -116,7 +116,7 @@ class InteractionHandler {
                 if (!interaction.replied) {
                     await interaction.reply({
                         content: 'Wystąpił błąd podczas ładowania strony.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             }
@@ -132,7 +132,7 @@ class InteractionHandler {
                 if (!interaction.replied) {
                     await interaction.reply({
                         content: 'Wystąpił błąd podczas ładowania statystyk.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             }
@@ -262,7 +262,7 @@ class InteractionHandler {
      */
     async handleStatisticsCommand(interaction) {
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         }
 
         try {
@@ -622,7 +622,7 @@ class InteractionHandler {
         if (!hasGabriel && !hasLucyfer) {
             return await interaction.reply({
                 content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy ról: Gabriel lub Lucyfer!\n\n💡 Virtutti Papajlari to medal kosmetyczny bez uprawnień do komend.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -654,7 +654,7 @@ class InteractionHandler {
         if (roleType === 'lucyfer') {
             return await interaction.reply({
                 content: '🔥 Lucyfer nie może błogosławić! Twoja ścieżka to klątwy, nie łaska.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -666,7 +666,7 @@ class InteractionHandler {
             if (hasLucyferRole) {
                 return await interaction.reply({
                     content: '☁️ Takie błogosławieństwa nie działają na demona! Ciemność odrzuca światło...',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -676,7 +676,7 @@ class InteractionHandler {
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -764,7 +764,7 @@ class InteractionHandler {
             logger.error(`❌ Błąd podczas wysyłania błogosławieństwa: ${error.message}`);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas udzielania błogosławieństwa.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -784,7 +784,7 @@ class InteractionHandler {
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -846,7 +846,7 @@ class InteractionHandler {
             logger.error(`❌ Błąd podczas sprawdzania cnót: ${error.message}`);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas sprawdzania cnót.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -864,7 +864,7 @@ class InteractionHandler {
         if (targetUser.id === interaction.user.id) {
             return await interaction.reply({
                 content: '💀 Nie możesz rzucić klątwy na samego siebie!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -881,7 +881,7 @@ class InteractionHandler {
                 const remainingMinutes = Math.ceil((reflectedCurse.endTime - Date.now()) / (60 * 1000));
                 return await interaction.reply({
                     content: `🔥 Twoja własna klątwa została odbita! Nie możesz używać /curse przez jeszcze **${remainingMinutes} minut**!`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -891,7 +891,7 @@ class InteractionHandler {
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -951,7 +951,7 @@ class InteractionHandler {
                     logger.error(`❌ Błąd podczas rzucania klątwy na Lucyfera: ${error.message}`);
                     return await interaction.reply({
                         content: '❌ Wystąpił błąd podczas przetwarzania klątwy.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             } else {
@@ -1019,7 +1019,7 @@ class InteractionHandler {
                 logger.error(`❌ Błąd podczas odbicia klątwy Lucyfera: ${error.message}`);
                 return await interaction.reply({
                     content: '❌ Wystąpił błąd podczas przetwarzania klątwy.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -1158,14 +1158,14 @@ class InteractionHandler {
 
                 await interaction.followUp({
                     content: `📊 Pozostałe klątwy dzisiaj: **${remainingUses}/${this.config.virtuttiPapajlari.dailyLimit}**`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             } else {
                 // Lucyfer - pokaż szansę na odbicie
                 const reflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
                 await interaction.followUp({
                     content: `🔥 Aktualna szansa na odbicie: **${reflectionChance}%** (resetuje się o północy)`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -1176,7 +1176,7 @@ class InteractionHandler {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: '❌ Wystąpił błąd podczas rzucania klątwy.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({
@@ -1675,7 +1675,7 @@ class InteractionHandler {
         if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
             return await interaction.reply({
                 content: '⛪ Tylko papież może ustawiać hasło!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1683,7 +1683,7 @@ class InteractionHandler {
         if (interaction.channel.id !== this.config.channels.trigger) {
             return await interaction.reply({
                 content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1716,7 +1716,7 @@ class InteractionHandler {
         if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
             return await interaction.reply({
                 content: '⛪ Tylko papież może dodawać podpowiedzi!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1724,7 +1724,7 @@ class InteractionHandler {
         if (interaction.channel.id !== this.config.channels.trigger) {
             return await interaction.reply({
                 content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1732,7 +1732,7 @@ class InteractionHandler {
         if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
             return await interaction.reply({
                 content: '⚠️ Brak aktywnego hasła do którego można dodać podpowiedź!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1784,26 +1784,26 @@ class InteractionHandler {
         if (newPassword.includes(' ')) {
             return await interaction.reply({
                 content: `${this.config.emojis.warning} Hasło nie zostało przyjęte! ${this.config.emojis.warning} Możesz ustawić tylko JEDNOWYRAZOWE hasło.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
         if (newPassword.length === 0) {
             return await interaction.reply({
                 content: '⚠️ Hasło nie może być puste!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
         if (this.gameService.trigger && newPassword.toLowerCase() === this.gameService.trigger.toLowerCase()) {
             return await interaction.reply({
                 content: '⚠️ To hasło jest już ustawione!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
         // Defer reply
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Wyczyść wszystkie timery
@@ -1852,12 +1852,12 @@ class InteractionHandler {
         if (hintText.length === 0) {
             return await interaction.reply({
                 content: '⚠️ Podpowiedź nie może być pusta!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
         // Defer reply
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Dodaj podpowiedź
@@ -1956,7 +1956,7 @@ class InteractionHandler {
         if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
             return await interaction.reply({
                 content: '⛪ Tylko papież może planować podpowiedzi!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1964,7 +1964,7 @@ class InteractionHandler {
         if (interaction.channel.id !== this.config.channels.trigger) {
             return await interaction.reply({
                 content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1972,7 +1972,7 @@ class InteractionHandler {
         if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
             return await interaction.reply({
                 content: '⚠️ Brak aktywnego hasła do którego można dodać podpowiedź!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -1982,7 +1982,7 @@ class InteractionHandler {
             if (activeScheduled.length >= 10) {
                 return await interaction.reply({
                     content: '⚠️ Osiągnięto limit 10 zaplanowanych podpowiedzi!',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -2040,12 +2040,12 @@ class InteractionHandler {
         if (!this.scheduledHintsService) {
             return await interaction.reply({
                 content: '❌ Serwis planowania podpowiedzi nie jest dostępny!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
         // Defer reply
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Parsuj datę i czas
@@ -2099,7 +2099,7 @@ class InteractionHandler {
         if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
             return await interaction.reply({
                 content: '⛪ Tylko papież może usuwać zaplanowane podpowiedzi!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -2107,14 +2107,14 @@ class InteractionHandler {
         if (interaction.channel.id !== this.config.channels.trigger) {
             return await interaction.reply({
                 content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
         if (!this.scheduledHintsService) {
             return await interaction.reply({
                 content: '❌ Serwis planowania podpowiedzi nie jest dostępny!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -2124,7 +2124,7 @@ class InteractionHandler {
         if (scheduledHints.length === 0) {
             return await interaction.reply({
                 content: '⚠️ Brak zaplanowanych podpowiedzi do usunięcia!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -2151,7 +2151,7 @@ class InteractionHandler {
         await interaction.reply({
             content: '🗑️ **Wybierz zaplanowaną podpowiedź do usunięcia:**',
             components: [row],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 
@@ -2165,7 +2165,7 @@ class InteractionHandler {
         if (!this.scheduledHintsService) {
             return await interaction.reply({
                 content: '❌ Serwis planowania podpowiedzi nie jest dostępny!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -2178,7 +2178,7 @@ class InteractionHandler {
             if (!removed) {
                 return await interaction.followUp({
                     content: '❌ Nie znaleziono podpowiedzi do usunięcia!',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 

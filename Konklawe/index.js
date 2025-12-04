@@ -186,14 +186,15 @@ async function onInteraction(interaction) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);
         
         try {
+            const { MessageFlags } = require('discord.js');
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    flags: MessageFlags.Ephemeral
                 });
             } else if (interaction.deferred) {
-                await interaction.editReply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
                 });
             }
         } catch (replyError) {

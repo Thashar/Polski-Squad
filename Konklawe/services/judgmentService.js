@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -144,7 +144,7 @@ class JudgmentService {
             if (!member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
                 return await interaction.reply({
                     content: '⛪ Tylko posiadacze medalu Virtutti Papajlari mogą stanąć przed Sądem Bożym!',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -163,7 +163,7 @@ class JudgmentService {
                     '⚖️ **Jednak równowaga wymaga ofiary...**\n\n' +
                     '🔥 **Wybierz jedną osobę z serwera, która otrzyma rolę Lucyfer** (przeciwna frakcja).\n' +
                     'Ta osoba nie będzie miała wyboru - los został przesądzony przez twój wybór.',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
                 components: [row]
             });
 
@@ -173,7 +173,7 @@ class JudgmentService {
             logger.error(`❌ Błąd podczas obsługi wyboru anioła: ${error.message}`);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -189,7 +189,7 @@ class JudgmentService {
             if (!member.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
                 return await interaction.reply({
                     content: '⛪ Tylko posiadacze medalu Virtutti Papajlari mogą stanąć przed Sądem Bożym!',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -208,7 +208,7 @@ class JudgmentService {
                     '⚖️ **Jednak równowaga wymaga ofiary...**\n\n' +
                     '☁️ **Wybierz jedną osobę z serwera, która otrzyma rolę Gabriel** (przeciwna frakcja).\n' +
                     'Ta osoba nie będzie miała wyboru - los został przesądzony przez twój wybór.',
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
                 components: [row]
             });
 
@@ -218,7 +218,7 @@ class JudgmentService {
             logger.error(`❌ Błąd podczas obsługi wyboru demona: ${error.message}`);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -241,7 +241,7 @@ class JudgmentService {
                 return await interaction.update({
                     content: '⛪ Nie posiadasz już medalu Virtutti Papajlari!',
                     components: [],
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -279,7 +279,7 @@ class JudgmentService {
                     `🎯 ${chosenUser.toString()} otrzymał rolę: **${chosenRoleName}**\n\n` +
                     `**Los został przesądzony...**`,
                 components: [],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
             // Wyślij powiadomienie do wybranej osoby
@@ -413,13 +413,13 @@ class JudgmentService {
                     await interaction.update({
                         content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
                         components: [],
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 } else {
                     // Jeśli już odpowiedziano, użyj followUp
                     await interaction.followUp({
                         content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             } catch (replyError) {
