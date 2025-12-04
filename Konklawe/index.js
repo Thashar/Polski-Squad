@@ -162,6 +162,82 @@ async function onReady() {
             }, 2000); // 2 sekundy opóźnienia aby guild i kanały były gotowe
         }
 
+        // Loguj szczegółowe statystyki Gabriela i Lucyfera
+        logger.info('═══════════════════════════════════════════════════════════════');
+        logger.info('📊 STATYSTYKI GABRIELA I LUCYFERA - SĄD BOŻY');
+        logger.info('═══════════════════════════════════════════════════════════════');
+        logger.info('');
+        logger.info('☁️  GABRIEL - ŚWIĘTY ANIOŁ');
+        logger.info('───────────────────────────────────────────────────────────────');
+        logger.info('🙏 BŁOGOSŁAWIEŃSTWA (/blessing):');
+        logger.info('   • Cooldown: 5 minut per cel');
+        logger.info('   • Brak dziennego limitu');
+        logger.info('   • 50% szans na usunięcie klątwy przy błogosławieństwie');
+        logger.info('   • 1% szans: nałożenie potężnej klątwy na Lucyfera (24h debuff)');
+        logger.info('');
+        logger.info('💀 KLĄTWY (/curse) NA ZWYKŁYCH CELACH:');
+        logger.info('   • Limit: 10 dziennie');
+        logger.info('   • Cooldown: 5 minut');
+        logger.info('   • 79% - Sukces (klątwa nałożona)');
+        logger.info('   • 20% - Fail (klątwa się nie powiodła)');
+        logger.info('   • 1% - Odbicie (klątwa wraca do Gabriela)');
+        logger.info('');
+        logger.info('⚔️  KLĄTWY NA LUCYFERA - 4 SCENARIUSZE:');
+        logger.info('   • 33% - Reset odbicia Lucyfera do 0%');
+        logger.info('   • 33% - Odporność (nic się nie dzieje)');
+        logger.info('   • 33% - Zwykła klątwa (5 minut)');
+        logger.info('   • 1% - POTĘŻNA KLĄTWA:');
+        logger.info('        - Natychmiastowa klątwa (5 min)');
+        logger.info('        - 24h debuff (10% szans co wiadomość na nową klątwę)');
+        logger.info('');
+        logger.info('🛡️  OBRONA PRZED LUCYFEREM:');
+        logger.info('   • 100% odbicie klątw Lucyfera');
+        logger.info('   • Lucyfer przeklina sam siebie');
+        logger.info('');
+        logger.info('═══════════════════════════════════════════════════════════════');
+        logger.info('');
+        logger.info('🔥 LUCYFER - UPADŁY ANIOŁ');
+        logger.info('───────────────────────────────────────────────────────────────');
+        logger.info('💀 KLĄTWY (/curse):');
+        logger.info('   • Brak dziennego limitu');
+        logger.info('   • Cooldown: 5 minut per cel');
+        logger.info('   • Może rzucać na różne osoby równocześnie');
+        logger.info('');
+        logger.info('📈 PROGRESYWNE ODBICIE:');
+        logger.info('   • Start: 0% dziennie');
+        logger.info('   • +1% za każdą rzuconą klątwę');
+        logger.info('   • Reset o północy (strefa polska)');
+        logger.info('');
+        logger.info('⚠️  KARA ZA ODBICIE:');
+        logger.info('   • Godzinna kara (60 minut)');
+        logger.info('   • Blokada /curse przez godzinę');
+        logger.info('   • 12 losowych klątw (co 5 minut)');
+        logger.info('');
+        logger.info('🛡️  ATAK NA GABRIELA:');
+        logger.info('   • 100% odbicie - klątwa wraca do Lucyfera');
+        logger.info('   • Lucyfer przeklina sam siebie (5 min)');
+        logger.info('');
+        logger.info('⚡ GABRIEL DEBUFF (24 GODZINY):');
+        logger.info('   • Nakładany przy 1% szansy przez Gabriela');
+        logger.info('   • Faza 1 (5 min): Natychmiastowa klątwa');
+        logger.info('   • Faza 2 (23h 55min): 10% szans co wiadomość na nową klątwę');
+        logger.info('   • 7 typów losowych klątw (slow_mode, auto_delete, random_ping,');
+        logger.info('     emoji_spam, forced_caps, random_timeout, special_role)');
+        logger.info('');
+        logger.info('⛔ OGRANICZENIA:');
+        logger.info('   • BRAK możliwości błogosławienia');
+        logger.info('');
+        logger.info('═══════════════════════════════════════════════════════════════');
+        logger.info('⚖️  SĄD BOŻY - WARUNKI DOSTĘPU');
+        logger.info('───────────────────────────────────────────────────────────────');
+        logger.info('   • Wymaga medalu Virtutti Papajlari (30+ punktów)');
+        logger.info('   • Wybór jednej frakcji usuwa medal');
+        logger.info('   • Wybierający → wybrana frakcja');
+        logger.info('   • Wybrana osoba → przeciwna frakcja');
+        logger.info('   • Komenda /reset-all (admin) usuwa wszystkie role specjalne');
+        logger.info('═══════════════════════════════════════════════════════════════');
+        logger.info('');
+
     } catch (error) {
         logger.error('❌ Błąd podczas uruchamiania bota:', error);
     }
