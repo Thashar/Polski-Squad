@@ -282,6 +282,27 @@ class JudgmentService {
                 ephemeral: true
             });
 
+            // Wyślij powiadomienie do wybranej osoby
+            try {
+                await chosenMember.send({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setTitle('⚖️ **ZOSTAŁEŚ WYBRANY PRZEZ SĄD BOŻY!**')
+                            .setDescription(
+                                `**${chooserMember.displayName}** stanął przed Sądem Bożym i wybrał Cię!\n\n` +
+                                `✨ **Otrzymałeś rolę: ${chosenRoleName}**\n\n` +
+                                `*Los został przesądzony. Twoja ścieżka została wyznaczona...*`
+                            )
+                            .setColor(chosenRoleName === 'Gabriel' ? '#87CEEB' : '#FF4500')
+                            .setTimestamp()
+                            .setFooter({ text: 'Konklawe - Sąd Boży' })
+                    ]
+                });
+                logger.info(`📨 Wysłano powiadomienie DM do ${chosenUser.tag} o roli ${chosenRoleName}`);
+            } catch (error) {
+                logger.warn(`⚠️ Nie udało się wysłać DM do ${chosenUser.tag}: ${error.message}`);
+            }
+
             // Wyślij ogłoszenie na kanał gry
             const gameChannel = await this.client.channels.fetch(this.config.channels.command);
             if (gameChannel && gameChannel.isTextBased()) {
@@ -291,7 +312,7 @@ class JudgmentService {
                         `**Równowaga została przywrócona. Dwie dusze zostały wybrane...**\n\n` +
                         `☁️ **${chooserMember.displayName}** otrzymał rolę **${chooserRoleName}**!\n` +
                         `🔥 **${chosenMember.displayName}** otrzymał rolę **${chosenRoleName}**!\n\n` +
-                        `*Niech ich moce służą zarówno światłu jak i ciemności.*`
+                        `⚔️ **Przygotujcie się na walkę dobra ze złem!**`
                     )
                     .setColor(choiceType === 'angel' ? '#87CEEB' : '#FF4500')
                     .setTimestamp()
