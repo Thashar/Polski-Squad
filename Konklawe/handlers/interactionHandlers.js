@@ -144,33 +144,6 @@ class InteractionHandler {
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleSelectMenuInteraction(interaction) {
-        // Obsługa user select menu dla Sądu Bożego
-        if (interaction.customId === 'judgment_angel_select') {
-            if (this.judgmentService && interaction.isUserSelectMenu()) {
-                const chosenUser = interaction.users.first();
-                await this.judgmentService.finalizeJudgmentChoice(
-                    interaction,
-                    interaction.user,
-                    chosenUser,
-                    'angel'
-                );
-            }
-            return;
-        }
-
-        if (interaction.customId === 'judgment_demon_select') {
-            if (this.judgmentService && interaction.isUserSelectMenu()) {
-                const chosenUser = interaction.users.first();
-                await this.judgmentService.finalizeJudgmentChoice(
-                    interaction,
-                    interaction.user,
-                    chosenUser,
-                    'demon'
-                );
-            }
-            return;
-        }
-
         if (interaction.customId === 'remove_scheduled_select') {
             await this.handleRemoveScheduledSelect(interaction);
         }
@@ -1769,6 +1742,10 @@ class InteractionHandler {
             await this.handleHintModalSubmit(interaction);
         } else if (modalId === 'hint_schedule_modal') {
             await this.handleScheduleHintModalSubmit(interaction);
+        } else if (modalId === 'judgment_angel_modal') {
+            await this.handleJudgmentAngelModalSubmit(interaction);
+        } else if (modalId === 'judgment_demon_modal') {
+            await this.handleJudgmentDemonModalSubmit(interaction);
         }
     }
 
@@ -2338,6 +2315,154 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error(`❌ Błąd aplikowania klątwy: ${error.message}`);
+        }
+    }
+
+    /**
+     * Obsługuje submit modalu wyboru anioła
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleJudgmentAngelModalSubmit(interaction) {
+        try {
+            const userInput = interaction.fields.getTextInputValue('user_input').trim();
+
+            // Parsuj input - może być @mention lub ID
+            let userId = userInput;
+
+            // Usuń <@> z mention
+            if (userInput.startsWith('<@') && userInput.endsWith('>')) {
+                userId = userInput.slice(2, -1);
+                if (userId.startsWith('!')) {
+                    userId = userId.slice(1);
+                }
+            }
+
+            // Sprawdź czy to prawidłowy snowflake ID
+            if (!/^\d{17,19}$/.test(userId)) {
+                return await interaction.reply({
+                    content: '❌ Nieprawidłowy format! Użyj @mention lub ID użytkownika (np. 123456789012345678)',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Pobierz użytkownika
+            let chosenUser;
+            try {
+                chosenUser = await interaction.client.users.fetch(userId);
+            } catch (error) {
+                return await interaction.reply({
+                    content: '❌ Nie znaleziono użytkownika o podanym ID!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Sprawdź czy użytkownik nie wybrał sam siebie
+            if (chosenUser.id === interaction.user.id) {
+                return await interaction.reply({
+                    content: '❌ Nie możesz wybrać samego siebie!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Defer reply - finalizacja może potrwać
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            // Wywołaj finalizację przez JudgmentService
+            if (this.judgmentService) {
+                await this.judgmentService.finalizeJudgmentChoice(
+                    interaction,
+                    interaction.user,
+                    chosenUser,
+                    'angel'
+                );
+            }
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas obsługi wyboru anioła z modalu: ${error.message}`);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
+                    flags: MessageFlags.Ephemeral
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.'
+                });
+            }
+        }
+    }
+
+    /**
+     * Obsługuje submit modalu wyboru demona
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleJudgmentDemonModalSubmit(interaction) {
+        try {
+            const userInput = interaction.fields.getTextInputValue('user_input').trim();
+
+            // Parsuj input - może być @mention lub ID
+            let userId = userInput;
+
+            // Usuń <@> z mention
+            if (userInput.startsWith('<@') && userInput.endsWith('>')) {
+                userId = userInput.slice(2, -1);
+                if (userId.startsWith('!')) {
+                    userId = userId.slice(1);
+                }
+            }
+
+            // Sprawdź czy to prawidłowy snowflake ID
+            if (!/^\d{17,19}$/.test(userId)) {
+                return await interaction.reply({
+                    content: '❌ Nieprawidłowy format! Użyj @mention lub ID użytkownika (np. 123456789012345678)',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Pobierz użytkownika
+            let chosenUser;
+            try {
+                chosenUser = await interaction.client.users.fetch(userId);
+            } catch (error) {
+                return await interaction.reply({
+                    content: '❌ Nie znaleziono użytkownika o podanym ID!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Sprawdź czy użytkownik nie wybrał sam siebie
+            if (chosenUser.id === interaction.user.id) {
+                return await interaction.reply({
+                    content: '❌ Nie możesz wybrać samego siebie!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Defer reply - finalizacja może potrwać
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            // Wywołaj finalizację przez JudgmentService
+            if (this.judgmentService) {
+                await this.judgmentService.finalizeJudgmentChoice(
+                    interaction,
+                    interaction.user,
+                    chosenUser,
+                    'demon'
+                );
+            }
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas obsługi wyboru demona z modalu: ${error.message}`);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
+                    flags: MessageFlags.Ephemeral
+                });
+            } else if (interaction.deferred) {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.'
+                });
+            }
         }
     }
 

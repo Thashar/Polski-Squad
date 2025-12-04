@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, MessageFlags } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -148,33 +148,35 @@ class JudgmentService {
                 });
             }
 
-            // Pokaż user select do wyboru osoby która dostanie rolę Lucyfer
-            const userSelect = new UserSelectMenuBuilder()
-                .setCustomId('judgment_angel_select')
-                .setPlaceholder('Wybierz osobę która otrzyma rolę Lucyfer')
-                .setMinValues(1)
-                .setMaxValues(1);
+            // Utwórz modal do wpisania ID/mention użytkownika
+            const modal = new ModalBuilder()
+                .setCustomId('judgment_angel_modal')
+                .setTitle('⚖️ Sąd Boży - Wybór Anioła');
 
-            const row = new ActionRowBuilder().addComponents(userSelect);
+            const userInput = new TextInputBuilder()
+                .setCustomId('user_input')
+                .setLabel('Wpisz @mention lub ID użytkownika')
+                .setPlaceholder('@username lub 123456789012345678')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMinLength(3)
+                .setMaxLength(100);
 
-            await interaction.reply({
-                content:
-                    '☁️ **Wybrałeś ścieżkę aniołów - otrzymasz rolę Gabriel!**\n\n' +
-                    '⚖️ **Jednak równowaga wymaga ofiary...**\n\n' +
-                    '🔥 **Wybierz jedną osobę z serwera, która otrzyma rolę Lucyfer** (przeciwna frakcja).\n' +
-                    'Ta osoba nie będzie miała wyboru - los został przesądzony przez twój wybór.',
-                flags: MessageFlags.Ephemeral,
-                components: [row]
-            });
+            const row = new ActionRowBuilder().addComponents(userInput);
+            modal.addComponents(row);
+
+            await interaction.showModal(modal);
 
             logger.info(`☁️ ${member.user.tag} rozpoczął wybór frakcji anioła`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas obsługi wyboru anioła: ${error.message}`);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
-                flags: MessageFlags.Ephemeral
-            });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
         }
     }
 
@@ -193,33 +195,35 @@ class JudgmentService {
                 });
             }
 
-            // Pokaż user select do wyboru osoby która dostanie rolę Gabriel
-            const userSelect = new UserSelectMenuBuilder()
-                .setCustomId('judgment_demon_select')
-                .setPlaceholder('Wybierz osobę która otrzyma rolę Gabriel')
-                .setMinValues(1)
-                .setMaxValues(1);
+            // Utwórz modal do wpisania ID/mention użytkownika
+            const modal = new ModalBuilder()
+                .setCustomId('judgment_demon_modal')
+                .setTitle('⚖️ Sąd Boży - Wybór Demona');
 
-            const row = new ActionRowBuilder().addComponents(userSelect);
+            const userInput = new TextInputBuilder()
+                .setCustomId('user_input')
+                .setLabel('Wpisz @mention lub ID użytkownika')
+                .setPlaceholder('@username lub 123456789012345678')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMinLength(3)
+                .setMaxLength(100);
 
-            await interaction.reply({
-                content:
-                    '🔥 **Wybrałeś ścieżkę demonów - otrzymasz rolę Lucyfer!**\n\n' +
-                    '⚖️ **Jednak równowaga wymaga ofiary...**\n\n' +
-                    '☁️ **Wybierz jedną osobę z serwera, która otrzyma rolę Gabriel** (przeciwna frakcja).\n' +
-                    'Ta osoba nie będzie miała wyboru - los został przesądzony przez twój wybór.',
-                flags: MessageFlags.Ephemeral,
-                components: [row]
-            });
+            const row = new ActionRowBuilder().addComponents(userInput);
+            modal.addComponents(row);
+
+            await interaction.showModal(modal);
 
             logger.info(`🔥 ${member.user.tag} rozpoczął wybór frakcji demona`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas obsługi wyboru demona: ${error.message}`);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
-                flags: MessageFlags.Ephemeral
-            });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
         }
     }
 
@@ -238,10 +242,8 @@ class JudgmentService {
 
             // Sprawdź czy chooser nadal ma Virtutti Papajlari
             if (!chooserMember.roles.cache.has(this.config.roles.virtuttiPapajlari)) {
-                return await interaction.update({
-                    content: '⛪ Nie posiadasz już medalu Virtutti Papajlari!',
-                    components: [],
-                    flags: MessageFlags.Ephemeral
+                return await interaction.editReply({
+                    content: '⛪ Nie posiadasz już medalu Virtutti Papajlari!'
                 });
             }
 
@@ -272,14 +274,12 @@ class JudgmentService {
             await chosenMember.roles.add(chosenRole);
 
             // Wyślij potwierdzenie do wybierającego
-            await interaction.update({
+            await interaction.editReply({
                 content:
                     `⚖️ **Sąd Boży został dokonany!**\n\n` +
                     `✅ Otrzymałeś rolę: **${chooserRoleName}**\n` +
                     `🎯 ${chosenUser.toString()} otrzymał rolę: **${chosenRoleName}**\n\n` +
-                    `**Los został przesądzony...**`,
-                components: [],
-                flags: MessageFlags.Ephemeral
+                    `**Los został przesądzony...**`
             });
 
             // Wyślij powiadomienie do wybranej osoby
@@ -408,18 +408,10 @@ class JudgmentService {
             logger.error(`Stack trace: ${error.stack}`);
 
             try {
-                // Spróbuj najpierw update
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.update({
-                        content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
-                        components: [],
-                        flags: MessageFlags.Ephemeral
-                    });
-                } else {
-                    // Jeśli już odpowiedziano, użyj followUp
-                    await interaction.followUp({
-                        content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
-                        flags: MessageFlags.Ephemeral
+                // Użyj editReply bo modal zrobił deferReply
+                if (interaction.deferred) {
+                    await interaction.editReply({
+                        content: '❌ Wystąpił błąd podczas finalizacji wyboru.'
                     });
                 }
             } catch (replyError) {
