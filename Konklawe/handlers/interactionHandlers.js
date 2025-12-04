@@ -723,12 +723,12 @@ class InteractionHandler {
                     this.activeCurses.delete(targetUser.id);
                     await this.saveActiveCurses();
 
-                    // Usuń efekt nicku jeśli istnieje
+                    // Przywróć oryginalny nick jeśli to klątwa nicku
                     if (curseData.type === 'nickname' || curseData.type === 'forced_caps') {
                         const nicknameManager = this.nicknameManager;
-                        if (nicknameManager && curseData.data && curseData.data.effectId) {
-                            await nicknameManager.removeEffect(targetUser.id, curseData.data.effectId);
-                            logger.info(`✨ Gabriel usunął klątwę nicku z Lucyfera ${targetUser.tag}`);
+                        if (nicknameManager) {
+                            await nicknameManager.restoreOriginalNickname(targetUser.id, interaction.guild);
+                            logger.info(`✨ Gabriel przywrócił oryginalny nick Lucyfera ${targetUser.tag}`);
                         }
                     }
                 }
@@ -793,11 +793,11 @@ class InteractionHandler {
                         this.activeCurses.delete(targetUser.id);
                         await this.saveActiveCurses();
 
-                        // Usuń klątwę z nickname managera jeśli to curse nick
+                        // Usuń klątwę z nickname managera i przywróć oryginalny nick
                         if (curseData.type === 'nickname' || curseData.type === 'forced_caps') {
                             const nicknameManager = this.nicknameManager;
-                            if (nicknameManager && curseData.data && curseData.data.effectId) {
-                                await nicknameManager.removeEffect(targetUser.id, curseData.data.effectId);
+                            if (nicknameManager) {
+                                await nicknameManager.restoreOriginalNickname(targetUser.id, interaction.guild);
                             }
                         }
 
@@ -1158,22 +1158,31 @@ class InteractionHandler {
                 // Zmień nick na "Osłabiony [nick]"
                 try {
                     const lucyferMember = await interaction.guild.members.fetch(userId);
-                    const originalNick = lucyferMember.displayName;
-                    const weakenedNick = `Osłabiony ${originalNick}`;
+                    const durationMs = 60 * 60 * 1000; // 1 godzina
+                    const endTime = Date.now() + durationMs;
 
-                    // Użyj nickname managera
+                    // Zapisz oryginalny nick w nickname managerze
                     if (this.nicknameManager) {
-                        await this.nicknameManager.applyEffect(
+                        const effectData = await this.nicknameManager.saveOriginalNickname(
                             userId,
                             'CURSE',
-                            60 * 60 * 1000, // 1 godzina
-                            {
-                                guildId: interaction.guild.id,
-                                appliedBy: 'Lucyfer Reflection',
-                                customPrefix: 'Osłabiony '
-                            }
+                            lucyferMember,
+                            durationMs
                         );
-                        logger.info(`🔥 Zmieniono nick Lucyfera ${userId} na "${weakenedNick}" na 1h`);
+
+                        // Zmień nick na "Osłabiony [displayName]"
+                        const weakenedNick = `Osłabiony ${lucyferMember.displayName}`.substring(0, 32);
+                        await lucyferMember.setNickname(weakenedNick);
+
+                        logger.info(`🔥 Zmieniono nick Lucyfera ${lucyferMember.user.tag} na "${weakenedNick}" na 1h`);
+
+                        // Zapisz do activeCurses
+                        this.activeCurses.set(userId, {
+                            type: 'nickname',
+                            data: { effectId: userId }, // effectId to samo co userId
+                            endTime
+                        });
+                        await this.saveActiveCurses();
                     }
                 } catch (error) {
                     logger.error(`❌ Błąd zmiany nicku przy odbiciu: ${error.message}`);
@@ -2465,23 +2474,22 @@ class InteractionHandler {
 
                 const newNick = `${forcedPrefix} ${targetMember.displayName}`.substring(0, 32);
 
-                const effectId = await this.nicknameManager.applyEffect(
+                // Zapisz oryginalny nick w nickname managerze
+                const effectData = await this.nicknameManager.saveOriginalNickname(
                     userId,
                     'CURSE',
-                    endTime - now,
-                    {
-                        guildId: guild.id,
-                        appliedBy: 'Gabriel Divine Power'
-                    }
+                    targetMember,
+                    endTime - now
                 );
 
+                // Zmień nick ręcznie
                 await targetMember.setNickname(newNick);
                 logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${newNick}"`);
 
                 // Zapisz do activeCurses
                 this.activeCurses.set(userId, {
                     type: 'nickname',
-                    data: { effectId },
+                    data: { effectId: userId }, // effectId to userId
                     endTime
                 });
             } catch (error) {
