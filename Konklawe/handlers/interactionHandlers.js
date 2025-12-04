@@ -740,8 +740,8 @@ class InteractionHandler {
             }
         }
 
-        // Sprawdź cooldown i limity (Gabriel ma brak limitów)
-        const canUse = this.virtuttiService.canUseCommand(userId, 'blessing', roleType);
+        // Sprawdź cooldown i limity (Gabriel ma cooldown per cel)
+        const canUse = this.virtuttiService.canUseCommand(userId, 'blessing', roleType, targetUser.id);
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
@@ -749,9 +749,11 @@ class InteractionHandler {
             });
         }
 
-        // Zarejestruj użycie (tylko dla Virtutti, Gabriel nie ma limitów)
+        // Zarejestruj użycie
         if (roleType === 'virtutti') {
             this.virtuttiService.registerUsage(userId, 'blessing', interaction.user.tag);
+        } else if (roleType === 'gabriel') {
+            this.virtuttiService.registerGabrielBlessing(userId, targetUser.id);
         }
 
         // Pobierz losowe błogosławieństwo

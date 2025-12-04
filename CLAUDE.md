@@ -2179,6 +2179,8 @@ process.on('SIGINT', async () => {
 - Ulepszenia w logowaniu błędów (template strings zamiast multiple args)
 
 **Konklawe Bot:**
+- Gabriel blessing cooldown: 5 minut per cel (nieograniczone cele, ale nie może błogosławić tej samej osoby częściej niż co 5 min)
+- Persistent storage blessing cooldowns w `data/gabriel_blessing_cooldowns.json`
 - Naprawa restoracji timerów po restarcie bota
 - Reset timerów gdy brak hasła lub brak podpowiedzi
 - Ulepszenia w zarządzaniu stanem gry

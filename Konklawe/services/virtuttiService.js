@@ -17,6 +17,9 @@ class VirtuttiService {
         // Lucyfer - Gabriel debuff tracking
         this.lucyferGabrielDebuff = new Map(); // userId -> { endTime: timestamp (24h), initialCurseEndTime: timestamp (5 min) }
 
+        // Gabriel - tracking blessing cooldowns per target
+        this.gabrielBlessingCooldowns = new Map(); // userId -> Map(targetId -> timestamp)
+
         // Ścieżki do plików danych
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
@@ -24,6 +27,7 @@ class VirtuttiService {
         this.lucyferCursesFile = path.join(this.dataDir, 'lucyfer_curses.json');
         this.lucyferTargetCooldownsFile = path.join(this.dataDir, 'lucyfer_target_cooldowns.json');
         this.lucyferGabrielDebuffFile = path.join(this.dataDir, 'lucyfer_gabriel_debuff.json');
+        this.gabrielBlessingCooldownsFile = path.join(this.dataDir, 'gabriel_blessing_cooldowns.json');
 
         // Wczytaj dane przy starcie
         this.loadData();
@@ -50,8 +54,25 @@ class VirtuttiService {
         const now = Date.now();
         const today = this.getPolishTime().toDateString();
 
-        // Gabriel - brak limitów na blessing
+        // Gabriel - blessing z cooldownem per target
         if (roleType === 'gabriel' && commandType === 'blessing') {
+            // Sprawdź cooldown tylko dla tego samego targetu
+            if (targetUserId) {
+                const targetCooldowns = this.gabrielBlessingCooldowns.get(userId);
+                if (targetCooldowns && targetCooldowns.has(targetUserId)) {
+                    const lastBlessingTime = targetCooldowns.get(targetUserId);
+                    const timeSince = now - lastBlessingTime;
+                    const cooldownMs = 5 * 60 * 1000; // 5 minut
+
+                    if (timeSince < cooldownMs) {
+                        const remainingMinutes = Math.ceil((cooldownMs - timeSince) / (60 * 1000));
+                        return {
+                            canUse: false,
+                            reason: `Musisz poczekać jeszcze ${remainingMinutes} minut przed kolejnym błogosławieństwem tej samej osoby.`
+                        };
+                    }
+                }
+            }
             return { canUse: true };
         }
 
@@ -306,6 +327,25 @@ class VirtuttiService {
     }
 
     /**
+     * Rejestruje błogosławieństwo Gabriela
+     * @param {string} userId - ID Gabriela
+     * @param {string} targetUserId - ID celu
+     */
+    registerGabrielBlessing(userId, targetUserId) {
+        const now = Date.now();
+
+        // Aktualizuj cooldown dla tego targetu
+        if (!this.gabrielBlessingCooldowns.has(userId)) {
+            this.gabrielBlessingCooldowns.set(userId, new Map());
+        }
+        this.gabrielBlessingCooldowns.get(userId).set(targetUserId, now);
+
+        logger.info(`☁️ Gabriel ${userId} błogosławi. Cooldown dla targetu ${targetUserId} ustawiony na 5 minut.`);
+
+        this.saveData();
+    }
+
+    /**
      * Rejestruje rzuconą klątwę przez Lucyfera
      * @param {string} userId - ID Lucyfera
      * @param {string} targetUserId - ID celu
@@ -506,6 +546,22 @@ class VirtuttiService {
                 }
             }
 
+            // Wczytaj Gabriel blessing cooldowns
+            try {
+                const gabrielBlessingCooldownsData = await fs.readFile(this.gabrielBlessingCooldownsFile, 'utf8');
+                const parsedBlessingCooldowns = JSON.parse(gabrielBlessingCooldownsData);
+                // Konwertuj zagnieżdżone obiekty na Maps
+                this.gabrielBlessingCooldowns = new Map();
+                for (const [userId, targets] of Object.entries(parsedBlessingCooldowns)) {
+                    this.gabrielBlessingCooldowns.set(userId, new Map(Object.entries(targets)));
+                }
+                logger.info(`📂 Wczytano ${this.gabrielBlessingCooldowns.size} blessing cooldownów Gabriela`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania blessing cooldownów Gabriela: ${error.message}`);
+                }
+            }
+
         } catch (error) {
             logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
         }
@@ -530,6 +586,12 @@ class VirtuttiService {
             // Konwertuj Gabriel debuff
             const lucyferGabrielDebuffObj = Object.fromEntries(this.lucyferGabrielDebuff);
 
+            // Konwertuj zagnieżdżone Maps dla Gabriel blessing cooldowns
+            const gabrielBlessingCooldownsObj = {};
+            for (const [userId, targets] of this.gabrielBlessingCooldowns.entries()) {
+                gabrielBlessingCooldownsObj[userId] = Object.fromEntries(targets);
+            }
+
             // Zapisz cooldowny
             await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownsObj, null, 2));
 
@@ -540,6 +602,9 @@ class VirtuttiService {
             await fs.writeFile(this.lucyferCursesFile, JSON.stringify(lucyferCursesObj, null, 2));
             await fs.writeFile(this.lucyferTargetCooldownsFile, JSON.stringify(lucyferTargetCooldownsObj, null, 2));
             await fs.writeFile(this.lucyferGabrielDebuffFile, JSON.stringify(lucyferGabrielDebuffObj, null, 2));
+
+            // Zapisz dane Gabriela
+            await fs.writeFile(this.gabrielBlessingCooldownsFile, JSON.stringify(gabrielBlessingCooldownsObj, null, 2));
 
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);
