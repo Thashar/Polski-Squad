@@ -658,6 +658,19 @@ class InteractionHandler {
             });
         }
 
+        // Gabriel nie może błogosławić Lucyfera - odporność
+        if (roleType === 'gabriel') {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
+
+            if (hasLucyferRole) {
+                return await interaction.reply({
+                    content: '☁️ Lucyfer jest odporny na błogosławieństwa Gabriela! Ciemność odrzuca światło...',
+                    ephemeral: true
+                });
+            }
+        }
+
         // Sprawdź cooldown i limity (Gabriel ma brak limitów)
         const canUse = this.virtuttiService.canUseCommand(userId, 'blessing', roleType);
         if (!canUse.canUse) {
@@ -855,6 +868,28 @@ class InteractionHandler {
             });
         }
 
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+
+        // Sprawdź odporności między Gabriel i Lucyfer
+        const targetHasGabrielRole = targetMember.roles.cache.has(this.config.roles.gabriel);
+        const targetHasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
+
+        // Gabriel nie może rzucić klątwy na Lucyfera
+        if (roleType === 'gabriel' && targetHasLucyferRole) {
+            return await interaction.reply({
+                content: '☁️ Lucyfer jest odporny na klątwy Gabriela! Ciemność odpiera światło...',
+                ephemeral: true
+            });
+        }
+
+        // Lucyfer nie może rzucić klątwy na Gabriela
+        if (roleType === 'lucyfer' && targetHasGabrielRole) {
+            return await interaction.reply({
+                content: '🔥 Gabriel jest odporny na klątwy Lucyfera! Światło odpiera ciemność...',
+                ephemeral: true
+            });
+        }
+
         // Sprawdź czy Lucyfer jest obecnie pod klątwą odbicia (blokada godzinna)
         if (roleType === 'lucyfer') {
             const reflectedCurse = this.lucyferReflectedCurses.get(userId);
@@ -866,8 +901,6 @@ class InteractionHandler {
                 });
             }
         }
-
-        const targetMember = await interaction.guild.members.fetch(targetUser.id);
 
         // Sprawdź cooldown i limity
         const canUse = this.virtuttiService.canUseCommand(userId, 'curse', roleType, targetUser.id);
