@@ -71,17 +71,17 @@ class JudgmentService {
                     {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
-                            '**⚡ System Energii:**\n' +
-                            '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
-                            '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
+                            '**⚡ System Many:**\n' +
+                            '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
+                            '• 📈 Progresywny koszt: **10 + (klątwy × 2)** many\n\n' +
                             '**Moce:**\n' +
-                            '• 🙏 Błogosławieństwa `/blessing` (5 energii, 5 min cooldown per cel)\n' +
+                            '• 🙏 Błogosławieństwa `/blessing` (5 many, 5 min cooldown per cel)\n' +
                             '• ✨ 50% szans na usunięcie klątwy\n' +
-                            '• 💀 Klątwy `/curse` (85% sukces, 14% fail, 1% odbicie)\n' +
+                            '• 💀 Klątwy `/curse` (85% sukces, 15% fail, 0% odbicie)\n' +
                             '• ⚡ 1% przy blessing: **silna klątwa na Lucyfera** (1h, zmiana co 5 min)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                             '**🎲 Poziomy klątw:**\n' +
-                            '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
+                            '• 💀 Zwykła (96%): 5 min | ⚡ Silna (3%): 15 min | 💥 Potężna (1%): 30 min\n\n' +
                             '**⚡ Tajemnicza moc:**\n' +
                             '• Światło i ciemność walczą w sposób nieprzewidywalny\n\n' +
                             '**Ścieżka łaski i światła.**',
@@ -90,16 +90,16 @@ class JudgmentService {
                     {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
-                            '**⚡ System Energii:**\n' +
-                            '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
-                            '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
+                            '**⚡ System Many:**\n' +
+                            '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
+                            '• 📈 Progresywny koszt: **10 + (klątwy × 2)** many\n\n' +
                             '**Moce:**\n' +
                             '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
-                            '• 📈 Progresywne odbicie: **5%, 10%, 15%...** (+5% za każdą klątwę dziennie)\n' +
+                            '• 📈 Progresywne odbicie: **3%, 6%, 9%...** (+3% za każdą klątwę dziennie)\n' +
                             '• ⚠️ Przy odbiciu: **blokada 1h + nick "Osłabiony"** (bez klątwy na siebie!)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                             '**🎲 Poziomy klątw:**\n' +
-                            '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
+                            '• 💀 Zwykła (96%): 5 min | ⚡ Silna (3%): 15 min | 💥 Potężna (1%): 30 min\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ BRAK błogosławieństw\n\n' +
                             '**🔥 Ukryta moc:**\n' +
@@ -291,31 +291,31 @@ class JudgmentService {
             // Funkcja pomocnicza do generowania opisu umiejętności
             const getAbilitiesDescription = (roleName) => {
                 if (roleName === 'Gabriel') {
-                    return '**⚡ System Energii:**\n' +
-                        '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
-                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
+                    return '**⚡ System Many:**\n' +
+                        '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
+                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** many\n\n' +
                         '**Moce:**\n' +
-                        '• 🙏 Błogosławieństwa `/blessing` (5 energii, 5 min cooldown per cel)\n' +
+                        '• 🙏 Błogosławieństwa `/blessing` (5 many, 5 min cooldown per cel)\n' +
                         '• ✨ 50% szans na usunięcie klątwy\n' +
-                        '• 💀 Klątwy `/curse` (85% sukces, 14% fail, 1% odbicie)\n' +
+                        '• 💀 Klątwy `/curse` (85% sukces, 15% fail, 0% odbicie)\n' +
                         '• ⚡ 1% przy blessing: **silna klątwa na Lucyfera** (1h, zmiana co 5 min)\n' +
                         '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                         '**🎲 Poziomy klątw:**\n' +
-                        '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
+                        '• 💀 Zwykła (96%): 5 min | ⚡ Silna (3%): 15 min | 💥 Potężna (1%): 30 min\n\n' +
                         '**⚡ Tajemnicza moc:**\n' +
                         '• Światło i ciemność walczą w sposób nieprzewidywalny\n\n' +
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
-                    return '**⚡ System Energii:**\n' +
-                        '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
-                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
+                    return '**⚡ System Many:**\n' +
+                        '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
+                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** many\n\n' +
                         '**Moce:**\n' +
                         '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
-                        '• 📈 Progresywne odbicie: **5%, 10%, 15%...** (+5% za każdą klątwę dziennie)\n' +
+                        '• 📈 Progresywne odbicie: **3%, 6%, 9%...** (+3% za każdą klątwę dziennie)\n' +
                         '• ⚠️ Przy odbiciu: **blokada 1h + nick "Osłabiony"** (bez klątwy na siebie!)\n' +
                         '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                         '**🎲 Poziomy klątw:**\n' +
-                        '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
+                        '• 💀 Zwykła (96%): 5 min | ⚡ Silna (3%): 15 min | 💥 Potężna (1%): 30 min\n\n' +
                         '**Ograniczenia:**\n' +
                         '• ⛔ BRAK błogosławieństw\n\n' +
                         '**🔥 Ukryta moc:**\n' +
