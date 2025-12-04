@@ -284,6 +284,39 @@ class JudgmentService {
 
             // Wyślij powiadomienie do wybranej osoby
             try {
+                // Przygotuj opis umiejętności w zależności od roli
+                let abilitiesDescription = '';
+
+                if (chosenRoleName === 'Gabriel') {
+                    abilitiesDescription =
+                        '**Moce:**\n' +
+                        '• 🙏 Nieograniczone błogosławieństwa `/blessing`\n' +
+                        '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
+                        '• 💀 Klątwy `/curse` (20% fail, 1% odbicie na siebie)\n' +
+                        '• ⚡ 1% szans przy użyciu blessing: nałożenie potężnej klątwy na wroga\n' +
+                        '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
+                        '**Limity klątw:**\n' +
+                        '• 📊 10 klątw dziennie, cooldown 5 min\n' +
+                        '• 🎯 Tylko jeden cel na raz\n\n' +
+                        '**⚡ Tajemnicza moc:**\n' +
+                        '• Światło i ciemność walczą ze sobą w sposób nieprzewidywalny\n' +
+                        '• Efekty konfrontacji pozostają tajemnicą Sądu Bożego\n\n' +
+                        '**Ścieżka łaski i światła.**';
+                } else { // Lucyfer
+                    abilitiesDescription =
+                        '**Moce:**\n' +
+                        '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
+                        '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie\n' +
+                        '• ⚠️ Przy odbiciu: silna klątwa przez 1h, co 5 min zmiana rodzaju klątwy + blokada `/curse`\n' +
+                        '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
+                        '**Ograniczenia:**\n' +
+                        '• ⛔ BRAK błogosławieństw\n\n' +
+                        '**🔥 Ukryta moc:**\n' +
+                        '• Ciemność pochłania światło w tajemniczy sposób\n' +
+                        '• Prawdziwa natura tej mocy jest nieznana śmiertelnikom\n\n' +
+                        '**Ścieżka potęgi i ciemności.**';
+                }
+
                 await chosenMember.send({
                     embeds: [
                         new EmbedBuilder()
@@ -293,6 +326,11 @@ class JudgmentService {
                                 `✨ **Otrzymałeś rolę: ${chosenRoleName}**\n\n` +
                                 `*Los został przesądzony. Twoja ścieżka została wyznaczona...*`
                             )
+                            .addFields({
+                                name: chosenRoleName === 'Gabriel' ? '☁️ **GABRIEL - Święty Anioł**' : '🔥 **LUCYFER - Upadły Anioł**',
+                                value: abilitiesDescription,
+                                inline: false
+                            })
                             .setColor(chosenRoleName === 'Gabriel' ? '#87CEEB' : '#FF4500')
                             .setTimestamp()
                             .setFooter({ text: 'Konklawe - Sąd Boży' })
