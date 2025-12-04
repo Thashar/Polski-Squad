@@ -80,7 +80,7 @@ class JudgmentService {
                             '**Limity klątw:**\n' +
                             '• 📊 10 klątw dziennie, cooldown 5 min\n' +
                             '• 🎯 Tylko jeden cel na raz\n\n' +
-                            '**⚡ Tajemnicza moc przeciw Lucyferowi:**\n' +
+                            '**⚡ Tajemnicza moc:**\n' +
                             '• Światło i ciemność walczą ze sobą w sposób nieprzewidywalny\n' +
                             '• Efekty konfrontacji pozostają tajemnicą Sądu Bożego\n\n' +
                             '**Ścieżka łaski i światła.**',
@@ -96,7 +96,7 @@ class JudgmentService {
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ BRAK błogosławieństw\n\n' +
-                            '**🔥 Ukryta moc przeciw Gabrielowi:**\n' +
+                            '**🔥 Ukryta moc:**\n' +
                             '• Ciemność pochłania światło w tajemniczy sposób\n' +
                             '• Prawdziwa natura tej mocy jest nieznana śmiertelnikom\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
