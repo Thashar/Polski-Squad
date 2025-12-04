@@ -168,6 +168,11 @@ class ClanRoleChangeService {
      * @returns {string|null} - Typ zmiany: 'join', 'promotion', 'demotion' lub null
      */
     determineChangeType(oldRole, newRole) {
+        // Nie wysyłaj powiadomień dla roli Verified (tylko dla ról klanowych)
+        if (!newRole || newRole === this.config.roles.verified) {
+            return null;
+        }
+
         // Jeśli nie było roli klanowej (tylko verified lub null), to dołączenie
         if (!oldRole || oldRole === this.config.roles.verified) {
             return 'join';
