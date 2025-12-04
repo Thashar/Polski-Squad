@@ -976,14 +976,16 @@ class InteractionHandler {
                 // 33% - Lucyfer urośnie w siłę (reset % odbicia)
                 this.virtuttiService.resetLucyferReflectionChance(targetUser.id);
 
+                const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer urósł w siłę!** Jego progresywne odbicie zostało zresetowane do 0%.`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer urósł w siłę!** Jego progresywne odbicie zostało zresetowane do 0%.\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
                     ephemeral: false
                 });
             } else if (randomChance >= 33 && randomChance < 66) {
                 // 33% - Nic się nie stanie (odporność)
+                const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
                     ephemeral: false
                 });
             } else if (randomChance >= 66 && randomChance < 99) {
@@ -1010,8 +1012,9 @@ class InteractionHandler {
                     const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
                     const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
 
+                    const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                     await interaction.editReply({
-                        content: `☁️ **Gabriel przeklął Lucyfera!** ${randomReaction}\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!** Klątwa będzie trwać 5 minut.`
+                        content: `☁️ **Gabriel przeklął Lucyfera!** ${randomReaction}\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!** Klątwa będzie trwać 5 minut.\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`
                     });
 
                     logger.info(`☁️ Gabriel (${interaction.user.tag}) skutecznie przeklął Lucyfera (${targetUser.tag})`);
@@ -1040,8 +1043,9 @@ class InteractionHandler {
                 const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id);
                 await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
 
+                const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡ **Potężna klątwa nałożona!** Lucyfer został osłabiony na 24 godziny! ⚡`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡ **Potężna klątwa nałożona!** Lucyfer został osłabiony na 24 godziny! ⚡\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
                     ephemeral: false
                 });
             }
@@ -1163,8 +1167,9 @@ class InteractionHandler {
             ];
             const randomFailMessage = failMessages[Math.floor(Math.random() * failMessages.length)];
 
+            const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
             return await interaction.reply({
-                content: randomFailMessage,
+                content: `${randomFailMessage}\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
                 ephemeral: false
             });
         }
@@ -1222,8 +1227,7 @@ class InteractionHandler {
 
             // Wyślij ephemeral message z informacją o pozostałych użyciach (tylko dla Virtutti/Gabriel)
             if (roleType !== 'lucyfer') {
-                const dailyUsage = this.virtuttiService.dailyUsage.get(userId);
-                const remainingUses = this.config.virtuttiPapajlari.dailyLimit - (dailyUsage?.curse || 0);
+                const remainingUses = this.virtuttiService.getRemainingUses(userId, 'curse');
 
                 await interaction.followUp({
                     content: `📊 Pozostałe klątwy dzisiaj: **${remainingUses}/${this.config.virtuttiPapajlari.dailyLimit}**`,

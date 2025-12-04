@@ -136,9 +136,27 @@ class VirtuttiService {
 
         const displayName = userTag || `ID:${userId}`;
         logger.info(`📊 Użytkownik ${displayName} użył komendy ${commandType}. Dzienny użyty: ${this.dailyUsage.get(userId)[commandType]}/${this.config.virtuttiPapajlari.dailyLimit}`);
-        
+
         // Zapisz dane do pliku po każdym użyciu
         this.saveData();
+    }
+
+    /**
+     * Zwraca pozostałe użycia komendy w danym dniu
+     * @param {string} userId - ID użytkownika
+     * @param {string} commandType - 'blessing', 'virtueCheck' lub 'curse'
+     * @returns {number} - Liczba pozostałych użyć
+     */
+    getRemainingUses(userId, commandType) {
+        const today = this.getPolishTime().toDateString();
+        const userDailyUsage = this.dailyUsage.get(userId);
+
+        if (!userDailyUsage || userDailyUsage.date !== today) {
+            return this.config.virtuttiPapajlari.dailyLimit;
+        }
+
+        const used = userDailyUsage[commandType] || 0;
+        return Math.max(0, this.config.virtuttiPapajlari.dailyLimit - used);
     }
 
     /**
