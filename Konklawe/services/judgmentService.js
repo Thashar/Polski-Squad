@@ -71,34 +71,39 @@ class JudgmentService {
                     {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
+                            '**⚡ System Energii:**\n' +
+                            '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
+                            '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
                             '**Moce:**\n' +
-                            '• 🙏 Błogosławieństwa `/blessing` (5 min cooldown per cel)\n' +
-                            '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
-                            '• 💀 Klątwy `/curse` (79% sukces, 20% fail, 1% odbicie na siebie)\n' +
-                            '• ⚡ 1% szans przy użyciu blessing: nałożenie potężnej klątwy na wroga\n' +
+                            '• 🙏 Błogosławieństwa `/blessing` (5 energii, 5 min cooldown per cel)\n' +
+                            '• ✨ 50% szans na usunięcie klątwy\n' +
+                            '• 💀 Klątwy `/curse` (85% sukces, 14% fail, 1% odbicie)\n' +
+                            '• ⚡ 1% przy blessing: **silna klątwa na Lucyfera** (1h, zmiana co 5 min)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
-                            '**Limity klątw:**\n' +
-                            '• 📊 10 klątw dziennie, cooldown 5 min\n' +
-                            '• 🎯 Tylko jeden cel na raz\n\n' +
+                            '**🎲 Poziomy klątw:**\n' +
+                            '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
                             '**⚡ Tajemnicza moc:**\n' +
-                            '• Światło i ciemność walczą ze sobą w sposób nieprzewidywalny\n' +
-                            '• Efekty konfrontacji pozostają tajemnicą Sądu Bożego\n\n' +
+                            '• Światło i ciemność walczą w sposób nieprzewidywalny\n\n' +
                             '**Ścieżka łaski i światła.**',
                         inline: false
                     },
                     {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
+                            '**⚡ System Energii:**\n' +
+                            '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
+                            '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
                             '**Moce:**\n' +
                             '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
-                            '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie\n' +
-                            '• ⚠️ Przy odbiciu: silna klątwa przez 1h, co 5 min zmiana rodzaju klątwy + blokada `/curse`\n' +
+                            '• 📈 Progresywne odbicie: **5%, 10%, 15%...** (+5% za każdą klątwę dziennie)\n' +
+                            '• ⚠️ Przy odbiciu: **blokada 1h + nick "Osłabiony"** (bez klątwy na siebie!)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
+                            '**🎲 Poziomy klątw:**\n' +
+                            '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ BRAK błogosławieństw\n\n' +
                             '**🔥 Ukryta moc:**\n' +
-                            '• Ciemność pochłania światło w tajemniczy sposób\n' +
-                            '• Prawdziwa natura tej mocy jest nieznana śmiertelnikom\n\n' +
+                            '• Ciemność pochłania światło w tajemniczy sposób\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
                         inline: false
                     }
@@ -286,30 +291,35 @@ class JudgmentService {
             // Funkcja pomocnicza do generowania opisu umiejętności
             const getAbilitiesDescription = (roleName) => {
                 if (roleName === 'Gabriel') {
-                    return '**Moce:**\n' +
-                        '• 🙏 Błogosławieństwa `/blessing` (5 min cooldown per cel)\n' +
-                        '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
-                        '• 💀 Klątwy `/curse` (79% sukces, 20% fail, 1% odbicie na siebie)\n' +
-                        '• ⚡ 1% szans przy użyciu blessing: nałożenie potężnej klątwy na wroga\n' +
+                    return '**⚡ System Energii:**\n' +
+                        '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
+                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
+                        '**Moce:**\n' +
+                        '• 🙏 Błogosławieństwa `/blessing` (5 energii, 5 min cooldown per cel)\n' +
+                        '• ✨ 50% szans na usunięcie klątwy\n' +
+                        '• 💀 Klątwy `/curse` (85% sukces, 14% fail, 1% odbicie)\n' +
+                        '• ⚡ 1% przy blessing: **silna klątwa na Lucyfera** (1h, zmiana co 5 min)\n' +
                         '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
-                        '**Limity klątw:**\n' +
-                        '• 📊 10 klątw dziennie, cooldown 5 min\n' +
-                        '• 🎯 Tylko jeden cel na raz\n\n' +
+                        '**🎲 Poziomy klątw:**\n' +
+                        '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
                         '**⚡ Tajemnicza moc:**\n' +
-                        '• Światło i ciemność walczą ze sobą w sposób nieprzewidywalny\n' +
-                        '• Efekty konfrontacji pozostają tajemnicą Sądu Bożego\n\n' +
+                        '• Światło i ciemność walczą w sposób nieprzewidywalny\n\n' +
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
-                    return '**Moce:**\n' +
+                    return '**⚡ System Energii:**\n' +
+                        '• 💯 Start: **100 energii**, regeneracja **5 pkt/h**\n' +
+                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** energii\n\n' +
+                        '**Moce:**\n' +
                         '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
-                        '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie\n' +
-                        '• ⚠️ Przy odbiciu: silna klątwa przez 1h, co 5 min zmiana rodzaju klątwy + blokada `/curse`\n' +
+                        '• 📈 Progresywne odbicie: **5%, 10%, 15%...** (+5% za każdą klątwę dziennie)\n' +
+                        '• ⚠️ Przy odbiciu: **blokada 1h + nick "Osłabiony"** (bez klątwy na siebie!)\n' +
                         '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
+                        '**🎲 Poziomy klątw:**\n' +
+                        '• 💀 Zwykła (96%): 3 min | ⚡ Silna (3%): 10 min | 💥 Potężna (1%): 30 min\n\n' +
                         '**Ograniczenia:**\n' +
                         '• ⛔ BRAK błogosławieństw\n\n' +
                         '**🔥 Ukryta moc:**\n' +
-                        '• Ciemność pochłania światło w tajemniczy sposób\n' +
-                        '• Prawdziwa natura tej mocy jest nieznana śmiertelnikom\n\n' +
+                        '• Ciemność pochłania światło w tajemniczy sposób\n\n' +
                         '**Ścieżka potęgi i ciemności.**';
                 }
             };

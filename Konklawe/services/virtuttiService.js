@@ -10,9 +10,13 @@ class VirtuttiService {
         this.cooldowns = new Map(); // userId -> { blessing: timestamp, virtueCheck: timestamp, curse: timestamp }
         this.dailyUsage = new Map(); // userId -> { date: string, blessing: count, virtueCheck: count, curse: count }
 
+        // === NOWY SYSTEM ENERGII ===
+        this.energySystem = new Map(); // userId -> { energy: number, lastRegeneration: timestamp, dailyCurses: number, date: string }
+
         // Lucyfer - tracking odbić klątw
         this.lucyferCurses = new Map(); // userId -> { date: string, cursesThrown: count, reflectionChance: number }
         this.lucyferTargetCooldowns = new Map(); // userId -> Map(targetId -> timestamp)
+        this.lucyferCurseBlocked = new Map(); // userId -> timestamp (blokada na 1h po odbiciu)
 
         // Lucyfer - Gabriel debuff tracking
         this.lucyferGabrielDebuff = new Map(); // userId -> { endTime: timestamp (24h), initialCurseEndTime: timestamp (5 min) }
@@ -24,8 +28,10 @@ class VirtuttiService {
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
         this.dailyUsageFile = path.join(this.dataDir, 'virtutti_daily_usage.json');
+        this.energySystemFile = path.join(this.dataDir, 'energy_system.json');
         this.lucyferCursesFile = path.join(this.dataDir, 'lucyfer_curses.json');
         this.lucyferTargetCooldownsFile = path.join(this.dataDir, 'lucyfer_target_cooldowns.json');
+        this.lucyferCurseBlockedFile = path.join(this.dataDir, 'lucyfer_curse_blocked.json');
         this.lucyferGabrielDebuffFile = path.join(this.dataDir, 'lucyfer_gabriel_debuff.json');
         this.gabrielBlessingCooldownsFile = path.join(this.dataDir, 'gabriel_blessing_cooldowns.json');
 
@@ -40,6 +46,135 @@ class VirtuttiService {
     getPolishTime() {
         const now = new Date();
         return new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+    }
+
+    // ========================================
+    // SYSTEM ENERGII
+    // ========================================
+
+    /**
+     * Inicjalizuje energię dla użytkownika (jeśli nie istnieje)
+     * @param {string} userId - ID użytkownika
+     */
+    initializeEnergy(userId) {
+        if (!this.energySystem.has(userId)) {
+            const today = this.getPolishTime().toDateString();
+            this.energySystem.set(userId, {
+                energy: 300, // Start z pełną maną
+                lastRegeneration: Date.now(),
+                dailyCurses: 0,
+                date: today
+            });
+            logger.info(`⚡ Zainicjowano energię dla użytkownika ${userId}: 300/300`);
+        }
+    }
+
+    /**
+     * Regeneruje energię użytkownika (5 punktów/godzinę)
+     * @param {string} userId - ID użytkownika
+     */
+    regenerateEnergy(userId) {
+        const userData = this.energySystem.get(userId);
+        if (!userData) return;
+
+        const now = Date.now();
+        const hoursSinceLastRegen = (now - userData.lastRegeneration) / (60 * 60 * 1000);
+        const energyToRegenerate = Math.floor(hoursSinceLastRegen * 10); // 10 punktów/h
+
+        if (energyToRegenerate > 0 && userData.energy < 300) {
+            userData.energy = Math.min(300, userData.energy + energyToRegenerate);
+            userData.lastRegeneration = now;
+            logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/300`);
+            this.saveData();
+        }
+    }
+
+    /**
+     * Oblicza koszt klątwy (progresywny)
+     * @param {number} dailyCurses - Liczba klątw rzuconych dzisiaj
+     * @returns {number} - Koszt many
+     */
+    calculateCurseCost(dailyCurses) {
+        const baseCost = 10;
+        return baseCost + (dailyCurses * 2);
+    }
+
+    /**
+     * Pobiera obecną energię użytkownika
+     * @param {string} userId - ID użytkownika
+     * @returns {Object} - { energy, maxEnergy, dailyCurses, nextCurseCost }
+     */
+    getEnergy(userId) {
+        this.initializeEnergy(userId);
+        this.regenerateEnergy(userId);
+
+        const today = this.getPolishTime().toDateString();
+        const userData = this.energySystem.get(userId);
+
+        // Reset dzienny
+        if (userData.date !== today) {
+            userData.date = today;
+            userData.dailyCurses = 0;
+        }
+
+        return {
+            energy: userData.energy,
+            maxEnergy: 300,
+            dailyCurses: userData.dailyCurses,
+            nextCurseCost: this.calculateCurseCost(userData.dailyCurses)
+        };
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma wystarczająco many
+     * @param {string} userId - ID użytkownika
+     * @param {number} cost - Koszt akcji
+     * @returns {boolean}
+     */
+    hasEnoughEnergy(userId, cost) {
+        const { energy } = this.getEnergy(userId);
+        return energy >= cost;
+    }
+
+    /**
+     * Zużywa manę użytkownika
+     * @param {string} userId - ID użytkownika
+     * @param {number} cost - Koszt many
+     * @param {string} actionType - 'curse' lub 'blessing'
+     * @returns {boolean} - Sukces zużycia
+     */
+    consumeEnergy(userId, cost, actionType = 'curse') {
+        this.initializeEnergy(userId);
+        const userData = this.energySystem.get(userId);
+
+        if (userData.energy < cost) {
+            return false;
+        }
+
+        userData.energy -= cost;
+
+        if (actionType === 'curse') {
+            userData.dailyCurses++;
+        }
+
+        logger.info(`⚡ ${userId} zużył ${cost} many (${actionType}). Pozostało: ${userData.energy}/300, klątwy dzisiaj: ${userData.dailyCurses}`);
+        this.saveData();
+        return true;
+    }
+
+    /**
+     * Zwraca połowę many (gdy klątwa się nie udaje)
+     * @param {string} userId - ID użytkownika
+     * @param {number} originalCost - Oryginalny koszt
+     */
+    refundHalfEnergy(userId, originalCost) {
+        this.initializeEnergy(userId);
+        const userData = this.energySystem.get(userId);
+        const refund = Math.floor(originalCost / 2);
+
+        userData.energy = Math.min(300, userData.energy + refund);
+        logger.info(`💰 ${userId} otrzymał ${refund} many zwrotu (połowa kosztu). Obecna: ${userData.energy}/300`);
+        this.saveData();
     }
 
     /**
@@ -311,6 +446,80 @@ class VirtuttiService {
         return advice[Math.floor(Math.random() * advice.length)];
     }
 
+    // ========================================
+    // BLOKADA LUCYFERA (PO ODBICIU)
+    // ========================================
+
+    /**
+     * Blokuje możliwość rzucania klątw przez Lucyfera na 1h
+     * @param {string} userId - ID Lucyfera
+     */
+    blockLucyferCurses(userId) {
+        const blockUntil = Date.now() + (60 * 60 * 1000); // 1 godzina
+        this.lucyferCurseBlocked.set(userId, blockUntil);
+        logger.info(`🚫 Lucyfer ${userId} zablokowany od rzucania klątw na 1h (po odbiciu)`);
+        this.saveData();
+    }
+
+    /**
+     * Sprawdza czy Lucyfer ma blokadę na rzucanie klątw
+     * @param {string} userId - ID Lucyfera
+     * @returns {Object|null} - { blocked: true, remainingMinutes } lub null
+     */
+    checkLucyferCurseBlock(userId) {
+        const blockUntil = this.lucyferCurseBlocked.get(userId);
+        if (!blockUntil) return null;
+
+        const now = Date.now();
+        if (now >= blockUntil) {
+            this.lucyferCurseBlocked.delete(userId);
+            this.saveData();
+            return null;
+        }
+
+        const remainingMs = blockUntil - now;
+        const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+        return { blocked: true, remainingMinutes };
+    }
+
+    // ========================================
+    // POZIOMY KLĄTW (96% / 3% / 1%)
+    // ========================================
+
+    /**
+     * Losuje poziom klątwy
+     * @returns {string} - 'normal' (96%), 'strong' (3%), 'powerful' (1%)
+     */
+    rollCurseLevel() {
+        const roll = Math.random() * 100;
+
+        if (roll < 1) {
+            return 'powerful'; // 1%
+        } else if (roll < 4) {
+            return 'strong'; // 3% (1-4)
+        } else {
+            return 'normal'; // 96% (4-100)
+        }
+    }
+
+    /**
+     * Pobiera czas trwania klątwy na podstawie poziomu
+     * @param {string} level - 'normal', 'strong', 'powerful'
+     * @returns {number} - Czas w milisekundach
+     */
+    getCurseDuration(level) {
+        switch (level) {
+            case 'normal':
+                return 5 * 60 * 1000; // 5 minut
+            case 'strong':
+                return 15 * 60 * 1000; // 15 minut
+            case 'powerful':
+                return 30 * 60 * 1000; // 30 minut
+            default:
+                return 5 * 60 * 1000; // Fallback 5 minut
+        }
+    }
+
     /**
      * Pobiera losową klątwę (zawsze nickname + jedna dodatkowa)
      * @returns {Object} - Obiekt z klątwami
@@ -365,7 +574,7 @@ class VirtuttiService {
 
         const userCurses = this.lucyferCurses.get(userId);
         userCurses.cursesThrown++;
-        userCurses.reflectionChance = userCurses.cursesThrown; // 1% za każdą klątwę
+        userCurses.reflectionChance = userCurses.cursesThrown * 3; // 3% za każdą klątwę
 
         // Aktualizuj cooldown dla tego targetu
         if (!this.lucyferTargetCooldowns.has(userId)) {
@@ -562,6 +771,30 @@ class VirtuttiService {
                 }
             }
 
+            // Wczytaj system many
+            try {
+                const energySystemData = await fs.readFile(this.energySystemFile, 'utf8');
+                const parsedEnergySystem = JSON.parse(energySystemData);
+                this.energySystem = new Map(Object.entries(parsedEnergySystem));
+                logger.info(`📂 Wczytano ${this.energySystem.size} danych systemu many`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania systemu many: ${error.message}`);
+                }
+            }
+
+            // Wczytaj blokady Lucyfera
+            try {
+                const lucyferCurseBlockedData = await fs.readFile(this.lucyferCurseBlockedFile, 'utf8');
+                const parsedLucyferBlocked = JSON.parse(lucyferCurseBlockedData);
+                this.lucyferCurseBlocked = new Map(Object.entries(parsedLucyferBlocked));
+                logger.info(`📂 Wczytano ${this.lucyferCurseBlocked.size} blokad Lucyfera`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania blokad Lucyfera: ${error.message}`);
+                }
+            }
+
         } catch (error) {
             logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
         }
@@ -606,9 +839,35 @@ class VirtuttiService {
             // Zapisz dane Gabriela
             await fs.writeFile(this.gabrielBlessingCooldownsFile, JSON.stringify(gabrielBlessingCooldownsObj, null, 2));
 
+            // Zapisz system many
+            const energySystemObj = Object.fromEntries(this.energySystem);
+            await fs.writeFile(this.energySystemFile, JSON.stringify(energySystemObj, null, 2));
+
+            // Zapisz blokady Lucyfera
+            const lucyferCurseBlockedObj = Object.fromEntries(this.lucyferCurseBlocked);
+            await fs.writeFile(this.lucyferCurseBlockedFile, JSON.stringify(lucyferCurseBlockedObj, null, 2));
+
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);
         }
+    }
+
+    // ========================================
+    // SILNA KLĄTWA GABRIELA NA LUCYFERA (1% przy blessing)
+    // ========================================
+
+    /**
+     * Tworzy silną klątwę Gabriela na Lucyfera (1h, zmiana co 5 min)
+     * Zwraca dane do zarządzania intervalem w interactionHandlers
+     * @param {string} userId - ID Lucyfera
+     * @returns {Object} - { duration, changeInterval }
+     */
+    createGabrielStrongCurseData(userId) {
+        return {
+            duration: 60 * 60 * 1000, // 1 godzina
+            changeInterval: 5 * 60 * 1000, // Zmiana co 5 minut
+            totalChanges: 12 // 12 zmian przez godzinę
+        };
     }
 
     /**
