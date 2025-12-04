@@ -74,7 +74,7 @@ class JudgmentService {
                             '**Moce:**\n' +
                             '• 🙏 Błogosławieństwa `/blessing` (5 min cooldown per cel)\n' +
                             '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
-                            '• 💀 Klątwy `/curse` (20% fail, 1% odbicie na siebie)\n' +
+                            '• 💀 Klątwy `/curse` (79% sukces, 20% fail, 1% odbicie na siebie)\n' +
                             '• ⚡ 1% szans przy użyciu blessing: nałożenie potężnej klątwy na wroga\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                             '**Limity klątw:**\n' +
@@ -289,7 +289,7 @@ class JudgmentService {
                     return '**Moce:**\n' +
                         '• 🙏 Błogosławieństwa `/blessing` (5 min cooldown per cel)\n' +
                         '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
-                        '• 💀 Klątwy `/curse` (20% fail, 1% odbicie na siebie)\n' +
+                        '• 💀 Klątwy `/curse` (79% sukces, 20% fail, 1% odbicie na siebie)\n' +
                         '• ⚡ 1% szans przy użyciu blessing: nałożenie potężnej klątwy na wroga\n' +
                         '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
                         '**Limity klątw:**\n' +
