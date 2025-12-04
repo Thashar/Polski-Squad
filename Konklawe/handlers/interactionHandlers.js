@@ -717,9 +717,25 @@ class InteractionHandler {
             const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
 
             if (hasLucyferRole) {
+                // Sprawdź czy Lucyfer ma aktywną klątwę i usuń ją wraz z nickiem
+                if (this.activeCurses.has(targetUser.id)) {
+                    const curseData = this.activeCurses.get(targetUser.id);
+                    this.activeCurses.delete(targetUser.id);
+                    await this.saveActiveCurses();
+
+                    // Usuń efekt nicku jeśli istnieje
+                    if (curseData.type === 'nickname' || curseData.type === 'forced_caps') {
+                        const nicknameManager = this.nicknameManager;
+                        if (nicknameManager && curseData.data && curseData.data.effectId) {
+                            await nicknameManager.removeEffect(targetUser.id, curseData.data.effectId);
+                            logger.info(`✨ Gabriel usunął klątwę nicku z Lucyfera ${targetUser.tag}`);
+                        }
+                    }
+                }
+
                 return await interaction.reply({
                     content: '☁️ Takie błogosławieństwa nie działają na demona! Ciemność odrzuca światło...',
-                    flags: MessageFlags.Ephemeral
+                    ephemeral: false
                 });
             }
         }
