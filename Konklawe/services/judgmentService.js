@@ -405,11 +405,37 @@ class JudgmentService {
 
         } catch (error) {
             logger.error(`❌ Błąd podczas finalizacji wyboru Sądu Bożego: ${error.message}`);
-            await interaction.update({
-                content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
-                components: [],
-                ephemeral: true
-            });
+            logger.error(`Stack trace: ${error.stack}`);
+
+            try {
+                // Spróbuj najpierw update
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.update({
+                        content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
+                        components: [],
+                        ephemeral: true
+                    });
+                } else {
+                    // Jeśli już odpowiedziano, użyj followUp
+                    await interaction.followUp({
+                        content: '❌ Wystąpił błąd podczas finalizacji wyboru.',
+                        ephemeral: true
+                    });
+                }
+            } catch (replyError) {
+                logger.error(`❌ Nie udało się wysłać komunikatu błędu: ${replyError.message}`);
+                // Jeśli nie możemy odpowiedzieć przez interakcję, wyślij wiadomość na kanał Sądu Bożego
+                try {
+                    const judgmentChannel = await this.client.channels.fetch(this.config.channels.judgment);
+                    if (judgmentChannel && judgmentChannel.isTextBased()) {
+                        await judgmentChannel.send({
+                            content: `❌ <@${interaction.user.id}> Wystąpił błąd podczas finalizacji wyboru Sądu Bożego. Spróbuj ponownie.`
+                        });
+                    }
+                } catch (channelError) {
+                    logger.error(`❌ Nie udało się wysłać komunikatu na kanał: ${channelError.message}`);
+                }
+            }
         }
     }
 }
