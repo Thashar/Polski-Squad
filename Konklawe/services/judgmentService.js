@@ -74,10 +74,9 @@ class JudgmentService {
                             '**Moce:**\n' +
                             '• 🙏 Nieograniczone błogosławieństwa `/blessing`\n' +
                             '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
-                            '• 💀 Klątwy `/curse` (20% szans na niepowodzenie, 1% na odbicie na siebie)\n' +
+                            '• 💀 Klątwy `/curse` (20% fail, 1% reflect na siebie)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n' +
-                            '• ⚡ Specjalna moc: 1% szansa przy błogosławieństwie na nałożenie klątwy na Lucyfera\n' +
-                            '• 🛡️ Odporność na klątwy Lucyfera\n\n' +
+                            '• ⚡ 1% szansa przy blessing: nałożenie klątwy na cel\n\n' +
                             '**Ścieżka łaski i światła.**',
                         inline: false
                     },
@@ -87,9 +86,8 @@ class JudgmentService {
                             '**Moce:**\n' +
                             '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
                             '• 🔍 Sprawdzanie cnót `/virtue-check`\n' +
-                            '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie (reset o północy)\n' +
-                            '• ⚠️ Przy odbiciu: 1h kara + losowa klątwa co 5 min + blokada `/curse`\n' +
-                            '• 🛡️ Odporność na klątwy i błogosławieństwa Gabriela\n\n' +
+                            '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie\n' +
+                            '• ⚠️ Przy odbiciu: 1h kara + losowa klątwa co 5 min + blokada `/curse`\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ BRAK błogosławieństw\n\n' +
                             '**Ścieżka potęgi i ciemności.**',

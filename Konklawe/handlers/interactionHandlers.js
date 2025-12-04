@@ -665,7 +665,7 @@ class InteractionHandler {
 
             if (hasLucyferRole) {
                 return await interaction.reply({
-                    content: '☁️ Lucyfer jest odporny na błogosławieństwa Gabriela! Ciemność odrzuca światło...',
+                    content: '☁️ Takie błogosławieństwa nie działają na demona! Ciemność odrzuca światło...',
                     ephemeral: true
                 });
             }
@@ -874,22 +874,6 @@ class InteractionHandler {
         const targetHasGabrielRole = targetMember.roles.cache.has(this.config.roles.gabriel);
         const targetHasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
 
-        // Gabriel nie może rzucić klątwy na Lucyfera
-        if (roleType === 'gabriel' && targetHasLucyferRole) {
-            return await interaction.reply({
-                content: '☁️ Lucyfer jest odporny na klątwy Gabriela! Ciemność odpiera światło...',
-                ephemeral: true
-            });
-        }
-
-        // Lucyfer nie może rzucić klątwy na Gabriela
-        if (roleType === 'lucyfer' && targetHasGabrielRole) {
-            return await interaction.reply({
-                content: '🔥 Gabriel jest odporny na klątwy Lucyfera! Światło odpiera ciemność...',
-                ephemeral: true
-            });
-        }
-
         // Sprawdź czy Lucyfer jest obecnie pod klątwą odbicia (blokada godzinna)
         if (roleType === 'lucyfer') {
             const reflectedCurse = this.lucyferReflectedCurses.get(userId);
@@ -911,6 +895,67 @@ class InteractionHandler {
             });
         }
 
+        // === SPECJALNA LOGIKA GABRIEL vs LUCYFER ===
+        // Gabriel curse → Lucyfer: resetuje % odbicia, Lucyfer zyskuje na sile
+        if (roleType === 'gabriel' && targetHasLucyferRole) {
+            // Resetuj progresywne odbicie Lucyfera
+            this.virtuttiService.resetLucyferReflectionChance(targetUser.id);
+
+            // Zarejestruj użycie
+            this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
+
+            return await interaction.reply({
+                content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer zyskuje na sile po rzuceniu na niego klątwy!** Jego progresywne odbicie zostało zresetowane do 0%.`,
+                ephemeral: false
+            });
+        }
+
+        // Lucyfer curse → Gabriel: 100% odbicie
+        if (roleType === 'lucyfer' && targetHasGabrielRole) {
+            // Automatyczne odbicie klątwy
+            const actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
+
+            // Zarejestruj użycie przed odbiciem
+            this.virtuttiService.registerLucyferCurse(userId, targetUser.id);
+
+            // Pobierz losową klątwę
+            const curse = this.virtuttiService.getRandomCurse();
+
+            try {
+                // Defer reply
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.deferReply({ ephemeral: false });
+                }
+
+                // Aplikuj klątwę na Lucyfera (sam siebie)
+                try {
+                    await this.applyNicknameCurse(actualTargetMember, interaction, curse.duration);
+                } catch (error) {
+                    logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
+                }
+
+                // Wykonaj dodatkową klątwę
+                await this.executeCurse(interaction, actualTargetMember, curse.additional);
+
+                const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
+                const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+
+                await interaction.editReply({
+                    content: `🛡️ **Gabriel jest odporny na klątwy Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}\n\n*Światło odpiera ciemność...*`
+                });
+
+                logger.info(`🛡️ Klątwa Lucyfera odbita przez Gabriela: ${interaction.user.tag}`);
+                return;
+
+            } catch (error) {
+                logger.error(`❌ Błąd podczas odbicia klątwy Lucyfera: ${error.message}`);
+                return await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania klątwy.',
+                    ephemeral: true
+                });
+            }
+        }
+
         // Sprawdź czy cel ma uprawnienia administratora - odbij klątwę!
         const hasAdminPermissions = targetMember.permissions.has('Administrator');
 
@@ -920,7 +965,7 @@ class InteractionHandler {
         let failedCurse = false;
         let curseReflectedByGabriel = false;
 
-        // GABRIEL - 20% fail, 1% reflect
+        // GABRIEL - 20% fail, 1% reflect (ale NIE na Lucyfera - to już obsłużone wyżej)
         if (roleType === 'gabriel') {
             const randomChance = Math.random() * 100;
 
