@@ -144,6 +144,86 @@ class InteractionHandler {
      * @param {Interaction} interaction - Interakcja Discord
      */
     async handleSelectMenuInteraction(interaction) {
+        // Obsługa wyboru użytkownika dla Sądu Bożego (anioł)
+        if (interaction.customId.startsWith('judgment_angel_user_select_')) {
+            const expectedUserId = interaction.customId.split('_').pop();
+
+            // Sprawdź czy to właściwy użytkownik
+            if (interaction.user.id !== expectedUserId) {
+                return await interaction.reply({
+                    content: 'To nie twój wybór! Możesz używać tylko swoich przycisków.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const chosenUserId = interaction.values[0];
+
+            // Pobierz użytkownika
+            let chosenUser;
+            try {
+                chosenUser = await interaction.client.users.fetch(chosenUserId);
+            } catch (error) {
+                return await interaction.reply({
+                    content: '❌ Nie udało się pobrać wybranego użytkownika!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Defer reply - finalizacja może potrwać
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            // Wywołaj finalizację przez JudgmentService
+            if (this.judgmentService) {
+                await this.judgmentService.finalizeJudgmentChoice(
+                    interaction,
+                    interaction.user,
+                    chosenUser,
+                    'angel'
+                );
+            }
+            return;
+        }
+
+        // Obsługa wyboru użytkownika dla Sądu Bożego (demon)
+        if (interaction.customId.startsWith('judgment_demon_user_select_')) {
+            const expectedUserId = interaction.customId.split('_').pop();
+
+            // Sprawdź czy to właściwy użytkownik
+            if (interaction.user.id !== expectedUserId) {
+                return await interaction.reply({
+                    content: 'To nie twój wybór! Możesz używać tylko swoich przycisków.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const chosenUserId = interaction.values[0];
+
+            // Pobierz użytkownika
+            let chosenUser;
+            try {
+                chosenUser = await interaction.client.users.fetch(chosenUserId);
+            } catch (error) {
+                return await interaction.reply({
+                    content: '❌ Nie udało się pobrać wybranego użytkownika!',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Defer reply - finalizacja może potrwać
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            // Wywołaj finalizację przez JudgmentService
+            if (this.judgmentService) {
+                await this.judgmentService.finalizeJudgmentChoice(
+                    interaction,
+                    interaction.user,
+                    chosenUser,
+                    'demon'
+                );
+            }
+            return;
+        }
+
         if (interaction.customId === 'remove_scheduled_select') {
             await this.handleRemoveScheduledSelect(interaction);
         }
@@ -2324,58 +2404,55 @@ class InteractionHandler {
      */
     async handleJudgmentAngelModalSubmit(interaction) {
         try {
-            const userInput = interaction.fields.getTextInputValue('user_input').trim();
+            const searchQuery = interaction.fields.getTextInputValue('user_input').trim().toLowerCase();
 
-            // Parsuj input - może być @mention lub ID
-            let userId = userInput;
+            // Pobierz wszystkich członków serwera
+            await interaction.guild.members.fetch();
 
-            // Usuń <@> z mention
-            if (userInput.startsWith('<@') && userInput.endsWith('>')) {
-                userId = userInput.slice(2, -1);
-                if (userId.startsWith('!')) {
-                    userId = userId.slice(1);
+            // Wyszukaj użytkowników pasujących do zapytania
+            const matchingMembers = interaction.guild.members.cache.filter(member => {
+                const displayName = member.displayName.toLowerCase();
+                const username = member.user.username.toLowerCase();
+
+                // Nie pokazuj botów ani użytkownika wywołującego
+                if (member.user.bot || member.id === interaction.user.id) {
+                    return false;
                 }
-            }
 
-            // Sprawdź czy to prawidłowy snowflake ID
-            if (!/^\d{17,19}$/.test(userId)) {
+                // Szukaj w display name i username
+                return displayName.includes(searchQuery) || username.includes(searchQuery);
+            });
+
+            // Ogranicz do 25 wyników (limit Discord)
+            const limitedMembers = Array.from(matchingMembers.values()).slice(0, 25);
+
+            if (limitedMembers.length === 0) {
                 return await interaction.reply({
-                    content: '❌ Nieprawidłowy format! Użyj @mention lub ID użytkownika (np. 123456789012345678)',
+                    content: `❌ Nie znaleziono użytkowników pasujących do: **${searchQuery}**\n\nSpróbuj wpisać inne litery.`,
                     flags: MessageFlags.Ephemeral
                 });
             }
 
-            // Pobierz użytkownika
-            let chosenUser;
-            try {
-                chosenUser = await interaction.client.users.fetch(userId);
-            } catch (error) {
-                return await interaction.reply({
-                    content: '❌ Nie znaleziono użytkownika o podanym ID!',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
-
-            // Sprawdź czy użytkownik nie wybrał sam siebie
-            if (chosenUser.id === interaction.user.id) {
-                return await interaction.reply({
-                    content: '❌ Nie możesz wybrać samego siebie!',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
-
-            // Defer reply - finalizacja może potrwać
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-            // Wywołaj finalizację przez JudgmentService
-            if (this.judgmentService) {
-                await this.judgmentService.finalizeJudgmentChoice(
-                    interaction,
-                    interaction.user,
-                    chosenUser,
-                    'angel'
+            // Utwórz select menu z wynikami
+            const { StringSelectMenuBuilder } = require('discord.js');
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`judgment_angel_user_select_${interaction.user.id}`)
+                .setPlaceholder('Wybierz użytkownika')
+                .addOptions(
+                    limitedMembers.map(member => ({
+                        label: member.displayName.substring(0, 100),
+                        description: `@${member.user.username}`.substring(0, 100),
+                        value: member.id
+                    }))
                 );
-            }
+
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+
+            await interaction.reply({
+                content: `🔍 **Znaleziono ${limitedMembers.length} użytkowników:**\n\n☁️ Wybrałeś ścieżkę aniołów - otrzymasz rolę **Gabriel**.\n🔥 Wybierz osobę która otrzyma rolę **Lucyfer** (przeciwna frakcja).`,
+                components: [row],
+                flags: MessageFlags.Ephemeral
+            });
 
         } catch (error) {
             logger.error(`❌ Błąd podczas obsługi wyboru anioła z modalu: ${error.message}`);
@@ -2383,10 +2460,6 @@ class InteractionHandler {
                 await interaction.reply({
                     content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
                     flags: MessageFlags.Ephemeral
-                });
-            } else if (interaction.deferred) {
-                await interaction.editReply({
-                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.'
                 });
             }
         }
@@ -2398,58 +2471,55 @@ class InteractionHandler {
      */
     async handleJudgmentDemonModalSubmit(interaction) {
         try {
-            const userInput = interaction.fields.getTextInputValue('user_input').trim();
+            const searchQuery = interaction.fields.getTextInputValue('user_input').trim().toLowerCase();
 
-            // Parsuj input - może być @mention lub ID
-            let userId = userInput;
+            // Pobierz wszystkich członków serwera
+            await interaction.guild.members.fetch();
 
-            // Usuń <@> z mention
-            if (userInput.startsWith('<@') && userInput.endsWith('>')) {
-                userId = userInput.slice(2, -1);
-                if (userId.startsWith('!')) {
-                    userId = userId.slice(1);
+            // Wyszukaj użytkowników pasujących do zapytania
+            const matchingMembers = interaction.guild.members.cache.filter(member => {
+                const displayName = member.displayName.toLowerCase();
+                const username = member.user.username.toLowerCase();
+
+                // Nie pokazuj botów ani użytkownika wywołującego
+                if (member.user.bot || member.id === interaction.user.id) {
+                    return false;
                 }
-            }
 
-            // Sprawdź czy to prawidłowy snowflake ID
-            if (!/^\d{17,19}$/.test(userId)) {
+                // Szukaj w display name i username
+                return displayName.includes(searchQuery) || username.includes(searchQuery);
+            });
+
+            // Ogranicz do 25 wyników (limit Discord)
+            const limitedMembers = Array.from(matchingMembers.values()).slice(0, 25);
+
+            if (limitedMembers.length === 0) {
                 return await interaction.reply({
-                    content: '❌ Nieprawidłowy format! Użyj @mention lub ID użytkownika (np. 123456789012345678)',
+                    content: `❌ Nie znaleziono użytkowników pasujących do: **${searchQuery}**\n\nSpróbuj wpisać inne litery.`,
                     flags: MessageFlags.Ephemeral
                 });
             }
 
-            // Pobierz użytkownika
-            let chosenUser;
-            try {
-                chosenUser = await interaction.client.users.fetch(userId);
-            } catch (error) {
-                return await interaction.reply({
-                    content: '❌ Nie znaleziono użytkownika o podanym ID!',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
-
-            // Sprawdź czy użytkownik nie wybrał sam siebie
-            if (chosenUser.id === interaction.user.id) {
-                return await interaction.reply({
-                    content: '❌ Nie możesz wybrać samego siebie!',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
-
-            // Defer reply - finalizacja może potrwać
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-            // Wywołaj finalizację przez JudgmentService
-            if (this.judgmentService) {
-                await this.judgmentService.finalizeJudgmentChoice(
-                    interaction,
-                    interaction.user,
-                    chosenUser,
-                    'demon'
+            // Utwórz select menu z wynikami
+            const { StringSelectMenuBuilder } = require('discord.js');
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`judgment_demon_user_select_${interaction.user.id}`)
+                .setPlaceholder('Wybierz użytkownika')
+                .addOptions(
+                    limitedMembers.map(member => ({
+                        label: member.displayName.substring(0, 100),
+                        description: `@${member.user.username}`.substring(0, 100),
+                        value: member.id
+                    }))
                 );
-            }
+
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+
+            await interaction.reply({
+                content: `🔍 **Znaleziono ${limitedMembers.length} użytkowników:**\n\n🔥 Wybrałeś ścieżkę demonów - otrzymasz rolę **Lucyfer**.\n☁️ Wybierz osobę która otrzyma rolę **Gabriel** (przeciwna frakcja).`,
+                components: [row],
+                flags: MessageFlags.Ephemeral
+            });
 
         } catch (error) {
             logger.error(`❌ Błąd podczas obsługi wyboru demona z modalu: ${error.message}`);
@@ -2457,10 +2527,6 @@ class InteractionHandler {
                 await interaction.reply({
                     content: '❌ Wystąpił błąd podczas przetwarzania wyboru.',
                     flags: MessageFlags.Ephemeral
-                });
-            } else if (interaction.deferred) {
-                await interaction.editReply({
-                    content: '❌ Wystąpił błąd podczas przetwarzania wyboru.'
                 });
             }
         }

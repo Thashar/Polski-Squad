@@ -155,12 +155,12 @@ class JudgmentService {
 
             const userInput = new TextInputBuilder()
                 .setCustomId('user_input')
-                .setLabel('Wpisz @mention lub ID użytkownika')
-                .setPlaceholder('@username lub 123456789012345678')
+                .setLabel('Wpisz kilka liter z nicku użytkownika')
+                .setPlaceholder('np. "push" aby znaleźć pushok_10')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
-                .setMinLength(3)
-                .setMaxLength(100);
+                .setMinLength(2)
+                .setMaxLength(32);
 
             const row = new ActionRowBuilder().addComponents(userInput);
             modal.addComponents(row);
@@ -202,12 +202,12 @@ class JudgmentService {
 
             const userInput = new TextInputBuilder()
                 .setCustomId('user_input')
-                .setLabel('Wpisz @mention lub ID użytkownika')
-                .setPlaceholder('@username lub 123456789012345678')
+                .setLabel('Wpisz kilka liter z nicku użytkownika')
+                .setPlaceholder('np. "push" aby znaleźć pushok_10')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
-                .setMinLength(3)
-                .setMaxLength(100);
+                .setMinLength(2)
+                .setMaxLength(32);
 
             const row = new ActionRowBuilder().addComponents(userInput);
             modal.addComponents(row);
