@@ -171,6 +171,14 @@ class ScheduledHintsService {
             return;
         }
 
+        // Sprawdź czy gra jest aktywna (hasło istnieje)
+        if (!this.gameService.trigger) {
+            logger.warn(`⚠️ Anulowano ujawnienie podpowiedzi ${hintId} - brak aktywnego hasła`);
+            hint.revealed = true; // Oznacz jako ujawnioną aby nie próbować ponownie
+            await this.saveScheduledHints();
+            return;
+        }
+
         try {
             // Oznacz jako ujawnioną
             hint.revealed = true;

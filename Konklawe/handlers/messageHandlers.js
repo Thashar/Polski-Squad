@@ -4,12 +4,13 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
 class MessageHandler {
-    constructor(config, gameService, rankingService, timerService, passwordEmbedService = null) {
+    constructor(config, gameService, rankingService, timerService, passwordEmbedService = null, scheduledHintsService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
         this.passwordEmbedService = passwordEmbedService;
+        this.scheduledHintsService = scheduledHintsService;
     }
 
     /**
@@ -161,6 +162,12 @@ class MessageHandler {
         const timeText = this.gameService.getFormattedTimeSincePasswordSet();
 
         this.timerService.clearAllTimers();
+
+        // Wyczyść zaplanowane podpowiedzi
+        if (this.scheduledHintsService) {
+            await this.scheduledHintsService.clearAllScheduled();
+        }
+
         this.gameService.clearPassword();
 
         logger.info('🔄 Usuwanie roli papieskiej wszystkim użytkownikom...');

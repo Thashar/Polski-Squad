@@ -76,7 +76,7 @@ async function initializeServices() {
 
     // Inicjalizacja handlerów z wszystkimi serwisami
     interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService);
-    messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService);
+    messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 
     // Inicjalizacja danych gry
     gameService.initializeGameData();
