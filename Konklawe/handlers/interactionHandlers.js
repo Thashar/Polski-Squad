@@ -896,18 +896,86 @@ class InteractionHandler {
         }
 
         // === SPECJALNA LOGIKA GABRIEL vs LUCYFER ===
-        // Gabriel curse → Lucyfer: resetuje % odbicia, Lucyfer zyskuje na sile
+        // Gabriel curse → Lucyfer: 33% reset / 33% odporność / 33% klątwa / 1% potężna
         if (roleType === 'gabriel' && targetHasLucyferRole) {
-            // Resetuj progresywne odbicie Lucyfera
-            this.virtuttiService.resetLucyferReflectionChance(targetUser.id);
+            const randomChance = Math.random() * 100;
 
             // Zarejestruj użycie
             this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
 
-            return await interaction.reply({
-                content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer zyskuje na sile po rzuceniu na niego klątwy!** Jego progresywne odbicie zostało zresetowane do 0%.`,
-                ephemeral: false
-            });
+            if (randomChance < 33) {
+                // 33% - Lucyfer urośnie w siłę (reset % odbicia)
+                this.virtuttiService.resetLucyferReflectionChance(targetUser.id);
+
+                return await interaction.reply({
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer urósł w siłę!** Jego progresywne odbicie zostało zresetowane do 0%.`,
+                    ephemeral: false
+                });
+            } else if (randomChance >= 33 && randomChance < 66) {
+                // 33% - Nic się nie stanie (odporność)
+                return await interaction.reply({
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...`,
+                    ephemeral: false
+                });
+            } else if (randomChance >= 66 && randomChance < 99) {
+                // 33% - Normalna klątwa 5 min
+                // Pobierz losową klątwę
+                const curse = this.virtuttiService.getRandomCurse();
+
+                try {
+                    // Defer reply
+                    if (!interaction.replied && !interaction.deferred) {
+                        await interaction.deferReply({ ephemeral: false });
+                    }
+
+                    // Aplikuj klątwę na Lucyfera
+                    try {
+                        await this.applyNicknameCurse(targetMember, interaction, curse.duration);
+                    } catch (error) {
+                        logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
+                    }
+
+                    // Wykonaj dodatkową klątwę
+                    await this.executeCurse(interaction, targetMember, curse.additional);
+
+                    const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
+                    const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+
+                    await interaction.editReply({
+                        content: `☁️ **Gabriel przeklął Lucyfera!** ${randomReaction}\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!** Klątwa będzie trwać 5 minut.`
+                    });
+
+                    logger.info(`☁️ Gabriel (${interaction.user.tag}) skutecznie przeklął Lucyfera (${targetUser.tag})`);
+                    return;
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas rzucania klątwy na Lucyfera: ${error.message}`);
+                    return await interaction.reply({
+                        content: '❌ Wystąpił błąd podczas przetwarzania klątwy.',
+                        ephemeral: true
+                    });
+                }
+            } else {
+                // 1% - Potężna klątwa 24h (jak przy blessing)
+                const curses = [
+                    'slow_mode',
+                    'auto_delete',
+                    'random_ping',
+                    'emoji_spam',
+                    'forced_caps',
+                    'random_timeout',
+                    'special_role'
+                ];
+                const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+
+                // Nałóż potężną klątwę (5 min aktywna + 24h debuff)
+                const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id);
+                await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
+
+                return await interaction.reply({
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡ **Potężna klątwa nałożona!** Lucyfer został osłabiony na 24 godziny! ⚡`,
+                    ephemeral: false
+                });
+            }
         }
 
         // Lucyfer curse → Gabriel: 100% odbicie
