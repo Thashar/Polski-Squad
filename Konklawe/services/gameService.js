@@ -263,6 +263,15 @@ class GameService {
     }
 
     /**
+     * Pobiera punkty użytkownika
+     * @param {string} userId - ID użytkownika
+     * @returns {number} - Liczba punktów
+     */
+    getPoints(userId) {
+        return this.scoreboard[userId] || 0;
+    }
+
+    /**
      * Resetuje ranking
      */
     resetScoreboard() {
