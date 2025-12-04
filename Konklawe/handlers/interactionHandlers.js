@@ -1081,8 +1081,7 @@ class InteractionHandler {
             // Automatyczne odbicie klątwy
             const actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
 
-            // Zarejestruj użycie przed odbiciem
-            this.virtuttiService.registerLucyferCurse(userId, targetUser.id);
+            // NIE rejestrujemy klątwy gdy jest odbita (licznik tylko dla skutecznych klątw)
 
             // Pobierz losową klątwę
             const curse = this.virtuttiService.getRandomCurse();
