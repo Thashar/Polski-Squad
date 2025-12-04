@@ -279,17 +279,14 @@ class JudgmentService {
                     `⚖️ **Sąd Boży został dokonany!**\n\n` +
                     `✅ Otrzymałeś rolę: **${chooserRoleName}**\n` +
                     `🎯 ${chosenUser.toString()} otrzymał rolę: **${chosenRoleName}**\n\n` +
-                    `**Los został przesądzony...**`
+                    `**Los został przesądzony...**\n\n` +
+                    `📬 Sprawdź wiadomości prywatne - wysłano szczegóły Twojej roli!`
             });
 
-            // Wyślij powiadomienie do wybranej osoby
-            try {
-                // Przygotuj opis umiejętności w zależności od roli
-                let abilitiesDescription = '';
-
-                if (chosenRoleName === 'Gabriel') {
-                    abilitiesDescription =
-                        '**Moce:**\n' +
+            // Funkcja pomocnicza do generowania opisu umiejętności
+            const getAbilitiesDescription = (roleName) => {
+                if (roleName === 'Gabriel') {
+                    return '**Moce:**\n' +
                         '• 🙏 Nieograniczone błogosławieństwa `/blessing`\n' +
                         '• ✨ 50% szans na usunięcie klątwy przy błogosławieństwie\n' +
                         '• 💀 Klątwy `/curse` (20% fail, 1% odbicie na siebie)\n' +
@@ -303,8 +300,7 @@ class JudgmentService {
                         '• Efekty konfrontacji pozostają tajemnicą Sądu Bożego\n\n' +
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
-                    abilitiesDescription =
-                        '**Moce:**\n' +
+                    return '**Moce:**\n' +
                         '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
                         '• 📈 Progresywne odbicie: 0% → +1% za każdą klątwę dziennie\n' +
                         '• ⚠️ Przy odbiciu: silna klątwa przez 1h, co 5 min zmiana rodzaju klątwy + blokada `/curse`\n' +
@@ -316,7 +312,37 @@ class JudgmentService {
                         '• Prawdziwa natura tej mocy jest nieznana śmiertelnikom\n\n' +
                         '**Ścieżka potęgi i ciemności.**';
                 }
+            };
 
+            // Wyślij powiadomienie DM do osoby wybierającej
+            try {
+                await chooserMember.send({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setTitle('⚖️ **STANĄŁEŚ PRZED SĄDEM BOŻYM!**')
+                            .setDescription(
+                                `**Wybrałeś swoją ścieżkę w Sądzie Bożym!**\n\n` +
+                                `✨ **Otrzymałeś rolę: ${chooserRoleName}**\n` +
+                                `🎯 **${chosenMember.displayName}** otrzymał rolę: **${chosenRoleName}**\n\n` +
+                                `*Los został przesądzony. Równowaga została przywrócona...*`
+                            )
+                            .addFields({
+                                name: chooserRoleName === 'Gabriel' ? '☁️ **GABRIEL - Święty Anioł**' : '🔥 **LUCYFER - Upadły Anioł**',
+                                value: getAbilitiesDescription(chooserRoleName),
+                                inline: false
+                            })
+                            .setColor(chooserRoleName === 'Gabriel' ? '#87CEEB' : '#FF4500')
+                            .setTimestamp()
+                            .setFooter({ text: 'Konklawe - Sąd Boży' })
+                    ]
+                });
+                logger.info(`📨 Wysłano powiadomienie DM do ${chooser.tag} o roli ${chooserRoleName}`);
+            } catch (error) {
+                logger.warn(`⚠️ Nie udało się wysłać DM do ${chooser.tag}: ${error.message}`);
+            }
+
+            // Wyślij powiadomienie DM do wybranej osoby
+            try {
                 await chosenMember.send({
                     embeds: [
                         new EmbedBuilder()
@@ -328,7 +354,7 @@ class JudgmentService {
                             )
                             .addFields({
                                 name: chosenRoleName === 'Gabriel' ? '☁️ **GABRIEL - Święty Anioł**' : '🔥 **LUCYFER - Upadły Anioł**',
-                                value: abilitiesDescription,
+                                value: getAbilitiesDescription(chosenRoleName),
                                 inline: false
                             })
                             .setColor(chosenRoleName === 'Gabriel' ? '#87CEEB' : '#FF4500')
