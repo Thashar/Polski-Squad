@@ -337,6 +337,20 @@ class VirtuttiService {
     }
 
     /**
+     * Resetuje szansę odbicia konkretnego Lucyfera (wywołane przez Gabriela)
+     * @param {string} userId - ID Lucyfera
+     */
+    resetLucyferReflectionChance(userId) {
+        if (this.lucyferCurses.has(userId)) {
+            const curseData = this.lucyferCurses.get(userId);
+            curseData.cursesThrown = 0;
+            curseData.reflectionChance = 0;
+            logger.info(`☁️ Gabriel zresetował progresywne odbicie Lucyfera ${userId} do 0%`);
+            this.saveData();
+        }
+    }
+
+    /**
      * Resetuje klątwy Lucyfera (wywoływane o północy)
      */
     resetLucyferCursesDaily() {
