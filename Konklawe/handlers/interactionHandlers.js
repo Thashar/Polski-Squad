@@ -748,7 +748,7 @@ class InteractionHandler {
                         // Nałóż początkową klątwę (5 min)
                         await this.applyCurse(lucyferMember, randomCurse, guild, debuffData.initialCurseEndTime);
 
-                        blessingMessage += `\n\n⚡ **Moc Gabriela dosięgła Lucyfera! Klątwa nałożona!** ⚡`;
+                        blessingMessage += `\n\n⚡ **Potężna klątwa nałożona!** ⚡`;
                         logger.info(`⚡ Gabriel (${interaction.user.tag}) nałożył specjalną klątwę na Lucyfera (${lucyferMember.user.tag})`);
                     }
                 }
@@ -941,7 +941,7 @@ class InteractionHandler {
                 const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
 
                 await interaction.editReply({
-                    content: `🛡️ **Gabriel jest odporny na klątwy Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}\n\n*Światło odpiera ciemność...*`
+                    content: `🛡️ **Gabriel okazał się odporny na tę klątwę Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}\n\n*Światło odpiera ciemność...*`
                 });
 
                 logger.info(`🛡️ Klątwa Lucyfera odbita przez Gabriela: ${interaction.user.tag}`);
@@ -1066,7 +1066,7 @@ class InteractionHandler {
                 responseContent = `${roleEmoji} **Klątwa została odbita!** Gabriel dostaje własną klątwę na 5 minut! ${randomReaction}`;
             } else if (isReflected) {
                 if (roleType === 'lucyfer') {
-                    responseContent = `🔥 **O nie! Klątwa została odbita!** Lucyfer zostaje przeklęty na **1 godzinę**! Co 5 minut dostaniesz losową klątwę! ${randomReaction}`;
+                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi na pełną godzinę!** ${randomReaction}`;
                 } else {
                     responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
                         `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}`;
@@ -1843,9 +1843,20 @@ class InteractionHandler {
                 durationMs
             );
 
+            // Sprawdź czy to Lucyfer z długą klątwą (1h = 60 min lub więcej)
+            const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
+            const isLongCurse = durationMinutes >= 60; // 1 godzina lub więcej
+
+            let cursePrefix = this.config.virtuttiPapajlari.forcedNickname; // Domyślnie "Przeklęty"
+
+            // Jeśli to Lucyfer z długą klątwą, użyj "Osłabiony"
+            if (hasLucyferRole && isLongCurse) {
+                cursePrefix = 'Osłabiony';
+            }
+
             // Aplikuj klątwę
             const originalDisplayName = targetMember.displayName;
-            const cursedNickname = `${this.config.virtuttiPapajlari.forcedNickname} ${originalDisplayName}`;
+            const cursedNickname = `${cursePrefix} ${originalDisplayName}`;
 
             await targetMember.setNickname(cursedNickname);
             logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${cursedNickname}"`);
@@ -2138,7 +2149,18 @@ class InteractionHandler {
         try {
             // 1. Aplikuj nickname curse (Przeklęty prefix)
             try {
-                const forcedPrefix = this.config.virtuttiPapajlari.forcedNickname || 'Przeklęty';
+                // Sprawdź czy to Lucyfer z długą klątwą (1h = 3600000ms lub więcej)
+                const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
+                const curseDurationMs = endTime - now;
+                const isLongCurse = curseDurationMs >= 3600000; // 1 godzina lub więcej
+
+                let forcedPrefix = this.config.virtuttiPapajlari.forcedNickname || 'Przeklęty';
+
+                // Jeśli to Lucyfer z długą klątwą, użyj "Osłabiony"
+                if (hasLucyferRole && isLongCurse) {
+                    forcedPrefix = 'Osłabiony';
+                }
+
                 const newNick = `${forcedPrefix} ${targetMember.displayName}`.substring(0, 32);
 
                 const effectId = await this.nicknameManager.applyEffect(
