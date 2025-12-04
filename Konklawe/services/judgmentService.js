@@ -370,12 +370,15 @@ class JudgmentService {
             // Wyślij ogłoszenie na kanał gry
             const gameChannel = await this.client.channels.fetch(this.config.channels.command);
             if (gameChannel && gameChannel.isTextBased()) {
+                const chooserEmoji = chooserRoleName === 'Gabriel' ? '☁️' : '🔥';
+                const chosenEmoji = chosenRoleName === 'Gabriel' ? '☁️' : '🔥';
+
                 const announcement = new EmbedBuilder()
                     .setTitle('⚖️ **SĄD BOŻY ZOSTAŁ DOKONANY!**')
                     .setDescription(
                         `**Równowaga została przywrócona. Dwie dusze zostały wybrane...**\n\n` +
-                        `☁️ **${chooserMember.displayName}** otrzymał rolę **${chooserRoleName}**!\n` +
-                        `🔥 **${chosenMember.displayName}** otrzymał rolę **${chosenRoleName}**!\n\n` +
+                        `${chooserEmoji} **${chooserMember.displayName}** otrzymał rolę **${chooserRoleName}**!\n` +
+                        `${chosenEmoji} **${chosenMember.displayName}** otrzymał rolę **${chosenRoleName}**!\n\n` +
                         `⚔️ **Przygotujcie się na walkę dobra ze złem!**`
                     )
                     .setColor(choiceType === 'angel' ? '#87CEEB' : '#FF4500')
