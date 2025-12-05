@@ -1154,6 +1154,9 @@ class InteractionHandler {
                 // Zablokuj rzucanie klątw na 1h
                 this.virtuttiService.blockLucyferCurses(userId);
 
+                // Zresetuj licznik progresywnego odbicia do 0%
+                this.virtuttiService.resetLucyferReflectionChance(userId);
+
                 // Zmień nick na "Osłabiony [nick]"
                 try {
                     const lucyferMember = await interaction.guild.members.fetch(userId);
