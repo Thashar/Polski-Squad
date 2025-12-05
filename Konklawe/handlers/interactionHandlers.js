@@ -703,6 +703,7 @@ class InteractionHandler {
     async handleBlessingCommand(interaction, roleType = 'virtutti') {
         const targetUser = interaction.options.getUser('użytkownik');
         const userId = interaction.user.id;
+        let curseRemoved = false; // Flaga dla specjalnego logowania Gabriel
 
         // Lucyfer nie może używać blessing
         if (roleType === 'lucyfer') {
@@ -804,6 +805,9 @@ class InteractionHandler {
 
                         blessingMessage += `\n\n✨ **Klątwa została ściągnięta przez moc Gabriela!** ✨`;
                         logger.info(`✨ Gabriel (${interaction.user.tag}) usunął klątwę z ${targetUser.tag}`);
+
+                        // Ustawienie flagi dla późniejszego logowania
+                        curseRemoved = true;
                     }
                 }
 
@@ -824,6 +828,15 @@ class InteractionHandler {
 
                         blessingMessage += `\n\n⚡ **Silna klątwa nałożona!** Lucyfer będzie cierpiał przez godzinę! ⚡`;
                         logger.info(`⚡ Gabriel (${interaction.user.tag}) nałożył silną klątwę na Lucyfera (${lucyferMember.user.tag}) - 1h, zmiana co 5 min`);
+
+                        // Szczegółowe logowanie silnej klątwy Gabriela
+                        if (this.detailedLogger) {
+                            await this.detailedLogger.logGabrielStrongCurse(
+                                interaction.user,
+                                lucyferMember.user,
+                                60 // 60 minut
+                            );
+                        }
                     }
                 }
             }
@@ -840,6 +853,18 @@ class InteractionHandler {
                     `🔋 Regeneracja: **10 pkt/h**`,
                 flags: MessageFlags.Ephemeral
             });
+
+            // Szczegółowe logowanie blessing
+            if (this.detailedLogger) {
+                await this.detailedLogger.logBlessing(
+                    interaction.user,
+                    targetUser,
+                    blessing,
+                    blessingCost,
+                    updatedEnergyData,
+                    curseRemoved
+                );
+            }
 
             logger.info(`🙏 ${interaction.user.tag} (${roleType}) błogosławi ${targetUser.tag}`);
         } catch (error) {
@@ -923,6 +948,16 @@ class InteractionHandler {
 
         try {
             await interaction.reply({ embeds: [embed], ephemeral: false });
+
+            // Szczegółowe logowanie virtue check
+            if (this.detailedLogger) {
+                await this.detailedLogger.logVirtueCheck(
+                    interaction.user,
+                    targetUser,
+                    virtues
+                );
+            }
+
             logger.info(`🔍 ${interaction.user.tag} sprawdza cnoty ${targetUser.tag}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas sprawdzania cnót: ${error.message}`);
@@ -960,6 +995,14 @@ class InteractionHandler {
         if (roleType === 'lucyfer') {
             const blockData = this.virtuttiService.checkLucyferCurseBlock(userId);
             if (blockData && blockData.blocked) {
+                // Szczegółowe logowanie próby użycia curse podczas blokady
+                if (this.detailedLogger) {
+                    await this.detailedLogger.logLucyferBlock(
+                        userId,
+                        blockData.remainingMinutes
+                    );
+                }
+
                 return await interaction.reply({
                     content: `🔥 **Jesteś osłabiony!** Twoja własna klątwa została odbita!\n\n⚠️ Nie możesz używać /curse przez jeszcze **${blockData.remainingMinutes} minut**!`,
                     flags: MessageFlags.Ephemeral
@@ -1110,6 +1153,14 @@ class InteractionHandler {
                     content: `🛡️ **Gabriel okazał się odporny na tę klątwę Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}\n\n*Światło odpiera ciemność...*`
                 });
 
+                // Szczegółowe logowanie odbicia Gabriela (33%)
+                if (this.detailedLogger) {
+                    await this.detailedLogger.logGabrielReflection(
+                        interaction.user,
+                        targetUser
+                    );
+                }
+
                 logger.info(`🛡️ Klątwa Lucyfera odbita przez Gabriela: ${interaction.user.tag}`);
                 return;
 
@@ -1191,6 +1242,15 @@ class InteractionHandler {
                     logger.error(`❌ Błąd zmiany nicku przy odbiciu: ${error.message}`);
                 }
 
+                // Szczegółowe logowanie odbicia Lucyfera (progresywne)
+                if (this.detailedLogger) {
+                    await this.detailedLogger.logLucyferReflection(
+                        interaction.user,
+                        reflectionChance,
+                        randomChance
+                    );
+                }
+
                 // Wyślij komunikat o odbiciu i blokadzie
                 return await interaction.reply({
                     content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został osłabiony!** Nie możesz rzucać klątw przez **1 godzinę**!\n\n*Siły ciemności nie zagrażają serwerowi...*`,
@@ -1233,6 +1293,19 @@ class InteractionHandler {
                 `☁️ **Fiasko!** Łaska zablokowała klątwę! Może następnym razem się uda.`
             ];
             const randomFailMessage = failMessages[Math.floor(Math.random() * failMessages.length)];
+
+            // Szczegółowe logowanie faila klątwy
+            if (this.detailedLogger) {
+                const refund = Math.floor(curseCost / 2);
+                const energyDataAfterRefund = this.virtuttiService.getEnergy(userId);
+                await this.detailedLogger.logCurseFail(
+                    interaction.user,
+                    targetUser,
+                    curseCost,
+                    refund,
+                    energyDataAfterRefund
+                );
+            }
 
             const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
             return await interaction.reply({
@@ -1337,6 +1410,23 @@ class InteractionHandler {
                         `🔋 Regeneracja: **10 pkt/h**`,
                     flags: MessageFlags.Ephemeral
                 });
+            }
+
+            // Szczegółowe logowanie klątwy (tylko dla skutecznych klątw, nie dla failów)
+            if (this.detailedLogger) {
+                // Oblicz reflectionChance tylko dla Lucyfera
+                const reflectionChance = roleType === 'lucyfer' ?
+                    this.virtuttiService.getLucyferReflectionChance(userId) : null;
+
+                await this.detailedLogger.logCurse(
+                    interaction.user,
+                    actualTarget,
+                    curse.additional,
+                    curseLevel,
+                    curseCost,
+                    updatedEnergyData,
+                    reflectionChance
+                );
             }
 
             logger.info(`💀 ${interaction.user.tag} (${roleType}) przeklął ${actualTarget.tag}${isReflected ? ' (odbita klątwa)' : ''}`);

@@ -4,9 +4,10 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
 class RankingService {
-    constructor(config, gameService) {
+    constructor(config, gameService, detailedLogger = null) {
         this.config = config;
         this.gameService = gameService;
+        this.detailedLogger = detailedLogger;
     }
 
     /**
@@ -225,8 +226,24 @@ class RankingService {
                 logger.error(`❌ Błąd nadawania roli Virtutti Papajlari dla ${userId}:`, err);
             }
 
+            // Pobierz punkty przed resetem
+            const points = this.gameService.getPoints(userId);
+
             this.gameService.addVirtuttiMedal(userId);
             const member = await guild.members.fetch(userId);
+
+            // Pobierz liczbę medali PO dodaniu nowego
+            const medalCount = this.gameService.virtuttiMedals[userId] || 1;
+
+            // Szczegółowe logowanie osiągnięcia
+            if (this.detailedLogger) {
+                await this.detailedLogger.logVirtuttiAchievement(
+                    member.user,
+                    points,
+                    medalCount
+                );
+            }
+
             const achievementMessage = this.config.messages.virtuttiPapajlariAchieved
                 .replace('{user}', `<@${userId}>`)
                 .replace('{emoji}', this.config.emojis.virtuttiPapajlari);

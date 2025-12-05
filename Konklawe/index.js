@@ -46,7 +46,8 @@ async function initializeServices() {
     // Najpierw utwórz serwisy podstawowe
     gameService = new GameService(config, dataService);
     timerService = new TimerService(config, gameService);
-    rankingService = new RankingService(config, gameService);
+    // RankingService będzie zainicjalizowany później z detailedLogger
+    rankingService = null;
     commandService = new CommandService(config);
 
     // Utwórz scheduledHintsService (wymaga gameService, timerService, passwordEmbedService)
@@ -72,9 +73,12 @@ async function initializeServices() {
     // Ustaw scheduledHintsService w gameService
     gameService.setScheduledHintsService(scheduledHintsService);
 
-    // Inicjalizacja DetailedLogger (przed JudgmentService)
+    // Inicjalizacja DetailedLogger (przed JudgmentService i RankingService)
     detailedLogger = new DetailedLogger(client, config);
     await detailedLogger.initialize();
+
+    // Inicjalizacja RankingService z detailedLogger
+    rankingService = new RankingService(config, gameService, detailedLogger);
 
     // Inicjalizacja JudgmentService
     judgmentService = new JudgmentService(config, detailedLogger);

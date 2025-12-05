@@ -205,10 +205,11 @@ class DetailedLogger {
      * Loguje osiągnięcie medalu Virtutti Papajlari
      */
     async logVirtuttiAchievement(user, points, medalCount) {
+        const threshold = this.config.achievements?.virtuttiPapajlariThreshold || 10;
         await this.log({
             type: 'achievement',
             title: '🏆 VIRTUTTI PAPAJLARI',
-            description: `**Nowy medal zdobyty!**\n\n<@${user.id}> osiągnął 30 zwycięstw w Konklawe!`,
+            description: `**Nowy medal zdobyty!**\n\n<@${user.id}> osiągnął ${threshold} zwycięstw w Konklawe!`,
             fields: [
                 { name: '👤 Użytkownik', value: `<@${user.id}> (${user.tag})`, inline: true },
                 { name: '🎯 Punkty', value: `${points}`, inline: true },
