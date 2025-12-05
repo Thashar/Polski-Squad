@@ -39,7 +39,8 @@ class NicknameManagerService {
     // Stałe typów efektów
     static EFFECTS = {
         CURSE: 'curse',        // Klątwa z Konklawe
-        FLAG: 'flag'           // Flaga z Muteusz
+        FLAG: 'flag',          // Flaga z Muteusz
+        WEAKENED: 'weakened'   // Osłabienie Lucyfera (trwałe)
     };
     
     /**
@@ -162,13 +163,14 @@ class NicknameManagerService {
     }
     
     /**
-     * Sprawdza czy nick jest nickiem efektu (klątwy/flagi)
+     * Sprawdza czy nick jest nickiem efektu (klątwy/flagi/osłabienia)
      */
     isEffectNickname(nickname) {
         if (!nickname) return false;
-        
+
         // Wzorce nicków efektów
         const cursePattern = /^Przeklęty /;
+        const weakenedPattern = /^Osłabiony /;
         const flagNicknames = [
             "Slava Ukrainu!",
             "POLSKA GUROM!",
@@ -177,8 +179,24 @@ class NicknameManagerService {
             "Hände hoch!",
             "Cyka blyat!"
         ];
-        
-        return cursePattern.test(nickname) || flagNicknames.includes(nickname);
+
+        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || flagNicknames.includes(nickname);
+    }
+
+    /**
+     * Usuwa prefixy efektów z nicku i zwraca "czysty" nick
+     * @param {string} nickname - Nick z prefixem
+     * @returns {string} - Nick bez prefixu
+     */
+    getCleanNickname(nickname) {
+        if (!nickname) return nickname;
+
+        // Usuń wszystkie known prefixy
+        let cleanNick = nickname
+            .replace(/^Przeklęty /, '')
+            .replace(/^Osłabiony /, '');
+
+        return cleanNick;
     }
     
     /**
@@ -481,17 +499,20 @@ class NicknameManagerService {
         const stats = {
             totalActiveEffects: this.activeEffects.size,
             curses: 0,
-            flags: 0
+            flags: 0,
+            weakened: 0
         };
-        
+
         for (const effectData of this.activeEffects.values()) {
             if (effectData.effectType === NicknameManagerService.EFFECTS.CURSE) {
                 stats.curses++;
             } else if (effectData.effectType === NicknameManagerService.EFFECTS.FLAG) {
                 stats.flags++;
+            } else if (effectData.effectType === NicknameManagerService.EFFECTS.WEAKENED) {
+                stats.weakened++;
             }
         }
-        
+
         return stats;
     }
     

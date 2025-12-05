@@ -1224,8 +1224,9 @@ class InteractionHandler {
                             durationMs
                         );
 
-                        // Zmień nick na "Osłabiony [displayName]"
-                        const weakenedNick = `Osłabiony ${lucyferMember.displayName}`.substring(0, 32);
+                        // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
+                        const cleanNick = this.nicknameManager.getCleanNickname(lucyferMember.displayName);
+                        const weakenedNick = `Osłabiony ${cleanNick}`.substring(0, 32);
                         await lucyferMember.setNickname(weakenedNick);
 
                         logger.info(`🔥 Zmieniono nick Lucyfera ${lucyferMember.user.tag} na "${weakenedNick}" na 1h`);
@@ -1280,8 +1281,12 @@ class InteractionHandler {
         if (roleType === 'virtutti' || roleType === 'gabriel') {
             this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
         } else if (roleType === 'lucyfer' && !isReflected) {
-            // Lucyfer rejestruje tylko jeśli nie została odbita
+            // Lucyfer rejestruje tylko jeśli nie została odbita (zwiększa licznik PRZED pokazaniem wyniku)
             this.virtuttiService.registerLucyferCurse(userId, targetUser.id);
+
+            // Logowanie diagnostyczne
+            const currentReflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
+            logger.info(`🔥 Lucyfer ${interaction.user.tag} zarejestrował klątwę. Obecna szansa odbicia: ${currentReflectionChance}%`);
         }
 
         // Jeśli Gabriel failnął, wyślij komunikat i zakończ
@@ -1402,6 +1407,10 @@ class InteractionHandler {
             } else {
                 // Lucyfer - pokaż szansę na odbicie + manę
                 const reflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
+
+                // Logowanie diagnostyczne - porównaj z wcześniejszą wartością
+                logger.info(`🔥 Lucyfer ${interaction.user.tag} wyświetlenie statusu. Szansa odbicia: ${reflectionChance}%`);
+
                 await interaction.followUp({
                     content: `🔥 **Aktualna szansa na odbicie:** **${reflectionChance}%**\n` +
                         `⚡ **Mana:** ${updatedEnergyData.energy}/${updatedEnergyData.maxEnergy}\n` +
@@ -2247,20 +2256,19 @@ class InteractionHandler {
                 durationMs
             );
 
-            // Sprawdź czy to Lucyfer z długą klątwą (1h = 60 min lub więcej)
+            // Sprawdź czy to Lucyfer (zawsze "Osłabiony" dla Lucyfera)
             const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
-            const isLongCurse = durationMinutes >= 60; // 1 godzina lub więcej
 
             let cursePrefix = this.config.virtuttiPapajlari.forcedNickname; // Domyślnie "Przeklęty"
 
-            // Jeśli to Lucyfer z długą klątwą, użyj "Osłabiony"
-            if (hasLucyferRole && isLongCurse) {
+            // Jeśli to Lucyfer, ZAWSZE użyj "Osłabiony"
+            if (hasLucyferRole) {
                 cursePrefix = 'Osłabiony';
             }
 
-            // Aplikuj klątwę
-            const originalDisplayName = targetMember.displayName;
-            const cursedNickname = `${cursePrefix} ${originalDisplayName}`;
+            // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
+            const cleanNick = this.nicknameManager.getCleanNickname(targetMember.displayName);
+            const cursedNickname = `${cursePrefix} ${cleanNick}`;
 
             await targetMember.setNickname(cursedNickname);
             logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${cursedNickname}"`);
@@ -2553,19 +2561,19 @@ class InteractionHandler {
         try {
             // 1. Aplikuj nickname curse (Przeklęty prefix)
             try {
-                // Sprawdź czy to Lucyfer z długą klątwą (1h = 3600000ms lub więcej)
+                // Sprawdź czy to Lucyfer (zawsze "Osłabiony" dla Lucyfera)
                 const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
-                const curseDurationMs = endTime - now;
-                const isLongCurse = curseDurationMs >= 3600000; // 1 godzina lub więcej
 
                 let forcedPrefix = this.config.virtuttiPapajlari.forcedNickname || 'Przeklęty';
 
-                // Jeśli to Lucyfer z długą klątwą, użyj "Osłabiony"
-                if (hasLucyferRole && isLongCurse) {
+                // Jeśli to Lucyfer, ZAWSZE użyj "Osłabiony"
+                if (hasLucyferRole) {
                     forcedPrefix = 'Osłabiony';
                 }
 
-                const newNick = `${forcedPrefix} ${targetMember.displayName}`.substring(0, 32);
+                // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
+                const cleanNick = this.nicknameManager.getCleanNickname(targetMember.displayName);
+                const newNick = `${forcedPrefix} ${cleanNick}`.substring(0, 32);
 
                 // Zapisz oryginalny nick w nickname managerze
                 const effectData = await this.nicknameManager.saveOriginalNickname(
