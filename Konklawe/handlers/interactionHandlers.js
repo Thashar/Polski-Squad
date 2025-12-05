@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -17,6 +17,7 @@ class InteractionHandler {
         this.passwordEmbedService = passwordEmbedService;
         this.scheduledHintsService = scheduledHintsService;
         this.judgmentService = judgmentService;
+        this.detailedLogger = detailedLogger;
         this.virtuttiService = new VirtuttiService(config);
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
         this.lucyferReflectedCurses = new Map(); // userId -> { endTime: timestamp, intervalId: any }

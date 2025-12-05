@@ -12,6 +12,7 @@ const CommandService = require('./services/commandService');
 const PasswordEmbedService = require('./services/passwordEmbedService');
 const ScheduledHintsService = require('./services/scheduledHintsService');
 const JudgmentService = require('./services/judgmentService');
+const DetailedLogger = require('./services/detailedLogger');
 
 // Import handlerów
 const InteractionHandler = require('./handlers/interactionHandlers');
@@ -33,7 +34,7 @@ const client = new Client({
 });
 
 // Inicjalizacja serwisów
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger;
 let interactionHandler, messageHandler;
 
 /**
@@ -71,11 +72,15 @@ async function initializeServices() {
     // Ustaw scheduledHintsService w gameService
     gameService.setScheduledHintsService(scheduledHintsService);
 
+    // Inicjalizacja DetailedLogger (przed JudgmentService)
+    detailedLogger = new DetailedLogger(client, config);
+    await detailedLogger.initialize();
+
     // Inicjalizacja JudgmentService
-    judgmentService = new JudgmentService(config);
+    judgmentService = new JudgmentService(config, detailedLogger);
 
     // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService);
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger);
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 
     // Inicjalizacja danych gry

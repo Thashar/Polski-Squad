@@ -4,11 +4,12 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Konklawe');
 
 class JudgmentService {
-    constructor(config) {
+    constructor(config, detailedLogger = null) {
         this.config = config;
         this.client = null;
         this.judgmentMessage = null;
         this.judgmentMessageId = null;
+        this.detailedLogger = detailedLogger;
     }
 
     /**
@@ -277,6 +278,16 @@ class JudgmentService {
             // Nadaj role
             await chooserMember.roles.add(chooserRole);
             await chosenMember.roles.add(chosenRole);
+
+            // Zaloguj Sąd Boży
+            if (this.detailedLogger) {
+                await this.detailedLogger.logJudgment(
+                    chooserMember.user,
+                    chosenUser,
+                    chooserRoleName,
+                    chosenRoleName
+                );
+            }
 
             // Wyślij potwierdzenie do wybierającego
             await interaction.editReply({
