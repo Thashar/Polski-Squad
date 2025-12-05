@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, WebhookClient } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -10,33 +10,34 @@ class DetailedLogger {
     constructor(client, config) {
         this.client = client;
         this.config = config;
-        this.logChannelId = '1446312764716089497'; // Dedykowany kanał dla szczegółowych logów
-        this.logChannel = null;
+        this.webhookUrl = process.env.KONKLAWE_DETAILED_LOG_WEBHOOK_URL;
+        this.webhook = null;
     }
 
     /**
-     * Inicjalizuje kanał logowania
+     * Inicjalizuje webhook logowania
      */
     async initialize() {
         try {
-            this.logChannel = await this.client.channels.fetch(this.logChannelId);
-            logger.info(`📋 DetailedLogger zainicjalizowany - kanał: ${this.logChannelId}`);
+            if (!this.webhookUrl || this.webhookUrl === 'TUTAJ_WKLEJ_URL_WEBHOOKA_Z_KROKU_1') {
+                logger.warn('⚠️ KONKLAWE_DETAILED_LOG_WEBHOOK_URL nie jest skonfigurowany - logowanie wyłączone');
+                return;
+            }
+
+            this.webhook = new WebhookClient({ url: this.webhookUrl });
+            logger.info(`📋 DetailedLogger zainicjalizowany - webhook połączony`);
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji DetailedLogger: ${error.message}`);
         }
     }
 
     /**
-     * Wysyła szczegółowy log na kanał Discord
+     * Wysyła szczegółowy log na kanał Discord przez webhook
      * @param {Object} data - Dane do zalogowania
      */
     async log(data) {
-        if (!this.logChannel) {
-            await this.initialize();
-        }
-
-        if (!this.logChannel) {
-            logger.warn('⚠️ Kanał logowania nie jest dostępny');
+        if (!this.webhook) {
+            logger.warn('⚠️ Webhook nie jest zainicjalizowany - pomijam logowanie');
             return;
         }
 
@@ -76,7 +77,11 @@ class DetailedLogger {
                 });
             }
 
-            await this.logChannel.send({ embeds: [embed] });
+            await this.webhook.send({
+                embeds: [embed],
+                username: 'Konklawe Logger',
+                avatarURL: 'https://cdn.discordapp.com/emojis/1170066835690102834.png' // JP2roll emoji
+            });
         } catch (error) {
             logger.error(`❌ Błąd wysyłania szczegółowego logu: ${error.message}`);
         }
