@@ -1341,7 +1341,7 @@ class InteractionHandler {
             // Aplikuj klątwę na nick (z czasem zależnym od poziomu)
             try {
                 await this.applyNicknameCurse(actualTargetMember, interaction, curseDuration);
-                logger.info(`😈 Aplikowano klątwę na nick ${actualTarget.tag}: "${this.config.virtuttiPapajlari.forcedNickname} ${actualTargetMember.displayName}" (${curseLevel}, ${curseDuration / 60000} min)`);
+                // Log już został zapisany w applyNicknameCurse(), nie duplikuj
             } catch (error) {
                 logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
                 nicknameError = error.message;
