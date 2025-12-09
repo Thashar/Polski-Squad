@@ -13,9 +13,18 @@ class ReminderService {
         this.activeSessions = new Map(); // sessionId → session
         this.activeReminderDMs = new Map(); // userId → { roleId, guildId, confirmationChannelId, sentAt }
         this.tempDir = './StalkerLME/temp';
+        this.ocrService = null; // Będzie ustawione przez setOCRService
 
         // Załaduj aktywne sesje DM z pliku
         this.loadActiveReminderDMs();
+    }
+
+    /**
+     * Ustawia referencję do OCR Service (wywoływane z index.js)
+     */
+    setOCRService(ocrService) {
+        this.ocrService = ocrService;
+        logger.info('[REMIND] ✅ OCR Service przypisany do ReminderService');
     }
 
     async sendReminders(guild, foundUsers) {
@@ -379,6 +388,12 @@ class ReminderService {
 
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
+
+        // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
+        if (this.ocrService && session.guildId && session.userId) {
+            await this.ocrService.endOCRSession(session.guildId, session.userId, true);
+            logger.info(`[REMIND] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+        }
 
         this.activeSessions.delete(sessionId);
         logger.info(`[REMIND] ✅ Sesja usunięta: ${sessionId}`);

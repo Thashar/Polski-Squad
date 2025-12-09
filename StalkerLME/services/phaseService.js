@@ -561,8 +561,14 @@ class PhaseService {
             session.downloadedFiles = null;
         }
 
-        // Odblokuj przetwarzanie dla tego guild
+        // Odblokuj przetwarzanie dla tego guild (ghost ping queue)
         await this.clearActiveProcessing(session.guildId);
+
+        // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
+        if (this.ocrService && session.guildId && session.userId) {
+            await this.ocrService.endOCRSession(session.guildId, session.userId, true);
+            logger.info(`[PHASE${session.phase || 1}] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+        }
 
         // Usuń sesję z mapy
         this.activeSessions.delete(sessionId);

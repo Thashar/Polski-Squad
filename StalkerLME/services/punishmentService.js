@@ -12,6 +12,15 @@ class PunishmentService {
         this.db = databaseService;
         this.activeSessions = new Map(); // sessionId → session
         this.tempDir = './StalkerLME/temp';
+        this.ocrService = null; // Będzie ustawione przez setOCRService
+    }
+
+    /**
+     * Ustawia referencję do OCR Service (wywoływane z index.js)
+     */
+    setOCRService(ocrService) {
+        this.ocrService = ocrService;
+        logger.info('[PUNISH] ✅ OCR Service przypisany do PunishmentService');
     }
 
     async processPunishments(guild, foundUsers) {
@@ -419,6 +428,12 @@ class PunishmentService {
 
         // Usuń pliki z temp
         await this.cleanupSessionFiles(sessionId);
+
+        // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
+        if (this.ocrService && session.guildId && session.userId) {
+            await this.ocrService.endOCRSession(session.guildId, session.userId, true);
+            logger.info(`[PUNISH] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+        }
 
         this.activeSessions.delete(sessionId);
         logger.info(`[PUNISH] ✅ Sesja usunięta: ${sessionId}`);

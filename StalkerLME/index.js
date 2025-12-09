@@ -43,6 +43,10 @@ const phaseService = new PhaseService(config, databaseService, ocrService, clien
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
 ocrService.setServices(reminderService, punishmentService, phaseService);
 
+// KRYTYCZNE: Daj każdemu serwisowi dostęp do ocrService (zapobiega deadlockom)
+reminderService.setOCRService(ocrService);
+punishmentService.setOCRService(ocrService);
+
 // Obiekt zawierający wszystkie współdzielone stany
 // Ustaw globalny dostęp do klienta dla messageCleanupService i reminderStatusTrackingService
 global.stalkerLMEClient = client;
