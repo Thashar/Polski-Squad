@@ -1617,6 +1617,25 @@ class OCRService {
         // Usuń rezerwację jeśli istnieje
         if (this.queueReservation.has(guildId)) {
             const reservation = this.queueReservation.get(guildId);
+
+            // Zatrzymaj ghost ping
+            if (reservation.ghostPingInterval) {
+                clearInterval(reservation.ghostPingInterval);
+                logger.info(`[OCR-QUEUE] ⏹️ Zatrzymano ghost ping - użytkownik rozpoczął sesję`);
+            }
+
+            // Usuń ostatnią wiadomość ghost ping
+            if (reservation.ghostPingMessageId) {
+                try {
+                    const channel = await this.client.channels.fetch(this.queueChannelId);
+                    const message = await channel.messages.fetch(reservation.ghostPingMessageId);
+                    await message.delete();
+                    logger.info(`[OCR-QUEUE] 🗑️ Usunięto ostatnią wiadomość ghost ping - sesja rozpoczęta`);
+                } catch (error) {
+                    // Ignoruj błąd - wiadomość już może być usunięta
+                }
+            }
+
             if (reservation.timeout) {
                 clearTimeout(reservation.timeout);
             }
@@ -1878,6 +1897,20 @@ class OCRService {
             if (oldReservation.timeout) {
                 clearTimeout(oldReservation.timeout);
             }
+            // Zatrzymaj ghost ping z poprzedniej rezerwacji
+            if (oldReservation.ghostPingInterval) {
+                clearInterval(oldReservation.ghostPingInterval);
+            }
+            // Usuń ostatnią wiadomość ghost ping
+            if (oldReservation.ghostPingMessageId) {
+                try {
+                    const channel = await this.client.channels.fetch(this.queueChannelId);
+                    const message = await channel.messages.fetch(oldReservation.ghostPingMessageId);
+                    await message.delete();
+                } catch (error) {
+                    // Ignoruj błąd - wiadomość już może być usunięta
+                }
+            }
         }
 
         const expiresAt = Date.now() + (3 * 60 * 1000); // 3 minuty
@@ -1887,33 +1920,86 @@ class OCRService {
             await this.expireOCRReservation(guildId, userId);
         }, 3 * 60 * 1000);
 
-        this.queueReservation.set(guildId, { userId, expiresAt, timeout, commandName });
+        // Rozpocznij ghost ping co 30 sekund
+        let ghostPingMessageId = null;
+        const sendGhostPing = async () => {
+            try {
+                if (!this.client || !this.queueChannelId) return;
+
+                const channel = await this.client.channels.fetch(this.queueChannelId);
+                if (!channel) return;
+
+                // Usuń poprzednią wiadomość ghost ping
+                if (ghostPingMessageId) {
+                    try {
+                        const oldMessage = await channel.messages.fetch(ghostPingMessageId);
+                        await oldMessage.delete();
+                    } catch (error) {
+                        // Ignoruj błąd - wiadomość już może być usunięta
+                    }
+                }
+
+                // Wyślij nową wiadomość ghost ping
+                const message = await channel.send(`<@${userId}> 👋 Twoja kolej! Użyj komendy, w celu przeprowadzenia analizy zdjęć!`);
+                ghostPingMessageId = message.id;
+
+                // Aktualizuj ID w rezerwacji (potrzebne dla czyszczenia)
+                const reservation = this.queueReservation.get(guildId);
+                if (reservation) {
+                    reservation.ghostPingMessageId = ghostPingMessageId;
+                }
+
+                logger.info(`[OCR-QUEUE] 👻 Wysłano ghost ping do ${userId}`);
+            } catch (error) {
+                logger.error(`[OCR-QUEUE] ❌ Błąd wysyłania ghost ping:`, error.message);
+            }
+        };
+
+        // Wyślij pierwszy ghost ping natychmiast
+        await sendGhostPing();
+
+        // Rozpocznij interval co 30 sekund
+        const ghostPingInterval = setInterval(sendGhostPing, 30 * 1000);
+
+        this.queueReservation.set(guildId, {
+            userId,
+            expiresAt,
+            timeout,
+            commandName,
+            ghostPingInterval,
+            ghostPingMessageId
+        });
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
 
-        // Powiadom użytkownika
-        try {
-            if (!this.client) return;
-            const user = await this.client.users.fetch(userId);
-            const expiryTimestamp = Math.floor(expiresAt / 1000);
-            await user.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('✅ Twoja kolej!')
-                    .setDescription(`Możesz teraz użyć komendy \`${commandName}\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 3 minut, Twoja kolej przepadnie.**`)
-                    .setColor('#00FF00')
-                    .setTimestamp()
-                ]
-            });
-        } catch (error) {
-            logger.error(`[OCR-QUEUE] ❌ Nie udało się powiadomić użytkownika:`, error.message);
-        }
+        logger.info(`[OCR-QUEUE] ✅ Utworzono rezerwację dla ${userId} z ghost pingiem co 30s`);
     }
 
     /**
      * Wygasa rezerwację i przechodzi do następnej osoby
      */
     async expireOCRReservation(guildId, userId) {
+        // Zatrzymaj ghost ping PRZED usunięciem rezerwacji
+        const reservation = this.queueReservation.get(guildId);
+        if (reservation) {
+            if (reservation.ghostPingInterval) {
+                clearInterval(reservation.ghostPingInterval);
+                logger.info(`[OCR-QUEUE] ⏹️ Zatrzymano ghost ping dla ${userId}`);
+            }
+            // Usuń ostatnią wiadomość ghost ping
+            if (reservation.ghostPingMessageId) {
+                try {
+                    const channel = await this.client.channels.fetch(this.queueChannelId);
+                    const message = await channel.messages.fetch(reservation.ghostPingMessageId);
+                    await message.delete();
+                    logger.info(`[OCR-QUEUE] 🗑️ Usunięto ostatnią wiadomość ghost ping`);
+                } catch (error) {
+                    // Ignoruj błąd - wiadomość już może być usunięta
+                }
+            }
+        }
+
         this.queueReservation.delete(guildId);
 
         // Usuń z kolejki
@@ -1925,32 +2011,10 @@ class OCRService {
                 queue.splice(index, 1);
                 logger.info(`[OCR-QUEUE] ➖ ${userId} usunięty z kolejki (timeout)`);
 
-                // Powiadom o utracie kolejki
-                try {
-                    if (!this.client) return;
-                    const user = await this.client.users.fetch(userId);
-                    await user.send({
-                        embeds: [new EmbedBuilder()
-                            .setTitle('⏰ Czas minął')
-                            .setDescription('Nie użyłeś komendy w ciągu 3 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
-                            .setColor('#FF0000')
-                            .setTimestamp()
-                        ]
-                    });
-                } catch (error) {
-                    logger.error(`[OCR-QUEUE] ❌ Błąd powiadomienia:`, error.message);
-                }
-
                 // Przejdź do następnej osoby
                 if (queue.length > 0) {
                     const nextPerson = queue[0];
                     await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
-
-                    // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
-                    // Użytkownicy dostaną powiadomienie tylko gdy nadejdzie ich kolej (rezerwacja)
-                    // for (let i = 1; i < queue.length; i++) {
-                    //     await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
-                    // }
                 } else {
                     this.waitingQueue.delete(guildId);
                 }

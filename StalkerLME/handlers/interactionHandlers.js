@@ -187,8 +187,8 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
                 .setTitle('⏳ Kolejka OCR')
                 .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
                                `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
-                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
-                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                               `👋 Otrzymasz powiadomienia na kanale kolejki co 30 sekund, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od pierwszego powiadomienia, Twoja rezerwacja wygaśnie.`)
                 .setColor('#ffa500')
                 .setTimestamp()
                 .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
@@ -300,8 +300,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
                 .setTitle('⏳ Kolejka OCR')
                 .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
                                `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
-                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
-                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                               `👋 Otrzymasz powiadomienia na kanale kolejki co 30 sekund, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od pierwszego powiadomienia, Twoja rezerwacja wygaśnie.`)
                 .setColor('#ffa500')
                 .setTimestamp()
                 .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
@@ -2947,8 +2947,8 @@ async function handlePhase1Command(interaction, sharedState) {
                 .setTitle('⏳ Kolejka OCR')
                 .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
                                `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
-                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
-                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                               `👋 Otrzymasz powiadomienia na kanale kolejki co 30 sekund, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od pierwszego powiadomienia, Twoja rezerwacja wygaśnie.`)
                 .setColor('#ffa500')
                 .setTimestamp()
                 .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
@@ -3722,8 +3722,8 @@ async function handlePhase2Command(interaction, sharedState) {
                 .setTitle('⏳ Kolejka OCR')
                 .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
                                `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
-                               `💬 Dostaniesz wiadomość prywatną, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
-                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od otrzymania powiadomienia, Twoja rezerwacja wygaśnie.`)
+                               `👋 Otrzymasz powiadomienia na kanale kolejki co 30 sekund, gdy będzie Twoja kolej (masz 3 minuty na użycie komendy).\n\n` +
+                               `⚠️ Jeśli nie użyjesz komendy w ciągu 3 minut od pierwszego powiadomienia, Twoja rezerwacja wygaśnie.`)
                 .setColor('#ffa500')
                 .setTimestamp()
                 .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
