@@ -95,7 +95,25 @@ client.once(Events.ClientReady, async () => {
             logger.error(`❌ Błąd sprawdzania wiadomości o urlopach dla serwera ${guild.name}: ${error.message}`);
         }
     }
-    
+
+    // SPRAWDZENIE PO STARCIE: Czy deadline minął? Jeśli tak, usuń przyciski natychmiast
+    const now = new Date();
+    const polandTime = new Date(now.toLocaleString('en-US', { timeZone: config.timezone }));
+    const deadline = new Date(polandTime);
+    deadline.setHours(config.bossDeadline.hour, config.bossDeadline.minute, 0, 0);
+
+    if (polandTime >= deadline) {
+        logger.info('⏰ Deadline minął - usuwam wygasłe przyciski potwierdzenia natychmiast po starcie...');
+        try {
+            await reminderService.disableExpiredConfirmationButtons(client);
+            logger.info('✅ Przyciski zostały usunięte po starcie bota');
+        } catch (error) {
+            logger.error(`❌ Błąd usuwania przycisków po starcie: ${error.message}`);
+        }
+    } else {
+        logger.info(`✅ Deadline jeszcze nie minął (${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}) - przyciski pozostają aktywne`);
+    }
+
     // Uruchomienie zadania cron dla czyszczenia punktów (poniedziałek o północy)
     cron.schedule('0 0 * * 1', async () => {
         logger.info('Rozpoczynam tygodniowe czyszczenie punktów karnych...');
@@ -120,9 +138,9 @@ client.once(Events.ClientReady, async () => {
         timezone: config.timezone
     });
 
-    // Uruchomienie zadania cron dla wyłączania przycisków potwierdzenia po deadline (codziennie o 16:51)
-    cron.schedule('51 16 * * *', async () => {
-        logger.info('⏰ Rozpoczynam wyłączanie wygasłych przycisków potwierdzenia...');
+    // Uruchomienie zadania cron dla wyłączania przycisków potwierdzenia po deadline (codziennie o 16:50)
+    cron.schedule('50 16 * * *', async () => {
+        logger.info('⏰ Deadline minął - wyłączam przyciski potwierdzenia...');
         await reminderService.disableExpiredConfirmationButtons(client);
     }, {
         timezone: config.timezone
