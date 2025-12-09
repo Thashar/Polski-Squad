@@ -1177,7 +1177,7 @@ class OCRService {
                     const endResult = this.analyzeLineEnd(line, bestMatch.displayName);
 
                     // Jeśli nick ma 10+ liter i nie znaleziono wyniku w tej linii, sprawdź następną
-                    let finalScore = null;
+                    let finalScore = 0; // DOMYŚLNIE 0 zamiast null
 
                     if (bestMatch.displayName.length >= 10 && endResult.type === 'unknown') {
                         const currentLineText = line.trim();
@@ -1194,6 +1194,7 @@ class OCRService {
                                 finalScore = parseInt(nextEndResult.value) || 0;
                             }
                         }
+                        // Jeśli nie znaleziono wyniku w następnej linii, pozostaje 0
                     } else {
                         // Wynik w tej samej linii
                         if (endResult.type === 'zero') {
@@ -1206,20 +1207,19 @@ class OCRService {
                             if (numberMatch) {
                                 finalScore = parseInt(numberMatch[0]) || 0;
                             }
+                            // Jeśli nie znaleziono liczby, pozostaje 0
                         }
                     }
 
-                    // Tylko jeśli udało się wyciągnąć wynik
-                    if (finalScore !== null) {
-                        processedNicks.add(bestMatch.displayName);
+                    // Dodaj gracza z wynikiem (finalScore jest zawsze liczbą, nigdy null)
+                    processedNicks.add(bestMatch.displayName);
 
-                        playersWithScores.push({
-                            nick: bestMatch.displayName,
-                            score: finalScore
-                        });
+                    playersWithScores.push({
+                        nick: bestMatch.displayName,
+                        score: finalScore
+                    });
 
-                        logger.info(`[PHASE1] ✅ "${bestMatch.displayName}" → ${finalScore} punktów`);
-                    }
+                    logger.info(`[PHASE1] ✅ "${bestMatch.displayName}" → ${finalScore} punktów`);
                 }
             }
 

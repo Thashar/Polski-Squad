@@ -945,7 +945,13 @@ class PhaseService {
 
             for (const player of imageData.results) {
                 const nick = player.nick;
-                const score = player.score;
+                let score = player.score;
+
+                // ZABEZPIECZENIE: Zamień null/undefined/NaN na 0
+                if (score === null || score === undefined || isNaN(score)) {
+                    logger.warn(`[PHASE1] ⚠️ Wykryto nieprawidłowy wynik dla "${nick}": ${score} - zamieniam na 0`);
+                    score = 0;
+                }
 
                 if (!session.aggregatedResults.has(nick)) {
                     session.aggregatedResults.set(nick, []);
@@ -1019,11 +1025,26 @@ class PhaseService {
 
             if (uniqueScores.length === 1) {
                 // Brak konfliktu - użyj jedynej wartości
-                finalResults.set(nick, uniqueScores[0]);
+                let finalScore = uniqueScores[0];
+
+                // ZABEZPIECZENIE: Zamień null/undefined/NaN na 0
+                if (finalScore === null || finalScore === undefined || isNaN(finalScore)) {
+                    logger.warn(`[PHASE1] ⚠️ Wykryto nieprawidłowy finalny wynik dla "${nick}": ${finalScore} - zamieniam na 0`);
+                    finalScore = 0;
+                }
+
+                finalResults.set(nick, finalScore);
             } else {
                 // Konflikt - użyj rozstrzygniętej wartości
-                const resolvedValue = session.resolvedConflicts.get(nick);
+                let resolvedValue = session.resolvedConflicts.get(nick);
+
                 if (resolvedValue !== undefined) {
+                    // ZABEZPIECZENIE: Zamień null/undefined/NaN na 0
+                    if (resolvedValue === null || isNaN(resolvedValue)) {
+                        logger.warn(`[PHASE1] ⚠️ Wykryto nieprawidłowy rozstrzygnięty wynik dla "${nick}": ${resolvedValue} - zamieniam na 0`);
+                        resolvedValue = 0;
+                    }
+
                     finalResults.set(nick, resolvedValue);
                 } else {
                     logger.warn(`[PHASE1] ⚠️ Nierozstrzygnięty konflikt dla "${nick}", pomijam`);
