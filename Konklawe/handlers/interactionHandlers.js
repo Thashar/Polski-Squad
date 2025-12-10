@@ -826,8 +826,8 @@ class InteractionHandler {
                         // Rozpocznij silną klątwę (1h, zmiana co 5 min)
                         await this.startGabrielStrongCurse(lucyferMember, guild, strongCurseData);
 
-                        blessingMessage += `\n\n⚡ **Silna klątwa nałożona na Lucyfera!** ⚡`;
-                        logger.info(`⚡ Gabriel (${interaction.user.tag}) nałożył silną klątwę na Lucyfera (${lucyferMember.user.tag}) - 1h, zmiana co 5 min`);
+                        blessingMessage += `\n\n💥⚡ **MEGA SILNA KLĄTWA NAŁOŻONA NA LUCYFERA!** ⚡💥`;
+                        logger.info(`💥⚡ Gabriel (${interaction.user.tag}) nałożył MEGA SILNĄ KLĄTWĘ na Lucyfera (${lucyferMember.user.tag}) - 1h, zmiana co 5 min`);
 
                         // Szczegółowe logowanie silnej klątwy Gabriela
                         if (this.detailedLogger) {
@@ -1116,7 +1116,7 @@ class InteractionHandler {
                     });
                 }
             } else {
-                // 1% - Potężna klątwa 24h (jak przy blessing)
+                // 1% - ⚡💥 ULTRA POTĘŻNA KLĄTWA 24h
                 const curses = [
                     'slow_mode',
                     'auto_delete',
@@ -1133,7 +1133,7 @@ class InteractionHandler {
                 await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
 
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡ **Potężna klątwa nałożona!** Lucyfer został osłabiony! ⚡`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡💥 **ULTRA POTĘŻNA KLĄTWA NAŁOŻONA!** Lucyfer został osłabiony! 💥⚡`,
                     ephemeral: false
                 });
             }
@@ -1550,10 +1550,10 @@ class InteractionHandler {
     }
 
     /**
-     * Rozpoczyna silną klątwę Gabriela na Lucyfera (1h, zmiana co 5 min)
+     * Rozpoczyna 💥⚡ MEGA SILNĄ KLĄTWĘ Gabriela na Lucyfera (1h, zmiana co 5 min)
      * @param {GuildMember} lucyferMember - Członek z rolą Lucyfer
      * @param {Guild} guild - Serwer Discord
-     * @param {Object} strongCurseData - Dane silnej klątwy
+     * @param {Object} strongCurseData - Dane MEGA SILNEJ klątwy
      */
     async startGabrielStrongCurse(lucyferMember, guild, strongCurseData) {
         const userId = lucyferMember.id;
@@ -1586,7 +1586,7 @@ class InteractionHandler {
         const firstCurse = curses[Math.floor(Math.random() * curses.length)];
         try {
             await this.applyCurse(lucyferMember, firstCurse, guild, endTime);
-            logger.info(`⚡ Gabriel silna klątwa: Lucyfer ${userId} dostał pierwszą klątwę: ${firstCurse}`);
+            logger.info(`💥⚡ MEGA SILNA KLĄTWA: Lucyfer ${userId} dostał pierwszą klątwę: ${firstCurse}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas aplikowania pierwszej silnej klątwy: ${error.message}`);
         }
@@ -1596,7 +1596,7 @@ class InteractionHandler {
             if (Date.now() >= endTime) {
                 clearInterval(intervalId);
                 this.gabrielStrongCurses.delete(userId);
-                logger.info(`⚡ Silna klątwa Gabriela zakończona dla Lucyfera ${userId}`);
+                logger.info(`💥⚡ MEGA SILNA KLĄTWA zakończona dla Lucyfera ${userId}`);
                 return;
             }
 
@@ -1606,7 +1606,7 @@ class InteractionHandler {
 
                 // Aplikuj nową losową klątwę
                 await this.applyCurse(member, randomCurse, guild, Date.now() + strongCurseData.changeInterval);
-                logger.info(`⚡ Gabriel silna klątwa: Lucyfer ${userId} dostał zmianę klątwy: ${randomCurse}`);
+                logger.info(`💥⚡ MEGA SILNA KLĄTWA: Lucyfer ${userId} dostał zmianę klątwy: ${randomCurse}`);
             } catch (error) {
                 logger.error(`❌ Błąd podczas zmiany silnej klątwy Gabriela: ${error.message}`);
             }

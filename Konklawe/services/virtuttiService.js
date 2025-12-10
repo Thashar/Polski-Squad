@@ -680,8 +680,8 @@ class VirtuttiService {
             lucyferData.failStreak = 0;
             logger.info(`✅ Sukces klątwy. Koszt: ${oldCost} → ${lucyferData.cost} many`);
         } else {
-            // Fail (odbicie) - koszt rośnie (+1, max 15)
-            lucyferData.cost = Math.min(15, lucyferData.cost + 1);
+            // Fail (odbicie) - koszt rośnie (+5, max 15)
+            lucyferData.cost = Math.min(15, lucyferData.cost + 5);
             lucyferData.failStreak++;
             lucyferData.successStreak = 0;
             logger.info(`❌ Fail klątwy (odbicie). Koszt: ${oldCost} → ${lucyferData.cost} many`);
@@ -1048,11 +1048,11 @@ class VirtuttiService {
     }
 
     // ========================================
-    // SILNA KLĄTWA GABRIELA NA LUCYFERA (1% przy blessing)
+    // 💥⚡ MEGA SILNA KLĄTWA GABRIELA NA LUCYFERA (1% przy blessing)
     // ========================================
 
     /**
-     * Tworzy silną klątwę Gabriela na Lucyfera (1h, zmiana co 5 min)
+     * Tworzy MEGA SILNĄ KLĄTWĘ Gabriela na Lucyfera (1h, zmiana co 5 min)
      * Zwraca dane do zarządzania intervalem w interactionHandlers
      * @param {string} userId - ID Lucyfera
      * @returns {Object} - { duration, changeInterval }

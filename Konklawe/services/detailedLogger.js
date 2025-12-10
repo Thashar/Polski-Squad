@@ -177,8 +177,8 @@ class DetailedLogger {
     async logGabrielStrongCurse(gabriel, lucyfer, duration) {
         await this.log({
             type: 'gabriel_strong',
-            title: '⚡ SILNA KLĄTWA GABRIELA',
-            description: `**Gabriel nałożył silną klątwę na Lucyfera!**\n\n1% szansa przy blessing została aktywowana`,
+            title: '💥⚡ MEGA SILNA KLĄTWA GABRIELA',
+            description: `**Gabriel nałożył MEGA SILNĄ KLĄTWĘ na Lucyfera!**\n\n1% szansa przy blessing została aktywowana`,
             fields: [
                 { name: '☁️ Gabriel', value: `<@${gabriel.id}> (${gabriel.tag})`, inline: true },
                 { name: '🔥 Lucyfer', value: `<@${lucyfer.id}> (${lucyfer.tag})`, inline: true },
