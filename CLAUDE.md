@@ -4,13 +4,19 @@
 
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
 - Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
-- Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pishnij. 
+- Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pishnij.
 - W commitach używaj krótkiego opisu zmian PO POLSKU
 - Po utworzeniu commita ZAWSZE od razu wykonaj `git push` bez pytania
 - Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
 - Przykład: "Dodano system kolejkowania OCR do StalkerLME"
 
-**Ostatnia aktualizacja:** Listopad 2025
+**⚡ KRYTYCZNE - OPTYMALIZACJA TOKENÓW:**
+- **ZAWSZE używaj Grep PRZED Read** - Znajdź lokalizację, POTEM czytaj tylko potrzebne linie
+- **ZAWSZE używaj offset + limit przy czytaniu dużych plików** - Nie czytaj całości!
+- **Dla eksploracji kodu: Task tool z Explore agent** - Nie czytaj wielu plików ręcznie
+- **Zobacz sekcję [🔥 OPTYMALIZACJA TOKENÓW](#optymalizacja-tokenów) poniżej dla szczegółów**
+
+**Ostatnia aktualizacja:** Grudzień 2025
 
 Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podczas pracy z kodem w tym repozytorium.
 
@@ -18,14 +24,180 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 
 ## 📋 Spis Treści
 
-1. [Przegląd Projektu](#przegląd-projektu)
-2. [Architektura Systemu](#architektura-systemu)
-3. [Systemy Scentralizowane](#systemy-scentralizowane)
-4. [Szczegóły Botów](#szczegóły-botów)
-5. [Komendy Deweloperskie](#komendy-deweloperskie)
-6. [Zmienne Środowiskowe](#zmienne-środowiskowe)
-7. [Najlepsze Praktyki](#najlepsze-praktyki)
-8. [Rozwiązywanie Problemów](#rozwiązywanie-problemów)
+1. [🔥 OPTYMALIZACJA TOKENÓW](#optymalizacja-tokenów)
+2. [Przegląd Projektu](#przegląd-projektu)
+3. [Architektura Systemu](#architektura-systemu)
+4. [Systemy Scentralizowane](#systemy-scentralizowane)
+5. [Szczegóły Botów](#szczegóły-botów)
+6. [Komendy Deweloperskie](#komendy-deweloperskie)
+7. [Zmienne Środowiskowe](#zmienne-środowiskowe)
+8. [Najlepsze Praktyki](#najlepsze-praktyki)
+9. [Rozwiązywanie Problemów](#rozwiązywanie-problemów)
+
+---
+
+## 🔥 OPTYMALIZACJA TOKENÓW
+
+**KRYTYCZNE: ZAWSZE minimalizuj zużycie tokenów. Nie czytaj całych plików bez potrzeby!**
+
+### Zasada 1: Użyj Grep PRZED Read
+
+**NIGDY** nie czytaj całego pliku jeśli szukasz konkretnego fragmentu kodu. **ZAWSZE** używaj Grep najpierw.
+
+**❌ ŹLE - Marnowanie tokenów:**
+```
+1. Read całego pliku ocrService.js (500 linii)
+2. Szukanie funkcji analyzeImage w przeczytanym tekście
+```
+
+**✅ DOBRZE - Oszczędzanie tokenów:**
+```
+1. Grep pattern "analyzeImage" w ocrService.js
+2. Grep pokazuje linie 145-180 zawierają funkcję
+3. Read tylko linii 145-180 używając offset i limit
+```
+
+**Przykład poprawnego workflow:**
+```javascript
+// 1. Znajdź gdzie jest funkcja
+Grep: pattern="function analyzeImage", path="StalkerLME/services/ocrService.js"
+// Wynik: Linia 145
+
+// 2. Przeczytaj TYLKO tę funkcję (np. 35 linii)
+Read: file_path="...", offset=145, limit=35
+```
+
+### Zasada 2: Używaj Task Tool z Explore Agent
+
+Dla eksploracji kodu, **ZAWSZE** używaj Task tool z `subagent_type='Explore'` zamiast bezpośredniego Grep/Read.
+
+**Kiedy używać Explore Agent:**
+- "Gdzie jest obsługa błędów OCR?" → Task Explore
+- "Jak działa system kolejkowania?" → Task Explore
+- "Znajdź wszystkie miejsca używające nicknameManager" → Task Explore
+- "Jaka jest struktura kodu w StalkerLME?" → Task Explore
+
+**Kiedy NIE używać Explore Agent:**
+- "Przeczytaj plik config.js" → Read bezpośrednio
+- "Znajdź definicję klasy QueueService" → Grep + Read (jeśli znasz lokalizację)
+- "Pokaż mi funkcję handleButton w line 234" → Read z offset
+
+**Przykład:**
+```javascript
+// ❌ ŹLE - czytasz wiele plików ręcznie
+Read: StalkerLME/services/ocrService.js (całość)
+Read: StalkerLME/services/queueService.js (całość)
+Read: StalkerLME/services/phaseService.js (całość)
+
+// ✅ DOBRZE - agent eksploruje za Ciebie
+Task: subagent_type='Explore', prompt="Znajdź i opisz jak działa system kolejkowania OCR w StalkerLME"
+```
+
+### Zasada 3: Czytaj Tylko Potrzebne Linie
+
+**ZAWSZE** używaj `offset` i `limit` gdy czytasz duże pliki.
+
+**❌ ŹLE:**
+```
+Read: file_path="CLAUDE.md" (2235 linii - 54920 tokenów!)
+```
+
+**✅ DOBRZE:**
+```
+// Najpierw znajdź gdzie jest interesująca sekcja
+Grep: pattern="System Kolejkowania OCR", path="CLAUDE.md"
+// Wynik: Linia 792
+
+// Przeczytaj tylko tę sekcję (np. 50 linii)
+Read: file_path="CLAUDE.md", offset=792, limit=50
+```
+
+### Zasada 4: Strategia "Grep → Read → Edit"
+
+**Zawsze** stosuj tę sekwencję przy modyfikacji kodu:
+
+1. **Grep** - Znajdź gdzie jest kod do edycji
+2. **Read** - Przeczytaj TYLKO interesujący fragment (offset + limit)
+3. **Edit** - Dokonaj zmian
+
+**Przykład:**
+```javascript
+// 1. Znajdź funkcję
+Grep: pattern="async function processImage", path="Rekruter/services/"
+// Wynik: ocrService.js:234
+
+// 2. Przeczytaj kontekst (30 linii powinno wystarczyć)
+Read: file_path="Rekruter/services/ocrService.js", offset=234, limit=30
+
+// 3. Edytuj
+Edit: old_string="...", new_string="..."
+```
+
+### Zasada 5: Kiedy NIE Czytać Plików
+
+**NIGDY** nie czytaj plików w tych sytuacjach:
+- Użytkownik pyta o ogólną architekturę → Użyj Task Explore
+- Szukasz wszystkich wystąpień funkcji → Użyj Grep (output_mode: "files_with_matches")
+- Chcesz poznać strukturę projektu → Użyj Glob dla znalezienia plików
+- Potrzebujesz zrozumieć flow kodu → Task Explore
+
+**Czytaj pliki TYLKO gdy:**
+- Znasz dokładnie który plik i którą linię musisz zobaczyć
+- Musisz edytować konkretny fragment
+- Plik jest mały (<100 linii) i kluczowy dla zadania
+- Użytkownik wprost prosi o przeczytanie konkretnego pliku
+
+### Zasada 6: Optymalizacja Grep
+
+**Użyj odpowiedniego output_mode:**
+
+```javascript
+// ❌ ŹLE - zwraca całą zawartość (dużo tokenów)
+Grep: pattern="logger", output_mode="content"
+
+// ✅ DOBRZE - zwraca tylko ścieżki plików
+Grep: pattern="logger", output_mode="files_with_matches"
+
+// ✅ DOBRZE - zwraca liczbę wystąpień
+Grep: pattern="logger", output_mode="count"
+
+// ✅ DOBRZE - tylko gdy potrzebujesz zobaczyć kod
+Grep: pattern="function analyzeImage", output_mode="content", head_limit=5
+```
+
+### Zasada 7: Glob dla Wyszukiwania Plików
+
+**Użyj Glob zamiast Bash ls:**
+
+```javascript
+// ❌ ŹLE
+Bash: "find StalkerLME -name '*.js'"
+
+// ✅ DOBRZE
+Glob: pattern="StalkerLME/**/*.js"
+
+// ✅ BARDZO DOBRZE - z Task Explore dla kontekstu
+Task: subagent_type='Explore', thoroughness='quick', prompt="Pokaż strukturę plików w StalkerLME"
+```
+
+### Podsumowanie Workflow
+
+**Dla EXPLORACJI kodu:**
+```
+Task (Explore agent) → [Agent używa Glob/Grep/Read za Ciebie]
+```
+
+**Dla EDYCJI konkretnego miejsca:**
+```
+Grep (znajdź lokalizację) → Read (offset+limit) → Edit
+```
+
+**Dla ZROZUMIENIA systemu:**
+```
+Task (Explore agent z opisem co chcesz zrozumieć)
+```
+
+**PAMIĘTAJ:** Każdy token się liczy. Im mniej czytasz, tym szybsza i tańsza praca!
 
 ---
 
@@ -1982,6 +2154,29 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ---
 
 ## Najlepsze Praktyki
+
+### 0. Optymalizacja Tokenów (PRIORYTET #1)
+
+**Zobacz szczegółową sekcję [🔥 OPTYMALIZACJA TOKENÓW](#optymalizacja-tokenów) na początku dokumentu.**
+
+**Kluczowe zasady:**
+- 🔍 **Grep PRZED Read** - Zawsze znajdź lokalizację najpierw
+- 📏 **offset + limit** - Nigdy nie czytaj całych dużych plików
+- 🤖 **Task Explore** - Dla eksploracji kodu używaj agenta
+- 📁 **files_with_matches** - W Grep używaj tego trybu gdy nie potrzebujesz treści
+- ⚡ **Minimalizm** - Im mniej czytasz, tym lepiej
+
+**Przykład workflow:**
+```javascript
+// 1. Znajdź gdzie jest kod
+Grep: pattern="handleInteraction", output_mode="files_with_matches"
+
+// 2. Znajdź dokładną linię
+Grep: pattern="async function handleInteraction", path="znaleziony_plik.js", output_mode="content", head_limit=3
+
+// 3. Przeczytaj tylko kontekst (np. 40 linii)
+Read: file_path="...", offset=145, limit=40
+```
 
 ### 1. Zasady Logowania
 

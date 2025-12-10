@@ -1485,7 +1485,10 @@ class InteractionHandler {
                     curseLevel,
                     curseCost,
                     updatedEnergyData,
-                    reflectionChance
+                    reflectionChance,
+                    roleType,
+                    userId,
+                    this.virtuttiService
                 );
             }
 

@@ -90,9 +90,16 @@ class DetailedLogger {
     /**
      * Loguje rzucenie klątwy
      */
-    async logCurse(caster, target, curseType, level, cost, energyData, reflectionChance = null) {
-        // Oblicz następny koszt na podstawie obecnej liczby klątw (10 + dailyCurses * 2)
-        const nextCost = 10 + (energyData.dailyCurses * 2);
+    async logCurse(caster, target, curseType, level, cost, energyData, reflectionChance = null, roleType = null, userId = null, virtuttiService = null) {
+        // Oblicz następny koszt w zależności od roli
+        let nextCost;
+        if (roleType === 'lucyfer' && virtuttiService && userId) {
+            // Lucyfer - dynamiczny koszt (5-15) - pobierz aktualny koszt po sukcesie/failu
+            nextCost = virtuttiService.getLucyferCurseCost(userId);
+        } else {
+            // Gabriel/Virtutti - progresywny koszt (10 + dailyCurses * 2)
+            nextCost = 10 + (energyData.dailyCurses * 2);
+        }
         
         const fields = [
             { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
