@@ -99,8 +99,6 @@ class PasswordEmbedService {
             // Zapisz timestamp aktualizacji
             this.lastUpdateTimestamp = Date.now();
             this.pendingUpdate = false;
-
-            logger.info('✅ Zaktualizowano embed statusu hasła');
         } catch (error) {
             logger.error('❌ Błąd podczas aktualizacji embeda:', error);
             this.pendingUpdate = false;
