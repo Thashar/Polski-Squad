@@ -1380,9 +1380,10 @@ class InteractionHandler {
                 // Konwertuj curseDuration z ms na minuty
                 const durationInMinutes = curseDuration / (60 * 1000);
                 await this.applyNicknameCurse(actualTargetMember, interaction, durationInMinutes);
-                // Log już został zapisany w applyNicknameCurse(), nie duplikuj
+                logger.info(`✅ Pomyślnie zmieniono nick na "Przeklęty" dla ${actualTargetMember.user.tag}`);
             } catch (error) {
-                logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
+                logger.error(`❌ BŁĄD zmiany nicku na "Przeklęty" dla ${actualTargetMember.user.tag}: ${error.message}`);
+                logger.error(`Stack trace:`, error.stack);
                 nicknameError = error.message;
             }
 
@@ -2299,6 +2300,8 @@ class InteractionHandler {
         const durationMs = durationMinutes * 60 * 1000;
 
         try {
+            logger.info(`🎯 Rozpoczynam aplikację klątwy na nick dla ${targetMember.user.tag} (${userId})`);
+            
             // Zapisz oryginalny nick w centralnym systemie
             await this.nicknameManager.saveOriginalNickname(
                 userId,
@@ -2306,6 +2309,7 @@ class InteractionHandler {
                 targetMember,
                 durationMs
             );
+            logger.info(`💾 Zapisano oryginalny nick w systemie`);
 
             // Sprawdź czy to Lucyfer (zawsze "Osłabiony" dla Lucyfera)
             const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
@@ -2315,14 +2319,17 @@ class InteractionHandler {
             // Jeśli to Lucyfer, ZAWSZE użyj "Osłabiony"
             if (hasLucyferRole) {
                 cursePrefix = 'Osłabiony';
+                logger.info(`🔥 Wykryto Lucyfera - użyję prefixu "Osłabiony"`);
             }
 
             // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
             const cleanNick = this.nicknameManager.getCleanNickname(targetMember.displayName);
             const cursedNickname = `${cursePrefix} ${cleanNick}`;
+            
+            logger.info(`🔄 Zmieniam nick z "${targetMember.displayName}" na "${cursedNickname}"`);
 
             await targetMember.setNickname(cursedNickname);
-            logger.info(`😈 Aplikowano klątwę na nick ${targetMember.user.tag}: "${cursedNickname}"`);
+            logger.info(`😈 ✅ Aplikowano klątwę na nick ${targetMember.user.tag}: "${cursedNickname}"`);
 
             // Timer do automatycznego przywrócenia
             setTimeout(async () => {
