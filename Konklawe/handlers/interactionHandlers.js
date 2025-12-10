@@ -803,7 +803,7 @@ class InteractionHandler {
                             }
                         }
 
-                        blessingMessage += `\n\n✨ **Klątwa została ściągnięta przez moc Gabriela!** ✨`;
+                        blessingMessage += `\n\n✨ **Klątwa została usunięta!** ✨`;
                         logger.info(`✨ Gabriel (${interaction.user.tag}) usunął klątwę z ${targetUser.tag}`);
 
                         // Ustawienie flagi dla późniejszego logowania
@@ -826,7 +826,7 @@ class InteractionHandler {
                         // Rozpocznij silną klątwę (1h, zmiana co 5 min)
                         await this.startGabrielStrongCurse(lucyferMember, guild, strongCurseData);
 
-                        blessingMessage += `\n\n⚡ **Silna klątwa nałożona!** Lucyfer będzie cierpiał przez godzinę! ⚡`;
+                        blessingMessage += `\n\n⚡ **Silna klątwa nałożona na Lucyfera!** ⚡`;
                         logger.info(`⚡ Gabriel (${interaction.user.tag}) nałożył silną klątwę na Lucyfera (${lucyferMember.user.tag}) - 1h, zmiana co 5 min`);
 
                         // Szczegółowe logowanie silnej klątwy Gabriela
@@ -1045,16 +1045,14 @@ class InteractionHandler {
                 // 33% - Lucyfer urośnie w siłę (reset % odbicia)
                 this.virtuttiService.resetLucyferReflectionChance(targetUser.id);
 
-                const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer urósł w siłę!** Jego progresywne odbicie zostało zresetowane do 0%.\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Gabriel używając klątwy przypadkiem wzmocnił Lucyfera!**`,
                     ephemeral: false
                 });
             } else if (randomChance >= 33 && randomChance < 66) {
                 // 33% - Nic się nie stanie (odporność)
-                const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...`,
                     ephemeral: false
                 });
             } else if (randomChance >= 66 && randomChance < 99) {
@@ -1081,9 +1079,8 @@ class InteractionHandler {
                     const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
                     const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
 
-                    const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                     await interaction.editReply({
-                        content: `☁️ **Gabriel przeklął Lucyfera!** ${randomReaction}\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!** Klątwa będzie trwać 5 minut.\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`
+                        content: `☁️ **Gabriel przeklął Lucyfera!** ${randomReaction}\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!**`
                     });
 
                     logger.info(`☁️ Gabriel (${interaction.user.tag}) skutecznie przeklął Lucyfera (${targetUser.tag})`);
@@ -1112,9 +1109,8 @@ class InteractionHandler {
                 const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id);
                 await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
 
-                const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡ **Potężna klątwa nałożona!** Lucyfer został osłabiony na 24 godziny! ⚡\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡ **Potężna klątwa nałożona!** Lucyfer został osłabiony! ⚡`,
                     ephemeral: false
                 });
             }
@@ -1238,6 +1234,18 @@ class InteractionHandler {
                             endTime
                         });
                         await this.saveActiveCurses();
+
+                        // Timer do automatycznego przywrócenia nicku po 1h
+                        setTimeout(async () => {
+                            try {
+                                const restored = await this.nicknameManager.restoreOriginalNickname(userId, interaction.guild);
+                                if (restored) {
+                                    logger.info(`✅ Automatycznie przywrócono nick po odbiciu klątwy dla ${lucyferMember.user.tag}`);
+                                }
+                            } catch (error) {
+                                logger.error(`❌ Błąd automatycznego przywracania nicku po odbiciu: ${error.message}`);
+                            }
+                        }, durationMs);
                     }
                 } catch (error) {
                     logger.error(`❌ Błąd zmiany nicku przy odbiciu: ${error.message}`);
@@ -1254,7 +1262,7 @@ class InteractionHandler {
 
                 // Wyślij komunikat o odbiciu i blokadzie
                 return await interaction.reply({
-                    content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został osłabiony!** Nie możesz rzucać klątw przez **1 godzinę**!\n\n*Siły ciemności nie zagrażają serwerowi...*`,
+                    content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został osłabiony!**\n\n*Siły ciemności nie zagrażają serwerowi...*`,
                     ephemeral: false
                 });
             }
@@ -1293,7 +1301,7 @@ class InteractionHandler {
         if (failedCurse) {
             const failMessages = [
                 `☁️ **O nie!** Klątwa nie powiodła się! Moc Gabriela nie była wystarczająca...`,
-                `☁️ **Ups!** Klątwa rozwiała się w powietrzu! Spróbuj ponownie za ${this.config.virtuttiPapajlari.cooldownMinutes} minut.`,
+                `☁️ **Ups!** Klątwa rozwiała się w powietrzu!`,
                 `☁️ **Nieudane!** Nawet święci anieli mają swoje dni... Klątwa nie zadziałała!`,
                 `☁️ **Fiasko!** Łaska zablokowała klątwę! Może następnym razem się uda.`
             ];
@@ -1312,9 +1320,8 @@ class InteractionHandler {
                 );
             }
 
-            const remaining = this.virtuttiService.getRemainingUses(userId, 'curse');
             return await interaction.reply({
-                content: `${randomFailMessage}\n\n📊 Pozostałe klątwy dzisiaj: **${remaining}/${this.config.virtuttiPapajlari.dailyLimit}**`,
+                content: randomFailMessage,
                 ephemeral: false
             });
         }
@@ -1358,22 +1365,21 @@ class InteractionHandler {
             const roleEmoji = roleType === 'gabriel' ? '☁️' : (roleType === 'lucyfer' ? '🔥' : '💀');
 
             // Opis poziomu klątwy
-            const durationText = curseDuration / 60000; // w minutach
             let levelDescription = '';
             if (curseLevel === 'powerful') {
-                levelDescription = `\n\n💥 **POTĘŻNA KLĄTWA!** Będzie trwać **${durationText} minut**!`;
+                levelDescription = `\n\n💥 **POTĘŻNA KLĄTWA!**`;
             } else if (curseLevel === 'strong') {
-                levelDescription = `\n\n⚡ **SILNA KLĄTWA!** Będzie trwać **${durationText} minut**!`;
+                levelDescription = `\n\n⚡ **SILNA KLĄTWA!**`;
             } else {
-                // Normal - pokaż tylko czas
-                levelDescription = `\n\n⏱️ Klątwa będzie trwać **${durationText} minut**.`;
+                // Normal - brak dodatkowego opisu
+                levelDescription = '';
             }
 
             if (curseReflectedByGabriel) {
                 responseContent = `${roleEmoji} **Klątwa została odbita!** Gabriel dostaje własną klątwę! ${randomReaction}${levelDescription}`;
             } else if (isReflected) {
                 if (roleType === 'lucyfer') {
-                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi na pełną godzinę!** ${randomReaction}`;
+                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi!** ${randomReaction}`;
                 } else {
                     responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
                         `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}${levelDescription}`;
