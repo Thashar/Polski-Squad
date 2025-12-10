@@ -91,6 +91,9 @@ class DetailedLogger {
      * Loguje rzucenie klątwy
      */
     async logCurse(caster, target, curseType, level, cost, energyData, reflectionChance = null) {
+        // Oblicz następny koszt na podstawie obecnej liczby klątw (10 + dailyCurses * 2)
+        const nextCost = 10 + (energyData.dailyCurses * 2);
+        
         const fields = [
             { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
             { name: '🎯 Cel', value: `<@${target.id}> (${target.tag})`, inline: true },
@@ -99,7 +102,7 @@ class DetailedLogger {
             { name: '💰 Koszt many', value: `${cost} many`, inline: true },
             { name: '🔋 Pozostała mana', value: `${energyData.energy}/${energyData.maxEnergy}`, inline: true },
             { name: '📊 Klątwy dzisiaj', value: `${energyData.dailyCurses}`, inline: true },
-            { name: '💸 Następny koszt', value: `${energyData.nextCurseCost} many`, inline: true }
+            { name: '💸 Następny koszt', value: `${nextCost} many`, inline: true }
         ];
 
         if (reflectionChance !== null) {
