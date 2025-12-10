@@ -68,23 +68,40 @@ class ClanRoleChangeService {
             // Pobierz ostatnie wpisy z audit log (tylko zmiany ról)
             const auditLogs = await guild.fetchAuditLogs({
                 type: 25, // MEMBER_ROLE_UPDATE
-                limit: 5
+                limit: 10
             });
 
-            // Znajdź wpis dotyczący tego użytkownika (w ostatnich 10 sekundach)
+            logger.info(`[CLAN_ROLE] [DEBUG] Sprawdzam audit log dla userId: ${targetUserId}, znaleziono ${auditLogs.entries.size} wpisów`);
+
+            // Znajdź wpis dotyczący tego użytkownika (w ostatnich 15 sekundach)
             const now = Date.now();
             const relevantEntry = auditLogs.entries.find(entry => {
                 const timeDiff = now - entry.createdTimestamp;
-                return entry.target?.id === targetUserId && timeDiff < 10000; // 10 sekund
+                const isMatch = entry.target?.id === targetUserId && timeDiff < 15000;
+
+                if (entry.target?.id === targetUserId) {
+                    logger.info(`[CLAN_ROLE] [DEBUG] Znaleziono wpis dla użytkownika, różnica czasu: ${timeDiff}ms, executor: ${entry.executor?.tag}`);
+                }
+
+                return isMatch;
             });
 
             if (!relevantEntry) {
+                logger.info(`[CLAN_ROLE] [DEBUG] Nie znaleziono wpisu w audit log dla tego użytkownika`);
+                return false;
+            }
+
+            // Sprawdź czy wykonawca to bot (jeśli tak, to nie blokuj powiadomienia)
+            if (relevantEntry.executor.bot) {
+                logger.info(`[CLAN_ROLE] [DEBUG] Wykonawca to bot ${relevantEntry.executor.tag} - NIE pomijam powiadomienia`);
                 return false;
             }
 
             // Sprawdź czy wykonawca ma uprawnienia administratora
             const executor = await guild.members.fetch(relevantEntry.executor.id);
             const isAdmin = executor.permissions.has('Administrator');
+
+            logger.info(`[CLAN_ROLE] [DEBUG] Wykonawca: ${executor.user.tag}, isAdmin: ${isAdmin}`);
 
             if (isAdmin) {
                 logger.info(`[CLAN_ROLE] Administrator ${executor.user.tag} zmienił rolę użytkownika - pomijam powiadomienie`);
@@ -93,7 +110,8 @@ class ClanRoleChangeService {
             return isAdmin;
         } catch (error) {
             // Jeśli nie mamy dostępu do audit logs lub wystąpił błąd, zakładamy że to nie admin
-            logger.warn(`[CLAN_ROLE] ⚠️ Nie można sprawdzić audit log:`, error.message);
+            logger.error(`[CLAN_ROLE] ❌ Błąd podczas sprawdzania audit log: ${error.message}`);
+            logger.error(`[CLAN_ROLE] Stack: ${error.stack}`);
             return false;
         }
     }
