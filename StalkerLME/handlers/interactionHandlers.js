@@ -3419,9 +3419,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase1_cancel_save') {
-        // Anuluj - usuń pliki temp i zakończ sesję OCR
+        // Anuluj - usuń pliki temp i zakończ sesję OCR (cleanupSession wywołuje endOCRSession)
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase1)`);
 
         await interaction.update({
@@ -3473,8 +3472,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             publicEmbed.addFields({ name: '📋 Gracze z wynikiem 0', value: zeroList, inline: false });
         }
 
-        // Usuń pliki temp po zapisaniu
-        await phaseService.cleanupSession(session.sessionId);
+        // Usuń TYLKO pliki temp (NIE całą sesję - to zrobimy po pokazaniu progress bara)
+        await phaseService.cleanupSessionFiles(session.sessionId);
 
         logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
@@ -3516,28 +3515,33 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         }
 
         // Zaktualizuj embed bez countdown (końcowa wiadomość)
-        await interaction.editReply({ 
+        await interaction.editReply({
             content: null,
-            embeds: [publicEmbed], 
-            components: [] 
+            embeds: [publicEmbed],
+            components: []
         });
 
-        // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        // TERAZ dopiero wyczyść całą sesję (to wywołuje endOCRSession i czyści kanał)
+        await phaseService.cleanupSession(session.sessionId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase1)`);
 
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd zapisu danych:', error);
 
-        // Zakończ sesję OCR w przypadku błędu
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        // Wyczyść sesję w przypadku błędu (to wywołuje endOCRSession)
+        await phaseService.cleanupSession(session.sessionId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase1)`);
 
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas zapisu danych do bazy.',
-            embeds: [],
-            components: []
-        });
+        // Spróbuj odpowiedzieć użytkownikowi (może się nie udać jeśli interaction expired)
+        try {
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas zapisu danych do bazy.',
+                embeds: [],
+                components: []
+            });
+        } catch (replyError) {
+            logger.warn('[PHASE1] ⚠️ Nie udało się zaktualizować wiadomości (interaction expired)');
+        }
     }
 }
 
@@ -3934,9 +3938,8 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase2_cancel_save') {
-        // Anuluj zapis i zakończ sesję OCR
+        // Anuluj zapis i zakończ sesję OCR (cleanupSession wywołuje endOCRSession)
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
 
         await interaction.update({
@@ -4021,7 +4024,8 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             }
         }
 
-        await phaseService.cleanupSession(session.sessionId);
+        // Usuń TYLKO pliki temp (NIE całą sesję - to zrobimy po pokazaniu progress bara)
+        await phaseService.cleanupSessionFiles(session.sessionId);
 
         logger.info(`[PHASE2] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
 
@@ -4070,25 +4074,33 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             }
         }
 
-        await interaction.editReply({ 
+        await interaction.editReply({
             content: null,
-            embeds: [publicEmbed], 
-            components: [] 
+            embeds: [publicEmbed],
+            components: []
         });
 
-        // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        // TERAZ dopiero wyczyść całą sesję (to wywołuje endOCRSession i czyści kanał)
+        await phaseService.cleanupSession(session.sessionId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (sukces Phase2)`);
 
     } catch (error) {
         logger.error('[PHASE2] ❌ Błąd zapisu:', error);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+
+        // Wyczyść sesję w przypadku błędu (to wywołuje endOCRSession)
+        await phaseService.cleanupSession(session.sessionId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase2)`);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas zapisywania danych.',
-            embeds: [],
-            components: []
-        });
+
+        // Spróbuj odpowiedzieć użytkownikowi (może się nie udać jeśli interaction expired)
+        try {
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas zapisywania danych.',
+                embeds: [],
+                components: []
+            });
+        } catch (replyError) {
+            logger.warn('[PHASE2] ⚠️ Nie udało się zaktualizować wiadomości (interaction expired)');
+        }
     }
 }
 
