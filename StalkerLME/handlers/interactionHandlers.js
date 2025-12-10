@@ -3433,11 +3433,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     }
 
     // Zatwierdź - zapisz do bazy
-    await interaction.update({
-        content: '💾 Zapisuję wyniki do bazy danych...',
-        embeds: [],
-        components: []
-    });
+    // Użyj deferUpdate dla przycisku, a następnie followUp zamiast editReply
+    await interaction.deferUpdate();
 
     try {
         const finalResults = phaseService.getFinalResults(session);
@@ -3497,8 +3494,33 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             logger.error(`[PHASE1] ⚠️ Błąd wysyłania powiadomienia na kanał ostrzeżeń: ${error.message}`);
         }
 
+        // Pobierz wiadomość która ma być zaktualizowana
+        const originalMessage = await interaction.fetchReply();
+
+        // Pokaż progress bar z odliczaniem 5 sekund przed czyszczeniem kanału
+        for (let i = 5; i >= 0; i--) {
+            const progress = ((5 - i) / 5) * 100;
+            const filledBars = Math.floor(progress / 10);
+            const emptyBars = 10 - filledBars;
+            const progressBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
+
+            await interaction.editReply({
+                content: `⏳ **Czyszczenie kanału za ${i} sekund...**\n\n${progressBar} ${Math.floor(progress)}%`,
+                embeds: [],
+                components: []
+            });
+
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+
         // Zaktualizuj embed bez countdown (końcowa wiadomość)
-        await interaction.editReply({ embeds: [publicEmbed], components: [] });
+        await interaction.editReply({ 
+            content: null,
+            embeds: [publicEmbed], 
+            components: [] 
+        });
 
         // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
@@ -3513,6 +3535,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zapisu danych do bazy.',
+            embeds: [],
             components: []
         });
     }
@@ -3924,11 +3947,8 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         return;
     }
 
-    await interaction.update({
-        content: '💾 Zapisywanie wyników...',
-        embeds: [],
-        components: []
-    });
+    // Użyj deferUpdate dla przycisku, a następnie editReply
+    await interaction.deferUpdate();
 
     try {
         // Wyniki wszystkich rund są już w roundsData (dodane po rozwiązaniu konfliktów)
@@ -4032,7 +4052,29 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
 
-        await interaction.editReply({ embeds: [publicEmbed], components: [] });
+        // Pokaż progress bar z odliczaniem 5 sekund przed czyszczeniem kanału
+        for (let i = 5; i >= 0; i--) {
+            const progress = ((5 - i) / 5) * 100;
+            const filledBars = Math.floor(progress / 10);
+            const emptyBars = 10 - filledBars;
+            const progressBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
+
+            await interaction.editReply({
+                content: `⏳ **Czyszczenie kanału za ${i} sekund...**\n\n${progressBar} ${Math.floor(progress)}%`,
+                embeds: [],
+                components: []
+            });
+
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+
+        await interaction.editReply({ 
+            content: null,
+            embeds: [publicEmbed], 
+            components: [] 
+        });
 
         // Zakończ sesję OCR (natychmiast, bez dodatkowego opóźnienia)
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
@@ -4043,7 +4085,9 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd zapisu Phase2)`);
         await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas zapisywania danych.'
+            content: '❌ Wystąpił błąd podczas zapisywania danych.',
+            embeds: [],
+            components: []
         });
     }
 }
