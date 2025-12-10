@@ -1097,7 +1097,7 @@ class InteractionHandler {
                     }
 
                     // Wykonaj dodatkową klątwę
-                    await this.executeCurse(interaction, targetMember, curse.additional);
+                    await this.executeCurse(interaction, targetMember, curse.additional, curse.duration * 60 * 1000);
 
                     const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
                     const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
@@ -1163,7 +1163,7 @@ class InteractionHandler {
                 }
 
                 // Wykonaj dodatkową klątwę
-                await this.executeCurse(interaction, actualTargetMember, curse.additional);
+                await this.executeCurse(interaction, actualTargetMember, curse.additional, curse.duration * 60 * 1000);
 
                 const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
                 const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
@@ -1377,7 +1377,9 @@ class InteractionHandler {
 
             // Aplikuj klątwę na nick (z czasem zależnym od poziomu)
             try {
-                await this.applyNicknameCurse(actualTargetMember, interaction, curseDuration);
+                // Konwertuj curseDuration z ms na minuty
+                const durationInMinutes = curseDuration / (60 * 1000);
+                await this.applyNicknameCurse(actualTargetMember, interaction, durationInMinutes);
                 // Log już został zapisany w applyNicknameCurse(), nie duplikuj
             } catch (error) {
                 logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
@@ -1531,7 +1533,7 @@ class InteractionHandler {
                 const curse = this.virtuttiService.getRandomCurse();
 
                 // Aplikuj losową klątwę
-                await this.executeCurse({ guild, channel: member.guild.channels.cache.first() }, member, curse.additional);
+                await this.executeCurse({ guild, channel: member.guild.channels.cache.first() }, member, curse.additional, curse.duration * 60 * 1000);
                 logger.info(`🔥 Lucyfer ${userId} dostał losową klątwę odbicia: ${curse.additional}`);
             } catch (error) {
                 logger.error(`❌ Błąd podczas aplikowania klątwy odbicia dla Lucyfera: ${error.message}`);
@@ -1624,63 +1626,64 @@ class InteractionHandler {
      * @param {Interaction} interaction - Interakcja Discord
      * @param {GuildMember} targetMember - Docelowy członek serwera
      * @param {string} curseDescription - Opis klątwy
+     * @param {number} curseDuration - Czas trwania klątwy w ms (opcjonalnie, domyślnie 5 minut)
      */
-    async executeCurse(interaction, targetMember, curseDescription) {
+    async executeCurse(interaction, targetMember, curseDescription, curseDuration = 5 * 60 * 1000) {
         const userId = targetMember.id;
         const now = Date.now();
         
         if (curseDescription.includes('Slow mode personal')) {
-            // Slow mode - 30 sekund między wiadomościami przez 5 minut
+            // Slow mode - 30 sekund między wiadomościami
             this.activeCurses.set(userId, {
                 type: 'slowMode',
                 data: { lastMessage: 0 },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Auto-delete')) {
-            // Auto-delete przez 5 minut z szansą 30%
+            // Auto-delete z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'autoDelete',
                 data: { chance: 3.33 }, // 1/3.33 szansa (30%)
-                endTime: now + (5 * 60 * 1000) // 5 minut
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Random ping')) {
-            // Random ping przez 5 minut
+            // Random ping
             this.activeCurses.set(userId, {
                 type: 'randomPing',
                 data: { channel: interaction.channel },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.startRandomPing(userId, interaction.channel);
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Emoji spam')) {
-            // Emoji spam przez 5 minut z szansą 30%
+            // Emoji spam z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'emojiSpam',
                 data: { chance: 3.33 }, // 1/3.33 szansa (30%)
-                endTime: now + (5 * 60 * 1000) // 5 minut
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Forced caps')) {
-            // Forced caps przez 5 minut z szansą 100%
+            // Forced caps z szansą 100%
             this.activeCurses.set(userId, {
                 type: 'forcedCaps',
                 data: { chance: 100 },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
             
         } else if (curseDescription.includes('Random timeout')) {
-            // Random timeout przez 5 minut
+            // Random timeout
             this.activeCurses.set(userId, {
                 type: 'randomTimeout',
                 data: { isTimedOut: false },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.startRandomTimeout(userId, targetMember);
             this.saveActiveCurses();
@@ -1693,7 +1696,7 @@ class InteractionHandler {
                     await targetMember.roles.add(specialRole);
                     logger.info(`🎭 Nadano specjalną rolę ${targetMember.user.tag} (klątwa)`);
                     
-                    // Usuń rolę po 5 minutach
+                    // Usuń rolę po czasie trwania klątwy
                     setTimeout(async () => {
                         try {
                             const memberToUpdate = await interaction.guild.members.fetch(targetMember.id);
@@ -1704,7 +1707,7 @@ class InteractionHandler {
                         } catch (error) {
                             logger.error(`❌ Błąd usuwania specjalnej roli: ${error.message}`);
                         }
-                    }, 5 * 60 * 1000);
+                    }, curseDuration);
                 } else {
                     logger.warn(`⚠️ Nie znaleziono specjalnej roli o ID: ${this.config.virtuttiPapajlari.specialRoleId}`);
                 }
@@ -1713,25 +1716,25 @@ class InteractionHandler {
             }
 
         } else if (curseDescription.includes('Scrambled words')) {
-            // Scrambled words przez 5 minut z szansą 30%
+            // Scrambled words z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'scrambledWords',
                 data: { chance: 30 },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
 
         } else if (curseDescription.includes('Don\'t be smart')) {
-            // Don't be smart przez 5 minut z szansą 30%
+            // Don't be smart z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'dontBeSmart',
                 data: { chance: 30 },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
 
         } else if (curseDescription.includes('Blah blah')) {
-            // Blah blah przez 5 minut z szansą 30%
+            // Blah blah z szansą 30%
             this.activeCurses.set(userId, {
                 type: 'blahBlah',
                 data: {
@@ -1746,7 +1749,7 @@ class InteractionHandler {
                         "https://tenor.com/view/blah-blah-blah-gif-2813101195058663365"
                     ]
                 },
-                endTime: now + (5 * 60 * 1000)
+                endTime: now + curseDuration
             });
             this.saveActiveCurses();
         }
