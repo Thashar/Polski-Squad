@@ -923,18 +923,27 @@ class PhaseService {
             // Wszystko ukończone - 10 zielonych kratek
             bar = '🟩'.repeat(totalBars);
         } else {
-            // W trakcie przetwarzania
-            // Zielone kratki = postęp ukończonych zdjęć (currentImage - 1)
-            // Pomarańczowe/białe kratki = postęp obecnego zdjęcia (migają co sekundę)
-            const completedBars = Math.ceil((currentImage / totalImages) * totalBars);
+            // Oblicz ile kratek reprezentuje ukończone zdjęcia
             const greenBars = Math.floor(((currentImage - 1) / totalImages) * totalBars);
+            // Oblicz ile kratek reprezentuje aktualnie przetwarzane zdjęcie
+            const completedBars = Math.ceil((currentImage / totalImages) * totalBars);
             const orangeBars = completedBars - greenBars;
             const remainingBars = totalBars - completedBars;
 
-            // Miganie: pomarańczowe ↔ białe (tylko dla aktualnie przetwarzanych kratek)
-            const currentBar = blinkState ? '🟧' : '⬜';
+            // Sprawdź czy to etap "po przetworzeniu" (aggregating, completed)
+            const isProcessingStage = stage === 'loading' || stage === 'ocr' || stage === 'extracting';
 
-            bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + '⬜'.repeat(remainingBars);
+            if (!isProcessingStage) {
+                // Po przetworzeniu (aggregating/completed) - wszystkie kratki (zielone + pomarańczowe) stają się zielone
+                // Zapewnia że: jeśli migały X kratek → X kratek staje się zielonych
+                bar = '🟩'.repeat(greenBars + orangeBars) + '⬜'.repeat(remainingBars);
+            } else {
+                // Podczas przetwarzania (loading/ocr/extracting)
+                // Zielone kratki = postęp ukończonych zdjęć (currentImage - 1)
+                // Pomarańczowe/białe kratki = postęp obecnego zdjęcia (migają co sekundę)
+                const currentBar = blinkState ? '🟧' : '⬜';
+                bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + '⬜'.repeat(remainingBars);
+            }
         }
 
         return `${bar} ${percentage}%`;

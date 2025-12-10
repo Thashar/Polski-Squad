@@ -876,22 +876,22 @@ class ReminderService {
             // Początek - wszystkie białe kratki
             bar = '⬜'.repeat(totalBars);
         } else {
+            // Oblicz ile kratek reprezentuje ukończone zdjęcia
+            const greenBars = Math.floor(((current - 1) / total) * totalBars);
+            // Oblicz ile kratek reprezentuje aktualnie przetwarzane zdjęcie
             const completedBars = Math.ceil((current / total) * totalBars);
+            const orangeBars = completedBars - greenBars;
+            const whiteBars = totalBars - completedBars;
 
             if (stage === 'completed') {
-                // Po przetworzeniu - wszystkie kratki do current są zielone
-                bar = '🟩'.repeat(completedBars) + '⬜'.repeat(totalBars - completedBars);
+                // Po przetworzeniu - wszystkie kratki (zielone + pomarańczowe) stają się zielone
+                // Zapewnia że: jeśli migały X kratek → X kratek staje się zielonych
+                bar = '🟩'.repeat(greenBars + orangeBars) + '⬜'.repeat(whiteBars);
             } else {
                 // Podczas przetwarzania
                 // Zielone kratki = postęp ukończonych zdjęć (current - 1)
                 // Pomarańczowe/białe kratki = postęp obecnego zdjęcia (migają co sekundę)
-                const greenBars = Math.floor(((current - 1) / total) * totalBars);
-                const orangeBars = completedBars - greenBars;
-                const whiteBars = totalBars - completedBars;
-
-                // Miganie: pomarańczowe ↔ białe (tylko dla aktualnie przetwarzanych kratek)
                 const currentBar = blinkState ? '🟧' : '⬜';
-
                 bar = '🟩'.repeat(greenBars) + currentBar.repeat(orangeBars) + '⬜'.repeat(whiteBars);
             }
         }
