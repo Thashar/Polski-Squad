@@ -58,6 +58,47 @@ class ClanRoleChangeService {
     }
 
     /**
+     * Sprawdza czy zmiana roli została wykonana przez administratora
+     * @param {Guild} guild - Serwer Discord
+     * @param {string} targetUserId - ID użytkownika, którego rola została zmieniona
+     * @returns {Promise<boolean>} - true jeśli administrator wykonał zmianę
+     */
+    async isAdminRoleChange(guild, targetUserId) {
+        try {
+            // Pobierz ostatnie wpisy z audit log (tylko zmiany ról)
+            const auditLogs = await guild.fetchAuditLogs({
+                type: 25, // MEMBER_ROLE_UPDATE
+                limit: 5
+            });
+
+            // Znajdź wpis dotyczący tego użytkownika (w ostatnich 10 sekundach)
+            const now = Date.now();
+            const relevantEntry = auditLogs.entries.find(entry => {
+                const timeDiff = now - entry.createdTimestamp;
+                return entry.target?.id === targetUserId && timeDiff < 10000; // 10 sekund
+            });
+
+            if (!relevantEntry) {
+                return false;
+            }
+
+            // Sprawdź czy wykonawca ma uprawnienia administratora
+            const executor = await guild.members.fetch(relevantEntry.executor.id);
+            const isAdmin = executor.permissions.has('Administrator');
+
+            if (isAdmin) {
+                logger.info(`[CLAN_ROLE] Administrator ${executor.user.tag} zmienił rolę użytkownika - pomijam powiadomienie`);
+            }
+
+            return isAdmin;
+        } catch (error) {
+            // Jeśli nie mamy dostępu do audit logs lub wystąpił błąd, zakładamy że to nie admin
+            logger.warn(`[CLAN_ROLE] ⚠️ Nie można sprawdzić audit log:`, error.message);
+            return false;
+        }
+    }
+
+    /**
      * Obsługuje zmianę ról członka
      * @param {GuildMember} oldMember - Stary stan członka
      * @param {GuildMember} newMember - Nowy stan członka
@@ -109,6 +150,13 @@ class ClanRoleChangeService {
             const newClanRole = this.getClanRoleFromIds(currentRoleIds);
 
             if (oldClanRole === newClanRole) {
+                return;
+            }
+
+            // Sprawdź czy zmiana została wykonana przez administratora
+            const isAdminChange = await this.isAdminRoleChange(newMember.guild, userId);
+            if (isAdminChange) {
+                logger.info(`[CLAN_ROLE] Zmiana roli przez administratora - pomijam powiadomienie dla ${freshMember.user.tag}`);
                 return;
             }
 
