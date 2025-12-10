@@ -13,8 +13,9 @@ class VirtuttiService {
         // === NOWY SYSTEM ENERGII ===
         this.energySystem = new Map(); // userId -> { energy: number, lastRegeneration: timestamp, dailyCurses: number, date: string }
 
-        // Lucyfer - tracking odbić klątw
-        this.lucyferCurses = new Map(); // userId -> { date: string, cursesThrown: count, reflectionChance: number }
+        // Lucyfer - nowy dynamiczny system
+        this.lucyferData = new Map(); // userId -> { cost, regenTimeMs, lastTarget, targetHistory, successStreak, failStreak, lastRegeneration, curseCount }
+        this.lucyferCurses = new Map(); // userId -> { cursesThrown: count, reflectionChance: number } (bez date - ciągła gra)
         this.lucyferTargetCooldowns = new Map(); // userId -> Map(targetId -> timestamp)
         this.lucyferCurseBlocked = new Map(); // userId -> timestamp (blokada na 1h po odbiciu)
 
@@ -29,6 +30,7 @@ class VirtuttiService {
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
         this.dailyUsageFile = path.join(this.dataDir, 'virtutti_daily_usage.json');
         this.energySystemFile = path.join(this.dataDir, 'energy_system.json');
+        this.lucyferDataFile = path.join(this.dataDir, 'lucyfer_data.json');
         this.lucyferCursesFile = path.join(this.dataDir, 'lucyfer_curses.json');
         this.lucyferTargetCooldownsFile = path.join(this.dataDir, 'lucyfer_target_cooldowns.json');
         this.lucyferCurseBlockedFile = path.join(this.dataDir, 'lucyfer_curse_blocked.json');
@@ -554,19 +556,200 @@ class VirtuttiService {
         this.saveData();
     }
 
+    // ========================================
+    // NOWY SYSTEM LUCYFERA - DYNAMICZNA REGENERACJA I KOSZTY
+    // ========================================
+
     /**
-     * Rejestruje rzuconą klątwę przez Lucyfera
+     * Inicjalizuje dane Lucyfera
+     * @param {string} userId - ID Lucyfera
+     */
+    initializeLucyferData(userId) {
+        if (!this.lucyferData.has(userId)) {
+            this.lucyferData.set(userId, {
+                cost: 5, // Bazowy koszt 5 many
+                regenTimeMs: 5 * 60 * 1000, // Bazowy czas 5 min
+                lastTarget: null,
+                targetHistory: [], // Ostatnie 10 celów
+                successStreak: 0, // Seria sukcesów
+                failStreak: 0, // Seria failów
+                lastRegeneration: Date.now(),
+                curseCount: 0 // Łączna liczba rzuconych klątw (do odbicia)
+            });
+            logger.info(`🔥 Zainicjowano dane Lucyfera dla ${userId}`);
+        }
+    }
+
+    /**
+     * Regeneruje manę dla Lucyfera z dynamicznym czasem
+     * @param {string} userId - ID Lucyfera
+     */
+    regenerateLucyferMana(userId) {
+        const userData = this.energySystem.get(userId);
+        const lucyferData = this.lucyferData.get(userId);
+
+        if (!userData || !lucyferData) return;
+
+        const now = Date.now();
+        const timeSinceLastRegen = now - lucyferData.lastRegeneration;
+
+        // Ile pełnych jednostek czasu minęło?
+        const fullUnits = Math.floor(timeSinceLastRegen / lucyferData.regenTimeMs);
+
+        if (fullUnits > 0 && userData.energy < 300) {
+            userData.energy = Math.min(300, userData.energy + fullUnits);
+            lucyferData.lastRegeneration = now - (timeSinceLastRegen % lucyferData.regenTimeMs);
+            logger.info(`🔋 Regeneracja ${fullUnits} many dla Lucyfera ${userId}. Obecna: ${userData.energy}/300, czas/jednostkę: ${lucyferData.regenTimeMs / 60000} min`);
+            this.saveData();
+        }
+    }
+
+    /**
+     * Aktualizuje czas regeneracji na podstawie targetowania
+     * @param {string} userId - ID Lucyfera
+     * @param {string} newTargetId - ID nowego celu
+     */
+    updateLucyferRegenTime(userId, newTargetId) {
+        const lucyferData = this.lucyferData.get(userId);
+        if (!lucyferData) return;
+
+        const oldRegenTime = lucyferData.regenTimeMs;
+
+        // Czy to ten sam cel co ostatnio?
+        if (lucyferData.lastTarget === newTargetId) {
+            // Ten sam cel - spowolnienie regeneracji (+1 min, max 15 min)
+            lucyferData.regenTimeMs = Math.min(15 * 60 * 1000, lucyferData.regenTimeMs + (1 * 60 * 1000));
+            logger.info(`🐌 Lucyfer ${userId} atakuje tego samego celu. Regeneracja: ${oldRegenTime / 60000} → ${lucyferData.regenTimeMs / 60000} min`);
+        } else {
+            // Inny cel - przyspieszenie regeneracji (-1 min, min 5 min)
+            lucyferData.regenTimeMs = Math.max(5 * 60 * 1000, lucyferData.regenTimeMs - (1 * 60 * 1000));
+            logger.info(`🏃 Lucyfer ${userId} atakuje inny cel. Regeneracja: ${oldRegenTime / 60000} → ${lucyferData.regenTimeMs / 60000} min`);
+        }
+
+        // Aktualizuj lastTarget i historię
+        lucyferData.lastTarget = newTargetId;
+        lucyferData.targetHistory.unshift(newTargetId);
+        if (lucyferData.targetHistory.length > 10) {
+            lucyferData.targetHistory = lucyferData.targetHistory.slice(0, 10);
+        }
+
+        // NATYCHMIASTOWA ZMIANA - Przyznaj punkt many jeśli czas się zmienił i upłynęło wystarczająco czasu
+        this.adjustLucyferRegeneration(userId, oldRegenTime);
+    }
+
+    /**
+     * Dostosowuje regenerację natychmiast gdy czas się zmienia
+     * @param {string} userId - ID Lucyfera
+     * @param {number} oldRegenTime - Stary czas regeneracji
+     */
+    adjustLucyferRegeneration(userId, oldRegenTime) {
+        const userData = this.energySystem.get(userId);
+        const lucyferData = this.lucyferData.get(userId);
+
+        if (!userData || !lucyferData || userData.energy >= 300) return;
+
+        const now = Date.now();
+        const timeSinceLastRegen = now - lucyferData.lastRegeneration;
+        const newRegenTime = lucyferData.regenTimeMs;
+
+        // Jeśli nowy czas jest krótszy i upłynęło więcej niż nowy czas, przyznaj punkty
+        if (timeSinceLastRegen >= newRegenTime) {
+            const pointsToGrant = Math.floor(timeSinceLastRegen / newRegenTime);
+            userData.energy = Math.min(300, userData.energy + pointsToGrant);
+            lucyferData.lastRegeneration = now - (timeSinceLastRegen % newRegenTime);
+            logger.info(`⚡ Natychmiastowa regeneracja ${pointsToGrant} many dla Lucyfera ${userId} po zmianie czasu`);
+            this.saveData();
+        }
+    }
+
+    /**
+     * Aktualizuje koszt klątwy na podstawie sukcesów/failów
+     * @param {string} userId - ID Lucyfera
+     * @param {boolean} success - Czy klątwa się powiodła
+     */
+    updateLucyferCost(userId, success) {
+        const lucyferData = this.lucyferData.get(userId);
+        if (!lucyferData) return;
+
+        const oldCost = lucyferData.cost;
+
+        if (success) {
+            // Sukces - koszt maleje (-1, min 5)
+            lucyferData.cost = Math.max(5, lucyferData.cost - 1);
+            lucyferData.successStreak++;
+            lucyferData.failStreak = 0;
+            logger.info(`✅ Sukces klątwy. Koszt: ${oldCost} → ${lucyferData.cost} many`);
+        } else {
+            // Fail (odbicie) - koszt rośnie (+1, max 15)
+            lucyferData.cost = Math.min(15, lucyferData.cost + 1);
+            lucyferData.failStreak++;
+            lucyferData.successStreak = 0;
+            logger.info(`❌ Fail klątwy (odbicie). Koszt: ${oldCost} → ${lucyferData.cost} many`);
+        }
+
+        this.saveData();
+    }
+
+    /**
+     * Pobiera koszt następnej klątwy dla Lucyfera
+     * @param {string} userId - ID Lucyfera
+     * @returns {number} - Koszt many
+     */
+    getLucyferCurseCost(userId) {
+        this.initializeLucyferData(userId);
+        return this.lucyferData.get(userId).cost;
+    }
+
+    /**
+     * Pobiera dane Lucyfera dla embeda
+     * @param {string} userId - ID Lucyfera
+     * @returns {Object} - Szczegółowe dane
+     */
+    getLucyferStats(userId) {
+        this.initializeLucyferData(userId);
+        const lucyferData = this.lucyferData.get(userId);
+
+        return {
+            cost: lucyferData.cost,
+            regenTimeMinutes: lucyferData.regenTimeMs / (60 * 1000),
+            successStreak: lucyferData.successStreak,
+            failStreak: lucyferData.failStreak,
+            curseCount: lucyferData.curseCount,
+            reflectionChance: this.getLucyferReflectionChance(userId),
+            lastRegeneration: lucyferData.lastRegeneration,
+            nextRegenIn: this.getNextLucyferRegenTime(userId)
+        };
+    }
+
+    /**
+     * Pobiera czas do następnej regeneracji
+     * @param {string} userId - ID Lucyfera
+     * @returns {number} - Czas w milisekundach
+     */
+    getNextLucyferRegenTime(userId) {
+        const lucyferData = this.lucyferData.get(userId);
+        if (!lucyferData) return 0;
+
+        const now = Date.now();
+        const timeSinceLastRegen = now - lucyferData.lastRegeneration;
+        const timeToNext = lucyferData.regenTimeMs - timeSinceLastRegen;
+
+        return Math.max(0, timeToNext);
+    }
+
+    /**
+     * Rejestruje rzuconą klątwę przez Lucyfera (NOWA WERSJA)
      * @param {string} userId - ID Lucyfera
      * @param {string} targetUserId - ID celu
      */
     registerLucyferCurse(userId, targetUserId) {
-        const today = this.getPolishTime().toDateString();
+        this.initializeLucyferData(userId);
         const now = Date.now();
+        const lucyferData = this.lucyferData.get(userId);
 
-        // Aktualizuj tracking klątw
-        if (!this.lucyferCurses.has(userId) || this.lucyferCurses.get(userId).date !== today) {
+        // Aktualizuj tracking klątw (BEZ DATE - ciągła gra)
+        if (!this.lucyferCurses.has(userId)) {
             this.lucyferCurses.set(userId, {
-                date: today,
                 cursesThrown: 0,
                 reflectionChance: 0
             });
@@ -575,6 +758,7 @@ class VirtuttiService {
         const userCurses = this.lucyferCurses.get(userId);
         userCurses.cursesThrown++;
         userCurses.reflectionChance = userCurses.cursesThrown * 3; // 3% za każdą klątwę
+        lucyferData.curseCount++;
 
         // Aktualizuj cooldown dla tego targetu
         if (!this.lucyferTargetCooldowns.has(userId)) {
@@ -582,21 +766,23 @@ class VirtuttiService {
         }
         this.lucyferTargetCooldowns.get(userId).set(targetUserId, now);
 
-        logger.info(`💀 Lucyfer ${userId} rzucił klątwę. Łącznie dzisiaj: ${userCurses.cursesThrown}, szansa odbicia: ${userCurses.reflectionChance}%`);
+        // Aktualizuj czas regeneracji i koszt (sukces - wykonano w interactionHandlers)
+        this.updateLucyferRegenTime(userId, targetUserId);
+
+        logger.info(`💀 Lucyfer ${userId} rzucił klątwę. Łącznie: ${userCurses.cursesThrown}, szansa odbicia: ${userCurses.reflectionChance}%`);
 
         this.saveData();
     }
 
     /**
-     * Pobiera szansę na odbicie klątwy dla Lucyfera
+     * Pobiera szansę na odbicie klątwy dla Lucyfera (NOWA WERSJA - bez daty)
      * @param {string} userId - ID Lucyfera
      * @returns {number} - Szansa w procentach (0-100)
      */
     getLucyferReflectionChance(userId) {
-        const today = this.getPolishTime().toDateString();
         const userCurses = this.lucyferCurses.get(userId);
 
-        if (!userCurses || userCurses.date !== today) {
+        if (!userCurses) {
             return 0;
         }
 
@@ -618,19 +804,12 @@ class VirtuttiService {
     }
 
     /**
-     * Resetuje klątwy Lucyfera (wywoływane o północy)
+     * USUNIĘTE - Resetuje klątwy Lucyfera (wywoływane o północy)
+     * NOWA LOGIKA: Gra ciągła bez resetów o północy
      */
     resetLucyferCursesDaily() {
-        const today = this.getPolishTime().toDateString();
-
-        for (const [userId, curses] of this.lucyferCurses.entries()) {
-            if (curses.date !== today) {
-                this.lucyferCurses.delete(userId);
-                logger.info(`🔄 Reset klątw Lucyfera dla ${userId}`);
-            }
-        }
-
-        this.saveData();
+        // FUNKCJA PUSTA - Lucyfer nie resetuje się o północy
+        // Gra jest ciągła
     }
 
     /**
@@ -712,6 +891,18 @@ class VirtuttiService {
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     logger.warn(`⚠️ Błąd wczytywania dziennych użyć: ${error.message}`);
+                }
+            }
+
+            // Wczytaj dane Lucyfera - główne dane (NOWY PLIK)
+            try {
+                const lucyferDataFile = await fs.readFile(this.lucyferDataFile, 'utf8');
+                const parsedLucyferData = JSON.parse(lucyferDataFile);
+                this.lucyferData = new Map(Object.entries(parsedLucyferData));
+                logger.info(`📂 Wczytano ${this.lucyferData.size} głównych danych Lucyfera`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania głównych danych Lucyfera: ${error.message}`);
                 }
             }
 
@@ -831,7 +1022,11 @@ class VirtuttiService {
             // Zapisz dzienne użycia
             await fs.writeFile(this.dailyUsageFile, JSON.stringify(dailyUsageObj, null, 2));
 
-            // Zapisz dane Lucyfera
+            // Zapisz dane Lucyfera - główne dane
+            const lucyferDataObj = Object.fromEntries(this.lucyferData);
+            await fs.writeFile(this.lucyferDataFile, JSON.stringify(lucyferDataObj, null, 2));
+
+            // Zapisz dane Lucyfera - klątwy
             await fs.writeFile(this.lucyferCursesFile, JSON.stringify(lucyferCursesObj, null, 2));
             await fs.writeFile(this.lucyferTargetCooldownsFile, JSON.stringify(lucyferTargetCooldownsObj, null, 2));
             await fs.writeFile(this.lucyferGabrielDebuffFile, JSON.stringify(lucyferGabrielDebuffObj, null, 2));

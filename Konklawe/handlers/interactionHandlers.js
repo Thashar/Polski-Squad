@@ -1020,14 +1020,37 @@ class InteractionHandler {
         }
 
         // === SPRAWDŹ ENERGIĘ (PROGRESYWNY KOSZT) ===
+        // Inicjalizuj dane Lucyfera jeśli to Lucyfer
+        if (roleType === 'lucyfer') {
+            this.virtuttiService.initializeLucyferData(userId);
+            this.virtuttiService.regenerateLucyferMana(userId);
+        }
+
         const energyData = this.virtuttiService.getEnergy(userId);
-        const curseCost = energyData.nextCurseCost;
+        const curseCost = roleType === 'lucyfer'
+            ? this.virtuttiService.getLucyferCurseCost(userId)
+            : energyData.nextCurseCost;
 
         if (!this.virtuttiService.hasEnoughEnergy(userId, curseCost)) {
-            return await interaction.reply({
-                content: `⚡ **Nie masz wystarczająco many!**\n\nKoszt następnej klątwy: **${curseCost}** many (${energyData.dailyCurses} klątw dzisiaj)\nTwoja mana: **${energyData.energy}/${energyData.maxEnergy}**\n\n🔋 Regeneracja: **10 punktów/godzinę**\n💡 Koszt rośnie z każdą klątwą: 10 + (klątwy * 2)`,
-                flags: MessageFlags.Ephemeral
-            });
+            if (roleType === 'lucyfer') {
+                const lucyferStats = this.virtuttiService.getLucyferStats(userId);
+                const nextRegenMinutes = Math.ceil(lucyferStats.nextRegenIn / (60 * 1000));
+                return await interaction.reply({
+                    content: `⚡ **Nie masz wystarczająco many!**\n\n` +
+                        `Koszt następnej klątwy: **${curseCost}** many\n` +
+                        `Twoja mana: **${energyData.energy}/${energyData.maxEnergy}**\n\n` +
+                        `🔋 Regeneracja: **1 pkt / ${lucyferStats.regenTimeMinutes} min**\n` +
+                        `⏰ Następna mana za: **${nextRegenMinutes} min**\n\n` +
+                        `💡 Dynamiczny koszt: ${curseCost} many (5-15)\n` +
+                        `📊 Sukcesy obniżają koszt, faile zwiększają`,
+                    flags: MessageFlags.Ephemeral
+                });
+            } else {
+                return await interaction.reply({
+                    content: `⚡ **Nie masz wystarczająco many!**\n\nKoszt następnej klątwy: **${curseCost}** many (${energyData.dailyCurses} klątw dzisiaj)\nTwoja mana: **${energyData.energy}/${energyData.maxEnergy}**\n\n🔋 Regeneracja: **10 punktów/godzinę**\n💡 Koszt rośnie z każdą klątwą: 10 + (klątwy * 2)`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
         }
 
         // === SPECJALNA LOGIKA GABRIEL vs LUCYFER ===
@@ -1288,13 +1311,20 @@ class InteractionHandler {
         // Zarejestruj użycie
         if (roleType === 'virtutti' || roleType === 'gabriel') {
             this.virtuttiService.registerUsage(userId, 'curse', interaction.user.tag);
-        } else if (roleType === 'lucyfer' && !isReflected) {
-            // Lucyfer rejestruje tylko jeśli nie została odbita (zwiększa licznik PRZED pokazaniem wyniku)
-            this.virtuttiService.registerLucyferCurse(userId, targetUser.id);
+        } else if (roleType === 'lucyfer') {
+            if (!isReflected) {
+                // Lucyfer SUKCES - rejestruj i obniż koszt
+                this.virtuttiService.registerLucyferCurse(userId, targetUser.id);
+                this.virtuttiService.updateLucyferCost(userId, true); // Sukces
 
-            // Logowanie diagnostyczne
-            const currentReflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
-            logger.info(`🔥 Lucyfer ${interaction.user.tag} zarejestrował klątwę. Obecna szansa odbicia: ${currentReflectionChance}%`);
+                // Logowanie diagnostyczne
+                const currentReflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
+                logger.info(`🔥 Lucyfer ${interaction.user.tag} zarejestrował klątwę (SUKCES). Szansa odbicia: ${currentReflectionChance}%`);
+            } else {
+                // Lucyfer FAIL (odbicie) - podnieś koszt, NIE rejestruj klątwy
+                this.virtuttiService.updateLucyferCost(userId, false); // Fail
+                logger.info(`🔥 Lucyfer ${interaction.user.tag} - klątwa ODBITA. Koszt zwiększony.`);
+            }
         }
 
         // Jeśli Gabriel failnął, wyślij komunikat i zakończ
@@ -1411,18 +1441,30 @@ class InteractionHandler {
                     flags: MessageFlags.Ephemeral
                 });
             } else {
-                // Lucyfer - pokaż szansę na odbicie + manę
-                const reflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
+                // Lucyfer - pokaż kompletne statystyki z nowego systemu
+                const lucyferStats = this.virtuttiService.getLucyferStats(userId);
+                const nextRegenMinutes = Math.ceil(lucyferStats.nextRegenIn / (60 * 1000));
+                const nextRegenSeconds = Math.ceil((lucyferStats.nextRegenIn % (60 * 1000)) / 1000);
 
-                // Logowanie diagnostyczne - porównaj z wcześniejszą wartością
-                logger.info(`🔥 Lucyfer ${interaction.user.tag} wyświetlenie statusu. Szansa odbicia: ${reflectionChance}%`);
+                // Logowanie diagnostyczne
+                logger.info(`🔥 Lucyfer ${interaction.user.tag} wyświetlenie statusu. Szansa odbicia: ${lucyferStats.reflectionChance}%`);
 
                 await interaction.followUp({
-                    content: `🔥 **Aktualna szansa na odbicie:** **${reflectionChance}%**\n` +
+                    content: `🔥 **=== STATUS LUCYFERA ===**\n\n` +
                         `⚡ **Mana:** ${updatedEnergyData.energy}/${updatedEnergyData.maxEnergy}\n` +
-                        `📊 Rzucone dzisiaj: **${updatedEnergyData.dailyCurses}** klątw\n` +
-                        `💰 ${nextCostInfo}\n` +
-                        `🔋 Regeneracja: **10 pkt/h**`,
+                        `💰 **Koszt następnej klątwy:** ${lucyferStats.cost} many (5-15)\n\n` +
+                        `🔋 **Regeneracja:** 1 pkt / ${lucyferStats.regenTimeMinutes} min\n` +
+                        `⏰ **Następna mana za:** ${nextRegenMinutes}m ${nextRegenSeconds}s\n\n` +
+                        `📊 **Statystyki:**\n` +
+                        `├─ Rzucone klątwy: **${lucyferStats.curseCount}**\n` +
+                        `├─ Seria sukcesów: **${lucyferStats.successStreak}** ✅\n` +
+                        `├─ Seria failów: **${lucyferStats.failStreak}** ❌\n` +
+                        `└─ Szansa odbicia: **${lucyferStats.reflectionChance}%** 🛡️\n\n` +
+                        `💡 **Mechaniki:**\n` +
+                        `• Atakowanie tej samej osoby: +1 min regeneracji\n` +
+                        `• Atakowanie różnych osób: -1 min regeneracji\n` +
+                        `• Sukcesy: -1 koszt klątwy\n` +
+                        `• Faile (odbicia): +1 koszt klątwy`,
                     flags: MessageFlags.Ephemeral
                 });
             }
