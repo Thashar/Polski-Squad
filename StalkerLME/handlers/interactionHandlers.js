@@ -3493,19 +3493,24 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             logger.error(`[PHASE1] ⚠️ Błąd wysyłania powiadomienia na kanał ostrzeżeń: ${error.message}`);
         }
 
-        // Pobierz wiadomość która ma być zaktualizowana
-        const originalMessage = await interaction.fetchReply();
-
-        // Pokaż progress bar z odliczaniem 5 sekund przed czyszczeniem kanału
+        // Pokaż embed z progress barem (animacja 5 sekund)
         for (let i = 5; i >= 0; i--) {
             const progress = ((5 - i) / 5) * 100;
             const filledBars = Math.floor(progress / 10);
             const emptyBars = 10 - filledBars;
             const progressBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
 
+            // Skopiuj embed i dodaj pole z progress barem
+            const embedWithProgress = EmbedBuilder.from(publicEmbed);
+            embedWithProgress.addFields({
+                name: '⏳ Czyszczenie kanału',
+                value: `${progressBar} ${Math.floor(progress)}%\nZa ${i} sekund...`,
+                inline: false
+            });
+
             await interaction.editReply({
-                content: `⏳ **Czyszczenie kanału za ${i} sekund...**\n\n${progressBar} ${Math.floor(progress)}%`,
-                embeds: [],
+                content: null,
+                embeds: [embedWithProgress],
                 components: []
             });
 
@@ -3514,7 +3519,7 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             }
         }
 
-        // Zaktualizuj embed bez countdown (końcowa wiadomość)
+        // Zaktualizuj embed bez progress bara (końcowa wiadomość)
         await interaction.editReply({
             content: null,
             embeds: [publicEmbed],
@@ -4056,16 +4061,24 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: `Zapisane przez ${interaction.user.tag}` });
 
-        // Pokaż progress bar z odliczaniem 5 sekund przed czyszczeniem kanału
+        // Pokaż embed z progress barem (animacja 5 sekund)
         for (let i = 5; i >= 0; i--) {
             const progress = ((5 - i) / 5) * 100;
             const filledBars = Math.floor(progress / 10);
             const emptyBars = 10 - filledBars;
             const progressBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
 
+            // Skopiuj embed i dodaj pole z progress barem
+            const embedWithProgress = EmbedBuilder.from(publicEmbed);
+            embedWithProgress.addFields({
+                name: '⏳ Czyszczenie kanału',
+                value: `${progressBar} ${Math.floor(progress)}%\nZa ${i} sekund...`,
+                inline: false
+            });
+
             await interaction.editReply({
-                content: `⏳ **Czyszczenie kanału za ${i} sekund...**\n\n${progressBar} ${Math.floor(progress)}%`,
-                embeds: [],
+                content: null,
+                embeds: [embedWithProgress],
                 components: []
             });
 
@@ -4074,6 +4087,7 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             }
         }
 
+        // Zaktualizuj embed bez progress bara (końcowa wiadomość)
         await interaction.editReply({
             content: null,
             embeds: [publicEmbed],
