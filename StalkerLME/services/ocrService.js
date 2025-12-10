@@ -1606,11 +1606,9 @@ class OCRService {
      * Określa timeout dla sesji na podstawie komendy
      */
     getSessionTimeout(commandName) {
-        // faza2: 10 minut, reszta: 5 minut
-        if (commandName === '/faza2') {
-            return 10 * 60 * 1000; // 10 minut
-        }
-        return 5 * 60 * 1000; // 5 minut (faza1, remind, punish)
+        // Wszystkie sesje OCR: 15 minut (maksymalny czas)
+        // Timeout kolejki (rezerwacji) pozostaje 3 minuty
+        return 15 * 60 * 1000; // 15 minut dla wszystkich komend
     }
 
     async startOCRSession(guildId, userId, commandName) {
