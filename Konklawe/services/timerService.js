@@ -183,6 +183,12 @@ class TimerService {
     async setReminderTimer(userId) {
         this.clearReminderTimer();
         this.gameService.reminderTimer = setTimeout(async () => {
+            // Nie wysyłaj przypomnienia jeśli hasło to "Konklawe"
+            if (this.gameService.trigger && this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
+                return;
+            }
+
+            // Wyślij przypomnienie jeśli trigger === null (brak hasła)
             if (this.gameService.trigger === null) {
                 try {
                     const reminderChannel = await this.client.channels.fetch(this.config.channels.reminder);

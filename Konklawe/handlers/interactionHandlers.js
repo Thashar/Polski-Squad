@@ -1356,9 +1356,20 @@ class InteractionHandler {
             });
         }
 
-        // === LOSUJ POZIOM KLĄTWY (96% / 3% / 1%) ===
-        const curseLevel = this.virtuttiService.rollCurseLevel();
-        const curseDuration = this.virtuttiService.getCurseDuration(curseLevel);
+        // === LOSUJ POZIOM KLĄTWY ===
+        // Gabriel: ZAWSZE zwykła klątwa (5 min)
+        // Lucyfer i Virtutti: 96% zwykła / 3% silna / 1% potężna
+        let curseLevel, curseDuration;
+
+        if (roleType === 'gabriel') {
+            // Gabriel rzuca TYLKO zwykłe klątwy
+            curseLevel = 'normal';
+            curseDuration = this.virtuttiService.getCurseDuration(curseLevel);
+        } else {
+            // Lucyfer i Virtutti mają normalne prawdopodobieństwa
+            curseLevel = this.virtuttiService.rollCurseLevel();
+            curseDuration = this.virtuttiService.getCurseDuration(curseLevel);
+        }
 
         // Pobierz losową klątwę
         const curse = this.virtuttiService.getRandomCurse();

@@ -80,12 +80,12 @@ class JudgmentService {
                             '  ╰ 50% szans na **usunięcie klątwy z celu**\n' +
                             '  ╰ 1% szans: **💥 MEGA SILNA KLĄTWA** (1h, losowa zmiana co 5 min)\n' +
                             '• 💀 **Klątwy** `/curse` (85% sukces, 15% fail zwrot 50% many)\n' +
-                            '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
+                            '  ╰ **100% - Zwykła klątwa (5 min)**\n' +
                             '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                             '**VS Lucyfer (curse):**\n' +
                             '• 33% - Wzmocnienie Lucyfera (reset % odbicia)\n' +
                             '• 33% - Odporność (nic się nie dzieje)\n' +
-                            '• 33% - Normalna klątwa (z poziomami)\n' +
+                            '• 33% - Normalna klątwa (5 min)\n' +
                             '• 1% - **⚡💥 ULTRA POTĘŻNA KLĄTWA** (5 min + 24h debuff, 10% szans/msg)\n\n' +
                             '**VS Lucyfer (blessing):**\n' +
                             '• Blessing nie działa na Lucyfera (odporność)\n\n' +
@@ -311,33 +311,40 @@ class JudgmentService {
                 if (roleName === 'Gabriel') {
                     return '**⚡ System Many:**\n' +
                         '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
-                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** many\n\n' +
+                        '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
                         '**Moce:**\n' +
-                        '• 🙏 Błogosławieństwa `/blessing` (5 many, 5 min cooldown per cel)\n' +
-                        '• ✨ 50% szans na usunięcie klątwy\n' +
-                        '• 💀 Klątwy `/curse` (85% sukces, 15% fail, 0% odbicie)\n' +
-                        '• ⚡ 1% przy blessing: **silna klątwa na Lucyfera** (1h, zmiana co 5 min)\n' +
-                        '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
-                        '**🎲 Poziomy klątw:**\n' +
-                        '• 💀 Zwykła (96%): 5 min | ⚡ Silna (3%): 15 min | 💥 Potężna (1%): 30 min\n\n' +
-                        '**⚡ Tajemnicza moc:**\n' +
-                        '• Światło i ciemność walczą w sposób nieprzewidywalny\n\n' +
+                        '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
+                        '  ╰ 50% szans na **usunięcie klątwy z celu**\n' +
+                        '  ╰ 1% szans: **💥 MEGA SILNA KLĄTWA** (1h, losowa zmiana co 5 min)\n' +
+                        '• 💀 **Klątwy** `/curse` (85% sukces, 15% fail zwrot 50% many)\n' +
+                        '  ╰ **100% - Zwykła klątwa (5 min)**\n' +
+                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
+                        '**VS Lucyfer (curse):**\n' +
+                        '• 33% - Wzmocnienie Lucyfera (reset % odbicia)\n' +
+                        '• 33% - Odporność (nic się nie dzieje)\n' +
+                        '• 33% - Normalna klątwa (5 min)\n' +
+                        '• 1% - **⚡💥 ULTRA POTĘŻNA KLĄTWA** (5 min + 24h debuff, 10% szans/msg)\n\n' +
+                        '**VS Lucyfer (blessing):**\n' +
+                        '• Blessing nie działa na Lucyfera (odporność)\n\n' +
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
                     return '**⚡ System Many:**\n' +
-                        '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
-                        '• 📈 Progresywny koszt: **10 + (klątwy × 2)** many\n\n' +
+                        '• 💯 Start: **300 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
+                        '• 🎯 Dynamiczny koszt klątw: **5-15 many**\n' +
+                        '  ╰ Sukces: koszt -1 (min 5) | Fail: koszt +5 (max 15)\n' +
+                        '  ╰ Ten sam cel: regen +1 min (max 15) | Inny cel: regen -1 min (min 5)\n\n' +
                         '**Moce:**\n' +
-                        '• 💀 Nieograniczone klątwy `/curse` (5 min cooldown per cel)\n' +
-                        '• 📈 Progresywne odbicie: **3%, 6%, 9%...** (+3% za każdą klątwę dziennie)\n' +
-                        '• ⚠️ Przy odbiciu: **blokada 1h + nick "Osłabiony"** (bez klątwy na siebie!)\n' +
-                        '• 🔍 Sprawdzanie cnót `/virtue-check`\n\n' +
-                        '**🎲 Poziomy klątw:**\n' +
-                        '• 💀 Zwykła (96%): 5 min | ⚡ Silna (3%): 15 min | 💥 Potężna (1%): 30 min\n\n' +
+                        '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
+                        '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
+                        '• 📈 **Progresywne odbicie:** +3% za każdą klątwę (NIE resetuje się dziennie)\n' +
+                        '  ╰ Przy odbiciu: **blokada 1h + nick "Osłabiony"**\n' +
+                        '  ╰ Reset % odbicia do 0% po odbiciu\n' +
+                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
+                        '**VS Gabriel (curse):**\n' +
+                        '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
                         '**Ograniczenia:**\n' +
-                        '• ⛔ BRAK błogosławieństw\n\n' +
-                        '**🔥 Ukryta moc:**\n' +
-                        '• Ciemność pochłania światło w tajemniczy sposób\n\n' +
+                        '• ⛔ **BRAK błogosławieństw** (`/blessing` niedostępne)\n\n' +
+                        '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam,\nForced caps, Random timeout, Special role, Scrambled words,\nDon\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
                         '**Ścieżka potęgi i ciemności.**';
                 }
             };

@@ -100,12 +100,28 @@ class DetailedLogger {
             // Gabriel/Virtutti - progresywny koszt (10 + dailyCurses * 2)
             nextCost = 10 + (energyData.dailyCurses * 2);
         }
-        
+
+        // Określ poziom klątwy z prawidłowymi prawdopodobieństwami
+        let levelDescription;
+        if (roleType === 'gabriel') {
+            // Gabriel - TYLKO zwykłe klątwy (5 min)
+            levelDescription = '💀 Zwykła (100%)';
+        } else {
+            // Lucyfer i Virtutti - normalne prawdopodobieństwa
+            if (level === 'normal') {
+                levelDescription = '💀 Zwykła (96%)';
+            } else if (level === 'strong') {
+                levelDescription = '⚡ Silna (3%)';
+            } else {
+                levelDescription = '💥 Potężna (1%)';
+            }
+        }
+
         const fields = [
             { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
             { name: '🎯 Cel', value: `<@${target.id}> (${target.tag})`, inline: true },
             { name: '💀 Typ klątwy', value: curseType, inline: true },
-            { name: '⚡ Poziom', value: level === 'normal' ? '💀 Zwykła (96%)' : level === 'strong' ? '⚡ Silna (3%)' : '💥 Potężna (1%)', inline: true },
+            { name: '⚡ Poziom', value: levelDescription, inline: true },
             { name: '💰 Koszt many', value: `${cost} many`, inline: true },
             { name: '🔋 Pozostała mana', value: `${energyData.energy}/${energyData.maxEnergy}`, inline: true },
             { name: '📊 Klątwy dzisiaj', value: `${energyData.dailyCurses}`, inline: true },
@@ -166,7 +182,7 @@ class DetailedLogger {
     }
 
     /**
-     * Loguje odbicie klątwy na Gabriela (33%)
+     * Loguje odbicie klątwy na Gabriela (100%)
      */
     async logGabrielReflection(lucyfer, gabriel) {
         await this.log({
@@ -176,7 +192,7 @@ class DetailedLogger {
             fields: [
                 { name: '👤 Lucyfer', value: `<@${lucyfer.id}> (${lucyfer.tag})`, inline: true },
                 { name: '☁️ Gabriel', value: `<@${gabriel.id}> (${gabriel.tag})`, inline: true },
-                { name: '⚡ Mechanika', value: '33% odbicie na Gabriela', inline: true }
+                { name: '⚡ Mechanika', value: '100% odbicie - Gabriel zawsze odbija klątwy Lucyfera', inline: false }
             ]
         });
     }
