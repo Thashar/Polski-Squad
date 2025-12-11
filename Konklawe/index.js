@@ -85,6 +85,7 @@ async function initializeServices() {
 
     // Inicjalizacja handlerów z wszystkimi serwisami
     interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger);
+    interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 
     // Inicjalizacja danych gry
@@ -109,6 +110,19 @@ async function onReady() {
         }
     } catch (error) {
         logger.error('❌ Błąd przywracania wygasłych efektów:', error);
+    }
+
+    // Odtwórz timery dla AKTYWNYCH klątw (które jeszcze trwają)
+    try {
+        const guild = client.guilds.cache.first();
+        if (guild && interactionHandler) {
+            const timersRestored = await interactionHandler.restoreActiveTimers(guild);
+            if (timersRestored > 0) {
+                logger.info(`✅ Odtworzono ${timersRestored} timerów dla aktywnych klątw`);
+            }
+        }
+    } catch (error) {
+        logger.error('❌ Błąd odtwarzania timerów klątw:', error);
     }
 
     try {

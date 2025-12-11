@@ -19,6 +19,7 @@ class InteractionHandler {
         this.judgmentService = judgmentService;
         this.detailedLogger = detailedLogger;
         this.virtuttiService = new VirtuttiService(config);
+        this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
         this.lucyferReflectedCurses = new Map(); // userId -> { endTime: timestamp, intervalId: any }
 
@@ -33,6 +34,14 @@ class InteractionHandler {
             this.virtuttiService.cleanup();
             this.cleanupExpiredCurses();
         }, 60 * 60 * 1000);
+    }
+
+    /**
+     * Ustawia klienta Discord
+     * @param {Client} client - Klient Discord
+     */
+    setClient(client) {
+        this.client = client;
     }
 
     /**
@@ -1015,6 +1024,17 @@ class InteractionHandler {
         if (!canUse.canUse) {
             return await interaction.reply({
                 content: `⏰ ${canUse.reason}`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // === BLOKADA WIELOKROTNYCH KLĄTW ===
+        // Sprawdź czy cel już ma aktywną klątwę
+        const existingCurse = this.activeCurses.get(targetUser.id);
+        if (existingCurse && Date.now() < existingCurse.endTime) {
+            const timeLeft = Math.ceil((existingCurse.endTime - Date.now()) / 60000);
+            return await interaction.reply({
+                content: `⚠️ **${targetUser.toString()} ma już aktywną klątwę!**\n\nPozostały czas: **${timeLeft} min**\n\n💡 Poczekaj aż klątwa wygaśnie zanim rzucisz nową.`,
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -2007,19 +2027,40 @@ class InteractionHandler {
     /**
      * Czyści wygasłe klątwy
      */
-    cleanupExpiredCurses() {
+    async cleanupExpiredCurses() {
         const now = Date.now();
         let dataChanged = false;
-        
+        const expiredCurses = [];
+
+        // Znajdź wygasłe klątwy
         for (const [userId, curse] of this.activeCurses.entries()) {
             if (now > curse.endTime) {
+                expiredCurses.push({ userId, curse });
                 this.activeCurses.delete(userId);
                 dataChanged = true;
             }
         }
-        
+
+        // Przywróć nicki dla wygasłych klątw nicku
+        if (expiredCurses.length > 0 && this.client) {
+            const guild = this.client.guilds.cache.first();
+
+            for (const { userId, curse } of expiredCurses) {
+                if ((curse.type === 'nickname' || curse.type === 'forced_caps') && guild) {
+                    try {
+                        const restored = await this.nicknameManager.restoreOriginalNickname(userId, guild);
+                        if (restored) {
+                            logger.info(`✅ [Cleanup] Przywrócono nick po wygasłej klątwie dla userId: ${userId}`);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Błąd przywracania nicku w cleanup dla ${userId}: ${error.message}`);
+                    }
+                }
+            }
+        }
+
         if (dataChanged) {
-            this.saveActiveCurses();
+            await this.saveActiveCurses();
         }
     }
 
@@ -2065,11 +2106,59 @@ class InteractionHandler {
                     cursesToSave[userId] = curse;
                 }
             }
-            
+
             await fs.writeFile(this.cursesFile, JSON.stringify(cursesToSave, null, 2));
         } catch (error) {
             logger.error(`❌ Błąd zapisywania aktywnych klątw: ${error.message}`);
         }
+    }
+
+    /**
+     * Odtwarza timery dla aktywnych klątw po restarcie bota
+     * Kluczowe: Przywraca automatyczne usuwanie klątw i nicków
+     */
+    async restoreActiveTimers(guild) {
+        const now = Date.now();
+        let timersRestored = 0;
+
+        for (const [userId, curse] of this.activeCurses.entries()) {
+            const timeLeft = curse.endTime - now;
+
+            if (timeLeft <= 0) {
+                // Klątwa już wygasła - usuń ją
+                this.activeCurses.delete(userId);
+                continue;
+            }
+
+            // Ustaw timer dla wygaszenia klątwy
+            setTimeout(async () => {
+                try {
+                    // Usuń klątwę z active curses
+                    this.activeCurses.delete(userId);
+                    await this.saveActiveCurses();
+
+                    // Przywróć nick jeśli to klątwa nicku
+                    if (curse.type === 'nickname' || curse.type === 'forced_caps') {
+                        const restored = await this.nicknameManager.restoreOriginalNickname(userId, guild);
+                        if (restored) {
+                            logger.info(`✅ [Timer] Automatycznie przywrócono nick po klątwie dla userId: ${userId}`);
+                        }
+                    }
+                } catch (error) {
+                    logger.error(`❌ Błąd automatycznego usuwania klątwy dla ${userId}: ${error.message}`);
+                }
+            }, timeLeft);
+
+            timersRestored++;
+            logger.info(`⏰ Odtworzono timer dla ${userId}: ${Math.ceil(timeLeft / 60000)} min pozostało (typ: ${curse.type})`);
+        }
+
+        // Zapisz wyczyszczone klątwy
+        if (timersRestored > 0) {
+            await this.saveActiveCurses();
+        }
+
+        return timersRestored;
     }
 
     /**
