@@ -3,12 +3,12 @@
 **INSTRUKCJA WAŻNA: ZAWSZE PISZ PO POLSKU. Odpowiadaj na każdą konwersację w języku polskim, niezależnie od języka zapytania użytkownika.**
 
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
-- Po zakończeniu wprowadzania zmian w kodzie ZAWSZE pytaj użytkownika czy zacommitować te zmiany
-- Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pishnij.
+- Po zakończeniu wprowadzania zmian w kodzie ZAWSZE commituj i pushuj BEZ PYTANIA
+- Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pushuj
 - W commitach używaj krótkiego opisu zmian PO POLSKU
-- Po utworzeniu commita ZAWSZE od razu wykonaj `git push` bez pytania
 - Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
 - Przykład: "Dodano system kolejkowania OCR do StalkerLME"
+- NIGDY nie pytaj użytkownika czy zacommitować - po prostu to zrób
 
 **INSTRUKCJA AKTUALIZACJI DOKUMENTACJI:**
 - Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj odpowiednią sekcję w CLAUDE.md
