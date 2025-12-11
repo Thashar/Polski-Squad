@@ -32,6 +32,8 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 
 ## 📋 Spis Treści
 
+### Nawigacja dla Ludzi (klikalne linki)
+
 1. [🔥 OPTYMALIZACJA TOKENÓW](#optymalizacja-tokenów)
 2. [Przegląd Projektu](#przegląd-projektu)
 3. [Architektura Systemu](#architektura-systemu)
@@ -41,6 +43,41 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 7. [Zmienne Środowiskowe](#zmienne-środowiskowe)
 8. [Najlepsze Praktyki](#najlepsze-praktyki)
 9. [Rozwiązywanie Problemów](#rozwiązywanie-problemów)
+
+---
+
+### Nawigacja dla Claude (numery linii + offset/limit)
+
+| Sekcja | Linia | Opis |
+|--------|-------|------|
+| **🔥 OPTYMALIZACJA TOKENÓW** | 84 | Workflow: Grep→Read→Edit, Task Explore |
+| **Przegląd Projektu** | 103 | 9 botów, środowisko produkcyjne |
+| **Architektura Systemu** | 127 | Struktura projektu, wzorce architektury |
+| **Systemy Scentralizowane** | 233 | Logger, Nickname Manager, OCR Utils, Backup |
+| **Szczegóły Botów** | 588 | Dokumentacja wszystkich 9 botów |
+| └─ Rekruter Bot | 590 | OCR rekrutacja, kwalifikacja klanów |
+| └─ Szkolenia Bot | 604 | Wątki treningowe, przypomnienia |
+| └─ StalkerLME Bot | 614 | Kary OCR, punkty, urlopy, dekoder, fazy |
+| └─ Muteusz Bot | 629 | Auto-moderacja, cache mediów, chaos mode |
+| └─ EndersEcho Bot | 645 | OCR wyników, rankingi, role TOP |
+| └─ Kontroler Bot | 658 | OCR dwukanałowy (CX/Daily), loteria |
+| └─ Konklawe Bot | 669 | Gra hasłowa, osiągnięcia, klątwy, blessingi |
+| └─ Wydarzynier Bot | 684 | Lobby party, zaproszenia, repozytorium |
+| └─ Gary Bot | 697 | Lunar Mine API, proxy, cache, wyszukiwanie |
+| **Komendy Deweloperskie** | 714 | npm start/dev/local, bot-config.json |
+| **Zmienne Środowiskowe** | 763 | Kompletna lista .env dla wszystkich botów |
+| **Najlepsze Praktyki** | 851 | Logowanie, błędy, konfiguracja, persistencja |
+| **Rozwiązywanie Problemów** | 862 | OCR, proxy, nicki, pamięć, rate limit |
+| **Historia Zmian** | 874 | Changelog: Listopad 2025, Styczeń 2025 |
+
+**Przykład użycia:**
+```bash
+# Chcę sprawdzić system OCR w StalkerLME
+Read /home/user/Polski-Squad/CLAUDE.md offset:614 limit:15
+
+# Chcę zobaczyć zmienne środowiskowe dla Gary
+Read /home/user/Polski-Squad/CLAUDE.md offset:798 limit:12
+```
 
 ---
 
@@ -835,6 +872,15 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ---
 
 ## Historia Zmian
+
+### Grudzień 2025
+
+**CLAUDE.md - Spis Treści z Numerami Linii:**
+- Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
+- Tabela z kolumnami: Sekcja, Linia, Opis
+- Hierarchiczny spis wszystkich 9 botów (linie 553-663)
+- Przykłady użycia `Read` z `offset`/`limit` dla szybkiej nawigacji
+- Oszczędność tokenów - Claude może czytać tylko potrzebne sekcje zamiast całego pliku
 
 ### Listopad 2025
 
