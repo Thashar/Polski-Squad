@@ -26,12 +26,10 @@ const client = new Client({
     }
 });
 
-// Inicjalizacja serwisów
 const lobbyService = new LobbyService(config);
 const timerService = new TimerService(config);
 const bazarService = new BazarService(config);
 
-// Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
     lobbyService,
     timerService,
@@ -47,18 +45,15 @@ client.once(Events.ClientReady, async () => {
     await lobbyService.loadLobbies();
     await timerService.restoreTimers(sharedState);
     await bazarService.initialize(client);
-    
-    // Zarejestruj komendy slash
+
     const { InteractionHandler } = require('./handlers/interactionHandlers');
     const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
     await interactionHandler.registerSlashCommands(client);
-    
-    // Uruchom system repozycjonowania ogłoszeń co 5 minut
+
     startRepositionSystem(sharedState);
-    
+
 });
 
-// Obsługa komend slash i przycisków
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
         await handleInteraction(interaction, sharedState);
@@ -82,7 +77,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Obsługa reakcji
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
     try {
         await handleReactionAdd(reaction, user, sharedState);
@@ -215,7 +209,6 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
     }
 });
 
-// Obsługa błędów
 client.on('error', error => {
     logger.error(`Błąd klienta Discord: ${error.message}`);
 });
@@ -309,7 +302,6 @@ async function repositionLobbyAnnouncement(lobby, sharedState) {
     }
 }
 
-// Eksportuj funkcje do zarządzania botem
 module.exports = {
     client,
     start: () => {

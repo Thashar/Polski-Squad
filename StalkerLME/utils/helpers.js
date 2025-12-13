@@ -2,24 +2,6 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Loguje wiadomość z timestamp w polskim formacie
- */
-function logWithTimestamp(message, level = 'info') {
-    const timestamp = new Date().toLocaleString('pl-PL', {
-        timeZone: 'Europe/Warsaw',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-    
-    const prefix = level === 'error' ? '[ERROR]' : level === 'warn' ? '[WARN]' : '[INFO]';
-    console.log(`[${timestamp}] ${prefix} ${message}`);
-}
-
-/**
  * Opóźnienie wykonania (delay)
  */
 function delay(ms) {
@@ -348,7 +330,6 @@ async function cleanupOldFiles(directoryPath, maxAgeHours = 24) {
 }
 
 module.exports = {
-    // logWithTimestamp - usunięto, używaj createBotLogger
     delay,
     createPolandDate,
     getCurrentPolandTime,

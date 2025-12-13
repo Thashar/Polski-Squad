@@ -2,7 +2,6 @@
 process.env.DOTENV_NO_MESSAGE = 'true';
 process.noDeprecation = true;
 
-// Import system logowania
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 const { scheduler } = require('./backup-scheduler');
 

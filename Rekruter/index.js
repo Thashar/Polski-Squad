@@ -15,7 +15,6 @@ const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
 
-// Inicjalizacja serwisów
 const roleMonitoringService = new RoleMonitoringService(config);
 const memberNotificationService = new MemberNotificationService(config);
 const memberCacheService = new MemberCacheService(config);
@@ -31,7 +30,6 @@ const client = new Client({
     ]
 });
 
-// Globalne mapy stanu
 const userStates = new Map();
 const userInfo = new Map();
 const nicknameRequests = new Map();
@@ -42,7 +40,6 @@ const pendingOtherPurposeFinish = new Map(); // Nowa mapa dla ścieżki "inne ce
 
 const MONITORED_CHANNEL_ID = config.channels.recruitment;
 
-// Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
     userStates,
     userInfo,
@@ -72,7 +69,6 @@ client.once('ready', async () => {
     try {
         await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
     } catch (error) {
-        // Folder exists
     }
     
     // Czyszczenie starych wiadomości i wysyłanie nowej
@@ -350,8 +346,6 @@ async function handleLostBoost(member) {
         logger.error(`[BOOST] ❌ Stack trace (lost boost general):`, error.stack);
     }
 }
-
-// ==================== GRACEFUL SHUTDOWN ====================
 
 process.on('SIGINT', async () => {
     logger.info('Zamykanie bota Rekruter...');

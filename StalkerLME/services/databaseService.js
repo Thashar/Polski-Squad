@@ -847,7 +847,6 @@ class DatabaseService {
                     if (!match) continue;
 
                     const weekNumber = parseInt(match[1]);
-                    // const fileClan = match[2]; // Nie filtrujemy po klanie - przeszukujemy wszystkie
 
                     // Sprawdź czy ten tydzień jest PRZED określonym tygodniem
                     const isBeforeTarget = (year < beforeYear) ||

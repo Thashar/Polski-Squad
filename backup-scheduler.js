@@ -94,7 +94,6 @@ class BackupScheduler {
     }
 }
 
-// Export klasy i instancji
 const scheduler = new BackupScheduler();
 
 module.exports = {

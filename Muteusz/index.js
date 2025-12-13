@@ -6,7 +6,6 @@ const NicknameManager = require('../utils/nicknameManagerService');
 
 const logger = createBotLogger('Muteusz');
 
-// Importuj serwisy
 const MediaService = require('./services/mediaService');
 const LogService = require('./services/logService');
 const SpecialRolesService = require('./services/specialRolesService');
@@ -17,12 +16,10 @@ const RoleConflictService = require('./services/roleConflictService');
 const MemberCacheService = require('./services/memberCacheService');
 const ChaosService = require('./services/chaosService');
 
-// Importuj handlery
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
 const MemberHandler = require('./handlers/memberHandlers');
 
-// Tworzenie klienta Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -40,7 +37,6 @@ const client = new Client({
     ]
 });
 
-// Inicjalizacja serwisów - najpierw te bez zależności
 const specialRolesService = new SpecialRolesService(config);
 const roleManagementService = new RoleManagementService(config, specialRolesService);
 const mediaService = new MediaService(config);
@@ -50,16 +46,13 @@ const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
 const chaosService = new ChaosService(config, logService);
 
-// NicknameManager i reactionRoleService będą zainicjalizowane w funkcji async
 let nicknameManager;
 let reactionRoleService;
 
-// Inicjalizacja handlerów
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
 const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
-// Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
     client,
     config,
@@ -74,8 +67,6 @@ const sharedState = {
     messageHandler,
     memberHandler
 };
-
-// ==================== EVENTY BOTA ====================
 
 client.once(Events.ClientReady, async () => {
     await logService.logMessage('success', `Bot ${client.user.tag} jest online!`);
@@ -128,22 +119,18 @@ client.once(Events.ClientReady, async () => {
     logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode');
 });
 
-// Obsługa wiadomości
 client.on(Events.MessageCreate, async (message) => {
     await messageHandler.handleMessage(message, client);
 });
 
-// Obsługa usuniętych wiadomości
 client.on(Events.MessageDelete, async (message) => {
     await mediaService.handleDeletedMessage(message, client);
 });
 
-// Obsługa edytowanych wiadomości
 client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
     await mediaService.handleEditedMessage(oldMessage, newMessage, client);
 });
 
-// Obsługa zmian członków serwera
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     // Obsługa ról ekskluzywnych
     await memberHandler.handleGuildMemberUpdate(oldMember, newMember);
@@ -165,7 +152,6 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     }
 });
 
-// Obsługa interakcji
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
         await interactionHandler.handleInteraction(interaction);
@@ -189,7 +175,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Obsługa reakcji
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
     try {
         // Discord może wymagać fetchowania partial reactions
@@ -228,9 +213,6 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
     }
 });
 
-// ==================== OBSŁUGA BŁĘDÓW ====================
-
-// Obsługa błędów klienta
 client.on('error', error => {
     if (logService && logService.logMessage) {
         logService.logMessage('error', `Błąd klienta Discord: ${error.message}`);
@@ -247,7 +229,6 @@ client.on('warn', warning => {
     }
 });
 
-// Obsługa błędów procesów
 process.on('unhandledRejection', async (error) => {
     if (logService && logService.logMessage) {
         await logService.logMessage('error', `Nieobsłużony błąd: ${error.message}`);
@@ -264,8 +245,6 @@ process.on('uncaughtException', async (error) => {
     }
     process.exit(1);
 });
-
-// ==================== GRACEFUL SHUTDOWN ====================
 
 process.on('SIGINT', async () => {
     if (logService && logService.logMessage) {
@@ -333,8 +312,6 @@ process.on('SIGTERM', async () => {
     }
 });
 
-// ==================== FUNKCJE ZARZĄDZANIA BOTEM ====================
-
 /**
  * Uruchamia bota
  */
@@ -392,7 +369,6 @@ async function stopBot() {
     }
 }
 
-// Eksportuj funkcje do zarządzania botem
 module.exports = {
     client,
     startBot,
@@ -404,7 +380,6 @@ module.exports = {
     stop: stopBot
 };
 
-// Jeśli plik jest uruchamiany bezpośrednio, wystartuj bota
 if (require.main === module) {
     startBot().catch(error => {
         logger.error('❌ Błąd uruchamiania bota:', error.message);

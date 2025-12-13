@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
 
 const config = require('./config/config');
-// const { logWithTimestamp } = require('./utils/helpers'); // Usunięto, używaj createBotLogger
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
@@ -20,10 +19,8 @@ const client = new Client({
     partials: [Partials.Message, Partials.Reaction, Partials.User],
 });
 
-// Mapa do śledzenia ostatnich przypomnień (będzie załadowana z pliku)
 let lastReminderMap = new Map();
 
-// Obiekt zawierający wszystkie współdzielone stany
 const sharedState = {
     lastReminderMap,
     client,
@@ -54,10 +51,9 @@ client.once(Events.ClientReady, async () => {
     setInterval(() => {
         checkThreads(client, sharedState, config);
     }, intervalMs);
-    
+
 });
 
-// Obsługa przycisków
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
         await handleInteraction(interaction, sharedState, config);
@@ -81,12 +77,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Obsługa reakcji do zakładania wątku
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
     await handleReactionAdd(reaction, user, sharedState, config);
 });
 
-// Obsługa błędów
 client.on('error', error => {
     logger.error(`Błąd klienta Discord: ${error.message}`);
 });
@@ -100,7 +94,6 @@ process.on('uncaughtException', error => {
     process.exit(1);
 });
 
-// Eksportuj funkcje do zarządzania botem
 module.exports = {
     client,
     start: () => {

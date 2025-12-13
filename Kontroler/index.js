@@ -1,10 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-// const { logWithTimestamp } = require('./utils/helpers'); // Usunięto, używaj createBotLogger
 
-// Import konfiguracji
 const config = require('./config/config');
 
-// Import serwisów
 const OCRService = require('./services/ocrService');
 const AnalysisService = require('./services/analysisService');
 const RoleService = require('./services/roleService');
@@ -13,14 +10,12 @@ const LotteryService = require('./services/lotteryService');
 const OligopolyService = require('./services/oligopolyService');
 const VotingService = require('./services/votingService');
 
-// Import handlerów
 const MessageHandler = require('./handlers/messageHandlers');
 const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Kontroler');
 
-// Klient Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -30,7 +25,6 @@ const client = new Client({
     ]
 });
 
-// Inicjalizacja serwisów
 let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService;
 
 /**
@@ -128,7 +122,6 @@ function setupEventHandlers() {
     });
     client.on('error', onError);
 
-    // Obsługa zamykania
     process.on('unhandledRejection', onUnhandledRejection);
     process.on('uncaughtException', onUncaughtException);
     process.on('SIGINT', () => onShutdown('SIGINT'));
@@ -149,7 +142,6 @@ async function start() {
     }
 }
 
-// Eksport dla użycia w main index.js
 module.exports = {
     start
 };

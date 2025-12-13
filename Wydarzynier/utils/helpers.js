@@ -42,18 +42,8 @@ function isAllowedChannel(channelId, allowedChannelId) {
     return channelId === allowedChannelId;
 }
 
-/**
- * Tworzy unikalne ID dla lobby
- * @param {string} userId - ID użytkownika
- * @returns {string} - Unikalne ID lobby
- */
-function generateLobbyId(userId) {
-    return `lobby_${userId}_${Date.now()}`;
-}
-
 module.exports = {
     formatMessage,
     delay,
-    isAllowedChannel,
-    generateLobbyId
+    isAllowedChannel
 };

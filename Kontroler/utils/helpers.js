@@ -5,23 +5,6 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Kontroler');
 
 /**
- * Loguje wiadomość z znacznikiem czasu
- * @param {string} message - Wiadomość do zalogowania
- * @param {string} level - Poziom logowania (info, error, warn, success)
- */
-function logWithTimestamp(message, level = 'info') {
-    const timestamp = new Date().toLocaleString('pl-PL');
-    const prefix = {
-        info: 'ℹ️',
-        error: '❌',
-        warn: '⚠️',
-        success: '✅'
-    }[level] || 'ℹ️';
-    
-    console.log(`[${timestamp}] ${prefix} ${message}`);
-}
-
-/**
  * Formatuje wiadomość zamieniając placeholdery
  * @param {string} template - Szablon wiadomości
  * @param {Object} params - Parametry do podstawienia

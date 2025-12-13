@@ -9,7 +9,6 @@ const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
-// Inicjalizacja klienta Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -18,7 +17,6 @@ const client = new Client({
     ]
 });
 
-// Inicjalizacja serwisów
 const ocrService = new OCRService(config);
 const rankingService = new RankingService(config);
 const logService = new LogService(config);
@@ -43,7 +41,6 @@ async function initializeBot() {
     }
 }
 
-// Event handlers
 client.once('ready', initializeBot);
 
 client.on('interactionCreate', async (interaction) => {
@@ -101,7 +98,6 @@ async function stopBot() {
     }
 }
 
-// Export dla głównego launcher
 module.exports = {
     name: 'EndersEcho',
     start: startBot,
@@ -109,11 +105,9 @@ module.exports = {
     client
 };
 
-// Uruchomienie jako standalone (jeśli uruchamiany bezpośrednio)
 if (require.main === module) {
     startBot().catch(error => logger.error('Błąd uruchomienia bota:', error));
-    
-    // Graceful shutdown
+
     process.on('SIGINT', async () => {
         logger.info('Otrzymano sygnał SIGINT, zamykam bota EndersEcho...');
         await stopBot();

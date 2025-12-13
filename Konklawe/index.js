@@ -1,9 +1,7 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 
-// Import konfiguracji
 const config = require('./config/config');
 
-// Import serwisów
 const DataService = require('./services/dataService');
 const GameService = require('./services/gameService');
 const TimerService = require('./services/timerService');
@@ -14,7 +12,6 @@ const ScheduledHintsService = require('./services/scheduledHintsService');
 const JudgmentService = require('./services/judgmentService');
 const DetailedLogger = require('./services/detailedLogger');
 
-// Import handlerów
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -22,7 +19,6 @@ const NicknameManager = require('../utils/nicknameManagerService');
 
 const logger = createBotLogger('Konklawe');
 
-// Klient Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -33,7 +29,6 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-// Inicjalizacja serwisów
 let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger;
 let interactionHandler, messageHandler;
 
@@ -258,12 +253,10 @@ async function start() {
     }
 }
 
-// Eksport dla użycia w main index.js
 module.exports = {
     start
 };
 
-// Uruchomienie jeśli plik jest wywoływany bezpośrednio
 if (require.main === module) {
     start();
 }

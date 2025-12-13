@@ -1749,10 +1749,6 @@ class OCRService {
                 await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
 
                 // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
-                // Użytkownicy dostaną powiadomienie tylko gdy nadejdzie ich kolej (rezerwacja)
-                // for (let i = 1; i < queue.length; i++) {
-                //     await this.notifyQueuePosition(guildId, queue[i].userId, i, queue[i].commandName);
-                // }
             } else {
                 this.waitingQueue.delete(guildId);
             }
@@ -1874,10 +1870,6 @@ class OCRService {
         const position = queue.length;
 
         logger.info(`[OCR-QUEUE] ➕ ${userId} dodany do kolejki OCR (pozycja: ${position}, komenda: ${commandName})`);
-
-        // WYŁĄCZONE: Powiadomienie o pozycji w kolejce
-        // Użytkownik dostanie powiadomienie tylko gdy nadejdzie jego kolej (rezerwacja)
-        // await this.notifyQueuePosition(guildId, userId, position, commandName);
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
