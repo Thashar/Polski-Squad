@@ -2,6 +2,8 @@
 
 **INSTRUKCJA WAŻNA: ZAWSZE PISZ PO POLSKU. Odpowiadaj na każdą konwersację w języku polskim, niezależnie od języka zapytania użytkownika.**
 
+**WYJĄTEK - Gary Bot:** Kod i komentarze w Gary Bot (`Gary/` folder) są pisane PO ANGIELSKU. To jest zamierzony wyjątek od reguły. Przy edycji Gary Bot używaj języka angielskiego w kodzie i komentarzach.
+
 **INSTRUKCJA COMMITOWANIA ZMIAN:**
 - Po zakończeniu wprowadzania zmian w kodzie ZAWSZE commituj i pushuj BEZ PYTANIA
 - Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pushuj
