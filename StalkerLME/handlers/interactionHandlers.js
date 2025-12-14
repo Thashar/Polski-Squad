@@ -9037,10 +9037,15 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
                 .filter(userData => userData.user && userData.user.member)
                 .map(userData => ({
                     member: userData.user.member,
-                    detectedNick: userData.detectedNick
+                    matchedName: userData.detectedNick
                 }));
 
-            await sharedState.ocrService.recordPingedUsers(interaction.guild.id, pingData);
+            // Zapisz pingi do użytkowników (dla statystyk w /debug-roles)
+            if (pingData.length > 0) {
+                await sharedState.reminderUsageService.recordPingedUsers(pingData);
+            } else {
+                logger.warn(`[REMIND] ⚠️ Brak użytkowników z member do zapisania w statystykach`);
+            }
 
             const summaryEmbed = new EmbedBuilder()
                 .setTitle('✅ Przypomnienia wysłane')
@@ -9091,16 +9096,6 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
 
         try {
             const punishmentResults = await sharedState.punishmentService.processPunishments(interaction.guild, finalUsers);
-
-            // Przekształć finalUsers do formatu oczekiwanego przez recordPunishedUsers
-            const punishData = finalUsers
-                .filter(userData => userData.user && userData.user.member)
-                .map(userData => ({
-                    member: userData.user.member,
-                    detectedNick: userData.detectedNick
-                }));
-
-            await sharedState.ocrService.recordPunishedUsers(interaction.guild.id, punishData);
 
             let summaryText = `Pomyślnie dodano punkty karne dla **${punishmentResults.length}** ${punishmentResults.length === 1 ? 'użytkownika' : 'użytkowników'}.\n\n`;
             summaryText += `**📊 Lista ukaranych graczy:**\n`;
