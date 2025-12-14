@@ -623,8 +623,10 @@ node manual-backup.js
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`
 
+**Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
+
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/clan-status`, `/ocr-debug`
-**Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
+**Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---
 
@@ -806,6 +808,10 @@ STALKER_LME_WARNING_CHANNEL_0=channel_id
 STALKER_LME_WARNING_CHANNEL_1=channel_id
 STALKER_LME_WARNING_CHANNEL_2=channel_id
 STALKER_LME_WARNING_CHANNEL_MAIN=channel_id
+STALKER_LME_CONFIRMATION_CHANNEL_0=channel_id
+STALKER_LME_CONFIRMATION_CHANNEL_1=channel_id
+STALKER_LME_CONFIRMATION_CHANNEL_2=channel_id
+STALKER_LME_CONFIRMATION_CHANNEL_MAIN=channel_id
 STALKER_LME_VACATION_CHANNEL_ID=channel_id
 
 # ===== MUTEUSZ BOT =====
@@ -876,6 +882,23 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Grudzień 2025
+
+**StalkerLME Bot - Naprawa Systemu Monitorowania DM:**
+- **FIX KRYTYCZNY:** Dodano brakujące intenty Discord dla wiadomości prywatnych
+- Dodano `GatewayIntentBits.DirectMessages` i `GatewayIntentBits.DirectMessageContent` do index.js
+- Problem: Bot nie odbierał wiadomości prywatnych od użytkowników mimo zaimplementowanego handlera
+- Skutek: Użytkownicy pisali do bota zamiast klikać przycisk potwierdzenia, ale bot nie reagował
+- Handler messageCreate (linia 177-235) był poprawnie zaimplementowany ale nigdy nie był wywoływany
+- Teraz bot odpowiada losowymi polskimi wiadomościami i repostuje wiadomości użytkowników na istniejące kanały potwierdzenia
+- Udokumentowano istniejące zmienne środowiskowe: `STALKER_LME_CONFIRMATION_CHANNEL_0/1/2/MAIN` (używane przez system potwierdzeń)
+
+**StalkerLME Bot - Naprawa Błędów Zliczania Przypomnień:**
+- **FIX KRYTYCZNY:** Naprawiono błędne wywołanie nieistniejącej metody `ocrService.recordPingedUsers()` w obsłudze decyzji urlopowych (linia 9043)
+- Problem powodował że przypomnienia wysłane przez ścieżkę urlopową NIE były zliczane w statystykach (`totalPings`)
+- Skutek: użytkownicy mogli mieć więcej potwierdzeń niż przypomnień (np. Przypomnienia: 1, Potwierdzenia: 2)
+- Poprawiono wywołanie na `reminderUsageService.recordPingedUsers(pingData)` z odpowiednim formatem danych
+- Usunięto martwy kod `ocrService.recordPunishedUsers()` w ścieżce `/punish` który powodował crashe
+- Teraz wszystkie przypomnienia (zarówno przez normalną ścieżkę jak i urlopową) są poprawnie zliczane
 
 **CLAUDE.md - Spis Treści z Numerami Linii:**
 - Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
