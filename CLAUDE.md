@@ -884,8 +884,8 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ### Grudzień 2025
 
 **StalkerLME Bot - Naprawa Systemu Monitorowania DM:**
-- **FIX KRYTYCZNY:** Dodano brakujące intenty Discord dla wiadomości prywatnych
-- Dodano `GatewayIntentBits.DirectMessages` i `GatewayIntentBits.DirectMessageContent` do index.js
+- **FIX KRYTYCZNY:** Dodano brakujący intent Discord dla wiadomości prywatnych
+- Dodano `GatewayIntentBits.DirectMessages` do index.js (MessageContent już był i działa dla DM)
 - Problem: Bot nie odbierał wiadomości prywatnych od użytkowników mimo zaimplementowanego handlera
 - Skutek: Użytkownicy pisali do bota zamiast klikać przycisk potwierdzenia, ale bot nie reagował
 - Handler messageCreate (linia 177-235) był poprawnie zaimplementowany ale nigdy nie był wywoływany
