@@ -3142,9 +3142,8 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
             components: []
         });
 
-        // Anuluj sesję i zwolnij kolejkę OCR
+        // Anuluj sesję (cleanupSession wywołuje endOCRSession gdy to bezpieczne)
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
 
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase1)`);
         logger.info(`[PHASE1] ❌ Sesja anulowana przez użytkownika: ${interaction.user.tag}`);
@@ -3832,9 +3831,8 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
             components: []
         });
 
-        // Anuluj sesję i zakończ sesję OCR
+        // Anuluj sesję (cleanupSession wywołuje endOCRSession gdy to bezpieczne)
         await phaseService.cleanupSession(session.sessionId);
-        await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
 
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie Phase2)`);
         logger.info(`[PHASE2] ❌ Sesja anulowana przez użytkownika: ${interaction.user.tag}`);
