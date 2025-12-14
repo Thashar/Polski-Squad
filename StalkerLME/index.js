@@ -27,7 +27,6 @@ const client = new Client({
     ]
 });
 
-// Inicjalizacja serwisów
 const databaseService = new DatabaseService(config);
 const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
@@ -47,8 +46,6 @@ ocrService.setServices(reminderService, punishmentService, phaseService);
 reminderService.setOCRService(ocrService);
 punishmentService.setOCRService(ocrService);
 
-// Obiekt zawierający wszystkie współdzielone stany
-// Ustaw globalny dostęp do klienta dla messageCleanupService i reminderStatusTrackingService
 global.stalkerLMEClient = client;
 global.stalkerClient = client; // Alias dla reminderStatusTrackingService
 
@@ -154,7 +151,6 @@ client.once(Events.ClientReady, async () => {
 
 });
 
-// Obsługa interakcji
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
         await handleInteraction(interaction, sharedState, config);
@@ -178,7 +174,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Obsługa wiadomości (dla usuwania roli urlopowej po napisaniu wniosku + Phase 1 images)
 client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
@@ -519,7 +514,6 @@ client.on(Events.MessageCreate, async (message) => {
     }
 });
 
-// Obsługa błędów
 client.on('error', error => {
     // Ignoruj błędy WebSocket 520 - są tymczasowe
     if (error.message && error.message.includes('520')) {
@@ -534,7 +528,6 @@ client.on('warn', warning => {
     logger.warn(`Ostrzeżenie Discord: ${warning}`);
 });
 
-// Obsługa błędów procesów
 process.on('unhandledRejection', error => {
     // Ignoruj błędy WebSocket 520 - są tymczasowe
     if (error.message && error.message.includes('520')) {
@@ -552,7 +545,6 @@ process.on('uncaughtException', error => {
     process.exit(1);
 });
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
     logger.info('Otrzymano sygnał SIGINT, zamykam bota...');
     
@@ -579,7 +571,6 @@ process.on('SIGTERM', async () => {
     }
 });
 
-// Funkcja do odświeżania cache'u członków
 async function refreshMemberCache() {
     try {
         logger.info('Odświeżanie cache\'u członków');
@@ -626,7 +617,6 @@ async function refreshMemberCache() {
     }
 }
 
-// Funkcje do zarządzania botem
 async function startBot() {
     try {
         if (!config.token) {
@@ -656,7 +646,6 @@ async function stopBot() {
     }
 }
 
-// Eksportuj funkcje do zarządzania botem
 module.exports = {
     client,
     startBot,

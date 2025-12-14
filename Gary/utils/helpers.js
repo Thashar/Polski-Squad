@@ -107,23 +107,10 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Truncate string to specified length
- * @param {string} str - String to truncate
- * @param {number} length - Max length
- * @returns {string}
- */
-function truncateString(str, length = 1024) {
-    if (str.length <= length) return str;
-    return str.substring(0, length - 3) + '...';
-}
-
-
 module.exports = {
     hasPermission,
     formatNumber,
     generatePaginationId,
     isAllowedChannel,
-    delay,
-    truncateString
+    delay
 };

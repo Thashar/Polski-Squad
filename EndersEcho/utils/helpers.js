@@ -3,24 +3,6 @@ const http = require('http');
 const fs = require('fs');
 
 /**
- * Loguje wiadomość z timestamp do konsoli
- * @param {string} message - Wiadomość do zalogowania
- * @param {string} type - Typ wiadomości (info, warn, error, success)
- */
-function logWithTimestamp(message, type = 'info') {
-    const timestamp = new Date().toLocaleString('pl-PL');
-    const icons = {
-        info: 'ℹ️',
-        warn: '⚠️',
-        error: '❌',
-        success: '✅'
-    };
-    
-    const icon = icons[type] || icons.info;
-    console.log(`[${timestamp}] ${icon} ${message}`);
-}
-
-/**
  * Formatuje wiadomość z parametrami
  * @param {string} template - Szablon wiadomości
  * @param {Object} params - Parametry do zastąpienia

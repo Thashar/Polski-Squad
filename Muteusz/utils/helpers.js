@@ -4,29 +4,6 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 
 /**
- * Loguje wiadomość z timestampem - używa nowego systemu logowania
- * @param {string} message - Wiadomość do zalogowania
- * @param {string} level - Poziom logowania (info, warn, error, success)
- */
-function logWithTimestamp(message, level = 'info') {
-    switch(level.toLowerCase()) {
-        case 'error':
-            logger.error(message);
-            break;
-        case 'warn':
-            logger.warn(message);
-            break;
-        case 'success':
-            logger.success(message);
-            break;
-        case 'info':
-        default:
-            logger.info(message);
-            break;
-    }
-}
-
-/**
  * Formatuje wiadomość z zamiennikami
  * @param {string} template - Szablon wiadomości
  * @param {Object} replacements - Obiekt z zamienniki

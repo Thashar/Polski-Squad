@@ -11,7 +11,6 @@ const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Gary');
 
-// Initialize Discord client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -20,7 +19,6 @@ const client = new Client({
     ]
 });
 
-// Services will be initialized in startBot function
 let garrytoolsService, clanService, playerService, endersEchoService, logService, interactionHandler;
 
 /**
@@ -51,7 +49,6 @@ async function initializeBot() {
     }
 }
 
-// Event handlers
 client.once('ready', initializeBot);
 
 client.on('interactionCreate', async (interaction) => {
@@ -327,7 +324,6 @@ async function stopBot() {
     }
 }
 
-// Handle graceful shutdown
 process.on('SIGINT', async () => {
     logger.info('Received SIGINT signal, shutting down gracefully...');
     await stopBot();
@@ -340,7 +336,6 @@ process.on('SIGTERM', async () => {
     process.exit(0);
 });
 
-// Export for main launcher
 module.exports = {
     start: startBot,  // Alias for main launcher
     startBot,
