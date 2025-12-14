@@ -23,9 +23,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.DirectMessageContent
+        GatewayIntentBits.MessageContent,  // Działa dla wiadomości guild I DM
+        GatewayIntentBits.DirectMessages   // Żeby odbierać eventy DM
     ]
 });
 
