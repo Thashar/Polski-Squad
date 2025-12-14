@@ -90,11 +90,11 @@ class InteractionHandler {
             return await this.handleButtonInteraction(interaction);
         }
 
-        // Check allowed channel
-        if (!isAllowedChannel(interaction, this.config.allowedChannelIds)) {
-            await interaction.reply({ 
-                content: '❌ This command can only be used in the designated channel!', 
-                ephemeral: true 
+        // Check allowed channel (admins and moderators can use commands anywhere)
+        if (!isAllowedChannel(interaction, this.config.allowedChannelIds) && !hasPermission(interaction, this.config.authorizedRoles)) {
+            await interaction.reply({
+                content: '❌ This command can only be used in the designated channel!',
+                ephemeral: true
             });
             return;
         }

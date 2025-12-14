@@ -2769,10 +2769,11 @@ async function handleDecodeCommand(interaction, sharedState) {
     const isAllowedChannel = config.allowedDecodeChannels.includes(currentChannelId) ||
                             config.allowedDecodeChannels.includes(parentChannelId);
 
-    // Administratorzy mogą używać komendy wszędzie
+    // Administratorzy i moderatorzy mogą używać komendy wszędzie
     const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
 
-    if (!isAllowedChannel && !isAdmin) {
+    if (!isAllowedChannel && !isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: '❌ Komenda `/decode` jest dostępna tylko na wybranych kanałach.',
             flags: MessageFlags.Ephemeral
@@ -7316,7 +7317,9 @@ async function handleProgresCommand(interaction, sharedState) {
         '1348200849242984478'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: `❌ Komenda \`/progres\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
@@ -7374,7 +7377,9 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         '1348200849242984478'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: `❌ Komenda \`/player-status\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
@@ -8207,7 +8212,9 @@ async function handleWynikiCommand(interaction, sharedState) {
         '1348200849242984478'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
@@ -8433,7 +8440,9 @@ async function handleClanStatusCommand(interaction, sharedState) {
         '1348200849242984478'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: `❌ Komenda \`/clan-status\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
@@ -8611,7 +8620,9 @@ async function handleClanProgresCommand(interaction, sharedState) {
         '1348200849242984478'
     ];
 
-    if (!allowedChannels.includes(interaction.channelId) && !isAdmin) {
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
         await interaction.reply({
             content: `❌ Komenda \`/clan-progres\` jest dostępna tylko na określonych kanałach.`,
             flags: MessageFlags.Ephemeral
