@@ -615,14 +615,15 @@ node manual-backup.js
 
 ### ⚔️ StalkerLME Bot
 
-**7 Systemów:**
+**6 Systemów:**
 1. **Kary OCR** - `ocrService.js`: Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00)
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`
-7. **Monitorowanie DM** - `reminderService.js`: Śledzenie wiadomości DM po wysłaniu przypomnienia, losowe odpowiedzi PL, repost na kanały potwierdzenia, automatyczne czyszczenie po deadline
+
+**Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/clan-status`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -888,8 +889,8 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Problem: Bot nie odbierał wiadomości prywatnych od użytkowników mimo zaimplementowanego handlera
 - Skutek: Użytkownicy pisali do bota zamiast klikać przycisk potwierdzenia, ale bot nie reagował
 - Handler messageCreate (linia 177-235) był poprawnie zaimplementowany ale nigdy nie był wywoływany
-- Teraz bot odpowiada losowymi polskimi wiadomościami i repostuje wiadomości użytkowników na kanały potwierdzenia
-- Dodano dokumentację brakujących zmiennych środowiskowych: `STALKER_LME_CONFIRMATION_CHANNEL_0/1/2/MAIN`
+- Teraz bot odpowiada losowymi polskimi wiadomościami i repostuje wiadomości użytkowników na istniejące kanały potwierdzenia
+- Udokumentowano istniejące zmienne środowiskowe: `STALKER_LME_CONFIRMATION_CHANNEL_0/1/2/MAIN` (używane przez system potwierdzeń)
 
 **StalkerLME Bot - Naprawa Błędów Zliczania Przypomnień:**
 - **FIX KRYTYCZNY:** Naprawiono błędne wywołanie nieistniejącej metody `ocrService.recordPingedUsers()` w obsłudze decyzji urlopowych (linia 9043)
