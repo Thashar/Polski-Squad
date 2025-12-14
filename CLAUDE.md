@@ -877,6 +877,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**StalkerLME Bot - Naprawa Błędów Zliczania Przypomnień:**
+- **FIX KRYTYCZNY:** Naprawiono błędne wywołanie nieistniejącej metody `ocrService.recordPingedUsers()` w obsłudze decyzji urlopowych (linia 9043)
+- Problem powodował że przypomnienia wysłane przez ścieżkę urlopową NIE były zliczane w statystykach (`totalPings`)
+- Skutek: użytkownicy mogli mieć więcej potwierdzeń niż przypomnień (np. Przypomnienia: 1, Potwierdzenia: 2)
+- Poprawiono wywołanie na `reminderUsageService.recordPingedUsers(pingData)` z odpowiednim formatem danych
+- Usunięto martwy kod `ocrService.recordPunishedUsers()` w ścieżce `/punish` który powodował crashe
+- Teraz wszystkie przypomnienia (zarówno przez normalną ścieżkę jak i urlopową) są poprawnie zliczane
+
 **CLAUDE.md - Spis Treści z Numerami Linii:**
 - Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
 - Tabela z kolumnami: Sekcja, Linia, Opis
