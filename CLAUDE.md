@@ -883,6 +883,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Rekruter Bot - Przywrócono Usuwanie Wiadomości:**
+- **FIX KRYTYCZNY:** Przywrócono funkcję `safeDeleteMessage` w `utils/helpers.js`
+- Problem: Commit 4bac8e5 (13 grudnia) przypadkowo usunął funkcję podczas "czyszczenia zbędnego kodu"
+- Skutek: Wiadomości użytkowników na kanale rekrutacyjnym NIE były usuwane, zaśmiecając kanał
+- Funkcja była używana w 13 miejscach w `messageHandlers.js` do usuwania:
+  - Wprowadzonych danych (RC, Lunar Level, Lunar Points, zdjęcia)
+  - Komend (!nick, !clan, !clan0, !clan1, !clan2)
+  - Niepotrzebnych wiadomości (gdy użytkownik nie jest w procesie rekrutacji)
+- Przywrócono oryginalną implementację z logowaniem i obsługą błędów
+
 **StalkerLME Bot - Naprawa Systemu Monitorowania DM:**
 - **FIX KRYTYCZNY:** Dodano brakujący intent Discord dla wiadomości prywatnych
 - Dodano `GatewayIntentBits.DirectMessages` do index.js (MessageContent już był i działa dla DM)
