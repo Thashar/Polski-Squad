@@ -6,6 +6,15 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function safeDeleteMessage(message) {
+    try {
+        await message.delete();
+        logger.info(`[MESSAGE] ✅ Usunięto wiadomość od ${message.author.username}`);
+    } catch (error) {
+        logger.error(`[MESSAGE] ❌ Nie udało się usunąć wiadomości od ${message.author.username}`);
+    }
+}
+
 async function updateUserEphemeralReply(userId, content, components = [], userEphemeralReplies) {
     const userReply = userEphemeralReplies.get(userId);
     if (!userReply) {
@@ -27,5 +36,6 @@ async function updateUserEphemeralReply(userId, content, components = [], userEp
 
 module.exports = {
     delay,
+    safeDeleteMessage,
     updateUserEphemeralReply
 };
