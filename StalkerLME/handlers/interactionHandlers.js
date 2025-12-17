@@ -75,8 +75,8 @@ async function handleInteraction(interaction, sharedState, config) {
 async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres, /player-status i /clan-status
-    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'clan-status'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres, /player-status, /clan-status i /clan-progres
+    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'clan-status', 'clan-progres'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
