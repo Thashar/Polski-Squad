@@ -2050,6 +2050,8 @@ async function handleButton(interaction, sharedState) {
         await handlePhase2RoundContinue(interaction, sharedState);
     } else if (interaction.customId.startsWith('progres_nav_better|') || interaction.customId.startsWith('progres_nav_worse|')) {
         await handleProgresNavButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('player_status_nav_better|') || interaction.customId.startsWith('player_status_nav_worse|')) {
+        await handlePlayerStatusNavButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('clan_status_prev|') || interaction.customId.startsWith('clan_status_next|')) {
         await handleClanStatusPageButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('confirm_reminder_')) {
@@ -6969,6 +6971,63 @@ async function handleProgresNavButton(interaction, sharedState) {
     }
 }
 
+// Funkcja obsługująca przyciski nawigacji statusu gracza
+async function handlePlayerStatusNavButton(interaction, sharedState) {
+    const { databaseService } = sharedState;
+
+    // Sprawdź czy użytkownik który kliknął to ten sam który wywołał komendę
+    const customIdParts = interaction.customId.split('|');
+    const ownerId = customIdParts[1];
+    const playerName = customIdParts[2];
+
+    if (interaction.user.id !== ownerId) {
+        await interaction.reply({
+            content: '❌ Tylko osoba która wywołała komendę może zmieniać gracza.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Defer reply (wysyłamy nową wiadomość)
+    await interaction.deferReply();
+
+    try {
+        // Pobierz wszystkie tygodnie
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.followUp({
+                content: '❌ Brak zapisanych wyników.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Usuń starą wiadomość i wyświetl nową
+        const messageCleanupService = interaction.client.messageCleanupService;
+        if (interaction.message && messageCleanupService) {
+            // Usuń scheduled deletion dla starej wiadomości
+            await messageCleanupService.removeScheduledMessage(interaction.message.id);
+
+            try {
+                await interaction.message.delete();
+            } catch (error) {
+                logger.warn('[PLAYER-STATUS] Nie udało się usunąć starej wiadomości');
+            }
+        }
+
+        // Wyświetl status nowego gracza
+        await showPlayerStatus(interaction, playerName, ownerId, sharedState);
+
+    } catch (error) {
+        logger.error('[PLAYER-STATUS] ❌ Błąd nawigacji:', error);
+        await interaction.followUp({
+            content: '❌ Wystąpił błąd podczas zmiany gracza.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
 // Funkcja tworząca ranking graczy po all-time max
 async function createAllTimeRanking(guildId, databaseService, last54Weeks) {
     // Mapa: userId -> { latestNick, maxScore }
@@ -7352,45 +7411,11 @@ async function handleProgresCommand(interaction, sharedState) {
     }
 }
 
-// Funkcja obsługująca komendę /player-status
-async function handlePlayerStatusCommand(interaction, sharedState) {
+// Funkcja wyświetlająca status gracza z przyciskami nawigacyjnymi
+async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedState) {
     const { config, databaseService, reminderUsageService } = sharedState;
 
-    // Sprawdź czy użytkownik ma rolę klanową
-    const clanRoleIds = Object.values(config.targetRoles);
-    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
-    const isAdmin = interaction.member.permissions.has('Administrator');
-
-    if (!hasClanRole && !isAdmin) {
-        await interaction.reply({
-            content: '❌ Komenda `/player-status` jest dostępna tylko dla członków klanu.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    // Sprawdź czy kanał jest dozwolony
-    const allowedChannels = [
-        ...Object.values(config.warningChannels),
-        '1348200849242984478'
-    ];
-
-    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
-
-    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
-        await interaction.reply({
-            content: `❌ Komenda \`/player-status\` jest dostępna tylko na określonych kanałach.`,
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    await interaction.deferReply();
-
     try {
-        // Pobierz nick z parametru
-        const selectedPlayer = interaction.options.getString('nick');
-
         // Znajdź userId dla wybranego nicku
         const userInfo = await databaseService.findUserIdByNick(interaction.guild.id, selectedPlayer);
 
@@ -8152,6 +8177,39 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
+        // Stwórz ranking all-time i znajdź pozycję gracza (po userId)
+        const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
+        const currentPlayerIndex = allTimeRanking.findIndex(p => p.userId === userId);
+
+        // Gracze sąsiedzi w rankingu (lepszy i gorszy)
+        const betterPlayer = currentPlayerIndex > 0 ? allTimeRanking[currentPlayerIndex - 1] : null;
+        const worsePlayer = currentPlayerIndex < allTimeRanking.length - 1 ? allTimeRanking[currentPlayerIndex + 1] : null;
+
+        // Stwórz przyciski nawigacji
+        const navigationButtons = [];
+
+        if (betterPlayer) {
+            const betterButton = new ButtonBuilder()
+                .setCustomId(`player_status_nav_better|${ownerId}|${betterPlayer.playerName}`)
+                .setLabel(`◀ ${betterPlayer.playerName}`)
+                .setStyle(ButtonStyle.Secondary);
+            navigationButtons.push(betterButton);
+        }
+
+        if (worsePlayer) {
+            const worseButton = new ButtonBuilder()
+                .setCustomId(`player_status_nav_worse|${ownerId}|${worsePlayer.playerName}`)
+                .setLabel(`${worsePlayer.playerName} ▶`)
+                .setStyle(ButtonStyle.Secondary);
+            navigationButtons.push(worseButton);
+        }
+
+        const components = [];
+        if (navigationButtons.length > 0) {
+            const navRow = new ActionRowBuilder().addComponents(navigationButtons);
+            components.push(navRow);
+        }
+
         // Stwórz embed z pełnym description
         const embed = new EmbedBuilder()
             .setDescription(description)
@@ -8167,7 +8225,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')} | Wygasa: za 5 min`
         });
 
-        const response = await interaction.editReply({ embeds: [embed] });
+        const response = await interaction.editReply({
+            embeds: [embed],
+            components: components
+        });
 
         // Zaplanuj usunięcie wiadomości
         const messageCleanupService = interaction.client.messageCleanupService;
@@ -8176,16 +8237,58 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 response.id,
                 response.channelId,
                 deleteAt,
-                interaction.user.id
+                ownerId
             );
         }
 
     } catch (error) {
         logger.error('[PLAYER-STATUS] ❌ Błąd wyświetlania statusu gracza:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas pobierania danych gracza.'
+        await interaction.followUp({
+            content: '❌ Wystąpił błąd podczas pobierania danych gracza.',
+            flags: MessageFlags.Ephemeral
         });
     }
+}
+
+// Funkcja obsługująca komendę /player-status
+async function handlePlayerStatusCommand(interaction, sharedState) {
+    const { config } = sharedState;
+
+    // Sprawdź czy użytkownik ma rolę klanową
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/player-status` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Sprawdź czy kanał jest dozwolony
+    const allowedChannels = [
+        ...Object.values(config.warningChannels),
+        '1348200849242984478'
+    ];
+
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: `❌ Komenda \`/player-status\` jest dostępna tylko na określonych kanałach.`,
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    const selectedPlayer = interaction.options.getString('nick');
+    const ownerId = interaction.user.id;
+
+    await showPlayerStatus(interaction, selectedPlayer, ownerId, sharedState);
 }
 
 async function handleWynikiCommand(interaction, sharedState) {
