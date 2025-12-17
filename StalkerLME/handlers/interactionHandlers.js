@@ -7255,8 +7255,23 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
 
-        // Pobierz klan gracza z najnowszych danych
-        const playerClan = playerProgressData.length > 0 ? playerProgressData[0].clanName : 'Brak';
+        // Sprawdź aktualny klan gracza (czy ma obecnie rolę klanową)
+        let playerClan = 'Poza strukturami';
+        try {
+            const member = await interaction.guild.members.fetch(userId);
+            if (member) {
+                // Sprawdź która rola klanowa ma gracz
+                for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        playerClan = config.roleDisplayNames[clanKey];
+                        break;
+                    }
+                }
+            }
+        } catch (fetchError) {
+            // Gracz nie jest już na serwerze
+            playerClan = 'Poza strukturami';
+        }
 
         // Użyj najnowszego nicku z danych
         const displayNick = playerProgressData.length > 0 ? playerProgressData[0].displayName : latestNick;
