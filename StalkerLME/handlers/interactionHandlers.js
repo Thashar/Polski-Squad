@@ -7314,8 +7314,25 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         const expiryInfo = (shouldAutoDelete && deleteTimestamp) ? `\n\n⏱️ Wygasa: <t:${deleteTimestamp}:R>` : '';
 
-        // Pobierz klan gracza z najnowszych danych
-        const playerClan = playerProgressData.length > 0 ? playerProgressData[0].clanName : 'Brak';
+        // Sprawdź aktualny klan gracza na Discordzie
+        let playerClan = 'Poza strukturami';
+        try {
+            const member = await interaction.guild.members.fetch(userId);
+            if (member) {
+                // Sprawdź czy ma jakąś rolę klanową
+                for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        playerClan = config.roleDisplayNames[clanKey];
+                        break;
+                    }
+                }
+            }
+        } catch (error) {
+            // Gracz opuścił serwer - użyj danych z historii jako fallback
+            if (playerProgressData.length > 0) {
+                playerClan = playerProgressData[0].clanName;
+            }
+        }
 
         // Użyj najnowszego nicku z danych
         const displayNick = playerProgressData.length > 0 ? playerProgressData[0].displayName : latestNick;
@@ -7492,6 +7509,7 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
         let currentClanKey = null;
 
         if (member) {
+            // Gracz jest na serwerze - sprawdź jego aktualną rolę klanową
             for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
                 if (member.roles.cache.has(roleId)) {
                     currentClan = config.roleDisplayNames[clanKey];
@@ -7499,15 +7517,21 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
                     break;
                 }
             }
+            // Jeśli gracz jest na serwerze ale nie ma roli klanowej - "Poza strukturami"
+            if (!currentClan) {
+                currentClan = 'Poza strukturami';
+            }
+        } else {
+            // Gracz opuścił serwer - użyj danych z historii jako fallback
+            if (playerProgressData.length > 0) {
+                currentClan = playerProgressData[0].clanName;
+                currentClanKey = playerProgressData[0].clan;
+            } else {
+                currentClan = 'Poza strukturami';
+            }
         }
 
-        // Jeśli nie ma klanu, użyj info z najnowszych danych lub "Aktualnie poza strukturami"
-        if (!currentClan && playerProgressData.length > 0) {
-            currentClan = playerProgressData[0].clanName;
-            currentClanKey = playerProgressData[0].clan;
-        }
-
-        const clanDisplay = currentClan || 'Aktualnie poza strukturami';
+        const clanDisplay = currentClan;
 
         // Oblicz globalną pozycję w rankingu
         const last54Weeks = allWeeks.slice(0, 54); // Dla globalnego rankingu używamy 54 tygodni
