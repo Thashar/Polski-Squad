@@ -7549,23 +7549,22 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
         let clanTotalPlayers = null;
 
         if (currentClanKey && member) {
-            // Pobierz członków z cache lub z API (Discord.js automatycznie cache'uje)
+            // Pobierz tylko członków z konkretnej roli klanowej (optymalizacja)
             const clanRoleId = config.targetRoles[currentClanKey];
 
-            // Użyj cache jeśli dostępny, w przeciwnym razie pobierz
-            let clanMembers = interaction.guild.members.cache;
+            // Najpierw wypełnij cache członków (konieczne aby role.members było pełne)
+            await interaction.guild.members.fetch();
 
-            // Jeśli cache jest pusty lub niepełny, pobierz wszystkich członków
-            if (clanMembers.size === 0) {
-                clanMembers = await interaction.guild.members.fetch();
-            }
+            const clanRole = await interaction.guild.roles.fetch(clanRoleId);
 
-            // Stwórz ranking graczy z tego klanu na podstawie all-time max score
-            const clanRanking = [];
+            if (clanRole) {
+                // Użyj role.members - Collection członków z tą rolą (teraz pełny dzięki fetch powyżej)
+                const clanMembers = clanRole.members;
 
-            for (const [memberId, clanMember] of clanMembers) {
-                // Sprawdź czy ma tę samą rolę klanową
-                if (clanMember.roles.cache.has(clanRoleId)) {
+                // Stwórz ranking graczy z tego klanu na podstawie all-time max score
+                const clanRanking = [];
+
+                for (const [memberId, clanMember] of clanMembers) {
                     // Znajdź jego userId w all-time rankingu
                     const playerInRanking = allTimeRanking.find(p => p.userId === memberId);
 
@@ -7577,14 +7576,14 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
                         });
                     }
                 }
+
+                // Posortuj ranking klanu po maxScore
+                clanRanking.sort((a, b) => b.maxScore - a.maxScore);
+
+                // Znajdź pozycję gracza w klanie
+                clanPosition = clanRanking.findIndex(p => p.userId === userId) + 1;
+                clanTotalPlayers = clanRanking.length;
             }
-
-            // Posortuj ranking klanu po maxScore
-            clanRanking.sort((a, b) => b.maxScore - a.maxScore);
-
-            // Znajdź pozycję gracza w klanie
-            clanPosition = clanRanking.findIndex(p => p.userId === userId) + 1;
-            clanTotalPlayers = clanRanking.length;
         }
 
         // Pobierz dane o karach
