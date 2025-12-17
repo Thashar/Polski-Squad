@@ -7501,9 +7501,13 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
             return b.weekNumber - a.weekNumber;
         });
 
-        // Pobierz obecny klan gracza i jego członka Discord
-        const members = await interaction.guild.members.fetch();
-        const member = members.get(userId);
+        // Pobierz obecnego gracza z Discorda (tylko jednego, nie wszystkich członków)
+        let member = null;
+        try {
+            member = await interaction.guild.members.fetch(userId);
+        } catch (error) {
+            // Gracz opuścił serwer - użyjemy danych z historii
+        }
 
         let currentClan = null;
         let currentClanKey = null;
@@ -7533,28 +7537,17 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
 
         const clanDisplay = currentClan;
 
-        // Oblicz globalną pozycję w rankingu
-        const last54Weeks = allWeeks.slice(0, 54); // Dla globalnego rankingu używamy 54 tygodni
-        const globalRanking = await createGlobalPlayerRanking(
-            interaction.guild,
-            databaseService,
-            config,
-            last54Weeks,
-            members  // Przekaż już pobrane members
-        );
+        // Dla pozycji globalnej użyj rankingu all-time (nie wymaga pobierania wszystkich członków)
+        const last54Weeks = allWeeks.slice(0, 54);
+        const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
 
-        const globalPosition = globalRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
-        const totalPlayers = globalRanking.length;
+        const globalPosition = allTimeRanking.findIndex(p => p.userId === userId) + 1;
+        const totalPlayers = allTimeRanking.length;
 
-        // Oblicz pozycję w klanie (jeśli ma klan)
+        // Pozycja w klanie - nie możemy precyzyjnie obliczyć bez pobrania wszystkich członków
+        // Zamiast tego pokażemy pozycję w all-time rankingu
         let clanPosition = null;
         let clanTotalPlayers = null;
-
-        if (currentClanKey) {
-            const clanRanking = globalRanking.filter(p => p.clanKey === currentClanKey);
-            clanPosition = clanRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
-            clanTotalPlayers = clanRanking.length;
-        }
 
         // Pobierz dane o karach
         const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
@@ -8201,8 +8194,7 @@ async function showPlayerStatus(interaction, selectedPlayer, ownerId, sharedStat
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
 
-        // Stwórz ranking all-time i znajdź pozycję gracza (po userId)
-        const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
+        // Znajdź pozycję gracza w rankingu all-time (już utworzonym wcześniej)
         const currentPlayerIndex = allTimeRanking.findIndex(p => p.userId === userId);
 
         // Gracze sąsiedzi w rankingu (lepszy i gorszy)
