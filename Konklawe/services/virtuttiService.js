@@ -461,6 +461,28 @@ class VirtuttiService {
         this.lucyferCurseBlocked.set(userId, blockUntil);
         logger.info(`🚫 Lucyfer ${userId} zablokowany od rzucania klątw na 1h (po odbiciu)`);
         this.saveData();
+
+        // Ustaw timer do dodania 50 many po zakończeniu blokady
+        setTimeout(() => {
+            this.grantLucyferBlockEndBonus(userId);
+        }, 60 * 60 * 1000);
+    }
+
+    /**
+     * Dodaje 50 many Lucyferowi po zakończeniu blokady
+     * @param {string} userId - ID Lucyfera
+     */
+    grantLucyferBlockEndBonus(userId) {
+        // Sprawdź czy użytkownik nadal jest w systemie
+        if (!this.energySystem.has(userId)) {
+            logger.warn(`⚠️ Nie można dodać bonusu - użytkownik ${userId} nie istnieje w systemie energii`);
+            return;
+        }
+
+        const userData = this.energySystem.get(userId);
+        userData.energy = Math.min(300, userData.energy + 50);
+        this.saveData();
+        logger.info(`✨ Lucyfer ${userId} otrzymał 50 many po zakończeniu blokady. Obecna mana: ${userData.energy}/300`);
     }
 
     /**

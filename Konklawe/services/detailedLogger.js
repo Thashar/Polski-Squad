@@ -169,13 +169,13 @@ class DetailedLogger {
         await this.log({
             type: 'reflection',
             title: '🔥 ODBICIE KLĄTWY LUCYFERA',
-            description: `**Klątwa została odbita!**\n\nLucyfer dostał blokadę 1h + nick "Osłabiony"\nLicznik odbicia zresetowany do 0%`,
+            description: `**Klątwa została odbita!**\n\nLucyfer dostał blokadę 1h + nick "Uśpiony"\nLicznik odbicia zresetowany do 0%\nGabriel nie może rzucać klątw na Lucyfera`,
             fields: [
                 { name: '👤 Lucyfer', value: `<@${lucyfer.id}> (${lucyfer.tag})`, inline: true },
                 { name: '🎲 Rzut', value: `${randomRoll.toFixed(2)}%`, inline: true },
                 { name: '🔥 Szansa odbicia', value: `${reflectionChance}%`, inline: true },
                 { name: '⏰ Blokada', value: '1 godzina', inline: true },
-                { name: '📛 Nick', value: 'Osłabiony [nick]', inline: true },
+                { name: '📛 Nick', value: 'Uśpiony [nick]', inline: true },
                 { name: '🔄 Reset', value: 'Licznik → 0%', inline: true }
             ]
         });

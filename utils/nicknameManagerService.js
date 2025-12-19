@@ -171,6 +171,7 @@ class NicknameManagerService {
         // Wzorce nicków efektów
         const cursePattern = /^Przeklęty /;
         const weakenedPattern = /^Osłabiony /;
+        const sleepyPattern = /^Uśpiony /;
         const flagNicknames = [
             "Slava Ukrainu!",
             "POLSKA GUROM!",
@@ -180,7 +181,7 @@ class NicknameManagerService {
             "Cyka blyat!"
         ];
 
-        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || flagNicknames.includes(nickname);
+        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || flagNicknames.includes(nickname);
     }
 
     /**
@@ -194,7 +195,8 @@ class NicknameManagerService {
         // Usuń wszystkie known prefixy
         let cleanNick = nickname
             .replace(/^Przeklęty /, '')
-            .replace(/^Osłabiony /, '');
+            .replace(/^Osłabiony /, '')
+            .replace(/^Uśpiony /, '');
 
         return cleanNick;
     }

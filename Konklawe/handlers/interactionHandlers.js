@@ -1040,7 +1040,7 @@ class InteractionHandler {
                 }
 
                 return await interaction.reply({
-                    content: `🔥 **Jesteś osłabiony!** Twoja własna klątwa została odbita!\n\n⚠️ Nie możesz używać /curse przez jeszcze **${blockData.remainingMinutes} minut**!`,
+                    content: `� **Jesteś uśpiony!** Twoja własna klątwa została odbita!\n\n⚠️ Nie możesz używać /curse przez jeszcze **${blockData.remainingMinutes} minut**!`,
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -1103,6 +1103,15 @@ class InteractionHandler {
         // === SPECJALNA LOGIKA GABRIEL vs LUCYFER ===
         // Gabriel curse → Lucyfer: 33% reset / 33% odporność / 33% klątwa / 1% potężna
         if (roleType === 'gabriel' && targetHasLucyferRole) {
+            // Sprawdź czy Lucyfer ma blokadę (Uśpiony)
+            const lucyferBlock = this.virtuttiService.checkLucyferCurseBlock(targetUser.id);
+            if (lucyferBlock) {
+                return await interaction.reply({
+                    content: `☁️ **Lucyfer jest Uśpiony!**\n\n😴 Nie możesz rzucić klątwy na Lucyfera, gdy odpoczywa po odbiciu. Pozostało: **${lucyferBlock.remainingMinutes} min**`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
             const randomChance = Math.random() * 100;
 
             // Zużyj energię
@@ -1290,10 +1299,10 @@ class InteractionHandler {
 
                         // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
                         const cleanNick = this.nicknameManager.getCleanNickname(lucyferMember.displayName);
-                        const weakenedNick = `Osłabiony ${cleanNick}`.substring(0, 32);
-                        await lucyferMember.setNickname(weakenedNick);
+                        const sleepyNick = `Uśpiony ${cleanNick}`.substring(0, 32);
+                        await lucyferMember.setNickname(sleepyNick);
 
-                        logger.info(`🔥 Zmieniono nick Lucyfera ${lucyferMember.user.tag} na "${weakenedNick}" na 1h`);
+                        logger.info(`🔥 Zmieniono nick Lucyfera ${lucyferMember.user.tag} na "${sleepyNick}" na 1h`);
 
                         // Zapisz do activeCurses
                         this.activeCurses.set(userId, {
@@ -1310,6 +1319,7 @@ class InteractionHandler {
                                 if (restored) {
                                     logger.info(`✅ Automatycznie przywrócono nick po odbiciu klątwy dla ${lucyferMember.user.tag}`);
                                 }
+                                // Bonus 50 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
                             } catch (error) {
                                 logger.error(`❌ Błąd automatycznego przywracania nicku po odbiciu: ${error.message}`);
                             }
