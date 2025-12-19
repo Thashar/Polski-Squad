@@ -1169,10 +1169,19 @@ async function handleButton(interaction, sharedState) {
                 .setColor('#00ff00')
                 .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
 
-            await interaction.editReply({
-                embeds: [successEmbed],
-                components: []
-            });
+            // Sprawdź czy interakcja nie wygasła przed próbą edycji
+            try {
+                await interaction.editReply({
+                    embeds: [successEmbed],
+                    components: []
+                });
+            } catch (editError) {
+                if (editError.code === 10008) {
+                    logger.warn('[REMIND] ⚠️ Interakcja wygasła, nie można zaktualizować wiadomości');
+                } else {
+                    logger.error(`[REMIND] ⚠️ Błąd aktualizacji wiadomości: ${editError.message}`);
+                }
+            }
 
             logger.info(`[REMIND] ✅ Przypomnienia wysłane przez ${interaction.user.tag}`);
 
@@ -9125,11 +9134,20 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
             // Zatrzymaj ghost ping
             stopGhostPing(session);
 
-            await interaction.editReply({
-                content: null,
-                embeds: [summaryEmbed],
-                components: []
-            });
+            // Sprawdź czy interakcja nie wygasła przed próbą edycji
+            try {
+                await interaction.editReply({
+                    content: null,
+                    embeds: [summaryEmbed],
+                    components: []
+                });
+            } catch (editError) {
+                if (editError.code === 10008) {
+                    logger.warn('[REMIND] ⚠️ Interakcja wygasła, nie można zaktualizować wiadomości');
+                } else {
+                    logger.error(`[REMIND] ⚠️ Błąd aktualizacji wiadomości: ${editError.message}`);
+                }
+            }
 
             // Zakończ sesję OCR i wyczyść
             await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
