@@ -329,10 +329,22 @@
           "requiredPermission": "clan_member"
         },
         {
+          "name": "/clan-progres",
+          "description": "Wyświetla progres TOP30 dla wybranego klanu przez ostatnie tygodnie (tylko członkowie klanu)",
+          "usage": "/clan-progres → wybierz klan z menu",
+          "requiredPermission": "clan_member"
+        },
+        {
           "name": "/clan-status",
           "description": "Wyświetla globalny ranking wszystkich graczy ze wszystkich klanów (tylko członkowie klanu)",
           "usage": "/clan-status",
           "requiredPermission": "clan_member"
+        },
+        {
+          "name": "/player-raport",
+          "description": "Wyświetla raport problematycznych graczy w klanie (tylko dla moderatorów)",
+          "usage": "/player-raport → wybierz klan → bot analizuje wszystkich graczy",
+          "requiredPermission": "moderator"
         },
         {
           "name": "/player-status",

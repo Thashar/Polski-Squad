@@ -20,6 +20,13 @@
 - To oszczędzi tysiące tokenów w przyszłych sesjach - kolejna instancja Claude będzie wiedziała jak działa kod bez czytania źródeł
 - **PRZYKŁAD**: Zmieniłeś system kolejkowania w StalkerLME → zaktualizuj sekcję "StalkerLME Bot - System Kolejkowania" + dodaj wpis w "Historia Zmian"
 
+**INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU:**
+- Po dodaniu NOWEJ komendy lub aktualizacji istniejącej komendy w KTÓRYMKOLWIEK bocie ZAWSZE aktualizuj `Muteusz/config/all_commands.json`
+- Ten plik jest używany przez komendę `/komendy` w Muteuszu do wyświetlania wszystkich dostępnych komend ze wszystkich botów
+- Dodaj/zaktualizuj wpis w odpowiedniej sekcji bota z: name, description, usage, requiredPermission
+- Zachowaj alfabetyczną kolejność komend w ramach danego bota
+- Poziomy uprawnień: administrator, moderator, clan_member, achievement_role, special_role, public
+
 **⚡ KRYTYCZNE - OPTYMALIZACJA TOKENÓW:**
 - **ZAWSZE używaj Grep PRZED Read** - Znajdź lokalizację, POTEM czytaj tylko potrzebne linie
 - **ZAWSZE używaj offset + limit przy czytaniu dużych plików** - Nie czytaj całości!
@@ -907,6 +914,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Grudzień 2025
+
+**Muteusz Bot - Aktualizacja Listy Komend:**
+- Dodano brakujące komendy StalkerLME do pliku `Muteusz/config/all_commands.json`:
+  - `/clan-progres` - Wyświetla progres TOP30 dla wybranego klanu (clan_member)
+  - `/player-raport` - Raport problematycznych graczy w klanie (moderator)
+- Te komendy teraz widnieją w systemie `/komendy` w Muteuszu
+- Dodano nową instrukcję w górnej części CLAUDE.md: "INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU"
+- Po dodaniu/aktualizacji dowolnej komendy w którymkolwiek bocie należy zaktualizować `all_commands.json`
 
 **Rekruter Bot - Przywrócono Usuwanie Wiadomości:**
 - **FIX KRYTYCZNY:** Przywrócono funkcję `safeDeleteMessage` w `utils/helpers.js`
