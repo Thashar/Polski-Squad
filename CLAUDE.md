@@ -987,10 +987,11 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Rozwiązanie 2: **Użycie cache w /player-raport** zamiast fetch
   - Bot ma cache odświeżany co 30 min przez `refreshMemberCache()`
   - Eliminuje niepotrzebne fetch podczas analizy graczy
+  - **UPDATE:** Zmieniono na `safeFetchMembers()` z throttlingiem, aby zapewnić kompletne dane
 - Rozwiązanie 3: **5-sekundowe opóźnienia w refreshMemberCache()** między serwerami
   - Zapobiega burst requestom do Gateway
 - Lokalizacja zmian:
-  - `StalkerLME/handlers/interactionHandlers.js` (linie 11-59, 417, 515, 9604)
+  - `StalkerLME/handlers/interactionHandlers.js` (linie 11-59, 417, 515, 9644-9646)
   - `StalkerLME/index.js` (linia 589)
 
 **StalkerLME Bot - Fix: Missing getReminderUsage Method:**

@@ -9641,13 +9641,15 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
     });
 
     try {
-        // Użyj cache zamiast fetch aby uniknąć rate limitów Gateway (opcode 8)
-        // Cache jest automatycznie odświeżany przez refreshMemberCache() w index.js
+        // Pobierz członków serwera z throttlingiem (zapobiega rate limitom Gateway opcode 8)
+        await safeFetchMembers(interaction.guild);
+        
+        // Teraz filtruj z cache (który jest już zaktualizowany przez safeFetchMembers)
         const clanMembers = interaction.guild.members.cache.filter(member => member.roles.cache.has(clanRoleId));
 
         if (clanMembers.size === 0) {
             await interaction.editReply({
-                content: `❌ Nie znaleziono członków w klanie **${clanName}**.\n\n*Jeśli widzisz ten błąd mimo że klan ma członków, cache może być nieaktualny. Spróbuj ponownie za chwilę.*`,
+                content: `❌ Nie znaleziono członków w klanie **${clanName}**.`,
                 embeds: [],
                 components: []
             });
