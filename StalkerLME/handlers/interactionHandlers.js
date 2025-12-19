@@ -7120,31 +7120,49 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         if (playerProgressData.length >= 2) {
             // Miesiąc (idealnie 4 tygodnie, ale pokaż co jest dostępne)
             if (playerProgressData.length >= 4) {
-                const diff = playerProgressData[0].score - playerProgressData[3].score;
+                // POPRAWKA: Weź najwyższy wynik z ostatnich 4 tygodni
+                const last4Weeks = playerProgressData.slice(0, 4);
+                const maxScore = Math.max(...last4Weeks.map(d => d.score));
+                const diff = maxScore - playerProgressData[3].score;
                 cumulativeSection += `**🔹 Miesiąc (4 tyg):** ${formatDifference(diff)}\n`;
             } else if (playerProgressData.length >= 2) {
                 const weeksCount = playerProgressData.length - 1;
-                const diff = playerProgressData[0].score - playerProgressData[weeksCount].score;
+                // POPRAWKA: Weź najwyższy wynik ze wszystkich dostępnych
+                const allScores = playerProgressData.map(d => d.score);
+                const maxScore = Math.max(...allScores);
+                const diff = maxScore - playerProgressData[weeksCount].score;
                 cumulativeSection += `**🔹 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
             }
 
             // Kwartał (idealnie 13 tygodni)
             if (playerProgressData.length >= 13) {
-                const diff = playerProgressData[0].score - playerProgressData[12].score;
+                // POPRAWKA: Weź najwyższy wynik z ostatnich 13 tygodni
+                const last13Weeks = playerProgressData.slice(0, 13);
+                const maxScore = Math.max(...last13Weeks.map(d => d.score));
+                const diff = maxScore - playerProgressData[12].score;
                 cumulativeSection += `**🔷 Kwartał (13 tyg):** ${formatDifference(diff)}\n`;
             } else if (playerProgressData.length >= 8) {
                 const weeksCount = Math.min(12, playerProgressData.length - 1);
-                const diff = playerProgressData[0].score - playerProgressData[weeksCount].score;
+                // POPRAWKA: Weź najwyższy wynik z dostępnych
+                const availableWeeks = playerProgressData.slice(0, weeksCount + 1);
+                const maxScore = Math.max(...availableWeeks.map(d => d.score));
+                const diff = maxScore - playerProgressData[weeksCount].score;
                 cumulativeSection += `**🔷 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
             }
 
             // Pół roku (idealnie 26 tygodni)
             if (playerProgressData.length >= 26) {
-                const diff = playerProgressData[0].score - playerProgressData[25].score;
+                // POPRAWKA: Weź najwyższy wynik z ostatnich 26 tygodni
+                const last26Weeks = playerProgressData.slice(0, 26);
+                const maxScore = Math.max(...last26Weeks.map(d => d.score));
+                const diff = maxScore - playerProgressData[25].score;
                 cumulativeSection += `**🔶 Pół roku (26 tyg):** ${formatDifference(diff)}\n`;
             } else if (playerProgressData.length >= 14) {
                 const weeksCount = Math.min(25, playerProgressData.length - 1);
-                const diff = playerProgressData[0].score - playerProgressData[weeksCount].score;
+                // POPRAWKA: Weź najwyższy wynik z dostępnych
+                const availableWeeks = playerProgressData.slice(0, weeksCount + 1);
+                const maxScore = Math.max(...availableWeeks.map(d => d.score));
+                const diff = maxScore - playerProgressData[weeksCount].score;
                 cumulativeSection += `**🔶 Dostępne dane (${weeksCount} tyg):** ${formatDifference(diff)}\n`;
             }
         }
@@ -7705,15 +7723,20 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let monthlyWeeksCount = 0;
 
         if (playerProgressData.length >= 2) {
-            const currentScore = playerProgressData[0].score;
+            // POPRAWKA: Weź najwyższy wynik z ostatnich 4 tygodni (lub mniej jeśli brak danych)
+            let currentScore = 0;
             let comparisonScore = 0;
 
             if (playerProgressData.length >= 5) {
-                // Idealnie: porównaj z tygodniem 5
+                // Idealnie: najwyższy z ostatnich 4 tygodni vs tydzień 5
+                const last4Weeks = playerProgressData.slice(0, 4);
+                currentScore = Math.max(...last4Weeks.map(d => d.score));
                 comparisonScore = playerProgressData[4].score;
                 monthlyWeeksCount = 4;
             } else {
-                // Za mało danych: porównaj z ostatnim dostępnym tygodniem
+                // Za mało danych: najwyższy z dostępnych vs najstarszy
+                const allScores = playerProgressData.map(d => d.score);
+                currentScore = Math.max(...allScores);
                 comparisonScore = playerProgressData[playerProgressData.length - 1].score;
 
                 // Oblicz zakres tygodni od pierwszego do ostatniego (nie liczbę tygodni z danymi)
@@ -7766,16 +7789,20 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             if (week13Score > 0 && playerProgressData.length > 0) {
-                const currentScore = playerProgressData[0].score;
+                // POPRAWKA: Weź najwyższy wynik z ostatnich 12 tygodni
+                const last12Weeks = playerProgressData.slice(0, Math.min(12, playerProgressData.length));
+                const currentScore = Math.max(...last12Weeks.map(d => d.score));
                 quarterlyProgress = currentScore - week13Score;
                 quarterlyProgressPercent = ((quarterlyProgress / week13Score) * 100).toFixed(1);
                 quarterlyWeeksCount = 12;
             }
         } else if (playerProgressData.length >= 2) {
             // Za mało danych: użyj tego co jest dostępne
-            const currentScore = playerProgressData[0].score;
+            // POPRAWKA: Weź najwyższy wynik ze wszystkich dostępnych tygodni
+            const allScores = playerProgressData.map(d => d.score);
+            const currentScore = Math.max(...allScores);
 
-            // POPRAWKA: Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
+            // Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
             let comparisonScore = 0;
             let firstWeekIndex = -1;
 
@@ -9841,12 +9868,19 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     let monthlyProgress = null;
 
     if (playerProgressData.length >= 2) {
-        const currentScore = playerProgressData[0].score;
+        // POPRAWKA: Weź najwyższy wynik z ostatnich 4 tygodni (lub mniej jeśli brak danych)
+        let currentScore = 0;
         let comparisonScore = 0;
 
         if (playerProgressData.length >= 5) {
+            // Idealnie: najwyższy z ostatnich 4 tygodni vs tydzień 5
+            const last4Weeks = playerProgressData.slice(0, 4);
+            currentScore = Math.max(...last4Weeks.map(d => d.score));
             comparisonScore = playerProgressData[4].score;
         } else {
+            // Za mało danych: najwyższy z dostępnych vs najstarszy
+            const allScores = playerProgressData.map(d => d.score);
+            currentScore = Math.max(...allScores);
             comparisonScore = playerProgressData[playerProgressData.length - 1].score;
         }
 
@@ -9882,14 +9916,18 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         }
 
         if (week13Score > 0 && playerProgressData.length > 0) {
-            const currentScore = playerProgressData[0].score;
+            // POPRAWKA: Weź najwyższy wynik z ostatnich 12 tygodni
+            const last12Weeks = playerProgressData.slice(0, Math.min(12, playerProgressData.length));
+            const currentScore = Math.max(...last12Weeks.map(d => d.score));
             quarterlyProgress = currentScore - week13Score;
         }
     } else if (playerProgressData.length >= 2) {
         // Za mało danych: użyj tego co jest dostępne
-        const currentScore = playerProgressData[0].score;
+        // POPRAWKA: Weź najwyższy wynik ze wszystkich dostępnych tygodni
+        const allScores = playerProgressData.map(d => d.score);
+        const currentScore = Math.max(...allScores);
 
-        // POPRAWKA: Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
+        // Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
         let comparisonScore = 0;
 
         for (let i = playerProgressData.length - 1; i >= 0; i--) {
