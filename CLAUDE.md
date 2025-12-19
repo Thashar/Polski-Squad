@@ -637,7 +637,20 @@ node manual-backup.js
 - Struktura rankingu: `{ userId, playerName, maxScore, clanName, clanKey }`
 - Gracze są widoczni w rankingach niezależnie od zmiany nicku Discord
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/ocr-debug`
+**Raport Problematycznych Graczy** - `/player-raport` (tylko admini i moderatorzy):
+- Wybór klanu → analiza wszystkich członków klanu
+- Kryteria problemu (przynajmniej jedno musi być spełnione):
+  - 🔴 Rzetelność < 90%
+  - 🔴 Punktualność < 70%
+  - 🔴 Zaangażowanie < 70%
+  - 🔴 Responsywność < 25%
+  - 🪦 Trend gwałtownie malejący (trendRatio ≤ 0.5)
+  - ⚠️ Progres miesięczny < 25 punktów
+  - ⚠️ Progres kwartalny < 100 punktów
+- Embed z polami: każdy gracz osobno, posortowani według liczby problemów
+- Ephemeral (tylko dla wywołującego), max 25 graczy w raporcie
+
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---
@@ -940,6 +953,23 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Przykład: Gracz z wynikami 51/25=547, 50/25=552, ..., 42/25=418, 40/25=0 → porówna 547 z 418 (pominie 0)
 - Wyświetli: "🔷 Dostępne dane (9 tyg): ▲ 129 (30.9%)" zamiast braku tej linii
 - Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js` (linie 7765-7798)
+
+**StalkerLME Bot - Nowa Komenda /player-raport:**
+- **NOWA FUNKCJA:** Dodano komendę `/player-raport` dla administratorów i moderatorów
+- Funkcjonalność: Generuje raport problematycznych graczy w wybranym klanie
+- Workflow: Wybór klanu → analiza wszystkich członków → raport z graczy wymagających uwagi
+- Kryteria problemu (wystarczy jedno):
+  - 🔴 Rzetelność < 90% (wyjebanieFactor)
+  - 🔴 Punktualność < 70% (timingFactor)
+  - 🔴 Zaangażowanie < 70% (engagementFactor)
+  - 🔴 Responsywność < 25% (responsivenessFactor)
+  - 🪦 Trend gwałtownie malejący (trendRatio ≤ 0.5)
+  - ⚠️ Progres miesięczny < 25 punktów
+  - ⚠️ Progres kwartalny < 100 punktów
+- Raport: Embed ephemeral z polami (każdy gracz osobno), sortowanie według liczby problemów
+- Max 25 graczy w raporcie (limit Discord embed fields)
+- Logika analizy używa tej samej matematyki co `/player-status`
+- Lokalizacja: `StalkerLME/handlers/interactionHandlers.js` (funkcje: `handlePlayerRaportCommand`, `handlePlayerRaportSelectClan`, `analyzePlayerForRaport`, linie 9472-9957)
 
 **CLAUDE.md - Spis Treści z Numerami Linii:**
 - Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
