@@ -6881,52 +6881,70 @@ async function handleAutocomplete(interaction, sharedState) {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
-            // Pobierz indeks graczy (szybkie - tylko 1 plik)
-            const playerIndex = await databaseService.loadPlayerIndex(interaction.guild.id);
+            // Szybkie zabezpieczenie przed timeout (3s limit Discord)
+            const timeout = setTimeout(() => {
+                logger.warn('[AUTOCOMPLETE] ⚠️ Timeout - odpowiadam pustą listą');
+                interaction.respond([]).catch(() => {}); // Ignoruj błędy jeśli już odpowiedzieliśmy
+            }, 2500); // 2.5s - bezpieczny margines
 
-            if (Object.keys(playerIndex).length === 0) {
-                await interaction.respond([]);
-                return;
+            try {
+                // Pobierz indeks graczy (teraz z cache - powinno być szybkie)
+                const playerIndex = await databaseService.loadPlayerIndex(interaction.guild.id);
+
+                clearTimeout(timeout); // Anuluj timeout jeśli zdążyliśmy
+
+                if (Object.keys(playerIndex).length === 0) {
+                    await interaction.respond([]);
+                    return;
+                }
+
+                // Zbierz tylko najnowsze nicki graczy
+                const playerNames = Object.values(playerIndex).map(data => data.latestNick);
+
+                // Filtruj i sortuj graczy według dopasowania
+                const choices = playerNames
+                    .filter(name => name.toLowerCase().includes(focusedValueLower))
+                    .sort((a, b) => {
+                        // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
+                        const aLower = a.toLowerCase();
+                        const bLower = b.toLowerCase();
+                        const aStartsWith = aLower.startsWith(focusedValueLower);
+                        const bStartsWith = bLower.startsWith(focusedValueLower);
+
+                        if (aStartsWith && !bStartsWith) return -1;
+                        if (!aStartsWith && bStartsWith) return 1;
+
+                        // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
+                        return aLower.localeCompare(bLower);
+                    })
+                    .map(name => ({
+                        name: name,
+                        value: name
+                    }))
+                    .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
+
+                // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
+                if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
+                    choices.unshift({
+                        name: `📝 Użyj wpisanego: "${focusedValue}"`,
+                        value: focusedValue
+                    });
+                }
+
+                await interaction.respond(choices);
+            } catch (innerError) {
+                clearTimeout(timeout);
+                throw innerError; // Rzuć dalej do głównego catch
             }
-
-            // Zbierz tylko najnowsze nicki graczy
-            const playerNames = Object.values(playerIndex).map(data => data.latestNick);
-
-            // Filtruj i sortuj graczy według dopasowania
-            const choices = playerNames
-                .filter(name => name.toLowerCase().includes(focusedValueLower))
-                .sort((a, b) => {
-                    // Sortuj: najpierw ci którzy zaczynają się od wpisanego tekstu
-                    const aLower = a.toLowerCase();
-                    const bLower = b.toLowerCase();
-                    const aStartsWith = aLower.startsWith(focusedValueLower);
-                    const bStartsWith = bLower.startsWith(focusedValueLower);
-
-                    if (aStartsWith && !bStartsWith) return -1;
-                    if (!aStartsWith && bStartsWith) return 1;
-
-                    // Jeśli oba zaczynają się lub oba nie zaczynają się, sortuj alfabetycznie
-                    return aLower.localeCompare(bLower);
-                })
-                .map(name => ({
-                    name: name,
-                    value: name
-                }))
-                .slice(0, 24); // Discord limit: max 25 opcji (zostawiamy miejsce na opcję "użyj wpisanego")
-
-            // Jeśli użytkownik coś wpisał i nie ma dokładnego dopasowania, dodaj opcję "użyj tego co wpisałem"
-            if (focusedValue.length > 0 && !choices.find(c => c.value.toLowerCase() === focusedValueLower)) {
-                choices.unshift({
-                    name: `📝 Użyj wpisanego: "${focusedValue}"`,
-                    value: focusedValue
-                });
-            }
-
-            await interaction.respond(choices);
         }
     } catch (error) {
         logger.error('[AUTOCOMPLETE] ❌ Błąd obsługi autocomplete:', error);
-        await interaction.respond([]);
+        // Próba odpowiedzi pustą listą (może się nie udać jeśli timeout)
+        try {
+            await interaction.respond([]);
+        } catch (respondError) {
+            // Ignoruj błąd - prawdopodobnie już odpowiedzieliśmy lub interakcja wygasła
+        }
     }
 }
 

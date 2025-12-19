@@ -16,6 +16,9 @@ class DatabaseService {
 
         // Nowa struktura - osobne pliki dla każdego tygodnia
         this.phasesBaseDir = path.join(path.dirname(this.punishmentsFile), 'phases');
+
+        // Cache dla indeksów graczy (zapobiega wielokrotnym odczytom podczas autocomplete)
+        this.playerIndexCache = new Map();
     }
 
     async initializeDatabase() {
@@ -106,12 +109,21 @@ class DatabaseService {
      * Ładuje indeks graczy dla danego serwera
      * Struktura: { userId: { latestNick, lastSeen, allNicks[] } }
      * Jeśli indeks nie istnieje, automatycznie go buduje z istniejących danych
+     * Używa cache aby uniknąć wielokrotnych odczytów (ważne dla autocomplete - limit 3s)
      */
     async loadPlayerIndex(guildId) {
+        // Sprawdź cache
+        if (this.playerIndexCache.has(guildId)) {
+            return this.playerIndexCache.get(guildId);
+        }
+
         const indexPath = this.getPlayerIndexPath(guildId);
         try {
             const data = await fs.readFile(indexPath, 'utf8');
-            return JSON.parse(data);
+            const index = JSON.parse(data);
+            // Zapisz w cache
+            this.playerIndexCache.set(guildId, index);
+            return index;
         } catch (error) {
             // Plik nie istnieje - zbuduj indeks automatycznie z istniejących danych
             logger.info(`[INDEX] 📂 Indeks nie istnieje dla guild ${guildId}, budowanie automatycznie...`);
@@ -122,7 +134,10 @@ class DatabaseService {
                 // Wczytaj świeżo zbudowany indeks
                 try {
                     const data = await fs.readFile(indexPath, 'utf8');
-                    return JSON.parse(data);
+                    const index = JSON.parse(data);
+                    // Zapisz w cache
+                    this.playerIndexCache.set(guildId, index);
+                    return index;
                 } catch (err) {
                     return {};
                 }
@@ -135,6 +150,7 @@ class DatabaseService {
 
     /**
      * Zapisuje indeks graczy dla danego serwera
+     * Aktualizuje również cache
      */
     async savePlayerIndex(guildId, index) {
         const indexPath = this.getPlayerIndexPath(guildId);
@@ -144,6 +160,23 @@ class DatabaseService {
         await fs.mkdir(indexDir, { recursive: true });
 
         await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf8');
+        
+        // Aktualizuj cache
+        this.playerIndexCache.set(guildId, index);
+    }
+
+    /**
+     * Czyści cache indeksu graczy dla danego serwera (lub wszystkich serwerów)
+     * Przydatne po manualnej modyfikacji plików lub w testach
+     */
+    clearPlayerIndexCache(guildId = null) {
+        if (guildId) {
+            this.playerIndexCache.delete(guildId);
+            logger.info(`[INDEX] 🗑️ Cache wyczyszczony dla guild ${guildId}`);
+        } else {
+            this.playerIndexCache.clear();
+            logger.info(`[INDEX] 🗑️ Cache wyczyszczony dla wszystkich guild`);
+        }
     }
 
     /**
