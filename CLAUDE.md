@@ -625,7 +625,19 @@ node manual-backup.js
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/clan-status`, `/ocr-debug`
+**Mapowanie Nicków** - System automatycznego mapowania użytkowników po zmianie nicku Discord:
+- `databaseService.js`: Indeks graczy `player_index.json` (userId → latestNick + allNicks)
+- `findUserIdByNick()`: Wyszukuje userId na podstawie nicku (stary lub nowy)
+- Komendy `/progres`, `/player-status`, `/clan-status` używają spójnego mechanizmu:
+  1. Discord ID użytkownika → aktualny klan (z roli Discord)
+  2. Szukanie w indeksie po nicku → userId + latestNick
+  3. Wyszukiwanie danych OCR po userId (nie po nicku!)
+  4. Wyświetlanie gracza w aktualnym klanie z ostatnim nickiem z danych
+- Funkcja `createGlobalPlayerRanking()`: Używa `userId` jako klucza w mapie zamiast `displayName`
+- Struktura rankingu: `{ userId, playerName, maxScore, clanName, clanKey }`
+- Gracze są widoczni w rankingach niezależnie od zmiany nicku Discord
+
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---
@@ -909,6 +921,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Poprawiono wywołanie na `reminderUsageService.recordPingedUsers(pingData)` z odpowiednim formatem danych
 - Usunięto martwy kod `ocrService.recordPunishedUsers()` w ścieżce `/punish` który powodował crashe
 - Teraz wszystkie przypomnienia (zarówno przez normalną ścieżkę jak i urlopową) są poprawnie zliczane
+
+**StalkerLME Bot - Naprawa Mapowania Użytkowników po Zmianie Nicku:**
+- **FIX KRYTYCZNY:** Naprawiono `/clan-status` i `/player-status` - gracze po zmianie nicku Discord nie byli widoczni w rankingach
+- Problem: Funkcja `createGlobalPlayerRanking()` używała `displayName` jako klucza zamiast `userId`
+- Skutek: Gracz z rolą klanową, który zmienił nick Discord, nie pojawiał się w `/clan-status` mimo że miał dane OCR
+- Rozwiązanie: Zmieniono klucz w mapie `playerMaxScores` z `displayName.toLowerCase()` na `userId`
+- Dodano pole `userId` do struktury rankingu dla jednoznacznego wyszukiwania graczy
+- `/player-status` - naprawiono wyszukiwanie pozycji w rankingu (używa `userId` zamiast porównywania nicków)
+- Mechanizm teraz spójny z `/progres` - wszystkie trzy komendy mapują Discord ID → ostatni nick z danych OCR → aktualny klan
+- Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js` (funkcja `createGlobalPlayerRanking`, linie 8276-8352, 7512-7525)
 
 **CLAUDE.md - Spis Treści z Numerami Linii:**
 - Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
