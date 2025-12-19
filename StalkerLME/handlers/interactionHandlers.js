@@ -150,6 +150,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'clan-progres':
             await handleClanProgresCommand(interaction, sharedState);
             break;
+        case 'player-raport':
+            await handlePlayerRaportCommand(interaction, sharedState);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -655,6 +658,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_user|')) {
         await handleDodajUserSelect(interaction, sharedState);
+    } else if (interaction.customId === 'player_raport_select_clan') {
+        await handlePlayerRaportSelectClan(interaction, sharedState);
     }
 }
 
@@ -2305,7 +2310,11 @@ async function registerSlashCommands(client) {
                     .setDescription('Nick gracza (wyszukaj z listy lub wpisz własny)')
                     .setRequired(true)
                     .setAutocomplete(true)
-            )
+            ),
+
+        new SlashCommandBuilder()
+            .setName('player-raport')
+            .setDescription('Wyświetla raport problematycznych graczy w klanie (tylko dla adminów/moderatorów)')
     ];
 
     try {
@@ -9458,6 +9467,493 @@ async function handleConfirmReminderButton(interaction, sharedState) {
             logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
     }
+}
+
+// Funkcja obsługująca komendę /player-raport
+async function handlePlayerRaportCommand(interaction, sharedState) {
+    const { config } = sharedState;
+
+    // Sprawdź uprawnienia - tylko admin i moderatorzy
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: '❌ Komenda `/player-raport` jest dostępna tylko dla administratorów i moderatorów.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        // Utwórz select menu z klanami
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('player_raport_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔍 Raport Problematycznych Graczy')
+            .setDescription('**Wybierz klan**, dla którego chcesz wygenerować raport graczy wymagających uwagi:')
+            .setColor('#FF6B6B')
+            .setTimestamp();
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[PLAYER-RAPORT] ❌ Błąd wyświetlania menu klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyświetlania menu.'
+        });
+    }
+}
+
+// Funkcja obsługująca wybór klanu w /player-raport
+async function handlePlayerRaportSelectClan(interaction, sharedState) {
+    const { config, databaseService, reminderUsageService } = sharedState;
+    const selectedClan = interaction.values[0];
+    const clanName = config.roleDisplayNames[selectedClan];
+    const clanRoleId = config.targetRoles[selectedClan];
+
+    await interaction.update({
+        content: '⏳ Analizuję graczy...',
+        embeds: [],
+        components: []
+    });
+
+    try {
+        // Pobierz wszystkich członków klanu
+        const members = await interaction.guild.members.fetch();
+        const clanMembers = members.filter(member => member.roles.cache.has(clanRoleId));
+
+        if (clanMembers.size === 0) {
+            await interaction.followUp({
+                content: `❌ Nie znaleziono członków w klanie **${clanName}**.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Pobierz wszystkie dostępne tygodnie
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+
+        if (allWeeks.length === 0) {
+            await interaction.followUp({
+                content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Pobierz dane o karach i przypomnieniach
+        const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
+        await reminderUsageService.loadUsageData();
+        const reminderData = reminderUsageService.usageData;
+        const confirmations = await loadConfirmations(config);
+
+        // Analizuj każdego gracza
+        const problematicPlayers = [];
+
+        for (const [memberId, member] of clanMembers) {
+            const analysis = await analyzePlayerForRaport(
+                memberId,
+                member,
+                selectedClan,
+                allWeeks,
+                databaseService,
+                guildPunishments,
+                reminderData,
+                confirmations,
+                config
+            );
+
+            if (analysis.hasProblems) {
+                problematicPlayers.push(analysis);
+            }
+        }
+
+        // Sortuj według liczby problemów (malejąco)
+        problematicPlayers.sort((a, b) => b.problemCount - a.problemCount);
+
+        // Stwórz embed z wynikami
+        const embed = new EmbedBuilder()
+            .setTitle(`🔍 Raport Problematycznych Graczy - ${clanName}`)
+            .setColor('#FF6B6B')
+            .setTimestamp()
+            .setFooter({ text: `Analizowano ${clanMembers.size} graczy | Znaleziono ${problematicPlayers.length} wymagających uwagi` });
+
+        if (problematicPlayers.length === 0) {
+            embed.setDescription(`✅ Wszyscy gracze w klanie **${clanName}** są w dobrej formie!\n\nBrak graczy wymagających szczególnej uwagi.`);
+        } else {
+            embed.setDescription(`Znaleziono **${problematicPlayers.length}** graczy wymagających uwagi:`);
+
+            // Dodaj każdego gracza jako osobne pole (max 25 pól w embedzie)
+            const maxFields = Math.min(25, problematicPlayers.length);
+            for (let i = 0; i < maxFields; i++) {
+                const player = problematicPlayers[i];
+                embed.addFields({
+                    name: `${i + 1}. ${player.displayName}`,
+                    value: player.problemsText,
+                    inline: false
+                });
+            }
+
+            if (problematicPlayers.length > 25) {
+                embed.addFields({
+                    name: '⚠️ Uwaga',
+                    value: `Raport zawiera tylko 25 pierwszych graczy. Łącznie znaleziono ${problematicPlayers.length} graczy wymagających uwagi.`,
+                    inline: false
+                });
+            }
+        }
+
+        await interaction.followUp({
+            embeds: [embed],
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+        logger.error('[PLAYER-RAPORT] ❌ Błąd generowania raportu:', error);
+        await interaction.followUp({
+            content: '❌ Wystąpił błąd podczas generowania raportu.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+// Funkcja pomocnicza analizująca pojedynczego gracza
+async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databaseService, guildPunishments, reminderData, confirmations, config) {
+    const displayName = member.displayName;
+    const problems = [];
+
+    // Pobierz dane gracza ze wszystkich tygodni
+    const last12Weeks = allWeeks.slice(0, 12);
+    const playerProgressData = [];
+
+    for (const week of last12Weeks) {
+        for (const clan of week.clans) {
+            const weekData = await databaseService.getPhase1Results(
+                member.guild.id,
+                week.weekNumber,
+                week.year,
+                clan
+            );
+
+            if (weekData && weekData.players) {
+                const player = weekData.players.find(p => p.userId === userId);
+
+                if (player) {
+                    playerProgressData.push({
+                        weekNumber: week.weekNumber,
+                        year: week.year,
+                        score: player.score,
+                        displayName: player.displayName,
+                        createdAt: weekData.createdAt
+                    });
+                    break;
+                }
+            }
+        }
+    }
+
+    // Jeśli brak danych, pomiń gracza
+    if (playerProgressData.length === 0) {
+        return { hasProblems: false };
+    }
+
+    // Sortuj od najnowszych do najstarszych
+    playerProgressData.sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.weekNumber - a.weekNumber;
+    });
+
+    // === 1. Oblicz współczynniki ===
+
+    // Pobierz dane o karach
+    const userPunishment = guildPunishments[userId];
+    const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
+
+    // Oblicz tygodnie z danymi (dla progów czasowych)
+    const weeksSince45_2025 = playerProgressData.filter(data => {
+        return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
+    }).length;
+
+    const weeksSince49_2025 = playerProgressData.filter(data => {
+        return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
+    }).length;
+
+    // Oblicz liczby przypomnień i potwierdzeń (z progami czasowymi)
+    let reminderCountForReliability = 0;
+    let reminderCountForResponsiveness = 0;
+    let confirmationCountForResponsiveness = 0;
+
+    // Helper do obliczania różnicy tygodni
+    const getWeeksDifference = (weekNum1, year1, weekNum2, year2) => {
+        if (year1 === year2) {
+            return weekNum1 - weekNum2;
+        } else {
+            return (year1 - year2) * 52 + (weekNum1 - weekNum2);
+        }
+    };
+
+    if (playerProgressData.length > 0) {
+        const getWeekStartDate = (weekNumber, year) => {
+            const date = new Date(year, 0, 1);
+            const dayOfWeek = date.getDay();
+            const diff = (weekNumber - 1) * 7 - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+            date.setDate(date.getDate() + diff);
+            return date;
+        };
+
+        const oldestWeek = playerProgressData[playerProgressData.length - 1];
+        const newestWeek = playerProgressData[0];
+
+        const weeksSinceThreshold45 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 45, 2025);
+        const weeksSinceThreshold49 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 49, 2025);
+
+        const useThreshold45 = weeksSinceThreshold45 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 45));
+        const useThreshold49 = weeksSinceThreshold49 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 49));
+
+        const startDate = getWeekStartDate(oldestWeek.weekNumber, oldestWeek.year);
+        const startDate45 = useThreshold45 ? getWeekStartDate(45, 2025) : startDate;
+        const startDate49 = useThreshold49 ? getWeekStartDate(49, 2025) : startDate;
+
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const startDate45Str = formatDate(startDate45);
+        const startDate49Str = formatDate(startDate49);
+
+        // Zlicz pingi
+        if (reminderData.receivers && reminderData.receivers[userId]) {
+            const userPings = reminderData.receivers[userId].dailyPings || {};
+
+            for (const dateStr in userPings) {
+                if (dateStr >= startDate45Str) {
+                    reminderCountForReliability += userPings[dateStr].length;
+                }
+                if (dateStr >= startDate49Str) {
+                    reminderCountForResponsiveness += userPings[dateStr].length;
+                }
+            }
+        }
+
+        // Zlicz potwierdzenia
+        const startTimestamp49 = startDate49.getTime();
+
+        for (const sessionKey in confirmations.sessions) {
+            const session = confirmations.sessions[sessionKey];
+            const sessionDate = new Date(session.createdAt);
+            const sessionTimestamp = sessionDate.getTime();
+
+            if (session.confirmedUsers && session.confirmedUsers.includes(userId)) {
+                if (sessionTimestamp >= startTimestamp49) {
+                    confirmationCountForResponsiveness++;
+                }
+            }
+        }
+    }
+
+    // Oblicz współczynniki
+    let wyjebanieFactor = null;
+    let timingFactor = null;
+
+    if (weeksSince45_2025 > 0) {
+        const penaltyScore = (reminderCountForReliability * 0.025) + (lifetimePoints * 0.2);
+        const rawFactor = (penaltyScore / weeksSince45_2025) * 100;
+        wyjebanieFactor = Math.max(0, 100 - rawFactor);
+
+        const timingPenaltyScore = reminderCountForReliability * 0.125;
+        const rawTimingFactor = (timingPenaltyScore / weeksSince45_2025) * 100;
+        timingFactor = Math.max(0, 100 - rawTimingFactor);
+    }
+
+    let responsivenessFactor = null;
+
+    if (weeksSince49_2025 > 0) {
+        if (reminderCountForResponsiveness > 0) {
+            responsivenessFactor = (confirmationCountForResponsiveness / reminderCountForResponsiveness) * 100;
+            responsivenessFactor = Math.min(100, responsivenessFactor);
+        } else if (reminderCountForResponsiveness === 0 && confirmationCountForResponsiveness === 0) {
+            responsivenessFactor = 100;
+        } else {
+            responsivenessFactor = 0;
+        }
+    }
+
+    // Oblicz współczynnik Zaangażowanie (procent tygodni z progresem dodatnim)
+    let engagementFactor = null;
+
+    if (playerProgressData.length >= 2) {
+        let weeksWithProgress = 0;
+
+        for (let i = 0; i < playerProgressData.length - 1; i++) {
+            const currentWeek = playerProgressData[i];
+            const previousWeek = playerProgressData[i + 1];
+
+            const difference = currentWeek.score - previousWeek.score;
+            if (difference > 0) {
+                weeksWithProgress++;
+            }
+        }
+
+        const totalWeekPairs = playerProgressData.length - 1;
+        engagementFactor = (weeksWithProgress / totalWeekPairs) * 100;
+    }
+
+    // === 2. Sprawdź czerwone kropki ===
+
+    if (wyjebanieFactor !== null && wyjebanieFactor < 90) {
+        problems.push(`🔴 Rzetelność: ${wyjebanieFactor.toFixed(1)}%`);
+    }
+
+    if (timingFactor !== null && timingFactor < 70) {
+        problems.push(`🔴 Punktualność: ${timingFactor.toFixed(1)}%`);
+    }
+
+    if (engagementFactor !== null && engagementFactor < 70) {
+        problems.push(`🔴 Zaangażowanie: ${engagementFactor.toFixed(1)}%`);
+    }
+
+    if (responsivenessFactor !== null && responsivenessFactor < 25) {
+        problems.push(`🔴 Responsywność: ${responsivenessFactor.toFixed(1)}%`);
+    }
+
+    // === 3. Oblicz progres miesięczny i kwartalny ===
+
+    let monthlyProgress = null;
+
+    if (playerProgressData.length >= 2) {
+        const currentScore = playerProgressData[0].score;
+        let comparisonScore = 0;
+
+        if (playerProgressData.length >= 5) {
+            comparisonScore = playerProgressData[4].score;
+        } else {
+            comparisonScore = playerProgressData[playerProgressData.length - 1].score;
+        }
+
+        if (comparisonScore > 0) {
+            monthlyProgress = currentScore - comparisonScore;
+        }
+    }
+
+    let quarterlyProgress = null;
+
+    // Sprawdź czy mamy pełny kwartał (13 tygodni)
+    const allWeeksForQuarterly = allWeeks.slice(0, 13);
+    if (allWeeksForQuarterly.length === 13) {
+        // Znajdź wynik z tygodnia 13
+        let week13Score = null;
+        const week13 = allWeeksForQuarterly[12];
+
+        for (const clan of week13.clans) {
+            const weekData = await databaseService.getPhase1Results(
+                member.guild.id,
+                week13.weekNumber,
+                week13.year,
+                clan
+            );
+
+            if (weekData && weekData.players) {
+                const player = weekData.players.find(p => p.userId === userId);
+                if (player) {
+                    week13Score = player.score;
+                    break;
+                }
+            }
+        }
+
+        if (week13Score > 0 && playerProgressData.length > 0) {
+            const currentScore = playerProgressData[0].score;
+            quarterlyProgress = currentScore - week13Score;
+        }
+    } else if (playerProgressData.length >= 2) {
+        // Za mało danych: użyj tego co jest dostępne
+        const currentScore = playerProgressData[0].score;
+
+        // POPRAWKA: Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
+        let comparisonScore = 0;
+
+        for (let i = playerProgressData.length - 1; i >= 0; i--) {
+            if (playerProgressData[i].score > 0) {
+                comparisonScore = playerProgressData[i].score;
+                break;
+            }
+        }
+
+        if (comparisonScore > 0) {
+            quarterlyProgress = currentScore - comparisonScore;
+        }
+    }
+
+    // Sprawdź progi
+    if (monthlyProgress !== null && monthlyProgress < 25) {
+        problems.push(`⚠️ Progres miesięczny: ${monthlyProgress} (< 25)`);
+    }
+
+    if (quarterlyProgress !== null && quarterlyProgress < 100) {
+        problems.push(`⚠️ Progres kwartalny: ${quarterlyProgress} (< 100)`);
+    }
+
+    // === 4. Oblicz trend ===
+
+    let trendRatio = null;
+
+    if (monthlyProgress !== null && quarterlyProgress !== null) {
+        let monthlyValue = null;
+        let longerTermValue = null;
+
+        if (playerProgressData.length >= 13) {
+            monthlyValue = monthlyProgress;
+            longerTermValue = quarterlyProgress / 3;
+        } else if (playerProgressData.length >= 2) {
+            const monthlyWeeksCount = playerProgressData.length >= 5 ? 4 : (playerProgressData.length - 1);
+            monthlyValue = monthlyProgress / (monthlyWeeksCount || 4);
+
+            const firstScore = playerProgressData[playerProgressData.length - 1].score;
+            const lastScore = playerProgressData[0].score;
+            const totalWeeks = playerProgressData.length - 1;
+
+            if (firstScore > 0 && totalWeeks > 0) {
+                const overallProgress = lastScore - firstScore;
+                longerTermValue = overallProgress / totalWeeks;
+            }
+        }
+
+        if (monthlyValue !== null && longerTermValue !== null && longerTermValue !== 0) {
+            trendRatio = monthlyValue / longerTermValue;
+        }
+    }
+
+    if (trendRatio !== null && trendRatio <= 0.5) {
+        problems.push(`🪦 Trend: Gwałtownie malejący (${trendRatio.toFixed(2)})`);
+    }
+
+    // Zwróć wynik
+    return {
+        hasProblems: problems.length > 0,
+        problemCount: problems.length,
+        displayName: displayName,
+        problemsText: problems.join('\n')
+    };
 }
 
 module.exports = {
