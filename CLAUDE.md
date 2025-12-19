@@ -971,6 +971,22 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Logika analizy używa tej samej matematyki co `/player-status`
 - Lokalizacja: `StalkerLME/handlers/interactionHandlers.js` (funkcje: `handlePlayerRaportCommand`, `handlePlayerRaportSelectClan`, `analyzePlayerForRaport`, linie 9472-9957)
 
+**StalkerLME Bot - Naprawa Obliczania Progresu - Najwyższy Wynik:**
+- **FIX KRYTYCZNY:** Zmieniono logikę obliczania progresu miesięcznego, kwartalnego i z dostępnych danych
+- Problem: Jeśli ostatni tydzień gracz dostał 0, pokazywało ogromny regres mimo dobrych wyników w poprzednich tygodniach
+- Stara logika: Porównywała wynik z ostatniego tygodnia (może być 0) z wcześniejszym okresem
+- Nowa logika: Porównuje **najwyższy wynik z okresu** z początkiem okresu
+- Zmienione miejsca:
+  - **Progres miesięczny:** Najwyższy z ostatnich 4 tygodni vs tydzień 5
+  - **Progres kwartalny:** Najwyższy z ostatnich 12 tygodni vs tydzień 13
+  - **Dostępne dane:** Najwyższy ze wszystkich dostępnych vs najstarszy wynik > 0
+- Przykład: Gracz miał 51/25=547, 50/25=552, 49/25=0 → progres miesięczny: 552 (najwyższy) - 546 = +6 (zamiast 0 - 546 = -546)
+- Dotyczy komend: `/progres`, `/player-status`, `/player-raport`
+- Lokalizacja zmian:
+  - `/player-status`: linie 7702-7816 (funkcja `handlePlayerStatusCommand`)
+  - `/progres`: linie 7117-7168 (funkcja `showPlayerProgress`)
+  - `/player-raport`: linie 9866-9943 (funkcja `analyzePlayerForRaport`)
+
 **CLAUDE.md - Spis Treści z Numerami Linii:**
 - Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
 - Tabela z kolumnami: Sekcja, Linia, Opis
