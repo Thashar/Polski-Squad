@@ -764,13 +764,11 @@ class InteractionHandler {
                     this.activeCurses.delete(targetUser.id);
                     await this.saveActiveCurses();
 
-                    // Przywróć oryginalny nick jeśli to klątwa nicku
-                    if (curseData.type === 'nickname' || curseData.type === 'forced_caps') {
-                        const nicknameManager = this.nicknameManager;
-                        if (nicknameManager) {
-                            await nicknameManager.restoreOriginalNickname(targetUser.id, interaction.guild);
-                            logger.info(`✨ Gabriel przywrócił oryginalny nick Lucyfera ${targetUser.tag}`);
-                        }
+                    // Przywróć oryginalny nick - każda klątwa zmienia nick na "Przeklęty"
+                    const nicknameManager = this.nicknameManager;
+                    if (nicknameManager) {
+                        await nicknameManager.restoreOriginalNickname(targetUser.id, interaction.guild);
+                        logger.info(`✨ Gabriel przywrócił oryginalny nick Lucyfera ${targetUser.tag}`);
                     }
                 }
 
@@ -834,12 +832,11 @@ class InteractionHandler {
                         this.activeCurses.delete(targetUser.id);
                         await this.saveActiveCurses();
 
-                        // Usuń klątwę z nickname managera i przywróć oryginalny nick
-                        if (curseData.type === 'nickname' || curseData.type === 'forced_caps') {
-                            const nicknameManager = this.nicknameManager;
-                            if (nicknameManager) {
-                                await nicknameManager.restoreOriginalNickname(targetUser.id, interaction.guild);
-                            }
+                        // Przywróć oryginalny nick - każda klątwa zmienia nick na "Przeklęty"
+                        const nicknameManager = this.nicknameManager;
+                        if (nicknameManager) {
+                            await nicknameManager.restoreOriginalNickname(targetUser.id, interaction.guild);
+                            logger.info(`✨ Gabriel przywrócił oryginalny nick ${targetUser.tag}`);
                         }
 
                         blessingMessage += `\n\n✨ **Klątwa została usunięta!** ✨`;
