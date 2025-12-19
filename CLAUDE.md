@@ -932,6 +932,15 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Mechanizm teraz spójny z `/progres` - wszystkie trzy komendy mapują Discord ID → ostatni nick z danych OCR → aktualny klan
 - Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js` (funkcja `createGlobalPlayerRanking`, linie 8276-8352, 7512-7525)
 
+**StalkerLME Bot - Naprawa Obliczania Progresu w /player-status:**
+- **FIX:** Naprawiono brak wyświetlania linii "🔷 Dostępne dane (X tyg)" gdy najstarszy wynik gracza wynosił 0
+- Problem: Kod porównywał najnowszy wynik z najstarszym (tydzień 40/25 = 0), więc warunek `comparisonScore > 0` nie był spełniony
+- Skutek: Sekcja "📊 STATYSTYKI" nie pokazywała progresu kwartalnego mimo dostępnych danych (np. 9/12 tygodni)
+- Rozwiązanie: Kod teraz szuka najstarszego wyniku **> 0** i porównuje z nim
+- Przykład: Gracz z wynikami 51/25=547, 50/25=552, ..., 42/25=418, 40/25=0 → porówna 547 z 418 (pominie 0)
+- Wyświetli: "🔷 Dostępne dane (9 tyg): ▲ 129 (30.9%)" zamiast braku tej linii
+- Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js` (linie 7765-7798)
+
 **CLAUDE.md - Spis Treści z Numerami Linii:**
 - Dodano szczegółowy spis treści z numerami linii dla każdej sekcji
 - Tabela z kolumnami: Sekcja, Linia, Opis
