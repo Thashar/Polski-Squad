@@ -708,7 +708,7 @@ node manual-backup.js
 1. **Gra Hasłowa** - `gameService.js`: Hasło "Konklawe" (admin może zmienić), poprawna→rola papieska
 2. **Osiągnięcia** - Medal Virtutti Papajlari: 30+ odpowiedzi, reset rankingu, specjalne uprawnienia
 3. **Timery** - `timerService.js`: 15/30/60min przypomnienia, auto-reset, persistent (`game_state.json`), restore po restarcie
-4. **Klątwy** - 7 rodzajów (slow mode, auto-delete, ping, emoji, caps, timeout, role), 5min, nickname manager
+4. **Klątwy** - 7 rodzajów (slow mode, auto-delete, ping, emoji, caps, timeout, role), 5min, nickname manager, walidacja przed rzuceniem (zapobiega duplikowaniu)
 5. **Komendy Specjalne** - Blessing (22 warianty, 10min cooldown, 5 daily), Virtue Check (10 cnót + porady)
 6. **Losowe Odpowiedzi** - Użytkownicy papiescy: 1/100 szansa, emoji JP2roll
 
@@ -914,6 +914,20 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Grudzień 2025
+
+**Konklawe Bot - Walidacja Klątw Przed Rzuceniem:**
+- Dodano funkcję `hasActiveCurse(userId, curseType)` sprawdzającą czy użytkownik ma już aktywną klątwę danego typu
+- System teraz sprawdza przed rzuceniem klątwy czy cel już ją ma:
+  - Gabriel → Lucyfer: Wyświetla komunikat "już ma aktywną klątwę tego typu"
+  - Gabriel debuff (10% przy wiadomości): Losuje inną klątwę lub pomija
+  - MEGA SILNA KLĄTWA (progresywna zmiana): Losuje inną klątwę lub pomija rundę
+- Funkcja sprawdza również czy klątwa nie wygasła (porównuje z `Date.now()`)
+- Przy losowaniu nowej klątwy system próbuje max 10 razy znaleźć unikalną klątwę
+- Zapobiega duplikowaniu efektów i nadpisywaniu aktywnych klątw
+- Lokalizacja zmian:
+  - `Konklawe/handlers/interactionHandlers.js` (funkcja `hasActiveCurse`, linie 2751-2765)
+  - `Konklawe/handlers/interactionHandlers.js` (walidacja przed applyCurse, linie 1186-1192, 1663-1682, 1696-1712)
+  - `Konklawe/handlers/messageHandlers.js` (walidacja Gabriel debuff, linie 52-78)
 
 **Muteusz Bot - Aktualizacja Listy Komend:**
 - Dodano brakujące komendy StalkerLME do pliku `Muteusz/config/all_commands.json`:
