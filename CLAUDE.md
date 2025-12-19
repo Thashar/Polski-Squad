@@ -1108,7 +1108,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Dekoder buildów Survivor.io z `/decode`
 
 **Kontroler Bot:**
-- Rola specjalna dla CX 2800+
+- Rola specjalna dla CX 2700+
 - Ulepszone ostrzeżenia loterii (tylko Daily/CX)
 - Automatyczna detekcja DST
 
