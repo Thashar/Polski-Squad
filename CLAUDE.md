@@ -923,6 +923,15 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Dodano nową instrukcję w górnej części CLAUDE.md: "INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU"
 - Po dodaniu/aktualizacji dowolnej komendy w którymkolwiek bocie należy zaktualizować `all_commands.json`
 
+**StalkerLME Bot - Optymalizacja /player-raport - Progi Progresów:**
+- Zmieniono logikę wyświetlania progresów w `/player-raport` dla ściślejszych wymagań
+- **Progres miesięczny:** Wyświetlany TYLKO gdy jest co najmniej 5 tygodni danych (4 ostatnie + 1 porównawczy)
+- **Progres kwartalny:** Wyświetlany TYLKO gdy jest pełny kwartał (13 tygodni)
+- **Usunięto "dostępne dane":** Bot nie pokazuje już progresów obliczanych z niepełnych danych
+- **Trend:** Obliczany tylko gdy są oba progresy (miesięczny i kwartalny), czyli minimum 13 tygodni
+- Cel: Zapobieganie fałszywym alarmom dla nowych graczy z małą ilością danych
+- Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js` (funkcja `analyzePlayerForRaport`, linie 9866-9942)
+
 **Rekruter Bot - Przywrócono Usuwanie Wiadomości:**
 - **FIX KRYTYCZNY:** Przywrócono funkcję `safeDeleteMessage` w `utils/helpers.js`
 - Problem: Commit 4bac8e5 (13 grudnia) przypadkowo usunął funkcję podczas "czyszczenia zbędnego kodu"

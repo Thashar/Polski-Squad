@@ -9867,22 +9867,12 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
 
     let monthlyProgress = null;
 
-    if (playerProgressData.length >= 2) {
-        // POPRAWKA: Weź najwyższy wynik z ostatnich 4 tygodni (lub mniej jeśli brak danych)
-        let currentScore = 0;
-        let comparisonScore = 0;
-
-        if (playerProgressData.length >= 5) {
-            // Idealnie: najwyższy z ostatnich 4 tygodni vs tydzień 5
-            const last4Weeks = playerProgressData.slice(0, 4);
-            currentScore = Math.max(...last4Weeks.map(d => d.score));
-            comparisonScore = playerProgressData[4].score;
-        } else {
-            // Za mało danych: najwyższy z dostępnych vs najstarszy
-            const allScores = playerProgressData.map(d => d.score);
-            currentScore = Math.max(...allScores);
-            comparisonScore = playerProgressData[playerProgressData.length - 1].score;
-        }
+    // Progres miesięczny - TYLKO jeśli mamy co najmniej 5 tygodni (4 ostatnie + 1 porównawczy)
+    if (playerProgressData.length >= 5) {
+        // Najwyższy z ostatnich 4 tygodni vs tydzień 5
+        const last4Weeks = playerProgressData.slice(0, 4);
+        const currentScore = Math.max(...last4Weeks.map(d => d.score));
+        const comparisonScore = playerProgressData[4].score;
 
         if (comparisonScore > 0) {
             monthlyProgress = currentScore - comparisonScore;
@@ -9891,7 +9881,7 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
 
     let quarterlyProgress = null;
 
-    // Sprawdź czy mamy pełny kwartał (13 tygodni)
+    // Progres kwartalny - TYLKO jeśli mamy pełny kwartał (13 tygodni)
     const allWeeksForQuarterly = allWeeks.slice(0, 13);
     if (allWeeksForQuarterly.length === 13) {
         // Znajdź wynik z tygodnia 13
@@ -9916,29 +9906,10 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         }
 
         if (week13Score > 0 && playerProgressData.length > 0) {
-            // POPRAWKA: Weź najwyższy wynik z ostatnich 12 tygodni
+            // Weź najwyższy wynik z ostatnich 12 tygodni
             const last12Weeks = playerProgressData.slice(0, Math.min(12, playerProgressData.length));
             const currentScore = Math.max(...last12Weeks.map(d => d.score));
             quarterlyProgress = currentScore - week13Score;
-        }
-    } else if (playerProgressData.length >= 2) {
-        // Za mało danych: użyj tego co jest dostępne
-        // POPRAWKA: Weź najwyższy wynik ze wszystkich dostępnych tygodni
-        const allScores = playerProgressData.map(d => d.score);
-        const currentScore = Math.max(...allScores);
-
-        // Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
-        let comparisonScore = 0;
-
-        for (let i = playerProgressData.length - 1; i >= 0; i--) {
-            if (playerProgressData[i].score > 0) {
-                comparisonScore = playerProgressData[i].score;
-                break;
-            }
-        }
-
-        if (comparisonScore > 0) {
-            quarterlyProgress = currentScore - comparisonScore;
         }
     }
 
@@ -9955,28 +9926,13 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
 
     let trendRatio = null;
 
+    // Trend wymagany jest tylko gdy mamy zarówno progres miesięczny jak i kwartalny
     if (monthlyProgress !== null && quarterlyProgress !== null) {
-        let monthlyValue = null;
-        let longerTermValue = null;
+        // Mając oba progresy, mamy na pewno >= 13 tygodni
+        const monthlyValue = monthlyProgress;
+        const longerTermValue = quarterlyProgress / 3;
 
-        if (playerProgressData.length >= 13) {
-            monthlyValue = monthlyProgress;
-            longerTermValue = quarterlyProgress / 3;
-        } else if (playerProgressData.length >= 2) {
-            const monthlyWeeksCount = playerProgressData.length >= 5 ? 4 : (playerProgressData.length - 1);
-            monthlyValue = monthlyProgress / (monthlyWeeksCount || 4);
-
-            const firstScore = playerProgressData[playerProgressData.length - 1].score;
-            const lastScore = playerProgressData[0].score;
-            const totalWeeks = playerProgressData.length - 1;
-
-            if (firstScore > 0 && totalWeeks > 0) {
-                const overallProgress = lastScore - firstScore;
-                longerTermValue = overallProgress / totalWeeks;
-            }
-        }
-
-        if (monthlyValue !== null && longerTermValue !== null && longerTermValue !== 0) {
+        if (longerTermValue !== 0) {
             trendRatio = monthlyValue / longerTermValue;
         }
     }
