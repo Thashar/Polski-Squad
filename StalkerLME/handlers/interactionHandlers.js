@@ -7509,7 +7509,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             members  // Przekaż już pobrane members
         );
 
-        const globalPosition = globalRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
+        // ZMIANA: Szukaj po userId zamiast nicku
+        const globalPosition = globalRanking.findIndex(p => p.userId === userId) + 1;
         const totalPlayers = globalRanking.length;
 
         // Oblicz pozycję w klanie (jeśli ma klan)
@@ -7518,7 +7519,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         if (currentClanKey) {
             const clanRanking = globalRanking.filter(p => p.clanKey === currentClanKey);
-            clanPosition = clanRanking.findIndex(p => p.playerName.toLowerCase() === latestNick.toLowerCase()) + 1;
+            // ZMIANA: Szukaj po userId zamiast nicku
+            clanPosition = clanRanking.findIndex(p => p.userId === userId) + 1;
             clanTotalPlayers = clanRanking.length;
         }
 
@@ -8275,6 +8277,7 @@ async function handleWynikiCommand(interaction, sharedState) {
 // Funkcja tworząca globalny ranking wszystkich graczy ze wszystkich klanów
 async function createGlobalPlayerRanking(guild, databaseService, config, last54Weeks, members = null) {
     // Przechowuj najwyższy wynik globalny dla każdego gracza (ze wszystkich klanów)
+    // ZMIANA: Używaj userId jako klucza zamiast displayName
     const playerMaxScores = new Map();
 
     // Iterujemy po wszystkich tygodniach i wszystkich klanach aby znaleźć najlepsze wyniki
@@ -8289,13 +8292,14 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
 
             if (weekData && weekData.players) {
                 weekData.players.forEach(player => {
-                    if (player.displayName && player.score > 0) {
-                        const playerKey = player.displayName.toLowerCase();
-                        const currentData = playerMaxScores.get(playerKey);
+                    // ZMIANA: Sprawdzaj userId zamiast tylko displayName
+                    if (player.userId && player.displayName && player.score > 0) {
+                        const currentData = playerMaxScores.get(player.userId);
                         const currentMaxScore = currentData ? currentData.score : 0;
 
                         if (player.score > currentMaxScore) {
-                            playerMaxScores.set(playerKey, {
+                            // ZMIANA: Klucz to userId, przechowuj też displayName (ostatni nick z danych)
+                            playerMaxScores.set(player.userId, {
                                 score: player.score,
                                 displayName: player.displayName
                             });
@@ -8329,12 +8333,13 @@ async function createGlobalPlayerRanking(guild, databaseService, config, last54W
 
         // Jeśli ma rolę klanową, znajdź jego najlepszy wynik ze wszystkich klanów w historii
         if (memberClan && memberClanKey) {
-            const memberDisplayName = member.displayName;
-            const scoreData = playerMaxScores.get(memberDisplayName.toLowerCase());
+            // ZMIANA: Szukaj po userId (memberId) zamiast displayName
+            const scoreData = playerMaxScores.get(memberId);
 
             if (scoreData) {
                 ranking.push({
-                    playerName: scoreData.displayName,
+                    userId: memberId, // Discord ID - dla wyszukiwania w rankingu
+                    playerName: scoreData.displayName, // Ostatni nick z danych OCR
                     maxScore: scoreData.score,
                     clanName: memberClan, // Obecny klan
                     clanKey: memberClanKey // Obecny klan
