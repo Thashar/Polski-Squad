@@ -103,8 +103,8 @@ class JudgmentService {
                             '**Moce:**\n' +
                             '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
                             '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
-                            '• 📈 **Progresywne odbicie:** +3% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                            '  ╰ Przy odbiciu: **blokada 1h + nick "Uśpiony" + 50 many po zakończeniu + Gabriel nie może rzucać klątw**\n' +
+                            '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
+                            '  ╰ Przy odbiciu: **blokada 1h + nick "Uśpiony" + 100 many po zakończeniu + Gabriel nie może rzucać klątw**\n' +
                             '  ╰ Reset % odbicia do 0% po odbiciu\n' +
                             '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                             '**VS Gabriel (curse):**\n' +
@@ -336,8 +336,8 @@ class JudgmentService {
                         '**Moce:**\n' +
                         '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
                         '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
-                        '• 📈 **Progresywne odbicie:** +3% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                        '  ╰ Przy odbiciu: **blokada 1h + nick "Uśpiony" + 50 many po zakończeniu + Gabriel nie może rzucać klątw**\n' +
+                        '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
+                        '  ⁰ Przy odbiciu: **blokada 1h + nick "Uśpiony" + 100 many po zakończeniu + Gabriel nie może rzucać klątw**\n' +
                         '  ╰ Reset % odbicia do 0% po odbiciu\n' +
                         '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                         '**VS Gabriel (curse):**\n' +

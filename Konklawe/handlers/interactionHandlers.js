@@ -1319,7 +1319,7 @@ class InteractionHandler {
                                 if (restored) {
                                     logger.info(`✅ Automatycznie przywrócono nick po odbiciu klątwy dla ${lucyferMember.user.tag}`);
                                 }
-                                // Bonus 50 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
+                                // Bonus 100 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
                             } catch (error) {
                                 logger.error(`❌ Błąd automatycznego przywracania nicku po odbiciu: ${error.message}`);
                             }

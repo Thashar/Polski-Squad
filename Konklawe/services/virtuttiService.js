@@ -462,14 +462,14 @@ class VirtuttiService {
         logger.info(`🚫 Lucyfer ${userId} zablokowany od rzucania klątw na 1h (po odbiciu)`);
         this.saveData();
 
-        // Ustaw timer do dodania 50 many po zakończeniu blokady
+        // Ustaw timer do dodania 100 many po zakończeniu blokady
         setTimeout(() => {
             this.grantLucyferBlockEndBonus(userId);
         }, 60 * 60 * 1000);
     }
 
     /**
-     * Dodaje 50 many Lucyferowi po zakończeniu blokady
+     * Dodaje 100 many Lucyferowi po zakończeniu blokady
      * @param {string} userId - ID Lucyfera
      */
     grantLucyferBlockEndBonus(userId) {
@@ -480,9 +480,9 @@ class VirtuttiService {
         }
 
         const userData = this.energySystem.get(userId);
-        userData.energy = Math.min(300, userData.energy + 50);
+        userData.energy = Math.min(300, userData.energy + 100);
         this.saveData();
-        logger.info(`✨ Lucyfer ${userId} otrzymał 50 many po zakończeniu blokady. Obecna mana: ${userData.energy}/300`);
+        logger.info(`✨ Lucyfer ${userId} otrzymał 100 many po zakończeniu blokady. Obecna mana: ${userData.energy}/300`);
     }
 
     /**
@@ -779,7 +779,7 @@ class VirtuttiService {
 
         const userCurses = this.lucyferCurses.get(userId);
         userCurses.cursesThrown++;
-        userCurses.reflectionChance = userCurses.cursesThrown * 3; // 3% za każdą klątwę
+        userCurses.reflectionChance = userCurses.cursesThrown * 1; // 1% za każdą klątwę
         lucyferData.curseCount++;
 
         // Aktualizuj cooldown dla tego targetu
