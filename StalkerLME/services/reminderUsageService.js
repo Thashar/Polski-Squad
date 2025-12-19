@@ -286,6 +286,35 @@ class ReminderUsageService {
     }
 
     /**
+     * Pobiera informacje o użyciu remind dla danej roli (klanu) dzisiaj
+     * @param {string} roleId - ID roli (klanu)
+     * @returns {Promise<Object>} - { todayCount: number, todayUsage: Array }
+     */
+    async getReminderUsage(roleId) {
+        if (!this.usageData) {
+            await this.loadUsageData();
+        }
+
+        const today = this.getTodayDate();
+
+        // Inicjalizacja danych klanu jeśli nie istnieją
+        if (!this.usageData.senders[roleId]) {
+            return {
+                todayCount: 0,
+                todayUsage: []
+            };
+        }
+
+        const clanData = this.usageData.senders[roleId];
+        const todayUsage = clanData.dailyUsage[today] || [];
+
+        return {
+            todayCount: todayUsage.length,
+            todayUsage: todayUsage
+        };
+    }
+
+    /**
      * Rejestruje pingi do użytkowników (dla statystyk w /debug-roles)
      * @param {Array<Object>} foundUsers - Tablica obiektów { member, matchedName }
      */

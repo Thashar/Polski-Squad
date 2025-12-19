@@ -584,6 +584,11 @@ async function refreshMemberCache() {
                 logger.info(`🏰 Przetwarzanie serwera: ${guild.name} (${guild.id})`);
                 
                 // Odśwież cache dla wszystkich członków serwera
+                // Dodaj opóźnienie między fetchami aby uniknąć rate limitów Gateway (opcode 8)
+                if (guildsProcessed > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 5000)); // 5s przerwy między serwerami
+                }
+                
                 const members = await guild.members.fetch();
                 
                 logger.info(`👥 Załadowano ${members.size} członków dla serwera ${guild.name}`);

@@ -959,6 +959,50 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Usunięto martwy kod `ocrService.recordPunishedUsers()` w ścieżce `/punish` który powodował crashe
 - Teraz wszystkie przypomnienia (zarówno przez normalną ścieżkę jak i urlopową) są poprawnie zliczane
 
+**StalkerLME Bot - Fix: Autocomplete Timeout (Unknown interaction):**
+- **FIX KRYTYCZNY:** Naprawiono błąd `DiscordAPIError[10062]: Unknown interaction` w autocomplete `/progres` i `/player-status`
+- Problem: Discord wymaga odpowiedzi na autocomplete w ciągu 3 sekund, `loadPlayerIndex()` czasami przekraczało limit
+- Przyczyna: Przy pierwszym wywołaniu funkcja skanowała wszystkie pliki phase1 (mogło zająć 5-10+ sekund)
+- Rozwiązanie 1: **Cache indeksów graczy w pamięci** (`playerIndexCache` Map w `DatabaseService`)
+  - Pierwsze wywołanie: ~100-200ms (odczyt z dysku + cache)
+  - Kolejne wywołania: <1ms (z cache)
+  - Automatyczna aktualizacja cache przy zapisie przez `savePlayerIndex()`
+- Rozwiązanie 2: **Timeout protection w handleAutocomplete** (2.5s z pustą odpowiedzią jako fallback)
+- Rozwiązanie 3: **Nowa metoda `clearPlayerIndexCache()`** do czyszczenia cache (przydatne w testach)
+- Lokalizacja zmian:
+  - `StalkerLME/services/databaseService.js` (linie 21, 113-149, 154-169, 171-181)
+  - `StalkerLME/handlers/interactionHandlers.js` (funkcja `handleAutocomplete`, linie 6876-6939)
+
+**StalkerLME Bot - Fix: Rate Limit Gateway (opcode 8):**
+- **FIX KRYTYCZNY:** Naprawiono błąd `GatewayRateLimitError: Request with opcode 8 was rate limited` w `/player-raport`
+- Problem: Discord Gateway limit dla opcode 8 (REQUEST_GUILD_MEMBERS) przekraczany przez częste `guild.members.fetch()`
+- Przyczyny:
+  - `/player-raport` fetchowało wszystkich członków serwera (niepotrzebnie)
+  - `/punishment` i `/debug-roles` często odświeżały cache
+  - `refreshMemberCache()` pobierał członków bez opóźnień między serwerami
+- Rozwiązanie 1: **Global throttling dla guild.members.fetch()** - funkcja `safeFetchMembers()`
+  - 30-sekundowy cooldown między fetch dla tego samego serwera
+  - Automatyczny fallback do cache jeśli fetch w toku
+  - Intelligent logging wszystkich operacji
+- Rozwiązanie 2: **Użycie cache w /player-raport** zamiast fetch
+  - Bot ma cache odświeżany co 30 min przez `refreshMemberCache()`
+  - Eliminuje niepotrzebne fetch podczas analizy graczy
+- Rozwiązanie 3: **5-sekundowe opóźnienia w refreshMemberCache()** między serwerami
+  - Zapobiega burst requestom do Gateway
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js` (linie 11-59, 417, 515, 9604)
+  - `StalkerLME/index.js` (linia 589)
+
+**StalkerLME Bot - Fix: Missing getReminderUsage Method:**
+- **FIX:** Naprawiono błąd `reminderUsageService.getReminderUsage is not a function`
+- Problem: `ReminderStatusTrackingService` wywoływało nieistniejącą metodę `getReminderUsage()`
+- Przyczyna: Metoda nie została zaimplementowana w `ReminderUsageService`
+- Rozwiązanie: Dodano metodę `getReminderUsage(roleId)` która zwraca:
+  - `todayCount` - liczba remind wysłanych dzisiaj dla klanu (0-2)
+  - `todayUsage` - tablica z detalami użyć (timestamp, minutesToDeadline, sentBy)
+- Używane przez: `ReminderStatusTrackingService.createOrUpdateTracking()` do określenia czy to pierwszy czy drugi remind dnia
+- Lokalizacja: `StalkerLME/services/reminderUsageService.js` (linie 288-316)
+
 **StalkerLME Bot - Naprawa Mapowania Użytkowników po Zmianie Nicku:**
 - **FIX KRYTYCZNY:** Naprawiono `/clan-status` i `/player-status` - gracze po zmianie nicku Discord nie byli widoczni w rankingach
 - Problem: Funkcja `createGlobalPlayerRanking()` używała `displayName` jako klucza zamiast `userId`

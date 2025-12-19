@@ -7,6 +7,53 @@ const logger = createBotLogger('StalkerLME');
 
 const confirmationData = new Map();
 
+// Throttling dla guild.members.fetch() - zapobiega rate limitom Discord Gateway (opcode 8)
+const membersFetchThrottle = new Map(); // guildId -> { lastFetch: timestamp, isInProgress: boolean }
+const MEMBERS_FETCH_COOLDOWN = 30000; // 30 sekund między fetch dla tego samego guild
+
+/**
+ * Bezpieczne pobranie członków serwera z throttlingiem
+ * @param {Guild} guild - Serwer Discord
+ * @param {boolean} force - Wymuś fetch nawet jeśli w cooldown
+ * @returns {Promise<Collection>} - Kolekcja członków
+ */
+async function safeFetchMembers(guild, force = false) {
+    const guildId = guild.id;
+    const now = Date.now();
+    const throttleData = membersFetchThrottle.get(guildId);
+
+    // Jeśli fetch już jest w toku, poczekaj i użyj cache
+    if (throttleData && throttleData.isInProgress) {
+        logger.warn(`[🔒 THROTTLE] Fetch już w toku dla guild ${guild.name}, używam cache`);
+        return guild.members.cache;
+    }
+
+    // Jeśli ostatni fetch był niedawno i nie wymuszamy, użyj cache
+    if (!force && throttleData && (now - throttleData.lastFetch) < MEMBERS_FETCH_COOLDOWN) {
+        const secondsLeft = Math.ceil((MEMBERS_FETCH_COOLDOWN - (now - throttleData.lastFetch)) / 1000);
+        logger.info(`[🔒 THROTTLE] Pomijam fetch dla guild ${guild.name} (cooldown: ${secondsLeft}s), używam cache (${guild.members.cache.size} członków)`);
+        return guild.members.cache;
+    }
+
+    // Wykonaj fetch
+    try {
+        logger.info(`🔄 Pobieram członków guild ${guild.name}...`);
+        membersFetchThrottle.set(guildId, { lastFetch: now, isInProgress: true });
+        
+        const members = await guild.members.fetch();
+        
+        membersFetchThrottle.set(guildId, { lastFetch: now, isInProgress: false });
+        logger.info(`✅ Pobrano ${members.size} członków dla guild ${guild.name}`);
+        
+        return members;
+    } catch (error) {
+        membersFetchThrottle.set(guildId, { lastFetch: now, isInProgress: false });
+        logger.error(`❌ Błąd pobierania członków guild ${guild.name}:`, error);
+        // Fallback do cache
+        return guild.members.cache;
+    }
+}
+
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
 
@@ -361,11 +408,9 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
     
     await interaction.deferReply();
     
-    // Odśwież cache członków przed sprawdzeniem rankingu
+    // Odśwież cache członków przed sprawdzeniem rankingu (z throttlingiem)
     try {
-        logger.info('🔄 Odświeżanie cache\'u członków dla punishment...');
-        await interaction.guild.members.fetch();
-        logger.info('✅ Cache członków odświeżony');
+        await safeFetchMembers(interaction.guild);
     } catch (error) {
         logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
@@ -462,11 +507,9 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
 
     await interaction.deferReply();
 
-    // Odśwież cache członków przed sprawdzeniem ról
+    // Odśwież cache członków przed sprawdzeniem ról (z throttlingiem)
     try {
-        logger.info('🔄 Odświeżanie cache\'u członków dla debug-roles...');
-        await interaction.guild.members.fetch();
-        logger.info('✅ Cache członków odświeżony');
+        await safeFetchMembers(interaction.guild);
     } catch (error) {
         logger.error('❌ Błąd odświeżania cache\'u:', error);
     }
@@ -9598,13 +9641,13 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
     });
 
     try {
-        // Pobierz wszystkich członków klanu
-        const members = await interaction.guild.members.fetch();
-        const clanMembers = members.filter(member => member.roles.cache.has(clanRoleId));
+        // Użyj cache zamiast fetch aby uniknąć rate limitów Gateway (opcode 8)
+        // Cache jest automatycznie odświeżany przez refreshMemberCache() w index.js
+        const clanMembers = interaction.guild.members.cache.filter(member => member.roles.cache.has(clanRoleId));
 
         if (clanMembers.size === 0) {
             await interaction.editReply({
-                content: `❌ Nie znaleziono członków w klanie **${clanName}**.`,
+                content: `❌ Nie znaleziono członków w klanie **${clanName}**.\n\n*Jeśli widzisz ten błąd mimo że klan ma członków, cache może być nieaktualny. Spróbuj ponownie za chwilę.*`,
                 embeds: [],
                 components: []
             });
