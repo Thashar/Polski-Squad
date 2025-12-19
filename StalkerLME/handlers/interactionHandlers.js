@@ -7765,14 +7765,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         } else if (playerProgressData.length >= 2) {
             // Za mało danych: użyj tego co jest dostępne
             const currentScore = playerProgressData[0].score;
-            const comparisonScore = playerProgressData[playerProgressData.length - 1].score;
 
-            if (comparisonScore > 0) {
+            // POPRAWKA: Znajdź najstarszy wynik który jest > 0 (pomijamy wyniki zerowe)
+            let comparisonScore = 0;
+            let firstWeekIndex = -1;
+
+            for (let i = playerProgressData.length - 1; i >= 0; i--) {
+                if (playerProgressData[i].score > 0) {
+                    comparisonScore = playerProgressData[i].score;
+                    firstWeekIndex = i;
+                    break;
+                }
+            }
+
+            if (comparisonScore > 0 && firstWeekIndex !== -1) {
                 quarterlyProgress = currentScore - comparisonScore;
                 quarterlyProgressPercent = ((quarterlyProgress / comparisonScore) * 100).toFixed(1);
 
-                // Oblicz zakres tygodni od pierwszego do ostatniego (nie liczbę tygodni z danymi)
-                const firstWeek = playerProgressData[playerProgressData.length - 1];
+                // Oblicz zakres tygodni od pierwszego (> 0) do ostatniego
+                const firstWeek = playerProgressData[firstWeekIndex];
                 const lastWeek = playerProgressData[0];
 
                 // Oblicz różnicę w tygodniach
