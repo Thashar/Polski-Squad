@@ -111,7 +111,7 @@ class JudgmentService {
                             '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ **BRAK błogosławieństw** (`/blessing` niedostępne)\n\n' +
-                            '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam,\nForced caps, Random timeout, Special role, Scrambled words,\nDon\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
+                            '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam,\nForced caps, Random timeout, Special role, Scrambled words,\nDon't be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
                         inline: false
                     }
