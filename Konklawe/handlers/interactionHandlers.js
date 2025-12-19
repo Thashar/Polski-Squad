@@ -45,6 +45,36 @@ class InteractionHandler {
     }
 
     /**
+     * Zwraca odpowiednie emoji dla danej klątwy na podstawie jej opisu
+     * @param {string} curseDescription - Opis klątwy
+     * @returns {string} - Emoji reprezentujące klątwę
+     */
+    getCurseEmojis(curseDescription) {
+        if (curseDescription.includes('Slow mode personal')) {
+            return '⏰ 🐌';
+        } else if (curseDescription.includes('Auto-delete')) {
+            return '🗑️ 💨';
+        } else if (curseDescription.includes('Random ping')) {
+            return '📢 👻';
+        } else if (curseDescription.includes('Emoji spam')) {
+            return '😀 🎭';
+        } else if (curseDescription.includes('Forced caps')) {
+            return '📝 🔠';
+        } else if (curseDescription.includes('Random timeout')) {
+            return '💤 ⏸️';
+        } else if (curseDescription.includes('Special role')) {
+            return '🔇 🎭';
+        } else if (curseDescription.includes('Scrambled words')) {
+            return '🔤 🌀';
+        } else if (curseDescription.includes('Don\'t be smart')) {
+            return '🤡 💢';
+        } else if (curseDescription.includes('Blah blah')) {
+            return '😂 💬';
+        }
+        return '💀 ⚡'; // fallback
+    }
+
+    /**
      * Obsługuje interakcje przycisków
      * @param {Interaction} interaction - Interakcja Discord
      */
@@ -1119,11 +1149,10 @@ class InteractionHandler {
                     // Wykonaj dodatkową klątwę
                     await this.executeCurse(interaction, targetMember, curse.additional, curse.duration * 60 * 1000);
 
-                    const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
-                    const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+                    const curseEmojis = this.getCurseEmojis(curse.additional);
 
                     await interaction.editReply({
-                        content: `☁️ **Gabriel przeklął Lucyfera!** ${randomReaction}\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!**`
+                        content: `☁️ **Gabriel przeklął Lucyfera!**\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!** ${curseEmojis}`
                     });
 
                     logger.info(`☁️ Gabriel (${interaction.user.tag}) skutecznie przeklął Lucyfera (${targetUser.tag})`);
@@ -1185,11 +1214,10 @@ class InteractionHandler {
                 // Wykonaj dodatkową klątwę
                 await this.executeCurse(interaction, actualTargetMember, curse.additional, curse.duration * 60 * 1000);
 
-                const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
-                const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+                const curseEmojis = this.getCurseEmojis(curse.additional);
 
                 await interaction.editReply({
-                    content: `🛡️ **Gabriel okazał się odporny na tę klątwę Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}\n\n*Światło odpiera ciemność...*`
+                    content: `🛡️ **Gabriel okazał się odporny na tę klątwę Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${curseEmojis}\n\n*Światło odpiera ciemność...*`
                 });
 
                 // Szczegółowe logowanie odbicia Gabriela (33%)
@@ -1422,8 +1450,7 @@ class InteractionHandler {
             await this.executeCurse(interaction, actualTargetMember, curse.additional, curseDuration);
 
             // Przygotuj komunikat
-            const curseReactions = ['💀', '⚡', '🔥', '💜', '🌙', '👹', '🔮'];
-            const randomReaction = curseReactions[Math.floor(Math.random() * curseReactions.length)];
+            const curseEmojis = this.getCurseEmojis(curse.additional);
 
             let responseContent;
             const roleEmoji = roleType === 'gabriel' ? '☁️' : (roleType === 'lucyfer' ? '🔥' : '💀');
@@ -1440,16 +1467,16 @@ class InteractionHandler {
             }
 
             if (curseReflectedByGabriel) {
-                responseContent = `${roleEmoji} **Klątwa została odbita!** Gabriel dostaje własną klątwę! ${randomReaction}${levelDescription}`;
+                responseContent = `${roleEmoji} **Klątwa została odbita!** Gabriel dostaje własną klątwę! ${curseEmojis}${levelDescription}`;
             } else if (isReflected) {
                 if (roleType === 'lucyfer') {
-                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi!** ${randomReaction}`;
+                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi!** ${curseEmojis}`;
                 } else {
                     responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
-                        `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${randomReaction}${levelDescription}`;
+                        `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${curseEmojis}${levelDescription}`;
                 }
             } else {
-                responseContent = `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty!** ${randomReaction}${levelDescription}`;
+                responseContent = `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty!** ${curseEmojis}${levelDescription}`;
             }
 
             if (nicknameError) {
