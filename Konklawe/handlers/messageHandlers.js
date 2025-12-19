@@ -49,20 +49,32 @@ class MessageHandler {
                                 'random_timeout',
                                 'special_role'
                             ];
-                            const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+                            // Wylosuj klątwę która nie jest aktywna (max 10 prób)
+                            let selectedCurse = null;
+                            for (let i = 0; i < 10; i++) {
+                                const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+                                if (!interactionHandler.hasActiveCurse(message.author.id, randomCurse)) {
+                                    selectedCurse = randomCurse;
+                                    break;
+                                }
+                            }
 
-                            try {
-                                // Nałóż klątwę (5 minut)
-                                await interactionHandler.applyCurse(
-                                    message.member,
-                                    randomCurse,
-                                    message.guild,
-                                    Date.now() + (5 * 60 * 1000)
-                                );
+                            if (selectedCurse) {
+                                try {
+                                    // Nałóż klątwę (5 minut)
+                                    await interactionHandler.applyCurse(
+                                        message.member,
+                                        selectedCurse,
+                                        message.guild,
+                                        Date.now() + (5 * 60 * 1000)
+                                    );
 
-                                logger.info(`⚡ Gabriel debuff wywołał klątwę na Lucyfera ${message.author.tag} (10% szansa)`);
-                            } catch (error) {
-                                logger.error(`❌ Błąd nakładania klątwy przez Gabriel debuff: ${error.message}`);
+                                    logger.info(`⚡ Gabriel debuff wywołał klątwę na Lucyfera ${message.author.tag} (10% szansa): ${selectedCurse}`);
+                                } catch (error) {
+                                    logger.error(`❌ Błąd nakładania klątwy przez Gabriel debuff: ${error.message}`);
+                                }
+                            } else {
+                                logger.warn(`⚠️ Pominięto Gabriel debuff dla Lucyfera ${message.author.tag} - już ma aktywną klątwę`);
                             }
                         }
                     }

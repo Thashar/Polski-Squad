@@ -1183,6 +1183,14 @@ class InteractionHandler {
                 ];
                 const randomCurse = curses[Math.floor(Math.random() * curses.length)];
 
+                // Sprawdź czy Lucyfer już ma taką klątwę
+                if (this.hasActiveCurse(targetUser.id, randomCurse)) {
+                    return await interaction.reply({
+                        content: `⚠️ Lucyfer już ma aktywną klątwę tego typu! Nie można nałożyć kolejnej.`,
+                        ephemeral: true
+                    });
+                }
+
                 // Nałóż potężną klątwę (5 min aktywna + 24h debuff)
                 const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id);
                 await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
@@ -1652,12 +1660,25 @@ class InteractionHandler {
             'special_role'
         ];
 
-        const firstCurse = curses[Math.floor(Math.random() * curses.length)];
-        try {
-            await this.applyCurse(lucyferMember, firstCurse, guild, endTime);
-            logger.info(`💥⚡ MEGA SILNA KLĄTWA: Lucyfer ${userId} dostał pierwszą klątwę: ${firstCurse}`);
-        } catch (error) {
-            logger.error(`❌ Błąd podczas aplikowania pierwszej silnej klątwy: ${error.message}`);
+        // Wylosuj klątwę która nie jest aktywna (max 10 prób)
+        let firstCurse = null;
+        for (let i = 0; i < 10; i++) {
+            const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+            if (!this.hasActiveCurse(userId, randomCurse)) {
+                firstCurse = randomCurse;
+                break;
+            }
+        }
+
+        if (firstCurse) {
+            try {
+                await this.applyCurse(lucyferMember, firstCurse, guild, endTime);
+                logger.info(`💥⚡ MEGA SILNA KLĄTWA: Lucyfer ${userId} dostał pierwszą klątwę: ${firstCurse}`);
+            } catch (error) {
+                logger.error(`❌ Błąd podczas aplikowania pierwszej silnej klątwy: ${error.message}`);
+            }
+        } else {
+            logger.warn(`⚠️ Nie udało się wylosować unikalnej klątwy dla Lucyfera ${userId} - wszystkie typy mogą być aktywne`);
         }
 
         // Ustaw interwał co 5 minut
@@ -1671,11 +1692,24 @@ class InteractionHandler {
 
             try {
                 const member = await guild.members.fetch(userId);
-                const randomCurse = curses[Math.floor(Math.random() * curses.length)];
 
-                // Aplikuj nową losową klątwę
-                await this.applyCurse(member, randomCurse, guild, Date.now() + strongCurseData.changeInterval);
-                logger.info(`💥⚡ MEGA SILNA KLĄTWA: Lucyfer ${userId} dostał zmianę klątwy: ${randomCurse}`);
+                // Wylosuj klątwę która nie jest aktywna (max 10 prób)
+                let selectedCurse = null;
+                for (let i = 0; i < 10; i++) {
+                    const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+                    if (!this.hasActiveCurse(userId, randomCurse)) {
+                        selectedCurse = randomCurse;
+                        break;
+                    }
+                }
+
+                if (selectedCurse) {
+                    // Aplikuj nową losową klątwę
+                    await this.applyCurse(member, selectedCurse, guild, Date.now() + strongCurseData.changeInterval);
+                    logger.info(`💥⚡ MEGA SILNA KLĄTWA: Lucyfer ${userId} dostał zmianę klątwy: ${selectedCurse}`);
+                } else {
+                    logger.warn(`⚠️ Pominięto zmianę klątwy dla Lucyfera ${userId} - już ma aktywną klątwę tego typu`);
+                }
             } catch (error) {
                 logger.error(`❌ Błąd podczas zmiany silnej klątwy Gabriela: ${error.message}`);
             }
@@ -2748,6 +2782,22 @@ class InteractionHandler {
      * @param {Guild} guild - Guild
      * @param {number} customEndTime - Opcjonalny custom timestamp końca klątwy
      */
+    /**
+     * Sprawdza czy użytkownik ma już aktywną klątwę danego typu
+     */
+    hasActiveCurse(userId, curseType) {
+        const activeCurse = this.activeCurses.get(userId);
+        if (!activeCurse) return false;
+
+        // Sprawdź czy klątwa jeszcze nie wygasła
+        if (Date.now() >= activeCurse.endTime) {
+            return false;
+        }
+
+        // Sprawdź typ klątwy
+        return activeCurse.type === curseType;
+    }
+
     async applyCurse(targetMember, curseType, guild, customEndTime = null) {
         const userId = targetMember.id;
         const now = Date.now();
