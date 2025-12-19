@@ -9567,9 +9567,10 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
         const clanMembers = members.filter(member => member.roles.cache.has(clanRoleId));
 
         if (clanMembers.size === 0) {
-            await interaction.followUp({
+            await interaction.editReply({
                 content: `❌ Nie znaleziono członków w klanie **${clanName}**.`,
-                flags: MessageFlags.Ephemeral
+                embeds: [],
+                components: []
             });
             return;
         }
@@ -9578,9 +9579,10 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
         const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
 
         if (allWeeks.length === 0) {
-            await interaction.followUp({
+            await interaction.editReply({
                 content: '❌ Brak zapisanych wyników. Użyj `/faza1` aby rozpocząć zbieranie danych.',
-                flags: MessageFlags.Ephemeral
+                embeds: [],
+                components: []
             });
             return;
         }
@@ -9647,16 +9649,18 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
             }
         }
 
-        await interaction.followUp({
+        await interaction.editReply({
+            content: null,
             embeds: [embed],
-            flags: MessageFlags.Ephemeral
+            components: []
         });
 
     } catch (error) {
         logger.error('[PLAYER-RAPORT] ❌ Błąd generowania raportu:', error);
-        await interaction.followUp({
+        await interaction.editReply({
             content: '❌ Wystąpił błąd podczas generowania raportu.',
-            flags: MessageFlags.Ephemeral
+            embeds: [],
+            components: []
         });
     }
 }
