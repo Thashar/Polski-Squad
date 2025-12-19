@@ -104,14 +104,14 @@ class JudgmentService {
                             '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
                             '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
                             '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                            '  ╰ Przy odbiciu: **blokada 1h + nick "Uśpiony" + 100 many po zakończeniu + Gabriel nie może rzucać klątw**\n' +
+                            '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 100 many po zakończeniu\n' +
                             '  ╰ Reset % odbicia do 0% po odbiciu\n' +
                             '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                             '**VS Gabriel (curse):**\n' +
                             '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
                             '**Ograniczenia:**\n' +
                             '• ⛔ **BRAK błogosławieństw** (`/blessing` niedostępne)\n\n' +
-                            '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam,\nForced caps, Random timeout, Special role, Scrambled words,\nDon\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
+                            '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam, Forced caps, Random timeout, Special role, Scrambled words, Don\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
                         inline: false
                     }
@@ -337,14 +337,14 @@ class JudgmentService {
                         '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
                         '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
                         '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                        '  ╰ Przy odbiciu: **blokada 1h + nick "Uśpiony" + 100 many po zakończeniu + Gabriel nie może rzucać klątw**\n' +
+                        '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 100 many po zakończeniu\n' +
                         '  ╰ Reset % odbicia do 0% po odbiciu\n' +
                         '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                         '**VS Gabriel (curse):**\n' +
                         '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
                         '**Ograniczenia:**\n' +
                         '• ⛔ **BRAK błogosławieństw** (`/blessing` niedostępne)\n\n' +
-                        '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam,\nForced caps, Random timeout, Special role, Scrambled words,\nDon\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
+                        '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam, Forced caps, Random timeout, Special role, Scrambled words, Don\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
                         '**Ścieżka potęgi i ciemności.**';
                 }
             };
