@@ -137,9 +137,9 @@ class ReminderStatusTrackingService {
                 };
             }
 
-            // Pobierz kanał potwierdzenia
-            const confirmationChannelId = this.config.confirmationChannels[roleId];
-            const confirmationChannel = await guild.channels.fetch(confirmationChannelId);
+            // Pobierz kanał ostrzeżeń (tam gdzie lądują przypomnienia)
+            const warningChannelId = this.config.warningChannels[roleId];
+            const warningChannel = await guild.channels.fetch(warningChannelId);
 
             // Pobierz istniejący tracking lub utwórz nowy
             let tracking = this.trackingData[trackingKey];
@@ -155,7 +155,7 @@ class ReminderStatusTrackingService {
                 // Pierwszy remind - utwórz nowy tracking
                 tracking = {
                     messageId: null,
-                    channelId: confirmationChannelId,
+                    channelId: warningChannelId,
                     reminders: [newReminder]
                 };
 
@@ -163,7 +163,7 @@ class ReminderStatusTrackingService {
                 const embed = this.createStatusEmbed(trackingKey, tracking);
 
                 // Wyślij embed
-                const message = await confirmationChannel.send({ embeds: [embed] });
+                const message = await warningChannel.send({ embeds: [embed] });
                 tracking.messageId = message.id;
 
                 // Zapisz tracking
@@ -242,17 +242,29 @@ class ReminderStatusTrackingService {
                 return;
             }
 
-            // Pobierz wiadomość z Discorda
+            // Pobierz kanał
             const channel = await global.stalkerClient.channels.fetch(tracking.channelId);
-            const message = await channel.messages.fetch(tracking.messageId);
+
+            // Usuń starą wiadomość
+            try {
+                const oldMessage = await channel.messages.fetch(tracking.messageId);
+                await oldMessage.delete();
+                logger.info(`[REMINDER-TRACKING] 🗑️ Usunięto stary embed`);
+            } catch (error) {
+                logger.warn(`[REMINDER-TRACKING] ⚠️ Nie udało się usunąć starego embeda: ${error.message}`);
+            }
 
             // Utwórz zaktualizowany embed
             const embed = this.createStatusEmbed(trackingKey, tracking);
 
-            // Zaktualizuj wiadomość
-            await message.edit({ embeds: [embed] });
+            // Wyślij nowy embed (na dole czatu)
+            const newMessage = await channel.send({ embeds: [embed] });
+            tracking.messageId = newMessage.id;
 
-            logger.info(`[REMINDER-TRACKING] 🔄 Zaktualizowano embed dla ${trackingKey}`);
+            // Zapisz nowy messageId
+            await this.saveTrackingData();
+
+            logger.info(`[REMINDER-TRACKING] 🔄 Zaktualizowano embed dla ${trackingKey} (nowy messageId: ${newMessage.id})`);
         } catch (error) {
             logger.error('[REMINDER-TRACKING] ❌ Błąd aktualizacji embeda:', error);
         }
