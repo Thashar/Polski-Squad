@@ -952,9 +952,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
     ]
   }
   ```
+- **Kanał wysyłania zmieniony** - embed trafia na kanał ostrzeżeń (WARNING_CHANNEL) zamiast CONFIRMATION_CHANNEL
+  - Teraz embed jest widoczny tam gdzie lądują przypomnienia o bossie
+- **Aktualizacja embeda przez usunięcie i ponowne wysłanie** - zamiast edytować istniejący embed, bot usuwa stary i wysyła nowy
+  - Embed zawsze jest na dole czatu (świeża pozycja)
+  - Nowy messageId zapisywany po każdej aktualizacji
 - Lokalizacja zmian:
   - `StalkerLME/handlers/interactionHandlers.js` (linia 9534-9543: usunięto wysyłanie wiadomości, dodano timestamp)
-  - `StalkerLME/services/reminderStatusTrackingService.js` (przepisano całą strukturę trackingu)
+  - `StalkerLME/services/reminderStatusTrackingService.js` (przepisano całą strukturę trackingu, zmiana kanału, logika delete+send)
 
 **Konklawe Bot - Walidacja Klątw Przed Rzuceniem:**
 - Dodano funkcję `hasActiveCurse(userId, curseType)` sprawdzającą czy użytkownik ma już aktywną klątwę danego typu
