@@ -915,6 +915,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Balans Progresywnego Odbicia:**
+- **Zmniejszono bonus many po odbiciu klątwy** - z 100 na 50 many
+- Dotyczy tylko Lucyfera przy progresywnym odbiciu klątwy (blokada 1h + nick "Uśpiony")
+- Komunikat przy bezpośrednim rzuceniu Gabriela na Lucyfera pozostał "osłabiony"
+- Komunikat przy odbiciu klątwy Lucyfera pozostał "uśpiony"
+- Zaktualizowano:
+  - `virtuttiService.js` - funkcja `grantLucyferBlockEndBonus()` (linia 483)
+  - `interactionHandlers.js` - komentarz bonusu (linia 1330)
+  - `judgmentService.js` - dwa miejsca w opisie roli Lucyfera (linie 107, 340)
+- Lokalizacja zmian: `Konklawe/services/virtuttiService.js:472-486`, `Konklawe/handlers/interactionHandlers.js:1330`, `Konklawe/services/judgmentService.js:107,340`
+
 **StalkerLME Bot - Ulepszenia Systemu Trackingu Potwierdzeń:**
 - **Usunięto osobne wiadomości potwierdzenia** - zamiast wysyłać `✅ @user potwierdził odbiór...`, tylko aktualizowany jest embed
 - **Godzina potwierdzenia obok nicku** - format: `✅ NickName • 14:27` (pokazuje kiedy użytkownik potwierdził)

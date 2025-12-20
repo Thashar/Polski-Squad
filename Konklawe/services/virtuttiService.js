@@ -469,7 +469,7 @@ class VirtuttiService {
     }
 
     /**
-     * Dodaje 100 many Lucyferowi po zakończeniu blokady
+     * Dodaje 50 many Lucyferowi po zakończeniu blokady
      * @param {string} userId - ID Lucyfera
      */
     grantLucyferBlockEndBonus(userId) {
@@ -480,9 +480,9 @@ class VirtuttiService {
         }
 
         const userData = this.energySystem.get(userId);
-        userData.energy = Math.min(300, userData.energy + 100);
+        userData.energy = Math.min(300, userData.energy + 50);
         this.saveData();
-        logger.info(`✨ Lucyfer ${userId} otrzymał 100 many po zakończeniu blokady. Obecna mana: ${userData.energy}/300`);
+        logger.info(`✨ Lucyfer ${userId} otrzymał 50 many po zakończeniu blokady. Obecna mana: ${userData.energy}/300`);
     }
 
     /**

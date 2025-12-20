@@ -1275,13 +1275,13 @@ class InteractionHandler {
             // Brak odbicia (0% reflect) - usunięto
         }
 
-        // LUCYFER - progresywne odbicie (blokada 1h + nick "Osłabiony")
+        // LUCYFER - progresywne odbicie (blokada 1h + nick "Uśpiony")
         if (roleType === 'lucyfer' && !hasAdminPermissions) {
             const reflectionChance = this.virtuttiService.getLucyferReflectionChance(userId);
             const randomChance = Math.random() * 100;
 
             if (randomChance < reflectionChance) {
-                // Klątwa odbita! Lucyfer dostaje blokadę 1h + nick "Osłabiony"
+                // Klątwa odbita! Lucyfer dostaje blokadę 1h + nick "Uśpiony"
                 logger.info(`🔥 Klątwa Lucyfera została odbita! (${randomChance.toFixed(2)}% < ${reflectionChance}%)`);
 
                 // Zablokuj rzucanie klątw na 1h
@@ -1290,7 +1290,7 @@ class InteractionHandler {
                 // Zresetuj licznik progresywnego odbicia do 0%
                 this.virtuttiService.resetLucyferReflectionChance(userId);
 
-                // Zmień nick na "Osłabiony [nick]"
+                // Zmień nick na "Uśpiony [nick]"
                 try {
                     const lucyferMember = await interaction.guild.members.fetch(userId);
                     const durationMs = 60 * 60 * 1000; // 1 godzina
@@ -1327,7 +1327,7 @@ class InteractionHandler {
                                 if (restored) {
                                     logger.info(`✅ Automatycznie przywrócono nick po odbiciu klątwy dla ${lucyferMember.user.tag}`);
                                 }
-                                // Bonus 100 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
+                                // Bonus 50 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
                             } catch (error) {
                                 logger.error(`❌ Błąd automatycznego przywracania nicku po odbiciu: ${error.message}`);
                             }
@@ -1348,7 +1348,7 @@ class InteractionHandler {
 
                 // Wyślij komunikat o odbiciu i blokadzie
                 return await interaction.reply({
-                    content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został osłabiony!**\n\n*Siły ciemności nie zagrażają serwerowi...*`,
+                    content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został uśpiony!**\n\n*Siły ciemności nie zagrażają serwerowi...*`,
                     ephemeral: false
                 });
             }
