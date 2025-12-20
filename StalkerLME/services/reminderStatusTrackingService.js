@@ -105,8 +105,8 @@ class ReminderStatusTrackingService {
                 if (userData.confirmed) confirmedCount++;
             }
 
-            // Postęp dla tego reminda
-            description += `📈 ${confirmedCount}/${totalCount} potwierdzonych\n\n`;
+            // Dodaj pustą linię między reminderami
+            description += '\n';
         }
 
         embed.setDescription(description.trim());
