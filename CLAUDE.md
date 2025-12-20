@@ -915,6 +915,47 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**StalkerLME Bot - Ulepszenia Systemu Trackingu Potwierdzeń:**
+- **Usunięto osobne wiadomości potwierdzenia** - zamiast wysyłać `✅ @user potwierdził odbiór...`, tylko aktualizowany jest embed
+- **Godzina potwierdzenia obok nicku** - format: `✅ NickName • 14:27` (pokazuje kiedy użytkownik potwierdził)
+- **Nowa struktura danych** - tracking przechowuje tablicę `reminders[]` zamiast pojedynczego obiektu
+- **Jeden embed dla obu przypomnień** - format embeda:
+  ```
+  📊 Status potwierdzeń przypomnienia
+
+  Przypomnienie 1/2 • Wysłano 3 godziny temu
+  ✅ User1 • 14:27
+  ❌ User2
+  ✅ User3 • 14:30
+  📈 2/3 potwierdzonych
+
+  Przypomnienie 2/2 • Wysłano 2 godziny temu
+  ✅ User1 • 16:15
+  ❌ User2
+  ✅ User3 • 16:20
+  📈 2/3 potwierdzonych
+  ```
+- **Drugi remind NIE usuwa pierwszego embeda** - tylko edytuje go i dodaje nową sekcję
+- **Struktura tracking:**
+  ```javascript
+  {
+    messageId: "...",
+    channelId: "...",
+    reminders: [
+      {
+        reminderNumber: 1,
+        sentAt: timestamp,
+        users: {
+          userId: { displayName, confirmed, confirmedAt }
+        }
+      }
+    ]
+  }
+  ```
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js` (linia 9534-9543: usunięto wysyłanie wiadomości, dodano timestamp)
+  - `StalkerLME/services/reminderStatusTrackingService.js` (przepisano całą strukturę trackingu)
+
 **Konklawe Bot - Walidacja Klątw Przed Rzuceniem:**
 - Dodano funkcję `hasActiveCurse(userId, curseType)` sprawdzającą czy użytkownik ma już aktywną klątwę danego typu
 - System teraz sprawdza przed rzuceniem klątwy czy cel już ją ma:
