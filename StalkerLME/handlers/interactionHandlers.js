@@ -9531,21 +9531,16 @@ async function handleConfirmReminderButton(interaction, sharedState) {
             logger.info(`[CONFIRM_REMINDER] 🔕 Przestano monitorować wiadomości DM od użytkownika ${userId}`);
         }
 
-        // Zaktualizuj status w trackingu potwierdzeń
+        // Zaktualizuj status w trackingu potwierdzeń (z timestampem)
+        const confirmationTimestamp = Date.now();
         if (sharedState.reminderStatusTrackingService) {
             try {
-                await sharedState.reminderStatusTrackingService.updateUserStatus(userId, roleId);
+                await sharedState.reminderStatusTrackingService.updateUserStatus(userId, roleId, confirmationTimestamp);
                 logger.info(`[CONFIRM_REMINDER] 📊 Zaktualizowano status trackingu dla użytkownika ${userId}`);
             } catch (trackingError) {
                 logger.error(`[CONFIRM_REMINDER] ❌ Błąd aktualizacji trackingu: ${trackingError.message}`);
             }
         }
-
-        // Wyślij wiadomość potwierdzenia na kanał
-        const unixTimestamp = Math.floor(Date.now() / 1000);
-        await confirmationChannel.send({
-            content: `✅ <@${userId}> potwierdził odbiór przypomnienia o bossie (<t:${unixTimestamp}:T>)\n**Klan:** ${clanName}`
-        });
 
         // Zaktualizuj wiadomość DM - usuń przycisk i pokaż potwierdzenie
         await interaction.update({

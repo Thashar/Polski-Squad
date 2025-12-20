@@ -61,40 +61,55 @@ class ReminderStatusTrackingService {
      * Tworzy embed ze statusem potwierdzeń
      */
     createStatusEmbed(trackingKey, trackingData) {
-        const { reminderNumber, sentAt, users } = trackingData;
-
-        // Posortuj użytkowników: najpierw niepotwierdzeni, potem potwierdzeni
-        const sortedUsers = Object.entries(users).sort((a, b) => {
-            if (a[1].confirmed === b[1].confirmed) return 0;
-            return a[1].confirmed ? 1 : -1;
-        });
-
-        // Utwórz listę użytkowników
-        let usersList = '';
-        let confirmedCount = 0;
-        let totalCount = sortedUsers.length;
-
-        for (const [userId, userData] of sortedUsers) {
-            const icon = userData.confirmed ? '✅' : '❌';
-            usersList += `${icon} ${userData.displayName}\n`;
-            if (userData.confirmed) confirmedCount++;
-        }
-
-        // Jeśli lista jest pusta
-        if (usersList === '') {
-            usersList = '*Brak użytkowników*';
-        }
+        const { reminders } = trackingData;
 
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Status potwierdzeń przypomnienia (${reminderNumber}/2)`)
-            .setDescription(usersList)
-            .setColor(reminderNumber === 1 ? '#FFA500' : '#FF0000')
-            .addFields(
-                { name: '📈 Postęp', value: `${confirmedCount}/${totalCount} potwierdzonych`, inline: true },
-                { name: '📅 Wysłano', value: `<t:${Math.floor(sentAt / 1000)}:R>`, inline: true }
-            )
-            .setTimestamp()
-            .setFooter({ text: `Przypomnienie ${reminderNumber}/2 • ${new Date(sentAt).toLocaleString('pl-PL', { timeZone: this.config.timezone })}` });
+            .setTitle('📊 Status potwierdzeń przypomnienia')
+            .setColor('#FFA500')
+            .setTimestamp();
+
+        let description = '';
+
+        // Iteruj po wszystkich reminderach (1/2 i/lub 2/2)
+        for (const reminder of reminders) {
+            const { reminderNumber, sentAt, users } = reminder;
+
+            // Nagłówek dla tego reminda
+            description += `**Przypomnienie ${reminderNumber}/2** • Wysłano <t:${Math.floor(sentAt / 1000)}:R>\n`;
+
+            // Posortuj użytkowników: najpierw potwierdzeni, potem niepotwierdzeni
+            const sortedUsers = Object.entries(users).sort((a, b) => {
+                if (a[1].confirmed === b[1].confirmed) return 0;
+                return a[1].confirmed ? -1 : 1;
+            });
+
+            // Utwórz listę użytkowników
+            let confirmedCount = 0;
+            let totalCount = sortedUsers.length;
+
+            for (const [userId, userData] of sortedUsers) {
+                const icon = userData.confirmed ? '✅' : '❌';
+                let line = `${icon} ${userData.displayName}`;
+
+                // Dodaj godzinę potwierdzenia jeśli potwierdzone
+                if (userData.confirmed && userData.confirmedAt) {
+                    const confirmTime = new Date(userData.confirmedAt).toLocaleTimeString('pl-PL', {
+                        timeZone: this.config.timezone,
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    line += ` • ${confirmTime}`;
+                }
+
+                description += line + '\n';
+                if (userData.confirmed) confirmedCount++;
+            }
+
+            // Postęp dla tego reminda
+            description += `📈 ${confirmedCount}/${totalCount} potwierdzonych\n\n`;
+        }
+
+        embed.setDescription(description.trim());
 
         return embed;
     }
@@ -118,60 +133,57 @@ class ReminderStatusTrackingService {
                 usersData[member.id] = {
                     displayName: member.displayName,
                     confirmed: false,
-                    confirmedReminders: [] // array numerów remind które potwierdził [1] lub [1, 2]
+                    confirmedAt: null
                 };
-            }
-
-            // Jeśli to drugi remind tego dnia
-            if (reminderNumber === 2 && this.trackingData[trackingKey]) {
-                // Zachowaj informacje o potwierdzeniach z pierwszego remind
-                const oldTracking = this.trackingData[trackingKey];
-
-                for (const [userId, userData] of Object.entries(oldTracking.users)) {
-                    if (usersData[userId]) {
-                        // Użytkownik był w pierwszym i jest w drugim remind
-                        usersData[userId].confirmedReminders = userData.confirmedReminders;
-                        // confirmed = false, bo czekamy na potwierdzenie drugiego remind
-                        usersData[userId].confirmed = false;
-                    }
-                }
-
-                // Usuń starą wiadomość trackingu
-                try {
-                    const channel = await guild.channels.fetch(oldTracking.channelId);
-                    const oldMessage = await channel.messages.fetch(oldTracking.messageId);
-                    await oldMessage.delete();
-                    logger.info('[REMINDER-TRACKING] 🗑️ Usunięto starą wiadomość trackingu');
-                } catch (error) {
-                    logger.warn('[REMINDER-TRACKING] ⚠️ Nie udało się usunąć starej wiadomości:', error.message);
-                }
             }
 
             // Pobierz kanał potwierdzenia
             const confirmationChannelId = this.config.confirmationChannels[roleId];
             const confirmationChannel = await guild.channels.fetch(confirmationChannelId);
 
-            // Utwórz nowy tracking
-            const newTracking = {
-                messageId: null, // Zostanie ustawione po wysłaniu embeda
-                channelId: confirmationChannelId,
+            // Pobierz istniejący tracking lub utwórz nowy
+            let tracking = this.trackingData[trackingKey];
+
+            // Nowy reminder
+            const newReminder = {
                 reminderNumber: reminderNumber,
                 sentAt: Date.now(),
                 users: usersData
             };
 
-            // Utwórz embed
-            const embed = this.createStatusEmbed(trackingKey, newTracking);
+            if (!tracking) {
+                // Pierwszy remind - utwórz nowy tracking
+                tracking = {
+                    messageId: null,
+                    channelId: confirmationChannelId,
+                    reminders: [newReminder]
+                };
 
-            // Wyślij embed
-            const message = await confirmationChannel.send({ embeds: [embed] });
-            newTracking.messageId = message.id;
+                // Utwórz embed
+                const embed = this.createStatusEmbed(trackingKey, tracking);
 
-            // Zapisz tracking
-            this.trackingData[trackingKey] = newTracking;
-            await this.saveTrackingData();
+                // Wyślij embed
+                const message = await confirmationChannel.send({ embeds: [embed] });
+                tracking.messageId = message.id;
 
-            logger.info(`[REMINDER-TRACKING] ✅ Utworzono tracking, messageId: ${message.id}`);
+                // Zapisz tracking
+                this.trackingData[trackingKey] = tracking;
+                await this.saveTrackingData();
+
+                logger.info(`[REMINDER-TRACKING] ✅ Utworzono nowy tracking, messageId: ${message.id}`);
+            } else {
+                // Drugi remind - dodaj do istniejącego trackingu
+                tracking.reminders.push(newReminder);
+
+                // Zapisz tracking
+                this.trackingData[trackingKey] = tracking;
+                await this.saveTrackingData();
+
+                // Aktualizuj embed (dodaj drugą sekcję)
+                await this.updateEmbed(trackingKey);
+
+                logger.info(`[REMINDER-TRACKING] 📝 Dodano drugi remind do trackingu`);
+            }
 
             return trackingKey;
         } catch (error) {
@@ -183,7 +195,7 @@ class ReminderStatusTrackingService {
     /**
      * Aktualizuje status użytkownika po potwierdzeniu
      */
-    async updateUserStatus(userId, roleId) {
+    async updateUserStatus(userId, roleId, confirmationTimestamp) {
         try {
             const trackingKey = this.getTrackingKey(roleId);
             const tracking = this.trackingData[trackingKey];
@@ -193,21 +205,19 @@ class ReminderStatusTrackingService {
                 return false;
             }
 
-            if (!tracking.users[userId]) {
-                logger.warn(`[REMINDER-TRACKING] ⚠️ Użytkownik ${userId} nie jest w trackingu`);
+            // Znajdź ostatni reminder (najnowszy)
+            const latestReminder = tracking.reminders[tracking.reminders.length - 1];
+
+            if (!latestReminder.users[userId]) {
+                logger.warn(`[REMINDER-TRACKING] ⚠️ Użytkownik ${userId} nie jest w najnowszym reminderze`);
                 return false;
             }
 
-            // Dodaj numer remind do potwierdzonych
-            const reminderNumber = tracking.reminderNumber;
-            if (!tracking.users[userId].confirmedReminders.includes(reminderNumber)) {
-                tracking.users[userId].confirmedReminders.push(reminderNumber);
-            }
+            // Oznacz jako confirmed i zapisz timestamp
+            latestReminder.users[userId].confirmed = true;
+            latestReminder.users[userId].confirmedAt = confirmationTimestamp;
 
-            // Oznacz jako confirmed tylko jeśli potwierdził bieżący remind
-            tracking.users[userId].confirmed = true;
-
-            logger.info(`[REMINDER-TRACKING] ✅ Zaktualizowano status użytkownika ${userId} w ${trackingKey}`);
+            logger.info(`[REMINDER-TRACKING] ✅ Zaktualizowano status użytkownika ${userId} w ${trackingKey} (remind ${latestReminder.reminderNumber})`);
 
             // Zapisz i aktualizuj embed
             await this.saveTrackingData();
