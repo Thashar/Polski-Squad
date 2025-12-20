@@ -1485,7 +1485,7 @@ class InteractionHandler {
                 responseContent = `${roleEmoji} **Klątwa została odbita!** Gabriel dostaje własną klątwę! ${curseEmojis}${levelDescription}`;
             } else if (isReflected) {
                 if (roleType === 'lucyfer') {
-                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi!** ${curseEmojis}`;
+                    responseContent = `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł!** ${curseEmojis}`;
                 } else {
                     responseContent = `🛡️ **O nie! ${targetUser.toString()} jest zbyt potężny i odbija klątwę!**\n\n` +
                         `${roleEmoji} **${actualTarget.toString()} zostałeś przeklęty własną klątwą!** ${curseEmojis}${levelDescription}`;

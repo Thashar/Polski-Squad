@@ -915,6 +915,12 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Skrócenie Komunikatu Odbicia od Admina:**
+- **Usunięto fragment "Siły ciemności nie zagrażają serwerowi!"** z komunikatu odbicia klątwy Lucyfera przez admina
+- Komunikat zmieniono z: `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi!**`
+- Na: `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł!**`
+- Lokalizacja zmian: `Konklawe/handlers/interactionHandlers.js:1488`
+
 **Konklawe Bot - Optymalizacja Aktualizacji Embeda Sądu Bożego:**
 - **Inteligentne aktualizacje embeda** - bot sprawdza zawartość przed aktualizacją przy starcie
 - Jeśli embed nie zmienił się - pozostawia istniejący (nie usuwa i nie wysyła ponownie)
