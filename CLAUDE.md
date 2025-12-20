@@ -915,6 +915,15 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Optymalizacja Aktualizacji Embeda Sądu Bożego:**
+- **Inteligentne aktualizacje embeda** - bot sprawdza zawartość przed aktualizacją przy starcie
+- Jeśli embed nie zmienił się - pozostawia istniejący (nie usuwa i nie wysyła ponownie)
+- Jeśli embed się zmienił - usuwa stary i wysyła nowy
+- Porównuje: title, description, wszystkie fields (name, value, inline)
+- Nowa funkcja `compareEmbeds()` w `JudgmentService`
+- Logi: `ℹ️ Embed bez zmian` lub `✅ Utworzono nowy embed`
+- Lokalizacja zmian: `Konklawe/services/judgmentService.js:32-57,146-189`
+
 **Konklawe Bot - Balans Progresywnego Odbicia:**
 - **Zmniejszono bonus many po odbiciu klątwy** - z 100 na 50 many
 - Dotyczy tylko Lucyfera przy progresywnym odbiciu klątwy (blokada 1h + nick "Uśpiony")

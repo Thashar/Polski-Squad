@@ -23,6 +23,39 @@ class JudgmentService {
     /**
      * Inicjalizuje embed Sądu Bożego
      */
+    /**
+     * Porównuje zawartość dwóch embedów
+     * @param {Object} embed1 - Pierwszy embed (Discord Embed)
+     * @param {Object} embed2 - Drugi embed (EmbedBuilder)
+     * @returns {boolean} - true jeśli embedy są identyczne
+     */
+    compareEmbeds(embed1, embed2) {
+        try {
+            // Porównaj title
+            if (embed1.title !== embed2.data.title) return false;
+
+            // Porównaj description
+            if (embed1.description !== embed2.data.description) return false;
+
+            // Porównaj fields
+            const fields1 = embed1.fields || [];
+            const fields2 = embed2.data.fields || [];
+
+            if (fields1.length !== fields2.length) return false;
+
+            for (let i = 0; i < fields1.length; i++) {
+                if (fields1[i].name !== fields2[i].name) return false;
+                if (fields1[i].value !== fields2[i].value) return false;
+                if (fields1[i].inline !== fields2[i].inline) return false;
+            }
+
+            return true;
+        } catch (error) {
+            logger.warn(`⚠️ Błąd porównywania embedów: ${error.message}`);
+            return false;
+        }
+    }
+
     async initializeJudgmentEmbed() {
         if (!this.client) {
             logger.error('❌ Klient Discord nie został ustawiony dla JudgmentService');
@@ -42,24 +75,15 @@ class JudgmentService {
                 return;
             }
 
-            // Sprawdź czy embed już istnieje - jeśli tak, usuń go i stwórz nowy
+            // Sprawdź czy embed już istnieje
             const messages = await judgmentChannel.messages.fetch({ limit: 10 });
-            const existingEmbed = messages.find(msg =>
+            const existingMessage = messages.find(msg =>
                 msg.author.id === this.client.user.id &&
                 msg.embeds.length > 0 &&
                 msg.embeds[0].title === '⚖️ SĄD BOŻY'
             );
 
-            if (existingEmbed) {
-                try {
-                    await existingEmbed.delete();
-                    logger.info('🗑️ Usunięto stary embed Sądu Bożego');
-                } catch (error) {
-                    logger.warn(`⚠️ Nie udało się usunąć starego embeda: ${error.message}`);
-                }
-            }
-
-            // Utwórz nowy embed
+            // Utwórz nowy embed (do porównania lub wysłania)
             const embed = new EmbedBuilder()
                 .setTitle('⚖️ SĄD BOŻY')
                 .setDescription(
@@ -119,6 +143,29 @@ class JudgmentService {
                 .setFooter({ text: 'Konklawe - Sąd Boży' })
                 .setTimestamp();
 
+            // Porównaj z istniejącym embedem
+            if (existingMessage) {
+                const existingEmbed = existingMessage.embeds[0];
+                const isIdentical = this.compareEmbeds(existingEmbed, embed);
+
+                if (isIdentical) {
+                    // Embed jest identyczny - zachowaj istniejący
+                    this.judgmentMessage = existingMessage;
+                    this.judgmentMessageId = existingMessage.id;
+                    logger.info('ℹ️ Embed Sądu Bożego bez zmian - pozostawiono istniejący');
+                    return;
+                } else {
+                    // Embed się zmienił - usuń stary
+                    try {
+                        await existingMessage.delete();
+                        logger.info('🗑️ Usunięto stary embed Sądu Bożego (zawartość się zmieniła)');
+                    } catch (error) {
+                        logger.warn(`⚠️ Nie udało się usunąć starego embeda: ${error.message}`);
+                    }
+                }
+            }
+
+            // Wyślij nowy embed
             const angelButton = new ButtonBuilder()
                 .setCustomId('judgment_angel')
                 .setLabel('Aniołowie')
@@ -139,7 +186,7 @@ class JudgmentService {
             });
 
             this.judgmentMessageId = this.judgmentMessage.id;
-            logger.info('✅ Utworzono embed Sądu Bożego');
+            logger.info('✅ Utworzono nowy embed Sądu Bożego');
 
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji embeda Sądu Bożego: ${error.message}`);
