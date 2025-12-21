@@ -11,7 +11,8 @@ class VirtuttiService {
         this.dailyUsage = new Map(); // userId -> { date: string, blessing: count, virtueCheck: count, curse: count }
 
         // === NOWY SYSTEM ENERGII ===
-        this.energySystem = new Map(); // userId -> { energy: number, lastRegeneration: timestamp, dailyCurses: number, date: string }
+        this.energySystem = new Map(); // userId -> { energy: number, lastRegeneration: timestamp, dailyCurses: number, date: string, roleType: string }
+        this.userRoles = new Map(); // userId -> 'gabriel' | 'lucyfer'
 
         // Lucyfer - nowy dynamiczny system
         this.lucyferData = new Map(); // userId -> { cost, regenTimeMs, lastTarget, targetHistory, successStreak, failStreak, lastRegeneration, curseCount }
@@ -55,38 +56,68 @@ class VirtuttiService {
     // ========================================
 
     /**
+     * Pobiera maksymalną ilość many dla użytkownika na podstawie roli
+     * @param {string} userId - ID użytkownika
+     * @returns {number} - Maksymalna ilość many (Gabriel: 150, Lucyfer: 100)
+     */
+    getMaxEnergy(userId) {
+        const roleType = this.userRoles.get(userId);
+        if (roleType === 'gabriel') {
+            return 150;
+        } else if (roleType === 'lucyfer') {
+            return 100;
+        }
+        // Fallback dla starych użytkowników bez roli
+        return 150;
+    }
+
+    /**
      * Inicjalizuje energię dla użytkownika (jeśli nie istnieje)
      * @param {string} userId - ID użytkownika
+     * @param {string} roleType - 'gabriel' lub 'lucyfer'
      */
-    initializeEnergy(userId) {
+    initializeEnergy(userId, roleType = null) {
         if (!this.energySystem.has(userId)) {
+            // Zapisz rolę użytkownika
+            if (roleType) {
+                this.userRoles.set(userId, roleType);
+            }
+
+            const maxEnergy = this.getMaxEnergy(userId);
             const today = this.getPolishTime().toDateString();
             this.energySystem.set(userId, {
-                energy: 300, // Start z pełną maną
+                energy: maxEnergy, // Start z pełną maną
                 lastRegeneration: Date.now(),
                 dailyCurses: 0,
-                date: today
+                date: today,
+                roleType: roleType
             });
-            logger.info(`⚡ Zainicjowano energię dla użytkownika ${userId}: 300/300`);
+            logger.info(`⚡ Zainicjowano energię dla użytkownika ${userId} (${roleType}): ${maxEnergy}/${maxEnergy}`);
+        } else if (roleType && !this.userRoles.has(userId)) {
+            // Aktualizuj rolę dla istniejącego użytkownika
+            this.userRoles.set(userId, roleType);
+            const userData = this.energySystem.get(userId);
+            userData.roleType = roleType;
         }
     }
 
     /**
-     * Regeneruje energię użytkownika (5 punktów/godzinę)
+     * Regeneruje energię użytkownika (10 punktów/godzinę dla Gabriel, 1pkt/5-15min dla Lucyfer)
      * @param {string} userId - ID użytkownika
      */
     regenerateEnergy(userId) {
         const userData = this.energySystem.get(userId);
         if (!userData) return;
 
+        const maxEnergy = this.getMaxEnergy(userId);
         const now = Date.now();
         const hoursSinceLastRegen = (now - userData.lastRegeneration) / (60 * 60 * 1000);
-        const energyToRegenerate = Math.floor(hoursSinceLastRegen * 10); // 10 punktów/h
+        const energyToRegenerate = Math.floor(hoursSinceLastRegen * 10); // 10 punktów/h (tylko dla Gabriel)
 
-        if (energyToRegenerate > 0 && userData.energy < 300) {
-            userData.energy = Math.min(300, userData.energy + energyToRegenerate);
+        if (energyToRegenerate > 0 && userData.energy < maxEnergy) {
+            userData.energy = Math.min(maxEnergy, userData.energy + energyToRegenerate);
             userData.lastRegeneration = now;
-            logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/300`);
+            logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/${maxEnergy}`);
             this.saveData();
         }
     }
@@ -104,14 +135,16 @@ class VirtuttiService {
     /**
      * Pobiera obecną energię użytkownika
      * @param {string} userId - ID użytkownika
+     * @param {string} roleType - Opcjonalnie, rola użytkownika dla inicjalizacji
      * @returns {Object} - { energy, maxEnergy, dailyCurses, nextCurseCost }
      */
-    getEnergy(userId) {
-        this.initializeEnergy(userId);
+    getEnergy(userId, roleType = null) {
+        this.initializeEnergy(userId, roleType);
         this.regenerateEnergy(userId);
 
         const today = this.getPolishTime().toDateString();
         const userData = this.energySystem.get(userId);
+        const maxEnergy = this.getMaxEnergy(userId);
 
         // Reset dzienny
         if (userData.date !== today) {
@@ -121,7 +154,7 @@ class VirtuttiService {
 
         return {
             energy: userData.energy,
-            maxEnergy: 300,
+            maxEnergy: maxEnergy,
             dailyCurses: userData.dailyCurses,
             nextCurseCost: this.calculateCurseCost(userData.dailyCurses)
         };
@@ -148,6 +181,7 @@ class VirtuttiService {
     consumeEnergy(userId, cost, actionType = 'curse') {
         this.initializeEnergy(userId);
         const userData = this.energySystem.get(userId);
+        const maxEnergy = this.getMaxEnergy(userId);
 
         if (userData.energy < cost) {
             return false;
@@ -159,7 +193,7 @@ class VirtuttiService {
             userData.dailyCurses++;
         }
 
-        logger.info(`⚡ ${userId} zużył ${cost} many (${actionType}). Pozostało: ${userData.energy}/300, klątwy dzisiaj: ${userData.dailyCurses}`);
+        logger.info(`⚡ ${userId} zużył ${cost} many (${actionType}). Pozostało: ${userData.energy}/${maxEnergy}, klątwy dzisiaj: ${userData.dailyCurses}`);
         this.saveData();
         return true;
     }
@@ -172,10 +206,11 @@ class VirtuttiService {
     refundHalfEnergy(userId, originalCost) {
         this.initializeEnergy(userId);
         const userData = this.energySystem.get(userId);
+        const maxEnergy = this.getMaxEnergy(userId);
         const refund = Math.floor(originalCost / 2);
 
-        userData.energy = Math.min(300, userData.energy + refund);
-        logger.info(`💰 ${userId} otrzymał ${refund} many zwrotu (połowa kosztu). Obecna: ${userData.energy}/300`);
+        userData.energy = Math.min(maxEnergy, userData.energy + refund);
+        logger.info(`💰 ${userId} otrzymał ${refund} many zwrotu (połowa kosztu). Obecna: ${userData.energy}/${maxEnergy}`);
         this.saveData();
     }
 
@@ -469,7 +504,7 @@ class VirtuttiService {
     }
 
     /**
-     * Dodaje 50 many Lucyferowi po zakończeniu blokady
+     * Dodaje 25 many Lucyferowi po zakończeniu blokady
      * @param {string} userId - ID Lucyfera
      */
     grantLucyferBlockEndBonus(userId) {
@@ -480,9 +515,10 @@ class VirtuttiService {
         }
 
         const userData = this.energySystem.get(userId);
-        userData.energy = Math.min(300, userData.energy + 50);
+        const maxEnergy = this.getMaxEnergy(userId);
+        userData.energy = Math.min(maxEnergy, userData.energy + 25);
         this.saveData();
-        logger.info(`✨ Lucyfer ${userId} otrzymał 50 many po zakończeniu blokady. Obecna mana: ${userData.energy}/300`);
+        logger.info(`✨ Lucyfer ${userId} otrzymał 25 many po zakończeniu blokady. Obecna mana: ${userData.energy}/${maxEnergy}`);
     }
 
     /**
@@ -618,10 +654,11 @@ class VirtuttiService {
         // Ile pełnych jednostek czasu minęło?
         const fullUnits = Math.floor(timeSinceLastRegen / lucyferData.regenTimeMs);
 
-        if (fullUnits > 0 && userData.energy < 300) {
-            userData.energy = Math.min(300, userData.energy + fullUnits);
+        const maxEnergy = this.getMaxEnergy(userId);
+        if (fullUnits > 0 && userData.energy < maxEnergy) {
+            userData.energy = Math.min(maxEnergy, userData.energy + fullUnits);
             lucyferData.lastRegeneration = now - (timeSinceLastRegen % lucyferData.regenTimeMs);
-            logger.info(`🔋 Regeneracja ${fullUnits} many dla Lucyfera ${userId}. Obecna: ${userData.energy}/300, czas/jednostkę: ${lucyferData.regenTimeMs / 60000} min`);
+            logger.info(`🔋 Regeneracja ${fullUnits} many dla Lucyfera ${userId}. Obecna: ${userData.energy}/${maxEnergy}, czas/jednostkę: ${lucyferData.regenTimeMs / 60000} min`);
             this.saveData();
         }
     }
@@ -667,8 +704,9 @@ class VirtuttiService {
     adjustLucyferRegeneration(userId, oldRegenTime) {
         const userData = this.energySystem.get(userId);
         const lucyferData = this.lucyferData.get(userId);
+        const maxEnergy = this.getMaxEnergy(userId);
 
-        if (!userData || !lucyferData || userData.energy >= 300) return;
+        if (!userData || !lucyferData || userData.energy >= maxEnergy) return;
 
         const now = Date.now();
         const timeSinceLastRegen = now - lucyferData.lastRegeneration;
@@ -677,7 +715,7 @@ class VirtuttiService {
         // Jeśli nowy czas jest krótszy i upłynęło więcej niż nowy czas, przyznaj punkty
         if (timeSinceLastRegen >= newRegenTime) {
             const pointsToGrant = Math.floor(timeSinceLastRegen / newRegenTime);
-            userData.energy = Math.min(300, userData.energy + pointsToGrant);
+            userData.energy = Math.min(maxEnergy, userData.energy + pointsToGrant);
             lucyferData.lastRegeneration = now - (timeSinceLastRegen % newRegenTime);
             logger.info(`⚡ Natychmiastowa regeneracja ${pointsToGrant} many dla Lucyfera ${userId} po zmianie czasu`);
             this.saveData();

@@ -790,7 +790,7 @@ class InteractionHandler {
 
         // === SPRAWDŹ ENERGIĘ (KOSZT: 5) ===
         const blessingCost = 5;
-        const energyData = this.virtuttiService.getEnergy(userId);
+        const energyData = this.virtuttiService.getEnergy(userId, roleType);
 
         if (!this.virtuttiService.hasEnoughEnergy(userId, blessingCost)) {
             return await interaction.reply({
@@ -883,7 +883,7 @@ class InteractionHandler {
             });
 
             // Wyślij ephemeral message z informacją o pozostałej manie
-            const updatedEnergyData = this.virtuttiService.getEnergy(userId);
+            const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
             await interaction.followUp({
                 content: `⚡ **Status many:** ${updatedEnergyData.energy}/${updatedEnergyData.maxEnergy}\n` +
                     `🔋 Regeneracja: **10 pkt/h**`,
@@ -1073,7 +1073,7 @@ class InteractionHandler {
             this.virtuttiService.regenerateLucyferMana(userId);
         }
 
-        const energyData = this.virtuttiService.getEnergy(userId);
+        const energyData = this.virtuttiService.getEnergy(userId, roleType);
         const curseCost = roleType === 'lucyfer'
             ? this.virtuttiService.getLucyferCurseCost(userId)
             : energyData.nextCurseCost;
@@ -1327,7 +1327,7 @@ class InteractionHandler {
                                 if (restored) {
                                     logger.info(`✅ Automatycznie przywrócono nick po odbiciu klątwy dla ${lucyferMember.user.tag}`);
                                 }
-                                // Bonus 50 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
+                                // Bonus 25 many jest dodawany automatycznie przez virtuttiService.blockLucyferCurses()
                             } catch (error) {
                                 logger.error(`❌ Błąd automatycznego przywracania nicku po odbiciu: ${error.message}`);
                             }
@@ -1403,7 +1403,7 @@ class InteractionHandler {
             // Szczegółowe logowanie faila klątwy
             if (this.detailedLogger) {
                 const refund = Math.floor(curseCost / 2);
-                const energyDataAfterRefund = this.virtuttiService.getEnergy(userId);
+                const energyDataAfterRefund = this.virtuttiService.getEnergy(userId, roleType);
                 await this.detailedLogger.logCurseFail(
                     interaction.user,
                     targetUser,
@@ -1503,7 +1503,7 @@ class InteractionHandler {
             });
 
             // Wyślij ephemeral message z informacją o manie i statusie
-            const updatedEnergyData = this.virtuttiService.getEnergy(userId);
+            const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
             const nextCostInfo = `Następna klątwa: **${updatedEnergyData.nextCurseCost}** many`;
 
             if (roleType !== 'lucyfer') {

@@ -915,6 +915,20 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Balans Systemu Many:**
+- **Gabriel: max 150 many** (było 300) - Start z pełną maną, regeneracja 10 pkt/h
+- **Lucyfer: max 100 many** (było 300) - Start z pełną maną, dynamiczna regeneracja 5-15 min/pkt
+- **Bonus po blokadzie odbicia: 25 many** (było 50) dla Lucyfera
+- Dodano system śledzenia ról użytkowników (`userRoles` Map)
+- Nowa funkcja `getMaxEnergy(userId)` która zwraca odpowiedni limit (150/100)
+- Zaktualizowano wszystkie funkcje energetyczne aby używały dynamicznego maxEnergy
+- Zaktualizowano wywołania `getEnergy()` aby przekazywały roleType
+- Zaktualizowano dokumentację w embedach Sądu Bożego (oba embedy)
+- Lokalizacja zmian:
+  - `Konklawe/services/virtuttiService.js:14-15,58-101,104-123,135-161,181-199,206-215,510-522,645-663,704-723`
+  - `Konklawe/handlers/interactionHandlers.js:793,886,1076,1330,1406,1506`
+  - `Konklawe/services/judgmentService.js:100,123,131,360,379,387`
+
 **Konklawe Bot - Skrócenie Komunikatu Odbicia od Admina:**
 - **Usunięto fragment "Siły ciemności nie zagrażają serwerowi!"** z komunikatu odbicia klątwy Lucyfera przez admina
 - Komunikat zmieniono z: `🔥 **O nie! Klątwa została odbita i wzmocniona przez co Lucyfer mocno osłabł! Siły ciemności nie zagrażają serwerowi!**`

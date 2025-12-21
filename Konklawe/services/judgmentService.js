@@ -97,7 +97,7 @@ class JudgmentService {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
                             '**⚡ System Many:**\n' +
-                            '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
+                            '• 💯 Start: **150 many**, regeneracja **10 pkt/h**\n' +
                             '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
                             '**Moce:**\n' +
                             '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
@@ -120,7 +120,7 @@ class JudgmentService {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
                             '**⚡ System Many:**\n' +
-                            '• 💯 Start: **300 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
+                            '• 💯 Start: **100 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
                             '• 🎯 Dynamiczny koszt klątw: **5-15 many**\n' +
                             '  ╰ Sukces: koszt -1 (min 5) | Fail: koszt +5 (max 15)\n' +
                             '  ╰ Ten sam cel: regen +1 min (max 15) | Inny cel: regen -1 min (min 5)\n\n' +
@@ -128,7 +128,7 @@ class JudgmentService {
                             '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
                             '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
                             '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                            '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 50 many po zakończeniu\n' +
+                            '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 25 many po zakończeniu\n' +
                             '  ╰ Reset % odbicia do 0% po odbiciu\n' +
                             '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                             '**VS Gabriel (curse):**\n' +
@@ -357,7 +357,7 @@ class JudgmentService {
             const getAbilitiesDescription = (roleName) => {
                 if (roleName === 'Gabriel') {
                     return '**⚡ System Many:**\n' +
-                        '• 💯 Start: **300 many**, regeneracja **10 pkt/h**\n' +
+                        '• 💯 Start: **150 many**, regeneracja **10 pkt/h**\n' +
                         '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
                         '**Moce:**\n' +
                         '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
@@ -376,7 +376,7 @@ class JudgmentService {
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
                     return '**⚡ System Many:**\n' +
-                        '• 💯 Start: **300 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
+                        '• 💯 Start: **100 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
                         '• 🎯 Dynamiczny koszt klątw: **5-15 many**\n' +
                         '  ╰ Sukces: koszt -1 (min 5) | Fail: koszt +5 (max 15)\n' +
                         '  ╰ Ten sam cel: regen +1 min (max 15) | Inny cel: regen -1 min (min 5)\n\n' +
@@ -384,7 +384,7 @@ class JudgmentService {
                         '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
                         '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
                         '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                        '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 50 many po zakończeniu\n' +
+                        '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 25 many po zakończeniu\n' +
                         '  ╰ Reset % odbicia do 0% po odbiciu\n' +
                         '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
                         '**VS Gabriel (curse):**\n' +
