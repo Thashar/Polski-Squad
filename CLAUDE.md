@@ -931,7 +931,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - `Konklawe/handlers/interactionHandlers.js:2469,2490-2503,1457-1466` (applyNicknameCurse, logika "Oszołomiony")
 
 **Konklawe Bot - Balans Systemu Many:**
-- **Gabriel: max 150 many** (było 300) - Start z pełną maną, regeneracja 10 pkt/h
+- **Gabriel: max 150 many** (było 300) - Start z pełną maną, regeneracja 1 pkt/5min (było 10 pkt/h)
 - **Lucyfer: max 100 many** (było 300) - Start z pełną maną, dynamiczna regeneracja 5-15 min/pkt
 - **Bonus po blokadzie odbicia: 25 many** (było 50) dla Lucyfera
 - Dodano system śledzenia ról użytkowników (`userRoles` Map)
