@@ -1453,10 +1453,19 @@ class InteractionHandler {
             try {
                 // Konwertuj curseDuration z ms na minuty
                 const durationInMinutes = curseDuration / (60 * 1000);
-                await this.applyNicknameCurse(actualTargetMember, interaction, durationInMinutes);
-                logger.info(`✅ Pomyślnie zmieniono nick na "Przeklęty" dla ${actualTargetMember.user.tag}`);
+
+                // SPECJALNY PRZYPADEK: Lucyfer rzucający na admina (odbicie) → "Oszołomiony"
+                let customPrefix = null;
+                if (isReflected && roleType === 'lucyfer' && hasAdminPermissions) {
+                    customPrefix = 'Oszołomiony';
+                    logger.info(`💫 Lucyfer odbity przez admina - użyję prefixu "Oszołomiony"`);
+                }
+
+                await this.applyNicknameCurse(actualTargetMember, interaction, durationInMinutes, customPrefix);
+                const expectedPrefix = customPrefix || (actualTargetMember.roles.cache.has(this.config.roles.lucyfer) ? 'Osłabiony' : 'Przeklęty');
+                logger.info(`✅ Pomyślnie zmieniono nick na "${expectedPrefix}" dla ${actualTargetMember.user.tag}`);
             } catch (error) {
-                logger.error(`❌ BŁĄD zmiany nicku na "Przeklęty" dla ${actualTargetMember.user.tag}: ${error.message}`);
+                logger.error(`❌ BŁĄD zmiany nicku dla ${actualTargetMember.user.tag}: ${error.message}`);
                 logger.error(`Stack trace:`, error.stack);
                 nicknameError = error.message;
             }
@@ -2466,13 +2475,13 @@ class InteractionHandler {
     /**
      * Aplikuje klątwę na nick przy użyciu centralnego systemu zarządzania nickami
      */
-    async applyNicknameCurse(targetMember, interaction, durationMinutes) {
+    async applyNicknameCurse(targetMember, interaction, durationMinutes, customPrefix = null) {
         const userId = targetMember.user.id; // POPRAWKA: używaj user.id jak w innych botach
         const durationMs = durationMinutes * 60 * 1000;
 
         try {
             logger.info(`🎯 Rozpoczynam aplikację klątwy na nick dla ${targetMember.user.tag} (${userId})`);
-            
+
             // Zapisz oryginalny nick w centralnym systemie
             await this.nicknameManager.saveOriginalNickname(
                 userId,
@@ -2482,15 +2491,24 @@ class InteractionHandler {
             );
             logger.info(`💾 Zapisano oryginalny nick w systemie`);
 
-            // Sprawdź czy to Lucyfer (zawsze "Osłabiony" dla Lucyfera)
+            // Sprawdź czy to Lucyfer
             const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
 
-            let cursePrefix = this.config.virtuttiPapajlari.forcedNickname; // Domyślnie "Przeklęty"
+            let cursePrefix;
 
-            // Jeśli to Lucyfer, ZAWSZE użyj "Osłabiony"
-            if (hasLucyferRole) {
+            // Jeśli przekazano customPrefix, użyj go (np. "Oszołomiony" dla Lucyfera odbijającego od admina)
+            if (customPrefix) {
+                cursePrefix = customPrefix;
+                logger.info(`🎭 Użyto niestandardowego prefixu: "${customPrefix}"`);
+            }
+            // Jeśli to Lucyfer i brak customPrefix, użyj "Osłabiony"
+            else if (hasLucyferRole) {
                 cursePrefix = 'Osłabiony';
                 logger.info(`🔥 Wykryto Lucyfera - użyję prefixu "Osłabiony"`);
+            }
+            // Dla innych użytkowników użyj domyślnego "Przeklęty"
+            else {
+                cursePrefix = this.config.virtuttiPapajlari.forcedNickname; // Domyślnie "Przeklęty"
             }
 
             // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)

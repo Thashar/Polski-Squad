@@ -159,7 +159,14 @@ class NicknameManagerService {
      * Pobiera aktualny nick serwerowy użytkownika
      */
     getCurrentServerNickname(member) {
-        return member.nickname; // null jeśli używa nick główny
+        const nickname = member.nickname;
+
+        // Jeśli nick jest null (używa nick główny), zwróć null
+        if (!nickname) return null;
+
+        // KRYTYCZNE: Wyczyść prefixy efektów przed zapisaniem jako oryginalny
+        // To zapobiega problemowi gdzie drugi efekt zapisuje zmieniony nick jako bazowy
+        return this.getCleanNickname(nickname);
     }
     
     /**
@@ -172,6 +179,7 @@ class NicknameManagerService {
         const cursePattern = /^Przeklęty /;
         const weakenedPattern = /^Osłabiony /;
         const sleepyPattern = /^Uśpiony /;
+        const stunnedPattern = /^Oszołomiony /;
         const flagNicknames = [
             "Slava Ukrainu!",
             "POLSKA GUROM!",
@@ -181,7 +189,7 @@ class NicknameManagerService {
             "Cyka blyat!"
         ];
 
-        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || flagNicknames.includes(nickname);
+        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || stunnedPattern.test(nickname) || flagNicknames.includes(nickname);
     }
 
     /**
@@ -196,7 +204,8 @@ class NicknameManagerService {
         let cleanNick = nickname
             .replace(/^Przeklęty /, '')
             .replace(/^Osłabiony /, '')
-            .replace(/^Uśpiony /, '');
+            .replace(/^Uśpiony /, '')
+            .replace(/^Oszołomiony /, '');
 
         return cleanNick;
     }

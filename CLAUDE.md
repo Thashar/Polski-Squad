@@ -915,6 +915,21 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot & Nickname Manager - Nicki Lucyfera i Naprawa Nakładania Efektów:**
+- **Dodano czwarty nick dla Lucyfera: "Oszołomiony"** - gdy rzuca klątwę na administratora
+- **Możliwe nicki Lucyfera:**
+  - "Osłabiony [nick]" - normalna klątwa (5/15/30 min)
+  - "Uśpiony [nick]" - progresywne odbicie (blokada 1h)
+  - "Oszołomiony [nick]" - odbicie od admina
+- **Naprawiono problem nakładania efektów** - gdy użytkownik dostaje drugi efekt podczas aktywnego pierwszego:
+  - `getCurrentServerNickname()` teraz czyści prefixy PRZED zapisaniem jako oryginalny nick
+  - Zapobiega problemowi gdzie po zakończeniu drugiego efektu nick wracał do pierwszego zmienionego zamiast do oryginału
+- **Rozszerzono `applyNicknameCurse()`** - dodano parametr `customPrefix` do wyboru niestandardowego prefixu
+- Dodano "Oszołomiony" do `getCleanNickname()` i `isEffectNickname()` w NicknameManager
+- Lokalizacja zmian:
+  - `utils/nicknameManagerService.js:161-170,182,192,208` (getCurrentServerNickname, isEffectNickname, getCleanNickname)
+  - `Konklawe/handlers/interactionHandlers.js:2469,2490-2503,1457-1466` (applyNicknameCurse, logika "Oszołomiony")
+
 **Konklawe Bot - Balans Systemu Many:**
 - **Gabriel: max 150 many** (było 300) - Start z pełną maną, regeneracja 10 pkt/h
 - **Lucyfer: max 100 many** (było 300) - Start z pełną maną, dynamiczna regeneracja 5-15 min/pkt
