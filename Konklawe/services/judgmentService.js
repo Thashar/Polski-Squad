@@ -97,7 +97,7 @@ class JudgmentService {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
                             '**⚡ System Many:**\n' +
-                            '• 💯 Start: **150 many**, regeneracja **10 pkt/h**\n' +
+                            '• 💯 Start: **150 many**, regeneracja **1 pkt/5min**\n' +
                             '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
                             '**Moce:**\n' +
                             '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
@@ -357,7 +357,7 @@ class JudgmentService {
             const getAbilitiesDescription = (roleName) => {
                 if (roleName === 'Gabriel') {
                     return '**⚡ System Many:**\n' +
-                        '• 💯 Start: **150 many**, regeneracja **10 pkt/h**\n' +
+                        '• 💯 Start: **150 many**, regeneracja **1 pkt/5min**\n' +
                         '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
                         '**Moce:**\n' +
                         '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +

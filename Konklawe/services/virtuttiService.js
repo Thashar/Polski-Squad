@@ -102,7 +102,7 @@ class VirtuttiService {
     }
 
     /**
-     * Regeneruje energię użytkownika (10 punktów/godzinę dla Gabriel, 1pkt/5-15min dla Lucyfer)
+     * Regeneruje energię użytkownika (1 pkt/5min dla Gabriel, 1pkt/5-15min dla Lucyfer)
      * @param {string} userId - ID użytkownika
      */
     regenerateEnergy(userId) {
@@ -111,12 +111,13 @@ class VirtuttiService {
 
         const maxEnergy = this.getMaxEnergy(userId);
         const now = Date.now();
-        const hoursSinceLastRegen = (now - userData.lastRegeneration) / (60 * 60 * 1000);
-        const energyToRegenerate = Math.floor(hoursSinceLastRegen * 10); // 10 punktów/h (tylko dla Gabriel)
+        const minutesSinceLastRegen = (now - userData.lastRegeneration) / (60 * 1000);
+        const energyToRegenerate = Math.floor(minutesSinceLastRegen / 5); // 1 punkt co 5 minut (Gabriel)
 
         if (energyToRegenerate > 0 && userData.energy < maxEnergy) {
             userData.energy = Math.min(maxEnergy, userData.energy + energyToRegenerate);
-            userData.lastRegeneration = now;
+            // Aktualizuj lastRegeneration z uwzględnieniem reszty czasu
+            userData.lastRegeneration = now - ((minutesSinceLastRegen % 5) * 60 * 1000);
             logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/${maxEnergy}`);
             this.saveData();
         }

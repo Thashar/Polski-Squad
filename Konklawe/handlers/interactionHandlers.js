@@ -886,7 +886,7 @@ class InteractionHandler {
             const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
             await interaction.followUp({
                 content: `⚡ **Status many:** ${updatedEnergyData.energy}/${updatedEnergyData.maxEnergy}\n` +
-                    `🔋 Regeneracja: **10 pkt/h**`,
+                    `🔋 Regeneracja: **1 pkt/5min**`,
                 flags: MessageFlags.Ephemeral
             });
 
@@ -1522,7 +1522,7 @@ class InteractionHandler {
                     content: `⚡ **Status many:** ${updatedEnergyData.energy}/${updatedEnergyData.maxEnergy}\n` +
                         `📊 Rzucone dzisiaj: **${updatedEnergyData.dailyCurses}** klątw\n` +
                         `💰 ${nextCostInfo}\n` +
-                        `🔋 Regeneracja: **10 pkt/h**`,
+                        `🔋 Regeneracja: **1 pkt/5min**`,
                     flags: MessageFlags.Ephemeral
                 });
             } else {
