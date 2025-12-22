@@ -1219,7 +1219,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Blessing nie działa na Lucyfera
   - Revenge Lucyfera → "Upadły" (blessing block 1h)
 - **Gabriel (💀 POZIOMY KLĄTW):**
-  - **Zwykła (100%):** 5 min, 1 efekt losowy z 7 typów
+  - **Zwykła (100%):** 5 min, 1 efekt losowy z 10 typów
   - **Mega silna (33% na Lucyfera):** Blessing → 1h, zmiana efektu co 5 min
   - **Ultra potężna (1% na Lucyfera):** Curse → 5 min + debuff 24h (10% co 5 min nowy efekt)
 - **Lucifer (🔥 MOCE):**
@@ -1231,10 +1231,20 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - 100% odbicie klątwy od Gabriela
   - ⛔ Brak blessingu
 - **Lucifer (💀 POZIOMY KLĄTW):**
-  - **Zwykła (96%):** 5 min, 1 efekt losowy z 7 typów
-  - **Silna (3%):** 15 min, 1 efekt losowy z 7 typów
-  - **Potężna (1%):** 30 min, 1 efekt losowy z 7 typów
-- **7 typów efektów klątw:** ⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping spam | 😀 Emoji spam (30%) | 📝 CAPS (100%) | 💤 Timeout (30%) | 🎭 Special role (5min)
+  - **Zwykła (96%):** 5 min, 1 efekt losowy z 10 typów
+  - **Silna (3%):** 15 min, 1 efekt losowy z 10 typów
+  - **Potężna (1%):** 30 min, 1 efekt losowy z 10 typów
+- **10 typów efektów klątw:**
+  1. ⏰ Slow (30s cd między wiadomościami)
+  2. 🗑️ Delete (30% szansa usunięcia)
+  3. 📢 Ping spam (bot pinguje losowo)
+  4. 😀 Emoji spam (30% szansa reakcji emoji)
+  5. 📝 CAPS (bot przepisuje CAPSEM)
+  6. 💤 Timeout (30% czasu na timeoucie)
+  7. 🎭 Special role (specjalna rola na czas klątwy)
+  8. 🔤 Scramble (30% mieszanie liter w słowach)
+  9. 🤫 Smart (30% usuwa wiadomość + "nie mądruj się")
+  10. 💬 Blah (30% odpowiedź losowym GIFem "blah blah")
 - **FIX:** Skrócono opisy aby zmieścić się w limicie Discord (Gabriel: ~650 znaków, Lucifer: ~650 znaków)
   - Usunięto zbędne słowa ("Rzuca klątwę", "Sprawdź cnotę użytkownika")
   - Skrócono nazwy (SYSTEM MANY → MANA, "efekt losowy z 7 typów" → "1 z 7 efektów")

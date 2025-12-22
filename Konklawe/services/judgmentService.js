@@ -107,10 +107,10 @@ class JudgmentService {
                             '• Blessing nie działa na Lucyfera\n' +
                             '• Revenge Lucyfera → "Upadły" (blessing block 1h)\n\n' +
                             '**💀 POZIOMY:**\n' +
-                            '• Zwykła (100%): 5min, 1 z 7 efektów\n' +
+                            '• Zwykła (100%): 5min, 1 z 10 efektów\n' +
                             '• Mega (33% na Lucyfera): Blessing → 1h, zmiana co 5min\n' +
                             '• Ultra (1% na Lucyfera): Curse → 5min + debuff 24h (10% co 5min)\n\n' +
-                            '**Efekty:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
+                            '**10 efektów:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola | 🔤 Scramble | 🤫 Smart | 💬 Blah',
                         inline: false
                     },
                     {
@@ -127,10 +127,10 @@ class JudgmentService {
                             '• 100% odbicie od Gabriela\n' +
                             '• ⛔ Brak `/blessing`\n\n' +
                             '**💀 POZIOMY:**\n' +
-                            '• Zwykła (96%): 5min, 1 z 7 efektów\n' +
-                            '• Silna (3%): 15min, 1 z 7 efektów\n' +
-                            '• Potężna (1%): 30min, 1 z 7 efektów\n\n' +
-                            '**Efekty:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
+                            '• Zwykła (96%): 5min, 1 z 10 efektów\n' +
+                            '• Silna (3%): 15min, 1 z 10 efektów\n' +
+                            '• Potężna (1%): 30min, 1 z 10 efektów\n\n' +
+                            '**10 efektów:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola | 🔤 Scramble | 🤫 Smart | 💬 Blah',
                         inline: false
                     }
                 )
