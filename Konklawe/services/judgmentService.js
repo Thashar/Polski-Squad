@@ -96,51 +96,29 @@ class JudgmentService {
                     {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
-                            '**⚡ System Many:**\n' +
-                            '• 💯 Start: **150 many**, regeneracja **1 pkt/5min**\n' +
-                            '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
+                            '**⚡ System Many:** 150 many, regen 1/5min\n' +
                             '**Moce:**\n' +
-                            '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
-                            '  ╰ 50% szans na **usunięcie klątwy z celu**\n' +
-                            '  ╰ Cel dostaje **🛡️ ochronę (1h, 50% szansa zablokowania klątwy)**\n' +
-                            '  ╰ 1% szans: **💥 MEGA SILNA KLĄTWA** (1h, losowa zmiana co 5 min)\n' +
-                            '• 💀 **Klątwy** `/curse` (85% sukces, 15% fail zwrot 50% many)\n' +
-                            '  ╰ **100% - Zwykła klątwa (5 min)**\n' +
-                            '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
-                            '• ⚔️ **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
-                            '  ╰ Cel dostaje efekt: **Lucyfer rzucając /curse = odbicie 3x**\n\n' +
-                            '**VS Lucyfer (curse):**\n' +
-                            '• 33% - Wzmocnienie Lucyfera (reset % odbicia)\n' +
-                            '• 33% - Odporność (nic się nie dzieje)\n' +
-                            '• 33% - Normalna klątwa (5 min)\n' +
-                            '• 1% - **⚡💥 ULTRA POTĘŻNA KLĄTWA** (5 min + 24h debuff, 10% szans/msg)\n\n' +
-                            '**VS Lucyfer (blessing):**\n' +
-                            '• Blessing nie działa na Lucyfera (odporność)\n\n' +
+                            '• 🙏 `/blessing` (5 many): 50% usunięcie klątwy + 🛡️ ochrona celu (1h, 50%)\n' +
+                            '• 💀 `/curse` (85% sukces): Zwykła klątwa (5 min)\n' +
+                            '• 🔍 `/virtue-check`\n' +
+                            '• ⚔️ `/revenge` (50 many, 24h cd): Cel → Lucyfer /curse = odbicie 3x\n\n' +
+                            '**VS Lucyfer:**\n' +
+                            '• curse: 33% wzmocnienie | 33% odporność | 33% klątwa | 1% ultra klątwa\n' +
+                            '• blessing: nie działa (odporność)\n\n' +
                             '**Ścieżka łaski i światła.**',
                         inline: false
                     },
                     {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
-                            '**⚡ System Many:**\n' +
-                            '• 💯 Start: **100 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
-                            '• 🎯 Dynamiczny koszt klątw: **5-15 many**\n' +
-                            '  ╰ Sukces: koszt -1 (min 5) | Fail: koszt +5 (max 15)\n' +
-                            '  ╰ Ten sam cel: regen +1 min (max 15) | Inny cel: regen -1 min (min 5)\n\n' +
+                            '**⚡ System Many:** 100 many, regen dynamiczny 5-15min/pkt\n' +
                             '**Moce:**\n' +
-                            '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
-                            '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
-                            '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                            '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 25 many po zakończeniu\n' +
-                            '  ╰ Reset % odbicia do 0% po odbiciu\n' +
-                            '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
-                            '• 💀 **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
-                            '  ╰ Cel dostaje efekt: **Gabriel używając /blessing = "Upadły" 1h + blokada**\n\n' +
-                            '**VS Gabriel (curse):**\n' +
-                            '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
-                            '**Ograniczenia:**\n' +
-                            '• ⛔ **BRAK błogosławieństw** (`/blessing` niedostępne)\n\n' +
-                            '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam, Forced caps, Random timeout, Special role, Scrambled words, Don\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
+                            '• 💀 `/curse` (5min cd): 96% zwykła | 3% silna | 1% potężna\n' +
+                            '• 📈 Progresywne odbicie: +1% za klątwę (przy odbiciu: reset + blokada 1h)\n' +
+                            '• 🔍 `/virtue-check`\n' +
+                            '• 💀 `/revenge` (50 many, 24h cd): Cel → Gabriel /blessing = "Upadły" 1h\n\n' +
+                            '**VS Gabriel:** 100% odbicie klątwy\n' +
+                            '**Ograniczenia:** ⛔ Brak `/blessing`\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
                         inline: false
                     }
@@ -361,47 +339,25 @@ class JudgmentService {
             // Funkcja pomocnicza do generowania opisu umiejętności
             const getAbilitiesDescription = (roleName) => {
                 if (roleName === 'Gabriel') {
-                    return '**⚡ System Many:**\n' +
-                        '• 💯 Start: **150 many**, regeneracja **1 pkt/5min**\n' +
-                        '• 📈 Progresywny koszt klątw: **10 + (klątwy × 2)** many (resetuje się dziennie)\n\n' +
+                    return '**⚡ System Many:** 150 many, regen 1/5min\n' +
                         '**Moce:**\n' +
-                        '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
-                        '  ╰ 50% szans na **usunięcie klątwy z celu**\n' +
-                        '  ╰ Cel dostaje **🛡️ ochronę (1h, 50% szansa zablokowania klątwy)**\n' +
-                        '  ╰ 1% szans: **💥 MEGA SILNA KLĄTWA** (1h, losowa zmiana co 5 min)\n' +
-                        '• 💀 **Klątwy** `/curse` (85% sukces, 15% fail zwrot 50% many)\n' +
-                        '  ╰ **100% - Zwykła klątwa (5 min)**\n' +
-                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
-                        '• ⚔️ **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
-                        '  ╰ Cel dostaje efekt: **Lucyfer rzucając /curse = odbicie 3x**\n\n' +
-                        '**VS Lucyfer (curse):**\n' +
-                        '• 33% - Wzmocnienie Lucyfera (reset % odbicia)\n' +
-                        '• 33% - Odporność (nic się nie dzieje)\n' +
-                        '• 33% - Normalna klątwa (5 min)\n' +
-                        '• 1% - **⚡💥 ULTRA POTĘŻNA KLĄTWA** (5 min + 24h debuff, 10% szans/msg)\n\n' +
-                        '**VS Lucyfer (blessing):**\n' +
-                        '• Blessing nie działa na Lucyfera (odporność)\n\n' +
+                        '• 🙏 `/blessing` (5 many): 50% usunięcie klątwy + 🛡️ ochrona celu (1h, 50%)\n' +
+                        '• 💀 `/curse` (85% sukces): Zwykła klątwa (5 min)\n' +
+                        '• 🔍 `/virtue-check`\n' +
+                        '• ⚔️ `/revenge` (50 many, 24h cd): Cel → Lucyfer /curse = odbicie 3x\n\n' +
+                        '**VS Lucyfer:**\n' +
+                        '• curse: 33% wzmocnienie | 33% odporność | 33% klątwa | 1% ultra klątwa\n' +
+                        '• blessing: nie działa (odporność)\n\n' +
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
-                    return '**⚡ System Many:**\n' +
-                        '• 💯 Start: **100 many**, regeneracja **dynamiczna 5-15 min/pkt**\n' +
-                        '• 🎯 Dynamiczny koszt klątw: **5-15 many**\n' +
-                        '  ╰ Sukces: koszt -1 (min 5) | Fail: koszt +5 (max 15)\n' +
-                        '  ╰ Ten sam cel: regen +1 min (max 15) | Inny cel: regen -1 min (min 5)\n\n' +
+                    return '**⚡ System Many:** 100 many, regen dynamiczny 5-15min/pkt\n' +
                         '**Moce:**\n' +
-                        '• 💀 **Nieograniczone klątwy** `/curse` (5 min cooldown per cel)\n' +
-                        '  ╰ 96% - Zwykła (5 min) | 3% - Silna (15 min) | 1% - Potężna (30 min)\n' +
-                        '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
-                        '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 25 many po zakończeniu\n' +
-                        '  ╰ Reset % odbicia do 0% po odbiciu\n' +
-                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
-                        '• 💀 **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
-                        '  ╰ Cel dostaje efekt: **Gabriel używając /blessing = "Upadły" 1h + blokada**\n\n' +
-                        '**VS Gabriel (curse):**\n' +
-                        '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
-                        '**Ograniczenia:**\n' +
-                        '• ⛔ **BRAK błogosławieństw** (`/blessing` niedostępne)\n\n' +
-                        '**Efekty klątw:** Slow mode, Auto-delete, Random ping, Emoji spam, Forced caps, Random timeout, Special role, Scrambled words, Don\'t be smart, Blah blah + **ZAWSZE nick "Przeklęty"**\n\n' +
+                        '• 💀 `/curse` (5min cd): 96% zwykła | 3% silna | 1% potężna\n' +
+                        '• 📈 Progresywne odbicie: +1% za klątwę (przy odbiciu: reset + blokada 1h)\n' +
+                        '• 🔍 `/virtue-check`\n' +
+                        '• 💀 `/revenge` (50 many, 24h cd): Cel → Gabriel /blessing = "Upadły" 1h\n\n' +
+                        '**VS Gabriel:** 100% odbicie klątwy\n' +
+                        '**Ograniczenia:** ⛔ Brak `/blessing`\n\n' +
                         '**Ścieżka potęgi i ciemności.**';
                 }
             };
