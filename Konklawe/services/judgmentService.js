@@ -96,29 +96,34 @@ class JudgmentService {
                     {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
-                            '**⚡ System Many:** 150 many, regen 1/5min\n' +
+                            '**⚡ System Many:** 150 many, regeneracja 1 pkt/5min\n\n' +
                             '**Moce:**\n' +
-                            '• 🙏 `/blessing` (5 many): 50% usunięcie klątwy + 🛡️ ochrona celu (1h, 50%)\n' +
-                            '• 💀 `/curse` (85% sukces): Zwykła klątwa (5 min)\n' +
-                            '• 🔍 `/virtue-check`\n' +
-                            '• ⚔️ `/revenge` (50 many, 24h cd): Cel → Lucyfer /curse = odbicie 3x\n\n' +
-                            '**VS Lucyfer:**\n' +
-                            '• curse: 33% wzmocnienie | 33% odporność | 33% klątwa | 1% ultra klątwa\n' +
-                            '• blessing: nie działa (odporność)\n\n' +
+                            '• 🙏 `/blessing` (5 many): Błogosławi cel. 50% szansa usunięcia klątwy Lucyfera.\n' +
+                            '  🛡️ **Ochrona:** Cel zyskuje ochronę na 1h - 50% szansa automatycznego zablokowania następnej klątwy Lucyfera.\n\n' +
+                            '• 💀 `/curse` (85% sukces): Rzuca zwykłą klątwę (5 min).\n\n' +
+                            '• ⚔️ `/revenge` (50 many, 24h cd/cel): Rzuć zemstę NA NEUTRALNEGO użytkownika.\n' +
+                            '  Gdy Lucyfer go przeklnie → klątwa odbija się do Lucyfera (3x).\n\n' +
+                            '• 🔍 `/virtue-check`: Sprawdź cnotę użytkownika.\n\n' +
+                            '**VS Lucyfer (bezpośrednia interakcja):**\n' +
+                            '• Twoja klątwa na Lucyfera: 33% wzmocnienie | 33% odporność | 33% normalna | 1% ultra\n' +
+                            '• Twój blessing na Lucyfera: nie działa (jest odporny)\n\n' +
                             '**Ścieżka łaski i światła.**',
                         inline: false
                     },
                     {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
-                            '**⚡ System Many:** 100 many, regen dynamiczny 5-15min/pkt\n' +
+                            '**⚡ System Many:** 100 many, regeneracja dynamiczna 5-15min/pkt\n\n' +
                             '**Moce:**\n' +
-                            '• 💀 `/curse` (5min cd): 96% zwykła | 3% silna | 1% potężna\n' +
-                            '• 📈 Progresywne odbicie: +1% za klątwę (przy odbiciu: reset + blokada 1h)\n' +
-                            '• 🔍 `/virtue-check`\n' +
-                            '• 💀 `/revenge` (50 many, 24h cd): Cel → Gabriel /blessing = "Upadły" 1h\n\n' +
-                            '**VS Gabriel:** 100% odbicie klątwy\n' +
-                            '**Ograniczenia:** ⛔ Brak `/blessing`\n\n' +
+                            '• 💀 `/curse` (5min cd): Rzuca klątwę. 96% zwykła | 3% silna | 1% potężna.\n\n' +
+                            '• 📈 **Progresywne odbicie:** Za każdą rzuconą klątwę +1% szansy że Gabriel ją odbije.\n' +
+                            '  Przy odbiciu: procent resetuje się + dostajesz blokadę rzucania klątw na 1h + nick "Uśpiony".\n\n' +
+                            '• ⚔️ `/revenge` (50 many, 24h cd/cel): Rzuć zemstę NA NEUTRALNEGO użytkownika.\n' +
+                            '  Gdy Gabriel go błogosławi → Gabriel staje się **"Upadły"** (blokada `/blessing` na 1h).\n\n' +
+                            '• 🔍 `/virtue-check`: Sprawdź cnotę użytkownika.\n\n' +
+                            '**VS Gabriel (bezpośrednia interakcja):**\n' +
+                            '• 100% odbicie klątwy z powrotem do Ciebie\n\n' +
+                            '**Ograniczenia:** ⛔ Nie możesz używać `/blessing`\n\n' +
                             '**Ścieżka potęgi i ciemności.**',
                         inline: false
                     }
