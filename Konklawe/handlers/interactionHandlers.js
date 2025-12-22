@@ -278,7 +278,7 @@ class InteractionHandler {
             const { commandName } = interaction;
             
             // Komendy specjalne dla Virtutti Papajlari - działają globalnie
-            if (commandName === 'blessing' || commandName === 'virtue-check' || commandName === 'curse') {
+            if (commandName === 'blessing' || commandName === 'virtue-check' || commandName === 'curse' || commandName === 'revenge') {
                 await this.handleVirtuttiPapajlariCommand(interaction);
                 return;
             }
