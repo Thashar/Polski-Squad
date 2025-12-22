@@ -1207,21 +1207,30 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Oszczędność tokenów - Claude może czytać tylko potrzebne sekcje zamiast całego pliku
 
 **Konklawe Bot - Rozwinięcie Sądu Bożego dla Nowych Graczy:**
-- **Rozbudowano opisy obu frakcji** - szczegółowe wyjaśnienia mechanik aby nowi gracze od razu zrozumieli system
-- **Gabriel:**
-  - Wyjaśniono co to "ochrona z blessingu" - cel zyskuje shield na 1h z 50% szansą zablokowania następnej klątwy Lucyfera
-  - Dodano szczegółowy opis revenge - rzucasz zemstę NA NEUTRALNEGO użytkownika, gdy Lucyfer go przeklnie klątwa odbija się 3x
-  - Dodano kontekst "bezpośrednia interakcja" dla walki Gabriel vs Lucyfer
-  - **Koszty many:** `/blessing` (5), `/curse` (10+(klątwy×2)), `/revenge` (50), `/virtue-check` (0)
-- **Lucifer:**
-  - Wyjaśniono progresywne odbicie - za każdą klątwę +1% szansy odbicia, przy odbiciu reset + blokada 1h + nick "Uśpiony"
-  - Dodano szczegółowy opis revenge - rzucasz zemstę NA NEUTRALNEGO użytkownika, gdy Gabriel go błogosławi Gabriel staje się "Upadły"
-  - Wyjaśniono status "Upadły" - blokada castingu `/blessing` na 1h
-  - **Koszty many:** `/curse` (5-15 dynamiczny), `/revenge` (50), `/virtue-check` (0)
-- Usunięto puste linie między komendami dla lepszej czytelności
-- Opisy nadal mieszczą się w limicie 1024 znaków Discord (Gabriel ~720, Lucifer ~720)
-- Embed jest teraz znacznie bardziej przystępny dla osób które widzą Sąd Boży po raz pierwszy
-- Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-110,115-128`
+- **Rozbudowano opisy obu frakcji** - szczegółowe wyjaśnienia mechanik z wyraźnymi sekcjami
+- **Struktura z nagłówkami:** ⚡ SYSTEM MANY | ✨/🔥 MOCE | ⚠️ SŁABOŚCI | 💀 KLĄTWY
+- **Gabriel (✨ MOCE):**
+  - 🙏 `/blessing` (5 many): 50% usunięcie klątwy + ochrona celu (1h, 50% block następnej)
+  - 💀 `/curse` (10+(klątwy×2) many): Zwykła klątwa (5min), 85% sukces, koszt rośnie
+  - ⚔️ `/revenge` (50 many, 24h cd): Pułapka na neutralnych - gdy Lucyfer przeklnie → odbicie 3x
+  - 🔍 `/virtue-check` (0 many): Sprawdź cnotę
+- **Gabriel (⚠️ SŁABOŚCI):**
+  - 15% fail rate przy curse
+  - Blessing nie działa na Lucyfera
+  - Revenge Lucyfera → "Upadły" (blessing block 1h)
+  - Curse na Lucyfera: 33% wzmocnienie | 33% odporność | 1% ultra
+- **Lucifer (🔥 MOCE):**
+  - 💀 `/curse` (5-15 many, 5min cd): Koszt dynamiczny, 96% zwykła (5min) | 3% silna (15min) | 1% potężna (30min)
+  - ⚔️ `/revenge` (50 many, 24h cd): Pułapka na neutralnych - gdy Gabriel błogosławi → "Upadły" (blessing block 1h)
+  - 🔍 `/virtue-check` (0 many): Sprawdź cnotę
+- **Lucifer (⚠️ SŁABOŚCI):**
+  - 📈 Progresywne odbicie: +1% za klątwę, przy odbiciu reset + blokada 1h + "Uśpiony"
+  - 100% odbicie klątwy od Gabriela
+  - ⛔ Brak blessingu
+- **💀 KLĄTWY (losowo 1 z 7):** ⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping | 😀 Emoji (30%) | 📝 CAPS | 💤 Timeout (30%) | 🎭 Rola
+- Rozpisano każdą mechanikę szczegółowo z symbolami → dla sub-punktów
+- Opisy mieszczą się w limicie 1024 znaków Discord (Gabriel ~920, Lucifer ~910)
+- Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-114,117-133`
 
 ### Listopad 2025
 
