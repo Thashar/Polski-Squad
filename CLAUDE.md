@@ -915,6 +915,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Wydarzynier Bot - Naprawa Obsługi Błędu Unknown Message:**
+- **FIX:** Dodano obsługę błędu `DiscordAPIError[10008]: Unknown Message` w komendzie `/party-close`
+- Problem: Gdy interakcja wygasała (użytkownik czekał za długo), bot wyrzucał błędy mimo że lobby zostało pomyślnie zamknięte
+- Rozwiązanie: Trójpoziomowa obsługa błędu Unknown Message (kod 10008)
+  - Try-catch wokół `editReply` po zamknięciu lobby
+  - Sprawdzanie kodu błędu i informacyjne logowanie zamiast błędów
+  - Komunikat: `ℹ️ Lobby zamknięte pomyślnie (interakcja wygasła)`
+- Teraz lobby jest zawsze prawidłowo zamykane, a użytkownik nie widzi strasznych błędów w logach
+- Lokalizacja zmian: `Wydarzynier/handlers/interactionHandlers.js:1003-1039`
+
 **Konklawe Bot - System Revenge i Ochrony Błogosławieństw:**
 - **Dodano komendę `/revenge`** (Gabriel/Lucyfer, koszt 50 many, cooldown 24h per cel)
   - Gabriel: Cel dostaje efekt - Lucyfer rzucając `/curse` = odbicie 3x
