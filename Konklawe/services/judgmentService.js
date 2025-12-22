@@ -107,10 +107,12 @@ class JudgmentService {
                             '**⚠️ SŁABOŚCI:**\n' +
                             '• 15% szansa niepowodzenia przy `/curse`\n' +
                             '• Blessing nie działa na Lucyfera (odporność)\n' +
-                            '• Revenge Lucyfera → status "Upadły" (blokada blessing 1h)\n' +
-                            '• Curse na Lucyfera: 33% wzmocnienie | 33% odporność | 1% ultra klątwa\n\n' +
-                            '**💀 KLĄTWY (losowo 1 z 7):**\n' +
-                            '⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping | 😀 Emoji (30%) | 📝 CAPS | 💤 Timeout (30%) | 🎭 Rola',
+                            '• Revenge Lucyfera → status "Upadły" (blokada blessing 1h)\n\n' +
+                            '**💀 POZIOMY KLĄTW:**\n' +
+                            '• **Zwykła (100%):** 5 min, 1 efekt losowy z 7 typów\n' +
+                            '• **Mega silna (33% na Lucyfera):** Blessing → 1h, zmiana efektu co 5 min\n' +
+                            '• **Ultra potężna (1% na Lucyfera):** Curse → 5 min + debuff 24h (10% co 5 min nowy efekt)\n\n' +
+                            '**7 typów efektów:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
                         inline: false
                     },
                     {
@@ -128,8 +130,11 @@ class JudgmentService {
                             '  → Przy odbiciu: % resetuje się + dostajesz blokadę klątw (1h) + nick "Uśpiony".\n' +
                             '• 100% odbicie klątwy od Gabriela z powrotem do Ciebie\n' +
                             '• ⛔ Brak dostępu do `/blessing`\n\n' +
-                            '**💀 KLĄTWY (losowo 1 z 7):**\n' +
-                            '⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping | 😀 Emoji (30%) | 📝 CAPS | 💤 Timeout (30%) | 🎭 Rola',
+                            '**💀 POZIOMY KLĄTW:**\n' +
+                            '• **Zwykła (96%):** 5 min, 1 efekt losowy z 7 typów\n' +
+                            '• **Silna (3%):** 15 min, 1 efekt losowy z 7 typów\n' +
+                            '• **Potężna (1%):** 30 min, 1 efekt losowy z 7 typów\n\n' +
+                            '**7 typów efektów:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
                         inline: false
                     }
                 )

@@ -1208,7 +1208,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 **Konklawe Bot - Rozwinięcie Sądu Bożego dla Nowych Graczy:**
 - **Rozbudowano opisy obu frakcji** - szczegółowe wyjaśnienia mechanik z wyraźnymi sekcjami
-- **Struktura z nagłówkami:** ⚡ SYSTEM MANY | ✨/🔥 MOCE | ⚠️ SŁABOŚCI | 💀 KLĄTWY
+- **Struktura z nagłówkami:** ⚡ SYSTEM MANY | ✨/🔥 MOCE | ⚠️ SŁABOŚCI | 💀 POZIOMY KLĄTW
 - **Gabriel (✨ MOCE):**
   - 🙏 `/blessing` (5 many): 50% usunięcie klątwy + ochrona celu (1h, 50% block następnej)
   - 💀 `/curse` (10+(klątwy×2) many): Zwykła klątwa (5min), 85% sukces, koszt rośnie
@@ -1218,19 +1218,26 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - 15% fail rate przy curse
   - Blessing nie działa na Lucyfera
   - Revenge Lucyfera → "Upadły" (blessing block 1h)
-  - Curse na Lucyfera: 33% wzmocnienie | 33% odporność | 1% ultra
+- **Gabriel (💀 POZIOMY KLĄTW):**
+  - **Zwykła (100%):** 5 min, 1 efekt losowy z 7 typów
+  - **Mega silna (33% na Lucyfera):** Blessing → 1h, zmiana efektu co 5 min
+  - **Ultra potężna (1% na Lucyfera):** Curse → 5 min + debuff 24h (10% co 5 min nowy efekt)
 - **Lucifer (🔥 MOCE):**
-  - 💀 `/curse` (5-15 many, 5min cd): Koszt dynamiczny, 96% zwykła (5min) | 3% silna (15min) | 1% potężna (30min)
+  - 💀 `/curse` (5-15 many, 5min cd): Koszt dynamiczny
   - ⚔️ `/revenge` (50 many, 24h cd): Pułapka na neutralnych - gdy Gabriel błogosławi → "Upadły" (blessing block 1h)
   - 🔍 `/virtue-check` (0 many): Sprawdź cnotę
 - **Lucifer (⚠️ SŁABOŚCI):**
   - 📈 Progresywne odbicie: +1% za klątwę, przy odbiciu reset + blokada 1h + "Uśpiony"
   - 100% odbicie klątwy od Gabriela
   - ⛔ Brak blessingu
-- **💀 KLĄTWY (losowo 1 z 7):** ⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping | 😀 Emoji (30%) | 📝 CAPS | 💤 Timeout (30%) | 🎭 Rola
+- **Lucifer (💀 POZIOMY KLĄTW):**
+  - **Zwykła (96%):** 5 min, 1 efekt losowy z 7 typów
+  - **Silna (3%):** 15 min, 1 efekt losowy z 7 typów
+  - **Potężna (1%):** 30 min, 1 efekt losowy z 7 typów
+- **7 typów efektów klątw:** ⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping spam | 😀 Emoji spam (30%) | 📝 CAPS (100%) | 💤 Timeout (30%) | 🎭 Special role (5min)
 - Rozpisano każdą mechanikę szczegółowo z symbolami → dla sub-punktów
-- Opisy mieszczą się w limicie 1024 znaków Discord (Gabriel ~920, Lucifer ~910)
-- Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-114,117-133`
+- Opisy mieszczą się w limicie 1024 znaków Discord (Gabriel ~1000, Lucifer ~1010)
+- Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-116,119-138`
 
 ### Listopad 2025
 
