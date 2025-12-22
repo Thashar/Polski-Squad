@@ -464,6 +464,12 @@
           "description": "Rzuć klątwę na innego użytkownika (7 typów klątw, tylko Medal Virtutti, cooldown 10min)",
           "usage": "/curse użytkownik:@user",
           "requiredPermission": "achievement_role"
+        },
+        {
+          "name": "/revenge",
+          "description": "Zaplanuj zemstę na użytkowniku (tylko Gabriel/Lucyfer, koszt 50 many, cooldown 24h per cel)",
+          "usage": "/revenge użytkownik:@user",
+          "requiredPermission": "achievement_role"
         }
       ]
     },

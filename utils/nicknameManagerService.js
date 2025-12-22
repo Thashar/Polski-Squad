@@ -180,6 +180,7 @@ class NicknameManagerService {
         const weakenedPattern = /^Osłabiony /;
         const sleepyPattern = /^Uśpiony /;
         const stunnedPattern = /^Oszołomiony /;
+        const fallenPattern = /^Upadły /;
         const flagNicknames = [
             "Slava Ukrainu!",
             "POLSKA GUROM!",
@@ -189,7 +190,7 @@ class NicknameManagerService {
             "Cyka blyat!"
         ];
 
-        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || stunnedPattern.test(nickname) || flagNicknames.includes(nickname);
+        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || stunnedPattern.test(nickname) || fallenPattern.test(nickname) || flagNicknames.includes(nickname);
     }
 
     /**
@@ -205,7 +206,8 @@ class NicknameManagerService {
             .replace(/^Przeklęty /, '')
             .replace(/^Osłabiony /, '')
             .replace(/^Uśpiony /, '')
-            .replace(/^Oszołomiony /, '');
+            .replace(/^Oszołomiony /, '')
+            .replace(/^Upadły /, '');
 
         return cleanNick;
     }

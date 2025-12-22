@@ -102,10 +102,13 @@ class JudgmentService {
                             '**Moce:**\n' +
                             '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
                             '  ╰ 50% szans na **usunięcie klątwy z celu**\n' +
+                            '  ╰ Cel dostaje **🛡️ ochronę (1h, 50% szansa zablokowania klątwy)**\n' +
                             '  ╰ 1% szans: **💥 MEGA SILNA KLĄTWA** (1h, losowa zmiana co 5 min)\n' +
                             '• 💀 **Klątwy** `/curse` (85% sukces, 15% fail zwrot 50% many)\n' +
                             '  ╰ **100% - Zwykła klątwa (5 min)**\n' +
-                            '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
+                            '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
+                            '• ⚔️ **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
+                            '  ╰ Cel dostaje efekt: **Lucyfer rzucając /curse = odbicie 3x**\n\n' +
                             '**VS Lucyfer (curse):**\n' +
                             '• 33% - Wzmocnienie Lucyfera (reset % odbicia)\n' +
                             '• 33% - Odporność (nic się nie dzieje)\n' +
@@ -130,7 +133,9 @@ class JudgmentService {
                             '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
                             '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 25 many po zakończeniu\n' +
                             '  ╰ Reset % odbicia do 0% po odbiciu\n' +
-                            '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
+                            '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
+                            '• 💀 **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
+                            '  ╰ Cel dostaje efekt: **Gabriel używając /blessing = "Upadły" 1h + blokada**\n\n' +
                             '**VS Gabriel (curse):**\n' +
                             '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
                             '**Ograniczenia:**\n' +
@@ -362,10 +367,13 @@ class JudgmentService {
                         '**Moce:**\n' +
                         '• 🙏 **Błogosławieństwa** `/blessing` (5 many, 5 min cooldown per cel)\n' +
                         '  ╰ 50% szans na **usunięcie klątwy z celu**\n' +
+                        '  ╰ Cel dostaje **🛡️ ochronę (1h, 50% szansa zablokowania klątwy)**\n' +
                         '  ╰ 1% szans: **💥 MEGA SILNA KLĄTWA** (1h, losowa zmiana co 5 min)\n' +
                         '• 💀 **Klątwy** `/curse` (85% sukces, 15% fail zwrot 50% many)\n' +
                         '  ╰ **100% - Zwykła klątwa (5 min)**\n' +
-                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
+                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
+                        '• ⚔️ **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
+                        '  ╰ Cel dostaje efekt: **Lucyfer rzucając /curse = odbicie 3x**\n\n' +
                         '**VS Lucyfer (curse):**\n' +
                         '• 33% - Wzmocnienie Lucyfera (reset % odbicia)\n' +
                         '• 33% - Odporność (nic się nie dzieje)\n' +
@@ -386,7 +394,9 @@ class JudgmentService {
                         '• 📈 **Progresywne odbicie:** +1% za każdą klątwę (NIE resetuje się dziennie)\n' +
                         '  ╰ Przy odbiciu: blokada 1h + nick "Uśpiony" + 25 many po zakończeniu\n' +
                         '  ╰ Reset % odbicia do 0% po odbiciu\n' +
-                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n\n' +
+                        '• 🔍 **Sprawdzanie cnót** `/virtue-check`\n' +
+                        '• 💀 **Zemsta** `/revenge` (50 many, 24h cooldown per cel)\n' +
+                        '  ╰ Cel dostaje efekt: **Gabriel używając /blessing = "Upadły" 1h + blokada**\n\n' +
                         '**VS Gabriel (curse):**\n' +
                         '• 100% odbicie - klątwa wraca do Lucyfera!\n\n' +
                         '**Ograniczenia:**\n' +

@@ -915,6 +915,34 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - System Revenge i Ochrony Błogosławieństw:**
+- **Dodano komendę `/revenge`** (Gabriel/Lucyfer, koszt 50 many, cooldown 24h per cel)
+  - Gabriel: Cel dostaje efekt - Lucyfer rzucając `/curse` = odbicie 3x
+  - Lucyfer: Cel dostaje efekt - Gabriel używając `/blessing` = "Upadły" 1h + blokada
+  - Komunikat ephemeral (cel ukryty) + publiczny hint ("Gabriel/Lucyfer przygotowuje zemstę...")
+  - Nie można użyć na siebie, na przeciwną frakcję (G→L, L→G), ani gdy cel już ma ten sam typ revenge
+- **System ochrony błogosławieństw** - każdy użytkownik `/blessing` dostaje ochronę (1h, 50% szansa)
+  - Przy rzuceniu klątwy przez Lucyfera: 50% szansa na zablokowanie klątwy
+  - Komunikat: "✨🛡️ BŁOGOSŁAWIEŃSTWO OCHRONIŁO! 🛡️✨"
+- **Nowy typ FALLEN w NicknameManager** - prefix "Upadły " (Gabriel po revenge Lucyfera)
+  - Dodano do `isEffectNickname()` i `getCleanNickname()`
+- **Revenge_gabriel:** Lucyfer rzuca `/curse` → klątwa odbija się na Lucyfera (3 użycia, 1h)
+- **Revenge_lucyfer:** Gabriel używa `/blessing` → Gabriel dostaje "Upadły" + blokada 1h (1 użycie)
+- **Struktury danych** (VirtuttiService):
+  - `revengeEffects` - Map(targetId → [{type, remainingUses, expiresAt, appliedBy}])
+  - `revengeCooldowns` - Map(userId → Map(targetId → timestamp))
+  - `blessingProtection` - Map(userId → {expiresAt, used})
+  - `gabrielBlessingBlocked` - Map(userId → {expiresAt})
+- **Zaktualizowano embed Sądu Bożego** - dodano informacje o revenge i ochronie błogosławieństw
+- **Zaktualizowano `/komendy` w Muteuszu** - dodano `/revenge` do all_commands.json
+- Lokalizacja zmian:
+  - `Konklawe/services/virtuttiService.js` (nowe funkcje: 1266-1534, loadData/saveData)
+  - `Konklawe/handlers/interactionHandlers.js` (handleRevengeCommand: 1689-1803, triggers: 816-850, 1502-1541)
+  - `Konklawe/services/commandService.js` (rejestracja /revenge: 46-52)
+  - `Konklawe/services/judgmentService.js` (embedy: 97-146, 362-407)
+  - `utils/nicknameManagerService.js` (FALLEN: 183, 210)
+  - `Muteusz/config/all_commands.json` (468-473)
+
 **Konklawe Bot & Nickname Manager - Nicki Lucyfera i Naprawa Nakładania Efektów:**
 - **Dodano czwarty nick dla Lucyfera: "Oszołomiony"** - gdy rzuca klątwę na administratora
 - **Możliwe nicki Lucyfera:**

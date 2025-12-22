@@ -731,6 +731,8 @@ class InteractionHandler {
             await this.handleVirtueCheckCommand(interaction, roleType);
         } else if (commandName === 'curse') {
             await this.handleCurseCommand(interaction, roleType);
+        } else if (commandName === 'revenge') {
+            await this.handleRevengeCommand(interaction, roleType);
         }
     }
 
@@ -788,6 +790,17 @@ class InteractionHandler {
             });
         }
 
+        // === SPRAWDŹ BLOKADĘ GABRIELA (Upadły) ===
+        if (roleType === 'gabriel') {
+            const blocked = this.virtuttiService.isGabrielBlessingBlocked(userId);
+            if (blocked) {
+                return await interaction.reply({
+                    content: `⚔️ **Blessing zablokowany!**\n\n😵 Jesteś "Upadły" po zemście. Nie możesz błogosławić przez **${blocked.minutesLeft} min**.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
         // === SPRAWDŹ ENERGIĘ (KOSZT: 5) ===
         const blessingCost = 5;
         const energyData = this.virtuttiService.getEnergy(userId, roleType);
@@ -801,6 +814,43 @@ class InteractionHandler {
 
         // Zużyj energię
         this.virtuttiService.consumeEnergy(userId, blessingCost, 'blessing');
+
+        // === SPRAWDŹ REVENGE_LUCYFER (PUŁAPKA!) ===
+        if (roleType === 'gabriel') {
+            const revengeEffect = this.virtuttiService.hasRevengeEffect(targetUser.id, 'lucyfer');
+            if (revengeEffect) {
+                // 1. Zablokuj blessing Gabriela (1h)
+                this.virtuttiService.blockGabrielBlessing(userId);
+
+                // 2. Zmień nick na "Upadły" (1h)
+                const nicknameManager = this.nicknameManager;
+                if (nicknameManager) {
+                    await nicknameManager.applyEffect(
+                        userId,
+                        'FALLEN',
+                        60 * 60 * 1000, // 1h
+                        {
+                            guildId: interaction.guild.id,
+                            prefix: 'Upadły ',
+                            appliedBy: 'Revenge System'
+                        }
+                    );
+                    logger.info(`⚔️ Gabriel ${interaction.user.tag} stał się Upadły przez revenge`);
+                }
+
+                // 3. Usuń revenge_lucyfer z celu (zużyty)
+                this.virtuttiService.decrementRevengeUses(targetUser.id, 'lucyfer');
+
+                // 4. Zwróć komunikat o pułapce
+                return await interaction.reply({
+                    content: `⚡💀 **PUŁAPKA ZEMSTY!** 💀⚡\n\n` +
+                        `Lucyfer zastawił zemstę na ${targetUser.toString()}!\n\n` +
+                        `☁️ **${interaction.user.toString()} zostałeś "Upadły"!**\n` +
+                        `⚔️ Blessing zablokowany na **1 godzinę**!`,
+                    ephemeral: false
+                });
+            }
+        }
 
         // Zarejestruj użycie
         if (roleType === 'virtutti') {
@@ -881,6 +931,10 @@ class InteractionHandler {
                 content: blessingMessage,
                 ephemeral: false
             });
+
+            // === DODAJ OCHRONĘ BŁOGOSŁAWIEŃSTWA (1h, 50% szansa) ===
+            this.virtuttiService.addBlessingProtection(targetUser.id);
+            logger.info(`🛡️ Dodano ochronę błogosławieństwa dla ${targetUser.tag} (1h, 50% szansa)`);
 
             // Wyślij ephemeral message z informacją o pozostałej manie
             const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
@@ -1447,6 +1501,47 @@ class InteractionHandler {
                 await interaction.deferReply({ ephemeral: false });
             }
 
+            // === SPRAWDŹ REVENGE_GABRIEL (PUŁAPKA! - tylko dla Lucyfera) ===
+            if (roleType === 'lucyfer' && !isReflected && !hasAdminPermissions) {
+                const revengeEffect = this.virtuttiService.hasRevengeEffect(targetUser.id, 'gabriel');
+                if (revengeEffect) {
+                    // Klątwa odbija się na Lucyfera!
+                    actualTarget = interaction.user;
+                    actualTargetMember = await interaction.guild.members.fetch(interaction.user.id);
+                    isReflected = true;
+
+                    // Zmniejsz licznik revenge
+                    const remaining = this.virtuttiService.decrementRevengeUses(targetUser.id, 'gabriel');
+                    logger.info(`💀 Revenge_gabriel triggered! Lucyfer ${interaction.user.tag} - klątwa odbita (${remaining} pozostało)`);
+
+                    // Zaktualizuj lucyfera: FAIL
+                    this.virtuttiService.updateLucyferCost(userId, false); // Fail
+                }
+            }
+
+            // === SPRAWDŹ OCHRONĘ BŁOGOSŁAWIEŃSTWA (50% szansa - tylko dla Lucyfera) ===
+            if (roleType === 'lucyfer' && !isReflected && this.virtuttiService.hasBlessingProtection(targetUser.id)) {
+                const chance = Math.random();
+                if (chance < 0.5) {
+                    // Ochrona zadziałała! Usuń klątwę
+                    this.virtuttiService.removeBlessingProtection(targetUser.id);
+                    logger.info(`🛡️ Ochrona błogosławieństwa zadziałała! ${targetUser.tag} uniknął klątwy (${(chance * 100).toFixed(1)}% < 50%)`);
+
+                    // Zaktualizuj lucyfera: FAIL
+                    this.virtuttiService.updateLucyferCost(userId, false); // Fail
+
+                    return await interaction.editReply({
+                        content: `✨🛡️ **BŁOGOSŁAWIEŃSTWO OCHRONIŁO!** 🛡️✨\n\n` +
+                            `${targetUser.toString()} ma ochronę błogosławieństwa!\n\n` +
+                            `🔥 **Klątwa Lucyfera została zablokowana!**`,
+                        ephemeral: false
+                    });
+                } else {
+                    logger.info(`🛡️ Ochrona błogosławieństwa NIE zadziałała dla ${targetUser.tag} (${(chance * 100).toFixed(1)}% >= 50%)`);
+                    // Ochrona nie zadziałała, ale zostaje aktywna (może zadziałać za następnym razem)
+                }
+            }
+
             let nicknameError = null;
 
             // Aplikuj klątwę na nick (z czasem zależnym od poziomu)
@@ -1589,6 +1684,122 @@ class InteractionHandler {
                 });
             }
         }
+    }
+
+    /**
+     * Obsługuje komendę /revenge
+     * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} roleType - Typ roli ('virtutti', 'gabriel', 'lucyfer')
+     */
+    async handleRevengeCommand(interaction, roleType = 'virtutti') {
+        const targetUser = interaction.options.getUser('użytkownik');
+        const userId = interaction.user.id;
+
+        // 1. Sprawdź czy to Gabriel lub Lucyfer
+        if (roleType !== 'gabriel' && roleType !== 'lucyfer') {
+            return await interaction.reply({
+                content: '⚠️ **Tylko Gabriel i Lucyfer mogą używać /revenge!**',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 2. Sprawdź czy cel to przeciwna frakcja (NIE MOŻE)
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+        const targetIsGabriel = targetMember.roles.cache.has(this.config.roles.gabriel);
+        const targetIsLucyfer = targetMember.roles.cache.has(this.config.roles.lucyfer);
+
+        if (roleType === 'gabriel' && targetIsLucyfer) {
+            return await interaction.reply({
+                content: '⚠️ **Gabriel nie może użyć revenge na Lucyfera!** Użyj na zwykłych użytkownikach.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        if (roleType === 'lucyfer' && targetIsGabriel) {
+            return await interaction.reply({
+                content: '⚠️ **Lucyfer nie może użyć revenge na Gabriela!** Użyj na zwykłych użytkownikach.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 3. Sprawdź czy cel to nie sam siebie
+        if (targetUser.id === userId) {
+            return await interaction.reply({
+                content: '⚠️ **Nie możesz użyć revenge na sam siebie!**',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 4. Sprawdź cooldown (24h)
+        const cooldown = this.virtuttiService.checkRevengeCooldown(userId, targetUser.id);
+        if (cooldown) {
+            return await interaction.reply({
+                content: `⏰ **Cooldown aktywny!**\n\nMożesz użyć /revenge na ${targetUser.toString()} za **${cooldown.hoursLeft}h**.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 5. Sprawdź czy cel już ma ten sam typ revenge (nie stackuje się)
+        const existingRevenge = this.virtuttiService.hasRevengeEffect(targetUser.id, roleType);
+        if (existingRevenge) {
+            return await interaction.reply({
+                content: `⚠️ **Ta osoba jest już chroniona!**\n\n${targetUser.toString()} ma już aktywny efekt revenge od ${roleType === 'lucyfer' ? 'Lucyfera' : 'Gabriela'}.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 6. Sprawdź manę (50)
+        this.virtuttiService.initializeEnergy(userId, roleType);
+        const energyData = this.virtuttiService.getEnergy(userId, roleType);
+
+        if (!this.virtuttiService.hasEnoughEnergy(userId, 50)) {
+            return await interaction.reply({
+                content: `⚡ **Nie masz wystarczająco many!**\n\nKoszt revenge: **50** many\nTwoja mana: **${energyData.energy}/${energyData.maxEnergy}**`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 7. Zużyj manę
+        this.virtuttiService.consumeEnergy(userId, 50, 'revenge');
+
+        // 8. Aplikuj efekt revenge
+        const success = this.virtuttiService.applyRevengeEffect(
+            targetUser.id, // kto ma efekt
+            userId,        // kto rzucił
+            roleType
+        );
+
+        if (!success) {
+            // Zwróć manę jeśli się nie udało
+            this.virtuttiService.consumeEnergy(userId, -50, 'revenge_refund');
+            return await interaction.reply({
+                content: `⚠️ **Nie udało się zastosować revenge!** (błąd systemu)`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 9. Zarejestruj cooldown
+        this.virtuttiService.setRevengeCooldown(userId, targetUser.id);
+
+        // 10. KOMUNIKAT EPHEMERAL (tylko dla wywołującego)
+        await interaction.reply({
+            content: `✅ **Zemsta została zaplanowana na ${targetUser.toString()}!**\n\n` +
+                `${roleType === 'lucyfer' ? '🔥 Gabriel używając /blessing zostanie "Upadły" na 1h!' : '☁️ Lucyfer rzucając /curse odbije klątwę 3 razy!'}`,
+            flags: MessageFlags.Ephemeral
+        });
+
+        // 11. KOMUNIKAT PUBLICZNY (dla wszystkich, bez celu)
+        const publicEmoji = roleType === 'lucyfer' ? '💀' : '⚔️';
+        const publicMessage = roleType === 'lucyfer'
+            ? `${publicEmoji} **Lucyfer przygotowuje zemstę...** ${publicEmoji}`
+            : `${publicEmoji} **Gabriel przygotowuje zemstę...** ${publicEmoji}`;
+
+        await interaction.channel.send({
+            content: publicMessage
+        });
+
+        // 12. Log
+        logger.info(`💀 ${roleType === 'lucyfer' ? 'Lucyfer' : 'Gabriel'} (${interaction.user.tag}) użył /revenge na ${targetUser.tag}`);
     }
 
     /**

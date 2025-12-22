@@ -42,6 +42,13 @@ class CommandService {
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik do przeklęcia')
+                        .setRequired(true)),
+            new SlashCommandBuilder()
+                .setName('revenge')
+                .setDescription('Zaplanuj zemstę na użytkowniku (Gabriel/Lucyfer, koszt 50 many)')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik który będzie celem zemsty')
                         .setRequired(true))
         ];
     }

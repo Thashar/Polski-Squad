@@ -26,6 +26,16 @@ class VirtuttiService {
         // Gabriel - tracking blessing cooldowns per target
         this.gabrielBlessingCooldowns = new Map(); // userId -> Map(targetId -> timestamp)
 
+        // === NOWY SYSTEM REVENGE ===
+        this.revengeEffects = new Map(); // targetUserId -> [{ type: 'lucyfer'|'gabriel', remainingUses: number, expiresAt: timestamp, appliedBy: userId }]
+        this.revengeCooldowns = new Map(); // userId -> Map(targetId -> timestamp) // 24h
+
+        // === SYSTEM OCHRONY BŁOGOSŁAWIEŃSTW ===
+        this.blessingProtection = new Map(); // userId -> { expiresAt: timestamp, used: boolean }
+
+        // === BLOKADA GABRIELA (Upadły) ===
+        this.gabrielBlessingBlocked = new Map(); // userId -> { expiresAt: timestamp }
+
         // Ścieżki do plików danych
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
@@ -37,6 +47,10 @@ class VirtuttiService {
         this.lucyferCurseBlockedFile = path.join(this.dataDir, 'lucyfer_curse_blocked.json');
         this.lucyferGabrielDebuffFile = path.join(this.dataDir, 'lucyfer_gabriel_debuff.json');
         this.gabrielBlessingCooldownsFile = path.join(this.dataDir, 'gabriel_blessing_cooldowns.json');
+        this.revengeEffectsFile = path.join(this.dataDir, 'revenge_effects.json');
+        this.revengeCooldownsFile = path.join(this.dataDir, 'revenge_cooldowns.json');
+        this.blessingProtectionFile = path.join(this.dataDir, 'blessing_protection.json');
+        this.gabrielBlessingBlockedFile = path.join(this.dataDir, 'gabriel_blessing_blocked.json');
 
         // Wczytaj dane przy starcie
         this.loadData();
@@ -1047,6 +1061,58 @@ class VirtuttiService {
                 }
             }
 
+            // Wczytaj efekty revenge
+            try {
+                const revengeEffectsData = await fs.readFile(this.revengeEffectsFile, 'utf8');
+                const parsedRevengeEffects = JSON.parse(revengeEffectsData);
+                this.revengeEffects = new Map(Object.entries(parsedRevengeEffects));
+                logger.info(`📂 Wczytano ${this.revengeEffects.size} efektów revenge`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania efektów revenge: ${error.message}`);
+                }
+            }
+
+            // Wczytaj revenge cooldowny
+            try {
+                const revengeCooldownsData = await fs.readFile(this.revengeCooldownsFile, 'utf8');
+                const parsedRevengeCooldowns = JSON.parse(revengeCooldownsData);
+                // Konwertuj zagnieżdżone obiekty na Maps
+                this.revengeCooldowns = new Map();
+                for (const [userId, targets] of Object.entries(parsedRevengeCooldowns)) {
+                    this.revengeCooldowns.set(userId, new Map(Object.entries(targets)));
+                }
+                logger.info(`📂 Wczytano ${this.revengeCooldowns.size} revenge cooldownów`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania revenge cooldownów: ${error.message}`);
+                }
+            }
+
+            // Wczytaj ochronę błogosławieństw
+            try {
+                const blessingProtectionData = await fs.readFile(this.blessingProtectionFile, 'utf8');
+                const parsedBlessingProtection = JSON.parse(blessingProtectionData);
+                this.blessingProtection = new Map(Object.entries(parsedBlessingProtection));
+                logger.info(`📂 Wczytano ${this.blessingProtection.size} ochrony błogosławieństw`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania ochrony błogosławieństw: ${error.message}`);
+                }
+            }
+
+            // Wczytaj blokady blessing Gabriela
+            try {
+                const gabrielBlessingBlockedData = await fs.readFile(this.gabrielBlessingBlockedFile, 'utf8');
+                const parsedGabrielBlocked = JSON.parse(gabrielBlessingBlockedData);
+                this.gabrielBlessingBlocked = new Map(Object.entries(parsedGabrielBlocked));
+                logger.info(`📂 Wczytano ${this.gabrielBlessingBlocked.size} blokad blessing Gabriela`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania blokad blessing Gabriela: ${error.message}`);
+                }
+            }
+
         } catch (error) {
             logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
         }
@@ -1102,6 +1168,25 @@ class VirtuttiService {
             // Zapisz blokady Lucyfera
             const lucyferCurseBlockedObj = Object.fromEntries(this.lucyferCurseBlocked);
             await fs.writeFile(this.lucyferCurseBlockedFile, JSON.stringify(lucyferCurseBlockedObj, null, 2));
+
+            // Zapisz efekty revenge
+            const revengeEffectsObj = Object.fromEntries(this.revengeEffects);
+            await fs.writeFile(this.revengeEffectsFile, JSON.stringify(revengeEffectsObj, null, 2));
+
+            // Zapisz revenge cooldowny (zagnieżdżone Maps)
+            const revengeCooldownsObj = {};
+            for (const [userId, targets] of this.revengeCooldowns.entries()) {
+                revengeCooldownsObj[userId] = Object.fromEntries(targets);
+            }
+            await fs.writeFile(this.revengeCooldownsFile, JSON.stringify(revengeCooldownsObj, null, 2));
+
+            // Zapisz ochronę błogosławieństw
+            const blessingProtectionObj = Object.fromEntries(this.blessingProtection);
+            await fs.writeFile(this.blessingProtectionFile, JSON.stringify(blessingProtectionObj, null, 2));
+
+            // Zapisz blokady blessing Gabriela
+            const gabrielBlessingBlockedObj = Object.fromEntries(this.gabrielBlessingBlocked);
+            await fs.writeFile(this.gabrielBlessingBlockedFile, JSON.stringify(gabrielBlessingBlockedObj, null, 2));
 
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);
@@ -1174,6 +1259,276 @@ class VirtuttiService {
         if (this.lucyferGabrielDebuff.has(userId)) {
             this.lucyferGabrielDebuff.delete(userId);
             logger.info(`🧹 Usunięto Gabriel debuff dla użytkownika ${userId}`);
+            this.saveData();
+        }
+    }
+
+    // ========================================
+    // 🛡️ SYSTEM OCHRONY BŁOGOSŁAWIEŃSTW
+    // ========================================
+
+    /**
+     * Dodaje ochronę błogosławieństwa dla użytkownika (1h, 50% szansa na zablokowanie klątwy)
+     * @param {string} userId - ID użytkownika
+     */
+    addBlessingProtection(userId) {
+        const expiresAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+        this.blessingProtection.set(userId, {
+            expiresAt,
+            used: false
+        });
+        logger.info(`🛡️ Dodano ochronę błogosławieństwa dla ${userId} (1h)`);
+        this.saveData();
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma aktywną ochronę błogosławieństwa
+     * @param {string} userId - ID użytkownika
+     * @returns {boolean}
+     */
+    hasBlessingProtection(userId) {
+        const protection = this.blessingProtection.get(userId);
+        if (!protection) return false;
+
+        // Sprawdź czy nie wygasło
+        if (Date.now() > protection.expiresAt) {
+            this.blessingProtection.delete(userId);
+            this.saveData();
+            return false;
+        }
+
+        return !protection.used;
+    }
+
+    /**
+     * Usuwa ochronę błogosławieństwa (po użyciu lub wygaśnięciu)
+     * @param {string} userId - ID użytkownika
+     */
+    removeBlessingProtection(userId) {
+        if (this.blessingProtection.has(userId)) {
+            this.blessingProtection.delete(userId);
+            logger.info(`🧹 Usunięto ochronę błogosławieństwa dla ${userId}`);
+            this.saveData();
+        }
+    }
+
+    // ========================================
+    // 💀 SYSTEM REVENGE
+    // ========================================
+
+    /**
+     * Sprawdza cooldown dla revenge na daną osobę
+     * @param {string} userId - ID użytkownika rzucającego
+     * @param {string} targetId - ID celu
+     * @returns {Object|null} - { hoursLeft, expiresAt } lub null
+     */
+    checkRevengeCooldown(userId, targetId) {
+        if (!this.revengeCooldowns.has(userId)) return null;
+
+        const targets = this.revengeCooldowns.get(userId);
+        const cooldownEnd = targets.get(targetId);
+
+        if (!cooldownEnd) return null;
+
+        const now = Date.now();
+        if (now > cooldownEnd) {
+            targets.delete(targetId);
+            if (targets.size === 0) {
+                this.revengeCooldowns.delete(userId);
+            }
+            this.saveData();
+            return null;
+        }
+
+        const timeLeft = cooldownEnd - now;
+        const hoursLeft = Math.ceil(timeLeft / (60 * 60 * 1000));
+
+        return { hoursLeft, expiresAt: cooldownEnd };
+    }
+
+    /**
+     * Ustawia cooldown revenge (24h)
+     * @param {string} userId - ID użytkownika rzucającego
+     * @param {string} targetId - ID celu
+     */
+    setRevengeCooldown(userId, targetId) {
+        if (!this.revengeCooldowns.has(userId)) {
+            this.revengeCooldowns.set(userId, new Map());
+        }
+
+        const cooldownEnd = Date.now() + (24 * 60 * 60 * 1000); // 24h
+        this.revengeCooldowns.get(userId).set(targetId, cooldownEnd);
+        logger.info(`⏰ Ustawiono revenge cooldown dla ${userId} → ${targetId} (24h)`);
+        this.saveData();
+    }
+
+    /**
+     * Dodaje efekt revenge na cel
+     * @param {string} targetId - ID osoby chronionej
+     * @param {string} appliedBy - ID użytkownika rzucającego
+     * @param {string} type - 'lucyfer' (1 użycie) lub 'gabriel' (3 użycia)
+     */
+    applyRevengeEffect(targetId, appliedBy, type) {
+        const remainingUses = type === 'lucyfer' ? 1 : 3;
+        const expiresAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+
+        // Pobierz istniejące efekty lub stwórz nową tablicę
+        let effects = this.revengeEffects.get(targetId) || [];
+
+        // Sprawdź czy już nie ma tego samego typu efektu
+        const existingEffect = effects.find(e => e.type === type);
+        if (existingEffect) {
+            logger.warn(`⚠️ ${targetId} już ma aktywny efekt revenge_${type}`);
+            return false;
+        }
+
+        // Dodaj nowy efekt
+        effects.push({
+            type,
+            remainingUses,
+            expiresAt,
+            appliedBy
+        });
+
+        this.revengeEffects.set(targetId, effects);
+        logger.info(`💀 Dodano revenge_${type} na ${targetId} (${remainingUses} użyć, 1h)`);
+        this.saveData();
+        return true;
+    }
+
+    /**
+     * Sprawdza czy cel ma aktywny efekt revenge danego typu
+     * @param {string} targetId - ID celu
+     * @param {string} type - 'lucyfer' lub 'gabriel'
+     * @returns {Object|null} - Efekt lub null
+     */
+    hasRevengeEffect(targetId, type) {
+        const effects = this.revengeEffects.get(targetId);
+        if (!effects) return null;
+
+        const now = Date.now();
+
+        // Filtruj wygasłe efekty
+        const validEffects = effects.filter(e => now < e.expiresAt);
+        if (validEffects.length !== effects.length) {
+            this.revengeEffects.set(targetId, validEffects);
+            this.saveData();
+        }
+
+        // Znajdź efekt danego typu
+        const effect = validEffects.find(e => e.type === type);
+        return effect || null;
+    }
+
+    /**
+     * Zmniejsza licznik użyć revenge i usuwa jeśli 0
+     * @param {string} targetId - ID celu
+     * @param {string} type - 'lucyfer' lub 'gabriel'
+     * @returns {number} - Pozostała liczba użyć (po zmniejszeniu)
+     */
+    decrementRevengeUses(targetId, type) {
+        const effects = this.revengeEffects.get(targetId);
+        if (!effects) return 0;
+
+        const effectIndex = effects.findIndex(e => e.type === type);
+        if (effectIndex === -1) return 0;
+
+        effects[effectIndex].remainingUses--;
+        const remaining = effects[effectIndex].remainingUses;
+
+        if (remaining <= 0) {
+            effects.splice(effectIndex, 1);
+            logger.info(`🧹 Usunięto revenge_${type} z ${targetId} (zużyte)`);
+        } else {
+            logger.info(`💀 Revenge_${type} na ${targetId}: ${remaining} użyć pozostało`);
+        }
+
+        if (effects.length === 0) {
+            this.revengeEffects.delete(targetId);
+        } else {
+            this.revengeEffects.set(targetId, effects);
+        }
+
+        this.saveData();
+        return remaining;
+    }
+
+    /**
+     * Usuwa wszystkie efekty revenge z celu
+     * @param {string} targetId - ID celu
+     */
+    removeAllRevengeEffects(targetId) {
+        if (this.revengeEffects.has(targetId)) {
+            this.revengeEffects.delete(targetId);
+            logger.info(`🧹 Usunięto wszystkie revenge efekty z ${targetId}`);
+            this.saveData();
+        }
+    }
+
+    /**
+     * Pobiera statystyki revenge dla embeda Sądu Bożego
+     * @param {string} targetId - ID celu
+     * @returns {Array} - Tablica efektów z detalami
+     */
+    getRevengeStats(targetId) {
+        const effects = this.revengeEffects.get(targetId);
+        if (!effects) return [];
+
+        const now = Date.now();
+        return effects
+            .filter(e => now < e.expiresAt)
+            .map(e => ({
+                type: e.type,
+                remainingUses: e.remainingUses,
+                timeLeft: Math.ceil((e.expiresAt - now) / (60 * 1000)) // w minutach
+            }));
+    }
+
+    // ========================================
+    // ⚔️ BLOKADA BLESSING GABRIELA (Upadły)
+    // ========================================
+
+    /**
+     * Blokuje blessing Gabriela na 1h i zmienia nick na "Upadły"
+     * @param {string} userId - ID Gabriela
+     */
+    blockGabrielBlessing(userId) {
+        const expiresAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+        this.gabrielBlessingBlocked.set(userId, { expiresAt });
+        logger.info(`⚔️ Zablokowano blessing Gabriela ${userId} na 1h (Upadły)`);
+        this.saveData();
+    }
+
+    /**
+     * Sprawdza czy Gabriel ma zablokowane blessing
+     * @param {string} userId - ID Gabriela
+     * @returns {Object|null} - { minutesLeft } lub null
+     */
+    isGabrielBlessingBlocked(userId) {
+        const blocked = this.gabrielBlessingBlocked.get(userId);
+        if (!blocked) return null;
+
+        const now = Date.now();
+        if (now > blocked.expiresAt) {
+            this.gabrielBlessingBlocked.delete(userId);
+            this.saveData();
+            return null;
+        }
+
+        const timeLeft = blocked.expiresAt - now;
+        const minutesLeft = Math.ceil(timeLeft / (60 * 1000));
+
+        return { minutesLeft, expiresAt: blocked.expiresAt };
+    }
+
+    /**
+     * Usuwa blokadę blessing Gabriela
+     * @param {string} userId - ID Gabriela
+     */
+    removeGabrielBlessingBlock(userId) {
+        if (this.gabrielBlessingBlocked.has(userId)) {
+            this.gabrielBlessingBlocked.delete(userId);
+            logger.info(`🧹 Usunięto blokadę blessing Gabriela ${userId}`);
             this.saveData();
         }
     }
