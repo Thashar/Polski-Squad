@@ -1000,13 +1000,29 @@ class InteractionHandler {
             // Usuń lobby używając istniejącej funkcji
             await this.deleteLobby(ownerLobby, sharedState);
 
-            await interaction.editReply({
-                content: '✅ Lobby zostało pomyślnie zamknięte.'
-            });
+            try {
+                await interaction.editReply({
+                    content: '✅ Lobby zostało pomyślnie zamknięte.'
+                });
+            } catch (replyError) {
+                // Jeśli nie można edytować odpowiedzi (Unknown Message), to znaczy że interakcja wygasła
+                // ale lobby zostało pomyślnie zamknięte
+                if (replyError.code === 10008) {
+                    logger.info('ℹ️ Lobby zamknięte pomyślnie (interakcja wygasła)');
+                } else {
+                    throw replyError;
+                }
+            }
 
         } catch (error) {
+            // Jeśli błąd to Unknown Message, lobby zostało zamknięte ale nie można wysłać potwierdzenia
+            if (error.code === 10008) {
+                logger.info('ℹ️ Lobby zamknięte pomyślnie (nie można wysłać potwierdzenia - interakcja wygasła)');
+                return;
+            }
+
             logger.error('❌ Błąd podczas obsługi komendy /party-close:', error);
-            
+
             try {
                 const errorMessage = '❌ Wystąpił błąd podczas zamykania lobby.';
                 if (interaction.deferred) {
@@ -1015,7 +1031,10 @@ class InteractionHandler {
                     await interaction.reply({ content: errorMessage, ephemeral: true });
                 }
             } catch (replyError) {
-                logger.error('❌ Nie można odpowiedzieć na interakcję /party-close:', replyError);
+                // Jeśli to Unknown Message, lobby i tak zostało zamknięte
+                if (replyError.code !== 10008) {
+                    logger.error('❌ Nie można odpowiedzieć na interakcję /party-close:', replyError);
+                }
             }
         }
     }
