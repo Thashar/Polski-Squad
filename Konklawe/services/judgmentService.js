@@ -99,11 +99,11 @@ class JudgmentService {
                             '**⚡ System Many:** 150 many, regeneracja 1 pkt/5min\n\n' +
                             '**Moce:**\n' +
                             '• 🙏 `/blessing` (5 many): Błogosławi cel. 50% szansa usunięcia klątwy Lucyfera.\n' +
-                            '  🛡️ **Ochrona:** Cel zyskuje ochronę na 1h - 50% szansa automatycznego zablokowania następnej klątwy Lucyfera.\n\n' +
-                            '• 💀 `/curse` (85% sukces): Rzuca zwykłą klątwę (5 min).\n\n' +
+                            '  🛡️ **Ochrona:** Cel zyskuje ochronę na 1h - 50% szansa automatycznego zablokowania następnej klątwy Lucyfera.\n' +
+                            '• 💀 `/curse` (10+(klątwy×2) many, 85% sukces): Rzuca zwykłą klątwę (5 min). Koszt rośnie z każdą klątwą.\n' +
                             '• ⚔️ `/revenge` (50 many, 24h cd/cel): Rzuć zemstę NA NEUTRALNEGO użytkownika.\n' +
-                            '  Gdy Lucyfer go przeklnie → klątwa odbija się do Lucyfera (3x).\n\n' +
-                            '• 🔍 `/virtue-check`: Sprawdź cnotę użytkownika.\n\n' +
+                            '  Gdy Lucyfer go przeklnie → klątwa odbija się do Lucyfera (3x).\n' +
+                            '• 🔍 `/virtue-check` (0 many): Sprawdź cnotę użytkownika.\n\n' +
                             '**VS Lucyfer (bezpośrednia interakcja):**\n' +
                             '• Twoja klątwa na Lucyfera: 33% wzmocnienie | 33% odporność | 33% normalna | 1% ultra\n' +
                             '• Twój blessing na Lucyfera: nie działa (jest odporny)\n\n' +
@@ -115,12 +115,12 @@ class JudgmentService {
                         value:
                             '**⚡ System Many:** 100 many, regeneracja dynamiczna 5-15min/pkt\n\n' +
                             '**Moce:**\n' +
-                            '• 💀 `/curse` (5min cd): Rzuca klątwę. 96% zwykła | 3% silna | 1% potężna.\n\n' +
+                            '• 💀 `/curse` (5-15 many, 5min cd): Rzuca klątwę. 96% zwykła | 3% silna | 1% potężna. Koszt dynamiczny (sukcesy obniżają, faile zwiększają).\n' +
                             '• 📈 **Progresywne odbicie:** Za każdą rzuconą klątwę +1% szansy że Gabriel ją odbije.\n' +
-                            '  Przy odbiciu: procent resetuje się + dostajesz blokadę rzucania klątw na 1h + nick "Uśpiony".\n\n' +
+                            '  Przy odbiciu: procent resetuje się + dostajesz blokadę rzucania klątw na 1h + nick "Uśpiony".\n' +
                             '• ⚔️ `/revenge` (50 many, 24h cd/cel): Rzuć zemstę NA NEUTRALNEGO użytkownika.\n' +
-                            '  Gdy Gabriel go błogosławi → Gabriel staje się **"Upadły"** (blokada `/blessing` na 1h).\n\n' +
-                            '• 🔍 `/virtue-check`: Sprawdź cnotę użytkownika.\n\n' +
+                            '  Gdy Gabriel go błogosławi → Gabriel staje się **"Upadły"** (blokada `/blessing` na 1h).\n' +
+                            '• 🔍 `/virtue-check` (0 many): Sprawdź cnotę użytkownika.\n\n' +
                             '**VS Gabriel (bezpośrednia interakcja):**\n' +
                             '• 100% odbicie klątwy z powrotem do Ciebie\n\n' +
                             '**Ograniczenia:** ⛔ Nie możesz używać `/blessing`\n\n' +

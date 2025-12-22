@@ -1212,11 +1212,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Wyjaśniono co to "ochrona z blessingu" - cel zyskuje shield na 1h z 50% szansą zablokowania następnej klątwy Lucyfera
   - Dodano szczegółowy opis revenge - rzucasz zemstę NA NEUTRALNEGO użytkownika, gdy Lucyfer go przeklnie klątwa odbija się 3x
   - Dodano kontekst "bezpośrednia interakcja" dla walki Gabriel vs Lucyfer
+  - **Koszty many:** `/blessing` (5), `/curse` (10+(klątwy×2)), `/revenge` (50), `/virtue-check` (0)
 - **Lucifer:**
   - Wyjaśniono progresywne odbicie - za każdą klątwę +1% szansy odbicia, przy odbiciu reset + blokada 1h + nick "Uśpiony"
   - Dodano szczegółowy opis revenge - rzucasz zemstę NA NEUTRALNEGO użytkownika, gdy Gabriel go błogosławi Gabriel staje się "Upadły"
   - Wyjaśniono status "Upadły" - blokada castingu `/blessing` na 1h
-- Opisy nadal mieszczą się w limicie 1024 znaków Discord (Gabriel ~680, Lucifer ~700)
+  - **Koszty many:** `/curse` (5-15 dynamiczny), `/revenge` (50), `/virtue-check` (0)
+- Usunięto puste linie między komendami dla lepszej czytelności
+- Opisy nadal mieszczą się w limicie 1024 znaków Discord (Gabriel ~720, Lucifer ~720)
 - Embed jest teraz znacznie bardziej przystępny dla osób które widzą Sąd Boży po raz pierwszy
 - Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-110,115-128`
 
