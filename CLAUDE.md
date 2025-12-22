@@ -1235,9 +1235,11 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - **Silna (3%):** 15 min, 1 efekt losowy z 7 typów
   - **Potężna (1%):** 30 min, 1 efekt losowy z 7 typów
 - **7 typów efektów klątw:** ⏰ Slow (30s cd) | 🗑️ Delete (30%) | 📢 Ping spam | 😀 Emoji spam (30%) | 📝 CAPS (100%) | 💤 Timeout (30%) | 🎭 Special role (5min)
-- Rozpisano każdą mechanikę szczegółowo z symbolami → dla sub-punktów
-- Opisy mieszczą się w limicie 1024 znaków Discord (Gabriel ~1000, Lucifer ~1010)
-- Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-116,119-138`
+- **FIX:** Skrócono opisy aby zmieścić się w limicie Discord (Gabriel: ~650 znaków, Lucifer: ~650 znaków)
+  - Usunięto zbędne słowa ("Rzuca klątwę", "Sprawdź cnotę użytkownika")
+  - Skrócono nazwy (SYSTEM MANY → MANA, "efekt losowy z 7 typów" → "1 z 7 efektów")
+  - Zastosowano skróty (sukces ↓, fail ↑)
+- Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-114,117-134`
 
 ### Listopad 2025
 

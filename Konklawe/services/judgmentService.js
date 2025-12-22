@@ -96,45 +96,41 @@ class JudgmentService {
                     {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
-                            '**⚡ SYSTEM MANY:** 150 many, regeneracja 1 pkt/5min\n\n' +
+                            '**⚡ MANA:** 150, regen 1/5min\n\n' +
                             '**✨ MOCE:**\n' +
-                            '• 🙏 `/blessing` (5 many): Błogosławi cel. 50% szansa usunięcia klątwy.\n' +
-                            '  → 🛡️ Cel zyskuje **ochronę na 1h** - 50% automatycznego zablokowania następnej klątwy Lucyfera.\n' +
-                            '• 💀 `/curse` (10+(klątwy×2) many): Rzuca klątwę zwykłą (5 min). 85% sukces. Koszt rośnie z każdą.\n' +
-                            '• ⚔️ `/revenge` (50 many, 24h cd/cel): Rzuć pułapkę na neutralnego użytkownika.\n' +
-                            '  → Gdy Lucyfer go przeklnie - klątwa odbija się do Lucyfera (3x użycia).\n' +
-                            '• 🔍 `/virtue-check` (0 many): Sprawdź cnotę użytkownika.\n\n' +
+                            '• 🙏 `/blessing` (5): 50% usunięcia klątwy + ochrona (1h, 50% block następnej)\n' +
+                            '• 💀 `/curse` (10+(N×2)): Zwykła klątwa (5min), 85% sukces\n' +
+                            '• ⚔️ `/revenge` (50, 24h cd): Pułapka na neutralnego. Gdy Lucyfer przeklnie → odbicie 3x\n' +
+                            '• 🔍 `/virtue-check` (0)\n\n' +
                             '**⚠️ SŁABOŚCI:**\n' +
-                            '• 15% szansa niepowodzenia przy `/curse`\n' +
-                            '• Blessing nie działa na Lucyfera (odporność)\n' +
-                            '• Revenge Lucyfera → status "Upadły" (blokada blessing 1h)\n\n' +
-                            '**💀 POZIOMY KLĄTW:**\n' +
-                            '• **Zwykła (100%):** 5 min, 1 efekt losowy z 7 typów\n' +
-                            '• **Mega silna (33% na Lucyfera):** Blessing → 1h, zmiana efektu co 5 min\n' +
-                            '• **Ultra potężna (1% na Lucyfera):** Curse → 5 min + debuff 24h (10% co 5 min nowy efekt)\n\n' +
-                            '**7 typów efektów:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
+                            '• 15% fail przy curse\n' +
+                            '• Blessing nie działa na Lucyfera\n' +
+                            '• Revenge Lucyfera → "Upadły" (blessing block 1h)\n\n' +
+                            '**💀 POZIOMY:**\n' +
+                            '• Zwykła (100%): 5min, 1 z 7 efektów\n' +
+                            '• Mega (33% na Lucyfera): Blessing → 1h, zmiana co 5min\n' +
+                            '• Ultra (1% na Lucyfera): Curse → 5min + debuff 24h (10% co 5min)\n\n' +
+                            '**Efekty:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
                         inline: false
                     },
                     {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
-                            '**⚡ SYSTEM MANY:** 100 many, regeneracja dynamiczna 5-15min/pkt\n\n' +
+                            '**⚡ MANA:** 100, regen dynamiczny 5-15min/pkt\n\n' +
                             '**🔥 MOCE:**\n' +
-                            '• 💀 `/curse` (5-15 many, 5min cd): Rzuca klątwę. Koszt dynamiczny (sukcesy obniżają, faile zwiększają).\n' +
-                            '  → **Poziomy:** 96% zwykła (5 min) | 3% silna (15 min) | 1% potężna (30 min)\n' +
-                            '• ⚔️ `/revenge` (50 many, 24h cd/cel): Rzuć pułapkę na neutralnego użytkownika.\n' +
-                            '  → Gdy Gabriel go błogosławi - Gabriel staje się "Upadły" (blokada `/blessing` na 1h).\n' +
-                            '• 🔍 `/virtue-check` (0 many): Sprawdź cnotę użytkownika.\n\n' +
+                            '• 💀 `/curse` (5-15, 5min cd): Koszt dynamiczny (sukces ↓, fail ↑)\n' +
+                            '• ⚔️ `/revenge` (50, 24h cd): Pułapka na neutralnego. Gdy Gabriel błogosławi → "Upadły" (blessing block 1h)\n' +
+                            '• 🔍 `/virtue-check` (0)\n\n' +
                             '**⚠️ SŁABOŚCI:**\n' +
-                            '• 📈 **Progresywne odbicie:** Za każdą rzuconą klątwę +1% szansy że Gabriel ją odbije.\n' +
-                            '  → Przy odbiciu: % resetuje się + dostajesz blokadę klątw (1h) + nick "Uśpiony".\n' +
-                            '• 100% odbicie klątwy od Gabriela z powrotem do Ciebie\n' +
-                            '• ⛔ Brak dostępu do `/blessing`\n\n' +
-                            '**💀 POZIOMY KLĄTW:**\n' +
-                            '• **Zwykła (96%):** 5 min, 1 efekt losowy z 7 typów\n' +
-                            '• **Silna (3%):** 15 min, 1 efekt losowy z 7 typów\n' +
-                            '• **Potężna (1%):** 30 min, 1 efekt losowy z 7 typów\n\n' +
-                            '**7 typów efektów:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
+                            '• 📈 Progresywne odbicie: Za każdą klątwę +1% że Gabriel odbije\n' +
+                            '  → Przy odbiciu: reset % + blokada 1h + nick "Uśpiony"\n' +
+                            '• 100% odbicie od Gabriela\n' +
+                            '• ⛔ Brak `/blessing`\n\n' +
+                            '**💀 POZIOMY:**\n' +
+                            '• Zwykła (96%): 5min, 1 z 7 efektów\n' +
+                            '• Silna (3%): 15min, 1 z 7 efektów\n' +
+                            '• Potężna (1%): 30min, 1 z 7 efektów\n\n' +
+                            '**Efekty:** ⏰ Slow | 🗑️ Delete | 📢 Ping | 😀 Emoji | 📝 CAPS | 💤 Timeout | 🎭 Rola',
                         inline: false
                     }
                 )
