@@ -2249,16 +2249,18 @@ class InteractionHandler {
             }
             
             try {
-                await channel.send(`<@${userId}> 👻`);
+                const pingMessage = await channel.send(`<@${userId}> 👻`);
                 setTimeout(async () => {
                     try {
-                        const messages = await channel.messages.fetch({ limit: 1 });
-                        const lastMessage = messages.first();
-                        if (lastMessage && lastMessage.content === `<@${userId}> 👻`) {
-                            await lastMessage.delete();
+                        if (pingMessage) {
+                            await pingMessage.delete();
+                            logger.info(`👻 Usunięto ghost ping dla ${userId}`);
                         }
                     } catch (error) {
-                        // Ignoruj błędy usuwania
+                        // Ignoruj błędy usuwania (wiadomość już usunięta lub brak uprawnień)
+                        if (error.code !== 10008) { // Unknown Message
+                            logger.warn(`⚠️ Nie udało się usunąć ghost pinga: ${error.message}`);
+                        }
                     }
                 }, 2000);
             } catch (error) {

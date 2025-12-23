@@ -941,6 +941,13 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Naprawa Ghost Pingów w Klątwie Random Ping:**
+- **FIX:** Klątwa Random ping teraz poprawnie usuwa wysłane pingi
+- **Problem:** Stary system próbował usunąć "ostatnią wiadomość" co powodowało błędy gdy ktoś napisał coś w międzyczasie
+- **Rozwiązanie:** Bot zapisuje messageId po wysłaniu i usuwa konkretnie tę wiadomość po 2 sekundach
+- Dodano lepsze logowanie i obsługę błędów (ignoruje Unknown Message)
+- Lokalizacja zmian: `Konklawe/handlers/interactionHandlers.js:2252-2265`
+
 **Konklawe Bot - System Automatycznego Usuwania Wiadomości:**
 - **NOWA FUNKCJA:** MessageCleanupService - automatyczne usuwanie wiadomości z klątwami/blessingami/revenge po zakończeniu efektu
 - **Persistent storage** - system przetrwa restart bota i przywraca timery
