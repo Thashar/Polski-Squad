@@ -49,6 +49,9 @@ const chaosService = new ChaosService(config, logService);
 let nicknameManager;
 let reactionRoleService;
 
+// Flaga gotowości bota - ustawiona po pełnej inicjalizacji
+let isFullyInitialized = false;
+
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
 const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
@@ -116,35 +119,56 @@ client.once(Events.ClientReady, async () => {
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
 
+    // Oznacz bota jako w pełni zainicjalizowanego
+    isFullyInitialized = true;
+
     logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode');
 });
 
 client.on(Events.MessageCreate, async (message) => {
+    // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
+    if (!isFullyInitialized) {
+        return;
+    }
     await messageHandler.handleMessage(message, client);
 });
 
 client.on(Events.MessageDelete, async (message) => {
+    // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
+    if (!isFullyInitialized) {
+        return;
+    }
     await mediaService.handleDeletedMessage(message, client);
 });
 
 client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
+    // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
+    if (!isFullyInitialized) {
+        return;
+    }
     await mediaService.handleEditedMessage(oldMessage, newMessage, client);
 });
 
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+    // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
+    if (!isFullyInitialized) {
+        logger.warn('⚠️ Ignoruję GuildMemberUpdate - bot jeszcze się inicjalizuje');
+        return;
+    }
+
     // Obsługa ról ekskluzywnych
     await memberHandler.handleGuildMemberUpdate(oldMember, newMember);
-    
+
     // Sprawdź zmianę statusu premium (boost)
     const oldPremium = oldMember.premiumSince;
     const newPremium = newMember.premiumSince;
-    
+
     // Jeśli użytkownik stracił boost
     if (oldPremium && !newPremium) {
         logger.info(`🔻 ${newMember.user.tag} stracił boost serwera`);
         await memberHandler.handleBoostLoss(newMember);
     }
-    
+
     // Jeśli użytkownik otrzymał boost
     if (!oldPremium && newPremium) {
         logger.info(`🔺 ${newMember.user.tag} otrzymał boost serwera`);
@@ -153,20 +177,35 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+    // Guard: Informuj użytkownika jeśli bot jeszcze się inicjalizuje
+    if (!isFullyInitialized) {
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '⏳ Bot jeszcze się inicjalizuje, spróbuj za chwilę...',
+                    ephemeral: true
+                });
+            }
+        } catch (error) {
+            logger.error('❌ Nie można odpowiedzieć na interakcję podczas inicjalizacji:', error.message);
+        }
+        return;
+    }
+
     try {
         await interactionHandler.handleInteraction(interaction);
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);
-        
+
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    ephemeral: true
                 });
             } else if (interaction.deferred) {
-                await interaction.editReply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
                 });
             }
         } catch (replyError) {
@@ -176,6 +215,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
+    if (!isFullyInitialized) {
+        return;
+    }
+
     try {
         // Discord może wymagać fetchowania partial reactions
         if (reaction.partial) {
@@ -186,7 +230,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
                 return;
             }
         }
-        
+
         // Usuń główne logowanie eventów reakcji - loguje tylko ReactionRoleService dla ważnych reakcji
         await reactionRoleService.handleReactionAdd(reaction, user);
     } catch (error) {
@@ -195,6 +239,11 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 });
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
+    // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
+    if (!isFullyInitialized) {
+        return;
+    }
+
     try {
         // Discord może wymagać fetchowania partial reactions
         if (reaction.partial) {
@@ -205,7 +254,7 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
                 return;
             }
         }
-        
+
         // Usuń główne logowanie eventów reakcji - loguje tylko ReactionRoleService dla ważnych reakcji
         await reactionRoleService.handleReactionRemove(reaction, user);
     } catch (error) {
