@@ -13,12 +13,14 @@
 - NIGDY nie pytaj użytkownika czy zacommitować - po prostu to zrób
 
 **INSTRUKCJA AKTUALIZACJI DOKUMENTACJI:**
-- Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj odpowiednią sekcję w CLAUDE.md
-- Opisz co się zmieniło, jak teraz działa funkcja, jakie są nowe parametry/komendy/mechanizmy
+- Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj odpowiednią GŁÓWNĄ SEKCJĘ bota w CLAUDE.md
+- **EDYTUJ istniejące opisy** funkcji zamiast dodawać nowe wpisy do "Historia Zmian"
+- Główne sekcje botów (np. "⚔️ StalkerLME Bot", "⛪ Konklawe Bot") powinny zawierać AKTUALNY stan funkcjonalności
 - Używaj Grep + Read z offset/limit + Edit - NIE czytaj całego pliku CLAUDE.md
-- Aktualizuj sekcję "Historia Zmian" na końcu dokumentu z krótkim opisem zmian
+- "Historia Zmian" służy TYLKO do ostatnich 30 dni - starsze wpisy usuń po przeniesieniu informacji do głównych sekcji
 - To oszczędzi tysiące tokenów w przyszłych sesjach - kolejna instancja Claude będzie wiedziała jak działa kod bez czytania źródeł
-- **PRZYKŁAD**: Zmieniłeś system kolejkowania w StalkerLME → zaktualizuj sekcję "StalkerLME Bot - System Kolejkowania" + dodaj wpis w "Historia Zmian"
+- **PRZYKŁAD POPRAWNY**: Zmieniłeś system kolejkowania w StalkerLME → zaktualizuj sekcję "⚔️ StalkerLME Bot" punkt 5 "Kolejkowanie OCR"
+- **PRZYKŁAD BŁĘDNY**: Dodałeś nowy wpis "StalkerLME Bot - Zmiana Kolejkowania" do "Historia Zmian" (TAK NIE ROBIĆ!)
 
 **INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU:**
 - Po dodaniu NOWEJ komendy lub aktualizacji istniejącej komendy w KTÓRYMKOLWIEK bocie ZAWSZE aktualizuj `Muteusz/config/all_commands.json`
@@ -631,6 +633,10 @@ node manual-backup.js
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
+- **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
+- Format: `✅ NickName • 14:27` - pokazuje kiedy użytkownik potwierdził (oba przypomnienia w jednym embedzie)
+- Struktura: `tracking.reminders[]` - tablica z obu przypomnieniami (reminderNumber, sentAt, users)
+- Aktualizacja przez usunięcie i ponowne wysłanie embeda (świeża pozycja na dole czatu)
 
 **Mapowanie Nicków** - System automatycznego mapowania użytkowników po zmianie nicku Discord:
 - `databaseService.js`: Indeks graczy `player_index.json` (userId → latestNick + allNicks)
@@ -652,10 +658,21 @@ node manual-backup.js
   - 🔴 Zaangażowanie < 70%
   - 🔴 Responsywność < 25%
   - 🪦 Trend gwałtownie malejący (trendRatio ≤ 0.5)
-  - ⚠️ Progres miesięczny < 25 punktów
-  - ⚠️ Progres kwartalny < 100 punktów
+  - ⚠️ Progres miesięczny < 25 punktów (min 5 tygodni danych)
+  - ⚠️ Progres kwartalny < 100 punktów (min 13 tygodni danych)
 - Embed z polami: każdy gracz osobno, posortowani według liczby problemów
 - Ephemeral (tylko dla wywołującego), max 25 graczy w raporcie
+
+**Obliczanie Progresu** - Logika dla `/progres`, `/player-status`, `/player-raport`:
+- **Progres miesięczny:** Najwyższy wynik z ostatnich 4 tygodni vs tydzień 5 (min 5 tygodni)
+- **Progres kwartalny:** Najwyższy wynik z ostatnich 12 tygodni vs tydzień 13 (min 13 tygodni)
+- **Dostępne dane:** Najwyższy ze wszystkich vs najstarszy wynik > 0
+- Zapobiega fałszywym regresom gdy ostatni tydzień = 0
+
+**Optymalizacje Wydajności:**
+- **Cache indeksów:** `playerIndexCache` Map w DatabaseService (pierwsze wywołanie ~100ms, kolejne <1ms)
+- **Throttling fetch:** `safeFetchMembers()` - 30s cooldown per guild, zapobiega rate limit Gateway (opcode 8)
+- **Autocomplete timeout:** 2.5s protection z pustą odpowiedzią jako fallback
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -704,15 +721,24 @@ node manual-backup.js
 
 ### ⛪ Konklawe Bot
 
-**6 Systemów:**
+**7 Systemów:**
 1. **Gra Hasłowa** - `gameService.js`: Hasło "Konklawe" (admin może zmienić), poprawna→rola papieska
 2. **Osiągnięcia** - Medal Virtutti Papajlari: 30+ odpowiedzi, reset rankingu, specjalne uprawnienia
 3. **Timery** - `timerService.js`: 15/30/60min przypomnienia, auto-reset, persistent (`game_state.json`), restore po restarcie
-4. **Klątwy** - 7 rodzajów (slow mode, auto-delete, ping, emoji, caps, timeout, role), 5min, nickname manager, walidacja przed rzuceniem (zapobiega duplikowaniu)
-5. **Komendy Specjalne** - Blessing (22 warianty, 10min cooldown, 5 daily), Virtue Check (10 cnót + porady)
-6. **Losowe Odpowiedzi** - Użytkownicy papiescy: 1/100 szansa, emoji JP2roll
+4. **System Many i Frakcji** - `virtuttiService.js`:
+   - **Gabriel:** max 150 many, regeneracja 1pkt/10min, start z pełną maną
+   - **Lucyfer:** max 100 many, regeneracja 10-30min/pkt (dynamiczna), start z pełną maną
+   - Śledzenie ról użytkowników (`userRoles` Map), funkcja `getMaxEnergy(userId)`
+5. **Klątwy i Błogosławieństwa** - 10 typów klątw (slow, delete, ping, emoji, caps, timeout, role, scramble, smart, blah):
+   - **Gabriel:** `/curse` (10+klątwy×2 many, 85% sukces), `/blessing` (5 many, 50% usunięcie klątwy LUB ochrona 1h)
+   - **Lucyfer:** `/curse` (5-15 many, 5min cd, progresywne odbicie +1% za klątwę)
+   - **Revenge:** `/revenge` (50 many, 24h cd per cel) - pułapki na neutralnych użytkowników
+   - **Walidacja:** sprawdzanie przed rzuceniem czy cel już ma aktywną klątwę tego typu
+   - **Nickname Manager:** 4 prefixy dla Lucyfera (Osłabiony, Uśpiony, Oszołomiony, Upadły)
+6. **Virtue Check** - 10 cnót + porady (0 many)
+7. **Losowe Odpowiedzi** - Użytkownicy papiescy: 1/100 szansa, emoji JP2roll
 
-**Komendy:** `/podpowiedz`, `/podpowiedzi`, `/statystyki`, `/blessing`, `/virtue-check`
+**Komendy:** `/podpowiedz`, `/podpowiedzi`, `/statystyki`, `/blessing`, `/curse`, `/revenge`, `/virtue-check`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID
 
 ---
@@ -1284,100 +1310,6 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Skrócono nazwy (SYSTEM MANY → MANA, "efekt losowy z 7 typów" → "1 z 7 efektów")
   - Zastosowano skróty (sukces ↓, fail ↑)
 - Lokalizacja zmian: `Konklawe/services/judgmentService.js:98-114,117-134`
-
-### Listopad 2025
-
-**System Backup do Google Drive:**
-- Dodano automatyczne backupy codzienne o 3:00 w nocy
-- Dodano manualne backupy przez komendę `/backup`
-- Integracja z Google Drive API
-- Dwa foldery: `Polski_Squad_Backups` (automatyczne, 7 dni retencji) i `Polski_Squad_Manual_Backups` (permanentne)
-- Szczegółowe logowanie błędów z klasyfikacją
-- Automatyczne podsumowania na webhook po zakończeniu backupu
-- Kompresja ZIP z poziomem 9 dla wszystkich folderów `data/` botów
-- **FIX:** Automatyczne zapisywanie odświeżonych tokenów OAuth - zapobiega wygasaniu tokenów przy codziennych backupach
-
-**StalkerLME Bot - System Kolejkowania i Faz:**
-- Globalny system kolejkowania OCR - jeden użytkownik na raz per guild
-- Komenda `/clan-status` - porównanie wyników między klanami
-- Przyciski komend (Faza1, Faza2, Punish, Remind) w embedzie kolejki
-- Progress bary z migającymi kratkami podczas przetwarzania OCR
-- Dynamiczne timeouty sesji z auto-refresh przy kliknięciu przycisków
-- Automatyczne wygasanie sesji po 15 minutach bezczynności
-- Powiadomienia na kanały warning po zakończeniu fazy
-- Restrykcje dostępu: `/progres` i `/wyniki` tylko dla członków klanu
-- Przycisk manualnego wprowadzania danych przy konfliktach
-- Optymalizacja: usunięcie schedulowanego czyszczenia plików temp (garbage collection automatyczny)
-- Naprawa błędów Unknown Message przy anulowaniu sesji
-- Naprawa interakcji timeout i deprecated API
-
-**Muteusz Bot - Chaos Mode:**
-- System Chaos Mode z polskim hymnem narodowym
-- 5% szansa na otrzymanie roli chaos (przyznawana na stałe do wyłączenia mode)
-- 10% szansa na odpowiedź bota dla użytkowników z rolą
-- 20% szansa na wysłanie zwrotki hymnu (5 zwrotek + refren)
-- Wsparcie dla wielu ról chaos jednocześnie
-- Automatyczne usuwanie ról przy wyłączeniu chaos mode
-- Persistent storage stanu w `data/chaos_mode.json`
-- Weryfikacja użytkowników po restarcie bota
-
-**Gary Bot:**
-- Cotygodniowa zaplanowana analiza Lunar Mine (środa 18:45)
-- Obsługa komend w wątkach kanałów whitelistowanych
-- Wykrywanie wątków przez `parentId`
-
-**Rekruter Bot:**
-- RoleConflictService - automatyczne usuwanie ról rekrutacyjnych przy nadaniu roli klanowej
-- Ulepszenia w logowaniu błędów (template strings zamiast multiple args)
-
-**Konklawe Bot:**
-- Gabriel blessing cooldown: 5 minut per cel (nieograniczone cele, ale nie może błogosławić tej samej osoby częściej niż co 5 min)
-- Persistent storage blessing cooldowns w `data/gabriel_blessing_cooldowns.json`
-- Naprawa restoracji timerów po restarcie bota
-- Reset timerów gdy brak hasła lub brak podpowiedzi
-- Ulepszenia w zarządzaniu stanem gry
-
-**Ogólne Ulepszenia:**
-- Ulepszenia w logowaniu błędów we wszystkich botach
-- Obsługa Unknown Message errors przy usuwaniu wiadomości
-- Naprawa timeoutów i deprecated Discord API
-- Optymalizacja wydajności z garbage collection
-
----
-
-### Styczeń 2025
-
-**Gary Bot:**
-- Dodano `/proxy-stats` do sprawdzania konfiguracji proxy
-- Ulepszone formatowanie embedów z niestandardowymi emoji serwerowymi
-- Naprawiono parsowanie kolumn dla poprawnego mapowania danych
-- Publiczna paginacja - każdy może używać przycisków nawigacji
-- Integracja Webshare API dla automatycznego odświeżania proxy
-
-**Wszystkie Boty OCR:**
-- Ulepszono system szczegółowego logowania z komendą `/ocr-debug`
-- Dodano automatyczną rotację przetworzonych obrazów (max 400, 100/typ)
-- Standaryzowane nazewnictwo plików dla łatwiejszego debugowania
-
-**Centralny System Logowania:**
-- Dodano inteligentne separatory między botami
-- Zoptymalizowane logi startowe (jednoliniowe)
-- Rate-limited logowanie Discord z kolejkowaniem
-
-**Nickname Manager:**
-- Ulepszone rozwiązywanie konfliktów dla nakładających się efektów
-- Persistent storage w `shared_data/`
-- Automatyczne czyszczenie wygasłych efektów
-
-**StalkerLME Bot:**
-- Dodano system faz Lunar Expedition
-- Komendy `/faza1`, `/wyniki`, `/modyfikuj`
-- Dekoder buildów Survivor.io z `/decode`
-
-**Kontroler Bot:**
-- Rola specjalna dla CX 2700+
-- Ulepszone ostrzeżenia loterii (tylko Daily/CX)
-- Automatyczna detekcja DST
 
 ---
 
