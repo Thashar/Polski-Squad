@@ -116,7 +116,7 @@ class VirtuttiService {
     }
 
     /**
-     * Regeneruje energię użytkownika (1 pkt/5min dla Gabriel, 1pkt/5-15min dla Lucyfer)
+     * Regeneruje energię użytkownika (1 pkt/10min dla Gabriel, 1pkt/10-30min dla Lucyfer)
      * @param {string} userId - ID użytkownika
      */
     regenerateEnergy(userId) {
@@ -126,12 +126,12 @@ class VirtuttiService {
         const maxEnergy = this.getMaxEnergy(userId);
         const now = Date.now();
         const minutesSinceLastRegen = (now - userData.lastRegeneration) / (60 * 1000);
-        const energyToRegenerate = Math.floor(minutesSinceLastRegen / 5); // 1 punkt co 5 minut (Gabriel)
+        const energyToRegenerate = Math.floor(minutesSinceLastRegen / 10); // 1 punkt co 10 minut (Gabriel)
 
         if (energyToRegenerate > 0 && userData.energy < maxEnergy) {
             userData.energy = Math.min(maxEnergy, userData.energy + energyToRegenerate);
             // Aktualizuj lastRegeneration z uwzględnieniem reszty czasu
-            userData.lastRegeneration = now - ((minutesSinceLastRegen % 5) * 60 * 1000);
+            userData.lastRegeneration = now - ((minutesSinceLastRegen % 10) * 60 * 1000);
             logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/${maxEnergy}`);
             this.saveData();
         }
@@ -641,7 +641,7 @@ class VirtuttiService {
         if (!this.lucyferData.has(userId)) {
             this.lucyferData.set(userId, {
                 cost: 5, // Bazowy koszt 5 many
-                regenTimeMs: 5 * 60 * 1000, // Bazowy czas 5 min
+                regenTimeMs: 10 * 60 * 1000, // Bazowy czas 10 min
                 lastTarget: null,
                 targetHistory: [], // Ostatnie 10 celów
                 successStreak: 0, // Seria sukcesów
@@ -691,12 +691,12 @@ class VirtuttiService {
 
         // Czy to ten sam cel co ostatnio?
         if (lucyferData.lastTarget === newTargetId) {
-            // Ten sam cel - spowolnienie regeneracji (+1 min, max 15 min)
-            lucyferData.regenTimeMs = Math.min(15 * 60 * 1000, lucyferData.regenTimeMs + (1 * 60 * 1000));
+            // Ten sam cel - spowolnienie regeneracji (+1 min, max 30 min)
+            lucyferData.regenTimeMs = Math.min(30 * 60 * 1000, lucyferData.regenTimeMs + (1 * 60 * 1000));
             logger.info(`🐌 Lucyfer ${userId} atakuje tego samego celu. Regeneracja: ${oldRegenTime / 60000} → ${lucyferData.regenTimeMs / 60000} min`);
         } else {
-            // Inny cel - przyspieszenie regeneracji (-1 min, min 5 min)
-            lucyferData.regenTimeMs = Math.max(5 * 60 * 1000, lucyferData.regenTimeMs - (1 * 60 * 1000));
+            // Inny cel - przyspieszenie regeneracji (-1 min, min 10 min)
+            lucyferData.regenTimeMs = Math.max(10 * 60 * 1000, lucyferData.regenTimeMs - (1 * 60 * 1000));
             logger.info(`🏃 Lucyfer ${userId} atakuje inny cel. Regeneracja: ${oldRegenTime / 60000} → ${lucyferData.regenTimeMs / 60000} min`);
         }
 

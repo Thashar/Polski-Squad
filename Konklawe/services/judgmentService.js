@@ -96,7 +96,7 @@ class JudgmentService {
                     {
                         name: '☁️ **GABRIEL - Święty Anioł**',
                         value:
-                            '**⚡ MANA:** 150, regen 1/5min\n\n' +
+                            '**⚡ MANA:** 150, regen 1/10min\n\n' +
                             '**✨ MOCE:**\n' +
                             '• 🙏 `/blessing` (5): 50% usunięcia klątwy + ochrona (1h, 50% block następnej)\n' +
                             '• 💀 `/curse` (10+(N×2)): Zwykła klątwa (5min), 85% sukces\n' +
@@ -116,7 +116,7 @@ class JudgmentService {
                     {
                         name: '🔥 **LUCYFER - Upadły Anioł**',
                         value:
-                            '**⚡ MANA:** 100, regen dynamiczny 5-15min/pkt\n\n' +
+                            '**⚡ MANA:** 100, regen dynamiczny 10-30min/pkt\n\n' +
                             '**🔥 MOCE:**\n' +
                             '• 💀 `/curse` (5-15, 5min cd): Koszt dynamiczny (sukces ↓, fail ↑)\n' +
                             '• ⚔️ `/revenge` (50, 24h cd): Pułapka na neutralnego. Gdy Gabriel błogosławi → "Upadły" (blessing block 1h)\n' +
@@ -350,7 +350,7 @@ class JudgmentService {
             // Funkcja pomocnicza do generowania opisu umiejętności
             const getAbilitiesDescription = (roleName) => {
                 if (roleName === 'Gabriel') {
-                    return '**⚡ System Many:** 150 many, regen 1/5min\n' +
+                    return '**⚡ System Many:** 150 many, regen 1/10min\n' +
                         '**Moce:**\n' +
                         '• 🙏 `/blessing` (5 many): 50% usunięcie klątwy + 🛡️ ochrona celu (1h, 50%)\n' +
                         '• 💀 `/curse` (85% sukces): Zwykła klątwa (5 min)\n' +
@@ -361,7 +361,7 @@ class JudgmentService {
                         '• blessing: nie działa (odporność)\n\n' +
                         '**Ścieżka łaski i światła.**';
                 } else { // Lucyfer
-                    return '**⚡ System Many:** 100 many, regen dynamiczny 5-15min/pkt\n' +
+                    return '**⚡ System Many:** 100 many, regen dynamiczny 10-30min/pkt\n' +
                         '**Moce:**\n' +
                         '• 💀 `/curse` (5min cd): 96% zwykła | 3% silna | 1% potężna\n' +
                         '• 📈 Progresywne odbicie: +1% za klątwę (przy odbiciu: reset + blokada 1h)\n' +

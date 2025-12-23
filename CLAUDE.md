@@ -915,6 +915,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Wydłużenie Regeneracji Many:**
+- **Gabriel:** Regeneracja wydłużona dwukrotnie - 1 pkt/10min (było 1 pkt/5min)
+- **Lucyfer:** Dynamiczna regeneracja wydłużona dwukrotnie - 10-30 min/pkt (było 5-15 min/pkt)
+  - Bazowy czas: 10 min (było 5 min)
+  - Maksymalny czas (ten sam cel): 30 min (było 15 min)
+  - Minimalny czas (różne cele): 10 min (było 5 min)
+- Zaktualizowano embedy Sądu Bożego (oba warianty) z nowymi wartościami regeneracji
+- Lokalizacja zmian:
+  - `Konklawe/services/virtuttiService.js:119,129,134,644,695,699` (logika regeneracji)
+  - `Konklawe/services/judgmentService.js:99,119,353,364` (embedy z opisami)
+
 **Wydarzynier Bot - Naprawa Obsługi Błędu Unknown Message:**
 - **FIX:** Dodano obsługę błędu `DiscordAPIError[10008]: Unknown Message` w komendzie `/party-close`
 - Problem: Gdy interakcja wygasała (użytkownik czekał za długo), bot wyrzucał błędy mimo że lobby zostało pomyślnie zamknięte
@@ -969,8 +980,8 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - `Konklawe/handlers/interactionHandlers.js:2469,2490-2503,1457-1466` (applyNicknameCurse, logika "Oszołomiony")
 
 **Konklawe Bot - Balans Systemu Many:**
-- **Gabriel: max 150 many** (było 300) - Start z pełną maną, regeneracja 1 pkt/5min (było 10 pkt/h)
-- **Lucyfer: max 100 many** (było 300) - Start z pełną maną, dynamiczna regeneracja 5-15 min/pkt
+- **Gabriel: max 150 many** (było 300) - Start z pełną maną, regeneracja 1 pkt/10min (było 1 pkt/5min)
+- **Lucyfer: max 100 many** (było 300) - Start z pełną maną, dynamiczna regeneracja 10-30 min/pkt (było 5-15 min/pkt)
 - **Bonus po blokadzie odbicia: 25 many** (było 50) dla Lucyfera
 - Dodano system śledzenia ról użytkowników (`userRoles` Map)
 - Nowa funkcja `getMaxEnergy(userId)` która zwraca odpowiedni limit (150/100)
