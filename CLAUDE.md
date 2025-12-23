@@ -915,6 +915,19 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Naprawa Mechaniki Błogosławieństwa:**
+- **FIX KRYTYCZNY:** Blessing jest teraz jednorazowy - jeśli użyty do próby usunięcia klątwy, NIE daje ochrony
+- **Nowa logika:**
+  - Cel MA klątwę → 50% szansa usunięcia → Blessing ZUŻYTY (bez ochrony na przyszłość)
+  - Cel NIE MA klątwy → Ochrona 1h (50% szansa blokowania następnej klątwy)
+- **Problem:** Stary system dawał ochronę zawsze, niezależnie od tego czy blessing był użyty do usunięcia klątwy
+- **Skutek:** Gracze dostawali podwójną korzyść - próba usunięcia klątwy + ochrona na przyszłość
+- Dodano komunikat "Próba usunięcia klątwy nie powiodła się..." gdy 50% się nie uda
+- Zaktualizowano embedy Sądu Bożego z nowym opisem blessingu
+- Lokalizacja zmian:
+  - `Konklawe/handlers/interactionHandlers.js:875,879,899-903,942-948` (logika blessing)
+  - `Konklawe/services/judgmentService.js:101,355` (embedy z opisami)
+
 **Konklawe Bot - Wydłużenie Regeneracji Many:**
 - **Gabriel:** Regeneracja wydłużona dwukrotnie - 1 pkt/10min (było 1 pkt/5min)
 - **Lucyfer:** Dynamiczna regeneracja wydłużona dwukrotnie - 10-30 min/pkt (było 5-15 min/pkt)

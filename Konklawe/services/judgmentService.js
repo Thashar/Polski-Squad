@@ -98,7 +98,7 @@ class JudgmentService {
                         value:
                             '**⚡ MANA:** 150, regen 1/10min\n\n' +
                             '**✨ MOCE:**\n' +
-                            '• 🙏 `/blessing` (5): 50% usunięcia klątwy + ochrona (1h, 50% block następnej)\n' +
+                            '• 🙏 `/blessing` (5): Ma klątwę? 50% usunięcia (zużyty). Brak klątwy? Ochrona 1h (50% block)\n' +
                             '• 💀 `/curse` (10+(N×2)): Zwykła klątwa (5min), 85% sukces\n' +
                             '• ⚔️ `/revenge` (50, 24h cd): Pułapka na neutralnego. Gdy Lucyfer przeklnie → odbicie 3x\n' +
                             '• 🔍 `/virtue-check` (0)\n\n' +
@@ -352,7 +352,7 @@ class JudgmentService {
                 if (roleName === 'Gabriel') {
                     return '**⚡ System Many:** 150 many, regen 1/10min\n' +
                         '**Moce:**\n' +
-                        '• 🙏 `/blessing` (5 many): 50% usunięcie klątwy + 🛡️ ochrona celu (1h, 50%)\n' +
+                        '• 🙏 `/blessing` (5 many): Ma klątwę? 50% usunięcia (zużyty). Brak klątwy? 🛡️ Ochrona 1h (50% block)\n' +
                         '• 💀 `/curse` (85% sukces): Zwykła klątwa (5 min)\n' +
                         '• 🔍 `/virtue-check`\n' +
                         '• ⚔️ `/revenge` (50 many, 24h cd): Cel → Lucyfer /curse = odbicie 3x\n\n' +

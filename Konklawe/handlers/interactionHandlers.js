@@ -872,9 +872,11 @@ class InteractionHandler {
             let blessingMessage = `${roleEmoji} **${targetUser.toString()} otrzymałeś błogosławieństwo!**\n\n${randomReaction} ${blessing}`;
 
             // === SPECJALNA MECHANIKA GABRIEL ===
+            let hadActiveCurse = false; // Flaga czy cel miał klątwę
             if (roleType === 'gabriel') {
                 // 1. Sprawdź czy target ma klątwę - 50% szansa na usunięcie
                 if (this.activeCurses.has(targetUser.id)) {
+                    hadActiveCurse = true; // Cel miał klątwę - blessing zostanie zużyty
                     const randomChance = Math.random() * 100;
                     if (randomChance < 50) {
                         // Usuń klątwę
@@ -894,6 +896,10 @@ class InteractionHandler {
 
                         // Ustawienie flagi dla późniejszego logowania
                         curseRemoved = true;
+                    } else {
+                        // Nie udało się usunąć klątwy
+                        blessingMessage += `\n\n💫 **Próba usunięcia klątwy nie powiodła się...** 💫`;
+                        logger.info(`💫 Gabriel (${interaction.user.tag}) próbował usunąć klątwę z ${targetUser.tag}, ale się nie udało`);
                     }
                 }
 
@@ -933,8 +939,13 @@ class InteractionHandler {
             });
 
             // === DODAJ OCHRONĘ BŁOGOSŁAWIEŃSTWA (1h, 50% szansa) ===
-            this.virtuttiService.addBlessingProtection(targetUser.id);
-            logger.info(`🛡️ Dodano ochronę błogosławieństwa dla ${targetUser.tag} (1h, 50% szansa)`);
+            // Ochrona dodawana TYLKO gdy cel NIE miał aktywnej klątwy
+            if (!hadActiveCurse) {
+                this.virtuttiService.addBlessingProtection(targetUser.id);
+                logger.info(`🛡️ Dodano ochronę błogosławieństwa dla ${targetUser.tag} (1h, 50% szansa)`);
+            } else {
+                logger.info(`💫 Blessing zużyty na próbę usunięcia klątwy - brak ochrony dla ${targetUser.tag}`);
+            }
 
             // Wyślij ephemeral message z informacją o pozostałej manie
             const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
