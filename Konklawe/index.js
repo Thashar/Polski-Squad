@@ -11,6 +11,7 @@ const PasswordEmbedService = require('./services/passwordEmbedService');
 const ScheduledHintsService = require('./services/scheduledHintsService');
 const JudgmentService = require('./services/judgmentService');
 const DetailedLogger = require('./services/detailedLogger');
+const MessageCleanupService = require('./services/messageCleanupService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -29,7 +30,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService;
 let interactionHandler, messageHandler;
 
 /**
@@ -78,8 +79,11 @@ async function initializeServices() {
     // Inicjalizacja JudgmentService
     judgmentService = new JudgmentService(config, detailedLogger);
 
+    // Inicjalizacja MessageCleanupService
+    messageCleanupService = new MessageCleanupService(client, logger, config.dataDir);
+
     // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger);
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService);
     interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 
@@ -105,6 +109,13 @@ async function onReady() {
         }
     } catch (error) {
         logger.error('❌ Błąd przywracania wygasłych efektów:', error);
+    }
+
+    // Zainicjalizuj MessageCleanupService (usuwa przeterminowane i przywraca timery)
+    try {
+        await messageCleanupService.initialize();
+    } catch (error) {
+        logger.error('❌ Błąd inicjalizacji MessageCleanupService:', error);
     }
 
     // Odtwórz timery dla AKTYWNYCH klątw (które jeszcze trwają)

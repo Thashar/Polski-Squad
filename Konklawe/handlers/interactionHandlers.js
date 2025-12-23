@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -18,6 +18,7 @@ class InteractionHandler {
         this.scheduledHintsService = scheduledHintsService;
         this.judgmentService = judgmentService;
         this.detailedLogger = detailedLogger;
+        this.messageCleanupService = messageCleanupService;
         this.virtuttiService = new VirtuttiService(config);
         this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
@@ -933,10 +934,21 @@ class InteractionHandler {
                 }
             }
 
-            await interaction.reply({
+            const blessingReply = await interaction.reply({
                 content: blessingMessage,
                 ephemeral: false
             });
+
+            // Zaplanuj automatyczne usunięcie wiadomości po 10 min
+            if (this.messageCleanupService && blessingReply) {
+                const deleteAt = Date.now() + (10 * 60 * 1000); // 10 minut
+                await this.messageCleanupService.scheduleMessageDeletion(
+                    blessingReply.id,
+                    blessingReply.channelId,
+                    deleteAt,
+                    'Blessing 10min - koniec'
+                );
+            }
 
             // === DODAJ OCHRONĘ BŁOGOSŁAWIEŃSTWA (1h, 50% szansa) ===
             // Ochrona dodawana TYLKO gdy cel NIE miał aktywnej klątwy
@@ -1048,7 +1060,18 @@ class InteractionHandler {
         });
 
         try {
-            await interaction.reply({ embeds: [embed], ephemeral: false });
+            const virtueCheckReply = await interaction.reply({ embeds: [embed], ephemeral: false });
+
+            // Zaplanuj automatyczne usunięcie wiadomości po 10 min
+            if (this.messageCleanupService && virtueCheckReply) {
+                const deleteAt = Date.now() + (10 * 60 * 1000); // 10 minut
+                await this.messageCleanupService.scheduleMessageDeletion(
+                    virtueCheckReply.id,
+                    virtueCheckReply.channelId,
+                    deleteAt,
+                    'Virtue-check 10min - koniec'
+                );
+            }
 
             // Szczegółowe logowanie virtue check
             if (this.detailedLogger) {
@@ -1218,13 +1241,26 @@ class InteractionHandler {
                     }
 
                     // Wykonaj dodatkową klątwę
-                    await this.executeCurse(interaction, targetMember, curse.additional, curse.duration * 60 * 1000);
+                    const curseDurationMs = curse.duration * 60 * 1000;
+                    await this.executeCurse(interaction, targetMember, curse.additional, curseDurationMs);
 
                     const curseEmojis = this.getCurseEmojis(curse.additional);
 
-                    await interaction.editReply({
+                    const gabrielCurseReply = await interaction.editReply({
                         content: `☁️ **Gabriel przeklął Lucyfera!**\n\n🔥 **${targetUser.toString()} zostałeś przeklęty!** ${curseEmojis}`
                     });
+
+                    // Zaplanuj automatyczne usunięcie wiadomości po zakończeniu klątwy
+                    if (this.messageCleanupService && gabrielCurseReply) {
+                        const deleteAt = Date.now() + curseDurationMs;
+                        const durationMinutes = Math.round(curseDurationMs / 1000 / 60);
+                        await this.messageCleanupService.scheduleMessageDeletion(
+                            gabrielCurseReply.id,
+                            gabrielCurseReply.channelId,
+                            deleteAt,
+                            `Gabriel→Lucyfer ${durationMinutes}min - koniec`
+                        );
+                    }
 
                     logger.info(`☁️ Gabriel (${interaction.user.tag}) skutecznie przeklął Lucyfera (${targetUser.tag})`);
                     return;
@@ -1294,10 +1330,23 @@ class InteractionHandler {
                 await this.executeCurse(interaction, actualTargetMember, curse.additional, curse.duration * 60 * 1000);
 
                 const curseEmojis = this.getCurseEmojis(curse.additional);
+                const curseDurationMs = curse.duration * 60 * 1000;
 
-                await interaction.editReply({
+                const gabrielReflectionReply = await interaction.editReply({
                     content: `🛡️ **Gabriel okazał się odporny na tę klątwę Lucyfera!**\n\n🔥 **${interaction.user.toString()} zostałeś przeklęty własną klątwą!** ${curseEmojis}\n\n*Światło odpiera ciemność...*`
                 });
+
+                // Zaplanuj automatyczne usunięcie wiadomości po zakończeniu klątwy
+                if (this.messageCleanupService && gabrielReflectionReply) {
+                    const deleteAt = Date.now() + curseDurationMs;
+                    const durationMinutes = Math.round(curseDurationMs / 1000 / 60);
+                    await this.messageCleanupService.scheduleMessageDeletion(
+                        gabrielReflectionReply.id,
+                        gabrielReflectionReply.channelId,
+                        deleteAt,
+                        `Odbicie Gabriela ${durationMinutes}min - koniec`
+                    );
+                }
 
                 // Szczegółowe logowanie odbicia Gabriela (33%)
                 if (this.detailedLogger) {
@@ -1412,10 +1461,23 @@ class InteractionHandler {
                 }
 
                 // Wyślij komunikat o odbiciu i blokadzie
-                return await interaction.reply({
+                const reflectionReply = await interaction.reply({
                     content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został uśpiony!**\n\n*Siły ciemności nie zagrażają serwerowi...*`,
                     ephemeral: false
                 });
+
+                // Zaplanuj automatyczne usunięcie wiadomości po 1h (czas blokady)
+                if (this.messageCleanupService && reflectionReply) {
+                    const deleteAt = Date.now() + (60 * 60 * 1000); // 1h
+                    await this.messageCleanupService.scheduleMessageDeletion(
+                        reflectionReply.id,
+                        reflectionReply.channelId,
+                        deleteAt,
+                        'Odbicie Lucyfera - koniec blokady'
+                    );
+                }
+
+                return reflectionReply;
             }
         }
 
@@ -1613,9 +1675,21 @@ class InteractionHandler {
                 responseContent += `\n\n⚠️ *Uwaga: ${nicknameError}*`;
             }
 
-            await interaction.editReply({
+            const curseReply = await interaction.editReply({
                 content: responseContent
             });
+
+            // Zaplanuj automatyczne usunięcie wiadomości po zakończeniu klątwy
+            if (this.messageCleanupService && curseReply) {
+                const deleteAt = Date.now() + curseDuration;
+                const durationMinutes = Math.round(curseDuration / 1000 / 60);
+                await this.messageCleanupService.scheduleMessageDeletion(
+                    curseReply.id,
+                    curseReply.channelId,
+                    deleteAt,
+                    `Klątwa ${durationMinutes}min - koniec`
+                );
+            }
 
             // Wyślij ephemeral message z informacją o manie i statusie
             const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
@@ -1805,9 +1879,20 @@ class InteractionHandler {
             ? `${publicEmoji} **Lucyfer przygotowuje zemstę...** ${publicEmoji}`
             : `${publicEmoji} **Gabriel przygotowuje zemstę...** ${publicEmoji}`;
 
-        await interaction.channel.send({
+        const revengePublicMessage = await interaction.channel.send({
             content: publicMessage
         });
+
+        // Zaplanuj automatyczne usunięcie wiadomości po 1h (czas trwania revenge)
+        if (this.messageCleanupService && revengePublicMessage) {
+            const deleteAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+            await this.messageCleanupService.scheduleMessageDeletion(
+                revengePublicMessage.id,
+                revengePublicMessage.channelId,
+                deleteAt,
+                'Revenge 1h - koniec'
+            );
+        }
 
         // 12. Log
         logger.info(`💀 ${roleType === 'lucyfer' ? 'Lucyfer' : 'Gabriel'} (${interaction.user.tag}) użył /revenge na ${targetUser.tag}`);

@@ -941,6 +941,27 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - System Automatycznego Usuwania Wiadomości:**
+- **NOWA FUNKCJA:** MessageCleanupService - automatyczne usuwanie wiadomości z klątwami/blessingami/revenge po zakończeniu efektu
+- **Persistent storage** - system przetrwa restart bota i przywraca timery
+- **Wiadomości klątw** - usuwane po zakończeniu klątwy (5/15/30min lub 1h zależnie od poziomu)
+  - Zwykła klątwa: 5 min
+  - Silna klątwa (Lucyfer): 15 min
+  - Potężna klątwa (Lucyfer): 30 min
+  - Mega silna klątwa (Gabriel→Lucyfer): 1h zmiana co 5min
+  - Odbicie Lucyfera (progresywne): 1h blokada
+  - Odbicie Gabriela: czas klątwy (5 min)
+- **Wiadomości blessing** - usuwane po 10 minutach
+- **Wiadomości virtue-check** - usuwane po 10 minutach
+- **Wiadomości revenge** - usuwane po 1 godzinie (czas trwania efektu)
+- **Auto-cleanup przy starcie** - usuwa wiadomości które już wygasły podczas offline bota
+- **Struktura danych:** `Konklawe/data/scheduled_message_deletions.json`
+- Lokalizacja zmian:
+  - `Konklawe/services/messageCleanupService.js` (nowy serwis)
+  - `Konklawe/index.js:14,33,83,114-119` (inicjalizacja)
+  - `Konklawe/handlers/interactionHandlers.js:11,21` (konstruktor)
+  - `Konklawe/handlers/interactionHandlers.js:937-951,1063-1074,1227-1241,1300-1314,1416-1432,1617-1631,1882-1895` (integracja)
+
 **Konklawe Bot - Naprawa Mechaniki Błogosławieństwa:**
 - **FIX KRYTYCZNY:** Blessing jest teraz jednorazowy - jeśli użyty do próby usunięcia klątwy, NIE daje ochrony
 - **Nowa logika:**
