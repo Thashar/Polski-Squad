@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const path = require('path');
 
 const config = require('./config/config');
 
@@ -80,7 +81,8 @@ async function initializeServices() {
     judgmentService = new JudgmentService(config, detailedLogger);
 
     // Inicjalizacja MessageCleanupService
-    messageCleanupService = new MessageCleanupService(client, logger, config.dataDir);
+    const dataDir = path.join(__dirname, 'data');
+    messageCleanupService = new MessageCleanupService(client, logger, dataDir);
 
     // Inicjalizacja handlerów z wszystkimi serwisami
     interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService);

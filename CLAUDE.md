@@ -941,6 +941,12 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Naprawa Błędu Inicjalizacji MessageCleanupService:**
+- **FIX KRYTYCZNY:** Naprawiono błąd `ERR_INVALID_ARG_TYPE: The "path" argument must be of type string. Received undefined`
+- **Problem:** `config.dataDir` nie istniał w konfiguracji Konklawe, powodując crash przy starcie
+- **Rozwiązanie:** Dodano `const path = require('path')` i przekazanie bezpośredniej ścieżki `path.join(__dirname, 'data')`
+- Lokalizacja zmian: `Konklawe/index.js:2,84-85`
+
 **Konklawe Bot - Naprawa Ghost Pingów w Klątwie Random Ping:**
 - **FIX:** Klątwa Random ping teraz poprawnie usuwa wysłane pingi
 - **Problem:** Stary system próbował usunąć "ostatnią wiadomość" co powodowało błędy gdy ktoś napisał coś w międzyczasie
