@@ -155,7 +155,16 @@ class VirtuttiService {
      */
     getEnergy(userId, roleType = null) {
         this.initializeEnergy(userId, roleType);
-        this.regenerateEnergy(userId);
+
+        // Regeneruj manę w zależności od typu użytkownika
+        const userRole = roleType || this.userRoles.get(userId);
+        if (userRole === 'lucyfer') {
+            // Lucyfer ma własny system regeneracji
+            this.regenerateLucyferMana(userId);
+        } else {
+            // Gabriel i Virtutti używają standardowej regeneracji
+            this.regenerateEnergy(userId);
+        }
 
         const today = this.getPolishTime().toDateString();
         const userData = this.energySystem.get(userId);
@@ -1045,6 +1054,7 @@ class VirtuttiService {
 
                 // WALIDACJA: Ogranicz energię do maksymalnego limitu przy wczytywaniu
                 let correctedCount = 0;
+                const now = Date.now();
                 for (const [userId, userData] of this.energySystem.entries()) {
                     // Zapisz rolę do userRoles jeśli istnieje w danych
                     if (userData.roleType) {
@@ -1058,6 +1068,16 @@ class VirtuttiService {
                     if (userData.energy > maxEnergy) {
                         logger.warn(`⚠️ Wykryto przekroczenie limitu many dla ${userId}: ${userData.energy}/${maxEnergy} - naprawiam...`);
                         userData.energy = maxEnergy;
+                        // KRYTYCZNE: Zaktualizuj lastRegeneration na teraz, aby zapobiec natychmiastowej regeneracji
+                        userData.lastRegeneration = now;
+
+                        // Jeśli to Lucyfer, zaktualizuj także lucyferData.lastRegeneration
+                        if (userData.roleType === 'lucyfer' && this.lucyferData.has(userId)) {
+                            const lucyferData = this.lucyferData.get(userId);
+                            lucyferData.lastRegeneration = now;
+                            logger.info(`🔥 Zaktualizowano lastRegeneration dla Lucyfera ${userId}`);
+                        }
+
                         correctedCount++;
                     }
                 }
