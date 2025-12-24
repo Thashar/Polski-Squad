@@ -942,17 +942,29 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
-**Konklawe Bot - Naprawa Przekroczenia Limitu Regeneracji Many:**
-- **FIX KRYTYCZNY:** Naprawiono możliwość przekroczenia maksymalnego limitu many (119/100)
-- **Problem:** Funkcja `loadData()` wczytywała dane z JSON bez walidacji limitów
-- **Skutek:** Jeśli w pliku było zapisane np. 119 many dla Lucyfera (limit 100), wartość była wczytywana bez ograniczenia
-- **Rozwiązanie 1:** Dodano walidację w `loadData()` która sprawdza wszystkich użytkowników i ogranicza energię do `maxEnergy`
-  - Przywraca `userRoles` z danych (`userData.roleType`)
-  - Loguje wszystkie naprawione przekroczenia
-  - Automatycznie zapisuje naprawione dane
-- **Rozwiązanie 2:** Dodano walidację w `saveData()` przed zapisem do pliku (dodatkowa warstwa bezpieczeństwa)
-- **Potwierdzenie:** Wszystkie funkcje regeneracji (`regenerateEnergy`, `regenerateLucyferMana`, `adjustLucyferRegeneration`, `refundHalfEnergy`, `grantLucyferBlockEndBonus`) używają `Math.min(maxEnergy, ...)` - są zabezpieczone
-- Lokalizacja zmian: `Konklawe/services/virtuttiService.js:1046-1070,1189-1196`
+**Konklawe Bot - Kompleksowa Naprawa Systemu Regeneracji Many:**
+- **FIX KRYTYCZNY:** Naprawiono wielokrotne problemy z regeneracją many:
+  1. **Przekroczenie limitu (119/100)** - `loadData()` wczytywała dane bez walidacji
+  2. **Podwójna regeneracja** - `getEnergy()` wywoływała zawsze `regenerateEnergy()` (Gabriel) nawet dla Lucyfera
+  3. **Stary timestamp regeneracji** - przy naprawie energii nie aktualizowano `lastRegeneration`
+  4. **Manualne wywołanie w handlerze** - `regenerateLucyferMana()` było wywołane 2x (handler + getEnergy)
+  5. **Problem "cały czas 100/100"** - kombinacja problemów 2+3+4 powodowała natychmiastową regenerację do pełna
+
+- **Rozwiązania:**
+  - **Walidacja w loadData():** Sprawdza limity, naprawia przekroczenia, aktualizuje `lastRegeneration` i `lucyferData.lastRegeneration`
+  - **Walidacja w saveData():** Dodatkowa warstwa bezpieczeństwa przed zapisem
+  - **Inteligentny getEnergy():** Rozpoznaje rolę użytkownika i wywołuje odpowiednią funkcję regeneracji:
+    - Lucyfer → `regenerateLucyferMana()` (dynamiczna 10-30min)
+    - Gabriel/Virtutti → `regenerateEnergy()` (1 pkt/10min)
+  - **Usunięto manualną regenerację:** Z `interactionHandlers.js` linia 1161 (duplikat wywołania)
+
+- **Systemy regeneracji (rozdzielone):**
+  - Gabriel: `userData.lastRegeneration`, `regenerateEnergy()`, 1 pkt/10min
+  - Lucyfer: `lucyferData.lastRegeneration`, `regenerateLucyferMana()`, 1 pkt/10-30min (dynamiczne)
+
+- Lokalizacja zmian:
+  - `Konklawe/services/virtuttiService.js:156-167,1055-1083,1189-1196`
+  - `Konklawe/handlers/interactionHandlers.js:1157-1164`
 
 **Konklawe Bot - Naprawa Błędu Inicjalizacji MessageCleanupService:**
 - **FIX KRYTYCZNY:** Naprawiono błąd `ERR_INVALID_ARG_TYPE: The "path" argument must be of type string. Received undefined`

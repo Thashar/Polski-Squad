@@ -1158,7 +1158,7 @@ class InteractionHandler {
         // Inicjalizuj dane Lucyfera jeśli to Lucyfer
         if (roleType === 'lucyfer') {
             this.virtuttiService.initializeLucyferData(userId);
-            this.virtuttiService.regenerateLucyferMana(userId);
+            // UWAGA: regenerateLucyferMana() jest już wywoływane w getEnergy()
         }
 
         const energyData = this.virtuttiService.getEnergy(userId, roleType);
