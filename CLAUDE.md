@@ -942,6 +942,18 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Naprawa Przekroczenia Limitu Regeneracji Many:**
+- **FIX KRYTYCZNY:** Naprawiono możliwość przekroczenia maksymalnego limitu many (119/100)
+- **Problem:** Funkcja `loadData()` wczytywała dane z JSON bez walidacji limitów
+- **Skutek:** Jeśli w pliku było zapisane np. 119 many dla Lucyfera (limit 100), wartość była wczytywana bez ograniczenia
+- **Rozwiązanie 1:** Dodano walidację w `loadData()` która sprawdza wszystkich użytkowników i ogranicza energię do `maxEnergy`
+  - Przywraca `userRoles` z danych (`userData.roleType`)
+  - Loguje wszystkie naprawione przekroczenia
+  - Automatycznie zapisuje naprawione dane
+- **Rozwiązanie 2:** Dodano walidację w `saveData()` przed zapisem do pliku (dodatkowa warstwa bezpieczeństwa)
+- **Potwierdzenie:** Wszystkie funkcje regeneracji (`regenerateEnergy`, `regenerateLucyferMana`, `adjustLucyferRegeneration`, `refundHalfEnergy`, `grantLucyferBlockEndBonus`) używają `Math.min(maxEnergy, ...)` - są zabezpieczone
+- Lokalizacja zmian: `Konklawe/services/virtuttiService.js:1046-1070,1189-1196`
+
 **Konklawe Bot - Naprawa Błędu Inicjalizacji MessageCleanupService:**
 - **FIX KRYTYCZNY:** Naprawiono błąd `ERR_INVALID_ARG_TYPE: The "path" argument must be of type string. Received undefined`
 - **Problem:** `config.dataDir` nie istniał w konfiguracji Konklawe, powodując crash przy starcie
