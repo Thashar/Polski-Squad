@@ -1042,7 +1042,32 @@ class VirtuttiService {
                 const energySystemData = await fs.readFile(this.energySystemFile, 'utf8');
                 const parsedEnergySystem = JSON.parse(energySystemData);
                 this.energySystem = new Map(Object.entries(parsedEnergySystem));
-                logger.info(`📂 Wczytano ${this.energySystem.size} danych systemu many`);
+
+                // WALIDACJA: Ogranicz energię do maksymalnego limitu przy wczytywaniu
+                let correctedCount = 0;
+                for (const [userId, userData] of this.energySystem.entries()) {
+                    // Zapisz rolę do userRoles jeśli istnieje w danych
+                    if (userData.roleType) {
+                        this.userRoles.set(userId, userData.roleType);
+                    }
+
+                    // Pobierz maksymalną energię dla użytkownika
+                    const maxEnergy = this.getMaxEnergy(userId);
+
+                    // Ogranicz energię jeśli przekracza limit
+                    if (userData.energy > maxEnergy) {
+                        logger.warn(`⚠️ Wykryto przekroczenie limitu many dla ${userId}: ${userData.energy}/${maxEnergy} - naprawiam...`);
+                        userData.energy = maxEnergy;
+                        correctedCount++;
+                    }
+                }
+
+                logger.info(`📂 Wczytano ${this.energySystem.size} danych systemu many${correctedCount > 0 ? ` (naprawiono ${correctedCount} przekroczeń)` : ''}`);
+
+                // Zapisz naprawione dane jeśli były korekty
+                if (correctedCount > 0) {
+                    await this.saveData();
+                }
             } catch (error) {
                 if (error.code !== 'ENOENT') {
                     logger.warn(`⚠️ Błąd wczytywania systemu many: ${error.message}`);
@@ -1160,6 +1185,15 @@ class VirtuttiService {
 
             // Zapisz dane Gabriela
             await fs.writeFile(this.gabrielBlessingCooldownsFile, JSON.stringify(gabrielBlessingCooldownsObj, null, 2));
+
+            // WALIDACJA: Sprawdź limity many przed zapisem
+            for (const [userId, userData] of this.energySystem.entries()) {
+                const maxEnergy = this.getMaxEnergy(userId);
+                if (userData.energy > maxEnergy) {
+                    logger.warn(`⚠️ Przed zapisem: naprawiam przekroczenie many dla ${userId}: ${userData.energy} -> ${maxEnergy}`);
+                    userData.energy = maxEnergy;
+                }
+            }
 
             // Zapisz system many
             const energySystemObj = Object.fromEntries(this.energySystem);
