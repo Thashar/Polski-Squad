@@ -1894,7 +1894,18 @@ class InteractionHandler {
             );
         }
 
-        // 12. Log
+        // 12. Szczegółowe logowanie
+        if (this.detailedLogger) {
+            const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
+            await this.detailedLogger.logRevenge(
+                interaction.user,
+                roleType,
+                50, // koszt
+                updatedEnergyData
+            );
+        }
+
+        // 13. Log
         logger.info(`💀 ${roleType === 'lucyfer' ? 'Lucyfer' : 'Gabriel'} (${interaction.user.tag}) użył /revenge na ${targetUser.tag}`);
     }
 

@@ -942,6 +942,22 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Dodano Szczegółowe Logowanie dla /revenge:**
+- **NOWA FUNKCJA:** Dodano logowanie do DetailedLogger dla komendy `/revenge`
+- **Nowa metoda:** `logRevenge(caster, roleType, cost, energyData)` w `detailedLogger.js`
+- **Informacje w logu:**
+  - Rzucający (Gabriel lub Lucyfer) z tagiem Discord
+  - Koszt (50 many)
+  - Pozostała mana po użyciu
+  - Typ efektu (gabriel lub lucyfer)
+  - Czas trwania (1h)
+  - Cooldown (24h na tego samego gracza)
+  - Cel: *Ukryty (efekt pułapkowy)* - nie ujawnia kto jest celem
+- **Wywołanie:** W `handleRevengeCommand` po zaplanowaniu usunięcia wiadomości (linia 1897-1906)
+- Lokalizacja zmian:
+  - `Konklawe/services/detailedLogger.js:319-342` (nowa metoda)
+  - `Konklawe/handlers/interactionHandlers.js:1897-1906` (wywołanie)
+
 **Konklawe Bot - Kompleksowa Naprawa Systemu Regeneracji Many:**
 - **FIX KRYTYCZNY:** Naprawiono wielokrotne problemy z regeneracją many:
   1. **Przekroczenie limitu (119/100)** - `loadData()` wczytywała dane bez walidacji

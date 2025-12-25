@@ -315,6 +315,31 @@ class DetailedLogger {
             ]
         });
     }
+
+    /**
+     * Loguje użycie /revenge przez Gabriela lub Lucyfera
+     */
+    async logRevenge(caster, roleType, cost, energyData) {
+        const roleEmoji = roleType === 'lucyfer' ? '🔥' : '☁️';
+        const roleName = roleType === 'lucyfer' ? 'Lucyfer' : 'Gabriel';
+        const effectDescription = roleType === 'lucyfer'
+            ? 'Gabriel używając /blessing zostanie "Upadły" na 1h!'
+            : 'Lucyfer rzucając /curse odbije klątwę 3 razy!';
+
+        await this.log({
+            type: 'revenge',
+            title: `${roleEmoji} ⚔️ ZEMSTA - ${roleName.toUpperCase()}`,
+            description: `**${roleName} zaplanował zemstę!**\n\n${effectDescription}`,
+            fields: [
+                { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
+                { name: '💰 Koszt', value: `${cost} many`, inline: true },
+                { name: '⚡ Pozostała mana', value: `${energyData.energy}/${energyData.maxEnergy}`, inline: true },
+                { name: '⏰ Czas trwania', value: '1 godzina', inline: true },
+                { name: '🔄 Cooldown', value: '24h na tego samego gracza', inline: true },
+                { name: '🎯 Cel', value: '*Ukryty (efekt pułapkowy)*', inline: true }
+            ]
+        });
+    }
 }
 
 module.exports = DetailedLogger;
