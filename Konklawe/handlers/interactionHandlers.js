@@ -1337,7 +1337,7 @@ class InteractionHandler {
                     });
                 }
             } else {
-                // 1% - ⚡💥 ULTRA POTĘŻNA KLĄTWA 24h
+                // 1% - ⚡💥 ULTRA POTĘŻNA KLĄTWA 24h (10 typów)
                 const curses = [
                     'slow_mode',
                     'auto_delete',
@@ -1345,7 +1345,10 @@ class InteractionHandler {
                     'emoji_spam',
                     'forced_caps',
                     'random_timeout',
-                    'special_role'
+                    'special_role',
+                    'scramble_letters',
+                    'smart_reply',
+                    'blah_blah'
                 ];
                 const randomCurse = curses[Math.floor(Math.random() * curses.length)];
 
@@ -1447,7 +1450,7 @@ class InteractionHandler {
                 });
             }
 
-            // Lista dostępnych klątw (7 typów)
+            // Lista dostępnych klątw (10 typów)
             const curses = [
                 'slow_mode',
                 'auto_delete',
@@ -1455,7 +1458,10 @@ class InteractionHandler {
                 'emoji_spam',
                 'forced_caps',
                 'random_timeout',
-                'special_role'
+                'special_role',
+                'scramble_letters',
+                'smart_reply',
+                'blah_blah'
             ];
             const randomCurse = curses[Math.floor(Math.random() * curses.length)];
 
@@ -1469,7 +1475,7 @@ class InteractionHandler {
             }
 
             // Nałóż ultra potężną klątwę (5 min aktywna + 24h debuff)
-            const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id);
+            const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id, 'admin');
             await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
 
             // Szczegółowe logowanie admin ultra klątwy

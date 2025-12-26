@@ -1270,17 +1270,19 @@ class VirtuttiService {
      * @param {string} userId - ID użytkownika (Lucyfer)
      * @returns {Object} - { initialCurseEndTime, debuffEndTime }
      */
-    applyGabrielDebuffToLucyfer(userId) {
+    applyGabrielDebuffToLucyfer(userId, source = 'gabriel') {
         const now = Date.now();
         const initialCurseEndTime = now + (5 * 60 * 1000); // 5 minut
         const debuffEndTime = now + (24 * 60 * 60 * 1000); // 24 godziny
 
         this.lucyferGabrielDebuff.set(userId, {
             endTime: debuffEndTime,
-            initialCurseEndTime: initialCurseEndTime
+            initialCurseEndTime: initialCurseEndTime,
+            source: source // 'gabriel' lub 'admin'
         });
 
-        logger.info(`⚡ Gabriel debuff nałożony na Lucyfera ${userId} (5 min klątwa + 24h debuff)`);
+        const sourceText = source === 'admin' ? 'Admin' : 'Gabriel';
+        logger.info(`⚡ ${sourceText} debuff nałożony na ${userId} (5 min klątwa + 24h debuff)`);
         this.saveData();
 
         return { initialCurseEndTime, debuffEndTime };

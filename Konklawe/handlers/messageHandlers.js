@@ -26,56 +26,67 @@ class MessageHandler {
                 await interactionHandler.handleCurseEffects(message);
             }
 
-            // === GABRIEL DEBUFF NA LUCYFERA - 10% szansa na klątwę po fazie początkowej ===
+            // === ULTRA POTĘŻNY DEBUFF (Gabriel/Admin) - 10% szansa na klątwę po fazie początkowej ===
             if (interactionHandler && interactionHandler.virtuttiService && message.member) {
-                // Sprawdź czy użytkownik ma rolę Lucyfer
-                const hasLucyferRole = message.member.roles.cache.has(this.config.roles.lucyfer);
+                // Sprawdź czy użytkownik ma debuff (niezależnie od roli, bo admin może nałożyć na każdego)
+                const debuffData = interactionHandler.virtuttiService.hasGabrielDebuff(message.author.id);
 
-                if (hasLucyferRole) {
-                    const debuffData = interactionHandler.virtuttiService.hasGabrielDebuff(message.author.id);
+                // Jeśli ma debuff i przeszło 5 minut (po fazie początkowej)
+                if (debuffData && Date.now() > debuffData.initialCurseEndTime) {
+                    const randomChance = Math.random() * 100;
 
-                    // Jeśli ma debuff i przeszło 5 minut (po fazie początkowej)
-                    if (debuffData && Date.now() > debuffData.initialCurseEndTime) {
-                        const randomChance = Math.random() * 100;
-
-                        if (randomChance < 10) {
-                            // 10% szansa na nową losową klątwę
-                            const curses = [
-                                'slow_mode',
-                                'auto_delete',
-                                'random_ping',
-                                'emoji_spam',
-                                'forced_caps',
-                                'random_timeout',
-                                'special_role'
-                            ];
-                            // Wylosuj klątwę która nie jest aktywna (max 10 prób)
-                            let selectedCurse = null;
-                            for (let i = 0; i < 10; i++) {
-                                const randomCurse = curses[Math.floor(Math.random() * curses.length)];
-                                if (!interactionHandler.hasActiveCurse(message.author.id, randomCurse)) {
-                                    selectedCurse = randomCurse;
-                                    break;
-                                }
+                    if (randomChance < 10) {
+                        // 10% szansa na nową losową klątwę (10 typów)
+                        const curses = [
+                            'slow_mode',
+                            'auto_delete',
+                            'random_ping',
+                            'emoji_spam',
+                            'forced_caps',
+                            'random_timeout',
+                            'special_role',
+                            'scramble_letters',
+                            'smart_reply',
+                            'blah_blah'
+                        ];
+                        // Wylosuj klątwę która nie jest aktywna (max 10 prób)
+                        let selectedCurse = null;
+                        for (let i = 0; i < 10; i++) {
+                            const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+                            if (!interactionHandler.hasActiveCurse(message.author.id, randomCurse)) {
+                                selectedCurse = randomCurse;
+                                break;
                             }
+                        }
 
-                            if (selectedCurse) {
-                                try {
-                                    // Nałóż klątwę (5 minut)
-                                    await interactionHandler.applyCurse(
-                                        message.member,
+                        if (selectedCurse) {
+                            try {
+                                // Nałóż klątwę (5 minut)
+                                await interactionHandler.applyCurse(
+                                    message.member,
+                                    selectedCurse,
+                                    message.guild,
+                                    Date.now() + (5 * 60 * 1000)
+                                );
+
+                                // Określ źródło debuffa
+                                const debuffSource = debuffData.source === 'admin' ? 'Admin' : 'Gabriel';
+
+                                logger.info(`⚡ ${debuffSource} debuff wywołał klątwę na ${message.author.tag} (10% szansa): ${selectedCurse}`);
+
+                                // Szczegółowe logowanie trigger klątwy
+                                if (interactionHandler.detailedLogger) {
+                                    await interactionHandler.detailedLogger.logDebuffCurseTrigger(
+                                        message.author,
                                         selectedCurse,
-                                        message.guild,
-                                        Date.now() + (5 * 60 * 1000)
+                                        debuffSource
                                     );
-
-                                    logger.info(`⚡ Gabriel debuff wywołał klątwę na Lucyfera ${message.author.tag} (10% szansa): ${selectedCurse}`);
-                                } catch (error) {
-                                    logger.error(`❌ Błąd nakładania klątwy przez Gabriel debuff: ${error.message}`);
                                 }
-                            } else {
-                                logger.warn(`⚠️ Pominięto Gabriel debuff dla Lucyfera ${message.author.tag} - już ma aktywną klątwę`);
+                            } catch (error) {
+                                logger.error(`❌ Błąd nakładania klątwy przez debuff: ${error.message}`);
                             }
+                        } else {
+                            logger.warn(`⚠️ Pominięto debuff dla ${message.author.tag} - już ma aktywną klątwę`);
                         }
                     }
                 }
