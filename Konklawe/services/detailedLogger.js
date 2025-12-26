@@ -315,6 +315,71 @@ class DetailedLogger {
             ]
         });
     }
+
+    /**
+     * Loguje użycie /revenge przez Gabriela lub Lucyfera
+     */
+    async logRevenge(caster, roleType, cost, energyData) {
+        const roleEmoji = roleType === 'lucyfer' ? '🔥' : '☁️';
+        const roleName = roleType === 'lucyfer' ? 'Lucyfer' : 'Gabriel';
+        const effectDescription = roleType === 'lucyfer'
+            ? 'Gabriel używając /blessing zostanie "Upadły" na 1h!'
+            : 'Lucyfer rzucając /curse odbije klątwę 3 razy!';
+
+        await this.log({
+            type: 'revenge',
+            title: `${roleEmoji} ⚔️ ZEMSTA - ${roleName.toUpperCase()}`,
+            description: `**${roleName} zaplanował zemstę!**\n\n${effectDescription}`,
+            fields: [
+                { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
+                { name: '💰 Koszt', value: `${cost} many`, inline: true },
+                { name: '⚡ Pozostała mana', value: `${energyData.energy}/${energyData.maxEnergy}`, inline: true },
+                { name: '⏰ Czas trwania', value: '24 godziny', inline: true },
+                { name: '🔄 Cooldown', value: '24h na tego samego gracza', inline: true },
+                { name: '🎯 Cel', value: '*Ukryty (efekt pułapkowy)*', inline: true }
+            ]
+        });
+    }
+
+    /**
+     * Loguje admin ultra klątwę
+     */
+    async logAdminCurse(admin, target) {
+        await this.log({
+            type: 'admin_curse',
+            title: '⚡💥 ADMIN - ULTRA POTĘŻNA KLĄTWA',
+            description: '**Administrator nałożył ultra potężną klątwę!**\n\n' +
+                '🔹 Początkowa klątwa: 5 min (losowy efekt)\n' +
+                '🔹 Debuff: 24h (10% szansa co wiadomość na nową klątwę)',
+            fields: [
+                { name: '👤 Administrator', value: `<@${admin.id}> (${admin.tag})`, inline: true },
+                { name: '🎯 Cel', value: `<@${target.id}> (${target.tag})`, inline: true },
+                { name: '⏰ Początkowa klątwa', value: '5 minut', inline: true },
+                { name: '📊 Debuff', value: '24 godziny', inline: true },
+                { name: '🎲 Szansa nowej klątwy', value: '10% co wiadomość', inline: true },
+                { name: '💰 Koszt', value: '0 many (admin)', inline: true }
+            ]
+        });
+    }
+
+    /**
+     * Loguje admin blessing (usunięcie wszystkich klątw)
+     */
+    async logAdminBlessing(admin, target) {
+        await this.log({
+            type: 'admin_blessing',
+            title: '✨ ADMIN - BŁOGOSŁAWIEŃSTWO',
+            description: '**Administrator usunął wszystkie klątwy i debuffy!**\n\n' +
+                '✅ Usunięto wszystkie aktywne klątwy\n' +
+                '✅ Usunięto wszystkie debuffy (Gabriel, Lucyfer, Admin)\n' +
+                '✅ Przywrócono oryginalny nick',
+            fields: [
+                { name: '👤 Administrator', value: `<@${admin.id}> (${admin.tag})`, inline: true },
+                { name: '🎯 Oczyszczony', value: `<@${target.id}> (${target.tag})`, inline: true },
+                { name: '💰 Koszt', value: '0 many (admin)', inline: true }
+            ]
+        });
+    }
 }
 
 module.exports = DetailedLogger;
