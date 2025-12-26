@@ -380,6 +380,38 @@ class DetailedLogger {
             ]
         });
     }
+
+    /**
+     * Loguje trigger klątwy z ultra potężnego debuffa (10% szansa)
+     */
+    async logDebuffCurseTrigger(target, curseType, debuffSource) {
+        const curseNames = {
+            'slow_mode': '⏰ Slow Mode',
+            'auto_delete': '🗑️ Auto Delete',
+            'random_ping': '📢 Random Ping',
+            'emoji_spam': '😀 Emoji Spam',
+            'forced_caps': '📝 Forced Caps',
+            'random_timeout': '💤 Random Timeout',
+            'special_role': '🎭 Special Role',
+            'scramble_letters': '🔤 Scramble Letters',
+            'smart_reply': '🤫 Smart Reply',
+            'blah_blah': '💬 Blah Blah'
+        };
+
+        await this.log({
+            type: 'debuff_curse_trigger',
+            title: '⚡💀 ULTRA POTĘŻNY DEBUFF - TRIGGER KLĄTWY',
+            description: `**10% szansa zadziałała! Nałożono nową klątwę z debuffa.**\n\n` +
+                `🎲 Debuff nałożony przez: **${debuffSource}**\n` +
+                `⏱️ Czas trwania klątwy: **5 minut**\n` +
+                `📊 Debuff aktywny: **24 godziny** (10% trigger co wiadomość)`,
+            fields: [
+                { name: '🎯 Cel', value: `<@${target.id}> (${target.tag})`, inline: true },
+                { name: '💀 Nałożona klątwa', value: curseNames[curseType] || curseType, inline: true },
+                { name: '🎲 Szansa', value: '10% co wiadomość', inline: true }
+            ]
+        });
+    }
 }
 
 module.exports = DetailedLogger;
