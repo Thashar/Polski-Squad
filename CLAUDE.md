@@ -733,6 +733,11 @@ node manual-backup.js
 5. **Klątwy i Błogosławieństwa** - 10 typów klątw (slow, delete, ping, emoji, caps, timeout, role, scramble, smart, blah):
    - **Gabriel:** `/curse` (10+klątwy×2 many, 85% sukces), `/blessing` (5 many, 50% usunięcie klątwy LUB ochrona 1h)
    - **Lucyfer:** `/curse` (5-15 many, 5min cd, progresywne odbicie +1% za klątwę)
+   - **Admin (bez roli Gabriel/Lucyfer):**
+     - `/curse` - Ultra potężna klątwa (cicha, 5min + 24h debuff, 10% trigger), 0 many, 0 cd, ephemeral only
+     - `/blessing` - Usuwa WSZYSTKIE klątwy i debuffs (100% sukces, cicha), 0 many, 0 cd, ephemeral only
+     - Nie może używać na innego admina
+     - Tylko szczegółowe logowanie DetailedLogger (brak publicznych wiadomości)
    - **Revenge:** `/revenge` (50 many, 24h cd per cel, pułapka 24h) - Gabriel: odbicie 3x, Lucyfer: "Upadły" 1h
    - **Walidacja:** sprawdzanie przed rzuceniem czy cel już ma aktywną klątwę tego typu
    - **Nickname Manager:** 4 prefixy dla Lucyfera (Osłabiony, Uśpiony, Oszołomiony, Upadły)
@@ -941,6 +946,31 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Grudzień 2025
+
+**Konklawe Bot - System Admin Curse i Admin Blessing:**
+- **NOWA FUNKCJA:** Dodano moce dla administratorów bez roli Gabriel/Lucyfer
+- **Admin Ultra Curse:**
+  - Administrator używa `/curse` bez roli Gabriel/Lucyfer → ultra potężna klątwa (cicha operacja)
+  - Mechanika: 5min początkowa klątwa + 24h debuff (10% szansa co wiadomość na nową klątwę)
+  - Taka sama jak Gabriel → Lucyfer, ale cicha (tylko ephemeral confirmation)
+  - 0 koszt many, 0 cooldown
+  - Nie można użyć na innego admina
+  - Szczegółowe logowanie przez `detailedLogger.logAdminCurse()`
+- **Admin Blessing:**
+  - Administrator używa `/blessing` bez roli Gabriel/Lucyfer → usuwa WSZYSTKIE klątwy i debuffs
+  - Usuwa: aktywne klątwy, debuffs (Gabriel/admin), przywraca oryginalny nick
+  - 100% skuteczność (nie ma 50% szansy jak Gabriel)
+  - Cicha operacja (tylko ephemeral confirmation)
+  - 0 koszt many, 0 cooldown
+  - Nie można użyć na innego admina
+  - Szczegółowe logowanie przez `detailedLogger.logAdminBlessing()` z listą usuniętych efektów
+- **Wykrywanie roli admin:** `handleVirtuttiPapajlariCommand` sprawdza uprawnienia i ustawia `roleType='admin'`
+- Lokalizacja zmian:
+  - `Konklawe/handlers/interactionHandlers.js:711-728` (wykrywanie admina)
+  - `Konklawe/handlers/interactionHandlers.js:1374-1429` (admin curse)
+  - `Konklawe/handlers/interactionHandlers.js:761-821` (admin blessing)
+  - `Konklawe/services/detailedLogger.js:344-382` (logAdminCurse, logAdminBlessing)
+  - `CLAUDE.md:736-740` (dokumentacja admin mocy)
 
 **Konklawe Bot - Zmiana Czasu Trwania Efektu /revenge:**
 - **ZMIANA BALANSU:** Czas trwania efektu revenge (pułapki) wydłużony z 1h na 24h

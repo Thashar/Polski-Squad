@@ -712,8 +712,10 @@ class InteractionHandler {
         // Sprawdź czy użytkownik ma jedną z uprzywilejowanych ról (Gabriel lub Lucyfer)
         const hasGabriel = interaction.member.roles.cache.has(this.config.roles.gabriel);
         const hasLucyfer = interaction.member.roles.cache.has(this.config.roles.lucyfer);
+        const hasAdminPermissions = interaction.member.permissions.has('Administrator');
 
-        if (!hasGabriel && !hasLucyfer) {
+        // Admin bez roli Gabriel/Lucyfer może używać komend (specjalne uprawnienia)
+        if (!hasGabriel && !hasLucyfer && !hasAdminPermissions) {
             return await interaction.reply({
                 content: '⛪ Ta komenda jest dostępna tylko dla posiadaczy ról: Gabriel lub Lucyfer!\n\n💡 Virtutti Papajlari to medal kosmetyczny bez uprawnień do komend.',
                 flags: MessageFlags.Ephemeral
@@ -723,6 +725,7 @@ class InteractionHandler {
         // Określ typ roli
         let roleType = 'gabriel';
         if (hasLucyfer) roleType = 'lucyfer';
+        else if (hasAdminPermissions && !hasGabriel) roleType = 'admin';
 
         const { commandName } = interaction;
 
@@ -751,6 +754,68 @@ class InteractionHandler {
         if (roleType === 'lucyfer') {
             return await interaction.reply({
                 content: '🔥 Lucyfer nie może błogosławić! Twoja ścieżka to klątwy, nie łaska.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // === ADMIN BLESSING - USUWANIE WSZYSTKICH KLĄTW I DEBUFFÓW ===
+        if (roleType === 'admin') {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+
+            // Sprawdź czy cel jest adminem
+            const targetIsAdmin = targetMember.permissions.has('Administrator');
+            if (targetIsAdmin) {
+                return await interaction.reply({
+                    content: '⚠️ Nie możesz błogosławić innego administratora.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            let removedItems = [];
+
+            // 1. Usuń WSZYSTKIE aktywne klątwy
+            if (this.activeCurses.has(targetUser.id)) {
+                const curseData = this.activeCurses.get(targetUser.id);
+                this.activeCurses.delete(targetUser.id);
+                await this.saveActiveCurses();
+                removedItems.push('klątwa');
+                logger.info(`✨ Admin ${interaction.user.tag} usunął klątwę z ${targetUser.tag}`);
+            }
+
+            // 2. Usuń WSZYSTKIE debuffs (Gabriel debuff / admin debuff)
+            if (this.virtuttiService.hasGabrielDebuff(targetUser.id)) {
+                this.virtuttiService.removeGabrielDebuff(targetUser.id);
+                removedItems.push('debuff (24h)');
+                logger.info(`🧹 Admin ${interaction.user.tag} usunął debuff z ${targetUser.tag}`);
+            }
+
+            // 3. Przywróć oryginalny nick (usuń wszystkie efekty)
+            const nicknameManager = this.nicknameManager;
+            if (nicknameManager) {
+                try {
+                    await nicknameManager.removeAllUserEffects(targetUser.id, interaction.guild);
+                    logger.info(`✨ Admin ${interaction.user.tag} przywrócił oryginalny nick ${targetUser.tag}`);
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas przywracania nicku: ${error.message}`);
+                }
+            }
+
+            // 4. Logowanie szczegółowe
+            if (this.detailedLogger) {
+                await this.detailedLogger.logAdminBlessing(
+                    interaction.user,
+                    targetUser,
+                    removedItems
+                );
+            }
+
+            // 5. Ephemeral confirmation (cicha operacja)
+            const removedText = removedItems.length > 0
+                ? `\n\n🧹 **Usunięto:** ${removedItems.join(', ')}`
+                : '\n\n💫 **Brak aktywnych efektów do usunięcia.**';
+
+            return await interaction.reply({
+                content: `✨💫 **Admin blessing nałożony na ${targetUser.toString()}!**${removedText}`,
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -1366,6 +1431,63 @@ class InteractionHandler {
                     flags: MessageFlags.Ephemeral
                 });
             }
+        }
+
+        // === SPECJALNA LOGIKA ADMIN → ANY (Ultra potężna klątwa) ===
+        // Admin bez roli Gabriel/Lucyfer rzuca ultra potężną klątwę (cicha, 0 many, 0 cooldown)
+        if (roleType === 'admin') {
+            const targetIsAdmin = targetMember.permissions.has('Administrator');
+
+            // Admin nie może rzucić klątwy na innego admina
+            if (targetIsAdmin) {
+                // Cicho zwróć błąd
+                return await interaction.reply({
+                    content: '⚠️ Nie możesz rzucić klątwy na innego administratora.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Lista dostępnych klątw (7 typów)
+            const curses = [
+                'slow_mode',
+                'auto_delete',
+                'random_ping',
+                'emoji_spam',
+                'forced_caps',
+                'random_timeout',
+                'special_role'
+            ];
+            const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+
+            // Sprawdź czy cel już ma taką klątwę
+            if (this.hasActiveCurse(targetUser.id, randomCurse)) {
+                // Cicho zwróć błąd
+                return await interaction.reply({
+                    content: `⚠️ ${targetUser.toString()} już ma aktywną klątwę tego typu! Nie można nałożyć kolejnej.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Nałóż ultra potężną klątwę (5 min aktywna + 24h debuff)
+            const debuffData = this.virtuttiService.applyGabrielDebuffToLucyfer(targetUser.id);
+            await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
+
+            // Szczegółowe logowanie admin ultra klątwy
+            if (this.detailedLogger) {
+                await this.detailedLogger.logAdminCurse(
+                    interaction.user,
+                    targetUser
+                );
+            }
+
+            // CICHA OPERACJA - brak komunikatu publicznego, tylko ephemeral potwierdzenie
+            return await interaction.reply({
+                content: `⚡💥 **Ultra potężna klątwa nałożona na ${targetUser.toString()}!**\n\n` +
+                    `🔹 Początkowa klątwa: 5 min\n` +
+                    `🔹 Debuff: 24h (10% szansa co wiadomość)\n\n` +
+                    `*Operacja przeprowadzona po cichu.*`,
+                flags: MessageFlags.Ephemeral
+            });
         }
 
         // Sprawdź czy cel ma uprawnienia administratora - odbij klątwę!

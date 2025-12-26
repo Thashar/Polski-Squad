@@ -340,6 +340,46 @@ class DetailedLogger {
             ]
         });
     }
+
+    /**
+     * Loguje admin ultra klątwę
+     */
+    async logAdminCurse(admin, target) {
+        await this.log({
+            type: 'admin_curse',
+            title: '⚡💥 ADMIN - ULTRA POTĘŻNA KLĄTWA',
+            description: '**Administrator nałożył ultra potężną klątwę!**\n\n' +
+                '🔹 Początkowa klątwa: 5 min (losowy efekt)\n' +
+                '🔹 Debuff: 24h (10% szansa co wiadomość na nową klątwę)',
+            fields: [
+                { name: '👤 Administrator', value: `<@${admin.id}> (${admin.tag})`, inline: true },
+                { name: '🎯 Cel', value: `<@${target.id}> (${target.tag})`, inline: true },
+                { name: '⏰ Początkowa klątwa', value: '5 minut', inline: true },
+                { name: '📊 Debuff', value: '24 godziny', inline: true },
+                { name: '🎲 Szansa nowej klątwy', value: '10% co wiadomość', inline: true },
+                { name: '💰 Koszt', value: '0 many (admin)', inline: true }
+            ]
+        });
+    }
+
+    /**
+     * Loguje admin blessing (usunięcie wszystkich klątw)
+     */
+    async logAdminBlessing(admin, target) {
+        await this.log({
+            type: 'admin_blessing',
+            title: '✨ ADMIN - BŁOGOSŁAWIEŃSTWO',
+            description: '**Administrator usunął wszystkie klątwy i debuffy!**\n\n' +
+                '✅ Usunięto wszystkie aktywne klątwy\n' +
+                '✅ Usunięto wszystkie debuffy (Gabriel, Lucyfer, Admin)\n' +
+                '✅ Przywrócono oryginalny nick',
+            fields: [
+                { name: '👤 Administrator', value: `<@${admin.id}> (${admin.tag})`, inline: true },
+                { name: '🎯 Oczyszczony', value: `<@${target.id}> (${target.tag})`, inline: true },
+                { name: '💰 Koszt', value: '0 many (admin)', inline: true }
+            ]
+        });
+    }
 }
 
 module.exports = DetailedLogger;
