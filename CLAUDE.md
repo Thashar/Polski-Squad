@@ -733,7 +733,7 @@ node manual-backup.js
 5. **Klątwy i Błogosławieństwa** - 10 typów klątw (slow, delete, ping, emoji, caps, timeout, role, scramble, smart, blah):
    - **Gabriel:** `/curse` (10+klątwy×2 many, 85% sukces), `/blessing` (5 many, 50% usunięcie klątwy LUB ochrona 1h)
    - **Lucyfer:** `/curse` (5-15 many, 5min cd, progresywne odbicie +1% za klątwę)
-   - **Revenge:** `/revenge` (50 many, 24h cd per cel) - pułapki na neutralnych użytkowników
+   - **Revenge:** `/revenge` (50 many, 24h cd per cel, pułapka 24h) - Gabriel: odbicie 3x, Lucyfer: "Upadły" 1h
    - **Walidacja:** sprawdzanie przed rzuceniem czy cel już ma aktywną klątwę tego typu
    - **Nickname Manager:** 4 prefixy dla Lucyfera (Osłabiony, Uśpiony, Oszołomiony, Upadły)
 6. **Virtue Check** - 10 cnót + porady (0 many)
@@ -942,6 +942,18 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Grudzień 2025
 
+**Konklawe Bot - Zmiana Czasu Trwania Efektu /revenge:**
+- **ZMIANA BALANSU:** Czas trwania efektu revenge (pułapki) wydłużony z 1h na 24h
+- **Co się zmieniło:**
+  - Efekt revenge na celu (pułapka) trwa teraz **24 godziny** (było 1h)
+  - Cooldown pozostaje bez zmian: **24h** na tego samego gracza
+  - Liczba użyć pozostaje bez zmian: Gabriel 3x odbicia, Lucyfer 1x "Upadły"
+- **Przykład:** Gabriel użył `/revenge` na neutralnego użytkownika → pułapka aktywna przez 24h → jeśli Lucyfer przeklnie tego użytkownika w ciągu 24h, klątwa odbije się 3 razy
+- Lokalizacja zmian:
+  - `Konklawe/services/virtuttiService.js:1427,1448` (czas efektu: 24h)
+  - `Konklawe/handlers/interactionHandlers.js:1886-1893` (usuwanie wiadomości: 24h)
+  - `Konklawe/services/detailedLogger.js:337` (log: "24 godziny")
+
 **Konklawe Bot - Dodano Szczegółowe Logowanie dla /revenge:**
 - **NOWA FUNKCJA:** Dodano logowanie do DetailedLogger dla komendy `/revenge`
 - **Nowa metoda:** `logRevenge(caster, roleType, cost, energyData)` w `detailedLogger.js`
@@ -950,7 +962,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Koszt (50 many)
   - Pozostała mana po użyciu
   - Typ efektu (gabriel lub lucyfer)
-  - Czas trwania (1h)
+  - Czas trwania (24h)
   - Cooldown (24h na tego samego gracza)
   - Cel: *Ukryty (efekt pułapkowy)* - nie ujawnia kto jest celem
 - **Wywołanie:** W `handleRevengeCommand` po zaplanowaniu usunięcia wiadomości (linia 1897-1906)

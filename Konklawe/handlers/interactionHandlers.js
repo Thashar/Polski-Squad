@@ -1883,14 +1883,14 @@ class InteractionHandler {
             content: publicMessage
         });
 
-        // Zaplanuj automatyczne usunięcie wiadomości po 1h (czas trwania revenge)
+        // Zaplanuj automatyczne usunięcie wiadomości po 24h (czas trwania revenge)
         if (this.messageCleanupService && revengePublicMessage) {
-            const deleteAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+            const deleteAt = Date.now() + (24 * 60 * 60 * 1000); // 24 godziny
             await this.messageCleanupService.scheduleMessageDeletion(
                 revengePublicMessage.id,
                 revengePublicMessage.channelId,
                 deleteAt,
-                'Revenge 1h - koniec'
+                'Revenge 24h - koniec'
             );
         }
 

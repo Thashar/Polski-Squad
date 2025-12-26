@@ -1424,7 +1424,7 @@ class VirtuttiService {
      */
     applyRevengeEffect(targetId, appliedBy, type) {
         const remainingUses = type === 'lucyfer' ? 1 : 3;
-        const expiresAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+        const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 godziny
 
         // Pobierz istniejące efekty lub stwórz nową tablicę
         let effects = this.revengeEffects.get(targetId) || [];
@@ -1445,7 +1445,7 @@ class VirtuttiService {
         });
 
         this.revengeEffects.set(targetId, effects);
-        logger.info(`💀 Dodano revenge_${type} na ${targetId} (${remainingUses} użyć, 1h)`);
+        logger.info(`💀 Dodano revenge_${type} na ${targetId} (${remainingUses} użyć, 24h)`);
         this.saveData();
         return true;
     }

@@ -334,7 +334,7 @@ class DetailedLogger {
                 { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
                 { name: '💰 Koszt', value: `${cost} many`, inline: true },
                 { name: '⚡ Pozostała mana', value: `${energyData.energy}/${energyData.maxEnergy}`, inline: true },
-                { name: '⏰ Czas trwania', value: '1 godzina', inline: true },
+                { name: '⏰ Czas trwania', value: '24 godziny', inline: true },
                 { name: '🔄 Cooldown', value: '24h na tego samego gracza', inline: true },
                 { name: '🎯 Cel', value: '*Ukryty (efekt pułapkowy)*', inline: true }
             ]
