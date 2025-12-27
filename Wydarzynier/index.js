@@ -179,15 +179,34 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
                 try {
                     const channel = await sharedState.client.channels.fetch(sharedState.config.channels.party);
                     const announcementMessage = await channel.messages.fetch(lobby.announcementMessageId).catch(() => null);
-                    
+
                     if (announcementMessage) {
                         const updatedContent = sharedState.config.messages.partyAnnouncement(
-                            lobby.ownerDisplayName, 
-                            lobby.players.length, 
+                            lobby.ownerDisplayName,
+                            lobby.players.length,
                             sharedState.config.lobby.maxPlayers
                         );
-                        
-                        await announcementMessage.edit(updatedContent);
+
+                        // Pobierz customId z aktualnego przycisku
+                        const currentButton = announcementMessage.components[0]?.components[0];
+                        const customId = currentButton?.customId || `join_lobby_${Date.now()}`;
+
+                        // Utwórz przycisk z odpowiednim stanem
+                        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+                        const joinButton = new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(customId)
+                                    .setLabel('Dołącz do Party')
+                                    .setEmoji(sharedState.config.emoji.ticket)
+                                    .setStyle(ButtonStyle.Primary)
+                                    .setDisabled(lobby.isFull) // Wyłącz jeśli pełne
+                            );
+
+                        await announcementMessage.edit({
+                            content: updatedContent,
+                            components: [joinButton]
+                        });
                     }
                 } catch (error) {
                     logger.error('❌ Błąd podczas aktualizacji wiadomości po wyjściu gracza:', error);

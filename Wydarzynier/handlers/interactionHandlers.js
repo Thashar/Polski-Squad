@@ -612,15 +612,33 @@ class InteractionHandler {
         try {
             const channel = await sharedState.client.channels.fetch(sharedState.config.channels.party);
             const announcementMessage = await channel.messages.fetch(lobby.announcementMessageId).catch(() => null);
-            
+
             if (announcementMessage) {
                 const updatedContent = this.config.messages.partyAnnouncement(
-                    lobby.ownerDisplayName, 
-                    lobby.players.length, 
+                    lobby.ownerDisplayName,
+                    lobby.players.length,
                     this.config.lobby.maxPlayers
                 );
-                
-                await announcementMessage.edit(updatedContent);
+
+                // Pobierz customId z aktualnego przycisku (jeśli istnieje)
+                const currentButton = announcementMessage.components[0]?.components[0];
+                const customId = currentButton?.customId || `join_lobby_${Date.now()}`;
+
+                // Utwórz przycisk z odpowiednim stanem (wyłączony jeśli pełne)
+                const joinButton = new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(customId)
+                            .setLabel('Dołącz do Party')
+                            .setEmoji(this.config.emoji.ticket)
+                            .setStyle(ButtonStyle.Primary)
+                            .setDisabled(lobby.isFull) // Wyłącz przycisk gdy lobby pełne
+                    );
+
+                await announcementMessage.edit({
+                    content: updatedContent,
+                    components: [joinButton]
+                });
             }
         } catch (error) {
             logger.error('❌ Błąd podczas aktualizacji wiadomości ogłoszeniowej:', error);
