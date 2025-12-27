@@ -120,6 +120,69 @@ async function onReady() {
         logger.error('❌ Błąd inicjalizacji MessageCleanupService:', error);
     }
 
+    // Uruchom interval dla Infernal Bargain (regeneracja + auto-curse)
+    setInterval(async () => {
+        try {
+            const guild = client.guilds.cache.first();
+            if (!guild) return;
+
+            // Iteruj przez wszystkich użytkowników z aktywnym infernal bargain
+            for (const [userId, bargainData] of virtuttiService.infernalBargainActive.entries()) {
+                const now = Date.now();
+
+                // 1. Regeneracja many (1 mana/min)
+                const minutesSinceLastRegen = (now - bargainData.lastRegenAt) / (60 * 1000);
+                if (minutesSinceLastRegen >= 1) {
+                    const userData = virtuttiService.energySystem.get(userId);
+                    if (userData) {
+                        const maxEnergy = virtuttiService.getMaxEnergy(userId);
+                        if (userData.energy < maxEnergy) {
+                            userData.energy = Math.min(maxEnergy, userData.energy + 1);
+                            virtuttiService.updateInfernalBargainRegenTime(userId);
+                            logger.info(`🔥 Infernal Bargain: Regenerowano 1 many dla ${userId} (${userData.energy}/${maxEnergy})`);
+                        }
+
+                        // Sprawdź czy mana jest pełna - jeśli tak, zatrzymaj efekt
+                        if (userData.energy >= maxEnergy) {
+                            // Usuń nick "Piekielny"
+                            try {
+                                const member = await guild.members.fetch(userId);
+                                if (member && member.nickname && member.nickname.startsWith('Piekielny ')) {
+                                    await nicknameManager.removeEffect(userId, 'infernal');
+                                    logger.info(`🔥 Infernal Bargain: Usunięto nick "Piekielny" dla ${userId} (pełna mana)`);
+                                }
+                            } catch (error) {
+                                logger.error(`❌ Błąd usuwania nicku Infernal Bargain: ${error.message}`);
+                            }
+
+                            virtuttiService.deactivateInfernalBargain(userId);
+                            logger.info(`🔥 Infernal Bargain: Zatrzymano efekt dla ${userId} (pełna mana)`);
+                            continue;
+                        }
+                    }
+                }
+
+                // 2. Auto-curse co 5 min
+                const minutesSinceLastCurse = (now - bargainData.lastCurseAt) / (60 * 1000);
+                if (minutesSinceLastCurse >= 5) {
+                    try {
+                        const member = await guild.members.fetch(userId);
+                        if (member && interactionHandler) {
+                            // Nakładaj losową klątwę
+                            await interactionHandler.applyRandomCurseToUser(member, '🔥 Infernal Bargain');
+                            virtuttiService.updateInfernalBargainCurseTime(userId);
+                            logger.info(`🔥 Infernal Bargain: Nałożono auto-curse na ${userId}`);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Błąd nakładania auto-curse Infernal Bargain: ${error.message}`);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd w Infernal Bargain interval: ${error.message}`);
+        }
+    }, 60 * 1000); // Co 1 minutę
+
     // Odtwórz timery dla AKTYWNYCH klątw (które jeszcze trwają)
     try {
         const guild = client.guilds.cache.first();

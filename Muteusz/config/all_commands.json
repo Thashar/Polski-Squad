@@ -470,6 +470,18 @@
           "description": "Zaplanuj zemstę na użytkowniku (tylko Gabriel/Lucyfer, koszt 50 many, cooldown 24h per cel)",
           "usage": "/revenge użytkownik:@user",
           "requiredPermission": "achievement_role"
+        },
+        {
+          "name": "/infernal-bargain",
+          "description": "Zawrzyj piekielny układ - szybka regeneracja (1 mana/min) + auto-curse (co 5min) + nick 'Piekielny' (tylko Lucyfer, cooldown 24h)",
+          "usage": "/infernal-bargain",
+          "requiredPermission": "achievement_role"
+        },
+        {
+          "name": "/chaos-blessing",
+          "description": "Mroczne błogosławieństwo - usuwa klątwę z Lucyfera, debuff Gabriela, lub blessing immunity (tylko Lucyfer, koszt 15 many, cooldown 1h)",
+          "usage": "/chaos-blessing użytkownik:@user",
+          "requiredPermission": "achievement_role"
         }
       ]
     },

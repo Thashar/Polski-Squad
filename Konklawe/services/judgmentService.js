@@ -120,6 +120,8 @@ class JudgmentService {
                             '**🔥 MOCE:**\n' +
                             '• 💀 `/curse` (5-15, 5min cd): Koszt dynamiczny (sukces ↓, fail ↑)\n' +
                             '• ⚔️ `/revenge` (50, 24h cd): Pułapka na neutralnego. Gdy Gabriel błogosławi → "Upadły" (blessing block 1h)\n' +
+                            '• 🔥 `/infernal-bargain` (0, 24h cd): Układ z ciemnością! Regen 1 mana/min + nick "Piekielny" → płacisz: klątwa co 5min. Stop: /infernal-bargain lub pełna mana\n' +
+                            '• 🌑 `/chaos-blessing` (15, 1h cd): Na Lucyfera: usuwa klątwę | Na Gabriela: -50% regen (1h) | Na neutralnego: blessing immunity (1h)\n' +
                             '• 🔍 `/virtue-check` (0)\n\n' +
                             '**⚠️ SŁABOŚCI:**\n' +
                             '• 📈 Progresywne odbicie: Za każdą klątwę +1% że Gabriel odbije\n' +

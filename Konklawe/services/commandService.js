@@ -49,6 +49,16 @@ class CommandService {
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik który będzie celem zemsty')
+                        .setRequired(true)),
+            new SlashCommandBuilder()
+                .setName('infernal-bargain')
+                .setDescription('Zawrzyj piekielny układ - szybka regen many za auto-curse (Lucyfer, 24h cd)'),
+            new SlashCommandBuilder()
+                .setName('chaos-blessing')
+                .setDescription('Mroczne błogosławieństwo - różne efekty (Lucyfer, koszt 15 many, 1h cd)')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik na którego użyć mrocznego błogosławieństwa')
                         .setRequired(true))
         ];
     }
