@@ -1381,7 +1381,8 @@ class VirtuttiService {
         if (now > debuffData.endTime) {
             this.lucyferGabrielDebuff.delete(userId);
             this.saveData();
-            return null;
+            // Zwróć informację że debuff wygasł naturalnie (do logowania)
+            return { expired: true, ...debuffData };
         }
 
         return debuffData;
@@ -1390,13 +1391,18 @@ class VirtuttiService {
     /**
      * Usuwa Gabriel debuff
      * @param {string} userId - ID użytkownika
+     * @param {boolean} natural - Czy usunięcie jest naturalne (wygaśnięcie) czy manualne
+     * @returns {Object|null} - Dane usuniętego debuffu lub null
      */
-    removeGabrielDebuff(userId) {
-        if (this.lucyferGabrielDebuff.has(userId)) {
+    removeGabrielDebuff(userId, natural = false) {
+        const debuffData = this.lucyferGabrielDebuff.get(userId);
+        if (debuffData) {
             this.lucyferGabrielDebuff.delete(userId);
-            logger.info(`🧹 Usunięto Gabriel debuff dla użytkownika ${userId}`);
+            logger.info(`🧹 Usunięto Gabriel debuff dla użytkownika ${userId} (${natural ? 'wygasł' : 'manualnie'})`);
             this.saveData();
+            return debuffData;
         }
+        return null;
     }
 
     // ========================================

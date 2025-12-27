@@ -412,6 +412,29 @@ class DetailedLogger {
             ]
         });
     }
+
+    /**
+     * Loguje zakończenie debuffu ultra potężnej klątwy (24h)
+     * @param {User} target - Użytkownik który miał debuff
+     * @param {string} source - Źródło debuffu ('admin' lub 'gabriel')
+     * @param {number} duration - Czas trwania debuffu w ms
+     */
+    async logDebuffEnd(target, source = 'gabriel', duration = 24 * 60 * 60 * 1000) {
+        const durationHours = Math.ceil(duration / (60 * 60 * 1000));
+        const sourceText = source === 'admin' ? '👑 Admin Ultra Potężna Klątwa' : '☁️ Gabriel Ultra Potężna Klątwa';
+
+        await this.log({
+            type: 'gabriel_strong',
+            title: '✅ ULTRA POTĘŻNY DEBUFF ZAKOŃCZONY',
+            description: `**Debuff dobiegł końca! Użytkownik nie będzie już automatycznie przeklęty co wiadomość.**`,
+            fields: [
+                { name: '🎯 Użytkownik', value: `<@${target.id}> (${target.tag})`, inline: true },
+                { name: '⏱️ Czas trwania', value: `${durationHours}h`, inline: true },
+                { name: '🎲 Źródło', value: sourceText, inline: true },
+                { name: '📊 Efekt', value: '10% szansa na auto-curse przestała działać', inline: false }
+            ]
+        });
+    }
 }
 
 module.exports = DetailedLogger;
