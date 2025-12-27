@@ -3309,6 +3309,19 @@ class InteractionHandler {
                     data: { effectId: userId }, // effectId to userId
                     endTime
                 });
+
+                // KRYTYCZNE: Ustaw timer do przywracania nicku po zakończeniu klątwy
+                const duration = endTime - now;
+                setTimeout(async () => {
+                    try {
+                        const restored = await this.nicknameManager.restoreOriginalNickname(userId, guild);
+                        if (restored) {
+                            logger.info(`✅ [applyCurse Timer] Automatycznie przywrócono nick po klątwie dla userId: ${userId}`);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Błąd automatycznego przywracania nicku dla ${userId}: ${error.message}`);
+                    }
+                }, duration);
             } catch (error) {
                 logger.warn(`⚠️ Nie udało się aplikować klątwy na nick: ${error.message}`);
             }

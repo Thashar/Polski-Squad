@@ -31,8 +31,21 @@ class MessageHandler {
                 // Sprawdź czy użytkownik ma debuff (niezależnie od roli, bo admin może nałożyć na każdego)
                 const debuffData = interactionHandler.virtuttiService.hasGabrielDebuff(message.author.id);
 
+                // Jeśli debuff wygasł naturalnie, zaloguj to
+                if (debuffData && debuffData.expired && interactionHandler.detailedLogger) {
+                    try {
+                        await interactionHandler.detailedLogger.logDebuffEnd(
+                            message.author,
+                            debuffData.source || 'gabriel',
+                            24 * 60 * 60 * 1000 // 24 godziny
+                        );
+                    } catch (error) {
+                        logger.warn(`⚠️ Błąd logowania zakończenia debuffu: ${error.message}`);
+                    }
+                }
+
                 // Jeśli ma debuff i przeszło 5 minut (po fazie początkowej)
-                if (debuffData && Date.now() > debuffData.initialCurseEndTime) {
+                if (debuffData && !debuffData.expired && Date.now() > debuffData.initialCurseEndTime) {
                     const randomChance = Math.random() * 100;
 
                     if (randomChance < 10) {
