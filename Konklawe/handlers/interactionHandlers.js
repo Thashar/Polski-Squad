@@ -2029,7 +2029,8 @@ class InteractionHandler {
                 interaction.user,
                 roleType,
                 50, // koszt
-                updatedEnergyData
+                updatedEnergyData,
+                targetUser
             );
         }
 

@@ -319,7 +319,7 @@ class DetailedLogger {
     /**
      * Loguje użycie /revenge przez Gabriela lub Lucyfera
      */
-    async logRevenge(caster, roleType, cost, energyData) {
+    async logRevenge(caster, roleType, cost, energyData, target) {
         const roleEmoji = roleType === 'lucyfer' ? '🔥' : '☁️';
         const roleName = roleType === 'lucyfer' ? 'Lucyfer' : 'Gabriel';
         const effectDescription = roleType === 'lucyfer'
@@ -332,11 +332,11 @@ class DetailedLogger {
             description: `**${roleName} zaplanował zemstę!**\n\n${effectDescription}`,
             fields: [
                 { name: '👤 Rzucający', value: `<@${caster.id}> (${caster.tag})`, inline: true },
+                { name: '🎯 Cel', value: `<@${target.id}> (${target.tag})`, inline: true },
                 { name: '💰 Koszt', value: `${cost} many`, inline: true },
                 { name: '⚡ Pozostała mana', value: `${energyData.energy}/${energyData.maxEnergy}`, inline: true },
                 { name: '⏰ Czas trwania', value: '24 godziny', inline: true },
-                { name: '🔄 Cooldown', value: '24h na tego samego gracza', inline: true },
-                { name: '🎯 Cel', value: '*Ukryty (efekt pułapkowy)*', inline: true }
+                { name: '🔄 Cooldown', value: '24h na tego samego gracza', inline: true }
             ]
         });
     }
