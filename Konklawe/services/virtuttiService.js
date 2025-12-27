@@ -36,6 +36,14 @@ class VirtuttiService {
         // === BLOKADA GABRIELA (Upadły) ===
         this.gabrielBlessingBlocked = new Map(); // userId -> { expiresAt: timestamp }
 
+        // === INFERNAL BARGAIN (Piekielny Układ) ===
+        this.infernalBargainActive = new Map(); // userId -> { startedAt, lastCurseAt, lastRegenAt }
+        this.infernalBargainCooldowns = new Map(); // userId -> timestamp (24h cooldown)
+
+        // === CHAOS BLESSING (Mroczne Błogosławieństwo) ===
+        this.chaosBlessingCooldowns = new Map(); // userId -> timestamp (1h cooldown)
+        this.chaosBlessingDebuffs = new Map(); // userId -> { type: 'gabriel_slow_regen' | 'blessing_immunity', expiresAt, appliedBy }
+
         // Ścieżki do plików danych
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'virtutti_cooldowns.json');
@@ -51,6 +59,10 @@ class VirtuttiService {
         this.revengeCooldownsFile = path.join(this.dataDir, 'revenge_cooldowns.json');
         this.blessingProtectionFile = path.join(this.dataDir, 'blessing_protection.json');
         this.gabrielBlessingBlockedFile = path.join(this.dataDir, 'gabriel_blessing_blocked.json');
+        this.infernalBargainActiveFile = path.join(this.dataDir, 'infernal_bargain_active.json');
+        this.infernalBargainCooldownsFile = path.join(this.dataDir, 'infernal_bargain_cooldowns.json');
+        this.chaosBlessingCooldownsFile = path.join(this.dataDir, 'chaos_blessing_cooldowns.json');
+        this.chaosBlessingDebuffsFile = path.join(this.dataDir, 'chaos_blessing_debuffs.json');
 
         // Wczytaj dane przy starcie
         this.loadData();
@@ -126,13 +138,17 @@ class VirtuttiService {
         const maxEnergy = this.getMaxEnergy(userId);
         const now = Date.now();
         const minutesSinceLastRegen = (now - userData.lastRegeneration) / (60 * 1000);
-        const energyToRegenerate = Math.floor(minutesSinceLastRegen / 10); // 1 punkt co 10 minut (Gabriel)
+
+        // Sprawdź czy Gabriel ma debuff slow regen (Chaos Blessing)
+        const hasSlowRegen = this.hasChaosBlessingDebuff(userId, 'gabriel_slow_regen');
+        const regenInterval = hasSlowRegen ? 20 : 10; // 2x wolniejsza regeneracja jeśli debuff
+        const energyToRegenerate = Math.floor(minutesSinceLastRegen / regenInterval); // 1 punkt co 10/20 minut (Gabriel)
 
         if (energyToRegenerate > 0 && userData.energy < maxEnergy) {
             userData.energy = Math.min(maxEnergy, userData.energy + energyToRegenerate);
             // Aktualizuj lastRegeneration z uwzględnieniem reszty czasu
-            userData.lastRegeneration = now - ((minutesSinceLastRegen % 10) * 60 * 1000);
-            logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/${maxEnergy}`);
+            userData.lastRegeneration = now - ((minutesSinceLastRegen % regenInterval) * 60 * 1000);
+            logger.info(`🔋 Regeneracja ${energyToRegenerate} many dla ${userId}. Obecna: ${userData.energy}/${maxEnergy}${hasSlowRegen ? ' (wolna regen)' : ''}`);
             this.saveData();
         }
     }
@@ -1158,6 +1174,54 @@ class VirtuttiService {
                 }
             }
 
+            // Wczytaj aktywne infernal bargains
+            try {
+                const infernalBargainActiveData = await fs.readFile(this.infernalBargainActiveFile, 'utf8');
+                const parsedInfernalActive = JSON.parse(infernalBargainActiveData);
+                this.infernalBargainActive = new Map(Object.entries(parsedInfernalActive));
+                logger.info(`📂 Wczytano ${this.infernalBargainActive.size} aktywnych infernal bargains`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania aktywnych infernal bargains: ${error.message}`);
+                }
+            }
+
+            // Wczytaj cooldowny infernal bargain
+            try {
+                const infernalBargainCooldownsData = await fs.readFile(this.infernalBargainCooldownsFile, 'utf8');
+                const parsedInfernalCooldowns = JSON.parse(infernalBargainCooldownsData);
+                this.infernalBargainCooldowns = new Map(Object.entries(parsedInfernalCooldowns));
+                logger.info(`📂 Wczytano ${this.infernalBargainCooldowns.size} cooldownów infernal bargain`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania cooldownów infernal bargain: ${error.message}`);
+                }
+            }
+
+            // Wczytaj cooldowny chaos blessing
+            try {
+                const chaosBlessingCooldownsData = await fs.readFile(this.chaosBlessingCooldownsFile, 'utf8');
+                const parsedChaosCooldowns = JSON.parse(chaosBlessingCooldownsData);
+                this.chaosBlessingCooldowns = new Map(Object.entries(parsedChaosCooldowns));
+                logger.info(`📂 Wczytano ${this.chaosBlessingCooldowns.size} cooldownów chaos blessing`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania cooldownów chaos blessing: ${error.message}`);
+                }
+            }
+
+            // Wczytaj debuffs chaos blessing
+            try {
+                const chaosBlessingDebuffsData = await fs.readFile(this.chaosBlessingDebuffsFile, 'utf8');
+                const parsedChaosDebuffs = JSON.parse(chaosBlessingDebuffsData);
+                this.chaosBlessingDebuffs = new Map(Object.entries(parsedChaosDebuffs));
+                logger.info(`📂 Wczytano ${this.chaosBlessingDebuffs.size} debuffs chaos blessing`);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.warn(`⚠️ Błąd wczytywania debuffs chaos blessing: ${error.message}`);
+                }
+            }
+
         } catch (error) {
             logger.error(`❌ Błąd wczytywania danych VirtuttiService: ${error.message}`);
         }
@@ -1241,6 +1305,22 @@ class VirtuttiService {
             // Zapisz blokady blessing Gabriela
             const gabrielBlessingBlockedObj = Object.fromEntries(this.gabrielBlessingBlocked);
             await fs.writeFile(this.gabrielBlessingBlockedFile, JSON.stringify(gabrielBlessingBlockedObj, null, 2));
+
+            // Zapisz aktywne infernal bargains
+            const infernalBargainActiveObj = Object.fromEntries(this.infernalBargainActive);
+            await fs.writeFile(this.infernalBargainActiveFile, JSON.stringify(infernalBargainActiveObj, null, 2));
+
+            // Zapisz cooldowny infernal bargain
+            const infernalBargainCooldownsObj = Object.fromEntries(this.infernalBargainCooldowns);
+            await fs.writeFile(this.infernalBargainCooldownsFile, JSON.stringify(infernalBargainCooldownsObj, null, 2));
+
+            // Zapisz cooldowny chaos blessing
+            const chaosBlessingCooldownsObj = Object.fromEntries(this.chaosBlessingCooldowns);
+            await fs.writeFile(this.chaosBlessingCooldownsFile, JSON.stringify(chaosBlessingCooldownsObj, null, 2));
+
+            // Zapisz debuffs chaos blessing
+            const chaosBlessingDebuffsObj = Object.fromEntries(this.chaosBlessingDebuffs);
+            await fs.writeFile(this.chaosBlessingDebuffsFile, JSON.stringify(chaosBlessingDebuffsObj, null, 2));
 
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);
@@ -1585,6 +1665,194 @@ class VirtuttiService {
         if (this.gabrielBlessingBlocked.has(userId)) {
             this.gabrielBlessingBlocked.delete(userId);
             logger.info(`🧹 Usunięto blokadę blessing Gabriela ${userId}`);
+            this.saveData();
+        }
+    }
+
+    // ========================================
+    // 🔥 INFERNAL BARGAIN (Piekielny Układ)
+    // ========================================
+
+    /**
+     * Sprawdza cooldown dla infernal bargain (24h)
+     * @param {string} userId - ID użytkownika
+     * @returns {Object|null} - { hoursLeft, expiresAt } lub null
+     */
+    checkInfernalBargainCooldown(userId) {
+        const cooldownEnd = this.infernalBargainCooldowns.get(userId);
+        if (!cooldownEnd) return null;
+
+        const now = Date.now();
+        if (now > cooldownEnd) {
+            this.infernalBargainCooldowns.delete(userId);
+            this.saveData();
+            return null;
+        }
+
+        const timeLeft = cooldownEnd - now;
+        const hoursLeft = Math.ceil(timeLeft / (60 * 60 * 1000));
+
+        return { hoursLeft, expiresAt: cooldownEnd };
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma aktywny infernal bargain
+     * @param {string} userId - ID użytkownika
+     * @returns {boolean}
+     */
+    hasActiveInfernalBargain(userId) {
+        return this.infernalBargainActive.has(userId);
+    }
+
+    /**
+     * Aktywuje infernal bargain dla użytkownika
+     * @param {string} userId - ID użytkownika
+     */
+    activateInfernalBargain(userId) {
+        const now = Date.now();
+        this.infernalBargainActive.set(userId, {
+            startedAt: now,
+            lastCurseAt: now,
+            lastRegenAt: now
+        });
+        logger.info(`🔥 Aktywowano Infernal Bargain dla ${userId}`);
+        this.saveData();
+    }
+
+    /**
+     * Dezaktywuje infernal bargain i ustawia cooldown 24h
+     * @param {string} userId - ID użytkownika
+     */
+    deactivateInfernalBargain(userId) {
+        if (this.infernalBargainActive.has(userId)) {
+            this.infernalBargainActive.delete(userId);
+
+            // Ustaw cooldown 24h
+            const cooldownEnd = Date.now() + (24 * 60 * 60 * 1000);
+            this.infernalBargainCooldowns.set(userId, cooldownEnd);
+
+            logger.info(`🔥 Dezaktywowano Infernal Bargain dla ${userId} (cooldown 24h)`);
+            this.saveData();
+        }
+    }
+
+    /**
+     * Pobiera dane aktywnego infernal bargain
+     * @param {string} userId - ID użytkownika
+     * @returns {Object|null} - { startedAt, lastCurseAt, lastRegenAt } lub null
+     */
+    getInfernalBargainData(userId) {
+        return this.infernalBargainActive.get(userId) || null;
+    }
+
+    /**
+     * Aktualizuje timestamp ostatniej klątwy infernal bargain
+     * @param {string} userId - ID użytkownika
+     */
+    updateInfernalBargainCurseTime(userId) {
+        const data = this.infernalBargainActive.get(userId);
+        if (data) {
+            data.lastCurseAt = Date.now();
+            this.saveData();
+        }
+    }
+
+    /**
+     * Aktualizuje timestamp ostatniej regeneracji infernal bargain
+     * @param {string} userId - ID użytkownika
+     */
+    updateInfernalBargainRegenTime(userId) {
+        const data = this.infernalBargainActive.get(userId);
+        if (data) {
+            data.lastRegenAt = Date.now();
+            this.saveData();
+        }
+    }
+
+    // ========================================
+    // 🌑 CHAOS BLESSING (Mroczne Błogosławieństwo)
+    // ========================================
+
+    /**
+     * Sprawdza cooldown dla chaos blessing (1h)
+     * @param {string} userId - ID użytkownika
+     * @returns {Object|null} - { minutesLeft, expiresAt } lub null
+     */
+    checkChaosBlessingCooldown(userId) {
+        const cooldownEnd = this.chaosBlessingCooldowns.get(userId);
+        if (!cooldownEnd) return null;
+
+        const now = Date.now();
+        if (now > cooldownEnd) {
+            this.chaosBlessingCooldowns.delete(userId);
+            this.saveData();
+            return null;
+        }
+
+        const timeLeft = cooldownEnd - now;
+        const minutesLeft = Math.ceil(timeLeft / (60 * 1000));
+
+        return { minutesLeft, expiresAt: cooldownEnd };
+    }
+
+    /**
+     * Ustawia cooldown chaos blessing (1h)
+     * @param {string} userId - ID użytkownika
+     */
+    setChaosBlessingCooldown(userId) {
+        const cooldownEnd = Date.now() + (60 * 60 * 1000); // 1 godzina
+        this.chaosBlessingCooldowns.set(userId, cooldownEnd);
+        this.saveData();
+    }
+
+    /**
+     * Nakłada debuff chaos blessing
+     * @param {string} targetId - ID celu
+     * @param {string} type - Typ debuffu ('gabriel_slow_regen' | 'blessing_immunity')
+     * @param {string} appliedBy - ID użytkownika rzucającego
+     */
+    applyChaosBlessingDebuff(targetId, type, appliedBy) {
+        const expiresAt = Date.now() + (60 * 60 * 1000); // 1 godzina
+        this.chaosBlessingDebuffs.set(targetId, {
+            type,
+            expiresAt,
+            appliedBy
+        });
+        logger.info(`🌑 Nałożono debuff chaos blessing (${type}) na ${targetId} przez ${appliedBy}`);
+        this.saveData();
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma aktywny debuff chaos blessing
+     * @param {string} userId - ID użytkownika
+     * @param {string} type - Opcjonalnie, typ debuffu do sprawdzenia
+     * @returns {Object|null} - Dane debuffu lub null
+     */
+    hasChaosBlessingDebuff(userId, type = null) {
+        const debuff = this.chaosBlessingDebuffs.get(userId);
+        if (!debuff) return null;
+
+        // Sprawdź czy nie wygasł
+        if (Date.now() > debuff.expiresAt) {
+            this.chaosBlessingDebuffs.delete(userId);
+            this.saveData();
+            return null;
+        }
+
+        // Jeśli podano typ, sprawdź czy się zgadza
+        if (type && debuff.type !== type) return null;
+
+        return debuff;
+    }
+
+    /**
+     * Usuwa debuff chaos blessing
+     * @param {string} userId - ID użytkownika
+     */
+    removeChaosBlessingDebuff(userId) {
+        if (this.chaosBlessingDebuffs.has(userId)) {
+            this.chaosBlessingDebuffs.delete(userId);
+            logger.info(`🧹 Usunięto debuff chaos blessing dla ${userId}`);
             this.saveData();
         }
     }

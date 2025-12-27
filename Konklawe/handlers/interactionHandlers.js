@@ -737,6 +737,10 @@ class InteractionHandler {
             await this.handleCurseCommand(interaction, roleType);
         } else if (commandName === 'revenge') {
             await this.handleRevengeCommand(interaction, roleType);
+        } else if (commandName === 'infernal-bargain') {
+            await this.handleInfernalBargainCommand(interaction, roleType);
+        } else if (commandName === 'chaos-blessing') {
+            await this.handleChaosBlessingCommand(interaction, roleType);
         }
     }
 
@@ -3528,6 +3532,227 @@ class InteractionHandler {
                 });
             }
         }
+    }
+
+    /**
+     * Handler komendy /infernal-bargain (Piekielny Układ)
+     * - Aktywuje: 1 mana/min regen + auto-curse co 5min + nick "Piekielny"
+     * - Dezaktywuje: jeśli już aktywny, zatrzymuje efekt
+     * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} roleType - Typ roli ('virtutti', 'gabriel', 'lucyfer')
+     */
+    async handleInfernalBargainCommand(interaction, roleType = 'virtutti') {
+        const userId = interaction.user.id;
+
+        // 1. Tylko Lucyfer może użyć tej komendy
+        if (roleType !== 'lucyfer') {
+            return await interaction.reply({
+                content: '⚠️ **Tylko Lucyfer może zawierać piekielne układy!**',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 2. Sprawdź czy użytkownik już ma aktywny infernal bargain
+        const isActive = this.virtuttiService.hasActiveInfernalBargain(userId);
+
+        if (isActive) {
+            // DEZAKTYWACJA - zatrzymaj efekt
+            // Usuń nick "Piekielny"
+            try {
+                const member = await interaction.guild.members.fetch(userId);
+                if (member && member.nickname && member.nickname.startsWith('Piekielny ')) {
+                    await this.nicknameManager.removeEffect(userId, 'infernal');
+                    logger.info(`🔥 Infernal Bargain: Usunięto nick "Piekielny" dla ${userId}`);
+                }
+            } catch (error) {
+                logger.error(`❌ Błąd usuwania nicku Infernal Bargain: ${error.message}`);
+            }
+
+            // Dezaktywuj i ustaw cooldown 24h
+            this.virtuttiService.deactivateInfernalBargain(userId);
+
+            return await interaction.reply({
+                content: `🔥 **Piekielny Układ wstrzymany!**\n\n` +
+                    `• Regeneracja many przywrócona do normalnej (1pkt/10min)\n` +
+                    `• Auto-curse zatrzymany\n` +
+                    `• Nick przywrócony\n` +
+                    `⏰ **Cooldown:** 24 godziny`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 3. Sprawdź cooldown (24h)
+        const cooldown = this.virtuttiService.checkInfernalBargainCooldown(userId);
+        if (cooldown) {
+            return await interaction.reply({
+                content: `⏰ **Cooldown aktywny!**\n\nMożesz użyć /infernal-bargain za **${cooldown.hoursLeft}h**.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 4. AKTYWACJA - rozpocznij efekt
+        this.virtuttiService.activateInfernalBargain(userId);
+
+        // Zmień nick na "Piekielny"
+        try {
+            const member = await interaction.guild.members.fetch(userId);
+            if (member) {
+                await this.nicknameManager.applyEffect(
+                    userId,
+                    'infernal',
+                    null, // permanent (dopóki aktywny lub pełna mana)
+                    {
+                        guildId: interaction.guild.id,
+                        appliedBy: 'Infernal Bargain'
+                    },
+                    member,
+                    'Piekielny'
+                );
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd nakładania nicku Infernal Bargain: ${error.message}`);
+        }
+
+        // 5. KOMUNIKAT EPHEMERAL (tylko dla wywołującego)
+        await interaction.reply({
+            content: `🔥💀 **PIEKIELNY UKŁAD ZAWARTY!** 💀🔥\n\n` +
+                `**Otrzymujesz:**\n` +
+                `• ⚡ Szybka regeneracja: **1 mana/minutę**\n` +
+                `• 🔥 Nick: **"Piekielny [twój nick]"**\n\n` +
+                `**Płacisz:**\n` +
+                `• 💀 Losowa klątwa co **5 minut**\n\n` +
+                `**Zatrzymanie:**\n` +
+                `• Ponowne użycie /infernal-bargain\n` +
+                `• Osiągnięcie pełnej many (100/100)\n\n` +
+                `⏰ Po zatrzymaniu: **24h cooldown**`,
+            flags: MessageFlags.Ephemeral
+        });
+
+        // 6. KOMUNIKAT PUBLICZNY
+        await interaction.channel.send({
+            content: `🔥💀 **Lucyfer zawarł piekielny układ z ciemnymi siłami!** 💀🔥`
+        });
+
+        // 7. Log
+        logger.info(`🔥 Lucyfer (${interaction.user.tag}) aktywował Infernal Bargain`);
+    }
+
+    /**
+     * Handler komendy /chaos-blessing (Mroczne Błogosławieństwo)
+     * - Na siebie (Lucyfer): Usuwa klątwę
+     * - Na Gabriela: Zmniejsza regenerację many o połowę na 1h
+     * - Na neutralnego: Na 1h nie działają na niego błogosławieństwa Gabriela
+     * @param {Interaction} interaction - Interakcja Discord
+     * @param {string} roleType - Typ roli ('virtutti', 'gabriel', 'lucyfer')
+     */
+    async handleChaosBlessingCommand(interaction, roleType = 'virtutti') {
+        const targetUser = interaction.options.getUser('użytkownik');
+        const userId = interaction.user.id;
+
+        // 1. Tylko Lucyfer może użyć tej komendy
+        if (roleType !== 'lucyfer') {
+            return await interaction.reply({
+                content: '⚠️ **Tylko Lucyfer może używać mrocznych błogosławieństw!**',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 2. Sprawdź cooldown (1h)
+        const cooldown = this.virtuttiService.checkChaosBlessingCooldown(userId);
+        if (cooldown) {
+            return await interaction.reply({
+                content: `⏰ **Cooldown aktywny!**\n\nMożesz użyć /chaos-blessing za **${cooldown.minutesLeft} minut**.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 3. Sprawdź manę (15)
+        this.virtuttiService.initializeEnergy(userId, roleType);
+        const energyData = this.virtuttiService.getEnergy(userId, roleType);
+
+        if (!this.virtuttiService.hasEnoughEnergy(userId, 15)) {
+            return await interaction.reply({
+                content: `⚡ **Nie masz wystarczająco many!**\n\nKoszt chaos blessing: **15** many\nTwoja mana: **${energyData.energy}/${energyData.maxEnergy}**`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 4. Sprawdź czy cel to administrator
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+        if (targetMember.permissions.has('Administrator')) {
+            return await interaction.reply({
+                content: '⚠️ **Nie możesz użyć tej mocy na administratorze!**',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // 5. Określ rolę celu
+        const targetIsGabriel = targetMember.roles.cache.has(this.config.roles.gabriel);
+        const targetIsLucyfer = targetMember.roles.cache.has(this.config.roles.lucyfer);
+
+        let effectMessage = '';
+        let publicMessage = '';
+
+        // 6. Zużyj manę
+        this.virtuttiService.consumeEnergy(userId, 15, 'chaos_blessing');
+
+        if (targetUser.id === userId || targetIsLucyfer) {
+            // WARIANT 1: Na siebie lub innego Lucyfera - usuwa klątwę
+            const activeCurses = this.activeCurses.get(targetUser.id) || [];
+            if (activeCurses.length === 0) {
+                // Zwróć manę - brak klątwy
+                this.virtuttiService.consumeEnergy(userId, -15, 'chaos_blessing_refund');
+                return await interaction.reply({
+                    content: `⚠️ **${targetUser.toString()} nie ma aktywnej klątwy!**`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Usuń pierwszą klątwę
+            const firstCurse = activeCurses[0];
+            await this.removeCurse(targetUser.id, firstCurse.type);
+
+            effectMessage = `🌑 **Mroczne moce uwolniły ${targetUser.toString()} od klątwy!**`;
+            publicMessage = `🌑 Lucyfer użył mrocznego błogosławieństwa!`;
+
+        } else if (targetIsGabriel) {
+            // WARIANT 2: Na Gabriela - zmniejsza regenerację many o połowę (1h)
+            this.virtuttiService.applyChaosBlessingDebuff(targetUser.id, 'gabriel_slow_regen', userId);
+
+            effectMessage = `🌑 **Skażono esencję ${targetUser.toString()}!**\n\n` +
+                `• Regeneracja many: **-50%** (1pkt/20min zamiast 1pkt/10min)\n` +
+                `• Czas trwania: **1 godzina**`;
+            publicMessage = `🌑💀 Lucyfer skażył esencję Gabriela! Światło słabnie...`;
+
+        } else {
+            // WARIANT 3: Na neutralnego użytkownika - blessing immunity (1h)
+            this.virtuttiService.applyChaosBlessingDebuff(targetUser.id, 'blessing_immunity', userId);
+
+            effectMessage = `🌑 **Skażono duszę ${targetUser.toString()}!**\n\n` +
+                `• Błogosławieństwa Gabriela nie działają na tej osobie\n` +
+                `• Czas trwania: **1 godzina**`;
+            publicMessage = `🌑💀 Lucyfer skażył duszę ${targetUser.toString()}! Światło nie może ich ocalić...`;
+        }
+
+        // 7. Ustaw cooldown (1h)
+        this.virtuttiService.setChaosBlessingCooldown(userId);
+
+        // 8. KOMUNIKAT EPHEMERAL
+        const updatedEnergyData = this.virtuttiService.getEnergy(userId, roleType);
+        await interaction.reply({
+            content: `✅ ${effectMessage}\n\n` +
+                `⚡ Pozostała mana: **${updatedEnergyData.energy}/${updatedEnergyData.maxEnergy}**\n` +
+                `⏰ Cooldown: **1 godzina**`,
+            flags: MessageFlags.Ephemeral
+        });
+
+        // 9. KOMUNIKAT PUBLICZNY
+        await interaction.channel.send({
+            content: publicMessage
+        });
+
+        // 10. Log
+        logger.info(`🌑 Lucyfer (${interaction.user.tag}) użył Chaos Blessing na ${targetUser.tag}`);
     }
 
 }

@@ -40,7 +40,8 @@ class NicknameManagerService {
     static EFFECTS = {
         CURSE: 'curse',        // Klątwa z Konklawe
         FLAG: 'flag',          // Flaga z Muteusz
-        WEAKENED: 'weakened'   // Osłabienie Lucyfera (trwałe)
+        WEAKENED: 'weakened',  // Osłabienie Lucyfera (trwałe)
+        INFERNAL: 'infernal'   // Piekielny Układ (Infernal Bargain)
     };
     
     /**
@@ -181,6 +182,7 @@ class NicknameManagerService {
         const sleepyPattern = /^Uśpiony /;
         const stunnedPattern = /^Oszołomiony /;
         const fallenPattern = /^Upadły /;
+        const infernalPattern = /^Piekielny /;
         const flagNicknames = [
             "Slava Ukrainu!",
             "POLSKA GUROM!",
@@ -190,7 +192,7 @@ class NicknameManagerService {
             "Cyka blyat!"
         ];
 
-        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || stunnedPattern.test(nickname) || fallenPattern.test(nickname) || flagNicknames.includes(nickname);
+        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || stunnedPattern.test(nickname) || fallenPattern.test(nickname) || infernalPattern.test(nickname) || flagNicknames.includes(nickname);
     }
 
     /**
@@ -207,7 +209,8 @@ class NicknameManagerService {
             .replace(/^Osłabiony /, '')
             .replace(/^Uśpiony /, '')
             .replace(/^Oszołomiony /, '')
-            .replace(/^Upadły /, '');
+            .replace(/^Upadły /, '')
+            .replace(/^Piekielny /, '');
 
         return cleanNick;
     }
