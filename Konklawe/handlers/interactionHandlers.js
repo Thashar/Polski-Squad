@@ -3269,6 +3269,49 @@ class InteractionHandler {
         return activeCurse.type === curseType;
     }
 
+    /**
+     * Nakłada losową klątwę na użytkownika (dla Infernal Bargain)
+     * @param {GuildMember} targetMember - Cel klątwy
+     * @param {string} source - Źródło klątwy (dla logów)
+     */
+    async applyRandomCurseToUser(targetMember, source = 'Unknown') {
+        const userId = targetMember.id;
+        const guild = targetMember.guild;
+
+        // Wszystkie dostępne typy klątw
+        const curses = [
+            'slow_mode',
+            'auto_delete',
+            'random_ping',
+            'emoji_spam',
+            'forced_caps',
+            'random_timeout',
+            'special_role',
+            'scramble_words',
+            'smart_aleck',
+            'blah_blah'
+        ];
+
+        // Wylosuj klątwę która nie jest aktywna (max 10 prób)
+        let selectedCurse = null;
+        for (let i = 0; i < 10; i++) {
+            const randomCurse = curses[Math.floor(Math.random() * curses.length)];
+            if (!this.hasActiveCurse(userId, randomCurse)) {
+                selectedCurse = randomCurse;
+                break;
+            }
+        }
+
+        // Jeśli nie znaleziono unikalnej klątwy, użyj losowej
+        if (!selectedCurse) {
+            selectedCurse = curses[Math.floor(Math.random() * curses.length)];
+        }
+
+        // Nałóż klątwę (5 minut)
+        await this.applyCurse(targetMember, selectedCurse, guild);
+        logger.info(`🔥 ${source}: Nałożono losową klątwę "${selectedCurse}" na ${targetMember.user.tag}`);
+    }
+
     async applyCurse(targetMember, curseType, guild, customEndTime = null) {
         const userId = targetMember.id;
         const now = Date.now();
