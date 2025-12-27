@@ -142,6 +142,10 @@ class LobbyService {
         const lobby = this.activeLobbyies.get(lobbyId);
         if (lobby) {
             lobby.pendingRequests.set(userId, messageId);
+            // Zapisz zmiany do pliku
+            this.saveLobbies().catch(error => {
+                logger.error('❌ Błąd podczas zapisywania lobby po dodaniu requestu:', error);
+            });
         }
     }
 
@@ -154,6 +158,10 @@ class LobbyService {
         const lobby = this.activeLobbyies.get(lobbyId);
         if (lobby && lobby.pendingRequests.has(userId)) {
             lobby.pendingRequests.delete(userId);
+            // Zapisz zmiany do pliku
+            this.saveLobbies().catch(error => {
+                logger.error('❌ Błąd podczas zapisywania lobby po usunięciu requestu:', error);
+            });
         }
     }
 
@@ -221,9 +229,14 @@ class LobbyService {
     async saveLobbies() {
         try {
             const lobbiesForSave = {};
-            
+
             for (const [lobbyId, lobby] of this.activeLobbyies.entries()) {
-                // Kopiuj lobby bez pendingRequests (Map nie da się zserializować do JSON)
+                // Konwertuj pendingRequests Map na obiekt dla serializacji JSON
+                const pendingRequestsObj = {};
+                for (const [userId, messageId] of lobby.pendingRequests.entries()) {
+                    pendingRequestsObj[userId] = messageId;
+                }
+
                 lobbiesForSave[lobbyId] = {
                     id: lobby.id,
                     ownerId: lobby.ownerId,
@@ -231,6 +244,7 @@ class LobbyService {
                     threadId: lobby.threadId,
                     announcementMessageId: lobby.announcementMessageId,
                     players: lobby.players,
+                    pendingRequests: pendingRequestsObj, // Zapisz jako obiekt
                     isFull: lobby.isFull,
                     createdAt: lobby.createdAt,
                     lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt,
@@ -251,21 +265,29 @@ class LobbyService {
         try {
             const data = await fs.readFile(this.dataPath, 'utf8');
             const lobbiesData = JSON.parse(data);
-            
+
             this.activeLobbyies.clear();
-            
+
             for (const [lobbyId, lobbyData] of Object.entries(lobbiesData)) {
-                // Odtwórz lobby z dodaniem pustej mapy pendingRequests
+                // Konwertuj pendingRequests obiekt na Map
+                const pendingRequestsMap = new Map();
+                if (lobbyData.pendingRequests) {
+                    for (const [userId, messageId] of Object.entries(lobbyData.pendingRequests)) {
+                        pendingRequestsMap.set(userId, messageId);
+                    }
+                }
+
+                // Odtwórz lobby z przywróconą mapą pendingRequests
                 const lobby = {
                     ...lobbyData,
-                    pendingRequests: new Map(),
+                    pendingRequests: pendingRequestsMap,
                     lastRepositionTime: lobbyData.lastRepositionTime || lobbyData.createdAt,
                     isExtended: lobbyData.isExtended || false
                 };
-                
+
                 this.activeLobbyies.set(lobbyId, lobby);
             }
-            
+
         } catch (error) {
             if (error.code !== 'ENOENT') {
                 logger.error('❌ Błąd podczas wczytywania lobby:', error);
