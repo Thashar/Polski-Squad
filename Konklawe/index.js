@@ -124,7 +124,9 @@ async function onReady() {
     setInterval(async () => {
         try {
             const guild = client.guilds.cache.first();
-            if (!guild) return;
+            if (!guild || !interactionHandler) return;
+
+            const virtuttiService = interactionHandler.virtuttiService;
 
             // Iteruj przez wszystkich użytkowników z aktywnym infernal bargain
             for (const [userId, bargainData] of virtuttiService.infernalBargainActive.entries()) {
