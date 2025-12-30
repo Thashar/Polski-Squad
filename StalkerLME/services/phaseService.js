@@ -1150,7 +1150,14 @@ class PhaseService {
         const dayOfWeek = now.getDay();
         const dateForWeek = dayOfWeek === 1 ? new Date(now.getTime() - 24 * 60 * 60 * 1000) : now;
 
-        const year = dateForWeek.getFullYear();
+        // Oblicz czwartek tego tygodnia (standard ISO 8601)
+        // Tydzień należy do roku, w którym wypada jego czwartek
+        const target = new Date(dateForWeek.valueOf());
+        const dayNumber = (dateForWeek.getDay() + 6) % 7; // poniedziałek = 0
+        target.setDate(target.getDate() - dayNumber + 3); // +3 = czwartek
+
+        // Rok ISO tygodnia to rok czwartku
+        const year = target.getFullYear();
         const weekNumber = this.getISOWeek(dateForWeek);
 
         return { weekNumber, year };
