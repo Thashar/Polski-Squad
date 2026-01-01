@@ -1,3 +1,4 @@
+const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 

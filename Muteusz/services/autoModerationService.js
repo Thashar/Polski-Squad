@@ -1,3 +1,4 @@
+const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs');
 const path = require('path');
 

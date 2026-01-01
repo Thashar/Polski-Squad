@@ -1,3 +1,4 @@
+const { safeParse } = require('../../utils/safeJSON');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const fs = require('fs').promises;
