@@ -1366,6 +1366,18 @@ class OCRService {
                 .setEmoji('🚪')
                 .setStyle(ButtonStyle.Danger);
 
+            const dodajButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_dodaj')
+                .setLabel('Dodaj brakujące dane')
+                .setEmoji('➕')
+                .setStyle(ButtonStyle.Success);
+
+            const modyfikujButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_modyfikuj')
+                .setLabel('Modyfikuj dane')
+                .setEmoji('✏️')
+                .setStyle(ButtonStyle.Success);
+
             const imgButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_img')
                 .setLabel('Dodaj zdjęcie rankingu')
@@ -1376,7 +1388,7 @@ class OCRService {
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
 
             const row2 = new ActionRowBuilder()
-                .addComponents(imgButton);
+                .addComponents(dodajButton, modyfikujButton, imgButton);
 
             // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
             if (this.queueMessageId) {
@@ -1560,6 +1572,18 @@ class OCRService {
                 .setEmoji('🚪')
                 .setStyle(ButtonStyle.Danger);
 
+            const dodajButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_dodaj')
+                .setLabel('Dodaj brakujące dane')
+                .setEmoji('➕')
+                .setStyle(ButtonStyle.Success);
+
+            const modyfikujButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_modyfikuj')
+                .setLabel('Modyfikuj dane')
+                .setEmoji('✏️')
+                .setStyle(ButtonStyle.Success);
+
             const imgButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_img')
                 .setLabel('Dodaj zdjęcie rankingu')
@@ -1570,7 +1594,7 @@ class OCRService {
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
 
             const row2 = new ActionRowBuilder()
-                .addComponents(imgButton);
+                .addComponents(dodajButton, modyfikujButton, imgButton);
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed

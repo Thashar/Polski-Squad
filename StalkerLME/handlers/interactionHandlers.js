@@ -694,10 +694,14 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleModyfikujClanSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_round|')) {
         await handleModyfikujRoundSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('modyfikuj_select_phase|')) {
+        await handleModyfikujPhaseSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_week_')) {
         await handleModyfikujWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_player_')) {
         await handleModyfikujPlayerSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('dodaj_select_phase|')) {
+        await handleDodajPhaseSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_week|')) {
         await handleDodajWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_round|')) {
@@ -1303,6 +1307,16 @@ async function handleButton(interaction, sharedState) {
 
     if (interaction.customId === 'queue_cmd_img') {
         await handleImgCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_dodaj') {
+        await handleDodajCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_modyfikuj') {
+        await handleModyfikujCommand(interaction, sharedState);
         return;
     }
 
@@ -2328,29 +2342,11 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('modyfikuj')
-            .setDescription('Modyfikuj wynik gracza')
-            .addStringOption(option =>
-                option.setName('faza')
-                    .setDescription('Wybierz fazę')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: 'Faza 1', value: 'phase1' },
-                        { name: 'Faza 2', value: 'phase2' }
-                    )
-            ),
+            .setDescription('Modyfikuj wynik gracza'),
 
         new SlashCommandBuilder()
             .setName('dodaj')
-            .setDescription('Dodaj nowego gracza do istniejących wyników')
-            .addStringOption(option =>
-                option.setName('faza')
-                    .setDescription('Wybierz fazę')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: 'Faza 1', value: 'phase1' },
-                        { name: 'Faza 2', value: 'phase2' }
-                    )
-            ),
+            .setDescription('Dodaj nowego gracza do istniejących wyników'),
 
         new SlashCommandBuilder()
             .setName('img')
@@ -4625,6 +4621,71 @@ async function showPhase2RoundSummary(interaction, session, phaseService) {
 
 // =============== DODAJ HANDLERS ===============
 
+async function handleDodajPhaseSelect(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+    const userClan = interaction.customId.split('|')[1];
+    const selectedPhase = interaction.values[0];
+
+    try {
+        const clanName = config.roleDisplayNames[userClan];
+
+        // Pobierz dostępne tygodnie dla tego klanu
+        const availableWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const weeksForClan = availableWeeks.filter(week => week.clans.includes(userClan));
+
+        if (weeksForClan.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder()
+                    .setTitle('❌ Brak danych')
+                    .setDescription(`Brak zapisanych wyników dla klanu ${clanName}. Najpierw użyj \`/faza1\` lub \`/faza2\` aby dodać wyniki.`)
+                    .setColor('#FF0000')
+                ],
+                components: []
+            });
+            return;
+        }
+
+        // Twórz select menu z tygodniami
+        const weekOptions = weeksForClan.slice(0, 25).map(week => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                .setValue(`${week.weekNumber}-${week.year}`)
+                .setDescription(`${week.clans.map(c => config.roleDisplayNames[c]).join(', ')}`);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`dodaj_select_week|${selectedPhase}|${userClan}`)
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(weekOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
+        const totalSteps = selectedPhase === 'phase2' ? '3' : '2';
+        const embed = new EmbedBuilder()
+            .setTitle(`➕ Dodaj gracza - ${phaseTitle}`)
+            .setDescription(`**Krok 2/${totalSteps}:** Wybierz tydzień\n**Klan:** ${clanName}`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (error) {
+        logger.error('[DODAJ] ❌ Błąd obsługi wyboru fazy:', error);
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Błąd')
+                .setDescription('Wystąpił błąd podczas przetwarzania wyboru fazy.')
+                .setColor('#FF0000')
+            ],
+            components: []
+        });
+    }
+}
+
 async function handleDodajWeekSelect(interaction, sharedState) {
     const { config } = sharedState;
     const [prefix, phase, clan] = interaction.customId.split('|');
@@ -4851,43 +4912,33 @@ async function handleDodajCommand(interaction, sharedState) {
         return;
     }
 
-    const selectedPhase = interaction.options.getString('faza');
-
     try {
         const clanName = config.roleDisplayNames[userClan];
 
-        // Pobierz dostępne tygodnie dla tego klanu
-        const availableWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-        const weeksForClan = availableWeeks.filter(week => week.clans.includes(userClan));
-
-        if (weeksForClan.length === 0) {
-            await interaction.reply({
-                content: `❌ Brak zapisanych wyników dla klanu ${clanName}. Najpierw użyj \`/faza1\` lub \`/faza2\` aby dodać wyniki.`,
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        // Twórz select menu z tygodniami
-        const weekOptions = weeksForClan.slice(0, 25).map(week => {
-            return new StringSelectMenuOptionBuilder()
-                .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
-                .setValue(`${week.weekNumber}-${week.year}`)
-                .setDescription(`${week.clans.map(c => config.roleDisplayNames[c]).join(', ')}`);
-        });
+        // Twórz select menu z wyborem fazy
+        const phaseOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 1')
+                .setValue('phase1')
+                .setDescription('Dodaj gracza do wyników Fazy 1')
+                .setEmoji('📊'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 2')
+                .setValue('phase2')
+                .setDescription('Dodaj gracza do wyników Fazy 2')
+                .setEmoji('📈')
+        ];
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`dodaj_select_week|${selectedPhase}|${userClan}`)
-            .setPlaceholder('Wybierz tydzień')
-            .addOptions(weekOptions);
+            .setCustomId(`dodaj_select_phase|${userClan}`)
+            .setPlaceholder('Wybierz fazę')
+            .addOptions(phaseOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
-        const phaseTitle = selectedPhase === 'phase2' ? 'Faza 2' : 'Faza 1';
-        const totalSteps = selectedPhase === 'phase2' ? '3' : '2';
         const embed = new EmbedBuilder()
-            .setTitle(`➕ Dodaj gracza - ${phaseTitle}`)
-            .setDescription(`**Krok 1/${totalSteps}:** Wybierz tydzień\n**Klan:** ${clanName}`)
+            .setTitle('➕ Dodaj gracza')
+            .setDescription(`**Krok 1/3:** Wybierz fazę\n**Klan:** ${clanName}`)
             .setColor('#00FF00')
             .setTimestamp();
 
@@ -5374,19 +5425,71 @@ async function handleModyfikujCommand(interaction, sharedState) {
         return;
     }
 
-    const selectedPhase = interaction.options.getString('faza');
-
     try {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const clanName = config.roleDisplayNames[userClan];
 
-        // Pomiń wybór klanu i przejdź bezpośrednio do wyboru tygodnia
-        await showModyfikujWeekSelection(interaction, databaseService, config, userClan, selectedPhase, null, 0);
+        // Twórz select menu z wyborem fazy
+        const phaseOptions = [
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 1')
+                .setValue('phase1')
+                .setDescription('Modyfikuj wyniki Fazy 1')
+                .setEmoji('📊'),
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Faza 2')
+                .setValue('phase2')
+                .setDescription('Modyfikuj wyniki Fazy 2')
+                .setEmoji('📈')
+        ];
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`modyfikuj_select_phase|${userClan}`)
+            .setPlaceholder('Wybierz fazę')
+            .addOptions(phaseOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('✏️ Modyfikuj wynik gracza')
+            .setDescription(`**Krok 1/3:** Wybierz fazę\n**Klan:** ${clanName}`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.reply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
 
     } catch (error) {
         logger.error('[MODYFIKUJ] ❌ Błąd komendy /modyfikuj:', error);
-        await interaction.editReply({
+        await interaction.reply({
             content: '❌ Wystąpił błąd podczas uruchamiania komendy.',
             flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleModyfikujPhaseSelect(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+    const userClan = interaction.customId.split('|')[1];
+    const selectedPhase = interaction.values[0];
+
+    try {
+        await interaction.deferUpdate();
+
+        // Przejdź do wyboru tygodnia z wybraną fazą
+        await showModyfikujWeekSelection(interaction, databaseService, config, userClan, selectedPhase, null, 0);
+
+    } catch (error) {
+        logger.error('[MODYFIKUJ] ❌ Błąd obsługi wyboru fazy:', error);
+        await interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Błąd')
+                .setDescription('Wystąpił błąd podczas przetwarzania wyboru fazy.')
+                .setColor('#FF0000')
+            ],
+            components: []
         });
     }
 }
