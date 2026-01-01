@@ -5087,20 +5087,19 @@ async function handleImgWeekSelect(interaction, sharedState) {
                 const buffer = Buffer.from(response.data);
 
                 // Określ ścieżkę do katalogu z danymi
-                const phaseDir = path.join(
+                const imageDir = path.join(
                     __dirname,
-                    '../data/phases',
+                    '../data/ranking_images',
                     `guild_${interaction.guild.id}`,
-                    'phase2',
                     year.toString()
                 );
 
                 // Upewnij się że katalog istnieje
-                await fs.mkdir(phaseDir, { recursive: true });
+                await fs.mkdir(imageDir, { recursive: true });
 
                 // Zapisz zdjęcie jako week-{weekNumber}_{clan}_table.png
                 const extension = attachment.name.split('.').pop();
-                const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${extension}`);
+                const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${extension}`);
                 await fs.writeFile(imagePath, buffer);
 
                 logger.info(`[IMG] ✅ Zapisano zdjęcie: ${imagePath}`);
@@ -6813,11 +6812,10 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     const path = require('path');
     const { AttachmentBuilder } = require('discord.js');
 
-    const phaseDir = path.join(
+    const imageDir = path.join(
         __dirname,
-        '../data/phases',
+        '../data/ranking_images',
         `guild_${interaction.guild.id}`,
-        'phase2',
         year.toString()
     );
 
@@ -6826,7 +6824,7 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     let imageAttachment = null;
 
     for (const ext of possibleExtensions) {
-        const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${ext}`);
+        const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${ext}`);
         try {
             await fs.access(imagePath);
             // Plik istnieje - stwórz attachment
@@ -7181,11 +7179,10 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     const path = require('path');
     const { AttachmentBuilder } = require('discord.js');
 
-    const phaseDir = path.join(
+    const imageDir = path.join(
         __dirname,
-        '../data/phases',
+        '../data/ranking_images',
         `guild_${interaction.guild.id}`,
-        'phase2',
         year.toString()
     );
 
@@ -7193,7 +7190,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 
     for (const ext of possibleExtensions) {
-        const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${ext}`);
+        const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${ext}`);
         try {
             await fs.access(imagePath);
             // Plik istnieje - stwórz attachment

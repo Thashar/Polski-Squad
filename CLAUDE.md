@@ -686,7 +686,7 @@ node manual-backup.js
 - **NIE używa kolejki OCR:** Komenda nie korzysta z systemu kolejkowania OCR (działa niezależnie)
 - **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla wybranego klanu (max 25)
 - **Logika agregacji:** Tygodnie z obu faz są łączone i deduplikowane, etykieta pokazuje które fazy są dostępne (F1, F2, F1+F2)
-- Katalog: `data/phases/guild_{guildId}/phase2/{year}/week-{weekNumber}_{clan}_table.{ext}`
+- Katalog: `data/ranking_images/guild_{guildId}/{year}/week-{weekNumber}_{clan}_table.{ext}`
 - Nazewnictwo: `week-{weekNumber}_{clan}_table.{png|jpg|jpeg|webp|gif}`
 - Obsługiwane formaty: PNG, JPG, JPEG, WEBP, GIF
 - **Wyświetlanie:** Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma)
@@ -965,6 +965,18 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**StalkerLME Bot - Komenda /img - Osobny Katalog dla Zdjęć Rankingów:**
+- **ZMIANA:** Zdjęcia rankingów są teraz zapisywane w dedykowanym katalogu `data/ranking_images/` zamiast w `data/phases/phase2/`
+- **Powód:** Logiczne oddzielenie załączników od danych faz, łatwiejsze zarządzanie i backup
+- **Nowa struktura:** `data/ranking_images/guild_{guildId}/{year}/week-{weekNumber}_{clan}_table.{ext}`
+- **Stara struktura:** `data/phases/guild_{guildId}/phase2/{year}/week-{weekNumber}_{clan}_table.{ext}`
+- **Zmienione miejsca:**
+  - Zapisywanie zdjęć w `/img` (handleImgWeekSelect)
+  - Odczytywanie zdjęć w `/wyniki` (showPhase2Results i showCombinedResults)
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js:5090-5102,6815-6827,7182-7193` (imageDir zamiast phaseDir)
+  - `CLAUDE.md:689` (dokumentacja katalogu)
 
 **GLOBALNA NAPRAWA - Parsowanie Uszkodzonych Plików JSON:**
 - **FIX KRYTYCZNY:** Naprawiono błędy parsowania JSON po incydencie ENOSPC (brak miejsca na dysku)
