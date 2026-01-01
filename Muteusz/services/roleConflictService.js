@@ -43,7 +43,7 @@ class RoleConflictService {
     async restoreTimersFromFile() {
         try {
             const data = await fs.readFile(this.timersFilePath, 'utf8');
-            const timersData = JSON.parse(data);
+            const timersData = safeParse(data, {});
             
             let restoredCount = 0;
             let expiredCount = 0;

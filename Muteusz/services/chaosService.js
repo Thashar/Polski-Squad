@@ -90,7 +90,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
             }
 
             const data = await fs.readFile(this.dataFile, 'utf8');
-            const chaosData = JSON.parse(data);
+            const chaosData = safeParse(data, {});
 
             this.enabled = chaosData.enabled || false;
             // Kompatybilność wsteczna - obsługa starego formatu z pojedynczą rolą

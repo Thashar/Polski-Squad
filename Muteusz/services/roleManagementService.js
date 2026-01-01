@@ -17,7 +17,7 @@ class RoleManagementService {
     async readRemovedRoles() {
         try {
             const data = await fs.readFile(this.removedRolesFile, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             // Jeśli plik nie istnieje, zwróć pusty obiekt
             if (error.code === 'ENOENT') {

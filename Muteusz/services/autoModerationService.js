@@ -205,7 +205,7 @@ class AutoModerationService {
     loadBadWords() {
         try {
             const data = fs.readFileSync(this.badWordsFile, 'utf8');
-            this.badWords = JSON.parse(data);
+            this.badWords = safeParse(data, {});
         } catch (error) {
             this.logger.error(`Błąd podczas wczytywania listy wyzwisk: ${error.message}`);
             this.badWords = this.getDefaultBadWords();

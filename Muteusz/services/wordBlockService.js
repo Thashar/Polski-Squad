@@ -42,7 +42,7 @@ class WordBlockService {
             }
 
             const data = await fs.readFile(this.dataFile, 'utf8');
-            const blocksData = JSON.parse(data);
+            const blocksData = safeParse(data, {});
             
             // Konwertuj na Map z datami i filtruj wygasłe
             this.wordBlocks.clear();

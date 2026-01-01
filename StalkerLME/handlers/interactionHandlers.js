@@ -5048,7 +5048,7 @@ async function handleImgWeekSelect(interaction, sharedState) {
     try {
         const embed = new EmbedBuilder()
             .setTitle('📷 Dodaj zdjęcie')
-            .setDescription(`**Krok 3/3:** Wyślij zdjęcie z tabelą wyników\n**Tydzień:** ${selectedWeek}\n**Klan:** ${clanName}\n\n⏳ Czekam na zdjęcie... (15 minut)`)
+            .setDescription(`**Krok 2/2:** Wyślij zdjęcie z tabelą wyników\n**Tydzień:** ${selectedWeek}\n**Klan:** ${clanName}\n\n⏳ Czekam na zdjęcie... (1 minuta)`)
             .setColor('#00FF00')
             .setTimestamp();
 
@@ -5057,9 +5057,9 @@ async function handleImgWeekSelect(interaction, sharedState) {
             components: []
         });
 
-        // Stwórz message collector aby poczekać na zdjęcie (15 minut)
+        // Stwórz message collector aby poczekać na zdjęcie (1 minuta)
         const filter = m => m.author.id === interaction.user.id && m.attachments.size > 0;
-        const collector = interaction.channel.createMessageCollector({ filter, time: 900000, max: 1 });
+        const collector = interaction.channel.createMessageCollector({ filter, time: 60000, max: 1 });
 
         collector.on('collect', async (message) => {
             try {
@@ -5142,7 +5142,7 @@ async function handleImgWeekSelect(interaction, sharedState) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('⏱️ Czas minął')
-                        .setDescription('Nie otrzymano zdjęcia w ciągu 15 minut. Użyj komendy `/img` lub przycisku "📷 Dodaj zdjęcie" ponownie.')
+                        .setDescription('Nie otrzymano zdjęcia w ciągu 1 minuty. Użyj komendy `/img` lub przycisku "📷 Dodaj zdjęcie rankingu" ponownie.')
                         .setColor('#FFA500')
                     ],
                     components: []

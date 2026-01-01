@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const cron = require('node-cron');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeParse } = require('../../utils/safeJSON');
 
 const logger = createBotLogger('Muteusz');
 
@@ -101,7 +102,14 @@ class RoleKickingService {
         try {
             logger.info(`Próba ładowania danych Rekrutera z: ${this.rekruterDataPath}`);
             const data = await fs.readFile(this.rekruterDataPath, 'utf8');
-            const parsedData = JSON.parse(data);
+
+            // Obsługa pustych plików (np. gdy brakło miejsca na dysku podczas zapisu)
+            if (!data || data.trim() === '') {
+                logger.warn('Plik danych Rekrutera jest pusty');
+                return null;
+            }
+
+            const parsedData = safeParse(data, {});
             logger.info(`Załadowano dane Rekrutera - znaleziono ${Object.keys(parsedData).length} użytkowników do monitorowania`);
             return parsedData;
         } catch (error) {
@@ -452,7 +460,7 @@ Bot Muteusz`;
     async loadRoleTimestamps() {
         try {
             const data = await fs.readFile(this.roleTimestampPath, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             if (error.code === 'ENOENT') {
                 return {};

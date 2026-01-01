@@ -35,7 +35,7 @@ class MemberCacheService {
     async loadCacheFromFile() {
         try {
             const data = await fs.readFile(this.cacheFilePath, 'utf8');
-            const cacheData = JSON.parse(data);
+            const cacheData = safeParse(data, {});
             
             // Konwertuj obiekt na Map
             for (const [userId, roleIds] of Object.entries(cacheData)) {

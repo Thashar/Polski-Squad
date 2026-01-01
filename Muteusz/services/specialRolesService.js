@@ -16,7 +16,7 @@ class SpecialRolesService {
     async readSpecialRoles() {
         try {
             const data = await fs.readFile(this.specialRolesFile, 'utf8');
-            const parsed = JSON.parse(data);
+            const parsed = safeParse(data, {});
             return parsed.roles || [];
         } catch (error) {
             // Jeśli plik nie istnieje, zwróć pustą listę

@@ -31,7 +31,7 @@ class WarningService {
     loadWarnings() {
         try {
             const data = fs.readFileSync(this.warningsFile, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             this.logger.error(`Błąd podczas wczytywania ostrzeżeń: ${error.message}`);
             return {};
