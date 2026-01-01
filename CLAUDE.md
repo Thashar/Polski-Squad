@@ -678,18 +678,20 @@ node manual-backup.js
 - **Throttling fetch:** `safeFetchMembers()` - 30s cooldown per guild, zapobiega rate limit Gateway (opcode 8)
 - **Autocomplete timeout:** 2.5s protection z pustą odpowiedzią jako fallback
 
-**Komenda /img** - Dodawanie zdjęć z tabelą wyników:
-- Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (30s timeout) → Zapis do katalogu
-- Uprawnienia: Tylko użytkownicy z rolą klanową (moderatorzy/admini)
-- Wykrywanie klanu: Automatyczne na podstawie roli Discord użytkownika
-- **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla klanu użytkownika (max 25)
+**Komenda /img i Przycisk "📷 Dodaj zdjęcie"** - Dodawanie zdjęć z tabelą wyników:
+- Workflow: Wybór klanu → Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (15 min timeout) → Zapis do katalogu
+- **Uprawnienia:** Tylko administratorzy i moderatorzy (allowedPunishRoles)
+- **Wybór klanu:** Ręczny wybór klanu z listy (admin/moderator nie musi mieć roli klanowej)
+- **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie" na embedzie kolejki OCR (drugi rząd przycisków)
+- **NIE używa kolejki OCR:** Komenda nie korzysta z systemu kolejkowania OCR (działa niezależnie)
+- **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla wybranego klanu (max 25)
 - **Logika agregacji:** Tygodnie z obu faz są łączone i deduplikowane, etykieta pokazuje które fazy są dostępne (F1, F2, F1+F2)
 - Katalog: `data/phases/guild_{guildId}/phase2/{year}/week-{weekNumber}_{clan}_table.{ext}`
 - Nazewnictwo: `week-{weekNumber}_{clan}_table.{png|jpg|jpeg|webp|gif}`
 - Obsługiwane formaty: PNG, JPG, JPEG, WEBP, GIF
 - **Wyświetlanie:** Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma)
 - Auto-usuwanie: Wiadomość użytkownika ze zdjęciem jest automatycznie usuwana po zapisie
-- Message Collector: 30 sekund na przesłanie zdjęcia, walidacja typu pliku
+- Message Collector: 15 minut na przesłanie zdjęcia, walidacja typu pliku
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -963,6 +965,22 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**StalkerLME Bot - Komenda /img - Przycisk na Embedzie Kolejki OCR + Rozszerzenie Uprawnień:**
+- **NOWA FUNKCJA:** Dodano przycisk "📷 Dodaj zdjęcie" do embeda kolejki OCR (drugi rząd przycisków, emoji 📷, kolor zielony)
+- **ZMIANA UPRAWNIEŃ:** Komenda `/img` teraz dostępna **tylko dla administratorów i moderatorów** (poprzednio: każdy z rolą klanową)
+- **ZMIANA WORKFLOW:** Dodano wybór klanu (Krok 1/3) przed wyborem tygodnia - admin/moderator nie musi mieć roli klanowej
+- **WYDŁUŻENIE TIMEOUT:** Czas na wrzucenie zdjęcia wydłużony z 30s do 15 minut (900000 ms)
+- **NIE używa kolejki OCR:** Komenda działa niezależnie od systemu kolejkowania OCR (nie blokuje innych komend)
+- **Usunięto debug logging:** Usunięto verbose logowanie w handleImgCommand (linie 4945-4953 poprzednio)
+- **Obsługa przycisku:** Nowy handler `queue_cmd_img` wywołuje `handleImgCommand()`
+- **Nowa funkcja:** `handleImgClanSelect()` - obsługa wyboru klanu w Kroku 1/3
+- Lokalizacja zmian:
+  - `StalkerLME/services/ocrService.js:1369-1379,1563-1573` (przycisk w embedzie kolejki)
+  - `StalkerLME/handlers/interactionHandlers.js:1304-1307` (obsługa przycisku)
+  - `StalkerLME/handlers/interactionHandlers.js:4909-4949,4962-5064` (nowy workflow: wybór klanu)
+  - `StalkerLME/handlers/interactionHandlers.js:5057,5077,5140` (timeout 15 min)
+  - `CLAUDE.md:681-694` (dokumentacja)
 
 **StalkerLME Bot - Komenda /wyniki - Wyświetlanie Zdjęć w Fazie 1:**
 - **FIX:** Zdjęcie z tabelą wyników teraz wyświetla się wewnątrz embeda na dole dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma)

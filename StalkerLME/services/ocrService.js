@@ -1366,14 +1366,23 @@ class OCRService {
                 .setEmoji('🚪')
                 .setStyle(ButtonStyle.Danger);
 
-            const row = new ActionRowBuilder()
+            const imgButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_img')
+                .setLabel('Dodaj zdjęcie')
+                .setEmoji('📷')
+                .setStyle(ButtonStyle.Success);
+
+            const row1 = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
+
+            const row2 = new ActionRowBuilder()
+                .addComponents(imgButton);
 
             // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
             if (this.queueMessageId) {
                 try {
                     const message = await channel.messages.fetch(this.queueMessageId);
-                    await message.edit({ embeds: [embed], components: [row] });
+                    await message.edit({ embeds: [embed], components: [row1, row2] });
                     logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
                     return;
                 } catch (error) {
@@ -1551,17 +1560,26 @@ class OCRService {
                 .setEmoji('🚪')
                 .setStyle(ButtonStyle.Danger);
 
-            const row = new ActionRowBuilder()
+            const imgButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_img')
+                .setLabel('Dodaj zdjęcie')
+                .setEmoji('📷')
+                .setStyle(ButtonStyle.Success);
+
+            const row1 = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
+
+            const row2 = new ActionRowBuilder()
+                .addComponents(imgButton);
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed
-                await queueMessage.edit({ embeds: [embed], components: [row] });
+                await queueMessage.edit({ embeds: [embed], components: [row1, row2] });
                 this.queueMessageId = queueMessage.id;
                 logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed kolejki (ID: ' + queueMessage.id + ')');
             } else {
                 // Wyślij nowy embed jako pierwszą wiadomość
-                const message = await channel.send({ embeds: [embed], components: [row] });
+                const message = await channel.send({ embeds: [embed], components: [row1, row2] });
                 this.queueMessageId = message.id;
                 logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed kolejki (ID: ' + message.id + ')');
             }

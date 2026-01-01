@@ -704,6 +704,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_user|')) {
         await handleDodajUserSelect(interaction, sharedState);
+    } else if (interaction.customId === 'img_select_clan') {
+        await handleImgClanSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('img_select_week|')) {
         await handleImgWeekSelect(interaction, sharedState);
     } else if (interaction.customId === 'player_raport_select_clan') {
@@ -1298,6 +1300,11 @@ async function handleButton(interaction, sharedState) {
 
     if (interaction.customId === 'queue_cmd_punish') {
         await handlePunishCommand(interaction, sharedState.config, sharedState.ocrService, sharedState.punishmentService);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_img') {
+        await handleImgCommand(interaction, sharedState);
         return;
     }
 
@@ -4916,41 +4923,57 @@ async function handleImgCommand(interaction, sharedState) {
         return;
     }
 
-    // Wykryj klan użytkownika
-    const targetRoleIds = Object.entries(config.targetRoles);
-    let userClan = null;
+    try {
+        // Krok 1: Wybór klanu
+        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(config.roleDisplayNames[clanKey])
+                .setValue(clanKey);
+        });
 
-    for (const [clanKey, roleId] of targetRoleIds) {
-        if (interaction.member.roles.cache.has(roleId)) {
-            userClan = clanKey;
-            break;
-        }
-    }
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('img_select_clan')
+            .setPlaceholder('Wybierz klan')
+            .addOptions(clanOptions);
 
-    if (!userClan) {
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📷 Dodaj zdjęcie')
+            .setDescription('**Krok 1/3:** Wybierz klan, dla którego chcesz dodać zdjęcie:')
+            .setColor('#00FF00')
+            .setTimestamp();
+
         await interaction.reply({
-            content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról klanowych aby dodawać zdjęcia.',
+            embeds: [embed],
+            components: [row],
             flags: MessageFlags.Ephemeral
         });
-        return;
+
+    } catch (error) {
+        logger.error('[IMG] ❌ Błąd komendy /img:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas inicjalizacji komendy.',
+            flags: MessageFlags.Ephemeral
+        });
     }
+}
+
+async function handleImgClanSelect(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    await interaction.deferUpdate();
 
     try {
-        const clanName = config.roleDisplayNames[userClan];
+        const selectedClan = interaction.values[0];
+        const clanName = config.roleDisplayNames[selectedClan];
 
         // Pobierz dostępne tygodnie z obu faz dla tego klanu
         const availableWeeksPhase1 = await databaseService.getAvailableWeeks(interaction.guild.id);
         const availableWeeksPhase2 = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
 
-        logger.info(`[IMG] 🔍 Debug - userClan: ${userClan}`);
-        logger.info(`[IMG] 🔍 Debug - availableWeeksPhase1: ${JSON.stringify(availableWeeksPhase1.slice(0, 3))}`);
-        logger.info(`[IMG] 🔍 Debug - availableWeeksPhase2: ${JSON.stringify(availableWeeksPhase2.slice(0, 3))}`);
-
-        const weeksForClanPhase1 = availableWeeksPhase1.filter(week => week.clans.includes(userClan));
-        const weeksForClanPhase2 = availableWeeksPhase2.filter(week => week.clans.includes(userClan));
-
-        logger.info(`[IMG] 🔍 Debug - weeksForClanPhase1 count: ${weeksForClanPhase1.length}`);
-        logger.info(`[IMG] 🔍 Debug - weeksForClanPhase2 count: ${weeksForClanPhase2.length}`);
+        const weeksForClanPhase1 = availableWeeksPhase1.filter(week => week.clans.includes(selectedClan));
+        const weeksForClanPhase2 = availableWeeksPhase2.filter(week => week.clans.includes(selectedClan));
 
         // Połącz tygodnie z obu faz i usuń duplikaty
         const uniqueWeeks = new Map();
@@ -4991,9 +5014,10 @@ async function handleImgCommand(interaction, sharedState) {
         });
 
         if (weeksForClan.length === 0) {
-            await interaction.reply({
+            await interaction.editReply({
                 content: `❌ Brak zapisanych wyników dla klanu ${clanName}.\n\nAby dodać zdjęcie, najpierw zapisz wyniki używając \`/faza1\` lub \`/faza2\` dla wybranego tygodnia.`,
-                flags: MessageFlags.Ephemeral
+                embeds: [],
+                components: []
             });
             return;
         }
@@ -5012,29 +5036,29 @@ async function handleImgCommand(interaction, sharedState) {
         });
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`img_select_week|${userClan}`)
+            .setCustomId(`img_select_week|${selectedClan}`)
             .setPlaceholder('Wybierz tydzień')
             .addOptions(weekOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
-            .setTitle('📷 Dodaj zdjęcie - Faza 2')
-            .setDescription(`**Krok 1/2:** Wybierz tydzień\n**Klan:** ${clanName}`)
+            .setTitle('📷 Dodaj zdjęcie')
+            .setDescription(`**Krok 2/3:** Wybierz tydzień\n**Klan:** ${clanName}`)
             .setColor('#00FF00')
             .setTimestamp();
 
-        await interaction.reply({
+        await interaction.editReply({
             embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
+            components: [row]
         });
 
     } catch (error) {
-        logger.error('[IMG] ❌ Błąd komendy /img:', error);
-        await interaction.reply({
-            content: '❌ Wystąpił błąd podczas inicjalizacji komendy.',
-            flags: MessageFlags.Ephemeral
+        logger.error('[IMG] ❌ Błąd wyboru klanu:', error);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas wyboru klanu.',
+            embeds: [],
+            components: []
         });
     }
 }
@@ -5049,8 +5073,8 @@ async function handleImgWeekSelect(interaction, sharedState) {
 
     try {
         const embed = new EmbedBuilder()
-            .setTitle('📷 Dodaj zdjęcie - Faza 2')
-            .setDescription(`**Krok 2/2:** Wyślij zdjęcie z tabelą wyników\n**Tydzień:** ${selectedWeek}\n**Klan:** ${clanName}\n\n⏳ Czekam na zdjęcie... (30 sekund)`)
+            .setTitle('📷 Dodaj zdjęcie')
+            .setDescription(`**Krok 3/3:** Wyślij zdjęcie z tabelą wyników\n**Tydzień:** ${selectedWeek}\n**Klan:** ${clanName}\n\n⏳ Czekam na zdjęcie... (15 minut)`)
             .setColor('#00FF00')
             .setTimestamp();
 
@@ -5059,9 +5083,9 @@ async function handleImgWeekSelect(interaction, sharedState) {
             components: []
         });
 
-        // Stwórz message collector aby poczekać na zdjęcie
+        // Stwórz message collector aby poczekać na zdjęcie (15 minut)
         const filter = m => m.author.id === interaction.user.id && m.attachments.size > 0;
-        const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+        const collector = interaction.channel.createMessageCollector({ filter, time: 900000, max: 1 });
 
         collector.on('collect', async (message) => {
             try {
@@ -5144,7 +5168,7 @@ async function handleImgWeekSelect(interaction, sharedState) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('⏱️ Czas minął')
-                        .setDescription('Nie otrzymano zdjęcia w ciągu 30 sekund. Użyj komendy `/img` ponownie.')
+                        .setDescription('Nie otrzymano zdjęcia w ciągu 15 minut. Użyj komendy `/img` lub przycisku "📷 Dodaj zdjęcie" ponownie.')
                         .setColor('#FFA500')
                     ],
                     components: []
