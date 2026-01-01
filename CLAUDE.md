@@ -678,7 +678,7 @@ node manual-backup.js
 - **Throttling fetch:** `safeFetchMembers()` - 30s cooldown per guild, zapobiega rate limit Gateway (opcode 8)
 - **Autocomplete timeout:** 2.5s protection z pustą odpowiedzią jako fallback
 
-**Komenda /img** - Dodawanie zdjęć z tabelą wyników do Fazy 2:
+**Komenda /img** - Dodawanie zdjęć z tabelą wyników:
 - Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (30s timeout) → Zapis do katalogu
 - Uprawnienia: Tylko użytkownicy z rolą klanową (moderatorzy/admini)
 - Wykrywanie klanu: Automatyczne na podstawie roli Discord użytkownika
@@ -687,7 +687,7 @@ node manual-backup.js
 - Katalog: `data/phases/guild_{guildId}/phase2/{year}/week-{weekNumber}_{clan}_table.{ext}`
 - Nazewnictwo: `week-{weekNumber}_{clan}_table.{png|jpg|jpeg|webp|gif}`
 - Obsługiwane formaty: PNG, JPG, JPEG, WEBP, GIF
-- Wyświetlanie: Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla wszystkich widoków Fazy 2 (Runda 1, 2, 3, Suma)
+- **Wyświetlanie:** Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma)
 - Auto-usuwanie: Wiadomość użytkownika ze zdjęciem jest automatycznie usuwana po zapisie
 - Message Collector: 30 sekund na przesłanie zdjęcia, walidacja typu pliku
 
@@ -963,6 +963,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**StalkerLME Bot - Komenda /wyniki - Wyświetlanie Zdjęć w Fazie 1:**
+- **FIX:** Zdjęcie z tabelą wyników teraz wyświetla się wewnątrz embeda na dole dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma)
+- **Problem:** Poprzednio zdjęcie było wyświetlane tylko dla widoków Fazy 2 (Runda 1, 2, 3, Suma), w Fazie 1 nie było zdjęcia w embedzie
+- **Rozwiązanie:** Usunięto warunek `isPhase2View` który ograniczał wyświetlanie zdjęcia tylko do Fazy 2
+- **Mechanika:** Zdjęcie jest ładowane z katalogu `phase2/{year}/week-{weekNumber}_{clan}_table.{ext}` i dodawane jako attachment + `embed.setImage()`
+- **Obsługiwane formaty:** PNG, JPG, JPEG, WEBP, GIF
+- **Dokumentacja:** Zaktualizowano sekcję "Komenda /img" w CLAUDE.md (linia 690)
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js:7180-7209` (usunięto warunek isPhase2View)
+  - `CLAUDE.md:690` (dokumentacja wyświetlania)
 
 **StalkerLME Bot - Komenda /img - Rozszerzenie Dostępnych Tygodni:**
 - **ZMIANA:** Komenda `/img` teraz pokazuje **wszystkie tygodnie** z zapisanymi wynikami (Faza 1 LUB Faza 2) dla klanu użytkownika

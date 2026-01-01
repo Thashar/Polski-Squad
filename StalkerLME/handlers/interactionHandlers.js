@@ -7177,38 +7177,34 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .setDisabled(!weekDataPhase2)
         );
 
-    // Sprawdź czy istnieje zdjęcie z tabelą wyników (tylko dla widoków Fazy 2)
-    const isPhase2View = view === 'round1' || view === 'round2' || view === 'round3' || view === 'summary';
+    // Sprawdź czy istnieje zdjęcie z tabelą wyników (dla wszystkich widoków)
     let imageAttachment = null;
+    const fs = require('fs').promises;
+    const path = require('path');
+    const { AttachmentBuilder } = require('discord.js');
 
-    if (isPhase2View) {
-        const fs = require('fs').promises;
-        const path = require('path');
-        const { AttachmentBuilder } = require('discord.js');
+    const phaseDir = path.join(
+        __dirname,
+        '../data/phases',
+        `guild_${interaction.guild.id}`,
+        'phase2',
+        year.toString()
+    );
 
-        const phaseDir = path.join(
-            __dirname,
-            '../data/phases',
-            `guild_${interaction.guild.id}`,
-            'phase2',
-            year.toString()
-        );
+    // Szukaj pliku ze zdjęciem (różne rozszerzenia)
+    const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 
-        // Szukaj pliku ze zdjęciem (różne rozszerzenia)
-        const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
-
-        for (const ext of possibleExtensions) {
-            const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${ext}`);
-            try {
-                await fs.access(imagePath);
-                // Plik istnieje - stwórz attachment
-                imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
-                embed.setImage(`attachment://table.${ext}`);
-                break;
-            } catch (error) {
-                // Plik nie istnieje - spróbuj następne rozszerzenie
-                continue;
-            }
+    for (const ext of possibleExtensions) {
+        const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${ext}`);
+        try {
+            await fs.access(imagePath);
+            // Plik istnieje - stwórz attachment
+            imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
+            embed.setImage(`attachment://table.${ext}`);
+            break;
+        } catch (error) {
+            // Plik nie istnieje - spróbuj następne rozszerzenie
+            continue;
         }
     }
 
