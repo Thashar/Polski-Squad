@@ -966,6 +966,24 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**GLOBALNA NAPRAWA - Parsowanie Uszkodzonych Plików JSON:**
+- **FIX KRYTYCZNY:** Naprawiono błędy parsowania JSON po incydencie ENOSPC (brak miejsca na dysku)
+- **Problem:** Gdy serwer zabrakło miejsca, pliki JSON były zapisywane jako puste lub częściowo → błąd "Unexpected end of JSON input"
+- **Rozwiązanie:** Dodano globalny helper `utils/safeJSON.js` z funkcjami:
+  - `safeParse(data, defaultValue)` - bezpieczne parsowanie z walidacją pustych stringów
+  - `safeReadJSON(filePath, defaultValue)` - bezpieczne wczytanie i parsowanie pliku
+- **Naprawione boty i serwisy:**
+  - **Wydarzynier:** lobbyService.js, timerService.js
+  - **Rekruter:** roleMonitoringService.js
+  - **Kontroler:** lotteryService.js
+  - **Konklawe:** virtuttiService.js (16 plików JSON!)
+  - **StalkerLME:** databaseService.js (wszystkie pliki faz)
+  - **Muteusz:** wszystkie 10 serwisów (autoModeration, chaos, imageBlock, memberCache, reactionRole, roleConflict, roleKicking, roleManagement, specialRoles, warning, wordBlock)
+- **Zachowanie:** Zamiast crashować, bot zwraca wartość domyślną (zwykle `{}`) i kontynuuje działanie
+- Lokalizacja zmian:
+  - `utils/safeJSON.js` (nowy helper)
+  - Wszystkie serwisy wymienionych botów - zamieniono `JSON.parse()` na `safeParse()`
+
 **StalkerLME Bot - Komenda /img - Skrócenie Timeout do 1 Minuty:**
 - **ZMIANA:** Timeout na wrzucenie zdjęcia skrócony z 15 minut do 1 minuty (60000 ms)
 - **Powód:** 15 minut było zbyt długim czasem oczekiwania, 1 minuta jest wystarczająca
