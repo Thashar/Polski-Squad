@@ -1368,7 +1368,7 @@ class OCRService {
 
             const imgButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_img')
-                .setLabel('Dodaj zdjęcie')
+                .setLabel('Dodaj zdjęcie rankingu')
                 .setEmoji('📷')
                 .setStyle(ButtonStyle.Success);
 
@@ -1562,7 +1562,7 @@ class OCRService {
 
             const imgButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_img')
-                .setLabel('Dodaj zdjęcie')
+                .setLabel('Dodaj zdjęcie rankingu')
                 .setEmoji('📷')
                 .setStyle(ButtonStyle.Success);
 

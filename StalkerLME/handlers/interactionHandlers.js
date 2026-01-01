@@ -704,8 +704,6 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_user|')) {
         await handleDodajUserSelect(interaction, sharedState);
-    } else if (interaction.customId === 'img_select_clan') {
-        await handleImgClanSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('img_select_week|')) {
         await handleImgWeekSelect(interaction, sharedState);
     } else if (interaction.customId === 'player_raport_select_clan') {
@@ -4923,57 +4921,34 @@ async function handleImgCommand(interaction, sharedState) {
         return;
     }
 
-    try {
-        // Krok 1: Wybór klanu
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
-            return new StringSelectMenuOptionBuilder()
-                .setLabel(config.roleDisplayNames[clanKey])
-                .setValue(clanKey);
-        });
+    // Wykryj klan użytkownika
+    const targetRoleIds = Object.entries(config.targetRoles);
+    let userClan = null;
 
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('img_select_clan')
-            .setPlaceholder('Wybierz klan')
-            .addOptions(clanOptions);
-
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-
-        const embed = new EmbedBuilder()
-            .setTitle('📷 Dodaj zdjęcie')
-            .setDescription('**Krok 1/3:** Wybierz klan, dla którego chcesz dodać zdjęcie:')
-            .setColor('#00FF00')
-            .setTimestamp();
-
-        await interaction.reply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
-        });
-
-    } catch (error) {
-        logger.error('[IMG] ❌ Błąd komendy /img:', error);
-        await interaction.reply({
-            content: '❌ Wystąpił błąd podczas inicjalizacji komendy.',
-            flags: MessageFlags.Ephemeral
-        });
+    for (const [clanKey, roleId] of targetRoleIds) {
+        if (interaction.member.roles.cache.has(roleId)) {
+            userClan = clanKey;
+            break;
+        }
     }
-}
 
-async function handleImgClanSelect(interaction, sharedState) {
-    const { config, databaseService } = sharedState;
-
-    await interaction.deferUpdate();
+    if (!userClan) {
+        await interaction.reply({
+            content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról klanowych aby dodawać zdjęcia.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
 
     try {
-        const selectedClan = interaction.values[0];
-        const clanName = config.roleDisplayNames[selectedClan];
+        const clanName = config.roleDisplayNames[userClan];
 
         // Pobierz dostępne tygodnie z obu faz dla tego klanu
         const availableWeeksPhase1 = await databaseService.getAvailableWeeks(interaction.guild.id);
         const availableWeeksPhase2 = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
 
-        const weeksForClanPhase1 = availableWeeksPhase1.filter(week => week.clans.includes(selectedClan));
-        const weeksForClanPhase2 = availableWeeksPhase2.filter(week => week.clans.includes(selectedClan));
+        const weeksForClanPhase1 = availableWeeksPhase1.filter(week => week.clans.includes(userClan));
+        const weeksForClanPhase2 = availableWeeksPhase2.filter(week => week.clans.includes(userClan));
 
         // Połącz tygodnie z obu faz i usuń duplikaty
         const uniqueWeeks = new Map();
@@ -5014,10 +4989,9 @@ async function handleImgClanSelect(interaction, sharedState) {
         });
 
         if (weeksForClan.length === 0) {
-            await interaction.editReply({
+            await interaction.reply({
                 content: `❌ Brak zapisanych wyników dla klanu ${clanName}.\n\nAby dodać zdjęcie, najpierw zapisz wyniki używając \`/faza1\` lub \`/faza2\` dla wybranego tygodnia.`,
-                embeds: [],
-                components: []
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -5036,29 +5010,29 @@ async function handleImgClanSelect(interaction, sharedState) {
         });
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`img_select_week|${selectedClan}`)
+            .setCustomId(`img_select_week|${userClan}`)
             .setPlaceholder('Wybierz tydzień')
             .addOptions(weekOptions);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
-            .setTitle('📷 Dodaj zdjęcie')
-            .setDescription(`**Krok 2/3:** Wybierz tydzień\n**Klan:** ${clanName}`)
+            .setTitle('📷 Dodaj zdjęcie rankingu')
+            .setDescription(`**Krok 1/2:** Wybierz tydzień\n**Klan:** ${clanName}`)
             .setColor('#00FF00')
             .setTimestamp();
 
-        await interaction.editReply({
+        await interaction.reply({
             embeds: [embed],
-            components: [row]
+            components: [row],
+            flags: MessageFlags.Ephemeral
         });
 
     } catch (error) {
-        logger.error('[IMG] ❌ Błąd wyboru klanu:', error);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas wyboru klanu.',
-            embeds: [],
-            components: []
+        logger.error('[IMG] ❌ Błąd komendy /img:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas inicjalizacji komendy.',
+            flags: MessageFlags.Ephemeral
         });
     }
 }
