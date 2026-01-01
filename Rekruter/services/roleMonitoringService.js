@@ -35,8 +35,15 @@ class RoleMonitoringService {
         try {
             // Utwórz katalog jeśli nie istnieje
             await fs.mkdir(path.dirname(this.dataPath), { recursive: true });
-            
+
             const data = await fs.readFile(this.dataPath, 'utf8');
+
+            // Obsługa pustych plików (np. gdy brakło miejsca na dysku podczas zapisu)
+            if (!data || data.trim() === '') {
+                this.monitoringData = {};
+                return;
+            }
+
             this.monitoringData = JSON.parse(data);
         } catch (error) {
             if (error.code !== 'ENOENT') {
