@@ -678,11 +678,11 @@ node manual-backup.js
 - **Throttling fetch:** `safeFetchMembers()` - 30s cooldown per guild, zapobiega rate limit Gateway (opcode 8)
 - **Autocomplete timeout:** 2.5s protection z pustą odpowiedzią jako fallback
 
-**Komenda /img i Przycisk "📷 Dodaj zdjęcie"** - Dodawanie zdjęć z tabelą wyników:
-- Workflow: Wybór klanu → Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (15 min timeout) → Zapis do katalogu
+**Komenda /img i Przycisk "📷 Dodaj zdjęcie rankingu"** - Dodawanie zdjęć z tabelą wyników:
+- Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (15 min timeout) → Zapis do katalogu
 - **Uprawnienia:** Tylko administratorzy i moderatorzy (allowedPunishRoles)
-- **Wybór klanu:** Ręczny wybór klanu z listy (admin/moderator nie musi mieć roli klanowej)
-- **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie" na embedzie kolejki OCR (drugi rząd przycisków)
+- **Detekcja klanu:** Automatyczna detekcja z roli użytkownika (admin/moderator musi mieć rolę klanową)
+- **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie rankingu" na embedzie kolejki OCR (drugi rząd przycisków)
 - **NIE używa kolejki OCR:** Komenda nie korzysta z systemu kolejkowania OCR (działa niezależnie)
 - **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla wybranego klanu (max 25)
 - **Logika agregacji:** Tygodnie z obu faz są łączone i deduplikowane, etykieta pokazuje które fazy są dostępne (F1, F2, F1+F2)
@@ -966,19 +966,30 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**StalkerLME Bot - Naprawa /img: Auto-Detekcja Klanu + Zmiana Nazwy Przycisku:**
+- **FIX:** Przywrócono automatyczną detekcję klanu z roli użytkownika - **usunięto krok wyboru klanu** (workflow: 2 kroki zamiast 3)
+- **Problem:** Poprzednia zmiana dodała manualny wybór klanu (Krok 1/3), co było niepotrzebne i nieergonomiczne
+- **Rozwiązanie:** Bot automatycznie wykrywa klan użytkownika na podstawie jego roli klanowej (tak jak było pierwotnie)
+- **Wymóg:** Admin/moderator **musi mieć** rolę klanową aby dodać zdjęcie (poprzednio: nie musiał)
+- **Zmiana nazwy przycisku:** "📷 Dodaj zdjęcie" → "📷 Dodaj zdjęcie rankingu" (bardziej opisowa nazwa)
+- **Workflow:** Wybór tygodnia (Krok 1/2) → Upload zdjęcia (Krok 2/2)
+- **Usunięto funkcję:** `handleImgClanSelect()` - nie jest już potrzebna
+- Lokalizacja zmian:
+  - `StalkerLME/services/ocrService.js:1370,1565` (zmiana label przycisku)
+  - `StalkerLME/handlers/interactionHandlers.js:4926-4943` (auto-detekcja klanu)
+  - `StalkerLME/handlers/interactionHandlers.js:5022` (zaktualizowany tytuł embeda)
+  - `CLAUDE.md:681-685` (dokumentacja workflow i detekcji klanu)
+
 **StalkerLME Bot - Komenda /img - Przycisk na Embedzie Kolejki OCR + Rozszerzenie Uprawnień:**
 - **NOWA FUNKCJA:** Dodano przycisk "📷 Dodaj zdjęcie" do embeda kolejki OCR (drugi rząd przycisków, emoji 📷, kolor zielony)
 - **ZMIANA UPRAWNIEŃ:** Komenda `/img` teraz dostępna **tylko dla administratorów i moderatorów** (poprzednio: każdy z rolą klanową)
-- **ZMIANA WORKFLOW:** Dodano wybór klanu (Krok 1/3) przed wyborem tygodnia - admin/moderator nie musi mieć roli klanowej
 - **WYDŁUŻENIE TIMEOUT:** Czas na wrzucenie zdjęcia wydłużony z 30s do 15 minut (900000 ms)
 - **NIE używa kolejki OCR:** Komenda działa niezależnie od systemu kolejkowania OCR (nie blokuje innych komend)
-- **Usunięto debug logging:** Usunięto verbose logowanie w handleImgCommand (linie 4945-4953 poprzednio)
+- **Usunięto debug logging:** Usunięto verbose logowanie w handleImgCommand
 - **Obsługa przycisku:** Nowy handler `queue_cmd_img` wywołuje `handleImgCommand()`
-- **Nowa funkcja:** `handleImgClanSelect()` - obsługa wyboru klanu w Kroku 1/3
 - Lokalizacja zmian:
   - `StalkerLME/services/ocrService.js:1369-1379,1563-1573` (przycisk w embedzie kolejki)
   - `StalkerLME/handlers/interactionHandlers.js:1304-1307` (obsługa przycisku)
-  - `StalkerLME/handlers/interactionHandlers.js:4909-4949,4962-5064` (nowy workflow: wybór klanu)
   - `StalkerLME/handlers/interactionHandlers.js:5057,5077,5140` (timeout 15 min)
   - `CLAUDE.md:681-694` (dokumentacja)
 
