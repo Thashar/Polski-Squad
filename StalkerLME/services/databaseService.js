@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeParse } = require('../../utils/safeJSON');
 
 const logger = createBotLogger('StalkerLME');
 const path = require('path');
@@ -120,7 +121,7 @@ class DatabaseService {
         const indexPath = this.getPlayerIndexPath(guildId);
         try {
             const data = await fs.readFile(indexPath, 'utf8');
-            const index = JSON.parse(data);
+            const index = safeParse(data, {});
             // Zapisz w cache
             this.playerIndexCache.set(guildId, index);
             return index;
@@ -134,7 +135,7 @@ class DatabaseService {
                 // Wczytaj świeżo zbudowany indeks
                 try {
                     const data = await fs.readFile(indexPath, 'utf8');
-                    const index = JSON.parse(data);
+                    const index = safeParse(data, {});
                     // Zapisz w cache
                     this.playerIndexCache.set(guildId, index);
                     return index;
@@ -284,7 +285,7 @@ class DatabaseService {
                     const weekNumber = parseInt(match[1]);
                     const filePath = path.join(yearPath, filename);
                     const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = JSON.parse(fileContent);
+                    const weekData = safeParse(fileContent, {});
 
                     if (!weekData.players) continue;
 
@@ -361,7 +362,7 @@ class DatabaseService {
     async loadPunishments() {
         try {
             const data = await fs.readFile(this.punishmentsFile, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             logger.error('💥 Błąd wczytywania bazy kar:', error);
             return {};
@@ -379,7 +380,7 @@ class DatabaseService {
     async loadWeeklyRemoval() {
         try {
             const data = await fs.readFile(this.weeklyRemovalFile, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             logger.error('💥 Błąd wczytywania danych tygodniowych:', error);
             return {};
@@ -600,7 +601,7 @@ class DatabaseService {
     async loadPhase1Data() {
         try {
             const data = await fs.readFile(this.phase1File, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             logger.error('💥 Błąd wczytywania danych Fazy 1:', error);
             return {};
@@ -624,7 +625,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            const data = JSON.parse(fileContent);
+            const data = safeParse(fileContent, {});
             return {
                 exists: true,
                 data: data
@@ -668,7 +669,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            weekData = JSON.parse(fileContent);
+            weekData = safeParse(fileContent, {});
             isOverwriting = true;
         } catch (error) {
             // Plik nie istnieje - utwórz nową strukturę
@@ -726,7 +727,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            const clanData = JSON.parse(fileContent);
+            const clanData = safeParse(fileContent, {});
             const players = clanData.players || [];
 
             const scores = players.map(p => p.score).sort((a, b) => b - a);
@@ -754,7 +755,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            return JSON.parse(fileContent);
+            return safeParse(fileContent, {});
         } catch (error) {
             // Plik nie istnieje
             return null;
@@ -802,7 +803,7 @@ class DatabaseService {
                     // Przeczytaj datę utworzenia z pliku
                     const filePath = path.join(yearPath, filename);
                     const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = JSON.parse(fileContent);
+                    const weekData = safeParse(fileContent, {});
 
                     if (!weeksMap.has(weekKey)) {
                         weeksMap.set(weekKey, {
@@ -890,7 +891,7 @@ class DatabaseService {
                     // Przeczytaj plik i znajdź wynik gracza
                     const filePath = path.join(yearPath, filename);
                     const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = JSON.parse(fileContent);
+                    const weekData = safeParse(fileContent, {});
 
                     if (!weekData.players) continue;
 
@@ -917,7 +918,7 @@ class DatabaseService {
     async loadPhase2Data() {
         try {
             const data = await fs.readFile(this.phase2File, 'utf8');
-            return JSON.parse(data);
+            return safeParse(data, {});
         } catch (error) {
             logger.error('💥 Błąd wczytywania danych Fazy 2:', error);
             return {};
@@ -941,7 +942,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            const data = JSON.parse(fileContent);
+            const data = safeParse(fileContent, {});
             return {
                 exists: true,
                 data: data
@@ -1052,7 +1053,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            const clanData = JSON.parse(fileContent);
+            const clanData = safeParse(fileContent, {});
             const players = clanData.summary?.players || clanData.players || [];
 
             const scores = players.map(p => p.score).sort((a, b) => b - a);
@@ -1080,7 +1081,7 @@ class DatabaseService {
 
         try {
             const fileContent = await fs.readFile(filePath, 'utf8');
-            return JSON.parse(fileContent);
+            return safeParse(fileContent, {});
         } catch (error) {
             // Plik nie istnieje
             return null;
@@ -1123,7 +1124,7 @@ class DatabaseService {
 
                     const filePath = path.join(yearPath, filename);
                     const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = JSON.parse(fileContent);
+                    const weekData = safeParse(fileContent, {});
 
                     if (!weeksMap.has(weekKey)) {
                         weeksMap.set(weekKey, {
