@@ -188,6 +188,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'dodaj':
             await handleDodajCommand(interaction, sharedState);
             break;
+        case 'img':
+            await handleImgCommand(interaction, sharedState);
+            break;
         case 'faza2':
             await handlePhase2Command(interaction, sharedState);
             break;
@@ -701,6 +704,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         await handleDodajRoundSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_select_user|')) {
         await handleDodajUserSelect(interaction, sharedState);
+    } else if (interaction.customId.startsWith('img_select_week|')) {
+        await handleImgWeekSelect(interaction, sharedState);
     } else if (interaction.customId === 'player_raport_select_clan') {
         await handlePlayerRaportSelectClan(interaction, sharedState);
     }
@@ -2341,6 +2346,10 @@ async function registerSlashCommands(client) {
                         { name: 'Faza 2', value: 'phase2' }
                     )
             ),
+
+        new SlashCommandBuilder()
+            .setName('img')
+            .setDescription('Dodaj zdjęcie z tabelą wyników do tygodnia Fazy 2'),
 
         new SlashCommandBuilder()
             .setName('faza2')
@@ -4892,6 +4901,219 @@ async function handleDodajCommand(interaction, sharedState) {
     }
 }
 
+async function handleImgCommand(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    // Sprawdź uprawnienia (admin lub allowedPunishRoles)
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Wykryj klan użytkownika
+    const targetRoleIds = Object.entries(config.targetRoles);
+    let userClan = null;
+
+    for (const [clanKey, roleId] of targetRoleIds) {
+        if (interaction.member.roles.cache.has(roleId)) {
+            userClan = clanKey;
+            break;
+        }
+    }
+
+    if (!userClan) {
+        await interaction.reply({
+            content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról klanowych aby dodawać zdjęcia.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    try {
+        const clanName = config.roleDisplayNames[userClan];
+
+        // Pobierz dostępne tygodnie z fazy 2 dla tego klanu
+        const availableWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const weeksForClan = availableWeeks.filter(week =>
+            week.clans.includes(userClan) && week.hasPhase2
+        );
+
+        if (weeksForClan.length === 0) {
+            await interaction.reply({
+                content: `❌ Brak zapisanych wyników dla Fazy 2 w klanie ${clanName}. Najpierw użyj \`/faza2\` aby dodać wyniki.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Twórz select menu z tygodniami
+        const weekOptions = weeksForClan.slice(0, 25).map(week => {
+            return new StringSelectMenuOptionBuilder()
+                .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                .setValue(`${week.weekNumber}-${week.year}`)
+                .setDescription(`${week.clans.map(c => config.roleDisplayNames[c]).join(', ')}`);
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`img_select_week|${userClan}`)
+            .setPlaceholder('Wybierz tydzień')
+            .addOptions(weekOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📷 Dodaj zdjęcie - Faza 2')
+            .setDescription(`**Krok 1/2:** Wybierz tydzień\n**Klan:** ${clanName}`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.reply({
+            embeds: [embed],
+            components: [row],
+            flags: MessageFlags.Ephemeral
+        });
+
+    } catch (error) {
+        logger.error('[IMG] ❌ Błąd komendy /img:', error);
+        await interaction.reply({
+            content: '❌ Wystąpił błąd podczas inicjalizacji komendy.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
+async function handleImgWeekSelect(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+    const [prefix, clan] = interaction.customId.split('|');
+    const selectedWeek = interaction.values[0];
+    const [weekNumber, year] = selectedWeek.split('-');
+
+    const clanName = config.roleDisplayNames[clan];
+
+    try {
+        const embed = new EmbedBuilder()
+            .setTitle('📷 Dodaj zdjęcie - Faza 2')
+            .setDescription(`**Krok 2/2:** Wyślij zdjęcie z tabelą wyników\n**Tydzień:** ${selectedWeek}\n**Klan:** ${clanName}\n\n⏳ Czekam na zdjęcie... (30 sekund)`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.update({
+            embeds: [embed],
+            components: []
+        });
+
+        // Stwórz message collector aby poczekać na zdjęcie
+        const filter = m => m.author.id === interaction.user.id && m.attachments.size > 0;
+        const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+
+        collector.on('collect', async (message) => {
+            try {
+                const attachment = message.attachments.first();
+
+                // Sprawdź czy załącznik to obraz
+                if (!attachment.contentType || !attachment.contentType.startsWith('image/')) {
+                    await interaction.editReply({
+                        embeds: [new EmbedBuilder()
+                            .setTitle('❌ Błąd')
+                            .setDescription('Przesłany plik nie jest obrazem. Spróbuj ponownie używając komendy `/img`.')
+                            .setColor('#FF0000')
+                        ],
+                        components: []
+                    });
+                    return;
+                }
+
+                // Pobierz obraz
+                const fs = require('fs').promises;
+                const path = require('path');
+                const axios = require('axios');
+
+                const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
+                const buffer = Buffer.from(response.data);
+
+                // Określ ścieżkę do katalogu z danymi
+                const phaseDir = path.join(
+                    __dirname,
+                    '../data/phases',
+                    `guild_${interaction.guild.id}`,
+                    'phase2',
+                    year.toString()
+                );
+
+                // Upewnij się że katalog istnieje
+                await fs.mkdir(phaseDir, { recursive: true });
+
+                // Zapisz zdjęcie jako week-{weekNumber}_{clan}_table.png
+                const extension = attachment.name.split('.').pop();
+                const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${extension}`);
+                await fs.writeFile(imagePath, buffer);
+
+                logger.info(`[IMG] ✅ Zapisano zdjęcie: ${imagePath}`);
+
+                // Usuń wiadomość użytkownika ze zdjęciem
+                try {
+                    await message.delete();
+                } catch (error) {
+                    logger.warn('[IMG] ⚠️ Nie można usunąć wiadomości użytkownika:', error.message);
+                }
+
+                // Zaktualizuj embed
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('✅ Zdjęcie dodane')
+                        .setDescription(`Pomyślnie dodano zdjęcie do tygodnia **${selectedWeek}** dla klanu **${clanName}**.\n\nZdjęcie będzie widoczne w komendzie \`/wyniki\`.`)
+                        .setColor('#00FF00')
+                        .setImage(attachment.url)
+                        .setTimestamp()
+                    ],
+                    components: []
+                });
+
+            } catch (error) {
+                logger.error('[IMG] ❌ Błąd zapisywania zdjęcia:', error);
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('❌ Błąd')
+                        .setDescription('Wystąpił błąd podczas zapisywania zdjęcia.')
+                        .setColor('#FF0000')
+                    ],
+                    components: []
+                });
+            }
+        });
+
+        collector.on('end', async (collected) => {
+            if (collected.size === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('⏱️ Czas minął')
+                        .setDescription('Nie otrzymano zdjęcia w ciągu 30 sekund. Użyj komendy `/img` ponownie.')
+                        .setColor('#FFA500')
+                    ],
+                    components: []
+                });
+            }
+        });
+
+    } catch (error) {
+        logger.error('[IMG] ❌ Błąd handlera wyboru tygodnia:', error);
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setTitle('❌ Błąd')
+                .setDescription('Wystąpił błąd podczas przetwarzania żądania.')
+                .setColor('#FF0000')
+            ],
+            components: []
+        });
+    }
+}
+
 async function handleDodajModalSubmit(interaction, sharedState) {
     const { config, databaseService } = sharedState;
     const customIdParts = interaction.customId.split('|');
@@ -6537,11 +6759,48 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
                 .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
         );
 
+    // Sprawdź czy istnieje zdjęcie z tabelą wyników
+    const fs = require('fs').promises;
+    const path = require('path');
+    const { AttachmentBuilder } = require('discord.js');
+
+    const phaseDir = path.join(
+        __dirname,
+        '../data/phases',
+        `guild_${interaction.guild.id}`,
+        'phase2',
+        year.toString()
+    );
+
+    // Szukaj pliku ze zdjęciem (różne rozszerzenia)
+    const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+    let imageAttachment = null;
+
+    for (const ext of possibleExtensions) {
+        const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${ext}`);
+        try {
+            await fs.access(imagePath);
+            // Plik istnieje - stwórz attachment
+            imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
+            embed.setImage(`attachment://table.${ext}`);
+            break;
+        } catch (error) {
+            // Plik nie istnieje - spróbuj następne rozszerzenie
+            continue;
+        }
+    }
+
     const replyMethod = isUpdate ? 'update' : 'editReply';
-    await interaction[replyMethod]({
+    const replyOptions = {
         embeds: [embed],
         components: [navRow]
-    });
+    };
+
+    if (imageAttachment) {
+        replyOptions.files = [imageAttachment];
+    }
+
+    await interaction[replyMethod](replyOptions);
 }
 
 async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, isUpdate = false, useFollowUp = false) {
@@ -6867,10 +7126,49 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .setDisabled(!weekDataPhase2)
         );
 
+    // Sprawdź czy istnieje zdjęcie z tabelą wyników (tylko dla widoków Fazy 2)
+    const isPhase2View = view === 'round1' || view === 'round2' || view === 'round3' || view === 'summary';
+    let imageAttachment = null;
+
+    if (isPhase2View) {
+        const fs = require('fs').promises;
+        const path = require('path');
+        const { AttachmentBuilder } = require('discord.js');
+
+        const phaseDir = path.join(
+            __dirname,
+            '../data/phases',
+            `guild_${interaction.guild.id}`,
+            'phase2',
+            year.toString()
+        );
+
+        // Szukaj pliku ze zdjęciem (różne rozszerzenia)
+        const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+
+        for (const ext of possibleExtensions) {
+            const imagePath = path.join(phaseDir, `week-${weekNumber}_${clan}_table.${ext}`);
+            try {
+                await fs.access(imagePath);
+                // Plik istnieje - stwórz attachment
+                imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
+                embed.setImage(`attachment://table.${ext}`);
+                break;
+            } catch (error) {
+                // Plik nie istnieje - spróbuj następne rozszerzenie
+                continue;
+            }
+        }
+    }
+
     const replyOptions = {
         embeds: [embed],
         components: [navRow]
     };
+
+    if (imageAttachment) {
+        replyOptions.files = [imageAttachment];
+    }
 
     let response;
     if (useFollowUp) {
