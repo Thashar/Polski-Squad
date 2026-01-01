@@ -56,6 +56,12 @@ class LotteryService {
     async loadLotteries() {
         try {
             const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
+
+            // Obsługa pustych plików (np. gdy brakło miejsca na dysku podczas zapisu)
+            if (!data || data.trim() === '') {
+                return;
+            }
+
             const lotteryData = JSON.parse(data);
             
             if (lotteryData.activeLotteries) {

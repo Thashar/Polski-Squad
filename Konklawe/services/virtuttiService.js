@@ -1,4 +1,5 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -973,7 +974,7 @@ class VirtuttiService {
             // Wczytaj cooldowny
             try {
                 const cooldownsData = await fs.readFile(this.cooldownsFile, 'utf8');
-                const parsedCooldowns = JSON.parse(cooldownsData);
+                const parsedCooldowns = safeParse(cooldownsData, {});
                 this.cooldowns = new Map(Object.entries(parsedCooldowns));
                 logger.info(`📂 Wczytano ${this.cooldowns.size} cooldownów z pliku`);
             } catch (error) {
@@ -985,7 +986,7 @@ class VirtuttiService {
             // Wczytaj dzienne użycia
             try {
                 const dailyUsageData = await fs.readFile(this.dailyUsageFile, 'utf8');
-                const parsedDailyUsage = JSON.parse(dailyUsageData);
+                const parsedDailyUsage = safeParse(dailyUsageData, {});
                 this.dailyUsage = new Map(Object.entries(parsedDailyUsage));
                 logger.info(`📂 Wczytano ${this.dailyUsage.size} dziennych użyć z pliku`);
             } catch (error) {
@@ -997,7 +998,7 @@ class VirtuttiService {
             // Wczytaj dane Lucyfera - główne dane (NOWY PLIK)
             try {
                 const lucyferDataFile = await fs.readFile(this.lucyferDataFile, 'utf8');
-                const parsedLucyferData = JSON.parse(lucyferDataFile);
+                const parsedLucyferData = safeParse(lucyferDataFile, {});
                 this.lucyferData = new Map(Object.entries(parsedLucyferData));
                 logger.info(`📂 Wczytano ${this.lucyferData.size} głównych danych Lucyfera`);
             } catch (error) {
@@ -1009,7 +1010,7 @@ class VirtuttiService {
             // Wczytaj dane Lucyfera - klątwy
             try {
                 const lucyferCursesData = await fs.readFile(this.lucyferCursesFile, 'utf8');
-                const parsedLucyferCurses = JSON.parse(lucyferCursesData);
+                const parsedLucyferCurses = safeParse(lucyferCursesData, {});
                 this.lucyferCurses = new Map(Object.entries(parsedLucyferCurses));
                 logger.info(`📂 Wczytano ${this.lucyferCurses.size} danych klątw Lucyfera`);
             } catch (error) {
@@ -1021,7 +1022,7 @@ class VirtuttiService {
             // Wczytaj dane Lucyfera - target cooldowny
             try {
                 const lucyferTargetCooldownsData = await fs.readFile(this.lucyferTargetCooldownsFile, 'utf8');
-                const parsedTargetCooldowns = JSON.parse(lucyferTargetCooldownsData);
+                const parsedTargetCooldowns = safeParse(lucyferTargetCooldownsData, {});
                 // Konwertuj zagnieżdżone obiekty na Maps
                 this.lucyferTargetCooldowns = new Map();
                 for (const [userId, targets] of Object.entries(parsedTargetCooldowns)) {
@@ -1037,7 +1038,7 @@ class VirtuttiService {
             // Wczytaj Gabriel debuff na Lucyfera
             try {
                 const lucyferGabrielDebuffData = await fs.readFile(this.lucyferGabrielDebuffFile, 'utf8');
-                const parsedDebuff = JSON.parse(lucyferGabrielDebuffData);
+                const parsedDebuff = safeParse(lucyferGabrielDebuffData, {});
                 this.lucyferGabrielDebuff = new Map(Object.entries(parsedDebuff));
                 logger.info(`📂 Wczytano ${this.lucyferGabrielDebuff.size} Gabriel debuff na Lucyfera`);
             } catch (error) {
@@ -1049,7 +1050,7 @@ class VirtuttiService {
             // Wczytaj Gabriel blessing cooldowns
             try {
                 const gabrielBlessingCooldownsData = await fs.readFile(this.gabrielBlessingCooldownsFile, 'utf8');
-                const parsedBlessingCooldowns = JSON.parse(gabrielBlessingCooldownsData);
+                const parsedBlessingCooldowns = safeParse(gabrielBlessingCooldownsData, {});
                 // Konwertuj zagnieżdżone obiekty na Maps
                 this.gabrielBlessingCooldowns = new Map();
                 for (const [userId, targets] of Object.entries(parsedBlessingCooldowns)) {
@@ -1065,7 +1066,7 @@ class VirtuttiService {
             // Wczytaj system many
             try {
                 const energySystemData = await fs.readFile(this.energySystemFile, 'utf8');
-                const parsedEnergySystem = JSON.parse(energySystemData);
+                const parsedEnergySystem = safeParse(energySystemData, {});
                 this.energySystem = new Map(Object.entries(parsedEnergySystem));
 
                 // WALIDACJA: Ogranicz energię do maksymalnego limitu przy wczytywaniu
@@ -1113,7 +1114,7 @@ class VirtuttiService {
             // Wczytaj blokady Lucyfera
             try {
                 const lucyferCurseBlockedData = await fs.readFile(this.lucyferCurseBlockedFile, 'utf8');
-                const parsedLucyferBlocked = JSON.parse(lucyferCurseBlockedData);
+                const parsedLucyferBlocked = safeParse(lucyferCurseBlockedData, {});
                 this.lucyferCurseBlocked = new Map(Object.entries(parsedLucyferBlocked));
                 logger.info(`📂 Wczytano ${this.lucyferCurseBlocked.size} blokad Lucyfera`);
             } catch (error) {
@@ -1125,7 +1126,7 @@ class VirtuttiService {
             // Wczytaj efekty revenge
             try {
                 const revengeEffectsData = await fs.readFile(this.revengeEffectsFile, 'utf8');
-                const parsedRevengeEffects = JSON.parse(revengeEffectsData);
+                const parsedRevengeEffects = safeParse(revengeEffectsData, {});
                 this.revengeEffects = new Map(Object.entries(parsedRevengeEffects));
                 logger.info(`📂 Wczytano ${this.revengeEffects.size} efektów revenge`);
             } catch (error) {
@@ -1137,7 +1138,7 @@ class VirtuttiService {
             // Wczytaj revenge cooldowny
             try {
                 const revengeCooldownsData = await fs.readFile(this.revengeCooldownsFile, 'utf8');
-                const parsedRevengeCooldowns = JSON.parse(revengeCooldownsData);
+                const parsedRevengeCooldowns = safeParse(revengeCooldownsData, {});
                 // Konwertuj zagnieżdżone obiekty na Maps
                 this.revengeCooldowns = new Map();
                 for (const [userId, targets] of Object.entries(parsedRevengeCooldowns)) {
@@ -1153,7 +1154,7 @@ class VirtuttiService {
             // Wczytaj ochronę błogosławieństw
             try {
                 const blessingProtectionData = await fs.readFile(this.blessingProtectionFile, 'utf8');
-                const parsedBlessingProtection = JSON.parse(blessingProtectionData);
+                const parsedBlessingProtection = safeParse(blessingProtectionData, {});
                 this.blessingProtection = new Map(Object.entries(parsedBlessingProtection));
                 logger.info(`📂 Wczytano ${this.blessingProtection.size} ochrony błogosławieństw`);
             } catch (error) {
@@ -1165,7 +1166,7 @@ class VirtuttiService {
             // Wczytaj blokady blessing Gabriela
             try {
                 const gabrielBlessingBlockedData = await fs.readFile(this.gabrielBlessingBlockedFile, 'utf8');
-                const parsedGabrielBlocked = JSON.parse(gabrielBlessingBlockedData);
+                const parsedGabrielBlocked = safeParse(gabrielBlessingBlockedData, {});
                 this.gabrielBlessingBlocked = new Map(Object.entries(parsedGabrielBlocked));
                 logger.info(`📂 Wczytano ${this.gabrielBlessingBlocked.size} blokad blessing Gabriela`);
             } catch (error) {
@@ -1177,7 +1178,7 @@ class VirtuttiService {
             // Wczytaj aktywne infernal bargains
             try {
                 const infernalBargainActiveData = await fs.readFile(this.infernalBargainActiveFile, 'utf8');
-                const parsedInfernalActive = JSON.parse(infernalBargainActiveData);
+                const parsedInfernalActive = safeParse(infernalBargainActiveData, {});
                 this.infernalBargainActive = new Map(Object.entries(parsedInfernalActive));
                 logger.info(`📂 Wczytano ${this.infernalBargainActive.size} aktywnych infernal bargains`);
             } catch (error) {
@@ -1189,7 +1190,7 @@ class VirtuttiService {
             // Wczytaj cooldowny infernal bargain
             try {
                 const infernalBargainCooldownsData = await fs.readFile(this.infernalBargainCooldownsFile, 'utf8');
-                const parsedInfernalCooldowns = JSON.parse(infernalBargainCooldownsData);
+                const parsedInfernalCooldowns = safeParse(infernalBargainCooldownsData, {});
                 this.infernalBargainCooldowns = new Map(Object.entries(parsedInfernalCooldowns));
                 logger.info(`📂 Wczytano ${this.infernalBargainCooldowns.size} cooldownów infernal bargain`);
             } catch (error) {
@@ -1201,7 +1202,7 @@ class VirtuttiService {
             // Wczytaj cooldowny chaos blessing
             try {
                 const chaosBlessingCooldownsData = await fs.readFile(this.chaosBlessingCooldownsFile, 'utf8');
-                const parsedChaosCooldowns = JSON.parse(chaosBlessingCooldownsData);
+                const parsedChaosCooldowns = safeParse(chaosBlessingCooldownsData, {});
                 this.chaosBlessingCooldowns = new Map(Object.entries(parsedChaosCooldowns));
                 logger.info(`📂 Wczytano ${this.chaosBlessingCooldowns.size} cooldownów chaos blessing`);
             } catch (error) {
@@ -1213,7 +1214,7 @@ class VirtuttiService {
             // Wczytaj debuffs chaos blessing
             try {
                 const chaosBlessingDebuffsData = await fs.readFile(this.chaosBlessingDebuffsFile, 'utf8');
-                const parsedChaosDebuffs = JSON.parse(chaosBlessingDebuffsData);
+                const parsedChaosDebuffs = safeParse(chaosBlessingDebuffsData, {});
                 this.chaosBlessingDebuffs = new Map(Object.entries(parsedChaosDebuffs));
                 logger.info(`📂 Wczytano ${this.chaosBlessingDebuffs.size} debuffs chaos blessing`);
             } catch (error) {
