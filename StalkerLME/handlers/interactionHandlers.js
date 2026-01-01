@@ -4942,8 +4942,15 @@ async function handleImgCommand(interaction, sharedState) {
         const availableWeeksPhase1 = await databaseService.getAvailableWeeks(interaction.guild.id);
         const availableWeeksPhase2 = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
 
+        logger.info(`[IMG] 🔍 Debug - userClan: ${userClan}`);
+        logger.info(`[IMG] 🔍 Debug - availableWeeksPhase1: ${JSON.stringify(availableWeeksPhase1.slice(0, 3))}`);
+        logger.info(`[IMG] 🔍 Debug - availableWeeksPhase2: ${JSON.stringify(availableWeeksPhase2.slice(0, 3))}`);
+
         const weeksForClanPhase1 = availableWeeksPhase1.filter(week => week.clans.includes(userClan));
         const weeksForClanPhase2 = availableWeeksPhase2.filter(week => week.clans.includes(userClan));
+
+        logger.info(`[IMG] 🔍 Debug - weeksForClanPhase1 count: ${weeksForClanPhase1.length}`);
+        logger.info(`[IMG] 🔍 Debug - weeksForClanPhase2 count: ${weeksForClanPhase2.length}`);
 
         // Połącz tygodnie z obu faz i usuń duplikaty
         const uniqueWeeks = new Map();
