@@ -316,6 +316,12 @@ class TimerService {
     async loadTimersFromFile() {
         try {
             const data = await fs.readFile(this.dataPath, 'utf8');
+
+            // Obsługa pustych plików
+            if (!data || data.trim() === '') {
+                return;
+            }
+
             const timersData = JSON.parse(data);
             
             this.activeTimers.clear();

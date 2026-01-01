@@ -264,6 +264,12 @@ class LobbyService {
     async loadLobbies() {
         try {
             const data = await fs.readFile(this.dataPath, 'utf8');
+
+            // Obsługa pustych plików
+            if (!data || data.trim() === '') {
+                return;
+            }
+
             const lobbiesData = JSON.parse(data);
 
             this.activeLobbyies.clear();
