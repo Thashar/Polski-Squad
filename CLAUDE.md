@@ -679,8 +679,11 @@ node manual-backup.js
 - **Autocomplete timeout:** 2.5s protection z pustą odpowiedzią jako fallback
 
 **Komenda /img** - Dodawanie zdjęć z tabelą wyników do Fazy 2:
-- Workflow: Wybór tygodnia → Upload zdjęcia (30s timeout) → Zapis do katalogu
+- Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (30s timeout) → Zapis do katalogu
 - Uprawnienia: Tylko użytkownicy z rolą klanową (moderatorzy/admini)
+- Wykrywanie klanu: Automatyczne na podstawie roli Discord użytkownika
+- **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla klanu użytkownika (max 25)
+- **Logika agregacji:** Tygodnie z obu faz są łączone i deduplikowane, etykieta pokazuje które fazy są dostępne (F1, F2, F1+F2)
 - Katalog: `data/phases/guild_{guildId}/phase2/{year}/week-{weekNumber}_{clan}_table.{ext}`
 - Nazewnictwo: `week-{weekNumber}_{clan}_table.{png|jpg|jpeg|webp|gif}`
 - Obsługiwane formaty: PNG, JPG, JPEG, WEBP, GIF
@@ -960,6 +963,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**StalkerLME Bot - Komenda /img - Rozszerzenie Dostępnych Tygodni:**
+- **ZMIANA:** Komenda `/img` teraz pokazuje **wszystkie tygodnie** z zapisanymi wynikami (Faza 1 LUB Faza 2) dla klanu użytkownika
+- **Problem:** Poprzednio komenda wymagała aby tydzień miał zapisane wyniki Fazy 2, co uniemożliwiało dodanie zdjęcia dla tygodnia który ma tylko Fazę 1
+- **Rozwiązanie:** Agregacja tygodni z obu faz (`getAvailableWeeks` + `getAvailableWeeksPhase2`), deduplikacja i sortowanie
+- **Workflow:** Użytkownik widzi listę wszystkich dostępnych tygodni z etykietą pokazującą które fazy są zapisane (F1, F2, lub F1+F2)
+- **Komunikat błędu:** Zmieniono z "Brak zapisanych wyników dla Fazy 2..." na "Brak zapisanych wyników... Użyj `/faza1` lub `/faza2`"
+- **Dokumentacja:** Zaktualizowano sekcję "Komenda /img" w CLAUDE.md z nową logiką agregacji
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js:4941-5005` (agregacja tygodni z obu faz)
+  - `CLAUDE.md:685-686` (dokumentacja dostępnych tygodni)
 
 **Szkolenia Bot - Zmiana Schedulingu na Codziennie 18:00 + Naprawa Krytycznego Bugu:**
 - **ZMIANA:** Sprawdzanie wątków zmieniono z co 60 minut → codziennie o 18:00 (node-cron, strefa Europe/Warsaw)

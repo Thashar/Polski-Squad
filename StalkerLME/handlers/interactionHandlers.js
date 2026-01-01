@@ -4938,26 +4938,70 @@ async function handleImgCommand(interaction, sharedState) {
     try {
         const clanName = config.roleDisplayNames[userClan];
 
-        // Pobierz dostępne tygodnie z fazy 2 dla tego klanu
-        const availableWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
-        const weeksForClan = availableWeeks.filter(week =>
-            week.clans.includes(userClan) && week.hasPhase2
-        );
+        // Pobierz dostępne tygodnie z obu faz dla tego klanu
+        const availableWeeksPhase1 = await databaseService.getAvailableWeeks(interaction.guild.id);
+        const availableWeeksPhase2 = await databaseService.getAvailableWeeksPhase2(interaction.guild.id);
+
+        const weeksForClanPhase1 = availableWeeksPhase1.filter(week => week.clans.includes(userClan));
+        const weeksForClanPhase2 = availableWeeksPhase2.filter(week => week.clans.includes(userClan));
+
+        // Połącz tygodnie z obu faz i usuń duplikaty
+        const uniqueWeeks = new Map();
+
+        for (const week of weeksForClanPhase1) {
+            const key = `${week.weekNumber}-${week.year}`;
+            if (!uniqueWeeks.has(key)) {
+                uniqueWeeks.set(key, {
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    createdAt: week.createdAt,
+                    hasPhase1: true,
+                    hasPhase2: false
+                });
+            } else {
+                uniqueWeeks.get(key).hasPhase1 = true;
+            }
+        }
+
+        for (const week of weeksForClanPhase2) {
+            const key = `${week.weekNumber}-${week.year}`;
+            if (!uniqueWeeks.has(key)) {
+                uniqueWeeks.set(key, {
+                    weekNumber: week.weekNumber,
+                    year: week.year,
+                    createdAt: week.createdAt,
+                    hasPhase1: false,
+                    hasPhase2: true
+                });
+            } else {
+                uniqueWeeks.get(key).hasPhase2 = true;
+            }
+        }
+
+        const weeksForClan = Array.from(uniqueWeeks.values()).sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
 
         if (weeksForClan.length === 0) {
             await interaction.reply({
-                content: `❌ Brak zapisanych wyników dla Fazy 2 w klanie ${clanName}. Najpierw użyj \`/faza2\` aby dodać wyniki.`,
+                content: `❌ Brak zapisanych wyników dla klanu ${clanName}.\n\nAby dodać zdjęcie, najpierw zapisz wyniki używając \`/faza1\` lub \`/faza2\` dla wybranego tygodnia.`,
                 flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        // Twórz select menu z tygodniami
+        // Twórz select menu z tygodniami (max 25)
         const weekOptions = weeksForClan.slice(0, 25).map(week => {
+            const phases = [];
+            if (week.hasPhase1) phases.push('F1');
+            if (week.hasPhase2) phases.push('F2');
+            const phasesLabel = phases.join(', ');
+
             return new StringSelectMenuOptionBuilder()
-                .setLabel(`Tydzień ${week.weekNumber}/${week.year}`)
+                .setLabel(`Tydzień ${week.weekNumber}/${week.year} (${phasesLabel})`)
                 .setValue(`${week.weekNumber}-${week.year}`)
-                .setDescription(`${week.clans.map(c => config.roleDisplayNames[c]).join(', ')}`);
+                .setDescription(`Klan: ${clanName}`);
         });
 
         const selectMenu = new StringSelectMenuBuilder()
