@@ -615,9 +615,13 @@ node manual-backup.js
 ### 🎓 Szkolenia Bot
 
 **Funkcjonalność:** Reakcja emoji N_SSS → Prywatny wątek z instrukcjami treningowymi
-**Lifecycle:** Utworzenie → 24h przypomnienie → archiwizacja → zamknięcie po 7 dniach
-**Serwisy:** `threadService.js` (60min interval), `reminderStorageService.js` (persistent JSON)
-**Komendy:** `/decode` (integracja sio-tools)
+**Lifecycle:** Utworzenie → 24h przypomnienie → zamknięcie po 7 dniach (automatyczne, niezależnie od reakcji użytkownika)
+**Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
+**Serwisy:**
+- `threadService.js` - Automatyzacja wątków (cron daily 18:00), 7-dniowe zamykanie PRZED sprawdzeniem threadOwner (FIX zmiany nicku)
+- `reminderStorageService.js` - Persistent JSON z danymi przypomień
+**Uprawnienia:** Każdy może utworzyć wątek (usunięto ograniczenie ról autoryzowanych)
+**Komendy:** `/decode` (integracja sio-tools, tylko informacja w wiadomości - komenda w StalkerLME)
 **Env:** TOKEN, CHANNEL_ID, PING_ROLE_ID
 
 ---
@@ -954,6 +958,22 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ---
 
 ## Historia Zmian
+
+### Styczeń 2026
+
+**Szkolenia Bot - Zmiana Schedulingu na Codziennie 18:00 + Naprawa Krytycznego Bugu:**
+- **ZMIANA:** Sprawdzanie wątków zmieniono z co 60 minut → codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
+- **ZMIANA:** Usunięto ograniczenie ról autoryzowanych - każdy może utworzyć wątek używając emoji N_SSS
+- **FIX KRYTYCZNY:** Naprawiono bug gdzie wątki NIE były zamykane po 7 dniach gdy użytkownik zmienił nick Discord
+  - **Problem:** Sprawdzenie threadOwner było PRZED sprawdzeniem 7 dni → gdy użytkownik zmienił nick, threadOwner=null → return (pominięcie wątku)
+  - **Rozwiązanie:** Przeniesiono sprawdzenie 7 dni PRZED sprawdzenie threadOwner w `processThread()`
+  - Wątki są teraz ZAWSZE zamykane po 7 dniach nieaktywności, niezależnie od zmiany nicku
+- **Konfiguracja:** Dodano `checkHour` i `checkMinute` zamiast `checkIntervalMinutes`
+- Lokalizacja zmian:
+  - `Szkolenia/index.js:2,51-59` (node-cron import + scheduling)
+  - `Szkolenia/config/config.js:53-54` (checkHour, checkMinute)
+  - `Szkolenia/handlers/reactionHandlers.js:34` (usunięto sprawdzanie ról)
+  - `Szkolenia/services/threadService.js:99-111` (zamknięcie 7 dni PRZED threadOwner check)
 
 ### Grudzień 2025
 
