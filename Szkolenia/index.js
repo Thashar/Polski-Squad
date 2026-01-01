@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
+const cron = require('node-cron');
 
 const config = require('./config/config');
 const { handleInteraction } = require('./handlers/interactionHandlers');
@@ -45,12 +46,17 @@ client.once(Events.ClientReady, async () => {
     
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
     await checkThreads(client, sharedState, config, true);
-    
-    // Uruchom automatyczne sprawdzanie wątków
-    const intervalMs = config.timing.checkIntervalMinutes * 60 * 1000;
-    setInterval(() => {
+
+    // Uruchom automatyczne sprawdzanie wątków - codziennie o 18:00
+    const cronExpression = `${config.timing.checkMinute} ${config.timing.checkHour} * * *`;
+    cron.schedule(cronExpression, () => {
+        logger.info(`🕐 Rozpoczynam zaplanowane sprawdzanie wątków (${config.timing.checkHour}:${config.timing.checkMinute.toString().padStart(2, '0')})`);
         checkThreads(client, sharedState, config);
-    }, intervalMs);
+    }, {
+        timezone: "Europe/Warsaw"
+    });
+
+    logger.info(`📅 Zaplanowano sprawdzanie wątków: codziennie o ${config.timing.checkHour}:${config.timing.checkMinute.toString().padStart(2, '0')} (strefa: Europe/Warsaw)`);
 
 });
 

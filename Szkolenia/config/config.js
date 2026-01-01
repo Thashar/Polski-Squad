@@ -50,7 +50,8 @@ module.exports = {
         threadArchiveDays: 1,
         threadLockDays: 7, // Zmieniono: threadDeleteDays -> threadLockDays (wątki są zamykane, nie usuwane)
         inactiveReminderHours: 24,
-        checkIntervalMinutes: 60
+        checkHour: 18, // Godzina sprawdzania wątków (18:00)
+        checkMinute: 0 // Minuta sprawdzania wątków (00)
     },
     
     // Wiadomości

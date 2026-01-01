@@ -30,12 +30,8 @@ async function handleReactionAdd(reaction, user, state, config) {
 
         const guild = reaction.message.guild;
         const member = await guild.members.fetch(user.id);
-        
-        // Sprawdź czy użytkownik ma uprawnienia
-        const hasRole = member.roles.cache.some(role => 
-            config.roles.authorized.includes(role.id)
-        );
-        if (!hasRole) return;
+
+        // Każdy może utworzyć wątek (usunięto sprawdzanie ról autoryzowanych)
 
         const channel = reaction.message.channel;
         const targetUser = reaction.message.author;

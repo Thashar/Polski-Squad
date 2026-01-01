@@ -96,18 +96,19 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         return;
     }
 
-    // Sprawdź czy to wątek z naszego systemu (nazwa = nick użytkownika)
-    const threadOwner = guild.members.cache.find(member => 
-        (member.displayName === thread.name) || (member.user.username === thread.name)
-    );
-
-    if (!threadOwner) return; // Pomiń wątki, które nie należą do naszego systemu
-
-    // Po 7 dniach automatycznie zamknij wątek (niezależnie od przypomnienia)
+    // KRYTYCZNE: Sprawdź 7 dni PRZED sprawdzeniem threadOwner
+    // Zapobiega to problemowi gdy użytkownik zmieni nick - wątek nadal zostanie zamknięty
     if (inactiveTime > lockThreshold) {
         await lockThread(thread, state, config);
         return; // Przerwij dalsze przetwarzanie
     }
+
+    // Sprawdź czy to wątek z naszego systemu (nazwa = nick użytkownika)
+    const threadOwner = guild.members.cache.find(member =>
+        (member.displayName === thread.name) || (member.user.username === thread.name)
+    );
+
+    if (!threadOwner) return; // Pomiń wątki, które nie należą do naszego systemu (przypomnienia NIE zostaną wysłane)
 
     // Sprawdź czas ostatniego przypomnienia (tylko przy normalnym sprawdzaniu)
     if (!isInitialCheck) {
