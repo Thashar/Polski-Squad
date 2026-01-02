@@ -49,12 +49,12 @@ class RankingService {
      */
     parseScoreValue(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)([KMBTQ]|QI)?$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|[KMBTQ])?$/);
         if (!match) return 0;
-        
+
         const number = parseFloat(match[1]);
         const unit = match[2];
-        
+
         return unit ? number * (this.config.scoring.units[unit] || 1) : number;
     }
 
@@ -92,7 +92,7 @@ class RankingService {
      */
     getScoreUnit(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)([KMBTQ]|QI)?$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|[KMBTQ])?$/);
         return match && match[2] ? match[2] : '';
     }
 

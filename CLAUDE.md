@@ -966,6 +966,22 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**EndersEcho Bot - FIX KRYTYCZNY: Naprawa Parsowania Jednostki Quintillion (Qi):**
+- **PROBLEM:** Bot błędnie rozpoznawał wyniki z jednostką Quintillion (Qi), pokazując "Nie pobito rekordu" mimo że wynik był wyższy
+- **Przykład:** Wynik 102.8Qi (102,800Q) był porównywany jako mniejszy niż 73,449.6Q
+- **Trzy błędy znalezione i naprawione:**
+  1. **OCR charWhitelist** - Brak litery "i" w `charWhitelist` → OCR nie mógł rozpoznać "Qi"
+  2. **Regex kolejność** - `([KMBTQ]|QI)?` dopasowywało tylko "Q" z "QI" → zmieniono na `(QI|[KMBTQ])?`
+  3. **Klucz jednostki** - Klucz w `config.scoring.units` był `'Qi'` ale kod używał `toUpperCase()` i szukał `'QI'`
+- **Rozwiązanie:**
+  - Dodano "i" do `charWhitelist`: `'0123456789KMBTQi7.Best:Total '`
+  - Zmieniono regex na `(QI|[KMBTQ])?` w `parseScoreValue()` i `getScoreUnit()`
+  - Zmieniono klucz jednostki z `'Qi'` na `'QI'` w `config.scoring.units`
+- **Skutek:** Teraz jednostki są poprawnie rozpoznawane: K→M→B→T→Q→QI
+- Lokalizacja zmian:
+  - `EndersEcho/config/config.js:42,77` (charWhitelist + units)
+  - `EndersEcho/services/rankingService.js:52,95` (regex w parseScoreValue i getScoreUnit)
+
 **StalkerLME Bot - Komenda /img - Osobny Katalog dla Zdjęć Rankingów:**
 - **ZMIANA:** Zdjęcia rankingów są teraz zapisywane w dedykowanym katalogu `data/ranking_images/` zamiast w `data/phases/phase2/`
 - **Powód:** Logiczne oddzielenie załączników od danych faz, łatwiejsze zarządzanie i backup
