@@ -984,9 +984,13 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **Fallback:** Jeśli nie znaleziono "Victory", używa starej logiki jako backup
 - **Przykład:** "Bb Victory" (linia 1) → "Withervine Lord" (linia 2) = nazwa bossa
 
+- **PROBLEM 3:** Progres wyświetlał "QI" (wielkie) zamiast "Qi" (małe i)
+- **ROZWIĄZANIE:** `formatProgressInUnit()` konwertuje "QI" → "Qi" przed wyświetleniem
+- **Przykład:** "(progres +29.35Qi)" zamiast "(progres +29.35QI)"
+
 - Lokalizacja zmian:
   - `EndersEcho/config/config.js:42,77` (charWhitelist + units)
-  - `EndersEcho/services/rankingService.js:52,95` (regex w parseScoreValue i getScoreUnit)
+  - `EndersEcho/services/rankingService.js:52,95,105-124` (regex + formatProgressInUnit)
   - `EndersEcho/services/ocrService.js:383-460` (extractBossName - logika Victory)
 
 **StalkerLME Bot - Komenda /img - Osobny Katalog dla Zdjęć Rankingów:**
