@@ -264,7 +264,7 @@ class InteractionHandler {
                     });
                     
                     const resultEmbed = this.rankingService.createResultEmbed(
-                        userName, bestScore, currentScore.score, imageAttachment.name
+                        userName, bestScore, currentScore.score, imageAttachment.name, bossName
                     );
                     
                     try {

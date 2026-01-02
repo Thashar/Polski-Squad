@@ -262,9 +262,10 @@ class RankingService {
      * @param {string} bestScore - Najlepszy wynik
      * @param {string} currentScore - Obecny wynik
      * @param {string} attachmentName - Nazwa załącznika ze zdjęciem (opcjonalny)
+     * @param {string} bossName - Nazwa bossa (opcjonalny)
      * @returns {EmbedBuilder} - Embed wyniku
      */
-    createResultEmbed(userName, bestScore, currentScore, attachmentName = null) {
+    createResultEmbed(userName, bestScore, currentScore, attachmentName = null, bossName = null) {
         const logger = require('../../utils/consoleLogger').createBotLogger('EndersEcho');
         
         if (this.config.ocr.detailedLogging.enabled) {
@@ -335,7 +336,7 @@ class RankingService {
                 logger.info('🔍 DEBUG: fullStatusValue: "' + fullStatusValue + '"');
             }
             
-            embed.addFields(
+            const fields = [
                 {
                     name: this.config.messages.resultPlayer,
                     value: userName,
@@ -345,13 +346,26 @@ class RankingService {
                     name: this.config.messages.resultScore,
                     value: bestScore,
                     inline: true
-                },
-                {
-                    name: this.config.messages.resultStatus,
-                    value: fullStatusValue,
-                    inline: false
                 }
-            );
+            ];
+
+            // Dodaj pole z bossem jeśli dostępne
+            if (bossName) {
+                fields.push({
+                    name: '👹 Boss',
+                    value: bossName,
+                    inline: false
+                });
+            }
+
+            // Dodaj status na końcu
+            fields.push({
+                name: this.config.messages.resultStatus,
+                value: fullStatusValue,
+                inline: false
+            });
+
+            embed.addFields(fields);
             
             if (this.config.ocr.detailedLogging.enabled) {
                 logger.info('🔍 DEBUG: Pola dodane do embed');
