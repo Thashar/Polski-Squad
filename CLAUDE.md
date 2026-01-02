@@ -988,10 +988,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **ROZWIĄZANIE:** `formatProgressInUnit()` konwertuje "QI" → "Qi" przed wyświetleniem
 - **Przykład:** "(progres +29.35Qi)" zamiast "(progres +29.35QI)"
 
+- **ULEPSZENIE:** Dodano nazwę bossa do embeda wyniku (bez pobicia rekordu)
+- Pole "👹 Boss" wyświetlane między wynikiem a statusem
+- Wyświetlane tylko gdy nazwa bossa została rozpoznana przez OCR
+- **Przykład:** Gracz • 102.8Qi → 👹 Boss: Withervine Lord → ❌ Nie pobito rekordu
+
 - Lokalizacja zmian:
   - `EndersEcho/config/config.js:42,77` (charWhitelist + units)
-  - `EndersEcho/services/rankingService.js:52,95,105-124` (regex + formatProgressInUnit)
+  - `EndersEcho/services/rankingService.js:52,95,105-124,268,339-368` (regex + formatProgressInUnit + createResultEmbed)
   - `EndersEcho/services/ocrService.js:383-460` (extractBossName - logika Victory)
+  - `EndersEcho/handlers/interactionHandlers.js:267` (przekazanie bossName)
 
 **StalkerLME Bot - Komenda /img - Osobny Katalog dla Zdjęć Rankingów:**
 - **ZMIANA:** Zdjęcia rankingów są teraz zapisywane w dedykowanym katalogu `data/ranking_images/` zamiast w `data/phases/phase2/`
