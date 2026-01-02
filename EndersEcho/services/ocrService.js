@@ -382,16 +382,47 @@ class OCRService {
      */
     extractBossName(text) {
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-        
+
+        // NOWA LOGIKA: Szukaj linii z "Victory" i weź następną linię jako nazwę bossa
+        const victoryIndex = lines.findIndex(line => /victory/i.test(line));
+
+        if (victoryIndex !== -1 && victoryIndex + 1 < lines.length) {
+            // Znaleziono "Victory" i jest następna linia
+            const bossLine = lines[victoryIndex + 1];
+
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                logger.info('Znaleziono "Victory" w linii ' + victoryIndex + ': "' + lines[victoryIndex] + '"');
+                logger.info('Nazwa bossa (następna linia): "' + bossLine + '"');
+            }
+
+            // Oczyszczenie nazwy bossa z niepotrzebnych znaków
+            const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
+
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info('🔍 DEBUG: bossLine przed czyszczeniem: "' + bossLine + '"');
+                logger.info('🔍 DEBUG: cleanBossName po czyszczeniu: "' + cleanBossName + '"');
+                logger.info('🔍 DEBUG: cleanBossName type: ' + typeof cleanBossName);
+                logger.info('🔍 DEBUG: cleanBossName length: ' + (cleanBossName ? cleanBossName.length : 'null/undefined'));
+            }
+
+            if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                logger.info('Oczyszczona nazwa bossa:', cleanBossName);
+            }
+
+            return cleanBossName || null;
+        }
+
+        // FALLBACK: Jeśli nie znaleziono "Victory", użyj starej logiki
         if (lines.length >= 2) {
             const secondLine = lines[1];
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
+                logger.info('Nie znaleziono "Victory", fallback do starej logiki');
                 logger.info('Druga linijka tekstu (boss):', secondLine);
             }
-            
+
             // Sprawdź czy druga linijka zawiera cyfry
             const hasDigits = /\d/.test(secondLine);
-            
+
             let bossLine;
             if (hasDigits && lines.length >= 1) {
                 // Jeśli druga linijka ma cyfry, użyj pierwszej linijki
@@ -406,24 +437,24 @@ class OCRService {
                     logger.info('Używam drugiej linijki (brak cyfr):', bossLine);
                 }
             }
-            
+
             // Oczyszczenie nazwy bossa z niepotrzebnych znaków
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
-            
+
             if (this.config.ocr.detailedLogging.enabled) {
                 logger.info('🔍 DEBUG: bossLine przed czyszczeniem: "' + bossLine + '"');
                 logger.info('🔍 DEBUG: cleanBossName po czyszczeniu: "' + cleanBossName + '"');
                 logger.info('🔍 DEBUG: cleanBossName type: ' + typeof cleanBossName);
                 logger.info('🔍 DEBUG: cleanBossName length: ' + (cleanBossName ? cleanBossName.length : 'null/undefined'));
             }
-            
+
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logBossNameExtraction) {
                 logger.info('Oczyszczona nazwa bossa:', cleanBossName);
             }
-            
+
             return cleanBossName || null;
         }
-        
+
         logger.info('Brak wystarczającej liczby linijek dla nazwy bossa');
         return null;
     }

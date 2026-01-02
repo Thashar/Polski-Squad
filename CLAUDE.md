@@ -966,8 +966,8 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
-**EndersEcho Bot - FIX KRYTYCZNY: Naprawa Parsowania Jednostki Quintillion (Qi):**
-- **PROBLEM:** Bot błędnie rozpoznawał wyniki z jednostką Quintillion (Qi), pokazując "Nie pobito rekordu" mimo że wynik był wyższy
+**EndersEcho Bot - FIX KRYTYCZNY: Naprawa Parsowania Jednostki Quintillion (Qi) + Ekstrakcja Nazwy Bossa:**
+- **PROBLEM 1:** Bot błędnie rozpoznawał wyniki z jednostką Quintillion (Qi), pokazując "Nie pobito rekordu" mimo że wynik był wyższy
 - **Przykład:** Wynik 102.8Qi (102,800Q) był porównywany jako mniejszy niż 73,449.6Q
 - **Trzy błędy znalezione i naprawione:**
   1. **OCR charWhitelist** - Brak litery "i" w `charWhitelist` → OCR nie mógł rozpoznać "Qi"
@@ -978,9 +978,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Zmieniono regex na `(QI|[KMBTQ])?` w `parseScoreValue()` i `getScoreUnit()`
   - Zmieniono klucz jednostki z `'Qi'` na `'QI'` w `config.scoring.units`
 - **Skutek:** Teraz jednostki są poprawnie rozpoznawane: K→M→B→T→Q→QI
+
+- **PROBLEM 2:** Nazwa bossa była pobierana nieprecyzyjnie (druga linia lub pierwsza jeśli druga ma cyfry)
+- **NOWA LOGIKA:** `extractBossName()` szuka linii zawierającej "Victory" i bierze następną linię jako nazwę bossa
+- **Fallback:** Jeśli nie znaleziono "Victory", używa starej logiki jako backup
+- **Przykład:** "Bb Victory" (linia 1) → "Withervine Lord" (linia 2) = nazwa bossa
+
 - Lokalizacja zmian:
   - `EndersEcho/config/config.js:42,77` (charWhitelist + units)
   - `EndersEcho/services/rankingService.js:52,95` (regex w parseScoreValue i getScoreUnit)
+  - `EndersEcho/services/ocrService.js:383-460` (extractBossName - logika Victory)
 
 **StalkerLME Bot - Komenda /img - Osobny Katalog dla Zdjęć Rankingów:**
 - **ZMIANA:** Zdjęcia rankingów są teraz zapisywane w dedykowanym katalogu `data/ranking_images/` zamiast w `data/phases/phase2/`
