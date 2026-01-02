@@ -1015,7 +1015,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **FIX KRYTYCZNY:** Naprawiono błędy parsowania JSON po incydencie ENOSPC (brak miejsca na dysku)
 - **Problem:** Gdy serwer zabrakło miejsca, pliki JSON były zapisywane jako puste lub częściowo → błąd "Unexpected end of JSON input"
 - **Rozwiązanie:** Dodano globalny helper `utils/safeJSON.js` z funkcjami:
-  - `safeParse(data, defaultValue)` - bezpieczne parsowanie z walidacją pustych stringów
+  - `safeParse(data, defaultValue)` - bezpieczne parsowanie z walidacją pustych stringów i try-catch dla uszkodzonych danych
   - `safeReadJSON(filePath, defaultValue)` - bezpieczne wczytanie i parsowanie pliku
 - **Naprawione boty i serwisy:**
   - **Wydarzynier:** lobbyService.js, timerService.js
