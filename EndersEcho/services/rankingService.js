@@ -113,11 +113,14 @@ class RankingService {
         }
 
         const unitImprovement = improvement / unitValue;
-        const formattedValue = unitImprovement % 1 === 0 ? 
-            Math.floor(unitImprovement).toString() : 
+        const formattedValue = unitImprovement % 1 === 0 ?
+            Math.floor(unitImprovement).toString() :
             parseFloat(unitImprovement.toFixed(2)).toString();
-        
-        return `+${formattedValue}${targetUnit}`;
+
+        // Zamień QI na Qi dla wyświetlania
+        const displayUnit = targetUnit === 'QI' ? 'Qi' : targetUnit;
+
+        return `+${formattedValue}${displayUnit}`;
     }
 
     /**
