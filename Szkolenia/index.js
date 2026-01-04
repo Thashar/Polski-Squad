@@ -21,11 +21,9 @@ const client = new Client({
 });
 
 let lastReminderMap = new Map();
-let pingedThreads = new Set(); // Śledzenie wątków które już dostały ping po pierwszej wiadomości właściciela
 
 const sharedState = {
     lastReminderMap,
-    pingedThreads,
     client,
     config
 };
@@ -95,9 +93,6 @@ client.on(Events.MessageCreate, async (message) => {
         if (!message.channel.isThread()) return;
         if (message.channel.parentId !== config.channels.training) return;
 
-        // Sprawdź czy wątek już dostał ping
-        if (sharedState.pingedThreads.has(message.channel.id)) return;
-
         // Sprawdź czy to bot
         if (message.author.bot) return;
 
@@ -120,15 +115,23 @@ client.on(Events.MessageCreate, async (message) => {
         // Sprawdź czy to właściciel wątku pisze
         if (message.author.id !== threadOwner.id) return;
 
-        // To pierwsza wiadomość od właściciela - wyślij ping do ról klanowych
-        await message.channel.send(
-            config.messages.ownerNeedsHelp(threadOwner.id, config.roles.clan)
-        );
+        // Sprawdź czy to pierwsza wiadomość właściciela w tym wątku
+        // Pobierz ostatnie 100 wiadomości z wątku
+        const messages = await message.channel.messages.fetch({ limit: 100 });
 
-        // Oznacz wątek jako już zpingowany
-        sharedState.pingedThreads.add(message.channel.id);
+        // Policz wiadomości właściciela (nie licząc wiadomości bota)
+        const ownerMessagesCount = messages.filter(msg =>
+            msg.author.id === threadOwner.id && !msg.author.bot
+        ).size;
 
-        logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${threadName}`);
+        // Jeśli to pierwsza wiadomość właściciela - wyślij ping do ról klanowych
+        if (ownerMessagesCount === 1) {
+            await message.channel.send(
+                config.messages.ownerNeedsHelp(threadOwner.id, config.roles.clan)
+            );
+
+            logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${threadName}`);
+        }
 
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi wiadomości w wątku:', error);
