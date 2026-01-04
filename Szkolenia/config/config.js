@@ -8,7 +8,11 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const requiredEnvVars = [
     'SZKOLENIA_DISCORD_TOKEN',
     'SZKOLENIA_CHANNEL_ID',
-    'SZKOLENIA_PING_ROLE_ID'
+    'SZKOLENIA_PING_ROLE_ID',
+    'SZKOLENIA_CLAN_ROLE_0',
+    'SZKOLENIA_CLAN_ROLE_1',
+    'SZKOLENIA_CLAN_ROLE_2',
+    'SZKOLENIA_CLAN_ROLE_MAIN'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -31,12 +35,20 @@ module.exports = {
     // Role
     roles: {
         ping: process.env.SZKOLENIA_PING_ROLE_ID,
+        // Role autoryzowane do otwierania wątków innym (admin/moderator/specjalne)
         authorized: [
             '1196911721588199464',
-            '1196586785413795850', 
+            '1196586785413795850',
             '1170332302715396106',
             '1170332127653531698',
             '1268527148394610730'
+        ],
+        // Role klanowe - użytkownicy z tymi rolami mogą otwierać wątki sobie
+        clan: [
+            process.env.SZKOLENIA_CLAN_ROLE_0,
+            process.env.SZKOLENIA_CLAN_ROLE_1,
+            process.env.SZKOLENIA_CLAN_ROLE_2,
+            process.env.SZKOLENIA_CLAN_ROLE_MAIN
         ]
     },
     
@@ -68,7 +80,10 @@ module.exports = {
         
         ownerOnly: 'Tylko właściciel wątku może użyć tych przycisków!',
         
-        inactiveReminder: (userId) => 
-            `<@${userId}> Twój wątek jest nieaktywny od 24 godzin. Czy mogę go zamknąć?`
+        inactiveReminder: (userId) =>
+            `<@${userId}> Twój wątek jest nieaktywny od 24 godzin. Czy mogę go zamknąć?`,
+
+        ownerNeedsHelp: (userId, clanRoles) =>
+            `<@${userId}> prosi o pomoc! ${clanRoles.map(roleId => `<@&${roleId}>`).join(' ')}`
     }
 };

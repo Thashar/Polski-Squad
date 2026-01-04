@@ -21,9 +21,11 @@ const client = new Client({
 });
 
 let lastReminderMap = new Map();
+let pingedThreads = new Set(); // Śledzenie wątków które już dostały ping po pierwszej wiadomości właściciela
 
 const sharedState = {
     lastReminderMap,
+    pingedThreads,
     client,
     config
 };
@@ -85,6 +87,52 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
     await handleReactionAdd(reaction, user, sharedState, config);
+});
+
+client.on(Events.MessageCreate, async (message) => {
+    try {
+        // Sprawdź czy to wątek w kanale szkoleniowym
+        if (!message.channel.isThread()) return;
+        if (message.channel.parentId !== config.channels.training) return;
+
+        // Sprawdź czy wątek już dostał ping
+        if (sharedState.pingedThreads.has(message.channel.id)) return;
+
+        // Sprawdź czy to bot
+        if (message.author.bot) return;
+
+        // Pobierz właściciela wątku (osoba której nick jest nazwą wątku)
+        const threadName = message.channel.name;
+        const guild = message.guild;
+
+        // Znajdź właściciela wątku - szukaj po displayName
+        const members = await guild.members.fetch();
+        const threadOwner = members.find(member =>
+            (member.displayName === threadName || member.user.username === threadName)
+        );
+
+        // Jeśli nie znaleziono właściciela, pomiń
+        if (!threadOwner) {
+            logger.warn(`⚠️ Nie znaleziono właściciela wątku: ${threadName}`);
+            return;
+        }
+
+        // Sprawdź czy to właściciel wątku pisze
+        if (message.author.id !== threadOwner.id) return;
+
+        // To pierwsza wiadomość od właściciela - wyślij ping do ról klanowych
+        await message.channel.send(
+            config.messages.ownerNeedsHelp(threadOwner.id, config.roles.clan)
+        );
+
+        // Oznacz wątek jako już zpingowany
+        sharedState.pingedThreads.add(message.channel.id);
+
+        logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${threadName}`);
+
+    } catch (error) {
+        logger.error('❌ Błąd podczas obsługi wiadomości w wątku:', error);
+    }
 });
 
 client.on('error', error => {

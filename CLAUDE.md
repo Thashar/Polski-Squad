@@ -620,9 +620,12 @@ node manual-backup.js
 **Serwisy:**
 - `threadService.js` - Automatyzacja wątków (cron daily 18:00), 7-dniowe zamykanie PRZED sprawdzeniem threadOwner (FIX zmiany nicku)
 - `reminderStorageService.js` - Persistent JSON z danymi przypomień
-**Uprawnienia:** Każdy może utworzyć wątek (usunięto ograniczenie ról autoryzowanych)
+**Uprawnienia:**
+- Admin/moderator/specjalne role → mogą otworzyć wątek każdemu (reakcja pod czyimkolwiek postem)
+- Użytkownik z rolą klanową → może otworzyć wątek tylko sobie (reakcja pod własnym postem)
+**Ping ról klanowych:** Po pierwszej wiadomości właściciela wątku bot automatycznie pinguje wszystkie 4 role klanowe
 **Komendy:** `/decode` (integracja sio-tools, tylko informacja w wiadomości - komenda w StalkerLME)
-**Env:** TOKEN, CHANNEL_ID, PING_ROLE_ID
+**Env:** TOKEN, CHANNEL_ID, PING_ROLE_ID, CLAN_ROLE_0, CLAN_ROLE_1, CLAN_ROLE_2, CLAN_ROLE_MAIN
 
 ---
 
@@ -874,6 +877,10 @@ WAITING_ROOM_CHANNEL=poczekalnia
 SZKOLENIA_DISCORD_TOKEN=bot_token_here
 SZKOLENIA_CHANNEL_ID=channel_id
 SZKOLENIA_PING_ROLE_ID=role_id
+SZKOLENIA_CLAN_ROLE_0=role_id
+SZKOLENIA_CLAN_ROLE_1=role_id
+SZKOLENIA_CLAN_ROLE_2=role_id
+SZKOLENIA_CLAN_ROLE_MAIN=role_id
 
 # ===== STALKERLME BOT =====
 STALKER_LME_DISCORD_TOKEN=bot_token_here
@@ -965,6 +972,26 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**Szkolenia Bot - Nowy System Uprawnień i Automatyczny Ping Ról Klanowych:**
+- **ZMIANA UPRAWNIEŃ:** Dodano dwupoziomowy system uprawnień do otwierania wątków
+  - **Admin/moderator/specjalne role:** Mogą otworzyć wątek każdemu (reakcja N_SSS pod czyimkolwiek postem)
+  - **Użytkownik z rolą klanową:** Może otworzyć wątek tylko sobie (reakcja N_SSS pod własnym postem)
+- **NOWA FUNKCJA:** Automatyczny ping ról klanowych po pierwszej wiadomości właściciela wątku
+  - Bot nasłuchuje pierwszą wiadomość od właściciela wątku (messageCreate event)
+  - Wysyła wiadomość: "@właściciel prosi o pomoc! @rola1 @rola2 @rola3 @rola4"
+  - System śledzenia zapobiega wielokrotnemu pingowaniu tego samego wątku
+- **NOWA KONFIGURACJA:** Dodano 4 zmienne ENV dla ról klanowych
+  - `SZKOLENIA_CLAN_ROLE_0`, `SZKOLENIA_CLAN_ROLE_1`, `SZKOLENIA_CLAN_ROLE_2`, `SZKOLENIA_CLAN_ROLE_MAIN`
+  - Role używane zarówno do autoryzacji jak i do pingowania
+- **Logika:** `reactionHandlers.js` sprawdza uprawnienia przed utworzeniem wątku
+- **Handler:** `index.js` obsługuje messageCreate dla wykrywania pierwszej wiadomości właściciela
+- **Śledzenie:** `pingedThreads` Set przechowuje ID wątków które już dostały ping
+- Lokalizacja zmian:
+  - `Szkolenia/config/config.js:12-15,38-53,86-87` (nowe zmienne ENV, role clan, wiadomość ping)
+  - `Szkolenia/handlers/reactionHandlers.js:34-46` (logika uprawnień)
+  - `Szkolenia/index.js:24,28,92-136` (pingedThreads Set, messageCreate handler)
+  - `CLAUDE.md:623-628,880-883` (dokumentacja)
 
 **EndersEcho Bot - FIX KRYTYCZNY: Naprawa Parsowania Jednostki Quintillion (Qi) + Ekstrakcja Nazwy Bossa:**
 - **PROBLEM 1:** Bot błędnie rozpoznawał wyniki z jednostką Quintillion (Qi), pokazując "Nie pobito rekordu" mimo że wynik był wyższy
