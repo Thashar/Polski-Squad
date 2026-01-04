@@ -121,10 +121,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
 
         // Sprawdź czy to właściciel wątku pisze
-        if (message.author.id !== threadOwnerId) {
-            logger.debug(`👤 Wiadomość od użytkownika innego niż właściciel wątku`);
-            return;
-        }
+        if (message.author.id !== threadOwnerId) return;
 
         logger.info(`👤 Wiadomość od właściciela wątku: ${message.author.tag}`);
 
@@ -146,8 +143,6 @@ client.on(Events.MessageCreate, async (message) => {
             );
 
             logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${message.channel.name}`);
-        } else {
-            logger.debug(`ℹ️ Nie wysyłam pingu - to nie pierwsza wiadomość (${ownerMessagesCount})`);
         }
 
     } catch (error) {
