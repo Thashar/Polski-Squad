@@ -29,6 +29,19 @@
 - Zachowaj alfabetyczną kolejność komend w ramach danego bota
 - Poziomy uprawnień: administrator, moderator, clan_member, achievement_role, special_role, public
 
+**⚠️ INSTRUKCJA PERSISTENCJI DANYCH:**
+- **ZAWSZE sprawdzaj czy nowa funkcjonalność przetrwa restart bota**
+- Jeśli funkcja opiera się na zmiennych w pamięci RAM (Map, Set, Array, Object) → dane zostaną utracone po restarcie
+- **ROZWIĄZANIA:**
+  - **Persistencja w pliku JSON:** Zapisuj dane do pliku (np. `data/feature_state.json`) i wczytuj przy starcie
+  - **Sprawdzanie historii:** Zamiast śledzenia w RAM, sprawdzaj historię (np. wiadomości w wątku, logi w bazie)
+  - **Rekonstrukcja ze stanu Discord:** Pobieraj dane z Discord API przy starcie (np. aktywne wątki, role użytkowników)
+- **PRZYKŁADY:**
+  - ❌ **ŹLE:** `pingedThreads = new Set()` - po restarcie Set będzie pusty, wątki dostaną ping ponownie
+  - ✅ **DOBRZE:** Sprawdzaj historię wiadomości w wątku - jeśli właściciel już pisał, nie pinguj ponownie
+  - ✅ **DOBRZE:** `reminderStorage.saveReminders()` - przypomnienia zapisywane w JSON, wczytywane przy starcie
+- **TEST:** Po implementacji funkcji zapytaj: "Co się stanie jeśli bot zrestartuje teraz?" → Jeśli funkcja przestanie działać prawidłowo = potrzebna persistencja
+
 **⚡ KRYTYCZNE - OPTYMALIZACJA TOKENÓW:**
 - **ZAWSZE używaj Grep PRZED Read** - Znajdź lokalizację, POTEM czytaj tylko potrzebne linie
 - **ZAWSZE używaj offset + limit przy czytaniu dużych plików** - Nie czytaj całości!
