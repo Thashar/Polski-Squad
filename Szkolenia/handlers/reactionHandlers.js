@@ -31,10 +31,21 @@ async function handleReactionAdd(reaction, user, state, config) {
         const guild = reaction.message.guild;
         const member = await guild.members.fetch(user.id);
 
-        // Każdy może utworzyć wątek (usunięto sprawdzanie ról autoryzowanych)
+        // Sprawdzanie uprawnień do otwierania wątku
+        const hasAuthorizedRole = config.roles.authorized.some(roleId => member.roles.cache.has(roleId));
+        const hasClanRole = config.roles.clan.some(roleId => member.roles.cache.has(roleId));
+        const targetUser = reaction.message.author;
+        const isOwnPost = user.id === targetUser.id;
+
+        // Logika uprawnień:
+        // 1. Admin/moderator/specjalne role → mogą otworzyć wątek każdemu
+        // 2. Użytkownik z rolą klanową + to jego własny post → może otworzyć wątek sobie
+        if (!hasAuthorizedRole && !(hasClanRole && isOwnPost)) {
+            logger.info(`⛔ ${member.displayName} nie ma uprawnień do otworzenia wątku`);
+            return;
+        }
 
         const channel = reaction.message.channel;
-        const targetUser = reaction.message.author;
         const targetMember = await guild.members.fetch(targetUser.id);
         const threadName = targetMember.displayName || targetUser.username;
 
