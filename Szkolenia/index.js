@@ -97,16 +97,36 @@ client.on(Events.MessageCreate, async (message) => {
         if (message.author.bot) return;
 
         // Pobierz właściciela wątku z thread.ownerId (ustawiane automatycznie przez Discord)
-        const threadOwnerId = message.channel.ownerId;
+        let threadOwnerId = message.channel.ownerId;
 
-        // Jeśli brak ownerId, pomiń
+        // Jeśli brak ownerId, spróbuj znaleźć właściciela po nazwie wątku w cache
         if (!threadOwnerId) {
-            logger.warn(`⚠️ Wątek nie ma właściciela: ${message.channel.name}`);
-            return;
+            logger.warn(`⚠️ Wątek nie ma ownerId, szukam po nazwie: ${message.channel.name}`);
+
+            const threadName = message.channel.name;
+            const guild = message.guild;
+
+            // Szukaj w cache (bez fetchowania!)
+            const threadOwner = guild.members.cache.find(member =>
+                member.displayName === threadName || member.user.username === threadName
+            );
+
+            if (!threadOwner) {
+                logger.warn(`⚠️ Nie znaleziono właściciela wątku w cache: ${threadName}`);
+                return;
+            }
+
+            threadOwnerId = threadOwner.id;
+            logger.info(`✅ Znaleziono właściciela w cache: ${threadOwner.displayName} (${threadOwnerId})`);
         }
 
         // Sprawdź czy to właściciel wątku pisze
-        if (message.author.id !== threadOwnerId) return;
+        if (message.author.id !== threadOwnerId) {
+            logger.debug(`👤 Wiadomość od użytkownika innego niż właściciel wątku`);
+            return;
+        }
+
+        logger.info(`👤 Wiadomość od właściciela wątku: ${message.author.tag}`);
 
         // Sprawdź czy to pierwsza wiadomość właściciela w tym wątku
         // Pobierz ostatnie 100 wiadomości z wątku
@@ -117,6 +137,8 @@ client.on(Events.MessageCreate, async (message) => {
             msg.author.id === threadOwnerId && !msg.author.bot
         ).size;
 
+        logger.info(`📊 Liczba wiadomości właściciela: ${ownerMessagesCount}`);
+
         // Jeśli to pierwsza wiadomość właściciela - wyślij ping do ról klanowych
         if (ownerMessagesCount === 1) {
             await message.channel.send(
@@ -124,6 +146,8 @@ client.on(Events.MessageCreate, async (message) => {
             );
 
             logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${message.channel.name}`);
+        } else {
+            logger.debug(`ℹ️ Nie wysyłam pingu - to nie pierwsza wiadomość (${ownerMessagesCount})`);
         }
 
     } catch (error) {
