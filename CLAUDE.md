@@ -963,6 +963,8 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 1. **Optymalizacja** - Zobacz [🔥 OPTYMALIZACJA TOKENÓW](#optymalizacja-tokenów)
 2. **Logowanie** - `utils/consoleLogger.js` - createBotLogger('NazwaBota'), NIGDY console.log
+   - Dostępne metody: `logger.info()`, `logger.error()`, `logger.warn()`, `logger.success()`
+   - **NIE MA:** `logger.debug()` - używaj `logger.info()` zamiast tego
 3. **Błędy** - try/catch z logger.error, ephemeral feedback do użytkownika
 4. **Konfiguracja** - Wrażliwe w `.env`, walidacja przy starcie, `config/config.js`
 5. **Persistencja** - `fs.promises`, `JSON.stringify(data, null, 2)` dla czytelności
@@ -985,6 +987,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**Szkolenia Bot - FIX: Błąd logger.debug is not a function:**
+- **PROBLEM:** Bot crashował przy każdej wiadomości w wątku z błędem `TypeError: logger.debug is not a function`
+- **Przyczyna:** Użycie nieistniejącej metody `logger.debug()` (linie 125, 150)
+- **Rozwiązanie:** Usunięto wywołania `logger.debug()` - logger ma tylko: `info()`, `error()`, `warn()`, `success()`
+- **Instrukcja:** Dodano do "Najlepsze Praktyki" punkt 2 z listą dostępnych metod loggera
+- **Zapobieganie:** ZAWSZE sprawdzaj dostępne metody przed użyciem - `utils/consoleLogger.js:344-365`
+- Lokalizacja zmian: `Szkolenia/index.js:125,150` (usunięto logger.debug), `CLAUDE.md:966-967` (dokumentacja)
 
 **Szkolenia Bot - FIX KRYTYCZNY: Naprawa Rate Limit Gateway (opcode 8):**
 - **PROBLEM:** Bot przekraczał limit Discord Gateway przy każdej wiadomości w wątku
