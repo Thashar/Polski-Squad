@@ -986,6 +986,15 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**Szkolenia Bot - FIX KRYTYCZNY: Naprawa Rate Limit Gateway (opcode 8):**
+- **PROBLEM:** Bot przekraczał limit Discord Gateway przy każdej wiadomości w wątku
+- **Przyczyna:** `guild.members.fetch()` pobierał WSZYSTKICH członków serwera przy KAŻDEJ wiadomości w wątku
+- **Błąd:** `GatewayRateLimitError: Request with opcode 8 was rate limited. Retry after 25.754 seconds`
+- **ROZWIĄZANIE:** Użycie `thread.ownerId` zamiast fetchowania i szukania po nazwie
+- **Optymalizacja:** Właściciel wątku jest teraz pobierany z `message.channel.ownerId` (natywna właściwość Discord)
+- **Skutek:** Eliminacja zbędnych wywołań API, brak rate limit, znacznie szybsze przetwarzanie wiadomości
+- Lokalizacja zmian: `Szkolenia/index.js:99-109` (thread.ownerId zamiast guild.members.fetch)
+
 **Szkolenia Bot - Nowy System Uprawnień i Automatyczny Ping Ról Klanowych:**
 - **ZMIANA UPRAWNIEŃ:** Dodano dwupoziomowy system uprawnień do otwierania wątków
   - **Admin/moderator/specjalne role:** Mogą otworzyć wątek każdemu (reakcja N_SSS pod czyimkolwiek postem)

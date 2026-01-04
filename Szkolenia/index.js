@@ -96,24 +96,17 @@ client.on(Events.MessageCreate, async (message) => {
         // Sprawdź czy to bot
         if (message.author.bot) return;
 
-        // Pobierz właściciela wątku (osoba której nick jest nazwą wątku)
-        const threadName = message.channel.name;
-        const guild = message.guild;
+        // Pobierz właściciela wątku z thread.ownerId (ustawiane automatycznie przez Discord)
+        const threadOwnerId = message.channel.ownerId;
 
-        // Znajdź właściciela wątku - szukaj po displayName
-        const members = await guild.members.fetch();
-        const threadOwner = members.find(member =>
-            (member.displayName === threadName || member.user.username === threadName)
-        );
-
-        // Jeśli nie znaleziono właściciela, pomiń
-        if (!threadOwner) {
-            logger.warn(`⚠️ Nie znaleziono właściciela wątku: ${threadName}`);
+        // Jeśli brak ownerId, pomiń
+        if (!threadOwnerId) {
+            logger.warn(`⚠️ Wątek nie ma właściciela: ${message.channel.name}`);
             return;
         }
 
         // Sprawdź czy to właściciel wątku pisze
-        if (message.author.id !== threadOwner.id) return;
+        if (message.author.id !== threadOwnerId) return;
 
         // Sprawdź czy to pierwsza wiadomość właściciela w tym wątku
         // Pobierz ostatnie 100 wiadomości z wątku
@@ -121,16 +114,16 @@ client.on(Events.MessageCreate, async (message) => {
 
         // Policz wiadomości właściciela (nie licząc wiadomości bota)
         const ownerMessagesCount = messages.filter(msg =>
-            msg.author.id === threadOwner.id && !msg.author.bot
+            msg.author.id === threadOwnerId && !msg.author.bot
         ).size;
 
         // Jeśli to pierwsza wiadomość właściciela - wyślij ping do ról klanowych
         if (ownerMessagesCount === 1) {
             await message.channel.send(
-                config.messages.ownerNeedsHelp(threadOwner.id, config.roles.clan)
+                config.messages.ownerNeedsHelp(threadOwnerId, config.roles.clan)
             );
 
-            logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${threadName}`);
+            logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${message.channel.name}`);
         }
 
     } catch (error) {
