@@ -29,6 +29,19 @@
 - Zachowaj alfabetyczną kolejność komend w ramach danego bota
 - Poziomy uprawnień: administrator, moderator, clan_member, achievement_role, special_role, public
 
+**⚠️ INSTRUKCJA PERSISTENCJI DANYCH:**
+- **ZAWSZE sprawdzaj czy nowa funkcjonalność przetrwa restart bota**
+- Jeśli funkcja opiera się na zmiennych w pamięci RAM (Map, Set, Array, Object) → dane zostaną utracone po restarcie
+- **ROZWIĄZANIA:**
+  - **Persistencja w pliku JSON:** Zapisuj dane do pliku (np. `data/feature_state.json`) i wczytuj przy starcie
+  - **Sprawdzanie historii:** Zamiast śledzenia w RAM, sprawdzaj historię (np. wiadomości w wątku, logi w bazie)
+  - **Rekonstrukcja ze stanu Discord:** Pobieraj dane z Discord API przy starcie (np. aktywne wątki, role użytkowników)
+- **PRZYKŁADY:**
+  - ❌ **ŹLE:** `pingedThreads = new Set()` - po restarcie Set będzie pusty, wątki dostaną ping ponownie
+  - ✅ **DOBRZE:** Sprawdzaj historię wiadomości w wątku - jeśli właściciel już pisał, nie pinguj ponownie
+  - ✅ **DOBRZE:** `reminderStorage.saveReminders()` - przypomnienia zapisywane w JSON, wczytywane przy starcie
+- **TEST:** Po implementacji funkcji zapytaj: "Co się stanie jeśli bot zrestartuje teraz?" → Jeśli funkcja przestanie działać prawidłowo = potrzebna persistencja
+
 **⚡ KRYTYCZNE - OPTYMALIZACJA TOKENÓW:**
 - **ZAWSZE używaj Grep PRZED Read** - Znajdź lokalizację, POTEM czytaj tylko potrzebne linie
 - **ZAWSZE używaj offset + limit przy czytaniu dużych plików** - Nie czytaj całości!
@@ -623,7 +636,7 @@ node manual-backup.js
 **Uprawnienia:**
 - Admin/moderator/specjalne role → mogą otworzyć wątek każdemu (reakcja pod czyimkolwiek postem)
 - Użytkownik z rolą klanową → może otworzyć wątek tylko sobie (reakcja pod własnym postem)
-**Ping ról klanowych:** Po pierwszej wiadomości właściciela wątku bot automatycznie pinguje wszystkie 4 role klanowe
+**Ping ról klanowych:** Po pierwszej wiadomości właściciela wątku bot automatycznie pinguje wszystkie 4 role klanowe (działa również po ponownym otwarciu wątku)
 **Komendy:** `/decode` (integracja sio-tools, tylko informacja w wiadomości - komenda w StalkerLME)
 **Env:** TOKEN, CHANNEL_ID, PING_ROLE_ID, CLAN_ROLE_0, CLAN_ROLE_1, CLAN_ROLE_2, CLAN_ROLE_MAIN
 
@@ -980,17 +993,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **NOWA FUNKCJA:** Automatyczny ping ról klanowych po pierwszej wiadomości właściciela wątku
   - Bot nasłuchuje pierwszą wiadomość od właściciela wątku (messageCreate event)
   - Wysyła wiadomość: "@właściciel prosi o pomoc! @rola1 @rola2 @rola3 @rola4"
-  - System śledzenia zapobiega wielokrotnemu pingowaniu tego samego wątku
+  - Bot sprawdza historię wiadomości w wątku (ostatnie 100) i pinguje tylko przy pierwszej wiadomości właściciela
+  - **Działa również po ponownym otwarciu wątku** - przy pierwszej wiadomości po odarchiwizowaniu znowu będzie ping
 - **NOWA KONFIGURACJA:** Dodano 4 zmienne ENV dla ról klanowych
   - `SZKOLENIA_CLAN_ROLE_0`, `SZKOLENIA_CLAN_ROLE_1`, `SZKOLENIA_CLAN_ROLE_2`, `SZKOLENIA_CLAN_ROLE_MAIN`
   - Role używane zarówno do autoryzacji jak i do pingowania
 - **Logika:** `reactionHandlers.js` sprawdza uprawnienia przed utworzeniem wątku
-- **Handler:** `index.js` obsługuje messageCreate dla wykrywania pierwszej wiadomości właściciela
-- **Śledzenie:** `pingedThreads` Set przechowuje ID wątków które już dostały ping
+- **Handler:** `index.js` obsługuje messageCreate dla wykrywania pierwszej wiadomości właściciela (sprawdzanie historii zamiast Set)
 - Lokalizacja zmian:
-  - `Szkolenia/config/config.js:12-15,38-53,86-87` (nowe zmienne ENV, role clan, wiadomość ping)
+  - `Szkolenia/config/config.js:12-15,38-53,74-75` (nowe zmienne ENV, role clan, wiadomość ping)
   - `Szkolenia/handlers/reactionHandlers.js:34-46` (logika uprawnień)
-  - `Szkolenia/index.js:24,28,92-136` (pingedThreads Set, messageCreate handler)
+  - `Szkolenia/index.js:90-139` (messageCreate handler ze sprawdzaniem historii)
   - `CLAUDE.md:623-628,880-883` (dokumentacja)
 
 **EndersEcho Bot - FIX KRYTYCZNY: Naprawa Parsowania Jednostki Quintillion (Qi) + Ekstrakcja Nazwy Bossa:**
