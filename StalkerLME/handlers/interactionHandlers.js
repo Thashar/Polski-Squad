@@ -8025,7 +8025,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         });
 
         // Pobierz obecny klan gracza i jego członka Discord
-        const members = await interaction.guild.members.fetch();
+        const members = await safeFetchMembers(interaction.guild, 'player-status');
         const member = members.get(userId);
 
         let currentClan = null;
