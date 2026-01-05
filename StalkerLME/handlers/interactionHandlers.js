@@ -8502,62 +8502,66 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Oblicz TOP3 MVP - tygodnie gdzie gracz był w TOP3 progresu
         const mvpWeeks = [];
 
-        for (let i = 0; i < playerProgressData.length; i++) {
-            const currentWeekData = playerProgressData[i];
-            const currentWeekKey = `${currentWeekData.weekNumber}-${currentWeekData.year}`;
+        // Zbuduj indeks wszystkich graczy i ich wyników dla wszystkich tygodni
+        const playerScoresIndex = new Map(); // userId → Map(weekKey → {score, displayName, clan})
 
-            // Znajdź poprzedni tydzień w danych gracza (starszy = większy indeks)
-            let previousWeekData = null;
-            for (let j = i + 1; j < playerProgressData.length; j++) {
-                previousWeekData = playerProgressData[j];
-                break;
+        for (const week of last12Weeks) {
+            for (const clan of ['0', '1', '2', 'main']) {
+                const weekData = await databaseService.getPhase1Results(
+                    interaction.guild.id,
+                    week.weekNumber,
+                    week.year,
+                    clan
+                );
+
+                if (weekData && weekData.players) {
+                    for (const player of weekData.players) {
+                        if (!playerScoresIndex.has(player.userId)) {
+                            playerScoresIndex.set(player.userId, new Map());
+                        }
+                        const weekKey = `${week.weekNumber}-${week.year}`;
+                        playerScoresIndex.get(player.userId).set(weekKey, {
+                            score: player.score,
+                            displayName: player.displayName,
+                            clan: clan
+                        });
+                    }
+                }
             }
+        }
 
-            // Jeśli nie ma poprzedniego tygodnia, pomiń ten tydzień
-            if (!previousWeekData) continue;
+        // Dla każdego tygodnia oblicz TOP3 progresu
+        for (let weekIndex = 0; weekIndex < last12Weeks.length; weekIndex++) {
+            const currentWeek = last12Weeks[weekIndex];
+            const currentWeekKey = `${currentWeek.weekNumber}-${currentWeek.year}`;
 
-            // Pobierz wszystkich graczy z tego tygodnia
-            const allPlayersCurrentWeek = await databaseService.getPhase1Results(
-                interaction.guild.id,
-                currentWeekData.weekNumber,
-                currentWeekData.year,
-                currentWeekData.clan
-            );
-
-            if (!allPlayersCurrentWeek || !allPlayersCurrentWeek.players) continue;
-
-            // Oblicz progres dla wszystkich graczy
             const progressData = [];
 
-            for (const player of allPlayersCurrentWeek.players) {
-                // Znajdź wynik tego gracza w poprzednim tygodniu (szukaj po userId)
+            // Dla każdego gracza który grał w tym tygodniu
+            for (const [playerId, weekMap] of playerScoresIndex.entries()) {
+                const currentWeekScore = weekMap.get(currentWeekKey);
+                if (!currentWeekScore) continue; // Gracz nie grał w tym tygodniu
+
+                // Znajdź ostatni dostępny wynik > 0 przed tym tygodniem (szukaj wstecz chronologicznie)
                 let previousScore = 0;
+                for (let j = weekIndex + 1; j < last12Weeks.length; j++) {
+                    const prevWeek = last12Weeks[j];
+                    const prevWeekKey = `${prevWeek.weekNumber}-${prevWeek.year}`;
+                    const prevWeekScore = weekMap.get(prevWeekKey);
 
-                // Przeszukaj wszystkie klany w poprzednim tygodniu
-                for (const clan of ['0', '1', '2', 'main']) {
-                    const prevWeekData = await databaseService.getPhase1Results(
-                        interaction.guild.id,
-                        previousWeekData.weekNumber,
-                        previousWeekData.year,
-                        clan
-                    );
-
-                    if (prevWeekData && prevWeekData.players) {
-                        const prevPlayer = prevWeekData.players.find(p => p.userId === player.userId);
-                        if (prevPlayer) {
-                            previousScore = prevPlayer.score;
-                            break;
-                        }
+                    if (prevWeekScore && prevWeekScore.score > 0) {
+                        previousScore = prevWeekScore.score;
+                        break;
                     }
                 }
 
-                const progress = player.score - previousScore;
+                const progress = currentWeekScore.score - previousScore;
 
                 if (progress > 0) {
                     progressData.push({
-                        userId: player.userId,
-                        displayName: player.displayName,
-                        score: player.score,
+                        userId: playerId,
+                        displayName: currentWeekScore.displayName,
+                        score: currentWeekScore.score,
                         progress: progress
                     });
                 }
@@ -8573,12 +8577,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             if (playerPosition !== -1) {
                 const medalEmojis = ['🥇', '🥈', '🥉'];
+                const playerCurrentWeekData = playerScoresIndex.get(userId).get(currentWeekKey);
                 mvpWeeks.push({
-                    weekNumber: currentWeekData.weekNumber,
-                    year: currentWeekData.year,
+                    weekNumber: currentWeek.weekNumber,
+                    year: currentWeek.year,
                     position: playerPosition + 1,
                     medal: medalEmojis[playerPosition],
-                    score: currentWeekData.score,
+                    score: playerCurrentWeekData.score,
                     progress: top3Progress[playerPosition].progress
                 });
             }
