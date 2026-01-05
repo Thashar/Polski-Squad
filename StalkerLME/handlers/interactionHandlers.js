@@ -8516,6 +8516,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
                 if (weekData && weekData.players) {
                     for (const player of weekData.players) {
+                        // Pomiń graczy bez userId (mogą być z niepoprawnych danych OCR)
+                        if (!player.userId) {
+                            logger.warn(`[PLAYER-STATUS MVP] Gracz bez userId w tygodniu ${week.weekNumber}/${week.year}, klan ${clan}: ${player.displayName}`);
+                            continue;
+                        }
+
                         if (!playerScoresIndex.has(player.userId)) {
                             playerScoresIndex.set(player.userId, new Map());
                         }
@@ -8542,20 +8548,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const currentWeekScore = weekMap.get(currentWeekKey);
                 if (!currentWeekScore) continue; // Gracz nie grał w tym tygodniu
 
-                // Znajdź ostatni dostępny wynik > 0 przed tym tygodniem (szukaj wstecz chronologicznie)
-                let previousScore = 0;
+                // Znajdź NAJLEPSZY wynik przed tym tygodniem (tak samo jak w /wyniki)
+                let previousBestScore = 0;
                 for (let j = weekIndex + 1; j < last12Weeks.length; j++) {
                     const prevWeek = last12Weeks[j];
                     const prevWeekKey = `${prevWeek.weekNumber}-${prevWeek.year}`;
                     const prevWeekScore = weekMap.get(prevWeekKey);
 
-                    if (prevWeekScore && prevWeekScore.score > 0) {
-                        previousScore = prevWeekScore.score;
-                        break;
+                    if (prevWeekScore && prevWeekScore.score > previousBestScore) {
+                        previousBestScore = prevWeekScore.score;
                     }
                 }
 
-                const progress = currentWeekScore.score - previousScore;
+                const progress = currentWeekScore.score - previousBestScore;
 
                 if (progress > 0) {
                     progressData.push({
@@ -8577,7 +8582,20 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             if (playerPosition !== -1) {
                 const medalEmojis = ['🥇', '🥈', '🥉'];
-                const playerCurrentWeekData = playerScoresIndex.get(userId).get(currentWeekKey);
+                const playerWeekMap = playerScoresIndex.get(userId);
+
+                if (!playerWeekMap) {
+                    logger.warn(`[PLAYER-STATUS MVP] Gracz ${userId} jest w TOP3 tygodnia ${currentWeekKey} ale nie ma w indeksie!`);
+                    continue;
+                }
+
+                const playerCurrentWeekData = playerWeekMap.get(currentWeekKey);
+
+                if (!playerCurrentWeekData) {
+                    logger.warn(`[PLAYER-STATUS MVP] Gracz ${userId} jest w TOP3 ale nie ma danych dla tygodnia ${currentWeekKey}!`);
+                    continue;
+                }
+
                 mvpWeeks.push({
                     weekNumber: currentWeek.weekNumber,
                     year: currentWeek.year,
@@ -8594,6 +8612,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (a.year !== b.year) return b.year - a.year;
             return b.weekNumber - a.weekNumber;
         });
+
+        // Debug log
+        if (mvpWeeks.length > 0) {
+            logger.info(`[PLAYER-STATUS MVP] Znaleziono ${mvpWeeks.length} tygodni MVP dla gracza ${userId} (${latestNick})`);
+        }
 
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
