@@ -724,11 +724,11 @@ node manual-backup.js
 - **Kolejność:** Od najnowszego do najstarszego tygodnia
 - **Logika obliczania TOP3:**
   - Dla każdego tygodnia z ostatnich 12: buduje indeks wszystkich graczy i ich wyników
-  - Dla każdego gracza: szuka ostatniego dostępnego wyniku > 0 przed tym tygodniem (chronologicznie wstecz)
-  - Oblicza progres = aktualny wynik - ostatni dostępny wynik > 0
+  - Dla każdego gracza: szuka NAJLEPSZEGO wyniku przed tym tygodniem (identyczna logika jak `/wyniki`)
+  - Oblicza progres = aktualny wynik - najlepszy historyczny wynik
   - Sortuje po progresie i wybiera TOP3
   - Sprawdza czy użytkownik jest w TOP3
-- **FIX:** Porównuje z ostatnim dostępnym wynikiem > 0, nie z poprzednim tygodniem (zapobiega fałszywym TOP3 po regresach/zerach)
+- **Spójność:** Używa tej samej metodologii co `/wyniki` TOP3 - porównanie z najlepszym wynikiem, nie ostatnim chronologicznym
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -1016,10 +1016,10 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **Format:** `🎮 ██████░░░░ 51/25 - 547 ▲²⁵` - ikona klanu pokazuje gdzie gracz osiągnął wynik
 - **NOWA SEKCJA MVP:** `/player-status` wyświetla sekcję "⭐ MVP TYGODNIA" z tygodniami gdzie gracz był w TOP3 progresu
 - **Format MVP:** `🥇 **51/25** - 1,547 (+125)` - medal (🥇🥈🥉), tydzień/rok, wynik, progres
-- **FIX KRYTYCZNY:** Naprawa obliczania progresu w MVP - teraz porównuje z ostatnim dostępnym wynikiem > 0 (chronologicznie wstecz)
-- **Problem:** Poprzednio porównywało z "poprzednim tygodniem gdzie był wynik", co dawało fałszywe TOP3 po regresach/zerach
-- **Przykład błędu:** Gracz miał 564 → 0 → brak → brak → 476 = pokazywało +476 (błąd), powinno 476 vs 564 = regres
-- **Rozwiązanie:** Buduje indeks wszystkich graczy i szuka wstecz chronologicznie ostatniego wyniku > 0 przed danym tygodniem
+- **FIX KRYTYCZNY:** Naprawa obliczania progresu w MVP - teraz porównuje z NAJLEPSZYM historycznym wynikiem (identyczna logika jak `/wyniki`)
+- **Problem:** MVP używało innej metodologii niż `/wyniki` - porównywało z ostatnim chronologicznym wynikiem zamiast z najlepszym
+- **Przykład błędu:** Gracz miał 564 → 0 → brak → brak → 476 = MVP pokazywało +476 (vs 0), `/wyniki` pokazywało -88 (vs 564)
+- **Rozwiązanie:** MVP teraz szuka NAJLEPSZEGO wyniku przed danym tygodniem (nie ostatniego chronologicznie), spójność z `/wyniki`
 - Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js:7690-7747,8502-8596,8767-8777` (ikony + MVP)
 
 **Szkolenia Bot - FIX: Błąd logger.debug is not a function:**
