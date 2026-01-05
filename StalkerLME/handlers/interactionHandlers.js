@@ -8546,12 +8546,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             const currentWeek = last12Weeks[weekIndex];
             const currentWeekKey = `${currentWeek.weekNumber}-${currentWeek.year}`;
 
+            // Sprawdź w jakim klanie użytkownik był w tym tygodniu
+            const userWeekData = playerScoresIndex.get(userId)?.get(currentWeekKey);
+            if (!userWeekData) continue; // Użytkownik nie grał w tym tygodniu
+
+            const userClan = userWeekData.clan; // Klan użytkownika w tym tygodniu
+
             const progressData = [];
 
-            // Dla każdego gracza który grał w tym tygodniu
+            // Dla każdego gracza który grał w tym tygodniu W TYM SAMYM KLANIE
             for (const [playerId, weekMap] of playerScoresIndex.entries()) {
                 const currentWeekScore = weekMap.get(currentWeekKey);
                 if (!currentWeekScore) continue; // Gracz nie grał w tym tygodniu
+                if (currentWeekScore.clan !== userClan) continue; // Pomiń graczy z innych klanów
 
                 // Znajdź NAJLEPSZY wynik przed tym tygodniem (tak samo jak w /wyniki)
                 let previousBestScore = 0;
