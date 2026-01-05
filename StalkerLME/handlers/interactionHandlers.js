@@ -8516,6 +8516,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
                 if (weekData && weekData.players) {
                     for (const player of weekData.players) {
+                        // Pomiń graczy bez userId (mogą być z niepoprawnych danych OCR)
+                        if (!player.userId) {
+                            logger.warn(`[PLAYER-STATUS MVP] Gracz bez userId w tygodniu ${week.weekNumber}/${week.year}, klan ${clan}: ${player.displayName}`);
+                            continue;
+                        }
+
                         if (!playerScoresIndex.has(player.userId)) {
                             playerScoresIndex.set(player.userId, new Map());
                         }
@@ -8577,7 +8583,20 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
             if (playerPosition !== -1) {
                 const medalEmojis = ['🥇', '🥈', '🥉'];
-                const playerCurrentWeekData = playerScoresIndex.get(userId).get(currentWeekKey);
+                const playerWeekMap = playerScoresIndex.get(userId);
+
+                if (!playerWeekMap) {
+                    logger.warn(`[PLAYER-STATUS MVP] Gracz ${userId} jest w TOP3 tygodnia ${currentWeekKey} ale nie ma w indeksie!`);
+                    continue;
+                }
+
+                const playerCurrentWeekData = playerWeekMap.get(currentWeekKey);
+
+                if (!playerCurrentWeekData) {
+                    logger.warn(`[PLAYER-STATUS MVP] Gracz ${userId} jest w TOP3 ale nie ma danych dla tygodnia ${currentWeekKey}!`);
+                    continue;
+                }
+
                 mvpWeeks.push({
                     weekNumber: currentWeek.weekNumber,
                     year: currentWeek.year,
@@ -8594,6 +8613,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (a.year !== b.year) return b.year - a.year;
             return b.weekNumber - a.weekNumber;
         });
+
+        // Debug log
+        if (mvpWeeks.length > 0) {
+            logger.info(`[PLAYER-STATUS MVP] Znaleziono ${mvpWeeks.length} tygodni MVP dla gracza ${userId} (${latestNick})`);
+        }
 
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
