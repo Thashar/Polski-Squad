@@ -8526,11 +8526,16 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                             playerScoresIndex.set(player.userId, new Map());
                         }
                         const weekKey = `${week.weekNumber}-${week.year}`;
-                        playerScoresIndex.get(player.userId).set(weekKey, {
-                            score: player.score,
-                            displayName: player.displayName,
-                            clan: clan
-                        });
+                        const existingScore = playerScoresIndex.get(player.userId).get(weekKey);
+
+                        // Zapisz tylko jeśli to lepszy wynik niż już istniejący (lub brak istniejącego)
+                        if (!existingScore || player.score > existingScore.score) {
+                            playerScoresIndex.get(player.userId).set(weekKey, {
+                                score: player.score,
+                                displayName: player.displayName,
+                                clan: clan
+                            });
+                        }
                     }
                 }
             }
