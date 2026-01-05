@@ -7694,6 +7694,15 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             playerScoreMap.set(key, data.score);
         });
 
+        // Stwórz mapę emoji klanów dla szybkiego dostępu
+        const clanEmojiMap = new Map();
+        playerProgressData.forEach(data => {
+            const key = `${data.weekNumber}-${data.year}`;
+            // Wyciągnij emoji z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
+            const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '◻️';
+            clanEmojiMap.set(key, clanEmoji);
+        });
+
         // Przygotuj tekst z wynikami - iteruj po WSZYSTKICH 54 tygodniach
         const barLength = 10;
         const resultsLines = [];
@@ -7702,6 +7711,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             const week = last54Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = playerScoreMap.get(weekKey);
+            const clanEmoji = clanEmojiMap.get(weekKey) || '◻️'; // Domyślnie puste miejsce
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
             // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
@@ -7729,11 +7739,11 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                     differenceText = formatSmallDifference(difference);
                 }
 
-                resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
+                resultsLines.push(`${clanEmoji} ${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
             } else {
                 // Gracz nie ma danych z tego tygodnia - pokaż pusty pasek bez wartości
                 const progressBar = '░'.repeat(barLength);
-                resultsLines.push(`${progressBar} ${weekLabel} - `);
+                resultsLines.push(`${clanEmoji} ${progressBar} ${weekLabel} - `);
             }
         }
 
@@ -8500,6 +8510,15 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             playerScoreMap.set(key, data.score);
         });
 
+        // Stwórz mapę emoji klanów dla szybkiego dostępu
+        const clanEmojiMap = new Map();
+        playerProgressData.forEach(data => {
+            const key = `${data.weekNumber}-${data.year}`;
+            // Wyciągnij emoji z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
+            const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '◻️';
+            clanEmojiMap.set(key, clanEmoji);
+        });
+
         const resultsLines = [];
 
         // Małe liczby dla progress barów
@@ -8538,6 +8557,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             const week = last12Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = playerScoreMap.get(weekKey);
+            const clanEmoji = clanEmojiMap.get(weekKey) || '◻️'; // Domyślnie puste miejsce
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
             // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
@@ -8561,10 +8581,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     differenceText = formatSmallDifference(difference);
                 }
 
-                resultsLines.push(`${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
+                resultsLines.push(`${clanEmoji} ${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
             } else {
                 const progressBar = '░'.repeat(barLength);
-                resultsLines.push(`${progressBar} ${weekLabel} - `);
+                resultsLines.push(`${clanEmoji} ${progressBar} ${weekLabel} - `);
             }
         }
 
