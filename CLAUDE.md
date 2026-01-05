@@ -709,6 +709,27 @@ node manual-backup.js
 - Auto-usuwanie: Wiadomość użytkownika ze zdjęciem jest automatycznie usuwana po zapisie
 - Message Collector: 1 minuta na przesłanie zdjęcia, walidacja typu pliku
 
+**Wykresy z Ikonami Klanów** - `/progres` i `/player-status` wyświetlają ikony klanów przy każdym słupku:
+- **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
+- **Ikona pustego miejsca:** `<:ZZ_Pusto:1209494954762829866>` (custom emoji) - dla tygodni bez wyniku
+- **Format wykresu:** `🎮 ██████░░░░ 51/25 - 547 ▲²⁵`
+- **Logika:** Ikona wyciągana z pierwszego znaku `clanName` (np. "🎮PolskiSquad⁰🎮" → "🎮")
+- **Implementacja:** `clanEmojiMap` - mapa weekKey → emoji klanu dla szybkiego dostępu
+
+**Sekcja MVP w `/player-status`** - Tygodnie gdzie gracz był w TOP3 progresu:
+- **Nazwa sekcji:** `### ⭐ MVP TYGODNIA`
+- **Lokalizacja:** Pod sekcją "STATYSTYKI", przed "WSPÓŁCZYNNIKI"
+- **Format:** `🥇 **51/25** - 1,547 (+125)` (medal, tydzień/rok, wynik, progres)
+- **Medale:** 🥇 (1. miejsce), 🥈 (2. miejsce), 🥉 (3. miejsce)
+- **Kolejność:** Od najnowszego do najstarszego tygodnia
+- **Logika obliczania TOP3:**
+  - Dla każdego tygodnia z ostatnich 12: buduje indeks wszystkich graczy i ich wyników
+  - Dla każdego gracza: szuka ostatniego dostępnego wyniku > 0 przed tym tygodniem (chronologicznie wstecz)
+  - Oblicza progres = aktualny wynik - ostatni dostępny wynik > 0
+  - Sortuje po progresie i wybiera TOP3
+  - Sprawdza czy użytkownik jest w TOP3
+- **FIX:** Porównuje z ostatnim dostępnym wynikiem > 0, nie z poprzednim tygodniem (zapobiega fałszywym TOP3 po regresach/zerach)
+
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
@@ -987,6 +1008,19 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**StalkerLME Bot - Dodano ikony klanów do wykresów i sekcję MVP w /player-status:**
+- **NOWA FUNKCJA:** Wykresy w `/progres` i `/player-status` pokazują ikony klanów przed każdym słupkiem
+- **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
+- **Ikona pustego miejsca:** `<:ZZ_Pusto:1209494954762829866>` (custom emoji z serwera)
+- **Format:** `🎮 ██████░░░░ 51/25 - 547 ▲²⁵` - ikona klanu pokazuje gdzie gracz osiągnął wynik
+- **NOWA SEKCJA MVP:** `/player-status` wyświetla sekcję "⭐ MVP TYGODNIA" z tygodniami gdzie gracz był w TOP3 progresu
+- **Format MVP:** `🥇 **51/25** - 1,547 (+125)` - medal (🥇🥈🥉), tydzień/rok, wynik, progres
+- **FIX KRYTYCZNY:** Naprawa obliczania progresu w MVP - teraz porównuje z ostatnim dostępnym wynikiem > 0 (chronologicznie wstecz)
+- **Problem:** Poprzednio porównywało z "poprzednim tygodniem gdzie był wynik", co dawało fałszywe TOP3 po regresach/zerach
+- **Przykład błędu:** Gracz miał 564 → 0 → brak → brak → 476 = pokazywało +476 (błąd), powinno 476 vs 564 = regres
+- **Rozwiązanie:** Buduje indeks wszystkich graczy i szuka wstecz chronologicznie ostatniego wyniku > 0 przed danym tygodniem
+- Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js:7690-7747,8502-8596,8767-8777` (ikony + MVP)
 
 **Szkolenia Bot - FIX: Błąd logger.debug is not a function:**
 - **PROBLEM:** Bot crashował przy każdej wiadomości w wątku z błędem `TypeError: logger.debug is not a function`
