@@ -8548,20 +8548,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const currentWeekScore = weekMap.get(currentWeekKey);
                 if (!currentWeekScore) continue; // Gracz nie grał w tym tygodniu
 
-                // Znajdź ostatni dostępny wynik > 0 przed tym tygodniem (szukaj wstecz chronologicznie)
-                let previousScore = 0;
+                // Znajdź NAJLEPSZY wynik przed tym tygodniem (tak samo jak w /wyniki)
+                let previousBestScore = 0;
                 for (let j = weekIndex + 1; j < last12Weeks.length; j++) {
                     const prevWeek = last12Weeks[j];
                     const prevWeekKey = `${prevWeek.weekNumber}-${prevWeek.year}`;
                     const prevWeekScore = weekMap.get(prevWeekKey);
 
-                    if (prevWeekScore && prevWeekScore.score > 0) {
-                        previousScore = prevWeekScore.score;
-                        break;
+                    if (prevWeekScore && prevWeekScore.score > previousBestScore) {
+                        previousBestScore = prevWeekScore.score;
                     }
                 }
 
-                const progress = currentWeekScore.score - previousScore;
+                const progress = currentWeekScore.score - previousBestScore;
 
                 if (progress > 0) {
                     progressData.push({
