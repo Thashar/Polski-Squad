@@ -723,12 +723,13 @@ node manual-backup.js
 - **Medale:** 🥇 (1. miejsce), 🥈 (2. miejsce), 🥉 (3. miejsce)
 - **Kolejność:** Od najnowszego do najstarszego tygodnia
 - **Logika obliczania TOP3:**
-  - Dla każdego tygodnia z ostatnich 12: buduje indeks wszystkich graczy i ich wyników
-  - Dla każdego gracza: szuka NAJLEPSZEGO wyniku przed tym tygodniem (identyczna logika jak `/wyniki`)
+  - Dla każdego tygodnia z ostatnich 12: sprawdza w jakim klanie użytkownik był
+  - Buduje TOP3 TYLKO dla tego klanu (identycznie jak `/wyniki` pokazuje TOP3 dla wybranego klanu)
+  - Dla każdego gracza z tego klanu: szuka NAJLEPSZEGO wyniku przed tym tygodniem
   - Oblicza progres = aktualny wynik - najlepszy historyczny wynik
   - Sortuje po progresie i wybiera TOP3
-  - Sprawdza czy użytkownik jest w TOP3
-- **Spójność:** Używa tej samej metodologii co `/wyniki` TOP3 - porównanie z najlepszym wynikiem, nie ostatnim chronologicznym
+  - Sprawdza czy użytkownik jest w TOP3 swojego klanu
+- **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -1016,10 +1017,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **Format:** `🎮 ██████░░░░ 51/25 - 547 ▲²⁵` - ikona klanu pokazuje gdzie gracz osiągnął wynik
 - **NOWA SEKCJA MVP:** `/player-status` wyświetla sekcję "⭐ MVP TYGODNIA" z tygodniami gdzie gracz był w TOP3 progresu
 - **Format MVP:** `🥇 **51/25** - 1,547 (+125)` - medal (🥇🥈🥉), tydzień/rok, wynik, progres
-- **FIX KRYTYCZNY:** Naprawa obliczania progresu w MVP - teraz porównuje z NAJLEPSZYM historycznym wynikiem (identyczna logika jak `/wyniki`)
-- **Problem:** MVP używało innej metodologii niż `/wyniki` - porównywało z ostatnim chronologicznym wynikiem zamiast z najlepszym
-- **Przykład błędu:** Gracz miał 564 → 0 → brak → brak → 476 = MVP pokazywało +476 (vs 0), `/wyniki` pokazywało -88 (vs 564)
-- **Rozwiązanie:** MVP teraz szuka NAJLEPSZEGO wyniku przed danym tygodniem (nie ostatniego chronologicznie), spójność z `/wyniki`
+- **FIX KRYTYCZNY 1:** Naprawa obliczania progresu - teraz porównuje z NAJLEPSZYM historycznym wynikiem (identyczna logika jak `/wyniki`)
+- **Problem 1:** MVP porównywało z ostatnim chronologicznym wynikiem zamiast z najlepszym
+- **Przykład błędu:** Gracz 564 → 0 → brak → brak → 476 = MVP +476 (vs 0), `/wyniki` -88 (vs 564)
+- **FIX KRYTYCZNY 2:** Naprawa nadpisywania wyników w indeksie - teraz zapisuje NAJLEPSZY wynik z tygodnia
+- **Problem 2:** Gdy gracz zmienił klan w tym samym tygodniu, ostatni wynik nadpisywał poprzednie (500→100)
+- **FIX KRYTYCZNY 3:** TOP3 obliczany TYLKO dla klanu użytkownika - identycznie jak `/wyniki`
+- **Problem 3:** MVP pokazywało TOP3 globalnie (wszystkie klany), `/wyniki` pokazywało TOP3 per klan
+- **Rozwiązanie:** MVP teraz szuka klanu użytkownika w danym tygodniu i oblicza TOP3 tylko dla tego klanu
 - Lokalizacja zmian: `StalkerLME/handlers/interactionHandlers.js:7690-7747,8502-8596,8767-8777` (ikony + MVP)
 
 **Szkolenia Bot - FIX: Błąd logger.debug is not a function:**
