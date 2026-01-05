@@ -7699,7 +7699,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         playerProgressData.forEach(data => {
             const key = `${data.weekNumber}-${data.year}`;
             // Wyciągnij emoji z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
-            const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '◻️';
+            const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '<:ZZ_Pusto:1209494954762829866>';
             clanEmojiMap.set(key, clanEmoji);
         });
 
@@ -7711,7 +7711,7 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
             const week = last54Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = playerScoreMap.get(weekKey);
-            const clanEmoji = clanEmojiMap.get(weekKey) || '◻️'; // Domyślnie puste miejsce
+            const clanEmoji = clanEmojiMap.get(weekKey) || '<:ZZ_Pusto:1209494954762829866>'; // Domyślnie puste miejsce
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
             // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
@@ -8515,7 +8515,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         playerProgressData.forEach(data => {
             const key = `${data.weekNumber}-${data.year}`;
             // Wyciągnij emoji z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
-            const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '◻️';
+            const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '<:ZZ_Pusto:1209494954762829866>';
             clanEmojiMap.set(key, clanEmoji);
         });
 
@@ -8557,7 +8557,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             const week = last12Weeks[i];
             const weekKey = `${week.weekNumber}-${week.year}`;
             const score = playerScoreMap.get(weekKey);
-            const clanEmoji = clanEmojiMap.get(weekKey) || '◻️'; // Domyślnie puste miejsce
+            const clanEmoji = clanEmojiMap.get(weekKey) || '<:ZZ_Pusto:1209494954762829866>'; // Domyślnie puste miejsce
             const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
 
             // Oblicz najlepszy wynik z POPRZEDNICH (wcześniejszych) tygodni
