@@ -8766,7 +8766,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Sekcja MVP - tygodnie w TOP3 progresu (tylko jeśli są wyniki)
         if (mvpWeeks.length > 0) {
-            description += `### ⭐ MVP - TOP3 PROGRESU\n`;
+            description += `### ⭐ MVP TYGODNIA\n`;
 
             const mvpLines = mvpWeeks.map(week => {
                 const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
