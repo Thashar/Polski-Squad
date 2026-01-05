@@ -8499,6 +8499,97 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
+        // Oblicz TOP3 MVP - tygodnie gdzie gracz był w TOP3 progresu
+        const mvpWeeks = [];
+
+        for (let i = 0; i < playerProgressData.length; i++) {
+            const currentWeekData = playerProgressData[i];
+            const currentWeekKey = `${currentWeekData.weekNumber}-${currentWeekData.year}`;
+
+            // Znajdź poprzedni tydzień w danych gracza (starszy = większy indeks)
+            let previousWeekData = null;
+            for (let j = i + 1; j < playerProgressData.length; j++) {
+                previousWeekData = playerProgressData[j];
+                break;
+            }
+
+            // Jeśli nie ma poprzedniego tygodnia, pomiń ten tydzień
+            if (!previousWeekData) continue;
+
+            // Pobierz wszystkich graczy z tego tygodnia
+            const allPlayersCurrentWeek = await databaseService.getPhase1Results(
+                interaction.guild.id,
+                currentWeekData.weekNumber,
+                currentWeekData.year,
+                currentWeekData.clan
+            );
+
+            if (!allPlayersCurrentWeek || !allPlayersCurrentWeek.players) continue;
+
+            // Oblicz progres dla wszystkich graczy
+            const progressData = [];
+
+            for (const player of allPlayersCurrentWeek.players) {
+                // Znajdź wynik tego gracza w poprzednim tygodniu (szukaj po userId)
+                let previousScore = 0;
+
+                // Przeszukaj wszystkie klany w poprzednim tygodniu
+                for (const clan of ['0', '1', '2', 'main']) {
+                    const prevWeekData = await databaseService.getPhase1Results(
+                        interaction.guild.id,
+                        previousWeekData.weekNumber,
+                        previousWeekData.year,
+                        clan
+                    );
+
+                    if (prevWeekData && prevWeekData.players) {
+                        const prevPlayer = prevWeekData.players.find(p => p.userId === player.userId);
+                        if (prevPlayer) {
+                            previousScore = prevPlayer.score;
+                            break;
+                        }
+                    }
+                }
+
+                const progress = player.score - previousScore;
+
+                if (progress > 0) {
+                    progressData.push({
+                        userId: player.userId,
+                        displayName: player.displayName,
+                        score: player.score,
+                        progress: progress
+                    });
+                }
+            }
+
+            // Sortuj po progresie (malejąco) i weź TOP3
+            const top3Progress = progressData
+                .sort((a, b) => b.progress - a.progress)
+                .slice(0, 3);
+
+            // Sprawdź czy nasz gracz jest w TOP3
+            const playerPosition = top3Progress.findIndex(p => p.userId === userId);
+
+            if (playerPosition !== -1) {
+                const medalEmojis = ['🥇', '🥈', '🥉'];
+                mvpWeeks.push({
+                    weekNumber: currentWeekData.weekNumber,
+                    year: currentWeekData.year,
+                    position: playerPosition + 1,
+                    medal: medalEmojis[playerPosition],
+                    score: currentWeekData.score,
+                    progress: top3Progress[playerPosition].progress
+                });
+            }
+        }
+
+        // Sortuj MVP od najnowszych do najstarszych (już jest w tej kolejności, ale dla pewności)
+        mvpWeeks.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
+
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
         const barLength = 10;
@@ -8671,6 +8762,18 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             } else {
                 description += `**↘️ Największy regres:** brak\n\n`;
             }
+        }
+
+        // Sekcja MVP - tygodnie w TOP3 progresu (tylko jeśli są wyniki)
+        if (mvpWeeks.length > 0) {
+            description += `### ⭐ MVP - TOP3 PROGRESU\n`;
+
+            const mvpLines = mvpWeeks.map(week => {
+                const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
+                return `${week.medal} **${weekLabel}** - ${week.score.toLocaleString('pl-PL')} (+${week.progress.toLocaleString('pl-PL')})`;
+            });
+
+            description += mvpLines.join('\n') + '\n\n';
         }
 
         // Sekcja 3: Współczynniki (zawsze pokazuj)
