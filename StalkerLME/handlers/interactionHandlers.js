@@ -7177,12 +7177,13 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .reduce((sum, p) => sum + Math.abs(p.difference), 0);
 
             if (topProgress.length > 0) {
+                const medalEmojis = ['🥇', '🥈', '🥉'];
                 top3Section += '**🏆 TOP3 Progres:**\n';
                 topProgress.forEach((p, idx) => {
                     const isCaller = p.userId === interaction.user.id;
                     const displayName = isCaller ? `**${p.displayName}**` : p.displayName;
                     const emoji = isCaller ? ' <a:PepeOklaski:1259556219312410760>' : '';
-                    top3Section += `${idx + 1}. ${displayName} (+${p.difference})${emoji}\n`;
+                    top3Section += `${medalEmojis[idx]} ${displayName} (+${p.difference})${emoji}\n`;
                 });
 
                 if (totalProgressSum > 0) {
@@ -7191,13 +7192,14 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             }
 
             if (topRegress.length > 0) {
+                const medalEmojis = ['🥇', '🥈', '🥉'];
                 if (topProgress.length > 0) top3Section += '\n';
                 top3Section += '**💀 TOP3 Regres:**\n';
                 topRegress.forEach((p, idx) => {
                     const isCaller = p.userId === interaction.user.id;
                     const displayName = isCaller ? `**${p.displayName}**` : p.displayName;
                     const emoji = isCaller ? ' <:PFrogLaczek:1425166409461268510>' : '';
-                    top3Section += `${idx + 1}. ${displayName} (${p.difference})${emoji}\n`;
+                    top3Section += `${medalEmojis[idx]} ${displayName} (${p.difference})${emoji}\n`;
                 });
 
                 if (totalRegressSum > 0) {
@@ -8526,11 +8528,16 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                             playerScoresIndex.set(player.userId, new Map());
                         }
                         const weekKey = `${week.weekNumber}-${week.year}`;
-                        playerScoresIndex.get(player.userId).set(weekKey, {
-                            score: player.score,
-                            displayName: player.displayName,
-                            clan: clan
-                        });
+                        const existingScore = playerScoresIndex.get(player.userId).get(weekKey);
+
+                        // Zapisz tylko jeśli to lepszy wynik niż już istniejący (lub brak istniejącego)
+                        if (!existingScore || player.score > existingScore.score) {
+                            playerScoresIndex.get(player.userId).set(weekKey, {
+                                score: player.score,
+                                displayName: player.displayName,
+                                clan: clan
+                            });
+                        }
                     }
                 }
             }
@@ -8541,12 +8548,19 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             const currentWeek = last12Weeks[weekIndex];
             const currentWeekKey = `${currentWeek.weekNumber}-${currentWeek.year}`;
 
+            // Sprawdź w jakim klanie użytkownik był w tym tygodniu
+            const userWeekData = playerScoresIndex.get(userId)?.get(currentWeekKey);
+            if (!userWeekData) continue; // Użytkownik nie grał w tym tygodniu
+
+            const userClan = userWeekData.clan; // Klan użytkownika w tym tygodniu
+
             const progressData = [];
 
-            // Dla każdego gracza który grał w tym tygodniu
+            // Dla każdego gracza który grał w tym tygodniu W TYM SAMYM KLANIE
             for (const [playerId, weekMap] of playerScoresIndex.entries()) {
                 const currentWeekScore = weekMap.get(currentWeekKey);
                 if (!currentWeekScore) continue; // Gracz nie grał w tym tygodniu
+                if (currentWeekScore.clan !== userClan) continue; // Pomiń graczy z innych klanów
 
                 // Znajdź NAJLEPSZY wynik przed tym tygodniem (tak samo jak w /wyniki)
                 let previousBestScore = 0;
