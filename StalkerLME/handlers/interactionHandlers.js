@@ -7177,13 +7177,12 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .reduce((sum, p) => sum + Math.abs(p.difference), 0);
 
             if (topProgress.length > 0) {
-                const medalEmojis = ['🥇', '🥈', '🥉'];
                 top3Section += '**🏆 TOP3 Progres:**\n';
                 topProgress.forEach((p, idx) => {
                     const isCaller = p.userId === interaction.user.id;
                     const displayName = isCaller ? `**${p.displayName}**` : p.displayName;
                     const emoji = isCaller ? ' <a:PepeOklaski:1259556219312410760>' : '';
-                    top3Section += `${medalEmojis[idx]} ${displayName} (+${p.difference})${emoji}\n`;
+                    top3Section += `${idx + 1}. ${displayName} (+${p.difference})${emoji}\n`;
                 });
 
                 if (totalProgressSum > 0) {
@@ -7192,14 +7191,13 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             }
 
             if (topRegress.length > 0) {
-                const medalEmojis = ['🥇', '🥈', '🥉'];
                 if (topProgress.length > 0) top3Section += '\n';
                 top3Section += '**💀 TOP3 Regres:**\n';
                 topRegress.forEach((p, idx) => {
                     const isCaller = p.userId === interaction.user.id;
                     const displayName = isCaller ? `**${p.displayName}**` : p.displayName;
                     const emoji = isCaller ? ' <:PFrogLaczek:1425166409461268510>' : '';
-                    top3Section += `${medalEmojis[idx]} ${displayName} (${p.difference})${emoji}\n`;
+                    top3Section += `${idx + 1}. ${displayName} (${p.difference})${emoji}\n`;
                 });
 
                 if (totalRegressSum > 0) {
