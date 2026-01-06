@@ -63,23 +63,28 @@ async function handleReactionAdd(reaction, user, state, config) {
         }
 
         if (existingThread) {
-            // Jeśli wątek jest zamknięty, odblokować go i odarchiwizować
-            if (existingThread.locked) {
-                try {
-                    await existingThread.setLocked(false, 'Odblokowanie wątek na prośbę użytkownika');
-                    logger.info(`🔓 Odblokowano wątek: ${existingThread.name}`);
-                } catch (error) {
-                    logger.error(`❌ Nie można odblokować wątku ${existingThread.name}:`, error);
-                }
-            }
-            
+            // WAŻNE: Kolejność operacji ma znaczenie!
+            // 1. Najpierw odarchiwizuj (archived: false)
+            // 2. Potem odblokuj (locked: false)
+            // Discord API wymaga aby wątek locked był archived, więc nie można odblokować przed odarchiwizowaniem
+
             // Jeśli wątek jest zarchiwizowany, odarchiwizować
             if (existingThread.archived) {
                 try {
                     await existingThread.setArchived(false, 'Ponowne otwarcie wątku');
                     logger.info(`📂 Odarchiwizowano wątek: ${existingThread.name}`);
                 } catch (error) {
-                    logger.error(`❌ Nie można odarchiwizować wątku ${existingThread.name}:`, error);
+                    logger.error(`❌ Nie można odarchivizować wątku ${existingThread.name}:`, error);
+                }
+            }
+
+            // Jeśli wątek jest zamknięty, odblokować go
+            if (existingThread.locked) {
+                try {
+                    await existingThread.setLocked(false, 'Odblokowanie wątku na prośbę użytkownika');
+                    logger.info(`🔓 Odblokowano wątek: ${existingThread.name}`);
+                } catch (error) {
+                    logger.error(`❌ Nie można odblokować wątku ${existingThread.name}:`, error);
                 }
             }
             
