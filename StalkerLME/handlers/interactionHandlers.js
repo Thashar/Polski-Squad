@@ -9397,7 +9397,8 @@ async function handleClanProgresCommand(interaction, sharedState) {
 
     try {
         // Utwórz select menu z klanami
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+        // Kolejność: Main, Clan 2, Clan 1, Clan 0
+        const clanOptions = Object.entries(config.targetRoles).reverse().map(([clanKey, roleId]) => {
             return new StringSelectMenuOptionBuilder()
                 .setLabel(config.roleDisplayNames[clanKey])
                 .setValue(clanKey);
@@ -10217,7 +10218,8 @@ async function handlePlayerRaportCommand(interaction, sharedState) {
 
     try {
         // Utwórz select menu z klanami
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+        // Kolejność: Main, Clan 2, Clan 1, Clan 0
+        const clanOptions = Object.entries(config.targetRoles).reverse().map(([clanKey, roleId]) => {
             return new StringSelectMenuOptionBuilder()
                 .setLabel(config.roleDisplayNames[clanKey])
                 .setValue(clanKey);
