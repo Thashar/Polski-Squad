@@ -358,27 +358,20 @@ class BazarService {
 
         let targetHour = currentHour;
 
-        // Sprawdź czy obecna godzina jest godziną resetu
-        const isResetHour = (targetHour % 2) === (this.startHour % 2);
-
-        if (isResetHour && currentMinute === 0) {
-            // Jest dokładnie godzina resetu
-            targetHour = currentHour;
-        } else {
-            // Znajdź następną godzinę resetu
-            do {
-                targetHour++;
-                if (targetHour >= 24) {
-                    targetHour = 0;
-                }
-            } while ((targetHour % 2) !== (this.startHour % 2));
-        }
+        // Zawsze szukaj NASTĘPNEJ godziny resetu (nigdy nie zwracaj obecnej godziny)
+        // To zapewnia że po wykonaniu resetu, komunikat pokaże czas do następnego resetu (nie "za 0h")
+        do {
+            targetHour++;
+            if (targetHour >= 24) {
+                targetHour = 0;
+            }
+        } while ((targetHour % 2) !== (this.startHour % 2));
 
         // Utwórz datę następnego resetu w czasie polskim
         const nextResetPoland = new Date(polandTime.year, polandTime.month - 1, polandTime.day, targetHour, 0, 0, 0);
 
-        // Jeśli targetHour < currentHour, oznacza to że reset jest następnego dnia
-        if (targetHour < currentHour || (targetHour === currentHour && currentMinute > 0)) {
+        // Jeśli targetHour < currentHour, oznacza to że reset jest następnego dnia (przeszliśmy przez północ)
+        if (targetHour < currentHour) {
             nextResetPoland.setDate(nextResetPoland.getDate() + 1);
         }
 
