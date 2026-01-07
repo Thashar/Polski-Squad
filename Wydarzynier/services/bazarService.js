@@ -129,9 +129,17 @@ class BazarService {
             // Uruchom timery
             await this.startTimers(guild);
 
-            return { 
-                success: true, 
-                message: `Bazar utworzony pomyślnie! Kanały będą resetowane co 2 godziny zaczynając od ${startHour}:00.`,
+            // Oblicz godziny resetów na podstawie startHour
+            const resetHours = [];
+            for (let h = 0; h < 24; h++) {
+                if ((h % 2) === (startHour % 2)) {
+                    resetHours.push(h);
+                }
+            }
+
+            return {
+                success: true,
+                message: `Bazar utworzony pomyślnie! Resety będą odbywać się o: ${resetHours.map(h => `${h}:00`).join(', ')}`,
                 categoryId: this.categoryId,
                 channelIds: this.channelIds
             };
@@ -359,9 +367,15 @@ class BazarService {
             // Usuń wszystkie wiadomości z kanału
             await this.clearChannelMessages(channel);
 
-            // Wyślij wiadomość o resecie
-            const resetMessage = await channel.send('# Bazar został zresetowany! Kolejny reset za 2h.');
-            
+            // Oblicz czas do następnego resetu
+            const now = new Date();
+            const nextReset = this.getNextResetTime(now);
+            const timeToReset = nextReset.getTime() - now.getTime();
+            const hoursToReset = Math.round(timeToReset / (1000 * 60 * 60));
+
+            // Wyślij wiadomość o resecie z rzeczywistym czasem
+            const resetMessage = await channel.send(`# Bazar został zresetowany! Kolejny reset za ${hoursToReset}h.`);
+
             logger.info(`Reset kanału ${channel.name} zakończony pomyślnie`);
 
         } catch (error) {
