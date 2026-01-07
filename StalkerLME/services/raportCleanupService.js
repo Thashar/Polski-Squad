@@ -1,15 +1,14 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { createBotLogger } = require('../../utils/consoleLogger');
-const logger = createBotLogger('StalkerLME');
 
 /**
  * Serwis zarządzający automatycznym usuwaniem raportów WDUPIE
  */
 class RaportCleanupService {
-    constructor(client, dataDir) {
+    constructor(client, logger) {
         this.client = client;
-        this.dataFilePath = path.join(dataDir, 'player_raport_deletions.json');
+        this.logger = logger;
+        this.dataFilePath = path.join(__dirname, '../data/player_raport_deletions.json');
         this.scheduledDeletions = new Map(); // messageId -> timeoutId
         this.pendingDeletions = []; // Tablica obiektów do usunięcia
     }
@@ -22,9 +21,9 @@ class RaportCleanupService {
             await this.loadData();
             await this.restoreTimers();
             await this.cleanupExpiredMessages();
-            logger.info('[RAPORT-CLEANUP] ✅ Serwis auto-usuwania raportów zainicjalizowany');
+            this.logger.info('[RAPORT-CLEANUP] ✅ Serwis auto-usuwania raportów zainicjalizowany');
         } catch (error) {
-            logger.error('[RAPORT-CLEANUP] ❌ Błąd inicjalizacji:', error);
+            this.logger.error('[RAPORT-CLEANUP] ❌ Błąd inicjalizacji:', error);
         }
     }
 
@@ -41,7 +40,7 @@ class RaportCleanupService {
                 this.pendingDeletions = [];
                 await this.saveData();
             } else {
-                logger.error('[RAPORT-CLEANUP] ❌ Błąd wczytywania danych:', error);
+                this.logger.error('[RAPORT-CLEANUP] ❌ Błąd wczytywania danych:', error);
                 this.pendingDeletions = [];
             }
         }
@@ -54,7 +53,7 @@ class RaportCleanupService {
         try {
             await fs.writeFile(this.dataFilePath, JSON.stringify(this.pendingDeletions, null, 2), 'utf8');
         } catch (error) {
-            logger.error('[RAPORT-CLEANUP] ❌ Błąd zapisu danych:', error);
+            this.logger.error('[RAPORT-CLEANUP] ❌ Błąd zapisu danych:', error);
         }
     }
 
@@ -81,7 +80,7 @@ class RaportCleanupService {
             }, delay);
 
             this.scheduledDeletions.set(messageId, timeoutId);
-            logger.info(`[RAPORT-CLEANUP] 🕐 Zaplanowano usunięcie raportu (ID: ${messageId}) za ${Math.round(delay / 1000)}s`);
+            this.logger.info(`[RAPORT-CLEANUP] 🕐 Zaplanowano usunięcie raportu (ID: ${messageId}) za ${Math.round(delay / 1000)}s`);
         } else {
             // Wiadomość już powinna być usunięta
             await this.deleteMessage(channelId, messageId);
@@ -95,7 +94,7 @@ class RaportCleanupService {
         try {
             const channel = await this.client.channels.fetch(channelId);
             if (!channel) {
-                logger.warn(`[RAPORT-CLEANUP] ⚠️ Nie znaleziono kanału (ID: ${channelId})`);
+                this.logger.warn(`[RAPORT-CLEANUP] ⚠️ Nie znaleziono kanału (ID: ${channelId})`);
                 await this.removePendingDeletion(messageId);
                 return;
             }
@@ -103,18 +102,18 @@ class RaportCleanupService {
             const message = await channel.messages.fetch(messageId).catch(() => null);
             if (message) {
                 await message.delete();
-                logger.info(`[RAPORT-CLEANUP] 🗑️ Usunięto raport (ID: ${messageId})`);
+                this.logger.info(`[RAPORT-CLEANUP] 🗑️ Usunięto raport (ID: ${messageId})`);
             } else {
-                logger.warn(`[RAPORT-CLEANUP] ⚠️ Wiadomość już nie istnieje (ID: ${messageId})`);
+                this.logger.warn(`[RAPORT-CLEANUP] ⚠️ Wiadomość już nie istnieje (ID: ${messageId})`);
             }
 
             await this.removePendingDeletion(messageId);
         } catch (error) {
             if (error.code === 10008) {
                 // Unknown Message - wiadomość już usunięta
-                logger.info(`[RAPORT-CLEANUP] ℹ️ Wiadomość już usunięta (ID: ${messageId})`);
+                this.logger.info(`[RAPORT-CLEANUP] ℹ️ Wiadomość już usunięta (ID: ${messageId})`);
             } else {
-                logger.error(`[RAPORT-CLEANUP] ❌ Błąd usuwania wiadomości (ID: ${messageId}):`, error);
+                this.logger.error(`[RAPORT-CLEANUP] ❌ Błąd usuwania wiadomości (ID: ${messageId}):`, error);
             }
             await this.removePendingDeletion(messageId);
         }
@@ -146,12 +145,12 @@ class RaportCleanupService {
 
                 this.scheduledDeletions.set(deletion.messageId, timeoutId);
                 restoredCount++;
-                logger.info(`[RAPORT-CLEANUP] 🔄 Przywrócono timer (ID: ${deletion.messageId}, za ${Math.round(delay / 1000)}s)`);
+                this.logger.info(`[RAPORT-CLEANUP] 🔄 Przywrócono timer (ID: ${deletion.messageId}, za ${Math.round(delay / 1000)}s)`);
             }
         }
 
         if (restoredCount > 0) {
-            logger.info(`[RAPORT-CLEANUP] ✅ Przywrócono ${restoredCount} timerów`);
+            this.logger.info(`[RAPORT-CLEANUP] ✅ Przywrócono ${restoredCount} timerów`);
         }
     }
 
@@ -166,13 +165,13 @@ class RaportCleanupService {
             return;
         }
 
-        logger.info(`[RAPORT-CLEANUP] 🧹 Czyszczenie ${expiredMessages.length} wygasłych raportów...`);
+        this.logger.info(`[RAPORT-CLEANUP] 🧹 Czyszczenie ${expiredMessages.length} wygasłych raportów...`);
 
         for (const deletion of expiredMessages) {
             await this.deleteMessage(deletion.channelId, deletion.messageId);
         }
 
-        logger.info(`[RAPORT-CLEANUP] ✅ Wyczyszczono ${expiredMessages.length} wygasłych raportów`);
+        this.logger.info(`[RAPORT-CLEANUP] ✅ Wyczyszczono ${expiredMessages.length} wygasłych raportów`);
     }
 
     /**
@@ -183,7 +182,7 @@ class RaportCleanupService {
             clearTimeout(timeoutId);
         }
         this.scheduledDeletions.clear();
-        logger.info('[RAPORT-CLEANUP] 🛑 Zatrzymano wszystkie timery usuwania raportów');
+        this.logger.info('[RAPORT-CLEANUP] 🛑 Zatrzymano wszystkie timery usuwania raportów');
     }
 }
 
