@@ -1320,6 +1320,26 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    if (interaction.customId === 'queue_cmd_clan_status') {
+        await handleClanStatusCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_clan_progres') {
+        await handleClanProgresCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_wyniki') {
+        await handleWynikiCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_player_raport') {
+        await handlePlayerRaportCommand(interaction, sharedState);
+        return;
+    }
+
     // ============ KONIEC OBSŁUGI PRZYCISKÓW KOMEND Z KOLEJKI ============
 
     // ============ OBSŁUGA PRZYCISKU "WYJDŹ Z KOLEJKI" ============
@@ -10192,7 +10212,7 @@ async function handlePlayerRaportCommand(interaction, sharedState) {
         return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferReply();
 
     try {
         // Utwórz select menu z klanami
@@ -10210,7 +10230,7 @@ async function handlePlayerRaportCommand(interaction, sharedState) {
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const embed = new EmbedBuilder()
-            .setTitle('🔍 Raport Problematycznych Graczy')
+            .setTitle('🔍 Gracze o potencjalnie wysokim poziomie wypalenia')
             .setDescription('**Wybierz klan**, dla którego chcesz wygenerować raport graczy wymagających uwagi:')
             .setColor('#FF6B6B')
             .setTimestamp();
@@ -10301,7 +10321,7 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
 
         // Stwórz embed z wynikami
         const embed = new EmbedBuilder()
-            .setTitle(`🔍 Raport Problematycznych Graczy - ${clanName}`)
+            .setTitle(`🔍 Gracze o potencjalnie wysokim poziomie wypalenia - ${clanName}`)
             .setColor('#FF6B6B')
             .setTimestamp()
             .setFooter({ text: `Analizowano ${clanMembers.size} graczy | Znaleziono ${problematicPlayers.length} wymagających uwagi` });
@@ -10331,11 +10351,17 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
             }
         }
 
-        await interaction.editReply({
+        const reply = await interaction.editReply({
             content: null,
             embeds: [embed],
             components: []
         });
+
+        // Zaplanuj auto-usunięcie raportu po 5 minutach
+        await sharedState.raportCleanupService.scheduleRaportDeletion(
+            reply.channelId,
+            reply.id
+        );
 
     } catch (error) {
         logger.error('[PLAYER-RAPORT] ❌ Błąd generowania raportu:', error);
@@ -10404,14 +10430,9 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
     }).length;
 
-    const weeksSince49_2025 = playerProgressData.filter(data => {
-        return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
-    }).length;
 
-    // Oblicz liczby przypomnień i potwierdzeń (z progami czasowymi)
+    // Oblicz liczby przypomnień (z progami czasowymi)
     let reminderCountForReliability = 0;
-    let reminderCountForResponsiveness = 0;
-    let confirmationCountForResponsiveness = 0;
 
     // Helper do obliczania różnicy tygodni
     const getWeeksDifference = (weekNum1, year1, weekNum2, year2) => {
@@ -10435,14 +10456,11 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         const newestWeek = playerProgressData[0];
 
         const weeksSinceThreshold45 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 45, 2025);
-        const weeksSinceThreshold49 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 49, 2025);
 
         const useThreshold45 = weeksSinceThreshold45 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 45));
-        const useThreshold49 = weeksSinceThreshold49 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 49));
 
         const startDate = getWeekStartDate(oldestWeek.weekNumber, oldestWeek.year);
         const startDate45 = useThreshold45 ? getWeekStartDate(45, 2025) : startDate;
-        const startDate49 = useThreshold49 ? getWeekStartDate(49, 2025) : startDate;
 
         const formatDate = (date) => {
             const year = date.getFullYear();
@@ -10452,7 +10470,6 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         };
 
         const startDate45Str = formatDate(startDate45);
-        const startDate49Str = formatDate(startDate49);
 
         // Zlicz pingi
         if (reminderData.receivers && reminderData.receivers[userId]) {
@@ -10461,24 +10478,6 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
             for (const dateStr in userPings) {
                 if (dateStr >= startDate45Str) {
                     reminderCountForReliability += userPings[dateStr].length;
-                }
-                if (dateStr >= startDate49Str) {
-                    reminderCountForResponsiveness += userPings[dateStr].length;
-                }
-            }
-        }
-
-        // Zlicz potwierdzenia
-        const startTimestamp49 = startDate49.getTime();
-
-        for (const sessionKey in confirmations.sessions) {
-            const session = confirmations.sessions[sessionKey];
-            const sessionDate = new Date(session.createdAt);
-            const sessionTimestamp = sessionDate.getTime();
-
-            if (session.confirmedUsers && session.confirmedUsers.includes(userId)) {
-                if (sessionTimestamp >= startTimestamp49) {
-                    confirmationCountForResponsiveness++;
                 }
             }
         }
@@ -10498,18 +10497,6 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         timingFactor = Math.max(0, 100 - rawTimingFactor);
     }
 
-    let responsivenessFactor = null;
-
-    if (weeksSince49_2025 > 0) {
-        if (reminderCountForResponsiveness > 0) {
-            responsivenessFactor = (confirmationCountForResponsiveness / reminderCountForResponsiveness) * 100;
-            responsivenessFactor = Math.min(100, responsivenessFactor);
-        } else if (reminderCountForResponsiveness === 0 && confirmationCountForResponsiveness === 0) {
-            responsivenessFactor = 100;
-        } else {
-            responsivenessFactor = 0;
-        }
-    }
 
     // Oblicz współczynnik Zaangażowanie (procent tygodni z progresem dodatnim)
     let engagementFactor = null;
@@ -10543,10 +10530,6 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
 
     if (engagementFactor !== null && engagementFactor < 70) {
         problems.push(`🔴 Zaangażowanie: ${engagementFactor.toFixed(1)}%`);
-    }
-
-    if (responsivenessFactor !== null && responsivenessFactor < 25) {
-        problems.push(`🔴 Responsywność: ${responsivenessFactor.toFixed(1)}%`);
     }
 
     // === 3. Oblicz progres miesięczny i kwartalny ===

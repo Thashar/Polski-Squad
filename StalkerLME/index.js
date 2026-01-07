@@ -14,6 +14,7 @@ const ReminderStatusTrackingService = require('./services/reminderStatusTracking
 const VacationService = require('./services/vacationService');
 const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
+const RaportCleanupService = require('./services/raportCleanupService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('StalkerLME');
@@ -37,6 +38,7 @@ const reminderStatusTrackingService = new ReminderStatusTrackingService(config);
 const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
+const raportCleanupService = new RaportCleanupService(client, config.database.dataDir);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
@@ -66,6 +68,7 @@ const sharedState = {
     vacationService,
     survivorService,
     messageCleanupService,
+    raportCleanupService,
     phaseService
 };
 
@@ -77,6 +80,7 @@ client.once(Events.ClientReady, async () => {
     await ocrService.initializeOCR();
     ocrService.setClient(client); // Ustaw klienta dla systemu kolejkowania OCR
     await messageCleanupService.init();
+    await raportCleanupService.initialize();
     await reminderUsageService.loadUsageData();
 
     // Rejestracja komend slash

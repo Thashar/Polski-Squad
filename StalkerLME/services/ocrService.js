@@ -1368,13 +1368,13 @@ class OCRService {
 
             const dodajButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_dodaj')
-                .setLabel('Dodaj brakujące dane')
+                .setLabel('Dodaj brakujący wynik')
                 .setEmoji('➕')
                 .setStyle(ButtonStyle.Success);
 
             const modyfikujButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_modyfikuj')
-                .setLabel('Modyfikuj dane')
+                .setLabel('Modyfikuj wynik')
                 .setEmoji('✏️')
                 .setStyle(ButtonStyle.Success);
 
@@ -1384,17 +1384,47 @@ class OCRService {
                 .setEmoji('📷')
                 .setStyle(ButtonStyle.Success);
 
+            const clanStatusButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_clan_status')
+                .setLabel('Status klanów')
+                .setEmoji('📊')
+                .setStyle(ButtonStyle.Primary);
+
+            const clanProgresButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_clan_progres')
+                .setLabel('Progres klanów')
+                .setEmoji('📈')
+                .setStyle(ButtonStyle.Primary);
+
+            const wynikiButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_wyniki')
+                .setLabel('Wyniki klanów')
+                .setEmoji('🏆')
+                .setStyle(ButtonStyle.Primary);
+
+            const wdupieButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_player_raport')
+                .setLabel('Gracze o potencjalnie wysokim poziomie wypalenia')
+                .setEmoji('🔍')
+                .setStyle(ButtonStyle.Danger);
+
             const row1 = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
 
+            const row3 = new ActionRowBuilder()
+                .addComponents(clanStatusButton, clanProgresButton, wynikiButton);
+
+            const row4 = new ActionRowBuilder()
+                .addComponents(wdupieButton);
+
             // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
             if (this.queueMessageId) {
                 try {
                     const message = await channel.messages.fetch(this.queueMessageId);
-                    await message.edit({ embeds: [embed], components: [row1, row2] });
+                    await message.edit({ embeds: [embed], components: [row1, row2, row3, row4] });
                     logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
                     return;
                 } catch (error) {
@@ -1574,13 +1604,13 @@ class OCRService {
 
             const dodajButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_dodaj')
-                .setLabel('Dodaj brakujące dane')
+                .setLabel('Dodaj brakujący wynik')
                 .setEmoji('➕')
                 .setStyle(ButtonStyle.Success);
 
             const modyfikujButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_modyfikuj')
-                .setLabel('Modyfikuj dane')
+                .setLabel('Modyfikuj wynik')
                 .setEmoji('✏️')
                 .setStyle(ButtonStyle.Success);
 
@@ -1590,11 +1620,41 @@ class OCRService {
                 .setEmoji('📷')
                 .setStyle(ButtonStyle.Success);
 
+            const clanStatusButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_clan_status')
+                .setLabel('Status klanów')
+                .setEmoji('📊')
+                .setStyle(ButtonStyle.Primary);
+
+            const clanProgresButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_clan_progres')
+                .setLabel('Progres klanów')
+                .setEmoji('📈')
+                .setStyle(ButtonStyle.Primary);
+
+            const wynikiButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_wyniki')
+                .setLabel('Wyniki klanów')
+                .setEmoji('🏆')
+                .setStyle(ButtonStyle.Primary);
+
+            const wdupieButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_player_raport')
+                .setLabel('Gracze o potencjalnie wysokim poziomie wypalenia')
+                .setEmoji('🔍')
+                .setStyle(ButtonStyle.Danger);
+
             const row1 = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
+
+            const row3 = new ActionRowBuilder()
+                .addComponents(clanStatusButton, clanProgresButton, wynikiButton);
+
+            const row4 = new ActionRowBuilder()
+                .addComponents(wdupieButton);
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed
@@ -1603,7 +1663,7 @@ class OCRService {
                 logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed kolejki (ID: ' + queueMessage.id + ')');
             } else {
                 // Wyślij nowy embed jako pierwszą wiadomość
-                const message = await channel.send({ embeds: [embed], components: [row1, row2] });
+                const message = await channel.send({ embeds: [embed], components: [row1, row2, row3, row4] });
                 this.queueMessageId = message.id;
                 logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed kolejki (ID: ' + message.id + ')');
             }
