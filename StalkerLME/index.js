@@ -38,7 +38,7 @@ const reminderStatusTrackingService = new ReminderStatusTrackingService(config);
 const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
-const raportCleanupService = new RaportCleanupService(client, config.database.dataDir);
+const raportCleanupService = new RaportCleanupService(client, logger);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
