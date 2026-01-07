@@ -1658,7 +1658,7 @@ class OCRService {
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed
-                await queueMessage.edit({ embeds: [embed], components: [row1, row2] });
+                await queueMessage.edit({ embeds: [embed], components: [row1, row2, row3, row4] });
                 this.queueMessageId = queueMessage.id;
                 logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed kolejki (ID: ' + queueMessage.id + ')');
             } else {
