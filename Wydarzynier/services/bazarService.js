@@ -129,9 +129,17 @@ class BazarService {
             // Uruchom timery
             await this.startTimers(guild);
 
-            return { 
-                success: true, 
-                message: `Bazar utworzony pomyślnie! Kanały będą resetowane co 2 godziny zaczynając od ${startHour}:00.`,
+            // Oblicz godziny resetów na podstawie startHour
+            const resetHours = [];
+            for (let h = 0; h < 24; h++) {
+                if ((h % 2) === (startHour % 2)) {
+                    resetHours.push(h);
+                }
+            }
+
+            return {
+                success: true,
+                message: `Bazar utworzony pomyślnie! Resety będą odbywać się o: ${resetHours.map(h => `${h}:00`).join(', ')}`,
                 categoryId: this.categoryId,
                 channelIds: this.channelIds
             };
@@ -302,27 +310,57 @@ class BazarService {
     }
 
     /**
-     * Oblicza czas następnego resetu bazaru
-     * @param {Date} now - Obecny czas
-     * @returns {Date} - Czas następnego resetu
+     * Pobiera aktualną godzinę w strefie czasowej Europe/Warsaw
+     * @param {Date} date - Data do konwersji
+     * @returns {Object} - { hour, minute, date }
+     */
+    getPolandTime(date) {
+        // Konwertuj UTC na czas polski (Europe/Warsaw)
+        const polandTimeString = date.toLocaleString('pl-PL', {
+            timeZone: 'Europe/Warsaw',
+            hour: '2-digit',
+            minute: '2-digit',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour12: false
+        });
+
+        // Format: "DD.MM.YYYY, HH:MM"
+        const [datePart, timePart] = polandTimeString.split(', ');
+        const [day, month, year] = datePart.split('.');
+        const [hour, minute] = timePart.split(':');
+
+        return {
+            hour: parseInt(hour, 10),
+            minute: parseInt(minute, 10),
+            day: parseInt(day, 10),
+            month: parseInt(month, 10),
+            year: parseInt(year, 10)
+        };
+    }
+
+    /**
+     * Oblicza czas następnego resetu bazaru (w strefie Europe/Warsaw)
+     * @param {Date} now - Obecny czas (UTC)
+     * @returns {Date} - Czas następnego resetu (UTC)
      */
     getNextResetTime(now) {
-        const nextReset = new Date(now);
-        nextReset.setMinutes(0, 0, 0); // Ustaw na pełną godzinę
+        // Pobierz aktualną godzinę w czasie polskim
+        const polandTime = this.getPolandTime(now);
+        const currentHour = polandTime.hour;
+        const currentMinute = polandTime.minute;
 
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-
-        // Stały cykl co 2 godziny przez całą dobę
+        // Stały cykl co 2 godziny przez całą dobę (czas polski)
         // Parametr startHour określa przesunięcie w cyklu
-        // Dla startHour=18: resety o 0,2,4,6,8,10,12,14,16,18,20,22
-        // Dla startHour=17: resety o 1,3,5,7,9,11,13,15,17,19,21,23
-        
+        // Dla startHour=18: resety o 0,2,4,6,8,10,12,14,16,18,20,22 (Polski)
+        // Dla startHour=17: resety o 1,3,5,7,9,11,13,15,17,19,21,23 (Polski)
+
         let targetHour = currentHour;
-        
+
         // Sprawdź czy obecna godzina jest godziną resetu
         const isResetHour = (targetHour % 2) === (this.startHour % 2);
-        
+
         if (isResetHour && currentMinute === 0) {
             // Jest dokładnie godzina resetu
             targetHour = currentHour;
@@ -332,13 +370,36 @@ class BazarService {
                 targetHour++;
                 if (targetHour >= 24) {
                     targetHour = 0;
-                    nextReset.setDate(nextReset.getDate() + 1);
                 }
             } while ((targetHour % 2) !== (this.startHour % 2));
         }
 
-        nextReset.setHours(targetHour);
-        return nextReset;
+        // Utwórz datę następnego resetu w czasie polskim
+        const nextResetPoland = new Date(polandTime.year, polandTime.month - 1, polandTime.day, targetHour, 0, 0, 0);
+
+        // Jeśli targetHour < currentHour, oznacza to że reset jest następnego dnia
+        if (targetHour < currentHour || (targetHour === currentHour && currentMinute > 0)) {
+            nextResetPoland.setDate(nextResetPoland.getDate() + 1);
+        }
+
+        // Konwertuj czas polski na UTC
+        const polandOffset = this.getTimezoneOffset(nextResetPoland);
+        const nextResetUTC = new Date(nextResetPoland.getTime() - polandOffset);
+
+        return nextResetUTC;
+    }
+
+    /**
+     * Pobiera offset strefy czasowej Europe/Warsaw dla danej daty (uwzględnia DST)
+     * @param {Date} date - Data
+     * @returns {number} - Offset w milisekundach
+     */
+    getTimezoneOffset(date) {
+        // Utwórz datę w strefie Europe/Warsaw
+        const polandDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+        const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+
+        return polandDate.getTime() - utcDate.getTime();
     }
 
     /**
@@ -359,9 +420,15 @@ class BazarService {
             // Usuń wszystkie wiadomości z kanału
             await this.clearChannelMessages(channel);
 
-            // Wyślij wiadomość o resecie
-            const resetMessage = await channel.send('# Bazar został zresetowany! Kolejny reset za 2h.');
-            
+            // Oblicz czas do następnego resetu
+            const now = new Date();
+            const nextReset = this.getNextResetTime(now);
+            const timeToReset = nextReset.getTime() - now.getTime();
+            const hoursToReset = Math.round(timeToReset / (1000 * 60 * 60));
+
+            // Wyślij wiadomość o resecie z rzeczywistym czasem
+            const resetMessage = await channel.send(`# Bazar został zresetowany! Kolejny reset za ${hoursToReset}h.`);
+
             logger.info(`Reset kanału ${channel.name} zakończony pomyślnie`);
 
         } catch (error) {
