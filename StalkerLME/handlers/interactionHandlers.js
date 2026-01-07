@@ -9616,9 +9616,15 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
             .setTimestamp();
 
         // Wyślij publiczne wyniki
-        await interaction.followUp({
+        const reply = await interaction.followUp({
             embeds: [embed]
         });
+
+        // Zaplanuj auto-usunięcie embeda po 5 minutach
+        await sharedState.raportCleanupService.scheduleRaportDeletion(
+            reply.channelId,
+            reply.id
+        );
 
         logger.info(`[CLAN-PROGRES] ✅ Wyświetlono progres klanu ${clanName}`);
 
