@@ -1044,6 +1044,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - `StalkerLME/services/raportCleanupService.js` (nowy serwis)
   - `StalkerLME/index.js:17,41,71,83` (inicjalizacja)
 
+**StalkerLME Bot - Zmiana Kolejności Klanów w Select Menu:**
+- **ZMIANA:** Odwrócono kolejność klanów w menu wyboru - z (Clan 0, Clan 1, Clan 2, Main) na (Main, Clan 2, Clan 1, Clan 0)
+- **Powód:** Lepsze UX - główny klan na górze listy
+- **Dotyczy komend:**
+  - `/clan-status` - Status obecności graczy w klanie
+  - `/clan-progres` - Progres TOP30 dla klanu
+  - `/player-raport` - Raport problematycznych graczy
+- **Implementacja:** Dodano `.reverse()` do `Object.entries(config.targetRoles)`
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js:8988,9401,10222` (reverse() w select menu)
+
 **StalkerLME Bot - Dodano ikony klanów do wykresów i sekcję MVP w /player-status:**
 - **NOWA FUNKCJA:** Wykresy w `/progres` i `/player-status` pokazują ikony klanów przed każdym słupkiem
 - **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
