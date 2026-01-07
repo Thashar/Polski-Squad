@@ -1010,6 +1010,40 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**StalkerLME Bot - Embed Kolejki OCR: Nowe Przyciski + System Auto-Usuwania Raportów:**
+- **ZMIANA NAZW PRZYCISKÓW:**
+  - "Dodaj brakujące dane" → "Dodaj brakujący wynik"
+  - "Modyfikuj dane" → "Modyfikuj wynik"
+- **NOWY RZĄD PRZYCISKÓW (Row 3, niebieski):**
+  - 📊 "Status klanów" → wywołuje `/clan-status`
+  - 📈 "Progres klanów" → wywołuje `/clan-progres`
+  - 🏆 "Wyniki klanów" → wywołuje `/wyniki`
+- **NOWY RZĄD PRZYCISKÓW (Row 4, czerwony):**
+  - 🔍 "Gracze o potencjalnie wysokim poziomie wypalenia" → wywołuje `/player-raport`
+- **KOMENDA /player-raport - ZMIANY:**
+  - Usunięto sprawdzanie "Responsywności" (responsivenessFactor) - nie jest już wyświetlane w raporcie
+  - Embed NIE jest ephemeral - widoczny dla wszystkich
+  - Auto-usuwanie embeda po 5 minutach (timer w pliku JSON)
+  - Nagłówek: "🔍 Gracze o potencjalnie wysokim poziomie wypalenia"
+- **NOWY SERWIS: RaportCleanupService:**
+  - Zarządza automatycznym usuwaniem raportów po 5 minutach
+  - Persistent timery w `StalkerLME/data/player_raport_deletions.json`
+  - Sprawdzanie przy starcie bota - usuwa wygasłe raporty
+  - Przywracanie timerów po restarcie bota
+  - Podobny do MessageCleanupService z Konklawe
+- **FIX KRYTYCZNY - Błąd inicjalizacji RaportCleanupService:**
+  - **PROBLEM:** Bot nie startował - `The "path" argument must be of type string. Received undefined`
+  - **Przyczyna:** `new RaportCleanupService(client, config.database.dataDir)` - dataDir był undefined
+  - **ROZWIĄZANIE:** Zmieniono na `new RaportCleanupService(client, logger)` + `path.join(__dirname, '../data/...')`
+  - **WAŻNA LEKCJA:** ZAWSZE używaj relatywnej ścieżki `path.join(__dirname, '../data/...')` zamiast `config.database.dataDir`
+  - **Pattern do naśladowania:** Zobacz `MessageCleanupService` - używa tej samej metody
+  - **Zapobieganie:** Przy tworzeniu nowego serwisu sprawdź jak inicjalizują się istniejące serwisy w tym samym bocie
+- Lokalizacja zmian:
+  - `StalkerLME/services/ocrService.js:1369-1398` (nowe przyciski)
+  - `StalkerLME/handlers/interactionHandlers.js:1323-1340,10037-10201` (handlery, publiczny embed)
+  - `StalkerLME/services/raportCleanupService.js` (nowy serwis)
+  - `StalkerLME/index.js:17,41,71,83` (inicjalizacja)
+
 **StalkerLME Bot - Dodano ikony klanów do wykresów i sekcję MVP w /player-status:**
 - **NOWA FUNKCJA:** Wykresy w `/progres` i `/player-status` pokazują ikony klanów przed każdym słupkiem
 - **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
