@@ -1055,6 +1055,14 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - Lokalizacja zmian:
   - `StalkerLME/handlers/interactionHandlers.js:8988,9401,10222` (reverse() w select menu)
 
+**StalkerLME Bot - Auto-usuwanie Embeda /clan-progres:**
+- **ZMIANA:** Embed z komendy `/clan-progres` jest teraz automatycznie usuwany po 5 minutach
+- **Powód:** Zapobieganie zaśmiecaniu kanałów starymi raportami progresów
+- **Integracja z RaportCleanupService:** Używa tego samego serwisu co `/player-raport`
+- **Persistent timery:** Zaplanowane usunięcia przetrwają restart bota
+- Lokalizacja zmian:
+  - `StalkerLME/handlers/interactionHandlers.js:9619-9627` (scheduleRaportDeletion po followUp)
+
 **StalkerLME Bot - Dodano ikony klanów do wykresów i sekcję MVP w /player-status:**
 - **NOWA FUNKCJA:** Wykresy w `/progres` i `/player-status` pokazują ikony klanów przed każdym słupkiem
 - **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
