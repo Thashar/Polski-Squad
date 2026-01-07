@@ -8984,7 +8984,8 @@ async function handleWynikiCommand(interaction, sharedState) {
 
     try {
         // Utwórz select menu z klanami (bez parametru phase)
-        const clanOptions = Object.entries(config.targetRoles).map(([clanKey, roleId]) => {
+        // Kolejność: Main, Clan 2, Clan 1, Clan 0
+        const clanOptions = Object.entries(config.targetRoles).reverse().map(([clanKey, roleId]) => {
             return new StringSelectMenuOptionBuilder()
                 .setLabel(config.roleDisplayNames[clanKey])
                 .setValue(clanKey);
