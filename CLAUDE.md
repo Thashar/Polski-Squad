@@ -768,9 +768,16 @@ node manual-backup.js
 
 ### 🎯 Kontroler Bot
 
-**2 Systemy:**
+**3 Systemy:**
 1. **OCR Dwukanałowy** - `ocrService.js`: CX (1500min, 0-2800/100, skip1, rola 2800+), Daily (910min, 0-1050/10, skip3, 2x nick), normalizacja znaków (o→0, z→2, l→1, sg→9)
 2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
+3. **Dywersja w klanie** - `votingService.js`:
+   - Trigger: Fraza "działasz na szkodę klanu" w odpowiedzi do użytkownika
+   - Głosowanie: 15 minut (przyciski Tak/Nie), ping roli klanowej
+   - Wynik: >50% TAK → rola Dywersanta 24h, remis → powtórka (max 3 razy)
+   - Cooldown: 7 dni per użytkownik
+   - **Persistencja:** 3 pliki JSON (active_votes.json, vote_history.json, saboteur_roles.json)
+   - **Restart-safe:** Przywracanie timerów głosowań i usuwania ról po restarcie bota
 
 **Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID
@@ -1009,6 +1016,24 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**Kontroler Bot - System "Dywersja w klanie" - Persistencja i Wydłużenie Czasu Głosowania:**
+- **ZMIANA:** Czas głosowania wydłużony z 5 minut na **15 minut**
+- **NOWA FUNKCJA:** Pełna persistencja aktywnych głosowań - restart bota nie przerywa głosowań
+- **Implementacja:**
+  - Nowy plik `Kontroler/data/active_votes.json` - zapisuje wszystkie aktywne głosowania
+  - Funkcje `loadActiveVotes()` i `saveActiveVotes()` - zarządzanie stanem głosowań
+  - Automatyczne zapisywanie po: rozpoczęciu głosowania, oddaniu głosu, zakończeniu głosowania
+  - Przywracanie timerów głosowań w `restoreTimers()` przy starcie bota
+  - Konwersja Set → Array przy zapisie, Array → Set przy odczycie
+- **Działanie po restarcie:**
+  - Bot wczytuje aktywne głosowania z pliku przy starcie
+  - Oblicza pozostały czas dla każdego głosowania
+  - Jeśli głosowanie się już zakończyło → natychmiast kończy i liczy wyniki
+  - Jeśli głosowanie wciąż trwa → przywraca timer na pozostały czas
+  - Głosy oddane przed restartem są zachowane
+- **Pliki JSON:** `active_votes.json`, `vote_history.json`, `saboteur_roles.json` (wszystkie persistent)
+- Lokalizacja zmian: `Kontroler/services/votingService.js` (linie 30, 75, 115-134, 161-176, 265, 322, 422, 490-509)
 
 **StalkerLME Bot - Embed Kolejki OCR: Nowe Przyciski + System Auto-Usuwania Raportów:**
 - **ZMIANA NAZW PRZYCISKÓW:**

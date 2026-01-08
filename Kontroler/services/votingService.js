@@ -26,8 +26,8 @@ class VotingService {
         // ID roli Dywersanta
         this.SABOTEUR_ROLE_ID = '1421060005913690204';
 
-        // Czas głosowania (5 minut)
-        this.VOTING_TIME = 5 * 60 * 1000;
+        // Czas głosowania (15 minut)
+        this.VOTING_TIME = 15 * 60 * 1000;
 
         // Czas trwania roli (24 godziny)
         this.ROLE_DURATION = 24 * 60 * 60 * 1000;
@@ -72,6 +72,7 @@ class VotingService {
     async loadData() {
         await this.loadVoteHistory();
         await this.loadSaboteurRoles();
+        await this.loadActiveVotes();
     }
 
     /**
@@ -109,6 +110,30 @@ class VotingService {
     }
 
     /**
+     * Ładuje aktywne głosowania
+     */
+    async loadActiveVotes() {
+        try {
+            const data = await fs.readFile(this.activeVotesFile, 'utf8');
+            const votesArray = JSON.parse(data);
+
+            // Konwersja z tablicy do Map z przywróceniem Set
+            for (const vote of votesArray) {
+                vote.votes.yes = new Set(vote.votes.yes);
+                vote.votes.no = new Set(vote.votes.no);
+                this.activeVotes.set(vote.messageId, vote);
+            }
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                this.activeVotes = new Map();
+            } else {
+                this.logger.error('❌ Błąd ładowania aktywnych głosowań:', error);
+                this.activeVotes = new Map();
+            }
+        }
+    }
+
+    /**
      * Zapisuje historię głosowań
      */
     async saveVoteHistory() {
@@ -127,6 +152,26 @@ class VotingService {
             await fs.writeFile(this.saboteurRolesFile, JSON.stringify(this.saboteurRoles, null, 2));
         } catch (error) {
             this.logger.error('❌ Błąd zapisywania ról Dywersanta:', error);
+        }
+    }
+
+    /**
+     * Zapisuje aktywne głosowania
+     */
+    async saveActiveVotes() {
+        try {
+            // Konwersja Map do tablicy z serializacją Set
+            const votesArray = Array.from(this.activeVotes.values()).map(vote => ({
+                ...vote,
+                votes: {
+                    yes: Array.from(vote.votes.yes),
+                    no: Array.from(vote.votes.no)
+                }
+            }));
+
+            await fs.writeFile(this.activeVotesFile, JSON.stringify(votesArray, null, 2));
+        } catch (error) {
+            this.logger.error('❌ Błąd zapisywania aktywnych głosowań:', error);
         }
     }
 
@@ -217,6 +262,7 @@ class VotingService {
         };
 
         this.activeVotes.set(voteMessage.id, voteData);
+        await this.saveActiveVotes();
 
         // Ustaw timer na zakończenie głosowania
         const timer = setTimeout(async () => {
@@ -272,6 +318,8 @@ class VotingService {
         } else {
             voteData.votes.no.add(userId);
         }
+
+        await this.saveActiveVotes();
 
         await interaction.reply({
             content: `✅ Twój głos "${vote === 'yes' ? 'Tak' : 'Nie'}" został zapisany.`,
@@ -371,6 +419,7 @@ class VotingService {
 
         // Wyczyść dane
         this.activeVotes.delete(messageId);
+        await this.saveActiveVotes();
 
         const timer = this.voteTimers.get(messageId);
         if (timer) {
@@ -445,6 +494,25 @@ class VotingService {
     async restoreTimers() {
         const now = Date.now();
 
+        // Przywróć timery głosowań
+        for (const [messageId, voteData] of this.activeVotes.entries()) {
+            const remainingTime = voteData.endTime - now;
+
+            if (remainingTime <= 0) {
+                // Głosowanie powinno się już skończyć
+                await this.endVoting(messageId);
+            } else {
+                // Ustaw timer na pozostały czas
+                const timer = setTimeout(async () => {
+                    await this.endVoting(messageId);
+                }, remainingTime);
+
+                this.voteTimers.set(messageId, timer);
+                this.logger.info(`🔄 Przywrócono timer głosowania dla wiadomości ${messageId} (${Math.round(remainingTime / (60 * 1000))}min)`);
+            }
+        }
+
+        // Przywróć timery usuwania ról Dywersanta
         for (const [userId, roleData] of Object.entries(this.saboteurRoles)) {
             const remainingTime = roleData.removeAt - now;
 
