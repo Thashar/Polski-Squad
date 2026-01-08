@@ -473,7 +473,7 @@
         },
         {
           "name": "/revenge",
-          "description": "Zaplanuj zemstę na użytkowniku (tylko Gabriel/Lucyfer, koszt 50 many, cooldown 24h per cel)",
+          "description": "Zaplanuj zemstę na użytkowniku poza przeciwną frakcją (koszt many: 50, cooldown 24h per cel)",
           "usage": "/revenge użytkownik:@user",
           "requiredPermission": "achievement_role"
         },

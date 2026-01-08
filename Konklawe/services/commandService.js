@@ -45,7 +45,7 @@ class CommandService {
                         .setRequired(true)),
             new SlashCommandBuilder()
                 .setName('revenge')
-                .setDescription('Zaplanuj zemstę na użytkowniku (Gabriel/Lucyfer, koszt 50 many)')
+                .setDescription('Zaplanuj zemstę na użytkowniku poza przeciwną frakcją. (koszt many: 50)')
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik który będzie celem zemsty')
