@@ -1924,12 +1924,13 @@ async function handleOligopolyListCommand(interaction, config) {
             chunks.push(memberList);
         }
 
-        // Wyślij pierwszą część jako editReply
-        const firstMessage = `📋 **Lista członków klanu ${detectedClan}** (${sortedMembers.length} osób)\n\n${chunks[0]}`;
-        await interaction.editReply({ content: firstMessage });
+        // Wyślij nagłówek jako osobną pierwszą wiadomość
+        await interaction.editReply({
+            content: `📋 **Lista członków klanu ${detectedClan}** (${sortedMembers.length} osób)`
+        });
 
-        // Wyślij pozostałe części jako followUp (jeśli są)
-        for (let i = 1; i < chunks.length; i++) {
+        // Wyślij wszystkie chunki jako followUp
+        for (let i = 0; i < chunks.length; i++) {
             await interaction.followUp({
                 content: chunks[i],
                 ephemeral: true
