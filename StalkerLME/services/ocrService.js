@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { calculateNameSimilarity } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 const { EmbedBuilder } = require('discord.js');
 const { stopGhostPing } = require('../handlers/interactionHandlers');
@@ -532,7 +533,7 @@ class OCRService {
 
     async findSimilarUserOnServer(guild, detectedNick) {
         try {
-            const members = await guild.members.fetch();
+            const members = await safeFetchMembers(guild, logger);
             let bestMatch = null;
             let bestSimilarity = 0;
             
@@ -619,10 +620,9 @@ class OCRService {
             logger.info('Wyszukiwanie użytkowników');
             logger.info(`🏰 Serwer: ${guild.name}`);
             logger.info(`🔍 Szukane nazwy: ${playerNames.join(', ')}`);
-            
+
             const foundUsers = [];
-            const members = await guild.members.fetch();
-            logger.info(`👥 Znaleziono ${members.size} członków serwera`);
+            const members = await safeFetchMembers(guild, logger);
             
             // Sprawdź czy użytkownik ma którejś z ról TARGET i ogranicz wyszukiwanie
             let restrictToRole = null;

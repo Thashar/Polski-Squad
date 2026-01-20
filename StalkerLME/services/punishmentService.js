@@ -4,6 +4,7 @@ const path = require('path');
 const https = require('https');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 
 const logger = createBotLogger('StalkerLME');
 class PunishmentService {
@@ -713,9 +714,7 @@ class PunishmentService {
         logger.info(`[PUNISH] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
         // Odśwież cache członków przed przetwarzaniem
-        logger.info('[PUNISH] 🔄 Odświeżanie cache członków...');
-        await guild.members.fetch();
-        logger.info('[PUNISH] ✅ Cache członków odświeżony');
+        await safeFetchMembers(guild, logger);
 
         const results = [];
 
