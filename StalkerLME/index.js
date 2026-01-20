@@ -16,6 +16,7 @@ const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
 const RaportCleanupService = require('./services/raportCleanupService');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 
 const logger = createBotLogger('StalkerLME');
 
@@ -592,8 +593,8 @@ async function refreshMemberCache() {
                 if (guildsProcessed > 0) {
                     await new Promise(resolve => setTimeout(resolve, 5000)); // 5s przerwy między serwerami
                 }
-                
-                const members = await guild.members.fetch();
+
+                const members = await safeFetchMembers(guild, logger);
                 
                 logger.info(`👥 Załadowano ${members.size} członków dla serwera ${guild.name}`);
                 totalMembers += members.size;

@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const fs = require('fs').promises;
 const path = require('path');
 const https = require('https');
@@ -617,9 +618,7 @@ class PhaseService {
         logger.info(`[PHASE1] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
         // Odśwież cache członków przed przetwarzaniem
-        logger.info('[PHASE1] 🔄 Odświeżanie cache członków...');
-        await guild.members.fetch();
-        logger.info('[PHASE1] ✅ Cache członków odświeżony');
+        await safeFetchMembers(guild, logger);
 
         // Utwórz snapshot nicków z roli na początku
         const snapshotPath = path.join(this.tempDir, `role_nicks_snapshot_${sessionId}.json`);
@@ -1106,7 +1105,7 @@ class PhaseService {
         await this.databaseService.deletePhase1DataForWeek(session.guildId, weekInfo.weekNumber, weekInfo.year, session.clan);
 
         // Zapisz nowe dane
-        const members = await guild.members.fetch();
+        const members = await safeFetchMembers(guild, logger);
         const savedCount = [];
         let isFirstSave = true;
 
