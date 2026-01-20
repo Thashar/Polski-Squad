@@ -1904,10 +1904,10 @@ async function handleOligopolyListCommand(interaction, config) {
             return;
         }
 
-        // Sortuj alfabetycznie po nicku serwera (lub username jeśli brak nicku)
+        // Sortuj alfabetycznie po nicku serwera
         const sortedMembers = Array.from(membersWithRole.values()).sort((a, b) => {
-            const nameA = (a.nickname || a.user.username).toLowerCase();
-            const nameB = (b.nickname || b.user.username).toLowerCase();
+            const nameA = a.displayName.toLowerCase();
+            const nameB = b.displayName.toLowerCase();
             return nameA.localeCompare(nameB);
         });
 
@@ -1918,7 +1918,7 @@ async function handleOligopolyListCommand(interaction, config) {
         for (let i = 0; i < sortedMembers.length; i += MEMBERS_PER_MESSAGE) {
             const chunk = sortedMembers.slice(i, i + MEMBERS_PER_MESSAGE);
             const memberList = chunk.map(member =>
-                `<@${member.user.id}> ${member.nickname || member.user.username}`
+                `<@${member.user.id}> ${member.displayName}`
             ).join('\n');
 
             chunks.push(memberList);
