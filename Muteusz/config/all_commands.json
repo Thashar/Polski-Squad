@@ -257,6 +257,12 @@
           "requiredPermission": "administrator"
         },
         {
+          "name": "/oligopoly-list",
+          "description": "Generuje listę wszystkich osób z Twoją rolą klanową",
+          "usage": "/oligopoly-list",
+          "requiredPermission": "clan_member"
+        },
+        {
           "name": "/kawka",
           "description": "Ogłoszenie wsparcia serwera kawką (tylko administratorzy)",
           "usage": "/kawka nick:[nick użytkownika] → wypełnij formularz z kwotą i typem wpłaty",
