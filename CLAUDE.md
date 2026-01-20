@@ -1029,8 +1029,8 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 - **Funkcjonalność:**
   - Automatyczna detekcja klanu użytkownika na podstawie roli Discord
   - Pobiera WSZYSTKICH członków serwera z daną rolą klanową (nie tylko tych w systemie oligopoly)
-  - Sortuje alfabetycznie po nicku serwera
-  - Wyświetla w formacie: `<@userId> serverNickname`
+  - Sortuje alfabetycznie po nicku serwera (`displayName`)
+  - Wyświetla w formacie: `<@userId> serverNickname` (używa `displayName` - nick serwera lub username Discord jeśli brak nicku)
   - Dzieli listę po 10 osób na wiadomość (pierwsza wiadomość = nagłówek, kolejne = listy po 10)
 - **Uprawnienia:** Wymaga roli klanowej (`clan_member`)
 - **Workflow:**
