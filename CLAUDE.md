@@ -1031,17 +1031,17 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Pobiera WSZYSTKICH członków serwera z daną rolą klanową (nie tylko tych w systemie oligopoly)
   - Sortuje alfabetycznie po nicku serwera
   - Wyświetla w formacie: `<@userId> serverNickname`
-  - Dzieli listę po 10 osób na wiadomość (pierwsza jako editReply, kolejne jako followUp)
+  - Dzieli listę po 10 osób na wiadomość (pierwsza wiadomość = nagłówek, kolejne = listy po 10)
 - **Uprawnienia:** Wymaga roli klanowej (`clan_member`)
 - **Workflow:**
   1. Użytkownik wpisuje `/oligopoly-list`
   2. Bot wykrywa rolę klanową użytkownika
   3. Bot pobiera wszystkich członków z tą rolą
   4. Bot sortuje alfabetycznie i dzieli po 10 osób
-  5. Wysyła pierwszą wiadomość z nagłówkiem i 10 osobami
-  6. Wysyła kolejne wiadomości (ephemeral) z następnymi 10 osobami każda
+  5. Wysyła pierwszą wiadomość (editReply) z samym nagłówkiem
+  6. Wysyła kolejne wiadomości (followUp, ephemeral) z listami po 10 osób każda
 - **Format wiadomości:**
-  - Pierwsza: `📋 **Lista członków klanu {nazwa}** ({liczba} osób)` + lista 10 osób
+  - Pierwsza: `📋 **Lista członków klanu {nazwa}** ({liczba} osób)` (tylko nagłówek)
   - Kolejne: lista 10 osób (bez nagłówka)
 - **Zaktualizowano:**
   - `Kontroler/handlers/interactionHandlers.js` - dodano `handleOligopolyListCommand()`, case w switch, rejestrację komendy
