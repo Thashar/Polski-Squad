@@ -84,7 +84,7 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 | └─ StalkerLME Bot | 614 | Kary OCR, punkty, urlopy, dekoder, fazy |
 | └─ Muteusz Bot | 629 | Auto-moderacja, cache mediów, chaos mode |
 | └─ EndersEcho Bot | 645 | OCR wyników, rankingi, role TOP |
-| └─ Kontroler Bot | 658 | OCR dwukanałowy (CX/Daily), loteria |
+| └─ Kontroler Bot | 769 | OCR dwukanałowy (CX/Daily), loteria, Oligopoly |
 | └─ Konklawe Bot | 669 | Gra hasłowa, osiągnięcia, klątwy, blessingi |
 | └─ Wydarzynier Bot | 684 | Lobby party, zaproszenia, repozytorium |
 | └─ Gary Bot | 697 | Lunar Mine API, proxy, cache, wyszukiwanie |
@@ -141,7 +141,7 @@ To jest kolekcja botów Discord dla Polski Squad, zawierająca **9 oddzielnych b
 3. **StalkerLME Bot** - System kar za uczestnictwo w bossach z OCR + dekoder buildów + system faz
 4. **Muteusz Bot** - Kompleksowa moderacja z cache'owaniem mediów i zarządzaniem rolami
 5. **EndersEcho Bot** - System rankingów bossów z OCR i automatycznymi rolami TOP
-6. **Kontroler Bot** - Dwukanałowa weryfikacja OCR + zaawansowana loteria z datami
+6. **Kontroler Bot** - Dwukanałowa weryfikacja OCR + zaawansowana loteria z datami + system Oligopoly
 7. **Konklawe Bot** - Interaktywna gra słowna z osiągnięciami i systemem klątw
 8. **Wydarzynier Bot** - Zarządzanie lobby party z organizacją wątkową
 9. **Gary Bot** - Analiza Lunar Mine Expedition z API garrytools.com i proxy
@@ -768,7 +768,7 @@ node manual-backup.js
 
 ### 🎯 Kontroler Bot
 
-**3 Systemy:**
+**4 Systemy:**
 1. **OCR Dwukanałowy** - `ocrService.js`: CX (1500min, 0-2800/100, skip1, rola 2800+), Daily (910min, 0-1050/10, skip3, 2x nick), normalizacja znaków (o→0, z→2, l→1, sg→9)
 2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
 3. **Dywersja w klanie** - `votingService.js`:
@@ -778,8 +778,15 @@ node manual-backup.js
    - Cooldown: 7 dni per użytkownik
    - **Persistencja:** 3 pliki JSON (active_votes.json, vote_history.json, saboteur_roles.json)
    - **Restart-safe:** Przywracanie timerów głosowań i usuwania ról po restarcie bota
+4. **Oligopoly** - `oligopolyService.js`:
+   - System zarządzania ID graczy pogrupowanych po klanach
+   - Automatyczna detekcja klanu na podstawie roli użytkownika
+   - Zabezpieczenie przed duplikatami ID
+   - Aktualizacja wpisów (jeden wpis per użytkownik per klan)
+   - **Persistencja:** `oligopoly.json` (userId, username, serverNickname, klan, id, timestamp)
+   - **Komendy:** `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`
 
-**Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`
+**Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID
 
 ---
@@ -1016,6 +1023,34 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**Kontroler Bot - Nowa Komenda /oligopoly-list:**
+- **NOWA FUNKCJA:** Dodano komendę `/oligopoly-list` do generowania listy wszystkich członków klanu użytkownika
+- **Funkcjonalność:**
+  - Automatyczna detekcja klanu użytkownika na podstawie roli Discord
+  - Pobiera WSZYSTKICH członków serwera z daną rolą klanową (nie tylko tych w systemie oligopoly)
+  - Sortuje alfabetycznie po nicku serwera
+  - Wyświetla w formacie: `<@userId> serverNickname`
+  - Dzieli listę po 10 osób na wiadomość (pierwsza jako editReply, kolejne jako followUp)
+- **Uprawnienia:** Wymaga roli klanowej (`clan_member`)
+- **Workflow:**
+  1. Użytkownik wpisuje `/oligopoly-list`
+  2. Bot wykrywa rolę klanową użytkownika
+  3. Bot pobiera wszystkich członków z tą rolą
+  4. Bot sortuje alfabetycznie i dzieli po 10 osób
+  5. Wysyła pierwszą wiadomość z nagłówkiem i 10 osobami
+  6. Wysyła kolejne wiadomości (ephemeral) z następnymi 10 osobami każda
+- **Format wiadomości:**
+  - Pierwsza: `📋 **Lista członków klanu {nazwa}** ({liczba} osób)` + lista 10 osób
+  - Kolejne: lista 10 osób (bez nagłówka)
+- **Zaktualizowano:**
+  - `Kontroler/handlers/interactionHandlers.js` - dodano `handleOligopolyListCommand()`, case w switch, rejestrację komendy
+  - `Muteusz/config/all_commands.json` - dodano komendę `/oligopoly-list`
+  - `CLAUDE.md` - zaktualizowano sekcję Kontroler Bot (4 systemy zamiast 3, dodano system Oligopoly)
+- Lokalizacja zmian:
+  - `Kontroler/handlers/interactionHandlers.js:44-46,1319-1321,1841-1932` (handler, case, rejestracja)
+  - `Muteusz/config/all_commands.json:259-263` (wpis komendy)
+  - `CLAUDE.md:771,782,787-794` (dokumentacja)
 
 **Kontroler Bot - System "Dywersja w klanie" - Persistencja i Wydłużenie Czasu Głosowania:**
 - **ZMIANA:** Czas głosowania wydłużony z 5 minut na **15 minut**

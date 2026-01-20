@@ -42,6 +42,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'oligopoly-clear':
                     await handleOligopolyClearCommand(interaction, config);
                     break;
+                case 'oligopoly-list':
+                    await handleOligopolyListCommand(interaction, config);
+                    break;
                 case 'kawka':
                     await handleKawkaCommand(interaction, config);
                     break;
@@ -1316,6 +1319,10 @@ async function registerSlashCommands(client, config) {
             .setDescription('Usuwa wszystkie wpisy oligopoly (tylko administratorzy)'),
 
         new SlashCommandBuilder()
+            .setName('oligopoly-list')
+            .setDescription('Generuje listę wszystkich osób z Twoją rolą klanową'),
+
+        new SlashCommandBuilder()
             .setName('kawka')
             .setDescription('Ogłoszenie wsparcia serwera kawką (tylko administratorzy)')
             .addStringOption(option =>
@@ -1827,6 +1834,111 @@ async function handleOligopolyReviewCommand(interaction, config) {
         await interaction.reply({
             content: response,
             ephemeral: true
+        });
+    }
+}
+
+/**
+ * Obsługuje komendę /oligopoly-list
+ */
+async function handleOligopolyListCommand(interaction, config) {
+    // Sprawdź czy użytkownik ma którąkolwiek z ról klanowych
+    const clanRoles = Object.values(config.lottery.clans)
+        .filter(clan => clan.roleId !== null) // Wyklucz "cały serwer"
+        .map(clan => clan.roleId);
+
+    const userClanRoles = interaction.member.roles.cache.filter(role =>
+        clanRoles.includes(role.id)
+    );
+
+    if (userClanRoles.size === 0) {
+        const availableClans = Object.values(config.lottery.clans)
+            .filter(clan => clan.roleId !== null)
+            .map(clan => clan.displayName);
+
+        await interaction.reply({
+            content: `❌ **Brak uprawnień do używania tej komendy!**\n\n` +
+                    `Musisz posiadać jedną z ról klanowych:\n${availableClans.map(name => `• ${name}`).join('\n')}\n\n` +
+                    `💡 Skontaktuj się z administratorem jeśli uważasz, że to błąd.`,
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Jeśli użytkownik ma więcej niż jedną rolę klanową, użyj pierwszej znalezionej
+    const userClanRoleId = userClanRoles.first().id;
+
+    // Znajdź odpowiedni klan na podstawie roli
+    let detectedClan = null;
+    for (const [key, clan] of Object.entries(config.lottery.clans)) {
+        if (clan.roleId === userClanRoleId) {
+            detectedClan = clan.displayName;
+            break;
+        }
+    }
+
+    if (!detectedClan) {
+        await interaction.reply({
+            content: '❌ Nie udało się wykryć Twojego klanu. Skontaktuj się z administratorem.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Defer reply - pobieranie członków może trochę potrwać
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        // Pobierz wszystkich członków serwera
+        await interaction.guild.members.fetch();
+
+        // Filtruj członków z daną rolą klanową
+        const membersWithRole = interaction.guild.members.cache.filter(member =>
+            member.roles.cache.has(userClanRoleId)
+        );
+
+        if (membersWithRole.size === 0) {
+            await interaction.editReply({
+                content: `📋 **Brak członków z rolą klanu:** ${detectedClan}`
+            });
+            return;
+        }
+
+        // Sortuj alfabetycznie po nicku serwera (lub username jeśli brak nicku)
+        const sortedMembers = Array.from(membersWithRole.values()).sort((a, b) => {
+            const nameA = (a.nickname || a.user.username).toLowerCase();
+            const nameB = (b.nickname || b.user.username).toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+
+        // Podziel listę na chunki po 10 osób
+        const MEMBERS_PER_MESSAGE = 10;
+        const chunks = [];
+
+        for (let i = 0; i < sortedMembers.length; i += MEMBERS_PER_MESSAGE) {
+            const chunk = sortedMembers.slice(i, i + MEMBERS_PER_MESSAGE);
+            const memberList = chunk.map(member =>
+                `<@${member.user.id}> ${member.nickname || member.user.username}`
+            ).join('\n');
+
+            chunks.push(memberList);
+        }
+
+        // Wyślij pierwszą część jako editReply
+        const firstMessage = `📋 **Lista członków klanu ${detectedClan}** (${sortedMembers.length} osób)\n\n${chunks[0]}`;
+        await interaction.editReply({ content: firstMessage });
+
+        // Wyślij pozostałe części jako followUp (jeśli są)
+        for (let i = 1; i < chunks.length; i++) {
+            await interaction.followUp({
+                content: chunks[i],
+                ephemeral: true
+            });
+        }
+    } catch (error) {
+        logger.error(`Błąd podczas pobierania listy członków klanu: ${error.message}`);
+        await interaction.editReply({
+            content: '❌ Wystąpił błąd podczas pobierania listy członków. Spróbuj ponownie później.'
         });
     }
 }
