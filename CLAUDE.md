@@ -1030,7 +1030,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - Automatyczna detekcja klanu użytkownika na podstawie roli Discord
   - Pobiera WSZYSTKICH członków serwera z daną rolą klanową (nie tylko tych w systemie oligopoly)
   - Sortuje alfabetycznie po nicku serwera (`displayName`)
-  - Wyświetla w formacie: `<@userId> serverNickname` (używa `displayName` - nick serwera lub username Discord jeśli brak nicku)
+  - Wyświetla w formacie: `<@userId> PLㅣserverNickname` (prefix "PLㅣ" przed nickiem, używa `displayName`)
   - Dzieli listę po 10 osób na wiadomość (pierwsza wiadomość = nagłówek, kolejne = listy po 10)
 - **Uprawnienia:** Wymaga roli klanowej (`clan_member`)
 - **Workflow:**
@@ -1042,7 +1042,7 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   6. Wysyła kolejne wiadomości (followUp, ephemeral) z listami po 10 osób każda
 - **Format wiadomości:**
   - Pierwsza: `📋 **Lista członków klanu {nazwa}** ({liczba} osób)` (tylko nagłówek)
-  - Kolejne: lista 10 osób (bez nagłówka)
+  - Kolejne: `<@userId> PLㅣNickname` (lista 10 osób, każda z prefixem "PLㅣ")
 - **Zaktualizowano:**
   - `Kontroler/handlers/interactionHandlers.js` - dodano `handleOligopolyListCommand()`, case w switch, rejestrację komendy
   - `Muteusz/config/all_commands.json` - dodano komendę `/oligopoly-list`

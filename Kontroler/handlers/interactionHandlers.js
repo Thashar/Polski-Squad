@@ -1918,7 +1918,7 @@ async function handleOligopolyListCommand(interaction, config) {
         for (let i = 0; i < sortedMembers.length; i += MEMBERS_PER_MESSAGE) {
             const chunk = sortedMembers.slice(i, i + MEMBERS_PER_MESSAGE);
             const memberList = chunk.map(member =>
-                `<@${member.user.id}> ${member.displayName}`
+                `<@${member.user.id}> PLㅣ${member.displayName}`
             ).join('\n');
 
             chunks.push(memberList);
