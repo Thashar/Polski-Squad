@@ -236,7 +236,7 @@ class OCRService {
             logger.info('Długość tekstu:', text ? text.length : 'null');
         }
 
-        // KROK 1: PRIORYTET - Najpierw sprawdź linijkę przed "Best:" gdzie jest najbardziej prawdopodobny prawidłowy wynik
+        // Znajdź linię z "Best:"
         const lines = text.split('\n').map(line => line.trim());
         let bestLineIndex = -1;
 
@@ -247,70 +247,68 @@ class OCRService {
             }
         }
 
-        if (bestLineIndex !== -1 && bestLineIndex > 0) {
-            const lineAbove = lines[bestLineIndex - 1];
-            logger.info(`KROK 1: Sprawdzam linijkę przed Best (${bestLineIndex - 1}): "${lineAbove}"`);
-
-            // Sprawdź czy w linijce wyżej jest wynik z jednostką
-            const aboveMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
-            if (aboveMatch) {
-                let score = aboveMatch[1];
-                logger.info(`✅ Znaleziono wynik z jednostką w linijce przed Best: "${score}"`);
-
-                // Waliduj długość - max 5 cyfr + jednostka (z opcjonalną kropką)
-                const numericPart = score.match(/^(\d+)(?:\.(\d+))?/);
-                if (numericPart) {
-                    const wholePart = numericPart[1];
-                    if (wholePart.length <= 5) {
-                        // Zastosuj poprawki: TT -> 1T
-                        score = this.fixScoreFormat(score);
-                        logger.info(`✅ Używam wyniku z linijki przed Best: "${score}"`);
-                        return score;
-                    } else {
-                        logger.info(`⚠️ Wynik ma za dużo cyfr (${wholePart.length}), pomijam i sprawdzam dalej`);
-                    }
-                }
-            }
-        }
-
-        // KROK 2: Spróbuj znaleźć wynik bezpośrednio po "Best:" z jednostkami
-        logger.info('KROK 2: Sprawdzam wynik bezpośrednio po "Best:" z jednostką...');
+        // KROK 1: Sprawdź linijkę z "Best:" - czy jest wynik z jednostką?
+        logger.info('KROK 1: Sprawdzam linijkę z "Best:" - czy jest wynik z jednostką...');
         const bestScorePattern = /best\s*:?\s*[©»]*\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
         let matches = text.match(bestScorePattern);
 
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
-            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best (wzorzec 1):', matches);
+            logger.info('🎯 Szczegółowy debug: Znalezione dopasowania Best z jednostką:', matches);
         } else {
-            logger.info('Znalezione dopasowania Best (wzorzec 1):', matches);
+            logger.info('Znalezione dopasowania Best z jednostką:', matches);
         }
 
         if (matches && matches.length > 0) {
             const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
             if (scoreMatch) {
                 let result = scoreMatch[1];
-                logger.info(`Znaleziono wynik po "Best:" z jednostką: "${result}"`);
+                logger.info(`Znaleziono wynik w linijce "Best:" z jednostką: "${result}"`);
 
-                // Waliduj długość - max 5 cyfr + jednostka
+                // Waliduj długość - max 5 cyfr przed kropką
                 const numericPart = result.match(/^(\d+)(?:\.(\d+))?/);
                 if (numericPart) {
                     const wholePart = numericPart[1];
                     if (wholePart.length <= 5) {
                         // Zastosuj poprawki: TT -> 1T
                         result = this.fixScoreFormat(result);
-
-                        if (result && result.trim() !== '') {
-                            logger.info(`✅ Używam wyniku po "Best:" z jednostką: "${result}"`);
-                            return result;
-                        }
+                        logger.info(`✅ Używam wyniku z linijki "Best:" z jednostką: "${result}"`);
+                        return result;
                     } else {
-                        logger.info(`⚠️ Wynik ma za dużo cyfr (${wholePart.length}), pomijam i sprawdzam dalej`);
+                        logger.info(`⚠️ Wynik ma za dużo cyfr (${wholePart.length}), pomijam i idę do KROKU 2`);
                     }
                 }
             }
         }
 
-        // KROK 3: Spróbuj znaleźć wynik po "Best:" bez jednostek i znormalizuj go
-        logger.info('KROK 3: Sprawdzam wynik po "Best:" bez jednostki...');
+        // KROK 2: Sprawdź linijkę WYŻEJ (przed "Best:") - czy jest wynik z jednostką?
+        if (bestLineIndex !== -1 && bestLineIndex > 0) {
+            const lineAbove = lines[bestLineIndex - 1];
+            logger.info(`KROK 2: Sprawdzam linijkę WYŻEJ przed Best (${bestLineIndex - 1}): "${lineAbove}"`);
+
+            // Sprawdź czy w linijce wyżej jest wynik z jednostką
+            const aboveMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
+            if (aboveMatch) {
+                let score = aboveMatch[1];
+                logger.info(`✅ Znaleziono wynik z jednostką w linijce wyżej: "${score}"`);
+
+                // Waliduj długość - max 5 cyfr przed kropką
+                const numericPart = score.match(/^(\d+)(?:\.(\d+))?/);
+                if (numericPart) {
+                    const wholePart = numericPart[1];
+                    if (wholePart.length <= 5) {
+                        // Zastosuj poprawki: TT -> 1T
+                        score = this.fixScoreFormat(score);
+                        logger.info(`✅ Używam wyniku z linijki wyżej: "${score}"`);
+                        return score;
+                    } else {
+                        logger.info(`⚠️ Wynik ma za dużo cyfr (${wholePart.length}), pomijam i idę do KROKU 3`);
+                    }
+                }
+            }
+        }
+
+        // KROK 3: Wróć do linijki "Best:" i znormalizuj wynik bez jednostki
+        logger.info('KROK 3: Wracam do linijki "Best:" i sprawdzam wynik bez jednostki...');
         const bestScoreNoUnitPattern = /best\s*:?\s*[©»]*[^\d]*(\d+(?:\.\d+)?)[^\w]*$/gmi;
         const noUnitMatches = text.match(bestScoreNoUnitPattern);
 
@@ -324,34 +322,13 @@ class OCRService {
             const scoreMatch = noUnitMatches[0].match(/(\d+(?:\.\d+)?)[^\w]*$/);
             if (scoreMatch) {
                 let result = scoreMatch[1];
-                logger.info(`Znaleziono wynik po "Best:" bez jednostki: "${result}"`);
+                logger.info(`Znaleziono wynik w linijce "Best:" bez jednostki: "${result}"`);
 
                 // Normalizacja wyniku bez jednostki
                 result = this.normalizeScoreWithoutUnit(result);
 
                 if (result) {
-                    logger.info(`✅ Znormalizowany wynik po "Best:": "${result}"`);
-                    return result;
-                }
-            }
-        }
-
-        // KROK 4: Fallback - sprawdź linijkę przed "Best:" bez jednostki
-        if (bestLineIndex !== -1 && bestLineIndex > 0) {
-            const lineAbove = lines[bestLineIndex - 1];
-            logger.info(`KROK 4: Sprawdzam linijkę przed Best bez jednostki: "${lineAbove}"`);
-
-            // Sprawdź czy jest liczba bez jednostki
-            const noUnitMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?)\s*$/);
-            if (noUnitMatch) {
-                let result = noUnitMatch[1];
-                logger.info(`Znaleziono wynik bez jednostki w linijce przed Best: "${result}"`);
-
-                // Normalizacja wyniku bez jednostki
-                result = this.normalizeScoreWithoutUnit(result);
-
-                if (result) {
-                    logger.info(`✅ Znormalizowany wynik z linijki przed Best: "${result}"`);
+                    logger.info(`✅ Znormalizowany wynik z linijki "Best:": "${result}"`);
                     return result;
                 }
             }
@@ -362,8 +339,8 @@ class OCRService {
     }
 
     /**
-     * Normalizuje wynik bez jednostki - dodaje jednostkę lub zamienia ostatnią cyfrę
-     * @param {string} score - Wynik bez jednostki (np. "38547" lub "385477")
+     * Normalizuje wynik bez jednostki - dodaje jednostkę lub usuwa ostatnią cyfrę
+     * @param {string} score - Wynik bez jednostki (np. "38547", "385477", "38547.7", "385477.7")
      * @returns {string|null} - Znormalizowany wynik z jednostką lub null
      */
     normalizeScoreWithoutUnit(score) {
@@ -373,21 +350,21 @@ class OCRService {
         const numericPart = score.match(/^(\d+)(?:\.(\d+))?/);
         if (!numericPart) return null;
 
-        const wholePart = numericPart[1];
-        const decimalPart = numericPart[2] || '';
+        const wholePart = numericPart[1]; // Cyfry przed kropką
+        const decimalPart = numericPart[2] || ''; // Cyfry po kropce (jeśli są)
 
         logger.info(`Normalizacja wyniku: całość="${wholePart}" (długość: ${wholePart.length}), część dziesiętna="${decimalPart}"`);
 
         let result;
 
         if (wholePart.length <= 5) {
-            // Wynik ma 5 lub mniej cyfr - dodaj jednostkę T na końcu
+            // ≤5 cyfr przed kropką - dodaj jednostkę na końcu całego wyniku
             result = score + 'T';
-            logger.info(`Wynik ma ${wholePart.length} cyfr (≤5), dodaję T na końcu: "${result}"`);
-        } else {
-            // Wynik ma więcej niż 5 cyfr - zamień ostatnią cyfrę na jednostkę
+            logger.info(`Wynik ma ${wholePart.length} cyfr przed kropką (≤5), dodaję T na końcu: "${result}"`);
+        } else if (wholePart.length === 6) {
+            // 6 cyfr przed kropką - usuń ostatnią cyfrę przed kropką, zachowaj kropkę+resztę, dodaj jednostkę
             const lastDigit = wholePart[wholePart.length - 1];
-            const trimmedWhole = wholePart.slice(0, -1);
+            const trimmedWhole = wholePart.slice(0, -1); // Usuń ostatnią cyfrę
 
             // Wybierz odpowiednią jednostkę na podstawie ostatniej cyfry
             let unit = 'T';
@@ -397,11 +374,21 @@ class OCRService {
                 unit = 'T';
             }
 
-            result = trimmedWhole + (decimalPart ? '.' + decimalPart : '') + unit;
-            logger.info(`Wynik ma ${wholePart.length} cyfr (>5), zamieniam ostatnią cyfrę "${lastDigit}" na "${unit}": "${result}"`);
+            // Zachowaj kropkę i cyfrę po kropce (jeśli są)
+            if (decimalPart) {
+                result = trimmedWhole + '.' + decimalPart + unit;
+                logger.info(`Wynik ma 6 cyfr przed kropką, usuwam ostatnią cyfrę "${lastDigit}", zachowuję kropkę, dodaję "${unit}": "${result}"`);
+            } else {
+                result = trimmedWhole + unit;
+                logger.info(`Wynik ma 6 cyfr (bez kropki), usuwam ostatnią cyfrę "${lastDigit}", dodaję "${unit}": "${result}"`);
+            }
+        } else {
+            // Więcej niż 6 cyfr - nieprawidłowy wynik
+            logger.warn(`⚠️ Wynik ma zbyt dużo cyfr (${wholePart.length}), oczekiwano max 6`);
+            return null;
         }
 
-        // Zastosuj dodatkowe poprawki
+        // Zastosuj dodatkowe poprawki (TT -> 1T)
         result = this.fixScoreFormat(result);
 
         // Waliduj końcowy wynik
