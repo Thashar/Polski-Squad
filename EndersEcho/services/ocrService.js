@@ -257,11 +257,11 @@ class OCRService {
                 let score = aboveMatch[1];
                 logger.info(`✅ Znaleziono wynik z jednostką w linijce przed Best: "${score}"`);
 
-                // Waliduj długość - max 6 cyfr + jednostka (z opcjonalną kropką)
+                // Waliduj długość - max 5 cyfr + jednostka (z opcjonalną kropką)
                 const numericPart = score.match(/^(\d+)(?:\.(\d+))?/);
                 if (numericPart) {
                     const wholePart = numericPart[1];
-                    if (wholePart.length <= 6) {
+                    if (wholePart.length <= 5) {
                         // Zastosuj poprawki: TT -> 1T
                         score = this.fixScoreFormat(score);
                         logger.info(`✅ Używam wyniku z linijki przed Best: "${score}"`);
@@ -290,11 +290,11 @@ class OCRService {
                 let result = scoreMatch[1];
                 logger.info(`Znaleziono wynik po "Best:" z jednostką: "${result}"`);
 
-                // Waliduj długość - max 6 cyfr + jednostka
+                // Waliduj długość - max 5 cyfr + jednostka
                 const numericPart = result.match(/^(\d+)(?:\.(\d+))?/);
                 if (numericPart) {
                     const wholePart = numericPart[1];
-                    if (wholePart.length <= 6) {
+                    if (wholePart.length <= 5) {
                         // Zastosuj poprawki: TT -> 1T
                         result = this.fixScoreFormat(result);
 
@@ -384,12 +384,8 @@ class OCRService {
             // Wynik ma 5 lub mniej cyfr - dodaj jednostkę T na końcu
             result = score + 'T';
             logger.info(`Wynik ma ${wholePart.length} cyfr (≤5), dodaję T na końcu: "${result}"`);
-        } else if (wholePart.length === 6) {
-            // Wynik ma dokładnie 6 cyfr - dodaj jednostkę T na końcu
-            result = score + 'T';
-            logger.info(`Wynik ma 6 cyfr, dodaję T na końcu: "${result}"`);
         } else {
-            // Wynik ma więcej niż 6 cyfr - zamień ostatnią cyfrę na jednostkę T
+            // Wynik ma więcej niż 5 cyfr - zamień ostatnią cyfrę na jednostkę
             const lastDigit = wholePart[wholePart.length - 1];
             const trimmedWhole = wholePart.slice(0, -1);
 
@@ -402,7 +398,7 @@ class OCRService {
             }
 
             result = trimmedWhole + (decimalPart ? '.' + decimalPart : '') + unit;
-            logger.info(`Wynik ma ${wholePart.length} cyfr (>6), zamieniam ostatnią cyfrę "${lastDigit}" na "${unit}": "${result}"`);
+            logger.info(`Wynik ma ${wholePart.length} cyfr (>5), zamieniam ostatnią cyfrę "${lastDigit}" na "${unit}": "${result}"`);
         }
 
         // Zastosuj dodatkowe poprawki
