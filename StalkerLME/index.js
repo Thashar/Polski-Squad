@@ -279,7 +279,7 @@ client.on(Events.MessageCreate, async (message) => {
             }
 
             // Sprawdź cooldown i daily limit
-            const canAsk = aiChatService.canAsk(message.author.id);
+            const canAsk = aiChatService.canAsk(message.author.id, message.member);
 
             if (!canAsk.allowed) {
                 if (canAsk.reason === 'cooldown') {
@@ -294,7 +294,8 @@ client.on(Events.MessageCreate, async (message) => {
             await message.channel.sendTyping();
 
             // Zapisz że użytkownik zadał pytanie (cooldown + daily limit)
-            aiChatService.recordAsk(message.author.id);
+            // Administratorzy nie mają limitów - statystyki nie są zapisywane
+            aiChatService.recordAsk(message.author.id, message.member);
 
             // Zadaj pytanie AI
             const answer = await aiChatService.ask(message, question);

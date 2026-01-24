@@ -118,9 +118,24 @@ class AIChatService {
     }
 
     /**
+     * Sprawdź czy użytkownik jest administratorem/moderatorem
+     */
+    isAdmin(member) {
+        if (!member) return false;
+
+        const adminRoles = this.config.allowedPunishRoles;
+        return member.roles.cache.some(role => adminRoles.includes(role.id));
+    }
+
+    /**
      * Sprawdź czy użytkownik może zadać pytanie
      */
-    canAsk(userId) {
+    canAsk(userId, member = null) {
+        // Administratorzy nie mają limitów
+        if (member && this.isAdmin(member)) {
+            return { allowed: true, isAdmin: true };
+        }
+
         const now = Date.now();
 
         // Sprawdź cooldown
@@ -158,7 +173,12 @@ class AIChatService {
     /**
      * Zapisz że użytkownik zadał pytanie
      */
-    recordAsk(userId) {
+    recordAsk(userId, member = null) {
+        // Administratorzy nie mają limitów - nie zapisuj statystyk
+        if (member && this.isAdmin(member)) {
+            return;
+        }
+
         const now = Date.now();
         const today = new Date().toISOString().split('T')[0];
 
