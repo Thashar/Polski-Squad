@@ -593,7 +593,6 @@ Typ pytania: ${context.queryType}
                 prompt += `\nDANE PIERWSZEGO GRACZA (${firstName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
                 logger.warn(`AI Chat: Brak danych dla pierwszego gracza userId ${firstUserId}`);
             }
-        }
 
             // Drugi gracz - wspomniany użytkownik (jeśli jest)
             if (context.mentionedUser) {
