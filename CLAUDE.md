@@ -738,6 +738,7 @@ node manual-backup.js
 - **Limity:**
   - Cooldown: 15 minut per użytkownik
   - Daily limit: 20 pytań per użytkownik
+  - **Administratorzy/moderatorzy:** Bez limitów (role MODERATOR_ROLE_1-4)
   - Persistent storage: `ai_chat_cooldowns.json`, `ai_chat_daily_usage.json`
 - **Uprawnienia:** Tylko członkowie klanów (rola TARGET_ROLE_0/1/2/MAIN)
 - **Kanały:** Wszystkie kanały na serwerze (bez ograniczeń)
