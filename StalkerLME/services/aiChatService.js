@@ -254,22 +254,20 @@ class AIChatService {
             }
         }
 
-        // Wykryj nicki w pytaniu (jeśli nie ma @mention) - MAX 5 graczy
-        // Przykład: "porównaj thashar i slaviax" -> wykryje obu graczy
-        if (!context.mentionedUsers || context.mentionedUsers.length === 0) {
-            const detectedNicks = await this.detectNicknamesInQuestion(question, message.guild.id);
-            if (detectedNicks.length > 0) {
-                context.detectedPlayers = detectedNicks.map(nick => ({
-                    id: nick.userId,
-                    nickname: nick.latestNick,
-                    displayName: nick.latestNick
-                }));
-                logger.info(`AI Chat: Wykryto ${detectedNicks.length} nicków w pytaniu: ${detectedNicks.map(n => n.latestNick).join(', ')}`);
+        // ZAWSZE wykryj nicki w pytaniu (niezależnie od @mentions) - MAX 5 graczy
+        // Przykład: "@user Jaki progres zaliczył Slaviax?" -> wykryje "Slaviax" mimo @mention
+        const detectedNicks = await this.detectNicknamesInQuestion(question, message.guild.id);
+        if (detectedNicks.length > 0) {
+            context.detectedPlayers = detectedNicks.map(nick => ({
+                id: nick.userId,
+                nickname: nick.latestNick,
+                displayName: nick.latestNick
+            }));
+            logger.info(`AI Chat: Wykryto ${detectedNicks.length} nicków w pytaniu: ${detectedNicks.map(n => n.latestNick).join(', ')}`);
 
-                // Dla kompatybilności wstecznej - pierwszy nick jako targetPlayer
-                if (detectedNicks.length === 1) {
-                    context.targetPlayer = context.detectedPlayers[0];
-                }
+            // Dla kompatybilności wstecznej - pierwszy nick jako targetPlayer
+            if (detectedNicks.length === 1) {
+                context.targetPlayer = context.detectedPlayers[0];
             }
         }
 
@@ -820,9 +818,26 @@ LIMITY PORÓWNAŃ:
 
         // Dodaj dane gracza którego dotyczy pytanie
         if (['stats', 'progress'].includes(context.queryType)) {
-            // Jeśli wykryto nick w pytaniu - użyj targetPlayer, w przeciwnym razie pytającego
-            const targetUserId = context.targetPlayer ? context.targetPlayer.id : context.asker.id;
-            const targetName = context.targetPlayer ? context.targetPlayer.displayName : context.asker.displayName;
+            // PRIORYTET: 1) Wykryty nick w pytaniu, 2) @mention, 3) targetPlayer (fallback), 4) Pytający
+            let targetUserId, targetName;
+
+            if (context.detectedPlayers && context.detectedPlayers.length > 0) {
+                // Najwyższy priorytet - nick wykryty w pytaniu (np. "progres Slaviax")
+                targetUserId = context.detectedPlayers[0].id;
+                targetName = context.detectedPlayers[0].displayName;
+            } else if (context.mentionedUsers && context.mentionedUsers.length > 0 && context.mentionedUsers[0].id !== context.asker.id) {
+                // Drugi priorytet - @mention (ale nie sam siebie)
+                targetUserId = context.mentionedUsers[0].id;
+                targetName = context.mentionedUsers[0].displayName;
+            } else if (context.targetPlayer) {
+                // Fallback - kompatybilność wsteczna
+                targetUserId = context.targetPlayer.id;
+                targetName = context.targetPlayer.displayName;
+            } else {
+                // Ostateczny fallback - pytający (np. "jaki jest mój progres")
+                targetUserId = context.asker.id;
+                targetName = context.asker.displayName;
+            }
 
             const playerData = await this.getPlayerData(targetUserId, context.guild.id);
             if (playerData) {
@@ -997,16 +1012,21 @@ LIMITY PORÓWNAŃ:
             prompt += `\n📊 TYP PYTANIA: PORÓWNANIE GRACZY\n`;
             prompt += `- Porównaj dokładnie tych graczy których dane dostałeś powyżej\n`;
             prompt += `- Pokaż różnice w wynikach, progresach, trendach i zaangażowaniu\n`;
-            prompt += `- Użyj tabelki lub punktów do przejrzystego porównania\n`;
+            prompt += `- Dla tabel/porównań KONIECZNIE użyj bloku kodu Discord (otocz \`\`\`)\n`;
+            prompt += `- Format tabeli w bloku kodu: proste kolumny oddzielone spacjami, bez ramek markdown\n`;
+            prompt += `- Przykład bloku kodu:\n\`\`\`\nStatystyka          Gracz1     Gracz2\n─────────────────────────────────────\nOstatni wynik       2045 pkt   2457 pkt\nNajlepszy wynik     2045 pkt   2457 pkt\n\`\`\`\n`;
             prompt += `- Wskaż który gracz jest lepszy i dlaczego (np. wyższy progres, lepszy trend)\n`;
-            prompt += `- Jeśli użytkownik pyta o konkretny aspekt (np. "kto ma lepszy progres z ostatnich 3 tygodni") - odpowiedz DOKŁADNIE na to pytanie używając danych z sekcji OSTATNIE WYNIKI\n`;
+            prompt += `- ⚠️ KRYTYCZNE: Jeśli użytkownik pyta o konkretny okres (np. "ostatnie 2 tygodnie", "ostatni miesiąc") - odpowiedz TYLKO o ten okres!\n`;
+            prompt += `- Oblicz progres dla DOKŁADNIE tego okresu używając sekcji OSTATNIE WYNIKI\n`;
+            prompt += `- NIE pokazuj progresu miesięcznego/kwartalnego gdy użytkownik pyta o inny okres!\n`;
         } else if (context.queryType === 'progress') {
             prompt += `\n📈 TYP PYTANIA: PROGRES GRACZA\n`;
             prompt += `- Opisz jak zmienia się wynik gracza w czasie\n`;
-            prompt += `- Skoncentruj się na progresach (miesięczny, kwartalny, największy)\n`;
+            prompt += `- ⚠️ KRYTYCZNE: Jeśli użytkownik pyta o konkretny okres (np. "ostatnie 2 tygodnie", "ostatni miesiąc") - odpowiedz TYLKO o ten okres!\n`;
+            prompt += `- Oblicz progres dla DOKŁADNIE tego okresu używając sekcji OSTATNIE WYNIKI (weź wynik z najnowszego tygodnia minus wynik sprzed X tygodni)\n`;
+            prompt += `- NIE pokazuj progresu miesięcznego/kwartalnego gdy użytkownik pyta o inny konkretny okres!\n`;
+            prompt += `- Jeśli użytkownik NIE precyzuje okresu - WTEDY pokaż progres miesięczny, kwartalny, trend\n`;
             prompt += `- Wskaż trend (rosnący, malejący, constans) i co to oznacza\n`;
-            prompt += `- Jeśli użytkownik pyta o konkretny okres (np. "ostatnie 3 tygodnie", "ostatni miesiąc") - odpowiedz DOKŁADNIE o ten okres używając danych z sekcji OSTATNIE WYNIKI\n`;
-            prompt += `- NIE mów tylko o progresie miesięcznym i kwartalnym gdy użytkownik pyta o inny okres!\n`;
         } else if (context.queryType === 'stats') {
             prompt += `\n📊 TYP PYTANIA: STATYSTYKI GRACZA\n`;
             prompt += `- Pokaż wszystkie dostępne statystyki gracza (wyniki, progresy, trend, zaangażowanie)\n`;
@@ -1042,6 +1062,8 @@ LIMITY PORÓWNAŃ:
         prompt += `- Jeśli pytanie dotyczy danych których NIE MASZ - powiedz "Nie mam tych informacji w bazie"\n`;
         prompt += `- Jeśli użytkownik pyta o "więcej graczy" a podałeś już wszystkich - powiedz "To wszystkie dane które mam"\n`;
         prompt += `- NIE wymyślaj nazwisk, wyników ani statystyk - używaj TYLKO faktów z sekcji "DANE"\n`;
+        prompt += `- FORMATOWANIE: Dla tabel ZAWSZE używaj bloku kodu \`\`\` ... \`\`\` (bez ramek markdown | --- |)\n`;
+        prompt += `- OKRES CZASU: Jeśli użytkownik pyta o konkretny okres (np. "2 tygodnie") - odpowiedz TYLKO o ten okres, NIE o miesięczny/kwartalny\n`;
         prompt += `- Odpowiedź powinna być zwięzła (max 1500 znaków), pomocna i sformatowana jako wiadomość Discord (markdown)\n`;
         prompt += `- Używaj emoji 🎯📈📊🏆💪 do urozmaicenia, ale nie przesadzaj\n`;
 
