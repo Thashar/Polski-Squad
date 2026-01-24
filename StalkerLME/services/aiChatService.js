@@ -228,29 +228,35 @@ class AIChatService {
             context.asker.clanName = this.config.roleDisplayNames[clanKey];
         }
 
-        // Wykryj o kogo/co pyta
+        // Wykryj o kogo/co pyta (max 5 graczy)
         const mentions = message.mentions.users;
         if (mentions.size > 1) { // >1 bo bot też jest wspomniany
-            const mentionedUser = Array.from(mentions.values()).find(u => !u.bot);
-            if (mentionedUser) {
-                const member = message.guild.members.cache.get(mentionedUser.id);
-                context.mentionedUser = {
-                    id: mentionedUser.id,
-                    username: mentionedUser.username,
-                    displayName: member?.displayName || mentionedUser.username
+            const mentionedUsersArray = Array.from(mentions.values())
+                .filter(u => !u.bot)
+                .slice(0, 5); // max 5 graczy
+
+            context.mentionedUsers = [];
+            for (const user of mentionedUsersArray) {
+                const member = message.guild.members.cache.get(user.id);
+                const userInfo = {
+                    id: user.id,
+                    username: user.username,
+                    displayName: member?.displayName || user.username
                 };
 
-                const mentionedClan = this.detectUserClan(member);
-                if (mentionedClan) {
-                    context.mentionedUser.clan = mentionedClan;
-                    context.mentionedUser.clanName = this.config.roleDisplayNames[mentionedClan];
+                const userClan = this.detectUserClan(member);
+                if (userClan) {
+                    userInfo.clan = userClan;
+                    userInfo.clanName = this.config.roleDisplayNames[userClan];
                 }
+
+                context.mentionedUsers.push(userInfo);
             }
         }
 
         // Wykryj nick w pytaniu (jeśli nie ma @mention)
         // Przykład: "powiedz coś o thashar" -> wykryje "thashar"
-        if (!context.mentionedUser) {
+        if (!context.mentionedUsers || context.mentionedUsers.length === 0) {
             const detectedNick = await this.detectNicknameInQuestion(question, message.guild.id);
             if (detectedNick) {
                 context.targetPlayer = {
@@ -551,6 +557,11 @@ Polski Squad ma 4 klany:
 - ⚡ Akademia 1 - trzeci poziom zaawansowania
 - 🎮 Akademia 0 - klan dla początkujących graczy
 Gracze mogą awansować między klanami na podstawie swoich wyników.
+
+LIMITY PORÓWNAŃ:
+- Możesz porównać maksymalnie 5 graczy jednocześnie
+- Użytkownik może wspomnieć (@mention) do 5 graczy w pytaniu
+- Przy porównaniu zawsze podawane są dane wszystkich dostępnych graczy
 `;
 
         // Dodaj dane gracza którego dotyczy pytanie
@@ -587,53 +598,50 @@ Gracze mogą awansować między klanami na podstawie swoich wyników.
             }
         }
 
-        // Dodaj dane dla porównania
+        // Dodaj dane dla porównania (max 5 graczy)
         if (context.queryType === 'compare') {
+            const playersToCompare = [];
+
             // Pierwszy gracz - targetPlayer lub pytający
             const firstUserId = context.targetPlayer ? context.targetPlayer.id : context.asker.id;
             const firstName = context.targetPlayer ? context.targetPlayer.displayName : context.asker.displayName;
+            playersToCompare.push({ id: firstUserId, name: firstName });
 
-            const firstData = await this.getPlayerData(firstUserId, context.guild.id);
-            if (firstData) {
-                prompt += `\nDANE PIERWSZEGO GRACZA (${firstData.playerName}):\n`;
-                prompt += `Ostatni wynik: ${firstData.stats.latestScore} pkt\n`;
-                prompt += `Najlepszy wynik: ${firstData.stats.maxScore} pkt\n`;
-                if (firstData.stats.monthlyProgress !== null) {
-                    prompt += `Progres miesięczny: ${firstData.stats.monthlyProgress > 0 ? '+' : ''}${firstData.stats.monthlyProgress} pkt\n`;
+            // Dodaj wspomnianych użytkowników (max 4 dodatkowych, łącznie 5 graczy)
+            if (context.mentionedUsers && context.mentionedUsers.length > 0) {
+                for (const user of context.mentionedUsers.slice(0, 4)) {
+                    playersToCompare.push({ id: user.id, name: user.displayName });
                 }
-                if (firstData.stats.quarterlyProgress !== null) {
-                    prompt += `Progres kwartalny: ${firstData.stats.quarterlyProgress > 0 ? '+' : ''}${firstData.stats.quarterlyProgress} pkt\n`;
-                }
-                prompt += `Liczba tygodni z danymi: ${firstData.stats.weeksWithData}\n`;
-
-                logger.info(`AI Chat: Pobrano dane dla ${firstData.playerName} - ${firstData.stats.weeksWithData} tygodni`);
-            } else {
-                prompt += `\nDANE PIERWSZEGO GRACZA (${firstName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
-                logger.warn(`AI Chat: Brak danych dla pierwszego gracza userId ${firstUserId}`);
             }
 
-            // Drugi gracz - wspomniany użytkownik (jeśli jest)
-            if (context.mentionedUser) {
-                const secondData = await this.getPlayerData(context.mentionedUser.id, context.guild.id);
-                if (secondData) {
-                    prompt += `\nDANE DRUGIEGO GRACZA (${secondData.playerName}):\n`;
-                    prompt += `Ostatni wynik: ${secondData.stats.latestScore} pkt\n`;
-                    prompt += `Najlepszy wynik: ${secondData.stats.maxScore} pkt\n`;
-                    if (secondData.stats.monthlyProgress !== null) {
-                        prompt += `Progres miesięczny: ${secondData.stats.monthlyProgress > 0 ? '+' : ''}${secondData.stats.monthlyProgress} pkt\n`;
-                    }
-                    if (secondData.stats.quarterlyProgress !== null) {
-                        prompt += `Progres kwartalny: ${secondData.stats.quarterlyProgress > 0 ? '+' : ''}${secondData.stats.quarterlyProgress} pkt\n`;
-                    }
-                    prompt += `Liczba tygodni z danymi: ${secondData.stats.weeksWithData}\n`;
+            // Pobierz dane dla każdego gracza
+            let loadedPlayersCount = 0;
+            for (let i = 0; i < playersToCompare.length; i++) {
+                const player = playersToCompare[i];
+                const playerData = await this.getPlayerData(player.id, context.guild.id);
+                const playerLabel = i === 0 ? 'PIERWSZEGO' : ['DRUGIEGO', 'TRZECIEGO', 'CZWARTEGO', 'PIĄTEGO'][i - 1];
 
-                    logger.info(`AI Chat: Pobrano dane dla ${secondData.playerName} - ${secondData.stats.weeksWithData} tygodni`);
+                if (playerData) {
+                    prompt += `\nDANE ${playerLabel} GRACZA (${playerData.playerName}):\n`;
+                    prompt += `Ostatni wynik: ${playerData.stats.latestScore} pkt\n`;
+                    prompt += `Najlepszy wynik: ${playerData.stats.maxScore} pkt\n`;
+                    if (playerData.stats.monthlyProgress !== null) {
+                        prompt += `Progres miesięczny: ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt\n`;
+                    }
+                    if (playerData.stats.quarterlyProgress !== null) {
+                        prompt += `Progres kwartalny: ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt\n`;
+                    }
+                    prompt += `Liczba tygodni z danymi: ${playerData.stats.weeksWithData}\n`;
+
+                    logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
+                    loadedPlayersCount++;
                 } else {
-                    prompt += `\nDANE DRUGIEGO GRACZA (${context.mentionedUser.displayName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
-                    logger.warn(`AI Chat: Brak danych dla drugiego gracza userId ${context.mentionedUser.id}`);
+                    prompt += `\nDANE ${playerLabel} GRACZA (${player.name}): Nie znaleziono żadnych wyników w bazie danych.\n`;
+                    logger.warn(`AI Chat: Brak danych dla ${playerLabel.toLowerCase()} gracza userId ${player.id}`);
                 }
             }
-            prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO tych dwóch graczy do porównania. NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
+
+            prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO ${loadedPlayersCount === 1 ? 'tego jednego gracza' : `tych ${loadedPlayersCount} graczy`} do porównania. NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
         }
 
         // Dodaj ranking klanu jeśli pytanie o ranking/klan

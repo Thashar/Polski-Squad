@@ -744,6 +744,7 @@ node manual-backup.js
 - **Kanały:** Wszystkie kanały na serwerze (bez ograniczeń)
 - **Przykłady pytań:**
   - `@StalkerLME Porównaj mnie z @gracz`
+  - `@StalkerLME Porównaj @gracz1 z @gracz2 i @gracz3` (max 5 graczy)
   - `@StalkerLME Jak wygląda mój progres?`
   - `@StalkerLME Kto jest najlepszy w moim klanie?`
   - `@StalkerLME Jakie mam statystyki?`
@@ -754,7 +755,7 @@ node manual-backup.js
   - Wykrywanie nicków w pytaniu (case-insensitive, filtruje stop words)
   - Rozpoznawanie pytań o siebie ("mnie", "mój") vs o innych graczy
   - **Pobieranie WSZYSTKICH dostępnych danych gracza** z phase1/phase2 (bez limitu tygodni)
-  - Porównywanie graczy (wspomniani użytkownicy + wykryte nicki) - NIE porównuje z pytającym gdy pyta o innych
+  - **Porównywanie graczy (max 5 graczy jednocześnie)** - wspomniany użytkownik (@mention do 5 osób) + wykryte nicki - NIE porównuje z pytającym gdy pyta o innych
   - **Pytania o klany** - rankingi wszystkich 4 klanów (Main + Akademia 2/1/0), kontekst struktury klanów
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
@@ -1063,13 +1064,32 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**StalkerLME Bot - AI Chat: Porównywanie do 5 Graczy:**
+- **ZMIANA:** Zwiększono limit porównywanych graczy z 2 do maksymalnie 5 jednocześnie
+- **Problem:** Poprzednio AI pobierał dane tylko pierwszego wspominanego użytkownika (@mention), co uniemożliwiało porównanie więcej osób
+- **Rozwiązanie:**
+  - `context.mentionedUser` → `context.mentionedUsers` (tablica max 5 graczy)
+  - Logika porównania iteruje przez wszystkich wspomnianych użytkowników (linie 597-641)
+  - Dynamiczne ostrzeżenie w prompcie informuje AI o liczbie dostępnych graczy
+- **Nowa funkcjonalność:**
+  - Użytkownik może wspomnieć (@mention) do 5 graczy w pytaniu
+  - AI otrzymuje dane wszystkich wspomnianych graczy
+  - Przykład: `@StalkerLME Porównaj @gracz1 z @gracz2 i @gracz3`
+- **Dodano do promptu systemowego:**
+  - Sekcja "LIMITY PORÓWNAŃ" z informacją o maksymalnie 5 graczach
+  - Zaktualizowano ostrzeżenia aby dynamicznie pokazywać liczbę dostępnych graczy
+- **Zaktualizowano dokumentację:** CLAUDE.md - sekcja AI Chat, przykłady pytań
+- Lokalizacja zmian:
+  - `StalkerLME/services/aiChatService.js:231-263,596-641,553-566` (wykrywanie użytkowników, porównanie, prompt)
+  - `CLAUDE.md:746,757` (dokumentacja i przykłady)
+
 **StalkerLME Bot - AI Chat: Wzmocnione Zabezpieczenia Przed Halucynacjami:**
 - **FIX KRYTYCZNY:** Naprawiono problem gdzie AI wymyślał statystyki graczy zamiast używać prawdziwych danych
 - **Problem:** Użytkownik pytał o "więcej graczy" → AI wymyślał nazwiska (Piotrek, Ania, Kuba) i fałszywe wyniki
 - **Rozwiązanie 1:** Kategoryczna instrukcja w prompcie "⛔ ABSOLUTNY ZAKAZ WYMYŚLANIA DANYCH ⛔"
 - **Rozwiązanie 2:** Dodano ostrzeżenia o limitach danych po każdej sekcji:
   - Stats/Progress: "⚠️ LIMIT DANYCH: Masz dane TYLKO tego jednego gracza. NIE MA danych innych graczy - NIE wymyślaj!"
-  - Compare: "⚠️ LIMIT DANYCH: Masz dane TYLKO tych dwóch graczy do porównania. NIE MA więcej danych - NIE wymyślaj innych graczy!"
+  - Compare: "⚠️ LIMIT DANYCH: Masz dane TYLKO tych X graczy do porównania (max 5). NIE MA więcej danych - NIE wymyślaj innych graczy!"
   - Ranking: "⚠️ LIMIT DANYCH: Masz TYLKO X graczy powyżej. NIE MA więcej danych - NIE wymyślaj innych graczy!"
 - **Rozwiązanie 3:** Wzmocniona sekcja ZADANIE z jasnymi instrukcjami:
   - "Jeśli pytanie dotyczy danych których NIE MASZ - powiedz 'Nie mam tych informacji w bazie danych'"
