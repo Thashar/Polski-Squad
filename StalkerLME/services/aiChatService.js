@@ -359,7 +359,13 @@ class AIChatService {
         if (q.includes('statystyki') || q.includes('stats') || q.includes('jak wygląda')) {
             return 'stats';
         }
-        if (q.includes('klan') || q.includes('clan')) {
+        // Rozpoznawanie nazw klanów - różne warianty
+        if (q.includes('klan') || q.includes('clan') ||
+            q.includes('polski squad') || q.includes('polskisquad') ||
+            q.includes('main') || q.includes('główny') ||
+            q.includes('dwójka') || q.includes('dwojka') || q.includes('akademia 2') || q.includes('najlepsza akademia') ||
+            q.includes('jedynka') || q.includes('akademia 1') ||
+            q.includes('zerówka') || q.includes('zerowka') || q.includes('akademia 0') || q.includes('najsłabsza akademia') || q.includes('akademia dla początkujących')) {
             return 'clan';
         }
 
@@ -616,7 +622,7 @@ class AIChatService {
     }
 
     /**
-     * Pobierz ranking klanu dla AI
+     * Pobierz ranking klanu dla AI (TOP X z ostatniego tygodnia)
      */
     async getClanRanking(clanKey, guildId, limit = 10) {
         try {
@@ -654,6 +660,94 @@ class AIChatService {
         } catch (error) {
             logger.error(`Błąd pobierania rankingu klanu ${clanKey}: ${error.message}`);
             return [];
+        }
+    }
+
+    /**
+     * Pobierz SZCZEGÓŁOWE dane klanu - WSZYSCY gracze ze WSZYSTKICH tygodni
+     */
+    async getClanDetailedData(clanKey, guildId) {
+        try {
+            // Pobierz wszystkie dostępne tygodnie
+            const allWeeks = await this.databaseService.getAvailableWeeks(guildId);
+
+            if (allWeeks.length === 0) {
+                return null;
+            }
+
+            // Zbierz dane wszystkich graczy klanu ze wszystkich tygodni
+            const playersMap = new Map(); // userId -> {playerName, weeks: [{weekNumber, year, score}]}
+
+            for (const week of allWeeks) {
+                const weekData = await this.databaseService.getPhase1Results(
+                    guildId,
+                    week.weekNumber,
+                    week.year,
+                    clanKey
+                );
+
+                if (weekData && weekData.players) {
+                    for (const player of weekData.players) {
+                        if (!player.userId) continue;
+
+                        if (!playersMap.has(player.userId)) {
+                            playersMap.set(player.userId, {
+                                playerName: player.displayName,
+                                weeks: []
+                            });
+                        }
+
+                        playersMap.get(player.userId).weeks.push({
+                            weekNumber: week.weekNumber,
+                            year: week.year,
+                            score: player.score
+                        });
+                    }
+                }
+            }
+
+            // Oblicz statystyki dla każdego gracza
+            const players = [];
+            for (const [userId, data] of playersMap.entries()) {
+                const scores = data.weeks.map(w => w.score).filter(s => s > 0);
+                if (scores.length === 0) continue;
+
+                const latestWeek = data.weeks[0];
+                const latestScore = latestWeek.score;
+                const maxScore = Math.max(...scores);
+                const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+
+                players.push({
+                    userId,
+                    playerName: data.playerName,
+                    latestScore,
+                    maxScore,
+                    avgScore,
+                    weeksCount: scores.length
+                });
+            }
+
+            // Sortuj po najlepszym wyniku
+            players.sort((a, b) => b.maxScore - a.maxScore);
+
+            // Oblicz statystyki klanu
+            const clanStats = {
+                totalPlayers: players.length,
+                avgMaxScore: players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.maxScore, 0) / players.length) : 0,
+                avgLatestScore: players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.latestScore, 0) / players.length) : 0,
+                topScore: players.length > 0 ? players[0].maxScore : 0
+            };
+
+            return {
+                clanKey,
+                clanName: this.config.roleDisplayNames[clanKey],
+                players,
+                stats: clanStats,
+                weeksCount: allWeeks.length
+            };
+        } catch (error) {
+            logger.error(`Błąd pobierania szczegółowych danych klanu ${clanKey}: ${error.message}`);
+            return null;
         }
     }
 
@@ -700,13 +794,23 @@ ${context.asker.clanName ? `Klan: ${context.asker.clanName}` : 'Klan: brak'}
 Pytanie: ${context.question}
 Typ pytania: ${context.queryType}
 
-STRUKTURA KLANÓW:
-Polski Squad ma 4 klany:
-- 🔥 Polski Squad (Główny Klan) - najsilniejsi gracze, pierwszy poziom zaawansowania
-- 💥 PolskiSquad² - Akademia, drugi poziom zaawansowania
-- ⚡ PolskiSquad¹ - Akademia o niższej sile, trzeci poziom zaawansowania
-- 🎮 PolskiSquad⁰ - klan dla początkujących graczy
-Gracze mogą awansować między klanami na podstawie swoich wyników.
+STRUKTURA KLANÓW I ROZPOZNAWANIE NAZW:
+Polski Squad ma 4 klany z różnymi nazwami w pytaniach użytkownika:
+
+1. 🔥 Polski Squad (Main Klan) - NAZWY: "polski squad", "main", "główny klan", "najlepszy klan"
+   → Najsilniejsi gracze, pierwszy poziom zaawansowania
+
+2. 💥 PolskiSquad² (Akademia 2) - NAZWY: "dwójka", "dwojka", "akademia 2", "najlepsza akademia"
+   → Drugi poziom zaawansowania, silni gracze
+
+3. ⚡ PolskiSquad¹ (Akademia 1) - NAZWY: "jedynka", "akademia 1"
+   → Trzeci poziom zaawansowania, średnio zaawansowani gracze
+
+4. 🎮 PolskiSquad⁰ (Akademia 0) - NAZWY: "zerówka", "zerowka", "akademia 0", "najsłabsza akademia", "akademia dla początkujących"
+   → Czwarty poziom, klan dla początkujących graczy
+
+Hierarchia: Main > Akademia 2 > Akademia 1 > Akademia 0
+Gracze awansują między klanami na podstawie swoich wyników w Lunar Mine Expedition.
 
 LIMITY PORÓWNAŃ:
 - Możesz porównać maksymalnie 5 graczy jednocześnie
@@ -838,28 +942,49 @@ LIMITY PORÓWNAŃ:
             prompt += `\n⚠️ LIMIT DANYCH: Masz ${totalCompared === 1 ? 'TYLKO tego jednego gracza' : `TYLKO tych ${totalCompared} graczy`} do porównania (max 5). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
         }
 
-        // Dodaj ranking klanu jeśli pytanie o ranking/klan
+        // Dodaj SZCZEGÓŁOWE dane klanów jeśli pytanie o ranking/klan
         if (['ranking', 'clan'].includes(context.queryType)) {
-            // Pobierz rankingi wszystkich klanów
+            // Pobierz szczegółowe dane wszystkich 4 klanów
             const clans = ['TARGET_ROLE_MAIN', 'TARGET_ROLE_2', 'TARGET_ROLE_1', 'TARGET_ROLE_0'];
+            const clanNames = {
+                'TARGET_ROLE_MAIN': 'Polski Squad (Main Klan)',
+                'TARGET_ROLE_2': 'PolskiSquad² (Akademia 2)',
+                'TARGET_ROLE_1': 'PolskiSquad¹ (Akademia 1)',
+                'TARGET_ROLE_0': 'PolskiSquad⁰ (Akademia 0)'
+            };
             let totalPlayers = 0;
 
             for (const clanKey of clans) {
-                const ranking = await this.getClanRanking(clanKey, context.guild.id, 10);
-                if (ranking.length > 0) {
-                    const clanName = this.config.roleDisplayNames[clanKey];
-                    prompt += `\nRANKING: ${clanName} (TOP ${ranking.length}):\n`;
-                    ranking.forEach((player, idx) => {
-                        prompt += `${idx + 1}. ${player.playerName} - ${player.score} pkt\n`;
+                const clanData = await this.getClanDetailedData(clanKey, context.guild.id);
+                if (clanData && clanData.players.length > 0) {
+                    prompt += `\n=== ${clanNames[clanKey]} ===\n`;
+                    prompt += `📊 STATYSTYKI KLANU:\n`;
+                    prompt += `- Liczba graczy: ${clanData.stats.totalPlayers}\n`;
+                    prompt += `- Najlepszy wynik: ${clanData.stats.topScore} pkt\n`;
+                    prompt += `- Średni max wynik: ${clanData.stats.avgMaxScore} pkt\n`;
+                    prompt += `- Średni ostatni wynik: ${clanData.stats.avgLatestScore} pkt\n`;
+                    prompt += `- Dostępne tygodnie: ${clanData.weeksCount}\n\n`;
+
+                    prompt += `👥 GRACZE (TOP 15):\n`;
+                    const top15 = clanData.players.slice(0, 15);
+                    top15.forEach((player, idx) => {
+                        prompt += `${idx + 1}. ${player.playerName} - Max: ${player.maxScore} pkt | Ostatni: ${player.latestScore} pkt | Średnia: ${player.avgScore} pkt\n`;
                     });
-                    totalPlayers += ranking.length;
+
+                    if (clanData.players.length > 15) {
+                        prompt += `... i ${clanData.players.length - 15} więcej graczy\n`;
+                    }
+
+                    totalPlayers += clanData.players.length;
+
+                    logger.info(`AI Chat: Pobrano dane klanu ${clanKey} - ${clanData.players.length} graczy, ${clanData.weeksCount} tygodni`);
                 }
             }
 
             if (totalPlayers > 0) {
-                prompt += `\n⚠️ LIMIT DANYCH: Masz TYLKO ${totalPlayers} graczy powyżej (ze wszystkich 4 klanów). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
+                prompt += `\n⚠️ LIMIT DANYCH: Masz dane ${totalPlayers} graczy ze wszystkich 4 klanów. Każdy klan ma TOP 15 graczy pokazanych + info ile jest więcej. NIE wymyślaj innych graczy!\n`;
             } else {
-                prompt += `\n⚠️ BRAK DANYCH: Nie znaleziono rankingów klanów.\n`;
+                prompt += `\n⚠️ BRAK DANYCH: Nie znaleziono danych klanów.\n`;
             }
         }
 
@@ -896,10 +1021,16 @@ LIMITY PORÓWNAŃ:
             prompt += `- Możesz porównać rankingi różnych klanów jeśli masz dane\n`;
         } else if (context.queryType === 'clan') {
             prompt += `\n🏰 TYP PYTANIA: KLANY\n`;
-            prompt += `- Porównaj klany Polski Squad (Main, Akademia 2, 1, 0)\n`;
-            prompt += `- Pokaż TOP graczy z każdego klanu jeśli masz dane\n`;
-            prompt += `- Wskaż różnice między klanami (siła graczy, średnie wyniki)\n`;
-            prompt += `- Wyjaśnij hierarchię klanów (Main > Akademia 2 > 1 > 0)\n`;
+            prompt += `- Rozpoznaj nazwy klanów w pytaniu:\n`;
+            prompt += `  * Polski Squad / Main / główny klan = Polski Squad (Main Klan)\n`;
+            prompt += `  * dwójka / najlepsza akademia / akademia 2 = PolskiSquad² (Akademia 2)\n`;
+            prompt += `  * jedynka / akademia 1 = PolskiSquad¹ (Akademia 1)\n`;
+            prompt += `  * zerówka / najsłabsza akademia / akademia 0 = PolskiSquad⁰ (Akademia 0)\n`;
+            prompt += `- Masz PEŁNE dane każdego klanu: wszystkich graczy, ich wyniki ze wszystkich tygodni, statystyki klanu\n`;
+            prompt += `- Porównaj klany używając statystyk: liczba graczy, najlepszy wynik, średnie wyniki\n`;
+            prompt += `- Pokaż TOP graczy z każdego klanu (masz TOP 15 + info ile jest więcej)\n`;
+            prompt += `- Wyjaśnij hierarchię: Main (najlepsi) > Akademia 2 (silni) > Akademia 1 (średni) > Akademia 0 (początkujący)\n`;
+            prompt += `- Gracze awansują między klanami na podstawie wyników\n`;
         } else {
             prompt += `\n💬 TYP PYTANIA: OGÓLNE\n`;
             prompt += `- Odpowiedz naturalnie i pomocnie\n`;
