@@ -747,10 +747,14 @@ node manual-backup.js
   - `@StalkerLME Jak wygląda mój progres?`
   - `@StalkerLME Kto jest najlepszy w moim klanie?`
   - `@StalkerLME Jakie mam statystyki?`
+  - `@StalkerLME Powiedz coś o thashar` (wykrywa nick w pytaniu)
+  - `@StalkerLME Porównaj thashar z @gracz` (nick + mention)
 - **Funkcjonalność:**
   - Wykrywanie typu pytania (compare, progress, ranking, stats, clan, general)
+  - Wykrywanie nicków w pytaniu (case-insensitive, filtruje stop words)
+  - Rozpoznawanie pytań o siebie ("mnie", "mój") vs o innych graczy
   - Pobieranie prawdziwych danych gracza z phase1/phase2 (ostatnie 12 tygodni)
-  - Porównywanie graczy (wspomniani użytkownicy)
+  - Porównywanie graczy (wspomniani użytkownicy + wykryte nicki)
   - Ranking klanu (TOP 10 z najnowszego tygodnia)
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
