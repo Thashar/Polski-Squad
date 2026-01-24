@@ -554,8 +554,8 @@ Typ pytania: ${context.queryType}
 
 STRUKTURA KLANÓW:
 Polski Squad ma 4 klany:
-- 🔥 Polski Squad (Główny Klan) - najsilniejsi gracze
-- 💥 PolskiSquad² - Najsilniejsza akademia, drugi poziom zaawansowania
+- 🔥 Polski Squad (Główny Klan) - najsilniejsi gracze, pierwszy poziom zaawansowania
+- 💥 PolskiSquad² - Akademia, drugi poziom zaawansowania
 - ⚡ PolskiSquad¹ - Akademia o niższej sile, trzeci poziom zaawansowania
 - 🎮 PolskiSquad⁰ - klan dla początkujących graczy
 Gracze mogą awansować między klanami na podstawie swoich wyników.
