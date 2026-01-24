@@ -651,7 +651,7 @@ node manual-backup.js
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
-7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Haiku 3.5), cooldown 15min, daily limit 20
+7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 15min, daily limit 20
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
@@ -734,7 +734,7 @@ node manual-backup.js
 
 **AI Chat** - System konwersacyjny z AI (mention @StalkerLME):
 - **Trigger:** Mention @StalkerLME + pytanie (max 300 znaków)
-- **Model:** Claude 3.5 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
+- **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
 - **Limity:**
   - Cooldown: 15 minut per użytkownik
   - Daily limit: 20 pytań per użytkownik
@@ -755,7 +755,7 @@ node manual-backup.js
   - Typing indicator podczas przetwarzania
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
-- **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-5-haiku-20241022)
+- **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -980,7 +980,7 @@ STALKER_LME_CONFIRMATION_CHANNEL_MAIN=channel_id
 STALKER_LME_VACATION_CHANNEL_ID=channel_id
 # AI Chat (opcjonalne)
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
-STALKER_LME_AI_CHAT_MODEL=claude-3-5-haiku-20241022
+STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
 
 # ===== MUTEUSZ BOT =====
 MUTEUSZ_TOKEN=bot_token_here
