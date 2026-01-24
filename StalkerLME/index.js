@@ -269,6 +269,15 @@ client.on(Events.MessageCreate, async (message) => {
                 return;
             }
 
+            // Sprawdź kanał - AI Chat działa tylko na wybranym kanale (admini bez ograniczeń)
+            const AI_CHAT_CHANNEL_ID = '1464709857545552146';
+            const isAdmin = aiChatService.isAdmin(message.member);
+
+            if (message.channel.id !== AI_CHAT_CHANNEL_ID && !isAdmin) {
+                await message.reply(`🚫 AI Chat jest dostępny tylko na kanale <#${AI_CHAT_CHANNEL_ID}>!`);
+                return;
+            }
+
             // Sprawdź czy użytkownik ma rolę klanową
             const clanRoles = Object.values(config.targetRoles);
             const hasClanRole = message.member.roles.cache.some(role => clanRoles.includes(role.id));
@@ -278,14 +287,12 @@ client.on(Events.MessageCreate, async (message) => {
                 return;
             }
 
-            // Sprawdź cooldown i daily limit
+            // Sprawdź cooldown
             const canAsk = aiChatService.canAsk(message.author.id, message.member);
 
             if (!canAsk.allowed) {
                 if (canAsk.reason === 'cooldown') {
                     await message.reply(`⏱️ Hej, daj mi chwilę! Możesz zadać kolejne pytanie za **${canAsk.remainingMinutes} min**.`);
-                } else if (canAsk.reason === 'daily_limit') {
-                    await message.reply(`🚫 Dziś już wykorzystałeś limit **${canAsk.limit} pytań**. Wróć jutro! 😊`);
                 }
                 return;
             }
