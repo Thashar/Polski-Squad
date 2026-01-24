@@ -15,6 +15,7 @@ const VacationService = require('./services/vacationService');
 const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
 const RaportCleanupService = require('./services/raportCleanupService');
+const AIChatService = require('./services/aiChatService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 
@@ -40,6 +41,7 @@ const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
 const raportCleanupService = new RaportCleanupService(client, logger);
+const aiChatService = new AIChatService(config, databaseService);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 
@@ -70,6 +72,7 @@ const sharedState = {
     survivorService,
     messageCleanupService,
     raportCleanupService,
+    aiChatService,
     phaseService
 };
 
@@ -244,6 +247,81 @@ client.on(Events.MessageCreate, async (message) => {
         await vacationService.handleVacationMessage(message);
     } catch (error) {
         logger.error(`❌ Błąd podczas obsługi wiadomości urlopowej: ${error.message}`);
+    }
+
+    // ============ OBSŁUGA AI CHAT (MENTION @StalkerLME) ============
+    if (message.mentions.has(client.user) && message.guild) {
+        try {
+            // Wyciągnij pytanie (usuń mention)
+            const question = message.content
+                .replace(/<@!?\d+>/g, '')
+                .trim();
+
+            // Jeśli puste pytanie
+            if (!question) {
+                await message.reply('🤖 Cześć! Zadaj mi pytanie o graczy, statystyki lub klan!\n\n**Przykłady:**\n• Porównaj mnie z @gracz\n• Jak wygląda mój progres?\n• Kto jest najlepszy w moim klanie?\n• Jakie mam statystyki?');
+                return;
+            }
+
+            // Sprawdź długość pytania
+            if (question.length > 300) {
+                await message.reply('🚫 Pytanie za długie! Maksymalnie 300 znaków.');
+                return;
+            }
+
+            // Sprawdź czy użytkownik ma rolę klanową
+            const clanRoles = Object.values(config.targetRoles);
+            const hasClanRole = message.member.roles.cache.some(role => clanRoles.includes(role.id));
+
+            if (!hasClanRole) {
+                await message.reply('🚫 Tylko członkowie klanów mogą korzystać z AI Chat!');
+                return;
+            }
+
+            // Sprawdź czy kanał jest dozwolony (kanały klanowe)
+            const allowedChannels = [
+                ...Object.values(config.warningChannels),
+                ...Object.values(config.confirmationChannels)
+            ];
+
+            if (!allowedChannels.includes(message.channelId)) {
+                await message.reply('🚫 Mogę odpowiadać tylko na kanałach klanowych!');
+                return;
+            }
+
+            // Sprawdź cooldown i daily limit
+            const canAsk = aiChatService.canAsk(message.author.id);
+
+            if (!canAsk.allowed) {
+                if (canAsk.reason === 'cooldown') {
+                    await message.reply(`⏱️ Hej, daj mi chwilę! Możesz zadać kolejne pytanie za **${canAsk.remainingMinutes} min**.`);
+                } else if (canAsk.reason === 'daily_limit') {
+                    await message.reply(`🚫 Dziś już wykorzystałeś limit **${canAsk.limit} pytań**. Wróć jutro! 😊`);
+                }
+                return;
+            }
+
+            // Pokaż typing indicator
+            await message.channel.sendTyping();
+
+            // Zapisz że użytkownik zadał pytanie (cooldown + daily limit)
+            aiChatService.recordAsk(message.author.id);
+
+            // Zadaj pytanie AI
+            const answer = await aiChatService.ask(message, question);
+
+            // Odpowiedz
+            await message.reply(answer);
+
+        } catch (error) {
+            logger.error(`❌ Błąd AI Chat: ${error.message}`);
+            try {
+                await message.reply('⚠️ Wystąpił błąd podczas przetwarzania pytania. Spróbuj ponownie.');
+            } catch (replyError) {
+                logger.error(`❌ Nie można wysłać odpowiedzi o błędzie: ${replyError.message}`);
+            }
+        }
+        return; // Nie przetwarzaj dalej jeśli to było pytanie AI
     }
 
     // Obsługa wiadomości z zdjęciami dla Phase 1
