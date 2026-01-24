@@ -335,10 +335,10 @@ class AIChatService {
     detectQueryType(question) {
         const q = question.toLowerCase();
 
-        if (q.includes('porównaj') || q.includes('vs') || q.includes('lepszy')) {
+        if (q.includes('porównaj') || q.includes('vs') || q.includes('lepszy') || q.includes('gorszy')) {
             return 'compare';
         }
-        if (q.includes('progres') || q.includes('rozwój') || q.includes('wzrost')) {
+        if (q.includes('progres') || q.includes('rozwój') || q.includes('wzrost') || q.includes('regres')) {
             return 'progress';
         }
         if (q.includes('ranking') || q.includes('top') || q.includes('najlepszy') || q.includes('najgorszy')) {
