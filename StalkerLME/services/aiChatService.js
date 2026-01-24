@@ -602,16 +602,19 @@ LIMITY PORÓWNAŃ:
         if (context.queryType === 'compare') {
             const playersToCompare = [];
 
-            // Pierwszy gracz - targetPlayer lub pytający
-            const firstUserId = context.targetPlayer ? context.targetPlayer.id : context.asker.id;
-            const firstName = context.targetPlayer ? context.targetPlayer.displayName : context.asker.displayName;
-            playersToCompare.push({ id: firstUserId, name: firstName });
-
-            // Dodaj wspomnianych użytkowników (max 4 dodatkowych, łącznie 5 graczy)
+            // Jeśli są wspomnienia (@mention) - użyj TYLKO wspomnianych graczy (max 5)
             if (context.mentionedUsers && context.mentionedUsers.length > 0) {
-                for (const user of context.mentionedUsers.slice(0, 4)) {
+                for (const user of context.mentionedUsers.slice(0, 5)) {
                     playersToCompare.push({ id: user.id, name: user.displayName });
                 }
+            }
+            // Jeśli wykryto nick w pytaniu - użyj targetPlayer jako pierwszy gracz
+            else if (context.targetPlayer) {
+                playersToCompare.push({ id: context.targetPlayer.id, name: context.targetPlayer.displayName });
+            }
+            // W ostateczności użyj pytającego (np. "porównaj mnie z rankingiem")
+            else {
+                playersToCompare.push({ id: context.asker.id, name: context.asker.displayName });
             }
 
             // Pobierz dane dla każdego gracza
@@ -641,7 +644,8 @@ LIMITY PORÓWNAŃ:
                 }
             }
 
-            prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO ${loadedPlayersCount === 1 ? 'tego jednego gracza' : `tych ${loadedPlayersCount} graczy`} do porównania. NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
+            const totalCompared = playersToCompare.length;
+            prompt += `\n⚠️ LIMIT DANYCH: Masz ${totalCompared === 1 ? 'TYLKO tego jednego gracza' : `TYLKO tych ${totalCompared} graczy`} do porównania (max 5). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
         }
 
         // Dodaj ranking klanu jeśli pytanie o ranking/klan

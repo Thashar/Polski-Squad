@@ -755,7 +755,11 @@ node manual-backup.js
   - Wykrywanie nicków w pytaniu (case-insensitive, filtruje stop words)
   - Rozpoznawanie pytań o siebie ("mnie", "mój") vs o innych graczy
   - **Pobieranie WSZYSTKICH dostępnych danych gracza** z phase1/phase2 (bez limitu tygodni)
-  - **Porównywanie graczy (max 5 graczy jednocześnie)** - wspomniany użytkownik (@mention do 5 osób) + wykryte nicki - NIE porównuje z pytającym gdy pyta o innych
+  - **Porównywanie graczy (max 5 graczy jednocześnie)** - logika inteligentna:
+    - Jeśli są @mentions → porównuje TYLKO wspomnianych graczy (nie dodaje pytającego)
+    - Jeśli wykryty nick w pytaniu → użyje tego gracza
+    - Jeśli pytanie o siebie ("mnie") → użyje pytającego
+    - Bot zawsze pobiera dane WSZYSTKICH wspomnianych graczy (do 5)
   - **Pytania o klany** - rankingi wszystkich 4 klanów (Main + Akademia 2/1/0), kontekst struktury klanów
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
