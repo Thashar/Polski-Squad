@@ -10,9 +10,10 @@ const logger = createBotLogger('StalkerLME');
  * Wspiera mention @StalkerLME z kontekstem danych gracza/klanu
  */
 class AIChatService {
-    constructor(config, databaseService) {
+    constructor(config, databaseService, reminderUsageService = null) {
         this.config = config;
         this.databaseService = databaseService;
+        this.reminderUsageService = reminderUsageService;
 
         // Anthropic API
         this.apiKey = process.env.ANTHROPIC_API_KEY;
@@ -27,17 +28,19 @@ class AIChatService {
         }
 
         // Limity
-        this.cooldownMinutes = 15; // 15 minut
-        this.dailyLimit = 20; // 20 pytań dziennie
+        this.cooldownMinutes = 5; // 5 minut
 
         // Persistent storage
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
-        this.dailyUsageFile = path.join(this.dataDir, 'ai_chat_daily_usage.json');
 
         // In-memory cache
         this.cooldowns = new Map(); // userId -> timestamp
-        this.dailyUsage = new Map(); // userId -> {date: string, count: number}
+
+        // Historia konwersacji (pamięć kontekstu)
+        this.conversationHistory = new Map(); // odlinkowany: userId -> {lastActivity: timestamp, messages: [{role, content}]}
+        this.conversationTimeoutMs = 60 * 60 * 1000; // 1 godzina
+        this.maxHistoryMessages = 10; // Max 5 par pytanie/odpowiedź
 
         // Load data
         this.loadData();
@@ -58,16 +61,6 @@ class AIChatService {
                 this.cooldowns = new Map();
             }
 
-            // Daily usage
-            try {
-                const usageData = await fs.readFile(this.dailyUsageFile, 'utf8');
-                const parsed = JSON.parse(usageData);
-                this.dailyUsage = new Map(Object.entries(parsed));
-            } catch (err) {
-                // Plik nie istnieje - OK
-                this.dailyUsage = new Map();
-            }
-
             // Cleanup starych danych (starsze niż 2 dni)
             this.cleanupOldData();
         } catch (error) {
@@ -85,10 +78,6 @@ class AIChatService {
             // Cooldowns
             const cooldownObj = Object.fromEntries(this.cooldowns);
             await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownObj, null, 2));
-
-            // Daily usage
-            const usageObj = Object.fromEntries(this.dailyUsage);
-            await fs.writeFile(this.dailyUsageFile, JSON.stringify(usageObj, null, 2));
         } catch (error) {
             logger.error(`Błąd zapisywania danych AI Chat: ${error.message}`);
         }
@@ -107,14 +96,85 @@ class AIChatService {
                 this.cooldowns.delete(userId);
             }
         }
+    }
 
-        // Usuń stare daily usage (zachowaj tylko dzisiejszy)
-        const today = new Date().toISOString().split('T')[0];
-        for (const [userId, data] of this.dailyUsage.entries()) {
-            if (data.date !== today) {
-                this.dailyUsage.delete(userId);
+    /**
+     * Pobierz historię konwersacji dla użytkownika (jeśli aktywna w ciągu ostatniej godziny)
+     */
+    getConversationHistory(userId) {
+        const conversation = this.conversationHistory.get(userId);
+
+        if (!conversation) {
+            return [];
+        }
+
+        // Sprawdź czy konwersacja nie wygasła (1 godzina)
+        const now = Date.now();
+        if (now - conversation.lastActivity > this.conversationTimeoutMs) {
+            this.conversationHistory.delete(userId);
+            return [];
+        }
+
+        return conversation.messages;
+    }
+
+    /**
+     * Dodaj wymianę pytanie/odpowiedź do historii konwersacji
+     */
+    addToConversationHistory(userId, userQuestion, assistantResponse) {
+        const now = Date.now();
+        let conversation = this.conversationHistory.get(userId);
+
+        if (!conversation || (now - conversation.lastActivity > this.conversationTimeoutMs)) {
+            // Nowa konwersacja lub wygasła - zacznij od nowa
+            conversation = {
+                lastActivity: now,
+                messages: []
+            };
+        }
+
+        // Dodaj nową wymianę
+        conversation.messages.push(
+            { role: 'user', content: userQuestion },
+            { role: 'assistant', content: assistantResponse }
+        );
+
+        // Ogranicz historię do max wiadomości (zachowaj ostatnie)
+        if (conversation.messages.length > this.maxHistoryMessages) {
+            conversation.messages = conversation.messages.slice(-this.maxHistoryMessages);
+        }
+
+        // Aktualizuj timestamp
+        conversation.lastActivity = now;
+
+        // Zapisz
+        this.conversationHistory.set(userId, conversation);
+
+        // Cleanup starych konwersacji (co jakiś czas)
+        this.cleanupConversationHistory();
+    }
+
+    /**
+     * Wyczyść wygasłe konwersacje z pamięci
+     */
+    cleanupConversationHistory() {
+        const now = Date.now();
+        for (const [userId, conversation] of this.conversationHistory.entries()) {
+            if (now - conversation.lastActivity > this.conversationTimeoutMs) {
+                this.conversationHistory.delete(userId);
             }
         }
+    }
+
+    /**
+     * Sprawdź czy użytkownik ma aktywną konwersację
+     */
+    hasActiveConversation(userId) {
+        const conversation = this.conversationHistory.get(userId);
+        if (!conversation) return false;
+
+        const now = Date.now();
+        return (now - conversation.lastActivity) <= this.conversationTimeoutMs;
     }
 
     /**
@@ -155,18 +215,6 @@ class AIChatService {
             }
         }
 
-        // Sprawdź daily limit
-        const today = new Date().toISOString().split('T')[0];
-        const usage = this.dailyUsage.get(userId);
-
-        if (usage && usage.date === today && usage.count >= this.dailyLimit) {
-            return {
-                allowed: false,
-                reason: `daily_limit`,
-                limit: this.dailyLimit
-            };
-        }
-
         return { allowed: true };
     }
 
@@ -180,18 +228,9 @@ class AIChatService {
         }
 
         const now = Date.now();
-        const today = new Date().toISOString().split('T')[0];
 
         // Zapisz cooldown
         this.cooldowns.set(userId, now);
-
-        // Zapisz daily usage
-        const usage = this.dailyUsage.get(userId);
-        if (usage && usage.date === today) {
-            usage.count++;
-        } else {
-            this.dailyUsage.set(userId, { date: today, count: 1 });
-        }
 
         // Zapisz do pliku (async, nie czekaj)
         this.saveData().catch(err => {
@@ -274,7 +313,58 @@ class AIChatService {
         // Wykryj typ pytania
         context.queryType = this.detectQueryType(question);
 
+        // Wykryj czy pytanie dotyczy siebie
+        context.askingAboutSelf = this.isAskingAboutSelf(question);
+
+        // Wykryj dynamiczny okres progresu (np. "z ostatnich 3 tygodni")
+        context.requestedWeeks = this.detectRequestedWeeks(question);
+
         return context;
+    }
+
+    /**
+     * Wykryj czy użytkownik pyta o siebie
+     */
+    isAskingAboutSelf(question) {
+        const q = question.toLowerCase();
+
+        // Słowa wskazujące na pytanie o siebie
+        const selfKeywords = [
+            'mnie', 'mój', 'moja', 'moje', 'mojego', 'moją', 'moich', 'mego',
+            'ja', 'mną', 'mi', 'mym', 'mymi',
+            'mój progres', 'moje statystyki', 'mój klan', 'moje wyniki',
+            'jak mi', 'jak u mnie', 'co u mnie', 'gdzie jestem',
+            'moja pozycja', 'mój ranking', 'mój wynik'
+        ];
+
+        return selfKeywords.some(keyword => q.includes(keyword));
+    }
+
+    /**
+     * Wykryj żądany okres progresu (np. "z ostatnich 3 tygodni")
+     */
+    detectRequestedWeeks(question) {
+        const q = question.toLowerCase();
+
+        // Wzorce do wykrycia okresu
+        const patterns = [
+            /ostatni(?:ch|e|ego)?\s*(\d+)\s*tygodn/i,  // "ostatnich 3 tygodni", "ostatnie 5 tygodni"
+            /z\s*(\d+)\s*tygodn/i,                     // "z 3 tygodni"
+            /(\d+)\s*tygodn(?:i|ie|iowy)/i,            // "3 tygodniowy progres"
+            /przez\s*ostatni(?:ch|e)?\s*(\d+)/i        // "przez ostatnie 3"
+        ];
+
+        for (const pattern of patterns) {
+            const match = q.match(pattern);
+            if (match && match[1]) {
+                const weeks = parseInt(match[1], 10);
+                if (weeks > 0 && weeks <= 52) {
+                    return weeks;
+                }
+            }
+        }
+
+        return null; // Brak konkretnego żądania
     }
 
     /**
@@ -429,11 +519,15 @@ class AIChatService {
             // Oblicz WSZYSTKIE statystyki jak w /player-status
             const stats = await this.calculatePlayerStats(playerProgressData, userId, guildId, last12Weeks);
 
+            // Oblicz MVP (tygodnie w TOP3 progresu) - uproszczona wersja
+            const mvpWeeks = await this.calculateMVPSimple(playerProgressData, userId);
+
             return {
                 userId,
                 playerName: playerProgressData[0].displayName,
                 recentWeeks: playerProgressData,
-                stats
+                stats,
+                mvpWeeks
             };
         } catch (error) {
             logger.error(`Błąd pobierania danych gracza ${userId}: ${error.message}`);
@@ -599,6 +693,26 @@ class AIChatService {
             }
         }
 
+        // === WSPÓŁCZYNNIKI ===
+        // Rzetelność, Punktualność, Responsywność - wymagają dostępu do punishmentService i trackingService
+        // Na razie pozostawiamy jako null (wyświetlane tylko gdy dostępne)
+        let reliabilityFactor = null;
+        let punctualityFactor = null;
+        let responsivenessFactor = null;
+
+        // Pobierz totalPings jeśli dostępny (pomocnicza informacja)
+        let totalPings = null;
+        if (this.reminderUsageService) {
+            try {
+                const reminderData = await this.reminderUsageService.getUserReminderData(userId);
+                if (reminderData) {
+                    totalPings = reminderData.totalPings || 0;
+                }
+            } catch (error) {
+                // Ignoruj błędy
+            }
+        }
+
         return {
             latestScore,
             maxScore,
@@ -615,8 +729,185 @@ class AIChatService {
             engagementFactor,
             trendRatio,
             trendDescription,
-            trendIcon
+            trendIcon,
+            reliabilityFactor,
+            punctualityFactor,
+            responsivenessFactor
         };
+    }
+
+    /**
+     * Oblicz dynamiczny progres z X ostatnich tygodni
+     */
+    calculateDynamicProgress(playerProgressData, weeks) {
+        if (!playerProgressData || playerProgressData.length < 2 || weeks < 1) {
+            return null;
+        }
+
+        // Pobierz dane z żądanego okresu
+        const recentWeeks = playerProgressData.slice(0, weeks);
+        const currentScore = Math.max(...recentWeeks.map(d => d.score).filter(s => s > 0));
+
+        // Znajdź wynik sprzed X tygodni
+        if (playerProgressData.length <= weeks) {
+            return null; // Za mało danych
+        }
+
+        const comparisonWeek = playerProgressData[weeks];
+        if (!comparisonWeek || comparisonWeek.score <= 0) {
+            return null;
+        }
+
+        const progress = currentScore - comparisonWeek.score;
+        const progressPercent = ((progress / comparisonWeek.score) * 100).toFixed(1);
+
+        return {
+            weeks,
+            progress,
+            progressPercent,
+            fromScore: comparisonWeek.score,
+            toScore: currentScore,
+            fromWeek: `${comparisonWeek.weekNumber}/${comparisonWeek.year}`,
+            toWeek: `${recentWeeks[0].weekNumber}/${recentWeeks[0].year}`
+        };
+    }
+
+    /**
+     * Oblicz MVP uproszczone - tygodnie z największym osobistym progresem
+     * (nie wymaga zapytań do bazy dla innych graczy)
+     */
+    async calculateMVPSimple(playerProgressData, userId) {
+        const progressPerWeek = [];
+
+        if (!playerProgressData || playerProgressData.length < 2) {
+            return [];
+        }
+
+        // Oblicz progres dla każdego tygodnia (porównanie z najlepszym wynikiem przed tym tygodniem)
+        for (let i = 0; i < playerProgressData.length - 1; i++) {
+            const currentWeek = playerProgressData[i];
+
+            // Znajdź najlepszy wynik przed tym tygodniem
+            let bestScoreBefore = 0;
+            for (let j = i + 1; j < playerProgressData.length; j++) {
+                if (playerProgressData[j].score > bestScoreBefore) {
+                    bestScoreBefore = playerProgressData[j].score;
+                }
+            }
+
+            if (bestScoreBefore > 0) {
+                const progress = currentWeek.score - bestScoreBefore;
+                progressPerWeek.push({
+                    weekNumber: currentWeek.weekNumber,
+                    year: currentWeek.year,
+                    weekKey: `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`,
+                    score: currentWeek.score,
+                    progress,
+                    progressPercent: ((progress / bestScoreBefore) * 100).toFixed(1),
+                    clan: currentWeek.clan,
+                    clanName: currentWeek.clanName
+                });
+            }
+        }
+
+        // Sortuj po progresie (malejąco) i zwróć TOP 5 tygodni z największym progresem
+        progressPerWeek.sort((a, b) => b.progress - a.progress);
+
+        // Zwróć tylko tygodnie z pozytywnym progresem
+        return progressPerWeek.filter(w => w.progress > 0).slice(0, 5);
+    }
+
+    /**
+     * Oblicz MVP - tygodnie gdzie gracz był w TOP3 progresu swojego klanu
+     */
+    async calculateMVP(playerProgressData, userId, guildId, last12Weeks) {
+        const mvpWeeks = [];
+
+        if (!playerProgressData || playerProgressData.length < 2) {
+            return mvpWeeks;
+        }
+
+        // Dla każdego tygodnia z ostatnich 12, sprawdź czy gracz był w TOP3
+        for (let i = 0; i < Math.min(12, playerProgressData.length); i++) {
+            const currentWeek = playerProgressData[i];
+            const weekKey = `${currentWeek.year}-${String(currentWeek.weekNumber).padStart(2, '0')}`;
+
+            try {
+                // Pobierz dane wszystkich graczy z tego klanu w tym tygodniu
+                const weekData = await this.databaseService.getPhase1Results(
+                    guildId,
+                    currentWeek.weekNumber,
+                    currentWeek.year,
+                    currentWeek.clan
+                );
+
+                if (!weekData || !weekData.players) continue;
+
+                // Oblicz progres dla każdego gracza w tym tygodniu
+                const playerProgresses = [];
+
+                for (const player of weekData.players) {
+                    // Znajdź najlepszy wynik tego gracza przed tym tygodniem
+                    let bestScoreBefore = 0;
+
+                    // Szukaj w historii tego gracza
+                    for (const histWeek of playerProgressData) {
+                        if (histWeek.year < currentWeek.year ||
+                            (histWeek.year === currentWeek.year && histWeek.weekNumber < currentWeek.weekNumber)) {
+                            // To jest tydzień przed bieżącym
+                            // Sprawdź czy ten gracz ma wynik w tym tygodniu
+                            const histData = await this.databaseService.getPhase1Results(
+                                guildId,
+                                histWeek.weekNumber,
+                                histWeek.year,
+                                currentWeek.clan
+                            );
+
+                            if (histData && histData.players) {
+                                const histPlayer = histData.players.find(p => p.userId === player.userId);
+                                if (histPlayer && histPlayer.score > bestScoreBefore) {
+                                    bestScoreBefore = histPlayer.score;
+                                }
+                            }
+                        }
+                    }
+
+                    const progress = player.score - bestScoreBefore;
+                    playerProgresses.push({
+                        userId: player.userId,
+                        displayName: player.displayName,
+                        score: player.score,
+                        progress
+                    });
+                }
+
+                // Sortuj po progresie (malejąco)
+                playerProgresses.sort((a, b) => b.progress - a.progress);
+
+                // Sprawdź czy nasz gracz jest w TOP3
+                const top3 = playerProgresses.slice(0, 3);
+                const userInTop3 = top3.findIndex(p => p.userId === userId);
+
+                if (userInTop3 !== -1) {
+                    const userData = top3[userInTop3];
+                    mvpWeeks.push({
+                        weekNumber: currentWeek.weekNumber,
+                        year: currentWeek.year,
+                        weekKey: `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`,
+                        position: userInTop3 + 1,
+                        score: userData.score,
+                        progress: userData.progress,
+                        clan: currentWeek.clan,
+                        clanName: currentWeek.clanName
+                    });
+                }
+            } catch (error) {
+                // Ignoruj błędy dla pojedynczych tygodni
+                continue;
+            }
+        }
+
+        return mvpWeeks;
     }
 
     /**
@@ -814,19 +1105,43 @@ LIMITY PORÓWNAŃ:
 - Możesz porównać maksymalnie 5 graczy jednocześnie
 - Użytkownik może wspomnieć (@mention) do 5 graczy w pytaniu
 - Przy porównaniu zawsze podawane są dane wszystkich dostępnych graczy
+
+ROZPOZNAWANIE PYTAŃ O SIEBIE:
+- Gdy użytkownik używa słów: "mój", "moje", "mnie", "ja", "mojego", "moją", "mój progres", "moje statystyki", "mój klan", "moje wyniki"
+  → ZAWSZE odpowiadaj o PYTAJĄCYM (${context.asker.displayName}), niezależnie od innych wzmianek w pytaniu
+- Gdy pytanie zawiera "porównaj mnie z X" → porównaj PYTAJĄCEGO z graczem X
+- Gdy pytanie to tylko "mój progres" lub "jak mi idzie" bez innych nicków → pokaż dane PYTAJĄCEGO
+
+DYNAMICZNY PROGRES:
+- Gdy użytkownik pyta o "progres z ostatnich X tygodni" → oblicz i pokaż progres z dokładnie tego okresu
+- Porównaj najlepszy wynik z ostatnich X tygodni z wynikiem sprzed X tygodni
+- Przykład: "progres z ostatnich 3 tygodni" = najlepszy wynik z ostatnich 3 tyg vs wynik sprzed 3 tyg
+
+WSPÓŁCZYNNIKI DO PORÓWNAŃ:
+- 📊 Zaangażowanie (%) - procent tygodni gdzie gracz zrobił progres
+- 📈 Trend - czy progres rośnie, spada, czy jest stały (🚀↗️⚖️↘️🪦)
+- ⭐ MVP - tygodnie z największym osobistym progresem (TOP wyniki gracza)
+- 🎯 Rzetelność (%) - regularność uczestnictwa w bossach
+- ⏰ Punktualność (%) - czy gracz potwierdza na czas
+- 📬 Responsywność (%) - odpowiedzi na przypomnienia
 `;
 
         // Dodaj dane gracza którego dotyczy pytanie
         if (['stats', 'progress'].includes(context.queryType)) {
-            // PRIORYTET: 1) Wykryty nick w pytaniu, 2) @mention, 3) targetPlayer (fallback), 4) Pytający
+            // PRIORYTET: 1) Pytanie o siebie (mój, moje, mnie), 2) Wykryty nick, 3) @mention, 4) Pytający
             let targetUserId, targetName;
 
-            if (context.detectedPlayers && context.detectedPlayers.length > 0) {
-                // Najwyższy priorytet - nick wykryty w pytaniu (np. "progres Slaviax")
+            if (context.askingAboutSelf) {
+                // NAJWYŻSZY PRIORYTET - użytkownik pyta o siebie (mój, moje, mnie, ja)
+                targetUserId = context.asker.id;
+                targetName = context.asker.displayName;
+                logger.info(`AI Chat: Pytanie o siebie - używam danych pytającego (${targetName})`);
+            } else if (context.detectedPlayers && context.detectedPlayers.length > 0) {
+                // Drugi priorytet - nick wykryty w pytaniu (np. "progres Slaviax")
                 targetUserId = context.detectedPlayers[0].id;
                 targetName = context.detectedPlayers[0].displayName;
             } else if (context.mentionedUsers && context.mentionedUsers.length > 0 && context.mentionedUsers[0].id !== context.asker.id) {
-                // Drugi priorytet - @mention (ale nie sam siebie)
+                // Trzeci priorytet - @mention (ale nie sam siebie)
                 targetUserId = context.mentionedUsers[0].id;
                 targetName = context.mentionedUsers[0].displayName;
             } else if (context.targetPlayer) {
@@ -834,7 +1149,7 @@ LIMITY PORÓWNAŃ:
                 targetUserId = context.targetPlayer.id;
                 targetName = context.targetPlayer.displayName;
             } else {
-                // Ostateczny fallback - pytający (np. "jaki jest mój progres")
+                // Ostateczny fallback - pytający
                 targetUserId = context.asker.id;
                 targetName = context.asker.displayName;
             }
@@ -873,6 +1188,39 @@ LIMITY PORÓWNAŃ:
                     prompt += `(Porównanie tempa progresu miesięcznego vs kwartalnego)\n\n`;
                 }
 
+                // Dodatkowe współczynniki
+                prompt += `📊 WSPÓŁCZYNNIKI:\n`;
+                if (playerData.stats.reliabilityFactor !== null) {
+                    prompt += `- Rzetelność: ${playerData.stats.reliabilityFactor.toFixed(1)}% (regularność uczestnictwa)\n`;
+                }
+                if (playerData.stats.punctualityFactor !== null) {
+                    prompt += `- Punktualność: ${playerData.stats.punctualityFactor.toFixed(1)}% (potwierdzanie na czas)\n`;
+                }
+                if (playerData.stats.responsivenessFactor !== null) {
+                    prompt += `- Responsywność: ${playerData.stats.responsivenessFactor.toFixed(1)}% (odpowiedzi na przypomnienia)\n`;
+                }
+                prompt += `\n`;
+
+                // MVP - tygodnie z największym progresem
+                if (playerData.mvpWeeks && playerData.mvpWeeks.length > 0) {
+                    prompt += `⭐ MVP - TYGODNIE Z NAJWIĘKSZYM PROGRESEM:\n`;
+                    for (const mvp of playerData.mvpWeeks.slice(0, 5)) {
+                        const medal = mvp.progress > 100 ? '🏆' : mvp.progress > 50 ? '🥇' : '⭐';
+                        prompt += `- ${mvp.weekKey}: +${mvp.progress} pkt (${mvp.score} wynik)\n`;
+                    }
+                    prompt += `\n`;
+                }
+
+                // Dynamiczny progres (jeśli użytkownik pytał o konkretny okres)
+                if (context.requestedWeeks) {
+                    const dynamicProgress = this.calculateDynamicProgress(playerData.recentWeeks, context.requestedWeeks);
+                    if (dynamicProgress) {
+                        prompt += `🎯 PROGRES Z OSTATNICH ${context.requestedWeeks} TYGODNI:\n`;
+                        prompt += `- Od ${dynamicProgress.fromWeek} (${dynamicProgress.fromScore} pkt) do ${dynamicProgress.toWeek} (${dynamicProgress.toScore} pkt)\n`;
+                        prompt += `- Zmiana: ${dynamicProgress.progress > 0 ? '+' : ''}${dynamicProgress.progress} pkt (${dynamicProgress.progressPercent}%)\n\n`;
+                    }
+                }
+
                 prompt += `📅 OSTATNIE WYNIKI (tydzień - wynik):\n`;
                 const recentWeeks = playerData.recentWeeks.slice(0, 12);
                 for (const week of recentWeeks) {
@@ -898,25 +1246,39 @@ LIMITY PORÓWNAŃ:
         // Dodaj dane dla porównania (max 5 graczy)
         if (context.queryType === 'compare') {
             const playersToCompare = [];
+            const addedUserIds = new Set(); // Zapobiegaj duplikatom
 
-            // Jeśli są wspomnienia (@mention) - użyj TYLKO wspomnianych graczy (max 5)
+            // Jeśli pytanie o siebie ("porównaj mnie z X") - ZAWSZE dodaj pytającego jako pierwszego
+            if (context.askingAboutSelf) {
+                playersToCompare.push({ id: context.asker.id, name: context.asker.displayName });
+                addedUserIds.add(context.asker.id);
+                logger.info(`AI Chat: Porównanie - dodaję pytającego (${context.asker.displayName}) jako pierwszego`);
+            }
+
+            // Jeśli są wspomnienia (@mention) - dodaj wspomnianych graczy (max 5 łącznie)
             if (context.mentionedUsers && context.mentionedUsers.length > 0) {
                 for (const user of context.mentionedUsers.slice(0, 5)) {
-                    playersToCompare.push({ id: user.id, name: user.displayName });
+                    if (!addedUserIds.has(user.id) && playersToCompare.length < 5) {
+                        playersToCompare.push({ id: user.id, name: user.displayName });
+                        addedUserIds.add(user.id);
+                    }
                 }
             }
-            // Jeśli wykryto WIELE nicków w pytaniu - użyj wszystkich (max 5)
+            // Jeśli wykryto nicki w pytaniu - dodaj znalezionych graczy
             else if (context.detectedPlayers && context.detectedPlayers.length > 0) {
                 for (const player of context.detectedPlayers.slice(0, 5)) {
-                    playersToCompare.push({ id: player.id, name: player.displayName });
+                    if (!addedUserIds.has(player.id) && playersToCompare.length < 5) {
+                        playersToCompare.push({ id: player.id, name: player.displayName });
+                        addedUserIds.add(player.id);
+                    }
                 }
             }
-            // Jeśli wykryto JEDEN nick - użyj targetPlayer (kompatybilność wsteczna)
-            else if (context.targetPlayer) {
+            // Jeśli wykryto targetPlayer (kompatybilność wsteczna)
+            else if (context.targetPlayer && !addedUserIds.has(context.targetPlayer.id)) {
                 playersToCompare.push({ id: context.targetPlayer.id, name: context.targetPlayer.displayName });
             }
-            // W ostateczności użyj pytającego (np. "porównaj mnie z rankingiem")
-            else {
+            // W ostateczności użyj pytającego jeśli jeszcze nie dodany
+            else if (!addedUserIds.has(context.asker.id)) {
                 playersToCompare.push({ id: context.asker.id, name: context.asker.displayName });
             }
 
@@ -942,6 +1304,21 @@ LIMITY PORÓWNAŃ:
                     }
                     if (playerData.stats.engagementFactor !== null) {
                         prompt += `🎯 Zaangażowanie: ${playerData.stats.engagementFactor}%\n`;
+                    }
+                    // Dodatkowe współczynniki w porównaniu
+                    if (playerData.stats.reliabilityFactor !== null) {
+                        prompt += `📋 Rzetelność: ${playerData.stats.reliabilityFactor.toFixed(1)}%\n`;
+                    }
+                    if (playerData.stats.punctualityFactor !== null) {
+                        prompt += `⏰ Punktualność: ${playerData.stats.punctualityFactor.toFixed(1)}%\n`;
+                    }
+                    if (playerData.stats.responsivenessFactor !== null) {
+                        prompt += `📬 Responsywność: ${playerData.stats.responsivenessFactor.toFixed(1)}%\n`;
+                    }
+                    // MVP w porównaniu
+                    if (playerData.mvpWeeks && playerData.mvpWeeks.length > 0) {
+                        const topMvp = playerData.mvpWeeks[0];
+                        prompt += `⭐ Najlepszy MVP: ${topMvp.weekKey} (+${topMvp.progress} pkt)\n`;
                     }
 
                     logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
@@ -1079,29 +1456,61 @@ LIMITY PORÓWNAŃ:
             return '⚠️ AI Chat jest obecnie wyłączony. Skontaktuj się z administratorem.';
         }
 
+        const userId = message.author.id;
+
         try {
             // Zbierz kontekst
             const context = await this.gatherContext(message, question);
 
-            // Przygotuj prompt
+            // Przygotuj prompt (system + dane)
             const prompt = await this.preparePrompt(context, message);
+
+            // Pobierz historię konwersacji (jeśli aktywna w ciągu ostatniej godziny)
+            const conversationHistory = this.getConversationHistory(userId);
+            const hasHistory = conversationHistory.length > 0;
+
+            // Zbuduj tablicę wiadomości
+            let messages = [];
+
+            if (hasHistory) {
+                // Dodaj informację o kontynuacji rozmowy do promptu
+                const continuationNote = `\n\n📝 KONTEKST ROZMOWY:\nTo jest kontynuacja poprzedniej rozmowy. Poniżej znajduje się historia ostatnich wymian.\nPamiętaj o wcześniejszym kontekście przy odpowiadaniu.\n`;
+
+                // Dodaj historię konwersacji
+                messages = [...conversationHistory];
+
+                // Dodaj nowe pytanie z pełnym kontekstem danych
+                messages.push({
+                    role: 'user',
+                    content: prompt + continuationNote
+                });
+
+                logger.info(`AI Chat: Kontynuacja rozmowy dla ${context.asker.username} (${conversationHistory.length / 2} poprzednich wymian)`);
+            } else {
+                // Pierwsza wiadomość - wysyłamy pełny prompt
+                messages.push({
+                    role: 'user',
+                    content: prompt
+                });
+            }
 
             // Wywołaj API
             const response = await this.client.messages.create({
                 model: this.model,
                 max_tokens: 1024,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }],
+                messages: messages,
                 temperature: 0.7
             });
 
             // Wyciągnij odpowiedź
             const answer = response.content[0].text;
 
-            // Log usage (opcjonalnie)
-            logger.info(`AI Chat: ${context.asker.username} zadał pytanie (typ: ${context.queryType})`);
+            // Zapisz do historii konwersacji (uproszczone pytanie + odpowiedź)
+            // Używamy oryginalnego pytania użytkownika, nie pełnego promptu z danymi
+            this.addToConversationHistory(userId, question, answer);
+
+            // Log usage
+            logger.info(`AI Chat: ${context.asker.username} zadał pytanie (typ: ${context.queryType})${hasHistory ? ' [kontynuacja]' : ''}`);
 
             return answer;
 
