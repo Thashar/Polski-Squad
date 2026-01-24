@@ -20,7 +20,7 @@ class AIChatService {
 
         if (this.enabled) {
             this.client = new Anthropic({ apiKey: this.apiKey });
-            this.model = process.env.STALKER_LME_AI_CHAT_MODEL || 'claude-3-5-haiku-20241022';
+            this.model = process.env.STALKER_LME_AI_CHAT_MODEL || 'claude-3-haiku-20240307';
             logger.success('✅ AI Chat aktywny - model: ' + this.model);
         } else {
             logger.warn('⚠️ AI Chat wyłączony - brak ANTHROPIC_API_KEY');
