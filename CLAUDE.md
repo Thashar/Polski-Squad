@@ -753,9 +753,9 @@ node manual-backup.js
   - Wykrywanie typu pytania (compare, progress, ranking, stats, clan, general)
   - Wykrywanie nicków w pytaniu (case-insensitive, filtruje stop words)
   - Rozpoznawanie pytań o siebie ("mnie", "mój") vs o innych graczy
-  - Pobieranie prawdziwych danych gracza z phase1/phase2 (ostatnie 12 tygodni)
-  - Porównywanie graczy (wspomniani użytkownicy + wykryte nicki)
-  - Ranking klanu (TOP 10 z najnowszego tygodnia)
+  - **Pobieranie WSZYSTKICH dostępnych danych gracza** z phase1/phase2 (bez limitu tygodni)
+  - Porównywanie graczy (wspomniani użytkownicy + wykryte nicki) - NIE porównuje z pytającym gdy pyta o innych
+  - **Pytania o klany** - rankingi wszystkich 4 klanów (Main + Akademia 2/1/0), kontekst struktury klanów
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
   - **Zabezpieczenia przed halucynacjami:**
@@ -1077,6 +1077,22 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
   - "NIE wymyślaj nazwisk, wyników ani statystyk - używaj TYLKO faktów z sekcji 'DANE' powyżej"
 - **Skutek:** AI teraz informuje gdy nie ma danych zamiast wymyślać fałszywe statystyki
 - Lokalizacja zmian: `StalkerLME/services/aiChatService.js:527-547,575-576,623-624,633-636,639-644` (wzmocniony prompt)
+
+**StalkerLME Bot - AI Chat: Rozszerzenie Funkcjonalności:**
+- **ZMIANA:** Usunięto limit 12 tygodni - AI teraz pobiera **WSZYSTKIE dostępne dane gracza** z phase1/phase2
+- **NOWA FUNKCJA:** Pytania o klany - AI ma dostęp do rankingów wszystkich 4 klanów jednocześnie:
+  - Main Klan (🔥 główny klan) - najsilniejsi gracze
+  - Akademia 2 (💥) - drugi poziom zaawansowania
+  - Akademia 1 (⚡) - trzeci poziom zaawansowania
+  - Akademia 0 (🎮) - klan dla początkujących
+- **ZMIANA:** AI NIE porównuje z pytającym gdy pytanie dotyczy innego gracza
+  - Wykrycie targetPlayer → instrukcja: "Pytanie dotyczy gracza X. NIE porównuj z użytkownikiem Y!"
+  - Użytkownik pyta o INNEGO gracza → odpowiedź TYLKO o tego gracza, bez porównań
+- **Przykłady nowych pytań:**
+  - `@StalkerLME Który klan jest najlepszy?`
+  - `@StalkerLME Porównaj Main z Akademią 2`
+  - `@StalkerLME Ile punktów ma najlepszy gracz w każdym klanie?`
+- Lokalizacja zmian: `StalkerLME/services/aiChatService.js:363,527-546,575-583,639-660` (wszystkie dane + klany + bez porównań)
 
 **Kontroler Bot - Nowa Komenda /oligopoly-list:**
 - **NOWA FUNKCJA:** Dodano komendę `/oligopoly-list` do generowania listy wszystkich członków klanu użytkownika
