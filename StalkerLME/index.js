@@ -278,17 +278,6 @@ client.on(Events.MessageCreate, async (message) => {
                 return;
             }
 
-            // Sprawdź czy kanał jest dozwolony (kanały klanowe)
-            const allowedChannels = [
-                ...Object.values(config.warningChannels),
-                ...Object.values(config.confirmationChannels)
-            ];
-
-            if (!allowedChannels.includes(message.channelId)) {
-                await message.reply('🚫 Mogę odpowiadać tylko na kanałach klanowych!');
-                return;
-            }
-
             // Sprawdź cooldown i daily limit
             const canAsk = aiChatService.canAsk(message.author.id);
 

@@ -740,7 +740,7 @@ node manual-backup.js
   - Daily limit: 20 pytań per użytkownik
   - Persistent storage: `ai_chat_cooldowns.json`, `ai_chat_daily_usage.json`
 - **Uprawnienia:** Tylko członkowie klanów (rola TARGET_ROLE_0/1/2/MAIN)
-- **Kanały:** Tylko kanały klanowe (WARNING i CONFIRMATION channels)
+- **Kanały:** Wszystkie kanały na serwerze (bez ograniczeń)
 - **Przykłady pytań:**
   - `@StalkerLME Porównaj mnie z @gracz`
   - `@StalkerLME Jak wygląda mój progres?`
