@@ -353,19 +353,17 @@ class AIChatService {
      */
     async getPlayerData(userId, guildId) {
         try {
-            // Pobierz wszystkie dostępne tygodnie (ostatnie 12)
+            // Pobierz wszystkie dostępne tygodnie
             const allWeeks = await this.databaseService.getAvailableWeeks(guildId);
 
             if (allWeeks.length === 0) {
                 return null;
             }
 
-            const last12Weeks = allWeeks.slice(0, 12);
-
-            // Zbierz dane gracza ze wszystkich tygodni i klanów (ostatnie 12 tygodni)
+            // Zbierz dane gracza ze wszystkich dostępnych tygodni i klanów
             const playerProgressData = [];
 
-            for (const week of last12Weeks) {
+            for (const week of allWeeks) {
                 for (const clan of week.clans) {
                     const weekData = await this.databaseService.getPhase1Results(
                         guildId,
@@ -545,6 +543,14 @@ Użytkownik: ${context.asker.displayName} (${context.asker.username})
 ${context.asker.clanName ? `Klan: ${context.asker.clanName}` : 'Klan: brak'}
 Pytanie: ${context.question}
 Typ pytania: ${context.queryType}
+
+STRUKTURA KLANÓW:
+Polski Squad ma 4 klany:
+- 🔥 Main Klan (główny klan) - najsilniejsi gracze
+- 💥 Akademia 2 - drugi poziom zaawansowania
+- ⚡ Akademia 1 - trzeci poziom zaawansowania
+- 🎮 Akademia 0 - klan dla początkujących graczy
+Gracze mogą awansować między klanami na podstawie swoich wyników.
 `;
 
         // Dodaj dane gracza którego dotyczy pytanie
@@ -571,7 +577,14 @@ Typ pytania: ${context.queryType}
                 prompt += `\nDANE GRACZA (${targetName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
                 logger.warn(`AI Chat: Brak danych dla userId ${targetUserId}`);
             }
-            prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO tego jednego gracza. NIE MA danych innych graczy - NIE wymyślaj!\n`;
+
+            // Instrukcja czy porównywać z pytającym
+            if (context.targetPlayer) {
+                prompt += `\n⚠️ LIMIT DANYCH: Pytanie dotyczy gracza ${targetName}. NIE porównuj z użytkownikiem ${context.asker.displayName}!\n`;
+                prompt += `Użytkownik pyta o INNEGO gracza - odpowiedz TYLKO o tego gracza, bez porównań z pytającym.\n`;
+            } else {
+                prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO tego jednego gracza (${targetName}). NIE MA danych innych graczy - NIE wymyślaj!\n`;
+            }
         }
 
         // Dodaj dane dla porównania
@@ -624,16 +637,27 @@ Typ pytania: ${context.queryType}
         }
 
         // Dodaj ranking klanu jeśli pytanie o ranking/klan
-        if (['ranking', 'clan'].includes(context.queryType) && context.asker.clan) {
-            const ranking = await this.getClanRanking(context.asker.clan, context.guild.id, 10);
-            if (ranking.length > 0) {
-                prompt += `\nRANKING KLANU ${context.asker.clanName} (TOP ${ranking.length}):\n`;
-                ranking.forEach((player, idx) => {
-                    prompt += `${idx + 1}. ${player.playerName} - ${player.score} pkt\n`;
-                });
-                prompt += `\n⚠️ LIMIT DANYCH: Masz TYLKO ${ranking.length} graczy powyżej. NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
+        if (['ranking', 'clan'].includes(context.queryType)) {
+            // Pobierz rankingi wszystkich klanów
+            const clans = ['TARGET_ROLE_MAIN', 'TARGET_ROLE_2', 'TARGET_ROLE_1', 'TARGET_ROLE_0'];
+            let totalPlayers = 0;
+
+            for (const clanKey of clans) {
+                const ranking = await this.getClanRanking(clanKey, context.guild.id, 10);
+                if (ranking.length > 0) {
+                    const clanName = this.config.roleDisplayNames[clanKey];
+                    prompt += `\nRANKING: ${clanName} (TOP ${ranking.length}):\n`;
+                    ranking.forEach((player, idx) => {
+                        prompt += `${idx + 1}. ${player.playerName} - ${player.score} pkt\n`;
+                    });
+                    totalPlayers += ranking.length;
+                }
+            }
+
+            if (totalPlayers > 0) {
+                prompt += `\n⚠️ LIMIT DANYCH: Masz TYLKO ${totalPlayers} graczy powyżej (ze wszystkich 4 klanów). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
             } else {
-                prompt += `\n⚠️ BRAK DANYCH: Nie znaleziono rankingu dla tego klanu.\n`;
+                prompt += `\n⚠️ BRAK DANYCH: Nie znaleziono rankingów klanów.\n`;
             }
         }
 
