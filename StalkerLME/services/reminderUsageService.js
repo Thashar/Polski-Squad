@@ -404,6 +404,27 @@ class ReminderUsageService {
     }
 
     /**
+     * Pobiera dane przypomień dla pojedynczego użytkownika (dla AI Chat)
+     * @param {string} userId - ID użytkownika
+     * @returns {Object|null} - Dane użytkownika lub null
+     */
+    async getUserReminderData(userId) {
+        if (!this.usageData) {
+            await this.loadUsageData();
+        }
+
+        const receiverData = this.usageData.receivers[userId];
+        if (!receiverData) {
+            return null;
+        }
+
+        return {
+            totalPings: receiverData.totalPings || 0,
+            // Dodatkowe dane mogą być tutaj dodane gdy będą dostępne
+        };
+    }
+
+    /**
      * Czyści stare dane (starsze niż 30 dni)
      */
     async cleanupOldData() {

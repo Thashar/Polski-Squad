@@ -651,7 +651,7 @@ node manual-backup.js
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
-7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 15min, daily limit 20, **pamięć kontekstu 1h**
+7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 5min, daily limit 20, **pamięć kontekstu 1h**, wykrywanie "mój/moje/mnie", dynamiczny progres z X tygodni, MVP
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
@@ -736,7 +736,7 @@ node manual-backup.js
 - **Trigger:** Mention @StalkerLME + pytanie (max 300 znaków)
 - **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
 - **Limity:**
-  - Cooldown: 15 minut per użytkownik
+  - Cooldown: 5 minut per użytkownik
   - Daily limit: 20 pytań per użytkownik
   - **Administratorzy/moderatorzy:** Bez limitów (role MODERATOR_ROLE_1-4)
   - Persistent storage: `ai_chat_cooldowns.json`, `ai_chat_daily_usage.json`
@@ -750,17 +750,22 @@ node manual-backup.js
   - `@StalkerLME Jakie mam statystyki?`
   - `@StalkerLME Powiedz coś o thashar` (wykrywa nick w pytaniu)
   - `@StalkerLME Porównaj thashar z @gracz` (nick + mention)
+  - `@StalkerLME Jaki był mój progres z ostatnich 3 tygodni?` (dynamiczny okres)
 - **Funkcjonalność:**
   - Wykrywanie typu pytania (compare, progress, ranking, stats, clan, general)
   - Wykrywanie nicków w pytaniu (case-insensitive, filtruje stop words)
-  - Rozpoznawanie pytań o siebie ("mnie", "mój") vs o innych graczy
+  - **Rozpoznawanie pytań o siebie** ("mnie", "mój", "moje", "ja", "mojego", "moją") → zawsze używa danych pytającego
   - **Pobieranie WSZYSTKICH dostępnych danych gracza** z phase1/phase2 (bez limitu tygodni)
   - **Porównywanie graczy (max 5 graczy jednocześnie)** - logika inteligentna:
-    - Jeśli są @mentions → porównuje TYLKO wspomnianych graczy (nie dodaje pytającego)
+    - "Porównaj mnie z X" → porównuje PYTAJĄCEGO z graczem X
+    - Jeśli są @mentions → dodaje WSZYSTKICH wspomnianych graczy
     - Jeśli wykryty nick w pytaniu → użyje tego gracza
     - Jeśli pytanie o siebie ("mnie") → użyje pytającego
     - Bot zawsze pobiera dane WSZYSTKICH wspomnianych graczy (do 5)
   - **Pytania o klany** - rankingi wszystkich 4 klanów (Main + Akademia 2/1/0), kontekst struktury klanów
+  - **Dynamiczny progres** - "progres z ostatnich X tygodni" → oblicza progres z dokładnie tego okresu
+  - **MVP** - tygodnie z największym osobistym progresem gracza (TOP 5)
+  - **Współczynniki w porównaniach** - zaangażowanie (%), trend (🚀↗️⚖️↘️🪦), MVP
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
   - **Zabezpieczenia przed halucynacjami:**
