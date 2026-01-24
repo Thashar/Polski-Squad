@@ -248,10 +248,65 @@ class AIChatService {
             }
         }
 
+        // Wykryj nick w pytaniu (jeśli nie ma @mention)
+        // Przykład: "powiedz coś o thashar" -> wykryje "thashar"
+        if (!context.mentionedUser) {
+            const detectedNick = await this.detectNicknameInQuestion(question, message.guild.id);
+            if (detectedNick) {
+                context.targetPlayer = {
+                    id: detectedNick.userId,
+                    nickname: detectedNick.latestNick,
+                    displayName: detectedNick.latestNick
+                };
+                logger.info(`AI Chat: Wykryto nick w pytaniu: ${detectedNick.latestNick} (userId: ${detectedNick.userId})`);
+            }
+        }
+
         // Wykryj typ pytania
         context.queryType = this.detectQueryType(question);
 
         return context;
+    }
+
+    /**
+     * Wykryj nick gracza w pytaniu
+     */
+    async detectNicknameInQuestion(question, guildId) {
+        const q = question.toLowerCase();
+
+        // Jeśli pytanie o siebie - nie szukaj nicku
+        const selfKeywords = ['mnie', 'mój', 'moja', 'moje', 'ja', 'mojego', 'moją', 'moich', 'mego'];
+        if (selfKeywords.some(keyword => q.includes(keyword))) {
+            return null;
+        }
+
+        // Stop words do pominięcia
+        const stopWords = ['o', 'jak', 'co', 'czy', 'ze', 'z', 'w', 'na', 'do', 'dla', 'i', 'a', 'ale',
+                          'oraz', 'lub', 'bo', 'że', 'się', 'jest', 'są', 'był', 'była', 'było',
+                          'powiedz', 'pokaż', 'jakie', 'jaki', 'jaka', 'który', 'która', 'które'];
+
+        // Wyciągnij słowa z pytania
+        const words = q.split(/\s+/).filter(word => {
+            // Usuń znaki interpunkcyjne
+            const cleaned = word.replace(/[.,!?;:]/g, '');
+            // Pomiń krótkie słowa (< 3 znaki) i stop words
+            return cleaned.length >= 3 && !stopWords.includes(cleaned);
+        });
+
+        // Spróbuj znaleźć gracza dla każdego słowa
+        for (const word of words) {
+            try {
+                const userInfo = await this.databaseService.findUserIdByNick(guildId, word);
+                if (userInfo) {
+                    return userInfo; // { userId, latestNick }
+                }
+            } catch (error) {
+                // Ignoruj błędy - po prostu to nie jest nick
+                continue;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -488,47 +543,78 @@ Pytanie: ${context.question}
 Typ pytania: ${context.queryType}
 `;
 
-        // Dodaj dane pytającego jeśli potrzebne
-        if (['stats', 'progress', 'compare'].includes(context.queryType)) {
-            const askerData = await this.getPlayerData(context.asker.id, context.guild.id);
-            if (askerData) {
-                prompt += `\nDANE PYTAJĄCEGO (${askerData.playerName}):\n`;
-                prompt += `Ostatni wynik: ${askerData.stats.latestScore} pkt\n`;
-                prompt += `Najlepszy wynik: ${askerData.stats.maxScore} pkt\n`;
-                if (askerData.stats.monthlyProgress !== null) {
-                    prompt += `Progres miesięczny: ${askerData.stats.monthlyProgress > 0 ? '+' : ''}${askerData.stats.monthlyProgress} pkt\n`;
-                }
-                if (askerData.stats.quarterlyProgress !== null) {
-                    prompt += `Progres kwartalny: ${askerData.stats.quarterlyProgress > 0 ? '+' : ''}${askerData.stats.quarterlyProgress} pkt\n`;
-                }
-                prompt += `Liczba tygodni z danymi: ${askerData.stats.weeksWithData}\n`;
+        // Dodaj dane gracza którego dotyczy pytanie
+        if (['stats', 'progress'].includes(context.queryType)) {
+            // Jeśli wykryto nick w pytaniu - użyj targetPlayer, w przeciwnym razie pytającego
+            const targetUserId = context.targetPlayer ? context.targetPlayer.id : context.asker.id;
+            const targetName = context.targetPlayer ? context.targetPlayer.displayName : context.asker.displayName;
 
-                logger.info(`AI Chat: Pobrano dane dla ${askerData.playerName} - ${askerData.stats.weeksWithData} tygodni`);
+            const playerData = await this.getPlayerData(targetUserId, context.guild.id);
+            if (playerData) {
+                prompt += `\nDANE GRACZA (${playerData.playerName}):\n`;
+                prompt += `Ostatni wynik: ${playerData.stats.latestScore} pkt\n`;
+                prompt += `Najlepszy wynik: ${playerData.stats.maxScore} pkt\n`;
+                if (playerData.stats.monthlyProgress !== null) {
+                    prompt += `Progres miesięczny: ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt\n`;
+                }
+                if (playerData.stats.quarterlyProgress !== null) {
+                    prompt += `Progres kwartalny: ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt\n`;
+                }
+                prompt += `Liczba tygodni z danymi: ${playerData.stats.weeksWithData}\n`;
+
+                logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
             } else {
-                prompt += `\nDANE PYTAJĄCEGO: Nie znaleziono żadnych wyników w bazie danych.\n`;
-                logger.warn(`AI Chat: Brak danych dla userId ${context.asker.id}`);
+                prompt += `\nDANE GRACZA (${targetName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
+                logger.warn(`AI Chat: Brak danych dla userId ${targetUserId}`);
             }
         }
 
-        // Dodaj dane wspomnianego użytkownika jeśli jest
-        if (context.mentionedUser && context.queryType === 'compare') {
-            const mentionedData = await this.getPlayerData(context.mentionedUser.id, context.guild.id);
-            if (mentionedData) {
-                prompt += `\nDANE WSPOMNIANEGO GRACZA (${mentionedData.playerName}):\n`;
-                prompt += `Ostatni wynik: ${mentionedData.stats.latestScore} pkt\n`;
-                prompt += `Najlepszy wynik: ${mentionedData.stats.maxScore} pkt\n`;
-                if (mentionedData.stats.monthlyProgress !== null) {
-                    prompt += `Progres miesięczny: ${mentionedData.stats.monthlyProgress > 0 ? '+' : ''}${mentionedData.stats.monthlyProgress} pkt\n`;
-                }
-                if (mentionedData.stats.quarterlyProgress !== null) {
-                    prompt += `Progres kwartalny: ${mentionedData.stats.quarterlyProgress > 0 ? '+' : ''}${mentionedData.stats.quarterlyProgress} pkt\n`;
-                }
-                prompt += `Liczba tygodni z danymi: ${mentionedData.stats.weeksWithData}\n`;
+        // Dodaj dane dla porównania
+        if (context.queryType === 'compare') {
+            // Pierwszy gracz - targetPlayer lub pytający
+            const firstUserId = context.targetPlayer ? context.targetPlayer.id : context.asker.id;
+            const firstName = context.targetPlayer ? context.targetPlayer.displayName : context.asker.displayName;
 
-                logger.info(`AI Chat: Pobrano dane dla ${mentionedData.playerName} - ${mentionedData.stats.weeksWithData} tygodni`);
+            const firstData = await this.getPlayerData(firstUserId, context.guild.id);
+            if (firstData) {
+                prompt += `\nDANE PIERWSZEGO GRACZA (${firstData.playerName}):\n`;
+                prompt += `Ostatni wynik: ${firstData.stats.latestScore} pkt\n`;
+                prompt += `Najlepszy wynik: ${firstData.stats.maxScore} pkt\n`;
+                if (firstData.stats.monthlyProgress !== null) {
+                    prompt += `Progres miesięczny: ${firstData.stats.monthlyProgress > 0 ? '+' : ''}${firstData.stats.monthlyProgress} pkt\n`;
+                }
+                if (firstData.stats.quarterlyProgress !== null) {
+                    prompt += `Progres kwartalny: ${firstData.stats.quarterlyProgress > 0 ? '+' : ''}${firstData.stats.quarterlyProgress} pkt\n`;
+                }
+                prompt += `Liczba tygodni z danymi: ${firstData.stats.weeksWithData}\n`;
+
+                logger.info(`AI Chat: Pobrano dane dla ${firstData.playerName} - ${firstData.stats.weeksWithData} tygodni`);
             } else {
-                prompt += `\nDANE WSPOMNIANEGO GRACZA: Nie znaleziono żadnych wyników w bazie danych.\n`;
-                logger.warn(`AI Chat: Brak danych dla wspomnianego userId ${context.mentionedUser.id}`);
+                prompt += `\nDANE PIERWSZEGO GRACZA (${firstName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
+                logger.warn(`AI Chat: Brak danych dla pierwszego gracza userId ${firstUserId}`);
+            }
+        }
+
+            // Drugi gracz - wspomniany użytkownik (jeśli jest)
+            if (context.mentionedUser) {
+                const secondData = await this.getPlayerData(context.mentionedUser.id, context.guild.id);
+                if (secondData) {
+                    prompt += `\nDANE DRUGIEGO GRACZA (${secondData.playerName}):\n`;
+                    prompt += `Ostatni wynik: ${secondData.stats.latestScore} pkt\n`;
+                    prompt += `Najlepszy wynik: ${secondData.stats.maxScore} pkt\n`;
+                    if (secondData.stats.monthlyProgress !== null) {
+                        prompt += `Progres miesięczny: ${secondData.stats.monthlyProgress > 0 ? '+' : ''}${secondData.stats.monthlyProgress} pkt\n`;
+                    }
+                    if (secondData.stats.quarterlyProgress !== null) {
+                        prompt += `Progres kwartalny: ${secondData.stats.quarterlyProgress > 0 ? '+' : ''}${secondData.stats.quarterlyProgress} pkt\n`;
+                    }
+                    prompt += `Liczba tygodni z danymi: ${secondData.stats.weeksWithData}\n`;
+
+                    logger.info(`AI Chat: Pobrano dane dla ${secondData.playerName} - ${secondData.stats.weeksWithData} tygodni`);
+                } else {
+                    prompt += `\nDANE DRUGIEGO GRACZA (${context.mentionedUser.displayName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
+                    logger.warn(`AI Chat: Brak danych dla drugiego gracza userId ${context.mentionedUser.id}`);
+                }
             }
         }
 
