@@ -749,11 +749,12 @@ node manual-backup.js
   - `@StalkerLME Jakie mam statystyki?`
 - **Funkcjonalność:**
   - Wykrywanie typu pytania (compare, progress, ranking, stats, clan, general)
-  - Pobieranie danych gracza (wyniki, statystyki, trendy)
+  - Pobieranie prawdziwych danych gracza z phase1/phase2 (ostatnie 12 tygodni)
   - Porównywanie graczy (wspomniani użytkownicy)
-  - Ranking klanu (TOP 10)
+  - Ranking klanu (TOP 10 z najnowszego tygodnia)
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
+  - Instrukcja dla AI: NIE wymyślaj danych - używaj tylko faktów z bazy
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
