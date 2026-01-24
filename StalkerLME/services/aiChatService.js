@@ -39,6 +39,11 @@ class AIChatService {
         this.cooldowns = new Map(); // userId -> timestamp
         this.dailyUsage = new Map(); // userId -> {date: string, count: number}
 
+        // Historia konwersacji (pamięć kontekstu)
+        this.conversationHistory = new Map(); // odlinkowany: userId -> {lastActivity: timestamp, messages: [{role, content}]}
+        this.conversationTimeoutMs = 60 * 60 * 1000; // 1 godzina
+        this.maxHistoryMessages = 10; // Max 5 par pytanie/odpowiedź
+
         // Load data
         this.loadData();
     }
@@ -115,6 +120,85 @@ class AIChatService {
                 this.dailyUsage.delete(userId);
             }
         }
+    }
+
+    /**
+     * Pobierz historię konwersacji dla użytkownika (jeśli aktywna w ciągu ostatniej godziny)
+     */
+    getConversationHistory(userId) {
+        const conversation = this.conversationHistory.get(userId);
+
+        if (!conversation) {
+            return [];
+        }
+
+        // Sprawdź czy konwersacja nie wygasła (1 godzina)
+        const now = Date.now();
+        if (now - conversation.lastActivity > this.conversationTimeoutMs) {
+            this.conversationHistory.delete(userId);
+            return [];
+        }
+
+        return conversation.messages;
+    }
+
+    /**
+     * Dodaj wymianę pytanie/odpowiedź do historii konwersacji
+     */
+    addToConversationHistory(userId, userQuestion, assistantResponse) {
+        const now = Date.now();
+        let conversation = this.conversationHistory.get(userId);
+
+        if (!conversation || (now - conversation.lastActivity > this.conversationTimeoutMs)) {
+            // Nowa konwersacja lub wygasła - zacznij od nowa
+            conversation = {
+                lastActivity: now,
+                messages: []
+            };
+        }
+
+        // Dodaj nową wymianę
+        conversation.messages.push(
+            { role: 'user', content: userQuestion },
+            { role: 'assistant', content: assistantResponse }
+        );
+
+        // Ogranicz historię do max wiadomości (zachowaj ostatnie)
+        if (conversation.messages.length > this.maxHistoryMessages) {
+            conversation.messages = conversation.messages.slice(-this.maxHistoryMessages);
+        }
+
+        // Aktualizuj timestamp
+        conversation.lastActivity = now;
+
+        // Zapisz
+        this.conversationHistory.set(userId, conversation);
+
+        // Cleanup starych konwersacji (co jakiś czas)
+        this.cleanupConversationHistory();
+    }
+
+    /**
+     * Wyczyść wygasłe konwersacje z pamięci
+     */
+    cleanupConversationHistory() {
+        const now = Date.now();
+        for (const [userId, conversation] of this.conversationHistory.entries()) {
+            if (now - conversation.lastActivity > this.conversationTimeoutMs) {
+                this.conversationHistory.delete(userId);
+            }
+        }
+    }
+
+    /**
+     * Sprawdź czy użytkownik ma aktywną konwersację
+     */
+    hasActiveConversation(userId) {
+        const conversation = this.conversationHistory.get(userId);
+        if (!conversation) return false;
+
+        const now = Date.now();
+        return (now - conversation.lastActivity) <= this.conversationTimeoutMs;
     }
 
     /**
@@ -1079,29 +1163,61 @@ LIMITY PORÓWNAŃ:
             return '⚠️ AI Chat jest obecnie wyłączony. Skontaktuj się z administratorem.';
         }
 
+        const userId = message.author.id;
+
         try {
             // Zbierz kontekst
             const context = await this.gatherContext(message, question);
 
-            // Przygotuj prompt
+            // Przygotuj prompt (system + dane)
             const prompt = await this.preparePrompt(context, message);
+
+            // Pobierz historię konwersacji (jeśli aktywna w ciągu ostatniej godziny)
+            const conversationHistory = this.getConversationHistory(userId);
+            const hasHistory = conversationHistory.length > 0;
+
+            // Zbuduj tablicę wiadomości
+            let messages = [];
+
+            if (hasHistory) {
+                // Dodaj informację o kontynuacji rozmowy do promptu
+                const continuationNote = `\n\n📝 KONTEKST ROZMOWY:\nTo jest kontynuacja poprzedniej rozmowy. Poniżej znajduje się historia ostatnich wymian.\nPamiętaj o wcześniejszym kontekście przy odpowiadaniu.\n`;
+
+                // Dodaj historię konwersacji
+                messages = [...conversationHistory];
+
+                // Dodaj nowe pytanie z pełnym kontekstem danych
+                messages.push({
+                    role: 'user',
+                    content: prompt + continuationNote
+                });
+
+                logger.info(`AI Chat: Kontynuacja rozmowy dla ${context.asker.username} (${conversationHistory.length / 2} poprzednich wymian)`);
+            } else {
+                // Pierwsza wiadomość - wysyłamy pełny prompt
+                messages.push({
+                    role: 'user',
+                    content: prompt
+                });
+            }
 
             // Wywołaj API
             const response = await this.client.messages.create({
                 model: this.model,
                 max_tokens: 1024,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }],
+                messages: messages,
                 temperature: 0.7
             });
 
             // Wyciągnij odpowiedź
             const answer = response.content[0].text;
 
-            // Log usage (opcjonalnie)
-            logger.info(`AI Chat: ${context.asker.username} zadał pytanie (typ: ${context.queryType})`);
+            // Zapisz do historii konwersacji (uproszczone pytanie + odpowiedź)
+            // Używamy oryginalnego pytania użytkownika, nie pełnego promptu z danymi
+            this.addToConversationHistory(userId, question, answer);
+
+            // Log usage
+            logger.info(`AI Chat: ${context.asker.username} zadał pytanie (typ: ${context.queryType})${hasHistory ? ' [kontynuacja]' : ''}`);
 
             return answer;
 

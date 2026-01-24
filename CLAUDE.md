@@ -651,7 +651,7 @@ node manual-backup.js
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
-7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 15min, daily limit 20
+7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 15min, daily limit 20, **pamięć kontekstu 1h**
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
@@ -768,6 +768,12 @@ node manual-backup.js
     - Ostrzeżenia o limitach danych po każdej sekcji (np. "Masz TYLKO 5 graczy")
     - AI informuje gdy nie ma danych zamiast wymyślać ("Nie mam tych informacji w bazie")
     - Używa WYŁĄCZNIE faktów z dostarczonych danych phase1/phase2
+- **Pamięć kontekstu rozmowy:**
+  - AI pamięta poprzednie pytania i odpowiedzi w ramach sesji
+  - **Timeout:** 1 godzina nieaktywności → reset kontekstu
+  - **Limit historii:** Maksymalnie 5 ostatnich wymian (10 wiadomości)
+  - **Przechowywanie:** W pamięci RAM (reset przy restarcie bota)
+  - Przykład: `@StalkerLME Porównaj mnie z @gracz` → odpowiedź → `@StalkerLME A kto ma lepszy progres?` → AI pamięta kontekst
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
