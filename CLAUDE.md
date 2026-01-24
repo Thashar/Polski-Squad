@@ -758,7 +758,11 @@ node manual-backup.js
   - Ranking klanu (TOP 10 z najnowszego tygodnia)
   - Odpowiedzi po polsku z emoji, dowcipne komentarze
   - Typing indicator podczas przetwarzania
-  - Instrukcja dla AI: NIE wymyślaj danych - używaj tylko faktów z bazy
+  - **Zabezpieczenia przed halucynacjami:**
+    - Kategoryczna instrukcja: "⛔ ABSOLUTNY ZAKAZ WYMYŚLANIA DANYCH ⛔"
+    - Ostrzeżenia o limitach danych po każdej sekcji (np. "Masz TYLKO 5 graczy")
+    - AI informuje gdy nie ma danych zamiast wymyślać ("Nie mam tych informacji w bazie")
+    - Używa WYŁĄCZNIE faktów z dostarczonych danych phase1/phase2
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
@@ -1058,6 +1062,21 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**StalkerLME Bot - AI Chat: Wzmocnione Zabezpieczenia Przed Halucynacjami:**
+- **FIX KRYTYCZNY:** Naprawiono problem gdzie AI wymyślał statystyki graczy zamiast używać prawdziwych danych
+- **Problem:** Użytkownik pytał o "więcej graczy" → AI wymyślał nazwiska (Piotrek, Ania, Kuba) i fałszywe wyniki
+- **Rozwiązanie 1:** Kategoryczna instrukcja w prompcie "⛔ ABSOLUTNY ZAKAZ WYMYŚLANIA DANYCH ⛔"
+- **Rozwiązanie 2:** Dodano ostrzeżenia o limitach danych po każdej sekcji:
+  - Stats/Progress: "⚠️ LIMIT DANYCH: Masz dane TYLKO tego jednego gracza. NIE MA danych innych graczy - NIE wymyślaj!"
+  - Compare: "⚠️ LIMIT DANYCH: Masz dane TYLKO tych dwóch graczy do porównania. NIE MA więcej danych - NIE wymyślaj innych graczy!"
+  - Ranking: "⚠️ LIMIT DANYCH: Masz TYLKO X graczy powyżej. NIE MA więcej danych - NIE wymyślaj innych graczy!"
+- **Rozwiązanie 3:** Wzmocniona sekcja ZADANIE z jasnymi instrukcjami:
+  - "Jeśli pytanie dotyczy danych których NIE MASZ - powiedz 'Nie mam tych informacji w bazie danych'"
+  - "Jeśli użytkownik pyta o 'więcej graczy' a podałeś już wszystkich - powiedz 'To wszystkie dane które mam'"
+  - "NIE wymyślaj nazwisk, wyników ani statystyk - używaj TYLKO faktów z sekcji 'DANE' powyżej"
+- **Skutek:** AI teraz informuje gdy nie ma danych zamiast wymyślać fałszywe statystyki
+- Lokalizacja zmian: `StalkerLME/services/aiChatService.js:527-547,575-576,623-624,633-636,639-644` (wzmocniony prompt)
 
 **Kontroler Bot - Nowa Komenda /oligopoly-list:**
 - **NOWA FUNKCJA:** Dodano komendę `/oligopoly-list` do generowania listy wszystkich członków klanu użytkownika
