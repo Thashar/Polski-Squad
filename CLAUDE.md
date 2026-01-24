@@ -644,13 +644,14 @@ node manual-backup.js
 
 ### ⚔️ StalkerLME Bot
 
-**6 Systemów:**
+**7 Systemów:**
 1. **Kary OCR** - `ocrService.js`: Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00)
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
+7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Haiku 3.5), cooldown 15min, daily limit 20
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
@@ -730,6 +731,31 @@ node manual-backup.js
   - Sortuje po progresie i wybiera TOP3
   - Sprawdza czy użytkownik jest w TOP3 swojego klanu
 - **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
+
+**AI Chat** - System konwersacyjny z AI (mention @StalkerLME):
+- **Trigger:** Mention @StalkerLME + pytanie (max 300 znaków)
+- **Model:** Claude 3.5 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
+- **Limity:**
+  - Cooldown: 15 minut per użytkownik
+  - Daily limit: 20 pytań per użytkownik
+  - Persistent storage: `ai_chat_cooldowns.json`, `ai_chat_daily_usage.json`
+- **Uprawnienia:** Tylko członkowie klanów (rola TARGET_ROLE_0/1/2/MAIN)
+- **Kanały:** Tylko kanały klanowe (WARNING i CONFIRMATION channels)
+- **Przykłady pytań:**
+  - `@StalkerLME Porównaj mnie z @gracz`
+  - `@StalkerLME Jak wygląda mój progres?`
+  - `@StalkerLME Kto jest najlepszy w moim klanie?`
+  - `@StalkerLME Jakie mam statystyki?`
+- **Funkcjonalność:**
+  - Wykrywanie typu pytania (compare, progress, ranking, stats, clan, general)
+  - Pobieranie danych gracza (wyniki, statystyki, trendy)
+  - Porównywanie graczy (wspomniani użytkownicy)
+  - Ranking klanu (TOP 10)
+  - Odpowiedzi po polsku z emoji, dowcipne komentarze
+  - Typing indicator podczas przetwarzania
+- **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
+- **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
+- **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-5-haiku-20241022)
 
 **Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
@@ -952,6 +978,9 @@ STALKER_LME_CONFIRMATION_CHANNEL_1=channel_id
 STALKER_LME_CONFIRMATION_CHANNEL_2=channel_id
 STALKER_LME_CONFIRMATION_CHANNEL_MAIN=channel_id
 STALKER_LME_VACATION_CHANNEL_ID=channel_id
+# AI Chat (opcjonalne)
+ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
+STALKER_LME_AI_CHAT_MODEL=claude-3-5-haiku-20241022
 
 # ===== MUTEUSZ BOT =====
 MUTEUSZ_TOKEN=bot_token_here
