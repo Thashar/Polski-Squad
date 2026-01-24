@@ -353,19 +353,17 @@ class AIChatService {
      */
     async getPlayerData(userId, guildId) {
         try {
-            // Pobierz wszystkie dostępne tygodnie (ostatnie 12)
+            // Pobierz wszystkie dostępne tygodnie
             const allWeeks = await this.databaseService.getAvailableWeeks(guildId);
 
             if (allWeeks.length === 0) {
                 return null;
             }
 
-            const last12Weeks = allWeeks.slice(0, 12);
-
-            // Zbierz dane gracza ze wszystkich tygodni i klanów (ostatnie 12 tygodni)
+            // Zbierz dane gracza ze wszystkich dostępnych tygodni i klanów
             const playerProgressData = [];
 
-            for (const week of last12Weeks) {
+            for (const week of allWeeks) {
                 for (const clan of week.clans) {
                     const weekData = await this.databaseService.getPhase1Results(
                         guildId,
@@ -526,13 +524,17 @@ class AIChatService {
     async preparePrompt(context, message) {
         let prompt = `Jesteś asystentem AI dla bota StalkerLME, który zarządza statystykami graczy w grze Survivor.io.
 
-ZASADY:
+KRYTYCZNE ZASADY - ŚCISŁE PRZESTRZEGANIE:
 - Odpowiadaj ZAWSZE po polsku
 - Bądź pomocny, ale też dowcipny gdy jest to stosowne
 - Używaj emoji do urozmaicenia odpowiedzi
-- Bądź konkretny - używaj TYLKO liczb i faktów które dostałeś poniżej
-- KRYTYCZNE: NIE WYMYŚLAJ danych! Jeśli nie masz danych gracza - powiedz że nie znalazłeś jego wyników
-- Gdy porównujesz graczy, bądź obiektywny ale możesz dodać zabawny komentarz
+
+⛔ ABSOLUTNY ZAKAZ WYMYŚLANIA DANYCH ⛔
+- Możesz używać WYŁĄCZNIE liczb, nazwisk graczy i statystyk które dostałeś poniżej w sekcji "DANE"
+- Jeśli użytkownik pyta o dane których NIE MASZ w sekcji "DANE" - powiedz że nie masz tych informacji
+- NIE wymyślaj nazwisk graczy, wyników, statystyk ani jakichkolwiek liczb
+- NIE zgaduj ani nie szacuj - używaj tylko faktów z danych
+- Jeśli ranking ma tylko 5 graczy - nie możesz pokazać "więcej graczy" bo ich NIE MASZ
 - Dane dotyczą wyników z Lunar Mine Expedition (bossy w grze Survivor.io)
 - Wyniki to punkty zdobyte w bossach (liczby typu 1547, 2340 itd.)
 
@@ -541,6 +543,14 @@ Użytkownik: ${context.asker.displayName} (${context.asker.username})
 ${context.asker.clanName ? `Klan: ${context.asker.clanName}` : 'Klan: brak'}
 Pytanie: ${context.question}
 Typ pytania: ${context.queryType}
+
+STRUKTURA KLANÓW:
+Polski Squad ma 4 klany:
+- 🔥 Main Klan (główny klan) - najsilniejsi gracze
+- 💥 Akademia 2 - drugi poziom zaawansowania
+- ⚡ Akademia 1 - trzeci poziom zaawansowania
+- 🎮 Akademia 0 - klan dla początkujących graczy
+Gracze mogą awansować między klanami na podstawie swoich wyników.
 `;
 
         // Dodaj dane gracza którego dotyczy pytanie
@@ -566,6 +576,14 @@ Typ pytania: ${context.queryType}
             } else {
                 prompt += `\nDANE GRACZA (${targetName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
                 logger.warn(`AI Chat: Brak danych dla userId ${targetUserId}`);
+            }
+
+            // Instrukcja czy porównywać z pytającym
+            if (context.targetPlayer) {
+                prompt += `\n⚠️ LIMIT DANYCH: Pytanie dotyczy gracza ${targetName}. NIE porównuj z użytkownikiem ${context.asker.displayName}!\n`;
+                prompt += `Użytkownik pyta o INNEGO gracza - odpowiedz TYLKO o tego gracza, bez porównań z pytającym.\n`;
+            } else {
+                prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO tego jednego gracza (${targetName}). NIE MA danych innych graczy - NIE wymyślaj!\n`;
             }
         }
 
@@ -615,21 +633,40 @@ Typ pytania: ${context.queryType}
                     logger.warn(`AI Chat: Brak danych dla drugiego gracza userId ${context.mentionedUser.id}`);
                 }
             }
+            prompt += `\n⚠️ LIMIT DANYCH: Masz dane TYLKO tych dwóch graczy do porównania. NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
         }
 
         // Dodaj ranking klanu jeśli pytanie o ranking/klan
-        if (['ranking', 'clan'].includes(context.queryType) && context.asker.clan) {
-            const ranking = await this.getClanRanking(context.asker.clan, context.guild.id, 10);
-            if (ranking.length > 0) {
-                prompt += `\nRANKING KLANU ${context.asker.clanName} (TOP ${ranking.length}):\n`;
-                ranking.forEach((player, idx) => {
-                    prompt += `${idx + 1}. ${player.playerName} - ${player.score} pkt\n`;
-                });
+        if (['ranking', 'clan'].includes(context.queryType)) {
+            // Pobierz rankingi wszystkich klanów
+            const clans = ['TARGET_ROLE_MAIN', 'TARGET_ROLE_2', 'TARGET_ROLE_1', 'TARGET_ROLE_0'];
+            let totalPlayers = 0;
+
+            for (const clanKey of clans) {
+                const ranking = await this.getClanRanking(clanKey, context.guild.id, 10);
+                if (ranking.length > 0) {
+                    const clanName = this.config.roleDisplayNames[clanKey];
+                    prompt += `\nRANKING: ${clanName} (TOP ${ranking.length}):\n`;
+                    ranking.forEach((player, idx) => {
+                        prompt += `${idx + 1}. ${player.playerName} - ${player.score} pkt\n`;
+                    });
+                    totalPlayers += ranking.length;
+                }
+            }
+
+            if (totalPlayers > 0) {
+                prompt += `\n⚠️ LIMIT DANYCH: Masz TYLKO ${totalPlayers} graczy powyżej (ze wszystkich 4 klanów). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
+            } else {
+                prompt += `\n⚠️ BRAK DANYCH: Nie znaleziono rankingów klanów.\n`;
             }
         }
 
-        prompt += `\nZADANIE: Odpowiedz na pytanie użytkownika w sposób pomocny i przyjazny. Używaj danych powyżej.`;
-        prompt += `\nOdpowiedź powinna być zwięzła (max 1500 znaków) i sformatowana jako wiadomość Discord (obsługuje markdown).`;
+        prompt += `\n⛔ ZADANIE - ŚCISŁE PRZESTRZEGANIE ⛔`;
+        prompt += `\nOdpowiedz na pytanie użytkownika TYLKO na podstawie danych powyżej.`;
+        prompt += `\n- Jeśli pytanie dotyczy danych których NIE MASZ - powiedz "Nie mam tych informacji w bazie danych"`;
+        prompt += `\n- Jeśli użytkownik pyta o "więcej graczy" a podałeś już wszystkich - powiedz "To wszystkie dane które mam"`;
+        prompt += `\n- NIE wymyślaj nazwisk, wyników ani statystyk - używaj TYLKO faktów z sekcji "DANE" powyżej`;
+        prompt += `\n- Odpowiedź powinna być zwięzła (max 1500 znaków), pomocna i sformatowana jako wiadomość Discord (markdown).`;
 
         return prompt;
     }
