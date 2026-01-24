@@ -254,17 +254,22 @@ class AIChatService {
             }
         }
 
-        // Wykryj nick w pytaniu (jeśli nie ma @mention)
-        // Przykład: "powiedz coś o thashar" -> wykryje "thashar"
+        // Wykryj nicki w pytaniu (jeśli nie ma @mention) - MAX 5 graczy
+        // Przykład: "porównaj thashar i slaviax" -> wykryje obu graczy
         if (!context.mentionedUsers || context.mentionedUsers.length === 0) {
-            const detectedNick = await this.detectNicknameInQuestion(question, message.guild.id);
-            if (detectedNick) {
-                context.targetPlayer = {
-                    id: detectedNick.userId,
-                    nickname: detectedNick.latestNick,
-                    displayName: detectedNick.latestNick
-                };
-                logger.info(`AI Chat: Wykryto nick w pytaniu: ${detectedNick.latestNick} (userId: ${detectedNick.userId})`);
+            const detectedNicks = await this.detectNicknamesInQuestion(question, message.guild.id);
+            if (detectedNicks.length > 0) {
+                context.detectedPlayers = detectedNicks.map(nick => ({
+                    id: nick.userId,
+                    nickname: nick.latestNick,
+                    displayName: nick.latestNick
+                }));
+                logger.info(`AI Chat: Wykryto ${detectedNicks.length} nicków w pytaniu: ${detectedNicks.map(n => n.latestNick).join(', ')}`);
+
+                // Dla kompatybilności wstecznej - pierwszy nick jako targetPlayer
+                if (detectedNicks.length === 1) {
+                    context.targetPlayer = context.detectedPlayers[0];
+                }
             }
         }
 
@@ -275,21 +280,22 @@ class AIChatService {
     }
 
     /**
-     * Wykryj nick gracza w pytaniu
+     * Wykryj nicki graczy w pytaniu (max 5)
      */
-    async detectNicknameInQuestion(question, guildId) {
+    async detectNicknamesInQuestion(question, guildId) {
         const q = question.toLowerCase();
 
-        // Jeśli pytanie o siebie - nie szukaj nicku
+        // Jeśli pytanie o siebie - nie szukaj nicków
         const selfKeywords = ['mnie', 'mój', 'moja', 'moje', 'ja', 'mojego', 'moją', 'moich', 'mego'];
         if (selfKeywords.some(keyword => q.includes(keyword))) {
-            return null;
+            return [];
         }
 
         // Stop words do pominięcia
         const stopWords = ['o', 'jak', 'co', 'czy', 'ze', 'z', 'w', 'na', 'do', 'dla', 'i', 'a', 'ale',
                           'oraz', 'lub', 'bo', 'że', 'się', 'jest', 'są', 'był', 'była', 'było',
-                          'powiedz', 'pokaż', 'jakie', 'jaki', 'jaka', 'który', 'która', 'które'];
+                          'powiedz', 'pokaż', 'jakie', 'jaki', 'jaka', 'który', 'która', 'które',
+                          'porównaj', 'vs', 'lepszy', 'gorszy'];
 
         // Wyciągnij słowa z pytania
         const words = q.split(/\s+/).filter(word => {
@@ -299,12 +305,18 @@ class AIChatService {
             return cleaned.length >= 3 && !stopWords.includes(cleaned);
         });
 
-        // Spróbuj znaleźć gracza dla każdego słowa
+        // Spróbuj znaleźć graczy dla każdego słowa (max 5)
+        const foundPlayers = [];
+        const foundUserIds = new Set(); // Zapobiega duplikatom
+
         for (const word of words) {
+            if (foundPlayers.length >= 5) break; // Max 5 graczy
+
             try {
                 const userInfo = await this.databaseService.findUserIdByNick(guildId, word);
-                if (userInfo) {
-                    return userInfo; // { userId, latestNick }
+                if (userInfo && !foundUserIds.has(userInfo.userId)) {
+                    foundPlayers.push(userInfo); // { userId, latestNick }
+                    foundUserIds.add(userInfo.userId);
                 }
             } catch (error) {
                 // Ignoruj błędy - po prostu to nie jest nick
@@ -312,7 +324,7 @@ class AIChatService {
             }
         }
 
-        return null;
+        return foundPlayers;
     }
 
     /**
@@ -355,7 +367,7 @@ class AIChatService {
     }
 
     /**
-     * Pobierz dane gracza dla AI
+     * Pobierz dane gracza dla AI - WSZYSTKIE dane jak w /progres i /player-status
      */
     async getPlayerData(userId, guildId) {
         try {
@@ -365,6 +377,9 @@ class AIChatService {
             if (allWeeks.length === 0) {
                 return null;
             }
+
+            // Pobierz ostatnie 12 tygodni dla szczegółowych statystyk
+            const last12Weeks = allWeeks.slice(0, 12);
 
             // Zbierz dane gracza ze wszystkich dostępnych tygodni i klanów
             const playerProgressData = [];
@@ -407,8 +422,8 @@ class AIChatService {
                 return b.weekNumber - a.weekNumber;
             });
 
-            // Oblicz statystyki
-            const stats = this.calculatePlayerStats(playerProgressData);
+            // Oblicz WSZYSTKIE statystyki jak w /player-status
+            const stats = await this.calculatePlayerStats(playerProgressData, userId, guildId, last12Weeks);
 
             return {
                 userId,
@@ -423,37 +438,160 @@ class AIChatService {
     }
 
     /**
-     * Oblicz statystyki gracza
+     * Oblicz WSZYSTKIE statystyki gracza - identycznie jak w /player-status
      */
-    calculatePlayerStats(weeks) {
-        if (!weeks || weeks.length === 0) {
+    async calculatePlayerStats(playerProgressData, userId, guildId, last12Weeks) {
+        if (!playerProgressData || playerProgressData.length === 0) {
             return null;
         }
 
-        const scores = weeks.map(w => w.score).filter(s => s > 0);
+        const scores = playerProgressData.map(w => w.score).filter(s => s > 0);
         if (scores.length === 0) return null;
 
-        const latestScore = scores[0];
+        const latestScore = playerProgressData[0].score;
         const maxScore = Math.max(...scores);
         const minScore = Math.min(...scores);
+        const weeksWithData = scores.length;
 
-        // Progres miesięczny (ostatnie 4 vs tydzień 5)
+        // === PROGRESY ===
+
+        // Miesięczny (ostatnie 4 tygodnie vs tydzień 5)
         let monthlyProgress = null;
-        if (weeks.length >= 5) {
-            const recentBest = Math.max(...weeks.slice(0, 4).map(w => w.score));
-            const week5Score = weeks[4].score;
-            if (week5Score > 0) {
-                monthlyProgress = recentBest - week5Score;
+        let monthlyProgressPercent = null;
+        if (playerProgressData.length >= 5) {
+            const last4Weeks = playerProgressData.slice(0, 4);
+            const currentScore = Math.max(...last4Weeks.map(d => d.score));
+            const comparisonScore = playerProgressData[4].score;
+            if (comparisonScore > 0) {
+                monthlyProgress = currentScore - comparisonScore;
+                monthlyProgressPercent = ((monthlyProgress / comparisonScore) * 100).toFixed(1);
+            }
+        } else if (playerProgressData.length >= 2) {
+            const allScores = playerProgressData.map(d => d.score);
+            const currentScore = Math.max(...allScores);
+            const comparisonScore = playerProgressData[playerProgressData.length - 1].score;
+            if (comparisonScore > 0) {
+                monthlyProgress = currentScore - comparisonScore;
+                monthlyProgressPercent = ((monthlyProgress / comparisonScore) * 100).toFixed(1);
             }
         }
 
-        // Progres kwartalny (ostatnie 12 vs tydzień 13)
+        // Kwartalny (ostatnie 12 tygodni vs tydzień 13)
         let quarterlyProgress = null;
-        if (weeks.length >= 13) {
-            const recentBest = Math.max(...weeks.slice(0, 12).map(w => w.score));
-            const week13Score = weeks[12].score;
+        let quarterlyProgressPercent = null;
+        if (playerProgressData.length >= 13) {
+            const last12 = playerProgressData.slice(0, 12);
+            const currentScore = Math.max(...last12.map(d => d.score));
+            const week13Score = playerProgressData[12].score;
             if (week13Score > 0) {
-                quarterlyProgress = recentBest - week13Score;
+                quarterlyProgress = currentScore - week13Score;
+                quarterlyProgressPercent = ((quarterlyProgress / week13Score) * 100).toFixed(1);
+            }
+        } else if (playerProgressData.length >= 2) {
+            const allScores = playerProgressData.map(d => d.score);
+            const currentScore = Math.max(...allScores);
+
+            let comparisonScore = 0;
+            for (let i = playerProgressData.length - 1; i >= 0; i--) {
+                if (playerProgressData[i].score > 0) {
+                    comparisonScore = playerProgressData[i].score;
+                    break;
+                }
+            }
+
+            if (comparisonScore > 0) {
+                quarterlyProgress = currentScore - comparisonScore;
+                quarterlyProgressPercent = ((quarterlyProgress / comparisonScore) * 100).toFixed(1);
+            }
+        }
+
+        // Największy progres i regres w historii
+        let biggestProgress = null;
+        let biggestProgressWeek = null;
+        let biggestRegress = null;
+        let biggestRegressWeek = null;
+        let progressWeeksCount = 0;
+
+        if (playerProgressData.length >= 2) {
+            let maxProgressDiff = 0;
+            let maxRegressDiff = 0;
+
+            for (let i = 0; i < playerProgressData.length; i++) {
+                const currentWeek = playerProgressData[i];
+
+                let bestScoreUpToNow = 0;
+                for (let j = i + 1; j < playerProgressData.length; j++) {
+                    const pastWeek = playerProgressData[j];
+                    if (pastWeek.score > bestScoreUpToNow) {
+                        bestScoreUpToNow = pastWeek.score;
+                    }
+                }
+
+                const diff = currentWeek.score - bestScoreUpToNow;
+
+                // Zaangażowanie
+                if (i < playerProgressData.length - 1) {
+                    if (currentWeek.score === 0) {
+                        // 0 punktów
+                    } else if (diff > 0) {
+                        progressWeeksCount += 1.0;
+                    } else if (diff === 0 && bestScoreUpToNow > 0) {
+                        progressWeeksCount += 0.8;
+                    }
+                }
+
+                // Największy progres
+                if (bestScoreUpToNow > 0 && diff > maxProgressDiff) {
+                    maxProgressDiff = diff;
+                    biggestProgress = diff;
+                    biggestProgressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
+                }
+
+                // Największy regres
+                if (bestScoreUpToNow > 0 && diff < maxRegressDiff) {
+                    maxRegressDiff = diff;
+                    biggestRegress = diff;
+                    biggestRegressWeek = `${String(currentWeek.weekNumber).padStart(2, '0')}/${String(currentWeek.year).slice(-2)}`;
+                }
+            }
+        }
+
+        // Współczynnik Zaangażowanie
+        let engagementFactor = null;
+        const totalComparisons = playerProgressData.length - 1;
+        if (totalComparisons > 0) {
+            engagementFactor = Math.round((progressWeeksCount / totalComparisons) * 100);
+        }
+
+        // === TREND ===
+        let trendRatio = null;
+        let trendDescription = null;
+        let trendIcon = null;
+
+        if (monthlyProgress !== null && quarterlyProgress !== null) {
+            const monthlyValue = monthlyProgress;
+            const longerTermValue = quarterlyProgress / 3;
+
+            if (longerTermValue !== 0) {
+                const adjustedLongerTermValue = longerTermValue < 0 ? Math.abs(longerTermValue) : longerTermValue;
+                trendRatio = monthlyValue / adjustedLongerTermValue;
+
+                if (trendRatio >= 1.5) {
+                    trendDescription = 'Gwałtownie rosnący';
+                    trendIcon = '🚀';
+                } else if (trendRatio > 1.1) {
+                    trendDescription = 'Rosnący';
+                    trendIcon = '↗️';
+                } else if (trendRatio >= 0.9) {
+                    trendDescription = 'Constans';
+                    trendIcon = '⚖️';
+                } else if (trendRatio > 0.5) {
+                    trendDescription = 'Malejący';
+                    trendIcon = '↘️';
+                } else {
+                    trendDescription = 'Gwałtownie malejący';
+                    trendIcon = '🪦';
+                }
             }
         }
 
@@ -461,9 +599,19 @@ class AIChatService {
             latestScore,
             maxScore,
             minScore,
-            weeksWithData: scores.length,
+            weeksWithData,
             monthlyProgress,
-            quarterlyProgress
+            monthlyProgressPercent,
+            quarterlyProgress,
+            quarterlyProgressPercent,
+            biggestProgress,
+            biggestProgressWeek,
+            biggestRegress,
+            biggestRegressWeek,
+            engagementFactor,
+            trendRatio,
+            trendDescription,
+            trendIcon
         };
     }
 
@@ -574,16 +722,44 @@ LIMITY PORÓWNAŃ:
 
             const playerData = await this.getPlayerData(targetUserId, context.guild.id);
             if (playerData) {
-                prompt += `\nDANE GRACZA (${playerData.playerName}):\n`;
-                prompt += `Ostatni wynik: ${playerData.stats.latestScore} pkt\n`;
-                prompt += `Najlepszy wynik: ${playerData.stats.maxScore} pkt\n`;
+                prompt += `\n=== DANE GRACZA: ${playerData.playerName} ===\n`;
+                prompt += `📊 PODSTAWOWE STATYSTYKI:\n`;
+                prompt += `- Ostatni wynik: ${playerData.stats.latestScore} pkt\n`;
+                prompt += `- Najlepszy wynik: ${playerData.stats.maxScore} pkt\n`;
+                prompt += `- Najgorszy wynik: ${playerData.stats.minScore} pkt\n`;
+                prompt += `- Liczba tygodni z danymi: ${playerData.stats.weeksWithData}\n\n`;
+
+                prompt += `📈 PROGRESY:\n`;
                 if (playerData.stats.monthlyProgress !== null) {
-                    prompt += `Progres miesięczny: ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt\n`;
+                    prompt += `- Miesięczny (4 tyg): ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt (${playerData.stats.monthlyProgressPercent}%)\n`;
                 }
                 if (playerData.stats.quarterlyProgress !== null) {
-                    prompt += `Progres kwartalny: ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt\n`;
+                    prompt += `- Kwartalny (13 tyg): ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt (${playerData.stats.quarterlyProgressPercent}%)\n`;
                 }
-                prompt += `Liczba tygodni z danymi: ${playerData.stats.weeksWithData}\n`;
+                if (playerData.stats.biggestProgress !== null) {
+                    prompt += `- Największy progres w historii: +${playerData.stats.biggestProgress} pkt (tydzień ${playerData.stats.biggestProgressWeek})\n`;
+                }
+                if (playerData.stats.biggestRegress !== null) {
+                    prompt += `- Największy regres w historii: ${playerData.stats.biggestRegress} pkt (tydzień ${playerData.stats.biggestRegressWeek})\n`;
+                }
+                prompt += `\n`;
+
+                if (playerData.stats.engagementFactor !== null) {
+                    prompt += `🎯 ZAANGAŻOWANIE: ${playerData.stats.engagementFactor}%\n`;
+                    prompt += `(Procent tygodni gdzie gracz zrobił progres)\n\n`;
+                }
+
+                if (playerData.stats.trendDescription !== null) {
+                    prompt += `📉 TREND: ${playerData.stats.trendIcon} ${playerData.stats.trendDescription}\n`;
+                    prompt += `(Porównanie tempa progresu miesięcznego vs kwartalnego)\n\n`;
+                }
+
+                prompt += `📅 OSTATNIE WYNIKI (tydzień - wynik):\n`;
+                const recentWeeks = playerData.recentWeeks.slice(0, 12);
+                for (const week of recentWeeks) {
+                    const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
+                    prompt += `- ${weekLabel}: ${week.score} pkt (${week.clanName})\n`;
+                }
 
                 logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
             } else {
@@ -610,7 +786,13 @@ LIMITY PORÓWNAŃ:
                     playersToCompare.push({ id: user.id, name: user.displayName });
                 }
             }
-            // Jeśli wykryto nick w pytaniu - użyj targetPlayer jako pierwszy gracz
+            // Jeśli wykryto WIELE nicków w pytaniu - użyj wszystkich (max 5)
+            else if (context.detectedPlayers && context.detectedPlayers.length > 0) {
+                for (const player of context.detectedPlayers.slice(0, 5)) {
+                    playersToCompare.push({ id: player.id, name: player.displayName });
+                }
+            }
+            // Jeśli wykryto JEDEN nick - użyj targetPlayer (kompatybilność wsteczna)
             else if (context.targetPlayer) {
                 playersToCompare.push({ id: context.targetPlayer.id, name: context.targetPlayer.displayName });
             }
@@ -627,21 +809,27 @@ LIMITY PORÓWNAŃ:
                 const playerLabel = i === 0 ? 'PIERWSZEGO' : ['DRUGIEGO', 'TRZECIEGO', 'CZWARTEGO', 'PIĄTEGO'][i - 1];
 
                 if (playerData) {
-                    prompt += `\nDANE ${playerLabel} GRACZA (${playerData.playerName}):\n`;
-                    prompt += `Ostatni wynik: ${playerData.stats.latestScore} pkt\n`;
-                    prompt += `Najlepszy wynik: ${playerData.stats.maxScore} pkt\n`;
+                    prompt += `\n=== ${playerLabel} GRACZ: ${playerData.playerName} ===\n`;
+                    prompt += `📊 PODSTAWOWE: Ostatni ${playerData.stats.latestScore} | Najlepszy ${playerData.stats.maxScore} | Tygodni ${playerData.stats.weeksWithData}\n`;
+
                     if (playerData.stats.monthlyProgress !== null) {
-                        prompt += `Progres miesięczny: ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt\n`;
+                        prompt += `📈 Progres miesięczny: ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt (${playerData.stats.monthlyProgressPercent}%)\n`;
                     }
                     if (playerData.stats.quarterlyProgress !== null) {
-                        prompt += `Progres kwartalny: ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt\n`;
+                        prompt += `📈 Progres kwartalny: ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt (${playerData.stats.quarterlyProgressPercent}%)\n`;
                     }
-                    prompt += `Liczba tygodni z danymi: ${playerData.stats.weeksWithData}\n`;
+                    if (playerData.stats.trendDescription !== null) {
+                        prompt += `📉 Trend: ${playerData.stats.trendIcon} ${playerData.stats.trendDescription}\n`;
+                    }
+                    if (playerData.stats.engagementFactor !== null) {
+                        prompt += `🎯 Zaangażowanie: ${playerData.stats.engagementFactor}%\n`;
+                    }
 
                     logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
                     loadedPlayersCount++;
                 } else {
-                    prompt += `\nDANE ${playerLabel} GRACZA (${player.name}): Nie znaleziono żadnych wyników w bazie danych.\n`;
+                    prompt += `\n=== ${playerLabel} GRACZ: ${player.name} ===\n`;
+                    prompt += `❌ Nie znaleziono żadnych wyników w bazie danych.\n`;
                     logger.warn(`AI Chat: Brak danych dla ${playerLabel.toLowerCase()} gracza userId ${player.id}`);
                 }
             }
@@ -675,12 +863,56 @@ LIMITY PORÓWNAŃ:
             }
         }
 
-        prompt += `\n⛔ ZADANIE - ŚCISŁE PRZESTRZEGANIE ⛔`;
-        prompt += `\nOdpowiedz na pytanie użytkownika TYLKO na podstawie danych powyżej.`;
-        prompt += `\n- Jeśli pytanie dotyczy danych których NIE MASZ - powiedz "Nie mam tych informacji w bazie danych"`;
-        prompt += `\n- Jeśli użytkownik pyta o "więcej graczy" a podałeś już wszystkich - powiedz "To wszystkie dane które mam"`;
-        prompt += `\n- NIE wymyślaj nazwisk, wyników ani statystyk - używaj TYLKO faktów z sekcji "DANE" powyżej`;
-        prompt += `\n- Odpowiedź powinna być zwięzła (max 1500 znaków), pomocna i sformatowana jako wiadomość Discord (markdown).`;
+        // Dodaj instrukcje specyficzne dla typu pytania
+        prompt += `\n\n⛔ ZADANIE - ŚCISŁE PRZESTRZEGANIE ⛔\n`;
+        prompt += `Odpowiedz na pytanie użytkownika TYLKO na podstawie danych powyżej.\n`;
+
+        // Specyficzne instrukcje dla każdego typu pytania
+        if (context.queryType === 'compare') {
+            prompt += `\n📊 TYP PYTANIA: PORÓWNANIE GRACZY\n`;
+            prompt += `- Porównaj dokładnie tych graczy których dane dostałeś powyżej\n`;
+            prompt += `- Pokaż różnice w wynikach, progresach, trendach i zaangażowaniu\n`;
+            prompt += `- Użyj tabelki lub punktów do przejrzystego porównania\n`;
+            prompt += `- Wskaż który gracz jest lepszy i dlaczego (np. wyższy progres, lepszy trend)\n`;
+            prompt += `- Jeśli użytkownik pyta o konkretny aspekt (np. "kto ma lepszy progres z ostatnich 3 tygodni") - odpowiedz DOKŁADNIE na to pytanie używając danych z sekcji OSTATNIE WYNIKI\n`;
+        } else if (context.queryType === 'progress') {
+            prompt += `\n📈 TYP PYTANIA: PROGRES GRACZA\n`;
+            prompt += `- Opisz jak zmienia się wynik gracza w czasie\n`;
+            prompt += `- Skoncentruj się na progresach (miesięczny, kwartalny, największy)\n`;
+            prompt += `- Wskaż trend (rosnący, malejący, constans) i co to oznacza\n`;
+            prompt += `- Jeśli użytkownik pyta o konkretny okres (np. "ostatnie 3 tygodnie", "ostatni miesiąc") - odpowiedz DOKŁADNIE o ten okres używając danych z sekcji OSTATNIE WYNIKI\n`;
+            prompt += `- NIE mów tylko o progresie miesięcznym i kwartalnym gdy użytkownik pyta o inny okres!\n`;
+        } else if (context.queryType === 'stats') {
+            prompt += `\n📊 TYP PYTANIA: STATYSTYKI GRACZA\n`;
+            prompt += `- Pokaż wszystkie dostępne statystyki gracza (wyniki, progresy, trend, zaangażowanie)\n`;
+            prompt += `- Użyj emoji i formatowania dla lepszej czytelności\n`;
+            prompt += `- Dodaj krótkie wyjaśnienie co oznaczają poszczególne współczynniki\n`;
+            prompt += `- Wskaż mocne i słabe strony gracza\n`;
+        } else if (context.queryType === 'ranking') {
+            prompt += `\n🏆 TYP PYTANIA: RANKINGI\n`;
+            prompt += `- Pokaż ranking graczy z dostępnych danych\n`;
+            prompt += `- Użyj numeracji (1., 2., 3., ...) i wyników w punktach\n`;
+            prompt += `- Jeśli użytkownik pyta o TOP X - pokaż dokładnie tyle graczy ile masz\n`;
+            prompt += `- Możesz porównać rankingi różnych klanów jeśli masz dane\n`;
+        } else if (context.queryType === 'clan') {
+            prompt += `\n🏰 TYP PYTANIA: KLANY\n`;
+            prompt += `- Porównaj klany Polski Squad (Main, Akademia 2, 1, 0)\n`;
+            prompt += `- Pokaż TOP graczy z każdego klanu jeśli masz dane\n`;
+            prompt += `- Wskaż różnice między klanami (siła graczy, średnie wyniki)\n`;
+            prompt += `- Wyjaśnij hierarchię klanów (Main > Akademia 2 > 1 > 0)\n`;
+        } else {
+            prompt += `\n💬 TYP PYTANIA: OGÓLNE\n`;
+            prompt += `- Odpowiedz naturalnie i pomocnie\n`;
+            prompt += `- Jeśli pytanie wykracza poza dane - powiedz że nie masz tych informacji\n`;
+            prompt += `- Możesz wyjaśnić jak działa system, co oznaczają statystyki itp.\n`;
+        }
+
+        prompt += `\n⚠️ PAMIĘTAJ:\n`;
+        prompt += `- Jeśli pytanie dotyczy danych których NIE MASZ - powiedz "Nie mam tych informacji w bazie"\n`;
+        prompt += `- Jeśli użytkownik pyta o "więcej graczy" a podałeś już wszystkich - powiedz "To wszystkie dane które mam"\n`;
+        prompt += `- NIE wymyślaj nazwisk, wyników ani statystyk - używaj TYLKO faktów z sekcji "DANE"\n`;
+        prompt += `- Odpowiedź powinna być zwięzła (max 1500 znaków), pomocna i sformatowana jako wiadomość Discord (markdown)\n`;
+        prompt += `- Używaj emoji 🎯📈📊🏆💪 do urozmaicenia, ale nie przesadzaj\n`;
 
         return prompt;
     }
