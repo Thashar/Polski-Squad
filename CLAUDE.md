@@ -651,7 +651,7 @@ node manual-backup.js
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
-7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 5min, daily limit 20, **pamięć kontekstu 1h**, wykrywanie "mój/moje/mnie", dynamiczny progres z X tygodni, MVP
+7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 5min, **pamięć kontekstu 1h**, wykrywanie "mój/moje/mnie", dynamiczny progres z X tygodni, MVP
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
@@ -737,9 +737,8 @@ node manual-backup.js
 - **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
 - **Limity:**
   - Cooldown: 5 minut per użytkownik
-  - Daily limit: 20 pytań per użytkownik
-  - **Administratorzy/moderatorzy:** Bez limitów (role MODERATOR_ROLE_1-4)
-  - Persistent storage: `ai_chat_cooldowns.json`, `ai_chat_daily_usage.json`
+  - **Administratorzy/moderatorzy:** Bez cooldownu (role MODERATOR_ROLE_1-4)
+  - Persistent storage: `ai_chat_cooldowns.json`
 - **Uprawnienia:** Tylko członkowie klanów (rola TARGET_ROLE_0/1/2/MAIN)
 - **Kanały:** Wszystkie kanały na serwerze (bez ograniczeń)
 - **Przykłady pytań:**

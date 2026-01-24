@@ -29,16 +29,13 @@ class AIChatService {
 
         // Limity
         this.cooldownMinutes = 5; // 5 minut
-        this.dailyLimit = 20; // 20 pytań dziennie
 
         // Persistent storage
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
-        this.dailyUsageFile = path.join(this.dataDir, 'ai_chat_daily_usage.json');
 
         // In-memory cache
         this.cooldowns = new Map(); // userId -> timestamp
-        this.dailyUsage = new Map(); // userId -> {date: string, count: number}
 
         // Historia konwersacji (pamięć kontekstu)
         this.conversationHistory = new Map(); // odlinkowany: userId -> {lastActivity: timestamp, messages: [{role, content}]}
@@ -64,16 +61,6 @@ class AIChatService {
                 this.cooldowns = new Map();
             }
 
-            // Daily usage
-            try {
-                const usageData = await fs.readFile(this.dailyUsageFile, 'utf8');
-                const parsed = JSON.parse(usageData);
-                this.dailyUsage = new Map(Object.entries(parsed));
-            } catch (err) {
-                // Plik nie istnieje - OK
-                this.dailyUsage = new Map();
-            }
-
             // Cleanup starych danych (starsze niż 2 dni)
             this.cleanupOldData();
         } catch (error) {
@@ -91,10 +78,6 @@ class AIChatService {
             // Cooldowns
             const cooldownObj = Object.fromEntries(this.cooldowns);
             await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownObj, null, 2));
-
-            // Daily usage
-            const usageObj = Object.fromEntries(this.dailyUsage);
-            await fs.writeFile(this.dailyUsageFile, JSON.stringify(usageObj, null, 2));
         } catch (error) {
             logger.error(`Błąd zapisywania danych AI Chat: ${error.message}`);
         }
@@ -111,14 +94,6 @@ class AIChatService {
         for (const [userId, timestamp] of this.cooldowns.entries()) {
             if (timestamp < twoDaysAgo) {
                 this.cooldowns.delete(userId);
-            }
-        }
-
-        // Usuń stare daily usage (zachowaj tylko dzisiejszy)
-        const today = new Date().toISOString().split('T')[0];
-        for (const [userId, data] of this.dailyUsage.entries()) {
-            if (data.date !== today) {
-                this.dailyUsage.delete(userId);
             }
         }
     }
@@ -240,18 +215,6 @@ class AIChatService {
             }
         }
 
-        // Sprawdź daily limit
-        const today = new Date().toISOString().split('T')[0];
-        const usage = this.dailyUsage.get(userId);
-
-        if (usage && usage.date === today && usage.count >= this.dailyLimit) {
-            return {
-                allowed: false,
-                reason: `daily_limit`,
-                limit: this.dailyLimit
-            };
-        }
-
         return { allowed: true };
     }
 
@@ -265,18 +228,9 @@ class AIChatService {
         }
 
         const now = Date.now();
-        const today = new Date().toISOString().split('T')[0];
 
         // Zapisz cooldown
         this.cooldowns.set(userId, now);
-
-        // Zapisz daily usage
-        const usage = this.dailyUsage.get(userId);
-        if (usage && usage.date === today) {
-            usage.count++;
-        } else {
-            this.dailyUsage.set(userId, { date: today, count: 1 });
-        }
 
         // Zapisz do pliku (async, nie czekaj)
         this.saveData().catch(err => {
