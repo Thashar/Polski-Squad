@@ -298,25 +298,63 @@ class AIChatService {
      */
     async getPlayerData(userId, guildId) {
         try {
-            // Znajdź gracza w indeksie
-            const playerIndex = await this.databaseService.loadPlayerIndex(guildId);
-            const playerData = playerIndex[userId];
+            // Pobierz wszystkie dostępne tygodnie (ostatnie 12)
+            const allWeeks = await this.databaseService.getAvailableWeeks(guildId);
 
-            if (!playerData) {
+            if (allWeeks.length === 0) {
                 return null;
             }
 
-            // Pobierz wyniki z ostatnich tygodni
-            const recentWeeks = await this.databaseService.getRecentWeeksForPlayer(userId, guildId, 12);
+            const last12Weeks = allWeeks.slice(0, 12);
+
+            // Zbierz dane gracza ze wszystkich tygodni i klanów (ostatnie 12 tygodni)
+            const playerProgressData = [];
+
+            for (const week of last12Weeks) {
+                for (const clan of week.clans) {
+                    const weekData = await this.databaseService.getPhase1Results(
+                        guildId,
+                        week.weekNumber,
+                        week.year,
+                        clan
+                    );
+
+                    if (weekData && weekData.players) {
+                        const player = weekData.players.find(p => p.userId === userId);
+
+                        if (player) {
+                            playerProgressData.push({
+                                weekNumber: week.weekNumber,
+                                year: week.year,
+                                clan: clan,
+                                clanName: this.config.roleDisplayNames[clan],
+                                score: player.score,
+                                displayName: player.displayName,
+                                createdAt: weekData.createdAt
+                            });
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (playerProgressData.length === 0) {
+                return null;
+            }
+
+            // Sortuj od najnowszego do najstarszego
+            playerProgressData.sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.weekNumber - a.weekNumber;
+            });
 
             // Oblicz statystyki
-            const stats = this.calculatePlayerStats(recentWeeks);
+            const stats = this.calculatePlayerStats(playerProgressData);
 
             return {
                 userId,
-                playerName: playerData.latestNick,
-                allNicks: playerData.allNicks,
-                recentWeeks,
+                playerName: playerProgressData[0].displayName,
+                recentWeeks: playerProgressData,
                 stats
             };
         } catch (error) {
@@ -375,26 +413,35 @@ class AIChatService {
      */
     async getClanRanking(clanKey, guildId, limit = 10) {
         try {
-            // Znajdź obecny tydzień
-            const currentWeek = this.getCurrentWeek();
+            // Pobierz najnowszy tydzień
+            const allWeeks = await this.databaseService.getAvailableWeeks(guildId);
 
-            // Pobierz dane wszystkich graczy z klanu
-            const playerIndex = await this.databaseService.loadPlayerIndex(guildId);
-            const ranking = [];
-
-            for (const [userId, data] of Object.entries(playerIndex)) {
-                const recentWeeks = await this.databaseService.getRecentWeeksForPlayer(userId, guildId, 1);
-                if (recentWeeks.length > 0 && recentWeeks[0].clan === clanKey) {
-                    ranking.push({
-                        userId,
-                        playerName: data.latestNick,
-                        score: recentWeeks[0].score
-                    });
-                }
+            if (allWeeks.length === 0) {
+                return [];
             }
 
-            // Sortuj po score
-            ranking.sort((a, b) => b.score - a.score);
+            const latestWeek = allWeeks[0];
+
+            // Pobierz wyniki dla tego klanu w najnowszym tygodniu
+            const weekData = await this.databaseService.getPhase1Results(
+                guildId,
+                latestWeek.weekNumber,
+                latestWeek.year,
+                clanKey
+            );
+
+            if (!weekData || !weekData.players) {
+                return [];
+            }
+
+            // Sortuj graczy po score
+            const ranking = weekData.players
+                .map(player => ({
+                    userId: player.userId,
+                    playerName: player.displayName,
+                    score: player.score
+                }))
+                .sort((a, b) => b.score - a.score);
 
             return ranking.slice(0, limit);
         } catch (error) {
@@ -428,9 +475,11 @@ ZASADY:
 - Odpowiadaj ZAWSZE po polsku
 - Bądź pomocny, ale też dowcipny gdy jest to stosowne
 - Używaj emoji do urozmaicenia odpowiedzi
-- Bądź konkretny - używaj liczb i faktów
+- Bądź konkretny - używaj TYLKO liczb i faktów które dostałeś poniżej
+- KRYTYCZNE: NIE WYMYŚLAJ danych! Jeśli nie masz danych gracza - powiedz że nie znalazłeś jego wyników
 - Gdy porównujesz graczy, bądź obiektywny ale możesz dodać zabawny komentarz
-- Dane dotyczą wyników z Lunar Mine Expedition (bossy w grze)
+- Dane dotyczą wyników z Lunar Mine Expedition (bossy w grze Survivor.io)
+- Wyniki to punkty zdobyte w bossach (liczby typu 1547, 2340 itd.)
 
 KONTEKST PYTANIA:
 Użytkownik: ${context.asker.displayName} (${context.asker.username})
@@ -444,15 +493,20 @@ Typ pytania: ${context.queryType}
             const askerData = await this.getPlayerData(context.asker.id, context.guild.id);
             if (askerData) {
                 prompt += `\nDANE PYTAJĄCEGO (${askerData.playerName}):\n`;
-                prompt += `Ostatni wynik: ${askerData.stats.latestScore}\n`;
-                prompt += `Najlepszy wynik: ${askerData.stats.maxScore}\n`;
+                prompt += `Ostatni wynik: ${askerData.stats.latestScore} pkt\n`;
+                prompt += `Najlepszy wynik: ${askerData.stats.maxScore} pkt\n`;
                 if (askerData.stats.monthlyProgress !== null) {
-                    prompt += `Progres miesięczny: ${askerData.stats.monthlyProgress > 0 ? '+' : ''}${askerData.stats.monthlyProgress}\n`;
+                    prompt += `Progres miesięczny: ${askerData.stats.monthlyProgress > 0 ? '+' : ''}${askerData.stats.monthlyProgress} pkt\n`;
                 }
                 if (askerData.stats.quarterlyProgress !== null) {
-                    prompt += `Progres kwartalny: ${askerData.stats.quarterlyProgress > 0 ? '+' : ''}${askerData.stats.quarterlyProgress}\n`;
+                    prompt += `Progres kwartalny: ${askerData.stats.quarterlyProgress > 0 ? '+' : ''}${askerData.stats.quarterlyProgress} pkt\n`;
                 }
                 prompt += `Liczba tygodni z danymi: ${askerData.stats.weeksWithData}\n`;
+
+                logger.info(`AI Chat: Pobrano dane dla ${askerData.playerName} - ${askerData.stats.weeksWithData} tygodni`);
+            } else {
+                prompt += `\nDANE PYTAJĄCEGO: Nie znaleziono żadnych wyników w bazie danych.\n`;
+                logger.warn(`AI Chat: Brak danych dla userId ${context.asker.id}`);
             }
         }
 
@@ -461,15 +515,20 @@ Typ pytania: ${context.queryType}
             const mentionedData = await this.getPlayerData(context.mentionedUser.id, context.guild.id);
             if (mentionedData) {
                 prompt += `\nDANE WSPOMNIANEGO GRACZA (${mentionedData.playerName}):\n`;
-                prompt += `Ostatni wynik: ${mentionedData.stats.latestScore}\n`;
-                prompt += `Najlepszy wynik: ${mentionedData.stats.maxScore}\n`;
+                prompt += `Ostatni wynik: ${mentionedData.stats.latestScore} pkt\n`;
+                prompt += `Najlepszy wynik: ${mentionedData.stats.maxScore} pkt\n`;
                 if (mentionedData.stats.monthlyProgress !== null) {
-                    prompt += `Progres miesięczny: ${mentionedData.stats.monthlyProgress > 0 ? '+' : ''}${mentionedData.stats.monthlyProgress}\n`;
+                    prompt += `Progres miesięczny: ${mentionedData.stats.monthlyProgress > 0 ? '+' : ''}${mentionedData.stats.monthlyProgress} pkt\n`;
                 }
                 if (mentionedData.stats.quarterlyProgress !== null) {
-                    prompt += `Progres kwartalny: ${mentionedData.stats.quarterlyProgress > 0 ? '+' : ''}${mentionedData.stats.quarterlyProgress}\n`;
+                    prompt += `Progres kwartalny: ${mentionedData.stats.quarterlyProgress > 0 ? '+' : ''}${mentionedData.stats.quarterlyProgress} pkt\n`;
                 }
                 prompt += `Liczba tygodni z danymi: ${mentionedData.stats.weeksWithData}\n`;
+
+                logger.info(`AI Chat: Pobrano dane dla ${mentionedData.playerName} - ${mentionedData.stats.weeksWithData} tygodni`);
+            } else {
+                prompt += `\nDANE WSPOMNIANEGO GRACZA: Nie znaleziono żadnych wyników w bazie danych.\n`;
+                logger.warn(`AI Chat: Brak danych dla wspomnianego userId ${context.mentionedUser.id}`);
             }
         }
 
