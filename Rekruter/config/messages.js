@@ -8,7 +8,7 @@ module.exports = {
     otherPurposeMessage: "Rozumiem, że szukasz Polskiej społeczności, ale masz już swój klan.\n## Bardzo dobrze trafiłeś!\n\nZanim dostaniesz dostęp do serwera, musimy sprawdzić o Tobie kilka rzeczy.\n**W tym celu wklej na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
     statsQuestion: "Wklej tu na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
     invalidRC: "Podaj poprawną ilość RC!",
-    invalidLunarLevel: "Podaj poprawny poziom Lunar Mine Expedition (1-12)!",
+    invalidLunarLevel: "Podaj poprawny poziom Lunar Mine Expedition (1-16)!",
     invalidLunarPoints: "Podaj poprawną ilość punktów z I fazy Lunar Mine Expedition (0-1500)!",
     invalidEquipmentImage: "❌ To nie jest zdjęcie postaci! Proszę wklej zdjęcie postaci bez obróbki. Musi być widoczny Twój nick, postać oraz EQ!",
     notQualified: "\nWitaj na serwerze!\nNiestety nie kwalifikujesz się do żadnego z naszych klanów :PepeSad:\n\nZostań z nami na serwerze, już niedługo z naszą pomocą osiągniesz odpowiedni poziom. <:PepePOG:1185136709487300669> <#1183308580867285152> z nami lub od razu zacznij <#1170323972173340744> <:PepeHahaNoob:1246476180408762548> .\nNa kanale <#1207041051831832586>, możesz wrzucić zdjęcie swojego EQ, sprawdzimy czy można coś poprawić , wytyczymy Ci odpowiednią ścieżkę rozwoju \nNa kanałach <#1190255710005633174> oraz <#1326501601409761350> możesz ustawić sobie odpowiednie role na serwerze, dzięki którym dostaniesz dostęp do tematycznych kanałów na serwerze. \n\nZmień NICK na serwerze na taki jaki masz w grze, jest to bardzo ważne byśmy pozostali w kontakcie! <:PepeOK:1185134659286347886>",

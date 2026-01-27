@@ -1089,6 +1089,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**Rekruter Bot - Rozszerzenie Poziomów Lunar Mine Expedition:**
+- **ZMIANA:** Zakres akceptowanych poziomów Lunar Mine Expedition rozszerzony z 1-12 na **1-16**
+- **Powód:** W grze pojawiło się więcej poziomów trudności ekspedycji
+- **Zmiany:**
+  - Komunikat walidacji: "Podaj poprawny poziom Lunar Mine Expedition (1-16)!"
+  - Walidacja w `handleLunarLevelInput`: `lvl > 12` → `lvl > 16`
+- Lokalizacja zmian:
+  - `Rekruter/config/messages.js:11` (komunikat)
+  - `Rekruter/handlers/messageHandlers.js:156` (walidacja)
+
 **Rekruter Bot - System AI OCR (Opcjonalny):**
 - **NOWA FUNKCJA:** Dodano opcjonalny system analizy zdjęć rekrutacyjnych przez Anthropic API (Claude Vision)
 - **Tryby OCR:**

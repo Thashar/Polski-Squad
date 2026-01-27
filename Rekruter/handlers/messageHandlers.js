@@ -153,7 +153,7 @@ async function handleLunarLevelInput(msg, state, config) {
   const lvl = parseInt(msg.content, 10);
   await safeDeleteMessage(msg);
 
-  if (isNaN(lvl) || lvl < 1 || lvl > 12) {
+  if (isNaN(lvl) || lvl < 1 || lvl > 16) {
     await updateUserEphemeralReply(
       msg.author.id,
       config.messages.invalidLunarLevel,
