@@ -21,6 +21,9 @@ backups/
 punishments.json
 weekly_removal.json
 
+# AI Chat prompts (prywatne)
+*/data/prompts/
+
 # OS generated files
 .DS_Store
 Thumbs.db

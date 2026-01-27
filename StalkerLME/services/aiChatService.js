@@ -1121,6 +1121,38 @@ class AIChatService {
     }
 
     /**
+     * Zapisz prompt do pliku w folderze data/prompts/
+     */
+    async savePromptToFile(promptContent, userDisplayName) {
+        try {
+            // Utwórz katalog jeśli nie istnieje
+            const promptsDir = path.join(__dirname, '../data/prompts');
+            await fs.mkdir(promptsDir, { recursive: true });
+
+            // Przygotuj timestamp dla nazwy pliku (YYYY-MM-DD_HH-mm-ss)
+            const now = new Date();
+            const timestamp = now.toISOString()
+                .replace(/T/, '_')
+                .replace(/:/g, '-')
+                .split('.')[0];
+
+            // Wyczyść nick z niedozwolonych znaków w nazwie pliku
+            const safeNick = userDisplayName.replace(/[<>:"/\\|?*]/g, '_');
+
+            // Nazwa pliku: <nick>_<timestamp>.txt
+            const filename = `${safeNick}_${timestamp}.txt`;
+            const filePath = path.join(promptsDir, filename);
+
+            // Zapisz prompt do pliku
+            await fs.writeFile(filePath, promptContent, 'utf-8');
+
+            logger.info(`📄 Zapisano prompt do pliku: ${filename}`);
+        } catch (error) {
+            logger.error(`❌ Błąd zapisu promptu do pliku: ${error.message}`);
+        }
+    }
+
+    /**
      * Przygotuj prompt dla AI
      */
     async preparePrompt(context, message) {
@@ -1512,9 +1544,9 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                 });
             }
 
-            // Loguj pełny prompt wysyłany do API
+            // Zapisz pełny prompt do pliku
             const lastMessage = messages[messages.length - 1];
-            logger.info(`\n${'='.repeat(80)}\n📤 PROMPT WYSYŁANY DO AI:\n${'='.repeat(80)}\n${lastMessage.content}\n${'='.repeat(80)}`);
+            await this.savePromptToFile(lastMessage.content, context.asker.displayName);
 
             // Wywołaj API
             const response = await this.client.messages.create({
