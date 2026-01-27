@@ -88,12 +88,15 @@ module.exports = {
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
-        
+
+        // AI OCR - używa Anthropic API (Claude Vision) zamiast Tesseract
+        useAI: process.env.USE_AI_OCR === 'true',
+
         // Zapisywanie przetworzonych obrazów
         saveProcessedImages: true,
         processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 400,
-        
+
         // Szczegółowe logowanie OCR
         detailedLogging: {
             enabled: false,  // Domyślnie wyłączone

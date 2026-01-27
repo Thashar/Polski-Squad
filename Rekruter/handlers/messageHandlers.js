@@ -17,6 +17,8 @@ const {
   initializeOCR
 } = require('../services/ocrService');
 
+const AIOCRService = require('../services/aiOcrService');
+
 const { proposeNicknameChange } = require('../services/nicknameService');
 const {
   finishOtherPurposeRecruitment,
@@ -245,11 +247,24 @@ async function handleImageInput(msg, state, config, client) {
   await downloadImage(file.url, imgPath);
   state.userImages.set(msg.author.id, imgPath);
 
-  const stats = await extractOptimizedStatsFromImage(
-    imgPath,
-    msg.author.id,
-    state.userEphemeralReplies
-  );
+  // Wybierz metodę OCR - AI lub tradycyjny Tesseract
+  let stats;
+  if (config.ocr.useAI) {
+    await updateUserEphemeralReply(
+      msg.author.id,
+      '🤖 Analizuję obraz przez AI...',
+      [],
+      state.userEphemeralReplies
+    );
+    const aiOcrService = new AIOCRService(config);
+    stats = await aiOcrService.analyzeRecruitmentImage(imgPath);
+  } else {
+    stats = await extractOptimizedStatsFromImage(
+      imgPath,
+      msg.author.id,
+      state.userEphemeralReplies
+    );
+  }
 
   await safeDeleteMessage(msg);                               // usuwamy oryginał
 

@@ -614,14 +614,21 @@ node manual-backup.js
 ### 🎯 Rekruter Bot
 
 **Funkcjonalność:** Wieloetapowa rekrutacja z OCR → Kwalifikacja klanów: <100K=brak, 100K-599K=Clan0, 600K-799K=Clan1, 800K-1.19M=Clan2, 1.2M+=Main
-**OCR:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing, ekstrakcja nick+atak
+**OCR - Dwa tryby:**
+1. **Tradycyjny:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing Sharp, ekstrakcja nick+atak
+2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), analiza obrazu przez AI
+   - Włączany przez `USE_AI_OCR=true` w .env
+   - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+   - Prompt: Wykrywa nick postaci (z prefixem), atak, oraz "My Equipment"
+   - Zwraca błąd gdy brak "My Equipment" lub niepoprawny screen
+
 **Serwisy:**
 - `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje
 - `roleMonitoringService.js` - Cron 6h, ostrzeżenia po 24h bez ról
 - `roleConflictService.js` - Auto-usuwanie ról rekrutacyjnych gdy dostaje klanową
 
 **Komendy:** `/ocr-debug`, `/nick`
-**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH)
+**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne)
 
 ---
 
@@ -972,6 +979,10 @@ CLAN1_ROLE=role_id
 CLAN2_ROLE=role_id
 MAIN_CLAN_ROLE=role_id
 WAITING_ROOM_CHANNEL=poczekalnia
+# AI OCR (opcjonalne)
+USE_AI_OCR=false
+ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
+ANTHROPIC_MODEL=claude-3-haiku-20240307
 
 # ===== SZKOLENIA BOT =====
 SZKOLENIA_DISCORD_TOKEN=bot_token_here
@@ -1077,6 +1088,33 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**Rekruter Bot - System AI OCR (Opcjonalny):**
+- **NOWA FUNKCJA:** Dodano opcjonalny system analizy zdjęć rekrutacyjnych przez Anthropic API (Claude Vision)
+- **Tryby OCR:**
+  - **Tradycyjny:** Tesseract + preprocessing Sharp (domyślny)
+  - **AI OCR:** Claude Vision API - włączany przez `USE_AI_OCR=true` w .env
+- **Implementacja:**
+  - Nowy serwis: `Rekruter/services/aiOcrService.js`
+  - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+  - Prompt: Wykrywa nick postaci (z prefixem), atak, oraz "My Equipment"
+  - Zwraca błąd gdy brak "My Equipment" lub niepoprawny screen
+- **Konfiguracja:**
+  - `Rekruter/config/config.js` - dodano `ocr.useAI` flag
+  - `Rekruter/handlers/messageHandlers.js` - wybór metody OCR na podstawie flagi
+  - Zmienne ENV: `USE_AI_OCR` (true/false), `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (opcjonalny)
+- **Workflow:**
+  - Jeśli `USE_AI_OCR=true` → zdjęcie wysyłane do Claude Vision
+  - Jeśli `USE_AI_OCR=false` → tradycyjny OCR (Tesseract)
+- **Zalety AI OCR:**
+  - Lepsze rozpoznawanie nicków z nietypowymi czcionkami/prefixami
+  - Inteligentne wykrywanie "My Equipment"
+  - Nie wymaga preprocessingu obrazu
+- Lokalizacja zmian:
+  - `Rekruter/services/aiOcrService.js` (nowy plik)
+  - `Rekruter/config/config.js:93` (useAI flag)
+  - `Rekruter/handlers/messageHandlers.js:20,250-267` (import + wybór metody)
+  - `CLAUDE.md:617-623,976-978` (dokumentacja)
 
 **StalkerLME Bot - AI Chat: Porównywanie do 5 Graczy:**
 - **ZMIANA:** Zwiększono limit porównywanych graczy z 2 do maksymalnie 5 jednocześnie
