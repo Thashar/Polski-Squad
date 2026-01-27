@@ -4,6 +4,7 @@ process.noDeprecation = true;
 
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 const { scheduler } = require('./backup-scheduler');
+const GitAutoFix = require('./utils/gitAutoFix');
 
 const logger = createBotLogger('Launcher');
 
@@ -165,6 +166,14 @@ function setupShutdownHandlers() {
 
 // Główna funkcja uruchamiająca
 async function main() {
+    // Git auto-fix (jeśli włączony w .env)
+    if (process.env.AUTO_GIT_FIX === 'true') {
+        logger.info('🔧 AUTO_GIT_FIX włączony - sprawdzam repozytorium git...');
+        const gitAutoFix = new GitAutoFix(logger);
+        await gitAutoFix.autoFix();
+        logger.info('');
+    }
+
     setupShutdownHandlers();
     await startAllBots();
 

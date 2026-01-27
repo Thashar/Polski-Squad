@@ -1069,6 +1069,14 @@ GARY_PROXY_STRATEGY=round-robin
 GARY_PROXY_LIST=http://proxy1:port,http://proxy2:port
 GARY_WEBSHARE_URL=https://proxy.webshare.io/api/v2/proxy/list/
 
+# ===== GIT AUTO-FIX (ZALECANE DLA SERWERÓW PRODUKCYJNYCH) =====
+# Automatyczna naprawa problemów z git przed startem botów
+# UWAGA: Włączenie tej opcji wykona "git reset --hard origin/main" przy starcie
+# Nadpisuje TYLKO śledzone pliki - nieśledzone pliki (data/, temp/, .env) pozostają nietknięte
+# Rozwiązuje problem: "fatal: Need to specify how to reconcile divergent branches"
+# ZALECANE dla serwerów produkcyjnych (Pterodactyl) gdzie nie można ręcznie naprawić git
+AUTO_GIT_FIX=false
+
 # ===== DISCORD WEBHOOK (OPCJONALNE) =====
 DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ```
@@ -1103,6 +1111,42 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**System Git Auto-Fix - Automatyczna Naprawa Divergent Branches:**
+- **NOWA FUNKCJA:** Dodano automatyczny system naprawy problemów z git przed startem botów
+- **Problem:** Serwer Pterodactyl wykonuje `git pull` ale nie może gdy są divergent branches (lokalne vs remote)
+- **Rozwiązanie:**
+  - Nowy moduł: `utils/gitAutoFix.js` - klasa GitAutoFix z metodami:
+    - `isGitRepo()` - sprawdza czy folder to repozytorium git
+    - `getStatus()` - pobiera status zmian lokalnych
+    - `hasDivergentBranches()` - wykrywa rozbieżności między local i remote
+    - `hardReset()` - wykonuje `git reset --hard origin/main` (BEZ `git clean`)
+  - Integracja z `index.js` - auto-fix uruchamia się PRZED startem botów
+  - Zmienna ENV: `AUTO_GIT_FIX=true/false` - włącza/wyłącza naprawę
+- **Działanie:**
+  1. Sprawdza czy folder to repo git
+  2. Pobiera najnowsze zmiany z `origin` (`git fetch`)
+  3. Wykrywa divergent branches (commits ahead/behind)
+  4. Wykonuje hard reset do `origin/main` (nadpisuje TYLKO śledzone pliki)
+  5. **Nieśledzone pliki pozostają nietknięte** (data/, temp/, .env)
+- **Bezpieczeństwo:**
+  - **NIE używa `git clean -fd`** - nie usuwa niesledzonych plików
+  - Pliki danych botów (data/, temp/) są bezpieczne
+  - Lokalne zmiany w .env są bezpieczne
+  - Nadpisuje tylko pliki śledzone przez git (kod źródłowy)
+- **Logowanie:**
+  - Wszystkie operacje logowane przez `consoleLogger`
+  - Informacje o liczbie commitów ahead/behind
+  - Potwierdzenie że nieśledzone pliki są bezpieczne
+- **Zalecane dla:**
+  - Serwerów produkcyjnych (Pterodactyl, Docker, VPS)
+  - Środowisk gdzie nie ma dostępu do konsoli
+  - Automatycznych deploymentów CI/CD
+- Lokalizacja zmian:
+  - `utils/gitAutoFix.js` (nowy moduł)
+  - `index.js:7,170-175` (import + integracja)
+  - `.env:10-16` (zmienna AUTO_GIT_FIX)
+  - `CLAUDE.md:1072-1078` (dokumentacja ENV)
 
 **EndersEcho Bot - System AI OCR (Opcjonalny):**
 - **NOWA FUNKCJA:** Dodano opcjonalny system analizy zdjęć wyników przez Anthropic API (Claude Vision)
