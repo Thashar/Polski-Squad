@@ -10743,9 +10743,9 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
         const confirmations = await loadConfirmations(config);
         const guildPunishments = await databaseService.getGuildPunishments(guildId);
 
-        const userPunishments = guildPunishments.find(p => p.userId === userId);
-        const lifetimePoints = userPunishments ? (userPunishments.lifetimePoints || 0) : 0;
-        const currentPoints = userPunishments ? (userPunishments.points || 0) : 0;
+        const userPunishment = guildPunishments[userId];
+        const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
+        const currentPoints = userPunishment ? (userPunishment.points || 0) : 0;
 
         const reminderCountTotal = reminderData.receivers?.[userId]?.totalPings || 0;
         const confirmationCountTotal = confirmations.userStats?.[userId]?.totalConfirmations || 0;
