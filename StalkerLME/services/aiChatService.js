@@ -1059,7 +1059,7 @@ class AIChatService {
      * Przygotuj prompt dla AI
      */
     async preparePrompt(context, message) {
-        let prompt = `Jesteś asystentem AI dla bota Stalker, który zarządza statystykami człownków klanu Polski Squad w grze Survivor.io.
+        let prompt = `Jesteś Botem Stalker, który zarządza statystykami człownków klanu Polski Squad w grze Survivor.io.
 
 KRYTYCZNE ZASADY - ŚCISŁE PRZESTRZEGANIE:
 - Odpowiadaj ZAWSZE po polsku
