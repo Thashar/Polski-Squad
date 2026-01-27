@@ -8,6 +8,7 @@ const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { saveProcessedImage } = require('../../utils/ocrFileUtils');
 const { EmbedBuilder } = require('discord.js');
 const { stopGhostPing } = require('../handlers/interactionHandlers');
+const AIOCRService = require('./aiOcrService');
 
 const logger = createBotLogger('StalkerLME');
 
@@ -17,6 +18,9 @@ class OCRService {
         this.client = client;
         this.tempDir = this.config.ocr.tempDir || './StalkerLME/temp';
         this.processedDir = this.config.ocr.processedDir || './StalkerLME/processed';
+
+        // Inicjalizuj AI OCR Service (opcjonalny)
+        this.aiOcrService = new AIOCRService(config);
 
         // System kolejkowania OCR - wspólny dla wszystkich komend używających OCR
         this.activeProcessing = new Map(); // guildId → {userId, commandName, expiresAt, timeout}
@@ -103,13 +107,47 @@ class OCRService {
 
     /**
      * Przetwarza obraz z pliku lokalnego (dla Phase 1)
+     * Wspiera AI OCR z fallbackiem na tradycyjny Tesseract
      */
     async processImageFromFile(filepath) {
         let imageBuffer = null;
         let processedBuffer = null;
 
         try {
-            logger.info(`[PHASE1] 📂 Przetwarzanie pliku: ${filepath}`);
+            logger.info(`[OCR] 📂 Przetwarzanie pliku: ${filepath}`);
+
+            // === KROK 1: Spróbuj AI OCR jeśli włączony ===
+            if (this.config.ocr.useAI && this.aiOcrService.enabled) {
+                logger.info('[AI OCR] 🤖 Próba analizy przez Claude Vision...');
+
+                try {
+                    const aiResult = await this.aiOcrService.analyzeResultsImage(filepath);
+
+                    if (aiResult.isValid && aiResult.players.length > 0) {
+                        logger.info(`[AI OCR] ✅ Pomyślnie rozpoznano ${aiResult.players.length} graczy`);
+
+                        // Przekonwertuj wyniki AI na format tekstowy (każda linia: "nick - wynik")
+                        const textLines = aiResult.players.map(p => `${p.playerName} - ${p.score}`);
+                        const text = textLines.join('\n');
+
+                        logger.info('[AI OCR] 🔤 Sparsowane dane z AI:');
+                        textLines.forEach((line, index) => {
+                            logger.info(`${index + 1}: ${line}`);
+                        });
+
+                        return text;
+                    } else {
+                        logger.warn('[AI OCR] ⚠️ AI OCR nie znalazł graczy lub wykrył niepoprawny screen');
+                        logger.warn('[AI OCR] 🔄 Fallback na tradycyjny OCR...');
+                    }
+                } catch (aiError) {
+                    logger.error('[AI OCR] ❌ Błąd AI OCR:', aiError.message);
+                    logger.warn('[AI OCR] 🔄 Fallback na tradycyjny OCR...');
+                }
+            }
+
+            // === KROK 2: Tradycyjny Tesseract OCR (domyślny lub fallback) ===
+            logger.info('[OCR] 🔄 Używam tradycyjnego OCR (Tesseract)...');
 
             // Wczytaj plik z dysku
             const fs = require('fs').promises;
@@ -117,12 +155,12 @@ class OCRService {
 
             processedBuffer = await this.processImageWithSharp(imageBuffer);
 
-            logger.info('[PHASE1] 🔄 Uruchamianie OCR na pliku...');
+            logger.info('[OCR] 🔄 Uruchamianie Tesseract OCR...');
             const { data: { text } } = await Tesseract.recognize(processedBuffer, 'pol', {
                 tessedit_char_whitelist: this.config.ocr.polishAlphabet
             });
 
-            logger.info('[PHASE1] 🔤 Odczytany tekst z OCR:');
+            logger.info('[OCR] 🔤 Odczytany tekst z OCR:');
             const textLines = text.split('\n').filter(line => line.trim().length > 0);
             textLines.forEach((line, index) => {
                 logger.info(`${index + 1}: ${line.trim()}`);
@@ -134,7 +172,7 @@ class OCRService {
 
             return text;
         } catch (error) {
-            logger.error('[PHASE1] ❌ Błąd podczas przetwarzania pliku:', error);
+            logger.error('[OCR] ❌ Błąd podczas przetwarzania pliku:', error);
             throw error;
         } finally {
             // Wymuś zwolnienie bufora z pamięci

@@ -102,9 +102,12 @@ module.exports = {
     
     // Konfiguracja OCR
     ocr: {
+        // AI OCR (opcjonalne)
+        useAI: process.env.USE_STALKER_AI_OCR === 'true',
+
         // Polski alfabet dla OCR whitelist (oryginalny)
         polishAlphabet: 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźżAĄBCĆDEĘFGHIJKLŁMNŃOÓPQRSŚTUVWXYZŹŻ0123456789.,;:!?-()[]{}/" ',
-        
+
         // Ustawienia przetwarzania obrazu (ulepszone)
         imageProcessing: {
             whiteThreshold: 200,

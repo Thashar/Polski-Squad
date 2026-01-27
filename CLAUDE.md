@@ -655,7 +655,14 @@ node manual-backup.js
 ### ⚔️ StalkerLME Bot
 
 **7 Systemów:**
-1. **Kary OCR** - `ocrService.js`: Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
+1. **Kary OCR** - Dwa tryby:
+   - **Tradycyjny:** `ocrService.js` - Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
+   - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), analiza wyników graczy przez AI
+     - Włączany przez `USE_STALKER_AI_OCR=true` w .env
+     - Używa tego samego modelu co AI Chat (domyślnie: Claude 3 Haiku)
+     - Prompt: "Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie: <nick> - <wynik>"
+     - Automatyczny fallback na tradycyjny OCR gdy AI zawiedzie
+     - Dotyczy komend: `/punish`, `/faza1`, `/faza2`
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00)
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
@@ -1028,6 +1035,9 @@ STALKER_LME_VACATION_CHANNEL_ID=channel_id
 # AI Chat (opcjonalne)
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
+# AI OCR (opcjonalne)
+USE_STALKER_AI_OCR=false
+STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
 
 # ===== MUTEUSZ BOT =====
 MUTEUSZ_TOKEN=bot_token_here
