@@ -282,12 +282,12 @@ class AIChatService {
             context.asker.clanName = this.config.roleDisplayNames[clanKey];
         }
 
-        // Wykryj o kogo/co pyta (max 5 graczy)
+        // Wykryj o kogo/co pyta (max 2 graczy)
         const mentions = message.mentions.users;
         if (mentions.size > 1) { // >1 bo bot też jest wspomniany
             const mentionedUsersArray = Array.from(mentions.values())
                 .filter(u => !u.bot)
-                .slice(0, 5); // max 5 graczy
+                .slice(0, 2); // max 2 graczy
 
             context.mentionedUsers = [];
             for (const user of mentionedUsersArray) {
@@ -1269,7 +1269,7 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
             }
         }
 
-        // Dodaj dane dla porównania (max 5 graczy)
+        // Dodaj dane dla porównania (max 2 graczy)
         if (context.queryType === 'compare') {
             const playersToCompare = [];
             const addedUserIds = new Set(); // Zapobiegaj duplikatom
@@ -1281,10 +1281,10 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                 logger.info(`AI Chat: Porównanie - dodaję pytającego (${context.asker.displayName}) jako pierwszego`);
             }
 
-            // Jeśli są wspomnienia (@mention) - dodaj wspomnianych graczy (max 5 łącznie)
+            // Jeśli są wspomnienia (@mention) - dodaj wspomnianych graczy (max 2 łącznie)
             if (context.mentionedUsers && context.mentionedUsers.length > 0) {
-                for (const user of context.mentionedUsers.slice(0, 5)) {
-                    if (!addedUserIds.has(user.id) && playersToCompare.length < 5) {
+                for (const user of context.mentionedUsers.slice(0, 2)) {
+                    if (!addedUserIds.has(user.id) && playersToCompare.length < 2) {
                         playersToCompare.push({ id: user.id, name: user.displayName });
                         addedUserIds.add(user.id);
                     }
@@ -1292,8 +1292,8 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
             }
             // Jeśli wykryto nicki w pytaniu - dodaj znalezionych graczy
             else if (context.detectedPlayers && context.detectedPlayers.length > 0) {
-                for (const player of context.detectedPlayers.slice(0, 5)) {
-                    if (!addedUserIds.has(player.id) && playersToCompare.length < 5) {
+                for (const player of context.detectedPlayers.slice(0, 2)) {
+                    if (!addedUserIds.has(player.id) && playersToCompare.length < 2) {
                         playersToCompare.push({ id: player.id, name: player.displayName });
                         addedUserIds.add(player.id);
                     }
@@ -1308,46 +1308,38 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                 playersToCompare.push({ id: context.asker.id, name: context.asker.displayName });
             }
 
-            // Pobierz dane dla każdego gracza
+            // Pobierz pełne dane dla każdego gracza (max 2) używając helper functions
+            const sharedState = {
+                config: this.config,
+                databaseService: this.databaseService,
+                reminderUsageService: this.reminderUsageService,
+                punishmentService: this.punishmentService
+            };
+
             let loadedPlayersCount = 0;
             for (let i = 0; i < playersToCompare.length; i++) {
                 const player = playersToCompare[i];
-                const playerData = await this.getPlayerData(player.id, context.guild.id);
-                const playerLabel = i === 0 ? 'PIERWSZEGO' : ['DRUGIEGO', 'TRZECIEGO', 'CZWARTEGO', 'PIĄTEGO'][i - 1];
+                const playerLabel = i === 0 ? 'PIERWSZEGO' : 'DRUGIEGO';
 
-                if (playerData) {
-                    prompt += `\n=== ${playerLabel} GRACZ: ${playerData.playerName} ===\n`;
-                    prompt += `📊 PODSTAWOWE: Ostatni ${playerData.stats.latestScore} | Najlepszy ${playerData.stats.maxScore} | Tygodni ${playerData.stats.weeksWithData}\n`;
+                // Użyj helper functions aby pobrać pełne dane
+                const progressResult = await this.helperFunctions.generatePlayerProgressTextData(
+                    player.id,
+                    context.guild.id,
+                    sharedState
+                );
 
-                    if (playerData.stats.monthlyProgress !== null) {
-                        prompt += `📈 Progres miesięczny: ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt (${playerData.stats.monthlyProgressPercent}%)\n`;
-                    }
-                    if (playerData.stats.quarterlyProgress !== null) {
-                        prompt += `📈 Progres kwartalny: ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt (${playerData.stats.quarterlyProgressPercent}%)\n`;
-                    }
-                    if (playerData.stats.trendDescription !== null) {
-                        prompt += `📉 Trend: ${playerData.stats.trendIcon} ${playerData.stats.trendDescription}\n`;
-                    }
-                    if (playerData.stats.engagementFactor !== null) {
-                        prompt += `🎯 Zaangażowanie: ${playerData.stats.engagementFactor}%\n`;
-                    }
-                    // Dodatkowe współczynniki w porównaniu
-                    if (playerData.stats.reliabilityFactor !== null) {
-                        prompt += `📋 Rzetelność: ${playerData.stats.reliabilityFactor.toFixed(1)}%\n`;
-                    }
-                    if (playerData.stats.punctualityFactor !== null) {
-                        prompt += `⏰ Punktualność: ${playerData.stats.punctualityFactor.toFixed(1)}%\n`;
-                    }
-                    if (playerData.stats.responsivenessFactor !== null) {
-                        prompt += `📬 Responsywność: ${playerData.stats.responsivenessFactor.toFixed(1)}%\n`;
-                    }
-                    // MVP w porównaniu
-                    if (playerData.mvpWeeks && playerData.mvpWeeks.length > 0) {
-                        const topMvp = playerData.mvpWeeks[0];
-                        prompt += `⭐ Najlepszy MVP: ${topMvp.weekKey} (+${topMvp.progress} pkt)\n`;
-                    }
+                const statusResult = await this.helperFunctions.generatePlayerStatusTextData(
+                    player.id,
+                    context.guild.id,
+                    sharedState
+                );
 
-                    logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
+                if (progressResult.success && statusResult.success) {
+                    prompt += `\n=== ${playerLabel} GRACZ ===\n`;
+                    prompt += progressResult.plainText + '\n';
+                    prompt += statusResult.plainText + '\n';
+
+                    logger.info(`AI Chat: Pobrano pełne dane dla ${progressResult.data.latestNick} - ${progressResult.data.weeksWithData} tygodni`);
                     loadedPlayersCount++;
                 } else {
                     prompt += `\n=== ${playerLabel} GRACZ: ${player.name} ===\n`;
@@ -1357,7 +1349,7 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
             }
 
             const totalCompared = playersToCompare.length;
-            prompt += `\n⚠️ LIMIT DANYCH: Masz ${totalCompared === 1 ? 'TYLKO tego jednego gracza' : `TYLKO tych ${totalCompared} graczy`} do porównania (max 5). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
+            prompt += `\n⚠️ LIMIT DANYCH: Masz ${totalCompared === 1 ? 'TYLKO tego jednego gracza' : `TYLKO tych ${totalCompared} graczy`} do porównania (max 2). NIE MA więcej danych - NIE wymyślaj innych graczy!\n`;
         }
 
         // Dodaj SZCZEGÓŁOWE dane klanów jeśli pytanie o ranking/klan
