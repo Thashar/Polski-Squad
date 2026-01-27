@@ -619,8 +619,10 @@ node manual-backup.js
 2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), analiza obrazu przez AI
    - Włączany przez `USE_AI_OCR=true` w .env
    - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
-   - Prompt: Wykrywa nick postaci (z prefixem), atak, oraz "My Equipment"
-   - Zwraca błąd gdy brak "My Equipment" lub niepoprawny screen
+   - Prompt sekwencyjny (dwuetapowy):
+     - **KROK 1:** Sprawdza czy jest "My Equipment" → jeśli NIE - natychmiast odrzuca zdjęcie
+     - **KROK 2:** Jeśli znalazł "My Equipment" → wyciąga nick postaci (z prefixem) i atak
+   - Zapobiega fałszywym pozytywom (wykrywanie danych z niepoprawnych screenów)
 
 **Serwisy:**
 - `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje
@@ -1088,6 +1090,18 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**Rekruter Bot - FIX KRYTYCZNY: AI OCR - Wymuszenie Walidacji "My Equipment":**
+- **PROBLEM:** AI OCR wykrywało nick i atak nawet gdy zdjęcie nie zawierało tekstu "My Equipment"
+- **Przykład błędu:** Użytkownik wrzucił złe zdjęcie → AI zwróciło "racza" / "1158788" mimo braku "My Equipment"
+- **Przyczyna:** Stary prompt wspominał o "My Equipment" na końcu jako opcjonalną walidację
+- **ROZWIĄZANIE:** Przepisano prompt na sekwencyjny z dwoma krokami:
+  - **KROK 1:** Sprawdź czy widoczny jest tekst "My Equipment"
+    - Jeśli NIE → NATYCHMIAST zwróć błąd, NIE szukaj nicku ani ataku
+  - **KROK 2:** Tylko jeśli znalazł "My Equipment" → dopiero wtedy wyciągnij nick i atak
+- **Skutek:** AI teraz odrzuca niepoprawne screeny przed jakimkolwiek wyciąganiem danych
+- Lokalizacja zmian:
+  - `Rekruter/services/aiOcrService.js:55-65` (przepisany prompt z sekwencyjną walidacją)
 
 **Rekruter Bot - Rozszerzenie Maksymalnych Punktów Lunar Mine Expedition:**
 - **ZMIANA:** Maksymalna liczba punktów z I fazy Lunar Mine Expedition rozszerzona z 1500 na **5000**

@@ -52,11 +52,17 @@ class AIOCRService {
 
             logger.info(`[AI OCR] Wysyłam obraz do Claude Vision (${mediaType})`);
 
-            // Prompt zgodny z wymaganiami użytkownika
-            const prompt = `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem. Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci. Twoim zadaniem jest określenie czy odczytujesz poprawny screen z gry i znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku, przedstaw dane w formacie:
+            // Prompt z sekwencyjną walidacją - NAJPIERW sprawdź "My Equipment"
+            const prompt = `KROK 1: Sprawdź czy na zdjęciu widoczny jest tekst "My Equipment".
+
+Jeżeli NIE widzisz tekstu "My Equipment" - NATYCHMIAST zwróć informację, że przesłano niepoprawny screen z gry oraz że trzeba przesłać screen postaci wraz z EQ bez żadnych modyfikacji. NIE szukaj nicku ani ataku.
+
+KROK 2: Tylko jeśli znalazłeś "My Equipment", przejdź do wyciągania danych:
+Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem. Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci.
+
+Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku. Przedstaw dane w formacie:
 <nick postaci>
-<atak>
-Na screenie powinno być wykryte też "My Equipment". Jeżeli nie wykryjesz tego słowa, ani nicku i ataku, powiadom o tym, że przesłano niepoprawny screen z gry oraz, że trzeba przesłać screen postaci wraz z EQ bez żadnych modyfikacji.`;
+<atak>`;
 
             // Wywołaj Anthropic API
             const message = await this.client.messages.create({
