@@ -81,7 +81,8 @@ class AIOCRService {
             logger.info(`[AI OCR] KROK 1 - Odpowiedź: "${checkResponse}"`);
 
             // Sprawdź czy znaleziono "Victory"
-            const foundVictory = checkResponse.toLowerCase().includes('znaleziono');
+            // Sprawdzamy czy odpowiedź NIE zawiera frazy "nie znaleziono" (case insensitive)
+            const foundVictory = !checkResponse.toLowerCase().includes('nie znaleziono');
 
             if (!foundVictory) {
                 logger.warn(`[AI OCR] KROK 1 - Nie znaleziono "Victory", przerywam analizę`);
