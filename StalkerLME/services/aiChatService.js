@@ -10,10 +10,11 @@ const logger = createBotLogger('StalkerLME');
  * Wspiera mention @StalkerLME z kontekstem danych gracza/klanu
  */
 class AIChatService {
-    constructor(config, databaseService, reminderUsageService = null) {
+    constructor(config, databaseService, reminderUsageService = null, punishmentService = null) {
         this.config = config;
         this.databaseService = databaseService;
         this.reminderUsageService = reminderUsageService;
+        this.punishmentService = punishmentService;
 
         // Anthropic API
         this.apiKey = process.env.ANTHROPIC_API_KEY;
@@ -95,6 +96,19 @@ class AIChatService {
             if (timestamp < twoDaysAgo) {
                 this.cooldowns.delete(userId);
             }
+        }
+    }
+
+    /**
+     * Wczytaj potwierdzenia z pliku JSON
+     */
+    async loadConfirmations() {
+        try {
+            const data = await fs.readFile(this.config.database.reminderConfirmations, 'utf8');
+            return JSON.parse(data);
+        } catch (error) {
+            // Jeśli plik nie istnieje lub jest pusty, zwróć pustą strukturę
+            return { sessions: {}, userStats: {} };
         }
     }
 
@@ -694,14 +708,17 @@ class AIChatService {
         }
 
         // === WSPÓŁCZYNNIKI ===
-        // Rzetelność, Punktualność, Responsywność - wymagają dostępu do punishmentService i trackingService
-        // Na razie pozostawiamy jako null (wyświetlane tylko gdy dostępne)
+        // Obliczamy uproszczone wersje współczynników (całkowite wartości zamiast filtrowania po datach)
         let reliabilityFactor = null;
         let punctualityFactor = null;
         let responsivenessFactor = null;
 
-        // Pobierz totalPings jeśli dostępny (pomocnicza informacja)
-        let totalPings = null;
+        // Pobierz dane potrzebne do współczynników
+        let totalPings = 0;
+        let totalConfirmations = 0;
+        let lifetimePoints = 0;
+
+        // 1. Pobierz totalPings z reminderUsageService
         if (this.reminderUsageService) {
             try {
                 const reminderData = await this.reminderUsageService.getUserReminderData(userId);
@@ -710,6 +727,53 @@ class AIChatService {
                 }
             } catch (error) {
                 // Ignoruj błędy
+            }
+        }
+
+        // 2. Pobierz totalConfirmations z confirmations file
+        try {
+            const confirmations = await this.loadConfirmations();
+            if (confirmations.userStats && confirmations.userStats[userId]) {
+                totalConfirmations = confirmations.userStats[userId].totalConfirmations || 0;
+            }
+        } catch (error) {
+            // Ignoruj błędy
+        }
+
+        // 3. Pobierz lifetimePoints z punishmentService
+        if (this.punishmentService) {
+            try {
+                const userPunishments = await this.punishmentService.getUserPunishments(guildId, userId);
+                if (userPunishments) {
+                    lifetimePoints = userPunishments.lifetimePoints || 0;
+                }
+            } catch (error) {
+                // Ignoruj błędy
+            }
+        }
+
+        // 4. Oblicz współczynniki (jeśli mamy wystarczająco danych)
+        const weeksSinceStart = playerProgressData.length;
+
+        if (weeksSinceStart > 0) {
+            // Rzetelność: 100% - ((pingi × 0.025 + punkty × 0.2) / tygodnie × 100%)
+            const penaltyScore = (totalPings * 0.025) + (lifetimePoints * 0.2);
+            const rawReliabilityFactor = (penaltyScore / weeksSinceStart) * 100;
+            reliabilityFactor = Math.max(0, 100 - rawReliabilityFactor);
+
+            // Punktualność: 100% - ((pingi × 0.125) / tygodnie × 100%)
+            const timingPenaltyScore = totalPings * 0.125;
+            const rawPunctualityFactor = (timingPenaltyScore / weeksSinceStart) * 100;
+            punctualityFactor = Math.max(0, 100 - rawPunctualityFactor);
+
+            // Responsywność: (potwierdzenia / pingi) × 100%
+            if (totalPings > 0) {
+                responsivenessFactor = (totalConfirmations / totalPings) * 100;
+                responsivenessFactor = Math.min(100, responsivenessFactor);
+            } else if (totalPings === 0 && totalConfirmations === 0) {
+                responsivenessFactor = 100;
+            } else {
+                responsivenessFactor = 0;
             }
         }
 
@@ -1221,9 +1285,8 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                     }
                 }
 
-                prompt += `📅 OSTATNIE WYNIKI (tydzień - wynik):\n`;
-                const recentWeeks = playerData.recentWeeks.slice(0, 12);
-                for (const week of recentWeeks) {
+                prompt += `📅 WSZYSTKIE WYNIKI (tydzień - wynik):\n`;
+                for (const week of playerData.recentWeeks) {
                     const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
                     prompt += `- ${weekLabel}: ${week.score} pkt (${week.clanName})\n`;
                 }
