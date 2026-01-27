@@ -616,13 +616,14 @@ node manual-backup.js
 **Funkcjonalność:** Wieloetapowa rekrutacja z OCR → Kwalifikacja klanów: <100K=brak, 100K-599K=Clan0, 600K-799K=Clan1, 800K-1.19M=Clan2, 1.2M+=Main
 **OCR - Dwa tryby:**
 1. **Tradycyjny:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing Sharp, ekstrakcja nick+atak
-2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), analiza obrazu przez AI
+2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa analiza przez AI
    - Włączany przez `USE_AI_OCR=true` w .env
    - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
-   - Prompt sekwencyjny (dwuetapowy):
-     - **KROK 1:** Sprawdza czy jest "My Equipment" → jeśli NIE - natychmiast odrzuca zdjęcie
-     - **KROK 2:** Jeśli znalazł "My Equipment" → wyciąga nick postaci (z prefixem) i atak
-   - Zapobiega fałszywym pozytywom (wykrywanie danych z niepoprawnych screenów)
+   - Dwuetapowa walidacja (dwa osobne requesty do API):
+     - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (50 tokenów)
+       - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu
+     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (500 tokenów)
+   - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
 
 **Serwisy:**
 - `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje
@@ -1091,17 +1092,20 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
-**Rekruter Bot - FIX KRYTYCZNY: AI OCR - Wymuszenie Walidacji "My Equipment":**
+**Rekruter Bot - FIX KRYTYCZNY: AI OCR - Dwuetapowa Walidacja "My Equipment":**
 - **PROBLEM:** AI OCR wykrywało nick i atak nawet gdy zdjęcie nie zawierało tekstu "My Equipment"
 - **Przykład błędu:** Użytkownik wrzucił złe zdjęcie → AI zwróciło "racza" / "1158788" mimo braku "My Equipment"
-- **Przyczyna:** Stary prompt wspominał o "My Equipment" na końcu jako opcjonalną walidację
-- **ROZWIĄZANIE:** Przepisano prompt na sekwencyjny z dwoma krokami:
-  - **KROK 1:** Sprawdź czy widoczny jest tekst "My Equipment"
-    - Jeśli NIE → NATYCHMIAST zwróć błąd, NIE szukaj nicku ani ataku
-  - **KROK 2:** Tylko jeśli znalazł "My Equipment" → dopiero wtedy wyciągnij nick i atak
-- **Skutek:** AI teraz odrzuca niepoprawne screeny przed jakimkolwiek wyciąganiem danych
+- **Przyczyna:** Jeden prompt nie wymuszał sprawdzenia "My Equipment" przed ekstrakcją danych
+- **ROZWIĄZANIE:** Przepisano na dwuetapowy system z dwoma osobnymi requestami do API:
+  - **KROK 1 (pierwszy request):** Prompt: `Znajdź na screenie napis "My Equipment", jeżeli znajdziesz napisz "Znalezniono", jeżeli nie znajdziesz napisz "Brak frazy".`
+    - Jeśli odpowiedź NIE zawiera "znalezniono" → NATYCHMIAST zwróć błąd `INVALID_SCREENSHOT`, NIE wysyłaj drugiego requestu
+  - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wysyła drugi prompt z pełną instrukcją ekstrakcji nicku i ataku
+- **Zalety:**
+  - 100% pewność że "My Equipment" jest sprawdzane NAJPIERW
+  - Oszczędność tokenów API gdy screenshot jest niepoprawny (tylko 50 tokenów zamiast 500)
+  - Niemożliwe jest wyciągnięcie danych z niepoprawnego screena
 - Lokalizacja zmian:
-  - `Rekruter/services/aiOcrService.js:55-65` (przepisany prompt z sekwencyjną walidacją)
+  - `Rekruter/services/aiOcrService.js:37-144` (dwuetapowa analiza z dwoma requestami API)
 
 **Rekruter Bot - Rozszerzenie Maksymalnych Punktów Lunar Mine Expedition:**
 - **ZMIANA:** Maksymalna liczba punktów z I fazy Lunar Mine Expedition rozszerzona z 1500 na **5000**

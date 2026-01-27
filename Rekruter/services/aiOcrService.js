@@ -50,22 +50,62 @@ class AIOCRService {
             const base64Image = pngBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            logger.info(`[AI OCR] Wysyłam obraz do Claude Vision (${mediaType})`);
+            // === KROK 1: Sprawdź czy jest "My Equipment" ===
+            logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "My Equipment"...`);
 
-            // Prompt z sekwencyjną walidacją - NAJPIERW sprawdź "My Equipment"
-            const prompt = `KROK 1: Sprawdź czy na zdjęciu widoczny jest tekst "My Equipment".
+            const checkPrompt = `Znajdź na screenie napis "My Equipment", jeżeli znajdziesz napisz "Znalezniono", jeżeli nie znajdziesz napisz "Brak frazy".`;
 
-Jeżeli NIE widzisz tekstu "My Equipment" - NATYCHMIAST zwróć informację, że przesłano niepoprawny screen z gry oraz że trzeba przesłać screen postaci wraz z EQ bez żadnych modyfikacji. NIE szukaj nicku ani ataku.
+            const checkMessage = await this.client.messages.create({
+                model: this.model,
+                max_tokens: 50,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: mediaType,
+                                data: base64Image
+                            }
+                        },
+                        {
+                            type: 'text',
+                            text: checkPrompt
+                        }
+                    ]
+                }]
+            });
 
-KROK 2: Tylko jeśli znalazłeś "My Equipment", przejdź do wyciągania danych:
-Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem. Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci.
+            const checkResponse = checkMessage.content[0].text.trim();
+            logger.info(`[AI OCR] KROK 1 - Odpowiedź: "${checkResponse}"`);
+
+            // Sprawdź czy znaleziono "My Equipment"
+            const foundEquipment = checkResponse.toLowerCase().includes('znalezniono');
+
+            if (!foundEquipment) {
+                logger.warn(`[AI OCR] KROK 1 - Nie znaleziono "My Equipment", przerywam analizę`);
+                return {
+                    playerNick: null,
+                    characterAttack: null,
+                    confidence: 0,
+                    isValidEquipment: false,
+                    error: 'INVALID_SCREENSHOT'
+                };
+            }
+
+            logger.info(`[AI OCR] KROK 1 - "My Equipment" znaleznione, przechodzę do KROKU 2`);
+
+            // === KROK 2: Wyciągnij nick i atak ===
+            logger.info(`[AI OCR] KROK 2: Wyciągam nick i atak...`);
+
+            const extractPrompt = `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem. Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci.
 
 Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku. Przedstaw dane w formacie:
 <nick postaci>
 <atak>`;
 
-            // Wywołaj Anthropic API
-            const message = await this.client.messages.create({
+            const extractMessage = await this.client.messages.create({
                 model: this.model,
                 max_tokens: 500,
                 messages: [{
@@ -81,20 +121,19 @@ Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżel
                         },
                         {
                             type: 'text',
-                            text: prompt
+                            text: extractPrompt
                         }
                     ]
                 }]
             });
 
-            // Parsuj odpowiedź
-            const responseText = message.content[0].text;
-            logger.info(`[AI OCR] Odpowiedź Claude:`);
-            logger.info(responseText);
+            const extractResponse = extractMessage.content[0].text;
+            logger.info(`[AI OCR] KROK 2 - Odpowiedź Claude:`);
+            logger.info(extractResponse);
 
             // Parsuj odpowiedź AI
-            const result = this.parseAIResponse(responseText);
-            logger.info(`[AI OCR] Wynik parsowania:`, result);
+            const result = this.parseAIResponse(extractResponse);
+            logger.info(`[AI OCR] KROK 2 - Wynik parsowania:`, result);
 
             return result;
 
