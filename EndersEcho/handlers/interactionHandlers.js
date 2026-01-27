@@ -229,7 +229,7 @@ class InteractionHandler {
                     } else {
                         logger.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
                         await fs.unlink(tempImagePath);
-                        await interaction.editReply('❌ Niepoprawny screenshot. Upewnij się, że zdjęcie zawiera ekran zwycięstwa z napisem "Victory".');
+                        await interaction.editReply('❌ Niepoprawny screenshot. Upewnij się, że zdjęcie zawiera ekran po zakończeniu walki Ender\'s Echo!');
                         return;
                     }
                 } catch (aiError) {
