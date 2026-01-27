@@ -42,7 +42,10 @@ module.exports = {
         charWhitelist: '0123456789KMBTQi7.Best:Total ',
         charWhitelistWords: 'BestTotalbesttotal: ',
         threshold: 200,
-        
+
+        // AI OCR (opcjonalne)
+        useAI: process.env.USE_ENDERSECHO_AI_OCR === 'true',
+
         // Zapisywanie przetworzonych obrazów
         saveProcessedImages: true,
         processedDir: path.join(__dirname, '../../processed_ocr'),

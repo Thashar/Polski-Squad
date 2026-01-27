@@ -817,13 +817,21 @@ node manual-backup.js
 ### 🏆 EndersEcho Bot
 
 **4 Systemy:**
-1. **OCR Wyników** - `ocrService.js`: Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
+1. **OCR Wyników** - Dwa tryby:
+   - **Tradycyjny:** `ocrService.js` - Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
+   - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa walidacja
+     - Włączany przez `USE_ENDERSECHO_AI_OCR=true` w .env
+     - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+     - Dwuetapowa walidacja (dwa osobne requesty do API):
+       - **KROK 1 (pierwszy request):** Sprawdza czy jest "Victory" (50 tokenów)
+       - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "Victory" → wyciąga nazwę bossa i wynik (500 tokenów)
+     - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, fallback na tradycyjny OCR
 2. **Rankingi** - `rankingService.js`: Persistent JSON (userId_bossName), funkcje: add/update, getTop, remove
 3. **Role TOP** - `roleManagementService.js`: 5 poziomów (top1, top2, top3-nieużywane, top4-10, top11-30), auto-update
 4. **Paginacja** - `interactionHandlers.js`: 10/strona, przyciski nawigacji, 1h timeout
 
 **Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`
-**Env:** TOKEN, CLIENT_ID, GUILD_ID, ALLOWED_CHANNEL_ID
+**Env:** TOKEN, CLIENT_ID, GUILD_ID, ALLOWED_CHANNEL_ID, USE_ENDERSECHO_AI_OCR (opcjonalne), ENDERSECHO_ANTHROPIC_API_KEY (opcjonalne), ENDERSECHO_ANTHROPIC_MODEL (opcjonalne)
 
 ---
 
@@ -1033,6 +1041,10 @@ ENDERSECHO_TOKEN=bot_token_here
 ENDERSECHO_CLIENT_ID=client_id
 ENDERSECHO_GUILD_ID=guild_id
 ENDERSECHO_ALLOWED_CHANNEL_ID=channel_id
+# AI OCR (opcjonalne)
+USE_ENDERSECHO_AI_OCR=false
+ENDERSECHO_ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
+ENDERSECHO_ANTHROPIC_MODEL=claude-3-haiku-20240307
 
 # ===== KONTROLER BOT =====
 KONTROLER_TOKEN=bot_token_here
@@ -1091,6 +1103,40 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Historia Zmian
 
 ### Styczeń 2026
+
+**EndersEcho Bot - System AI OCR (Opcjonalny):**
+- **NOWA FUNKCJA:** Dodano opcjonalny system analizy zdjęć wyników przez Anthropic API (Claude Vision)
+- **Tryby OCR:**
+  - **Tradycyjny:** Tesseract + preprocessing Sharp (domyślny)
+  - **AI OCR:** Claude Vision API - włączany przez `USE_ENDERSECHO_AI_OCR=true` w .env
+- **Implementacja:**
+  - Nowy serwis: `EndersEcho/services/aiOcrService.js`
+  - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+  - Dwuetapowa walidacja (dwa osobne requesty do API):
+    - **KROK 1 (pierwszy request):** Sprawdza czy jest "Victory" (50 tokenów)
+      - Jeśli NIE znaleziono → NATYCHMIAST zwróć błąd, NIE wysyłaj drugiego requestu
+    - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "Victory" → wyciąga nazwę bossa i wynik (500 tokenów)
+  - Prompt KROK 1: `Znajdź na screenie frazę "Victory", jeżeli jej nie znajdziesz odpisz "Nie znaleziono frazy", jeżeli znajdziesz to "Znaleziono".`
+  - Prompt KROK 2: `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik. Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie: <nazwa bossa> <wynik>`
+- **Konfiguracja:**
+  - `EndersEcho/config/config.js` - dodano `ocr.useAI` flag
+  - `EndersEcho/handlers/interactionHandlers.js` - wybór metody OCR na podstawie flagi + fallback na tradycyjny OCR
+  - Zmienne ENV: `USE_ENDERSECHO_AI_OCR` (true/false), `ENDERSECHO_ANTHROPIC_API_KEY`, `ENDERSECHO_ANTHROPIC_MODEL` (opcjonalny)
+- **Workflow:**
+  - Jeśli `USE_ENDERSECHO_AI_OCR=true` → zdjęcie wysyłane do Claude Vision
+  - Jeśli AI OCR zawiedzie → automatyczny fallback na tradycyjny OCR (Tesseract)
+  - Jeśli `USE_ENDERSECHO_AI_OCR=false` → tradycyjny OCR (Tesseract)
+- **Zalety AI OCR:**
+  - Lepsze rozpoznawanie nazw bossów i wyników z nietypowymi czcionkami
+  - Inteligentne wykrywanie "Victory"
+  - Nie wymaga preprocessingu obrazu
+  - 100% pewność walidacji, oszczędność tokenów przy złych screenach
+- Lokalizacja zmian:
+  - `EndersEcho/services/aiOcrService.js` (nowy plik)
+  - `EndersEcho/config/config.js:47` (useAI flag)
+  - `EndersEcho/index.js:4,22,26` (import + inicjalizacja)
+  - `EndersEcho/handlers/interactionHandlers.js:10,13,219-281` (konstruktor + logika wyboru OCR)
+  - `CLAUDE.md:820-828,1044-1047` (dokumentacja)
 
 **Rekruter Bot - FIX KRYTYCZNY: AI OCR - Dwuetapowa Walidacja "My Equipment":**
 - **PROBLEM:** AI OCR wykrywało nick i atak nawet gdy zdjęcie nie zawierało tekstu "My Equipment"

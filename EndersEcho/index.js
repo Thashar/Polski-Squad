@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const config = require('./config/config');
 const OCRService = require('./services/ocrService');
+const AIOCRService = require('./services/aiOcrService');
 const RankingService = require('./services/rankingService');
 const LogService = require('./services/logService');
 const RoleService = require('./services/roleService');
@@ -18,10 +19,11 @@ const client = new Client({
 });
 
 const ocrService = new OCRService(config);
+const aiOcrService = new AIOCRService(config);
 const rankingService = new RankingService(config);
 const logService = new LogService(config);
 const roleService = new RoleService(config, rankingService);
-const interactionHandler = new InteractionHandler(config, ocrService, rankingService, logService, roleService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService);
 
 /**
  * Inicjalizuje bota EndersEcho

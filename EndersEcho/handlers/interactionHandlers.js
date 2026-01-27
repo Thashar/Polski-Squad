@@ -7,9 +7,10 @@ const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 class InteractionHandler {
-    constructor(config, ocrService, rankingService, logService, roleService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService) {
         this.config = config;
         this.ocrService = ocrService;
+        this.aiOcrService = aiOcrService;
         this.rankingService = rankingService;
         this.logService = logService;
         this.roleService = roleService;
@@ -211,28 +212,73 @@ class InteractionHandler {
             
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
-            
-            // Sprawdzenie wymaganych słów
-            const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
-            
-            if (!hasRequiredWords) {
-                await fs.unlink(tempImagePath);
-                await interaction.editReply(this.config.messages.updateNoRequiredWords);
-                return;
+
+            let bestScore = null;
+            let bossName = null;
+
+            // === AI OCR (jeśli włączony) ===
+            if (this.aiOcrService.enabled) {
+                try {
+                    logger.info('🤖 Używam AI OCR do analizy obrazu...');
+                    const aiResult = await this.aiOcrService.analyzeVictoryImage(tempImagePath);
+
+                    if (aiResult.isValidVictory) {
+                        bestScore = aiResult.score;
+                        bossName = aiResult.bossName;
+                        logger.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
+                    } else {
+                        logger.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
+                        await fs.unlink(tempImagePath);
+                        await interaction.editReply('❌ Niepoprawny screenshot. Upewnij się, że zdjęcie zawiera ekran zwycięstwa z napisem "Victory".');
+                        return;
+                    }
+                } catch (aiError) {
+                    logger.error('❌ AI OCR błąd, przechodzę na tradycyjny OCR:', aiError);
+                    await interaction.editReply({ content: '⚠️ AI OCR niedostępny, używam tradycyjnego OCR...' });
+
+                    // Fallback na tradycyjny OCR
+                    const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
+
+                    if (!hasRequiredWords) {
+                        await fs.unlink(tempImagePath);
+                        await interaction.editReply(this.config.messages.updateNoRequiredWords);
+                        return;
+                    }
+
+                    const extractedText = await this.ocrService.extractTextFromImage(tempImagePath);
+                    bestScore = this.ocrService.extractScoreAfterBest(extractedText);
+
+                    if (!bestScore || bestScore.trim() === '') {
+                        await fs.unlink(tempImagePath);
+                        await interaction.editReply(this.config.messages.updateNoScore);
+                        return;
+                    }
+
+                    bossName = this.ocrService.extractBossName(extractedText);
+                }
+            } else {
+                // === Tradycyjny OCR ===
+                logger.info('🔍 Używam tradycyjnego OCR...');
+
+                const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
+
+                if (!hasRequiredWords) {
+                    await fs.unlink(tempImagePath);
+                    await interaction.editReply(this.config.messages.updateNoRequiredWords);
+                    return;
+                }
+
+                const extractedText = await this.ocrService.extractTextFromImage(tempImagePath);
+                bestScore = this.ocrService.extractScoreAfterBest(extractedText);
+
+                if (!bestScore || bestScore.trim() === '') {
+                    await fs.unlink(tempImagePath);
+                    await interaction.editReply(this.config.messages.updateNoScore);
+                    return;
+                }
+
+                bossName = this.ocrService.extractBossName(extractedText);
             }
-            
-            // Ekstrakcja tekstu i wyniku
-            const extractedText = await this.ocrService.extractTextFromImage(tempImagePath);
-            let bestScore = this.ocrService.extractScoreAfterBest(extractedText);
-            
-            if (!bestScore || bestScore.trim() === '') {
-                await fs.unlink(tempImagePath);
-                await interaction.editReply(this.config.messages.updateNoScore);
-                return;
-            }
-            
-            // Ekstrakcja nazwy bossa
-            const bossName = this.ocrService.extractBossName(extractedText);
             
             // Aktualizacja rankingu
             const userId = interaction.user.id;
