@@ -10584,11 +10584,329 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     };
 }
 
+/**
+ * Generuje dane i czysty tekst z /progres dla AI Chat
+ * @param {string} userId - ID użytkownika Discord
+ * @param {string} guildId - ID serwera Discord
+ * @param {Object} sharedState - Stan współdzielony (config, databaseService, etc.)
+ * @returns {Promise<Object>} - {success: boolean, plainText: string, data: Object}
+ */
+async function generatePlayerProgressTextData(userId, guildId, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    try {
+        // 1. Pobierz indeks graczy i znajdź najnowszy nick
+        const playerIndex = await databaseService.loadPlayerIndex(guildId);
+        const playerData = playerIndex[userId];
+
+        if (!playerData || !playerData.latestNick) {
+            return { success: false, plainText: '', data: null };
+        }
+
+        const latestNick = playerData.latestNick;
+
+        // 2. Pobierz wszystkie tygodnie (max 54)
+        const allWeeks = await databaseService.getAvailableWeeks(guildId);
+        const last54Weeks = allWeeks.slice(0, 54);
+
+        // 3. Zbierz dane gracza
+        const playerProgressData = [];
+
+        for (const week of last54Weeks) {
+            for (const clan of week.clans) {
+                const weekData = await databaseService.getPhase1Results(guildId, week.weekNumber, week.year, clan);
+
+                if (weekData && weekData.players) {
+                    const player = weekData.players.find(p => p.userId === userId);
+
+                    if (player) {
+                        playerProgressData.push({
+                            weekNumber: week.weekNumber,
+                            year: week.year,
+                            clan: clan,
+                            clanName: config.roleDisplayNames[clan],
+                            score: player.score,
+                            displayName: player.displayName,
+                            createdAt: weekData.createdAt
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (playerProgressData.length === 0) {
+            return { success: false, plainText: '', data: null };
+        }
+
+        // 4. Posortuj dane
+        playerProgressData.sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.weekNumber - a.weekNumber;
+        });
+
+        // 5. Oblicz progresy skumulowane
+        const formatDifference = (difference) => {
+            if (difference > 0) return `+${difference.toLocaleString('pl-PL')}`;
+            if (difference < 0) return `${difference.toLocaleString('pl-PL')}`;
+            return '0';
+        };
+
+        let plainText = `📊 PROGRES GRACZA: ${latestNick}\n\n`;
+
+        // Progresy skumulowane
+        plainText += `=== PROGRESY SKUMULOWANE ===\n`;
+
+        if (playerProgressData.length >= 4) {
+            const last4Weeks = playerProgressData.slice(0, 4);
+            const maxScore = Math.max(...last4Weeks.map(d => d.score));
+            const diff = maxScore - playerProgressData[3].score;
+            plainText += `🔹 Miesiąc (4 tyg): ${formatDifference(diff)}\n`;
+        }
+
+        if (playerProgressData.length >= 13) {
+            const last13Weeks = playerProgressData.slice(0, 13);
+            const maxScore = Math.max(...last13Weeks.map(d => d.score));
+            const diff = maxScore - playerProgressData[12].score;
+            plainText += `🔷 Kwartał (13 tyg): ${formatDifference(diff)}\n`;
+        }
+
+        if (playerProgressData.length >= 26) {
+            const last26Weeks = playerProgressData.slice(0, 26);
+            const maxScore = Math.max(...last26Weeks.map(d => d.score));
+            const diff = maxScore - playerProgressData[25].score;
+            plainText += `🔶 Pół roku (26 tyg): ${formatDifference(diff)}\n`;
+        }
+
+        // 6. Historia wyników (ostatnie 12 tygodni)
+        plainText += `\n=== OSTATNIE 12 TYGODNI ===\n`;
+        const last12Weeks = playerProgressData.slice(0, 12);
+
+        for (let i = 0; i < last12Weeks.length; i++) {
+            const weekData = last12Weeks[i];
+            const weekLabel = `${String(weekData.weekNumber).padStart(2, '0')}/${String(weekData.year).slice(-2)}`;
+
+            // Oblicz najlepszy wynik z poprzednich tygodni
+            let bestScoreUpToNow = 0;
+            for (let j = i + 1; j < playerProgressData.length; j++) {
+                if (playerProgressData[j].score > bestScoreUpToNow) {
+                    bestScoreUpToNow = playerProgressData[j].score;
+                }
+            }
+
+            const diff = bestScoreUpToNow > 0 && weekData.score !== bestScoreUpToNow
+                ? ` (${formatDifference(weekData.score - bestScoreUpToNow)})`
+                : '';
+
+            const clanEmoji = weekData.clanName ? Array.from(weekData.clanName)[0] : '�';
+            plainText += `${clanEmoji} ${weekLabel}: ${weekData.score.toLocaleString('pl-PL')} pkt${diff}\n`;
+        }
+
+        return {
+            success: true,
+            plainText,
+            data: {
+                latestNick,
+                playerProgressData,
+                weeksWithData: playerProgressData.length
+            }
+        };
+
+    } catch (error) {
+        logger.error(`[generatePlayerProgressTextData] Błąd: ${error.message}`);
+        return { success: false, plainText: '', data: null };
+    }
+}
+
+/**
+ * Generuje dane i czysty tekst z /player-status dla AI Chat
+ * @param {string} userId - ID użytkownika Discord
+ * @param {string} guildId - ID serwera Discord
+ * @param {Object} sharedState - Stan współdzielony (config, databaseService, etc.)
+ * @returns {Promise<Object>} - {success: boolean, plainText: string, data: Object}
+ */
+async function generatePlayerStatusTextData(userId, guildId, sharedState) {
+    const { config, databaseService, reminderUsageService } = sharedState;
+
+    try {
+        // Użyj tej samej logiki co generatePlayerProgressTextData dla pobrania danych
+        const progressResult = await generatePlayerProgressTextData(userId, guildId, sharedState);
+        if (!progressResult.success) {
+            return { success: false, plainText: '', data: null };
+        }
+
+        const { latestNick, playerProgressData } = progressResult.data;
+
+        // Wczytaj dane o przypomnieniach, potwierdzeniach i karach
+        await reminderUsageService.loadUsageData();
+        const reminderData = reminderUsageService.usageData;
+        const confirmations = await loadConfirmations(config);
+        const guildPunishments = await databaseService.getGuildPunishments(guildId);
+
+        const userPunishments = guildPunishments.find(p => p.userId === userId);
+        const lifetimePoints = userPunishments ? (userPunishments.lifetimePoints || 0) : 0;
+        const currentPoints = userPunishments ? (userPunishments.points || 0) : 0;
+
+        const reminderCountTotal = reminderData.receivers?.[userId]?.totalPings || 0;
+        const confirmationCountTotal = confirmations.userStats?.[userId]?.totalConfirmations || 0;
+
+        // Oblicz współczynniki (uproszczona wersja - całkowite wartości)
+        const weeksSinceStart = playerProgressData.length;
+        let reliabilityFactor = null;
+        let punctualityFactor = null;
+        let responsivenessFactor = null;
+        let engagementFactor = null;
+        let trendDescription = null;
+
+        if (weeksSinceStart > 0) {
+            // Rzetelność
+            const penaltyScore = (reminderCountTotal * 0.025) + (lifetimePoints * 0.2);
+            const rawReliabilityFactor = (penaltyScore / weeksSinceStart) * 100;
+            reliabilityFactor = Math.max(0, 100 - rawReliabilityFactor);
+
+            // Punktualność
+            const timingPenaltyScore = reminderCountTotal * 0.125;
+            const rawPunctualityFactor = (timingPenaltyScore / weeksSinceStart) * 100;
+            punctualityFactor = Math.max(0, 100 - rawPunctualityFactor);
+
+            // Responsywność
+            if (reminderCountTotal > 0) {
+                responsivenessFactor = (confirmationCountTotal / reminderCountTotal) * 100;
+                responsivenessFactor = Math.min(100, responsivenessFactor);
+            } else {
+                responsivenessFactor = 100;
+            }
+
+            // Zaangażowanie (procent tygodni z progresem)
+            let weeksWithProgress = 0;
+            for (let i = 0; i < playerProgressData.length - 1; i++) {
+                let bestScoreUpToNow = 0;
+                for (let j = i + 1; j < playerProgressData.length; j++) {
+                    if (playerProgressData[j].score > bestScoreUpToNow) {
+                        bestScoreUpToNow = playerProgressData[j].score;
+                    }
+                }
+                if (playerProgressData[i].score > 0 && playerProgressData[i].score > bestScoreUpToNow) {
+                    weeksWithProgress++;
+                }
+            }
+            engagementFactor = Math.round((weeksWithProgress / (playerProgressData.length - 1)) * 100);
+
+            // Trend (uproszczony)
+            if (playerProgressData.length >= 13) {
+                const last4 = playerProgressData.slice(0, 4);
+                const maxLast4 = Math.max(...last4.map(d => d.score));
+                const monthlyProgress = maxLast4 - (playerProgressData[4]?.score || 0);
+
+                const last12 = playerProgressData.slice(0, 12);
+                const maxLast12 = Math.max(...last12.map(d => d.score));
+                const quarterlyProgress = maxLast12 - (playerProgressData[12]?.score || 0);
+
+                const longerTermValue = quarterlyProgress / 3;
+                if (longerTermValue !== 0) {
+                    const trendRatio = monthlyProgress / Math.abs(longerTermValue);
+                    if (trendRatio >= 1.5) trendDescription = '🚀 Gwałtownie rosnący';
+                    else if (trendRatio > 1.1) trendDescription = '↗️ Rosnący';
+                    else if (trendRatio >= 0.9) trendDescription = '⚖️ Constans';
+                    else if (trendRatio > 0.5) trendDescription = '↘️ Malejący';
+                    else trendDescription = '🪦 Gwałtownie malejący';
+                }
+            }
+        }
+
+        // Progresy miesięczny i kwartalny
+        let monthlyProgress = null;
+        let quarterlyProgress = null;
+
+        if (playerProgressData.length >= 5) {
+            const last4 = playerProgressData.slice(0, 4);
+            const maxScore = Math.max(...last4.map(d => d.score));
+            monthlyProgress = maxScore - (playerProgressData[4]?.score || 0);
+        }
+
+        if (playerProgressData.length >= 13) {
+            const last12 = playerProgressData.slice(0, 12);
+            const maxScore = Math.max(...last12.map(d => d.score));
+            quarterlyProgress = maxScore - (playerProgressData[12]?.score || 0);
+        }
+
+        // Buduj tekst
+        let plainText = `📋 STATUS GRACZA: ${latestNick}\n\n`;
+
+        plainText += `=== STATYSTYKI PODSTAWOWE ===\n`;
+        const latestScore = playerProgressData[0].score;
+        const maxScore = Math.max(...playerProgressData.map(d => d.score));
+        const minScore = Math.min(...playerProgressData.filter(d => d.score > 0).map(d => d.score));
+        plainText += `Ostatni wynik: ${latestScore.toLocaleString('pl-PL')} pkt\n`;
+        plainText += `Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')} pkt\n`;
+        plainText += `Najgorszy wynik: ${minScore.toLocaleString('pl-PL')} pkt\n`;
+        plainText += `Liczba tygodni z danymi: ${weeksSinceStart}\n`;
+
+        plainText += `\n=== PROGRESY ===\n`;
+        if (monthlyProgress !== null) {
+            const sign = monthlyProgress >= 0 ? '+' : '';
+            plainText += `Miesięczny (4 tyg): ${sign}${monthlyProgress.toLocaleString('pl-PL')} pkt\n`;
+        }
+        if (quarterlyProgress !== null) {
+            const sign = quarterlyProgress >= 0 ? '+' : '';
+            plainText += `Kwartalny (13 tyg): ${sign}${quarterlyProgress.toLocaleString('pl-PL')} pkt\n`;
+        }
+
+        plainText += `\n=== WSPÓŁCZYNNIKI ===\n`;
+        if (reliabilityFactor !== null) {
+            plainText += `🎯 Rzetelność: ${reliabilityFactor.toFixed(1)}%\n`;
+        }
+        if (punctualityFactor !== null) {
+            plainText += `⏱️ Punktualność: ${punctualityFactor.toFixed(1)}%\n`;
+        }
+        if (engagementFactor !== null) {
+            plainText += `💪 Zaangażowanie: ${engagementFactor}%\n`;
+        }
+        if (responsivenessFactor !== null) {
+            plainText += `📨 Responsywność: ${responsivenessFactor.toFixed(1)}%\n`;
+        }
+        if (trendDescription) {
+            plainText += `💨 Trend: ${trendDescription}\n`;
+        }
+
+        plainText += `\n=== KARY I STATUS ===\n`;
+        plainText += `Przypomnienia (lifetime): ${reminderCountTotal}\n`;
+        plainText += `Potwierdzenia (lifetime): ${confirmationCountTotal}\n`;
+        plainText += `Punkty kary (aktualne): ${currentPoints}\n`;
+        plainText += `Punkty kary (lifetime): ${lifetimePoints}\n`;
+
+        return {
+            success: true,
+            plainText,
+            data: {
+                latestNick,
+                reliabilityFactor,
+                punctualityFactor,
+                engagementFactor,
+                responsivenessFactor,
+                trendDescription,
+                monthlyProgress,
+                quarterlyProgress,
+                reminderCountTotal,
+                confirmationCountTotal,
+                currentPoints,
+                lifetimePoints
+            }
+        };
+
+    } catch (error) {
+        logger.error(`[generatePlayerStatusTextData] Błąd: ${error.message}`);
+        return { success: false, plainText: '', data: null };
+    }
+}
+
 module.exports = {
     handleInteraction,
     registerSlashCommands,
     unregisterCommand,
     confirmationData,
     sendGhostPing,
-    stopGhostPing
+    stopGhostPing,
+    generatePlayerProgressTextData,
+    generatePlayerStatusTextData
 };

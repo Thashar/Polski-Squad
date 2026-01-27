@@ -41,7 +41,16 @@ const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
 const raportCleanupService = new RaportCleanupService(client, logger);
-const aiChatService = new AIChatService(config, databaseService, reminderUsageService, punishmentService);
+// Import funkcji pomocniczych do AI Chat
+const { generatePlayerProgressTextData, generatePlayerStatusTextData } = require('./handlers/interactionHandlers');
+
+const aiChatService = new AIChatService(
+    config,
+    databaseService,
+    reminderUsageService,
+    punishmentService,
+    { generatePlayerProgressTextData, generatePlayerStatusTextData } // Helper functions
+);
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 

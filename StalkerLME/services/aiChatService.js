@@ -10,11 +10,12 @@ const logger = createBotLogger('StalkerLME');
  * Wspiera mention @StalkerLME z kontekstem danych gracza/klanu
  */
 class AIChatService {
-    constructor(config, databaseService, reminderUsageService = null, punishmentService = null) {
+    constructor(config, databaseService, reminderUsageService = null, punishmentService = null, helperFunctions = null) {
         this.config = config;
         this.databaseService = databaseService;
         this.reminderUsageService = reminderUsageService;
         this.punishmentService = punishmentService;
+        this.helperFunctions = helperFunctions || {}; // { generatePlayerProgressTextData, generatePlayerStatusTextData }
 
         // Anthropic API
         this.apiKey = process.env.ANTHROPIC_API_KEY;
@@ -1218,83 +1219,45 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                 targetName = context.asker.displayName;
             }
 
-            const playerData = await this.getPlayerData(targetUserId, context.guild.id);
-            if (playerData) {
-                prompt += `\n=== DANE GRACZA: ${playerData.playerName} ===\n`;
-                prompt += `📊 PODSTAWOWE STATYSTYKI:\n`;
-                prompt += `- Ostatni wynik: ${playerData.stats.latestScore} pkt\n`;
-                prompt += `- Najlepszy wynik: ${playerData.stats.maxScore} pkt\n`;
-                prompt += `- Najgorszy wynik: ${playerData.stats.minScore} pkt\n`;
-                prompt += `- Liczba tygodni z danymi: ${playerData.stats.weeksWithData}\n\n`;
+            // Użyj nowych funkcji pomocniczych z interactionHandlers
+            if (this.helperFunctions.generatePlayerProgressTextData && this.helperFunctions.generatePlayerStatusTextData) {
+                const sharedState = {
+                    config: this.config,
+                    databaseService: this.databaseService,
+                    reminderUsageService: this.reminderUsageService,
+                    punishmentService: this.punishmentService
+                };
 
-                prompt += `📈 PROGRESY:\n`;
-                if (playerData.stats.monthlyProgress !== null) {
-                    prompt += `- Miesięczny (4 tyg): ${playerData.stats.monthlyProgress > 0 ? '+' : ''}${playerData.stats.monthlyProgress} pkt (${playerData.stats.monthlyProgressPercent}%)\n`;
-                }
-                if (playerData.stats.quarterlyProgress !== null) {
-                    prompt += `- Kwartalny (13 tyg): ${playerData.stats.quarterlyProgress > 0 ? '+' : ''}${playerData.stats.quarterlyProgress} pkt (${playerData.stats.quarterlyProgressPercent}%)\n`;
-                }
-                if (playerData.stats.biggestProgress !== null) {
-                    prompt += `- Największy progres w historii: +${playerData.stats.biggestProgress} pkt (tydzień ${playerData.stats.biggestProgressWeek})\n`;
-                }
-                if (playerData.stats.biggestRegress !== null) {
-                    prompt += `- Największy regres w historii: ${playerData.stats.biggestRegress} pkt (tydzień ${playerData.stats.biggestRegressWeek})\n`;
-                }
-                prompt += `\n`;
+                // Pobierz dane z /progres
+                const progressResult = await this.helperFunctions.generatePlayerProgressTextData(
+                    targetUserId,
+                    context.guild.id,
+                    sharedState
+                );
 
-                if (playerData.stats.engagementFactor !== null) {
-                    prompt += `🎯 ZAANGAŻOWANIE: ${playerData.stats.engagementFactor}%\n`;
-                    prompt += `(Procent tygodni gdzie gracz zrobił progres)\n\n`;
-                }
+                // Pobierz dane z /player-status
+                const statusResult = await this.helperFunctions.generatePlayerStatusTextData(
+                    targetUserId,
+                    context.guild.id,
+                    sharedState
+                );
 
-                if (playerData.stats.trendDescription !== null) {
-                    prompt += `📉 TREND: ${playerData.stats.trendIcon} ${playerData.stats.trendDescription}\n`;
-                    prompt += `(Porównanie tempa progresu miesięcznego vs kwartalnego)\n\n`;
-                }
+                if (progressResult.success && statusResult.success) {
+                    // Dodaj dane z /progres
+                    prompt += `\n${progressResult.plainText}\n`;
 
-                // Dodatkowe współczynniki
-                prompt += `📊 WSPÓŁCZYNNIKI:\n`;
-                if (playerData.stats.reliabilityFactor !== null) {
-                    prompt += `- Rzetelność: ${playerData.stats.reliabilityFactor.toFixed(1)}% (regularność uczestnictwa)\n`;
-                }
-                if (playerData.stats.punctualityFactor !== null) {
-                    prompt += `- Punktualność: ${playerData.stats.punctualityFactor.toFixed(1)}% (potwierdzanie na czas)\n`;
-                }
-                if (playerData.stats.responsivenessFactor !== null) {
-                    prompt += `- Responsywność: ${playerData.stats.responsivenessFactor.toFixed(1)}% (odpowiedzi na przypomnienia)\n`;
-                }
-                prompt += `\n`;
+                    // Dodaj dane z /player-status
+                    prompt += `\n${statusResult.plainText}\n`;
 
-                // MVP - tygodnie z największym progresem
-                if (playerData.mvpWeeks && playerData.mvpWeeks.length > 0) {
-                    prompt += `⭐ MVP - TYGODNIE Z NAJWIĘKSZYM PROGRESEM:\n`;
-                    for (const mvp of playerData.mvpWeeks.slice(0, 5)) {
-                        const medal = mvp.progress > 100 ? '🏆' : mvp.progress > 50 ? '🥇' : '⭐';
-                        prompt += `- ${mvp.weekKey}: +${mvp.progress} pkt (${mvp.score} wynik)\n`;
-                    }
-                    prompt += `\n`;
+                    logger.info(`AI Chat: Pobrano dane dla gracza (userId: ${targetUserId}) z /progres i /player-status`);
+                } else {
+                    prompt += `\nDANE GRACZA (${targetName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
+                    logger.warn(`AI Chat: Brak danych dla userId ${targetUserId}`);
                 }
-
-                // Dynamiczny progres (jeśli użytkownik pytał o konkretny okres)
-                if (context.requestedWeeks) {
-                    const dynamicProgress = this.calculateDynamicProgress(playerData.recentWeeks, context.requestedWeeks);
-                    if (dynamicProgress) {
-                        prompt += `🎯 PROGRES Z OSTATNICH ${context.requestedWeeks} TYGODNI:\n`;
-                        prompt += `- Od ${dynamicProgress.fromWeek} (${dynamicProgress.fromScore} pkt) do ${dynamicProgress.toWeek} (${dynamicProgress.toScore} pkt)\n`;
-                        prompt += `- Zmiana: ${dynamicProgress.progress > 0 ? '+' : ''}${dynamicProgress.progress} pkt (${dynamicProgress.progressPercent}%)\n\n`;
-                    }
-                }
-
-                prompt += `📅 WSZYSTKIE WYNIKI (tydzień - wynik):\n`;
-                for (const week of playerData.recentWeeks) {
-                    const weekLabel = `${String(week.weekNumber).padStart(2, '0')}/${String(week.year).slice(-2)}`;
-                    prompt += `- ${weekLabel}: ${week.score} pkt (${week.clanName})\n`;
-                }
-
-                logger.info(`AI Chat: Pobrano dane dla ${playerData.playerName} - ${playerData.stats.weeksWithData} tygodni`);
             } else {
-                prompt += `\nDANE GRACZA (${targetName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
-                logger.warn(`AI Chat: Brak danych dla userId ${targetUserId}`);
+                // Fallback - stary system (nie powinien się zdarzyć)
+                prompt += `\n⚠️ BŁĄD: Brak dostępu do funkcji pomocniczych.\n`;
+                logger.error(`AI Chat: Brak helperFunctions - sprawdź inicjalizację serwisu`);
             }
 
             // Instrukcja czy porównywać z pytającym
