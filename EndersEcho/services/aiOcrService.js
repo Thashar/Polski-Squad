@@ -53,7 +53,7 @@ class AIOCRService {
             // === KROK 1: Sprawdź czy jest "Victory" ===
             logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "Victory"...`);
 
-            const checkPrompt = `Na załączonym scteenie znajdź frazę "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa co w cudzysłowiu: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo co w cudzysłowie: "Znaleziono", nie pisz nic poza tym.`;
+            const checkPrompt = `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
 
             const checkMessage = await this.client.messages.create({
                 model: this.model,
