@@ -1512,6 +1512,10 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                 });
             }
 
+            // Loguj pełny prompt wysyłany do API
+            const lastMessage = messages[messages.length - 1];
+            logger.info(`\n${'='.repeat(80)}\n📤 PROMPT WYSYŁANY DO AI:\n${'='.repeat(80)}\n${lastMessage.content}\n${'='.repeat(80)}`);
+
             // Wywołaj API
             const response = await this.client.messages.create({
                 model: this.model,
