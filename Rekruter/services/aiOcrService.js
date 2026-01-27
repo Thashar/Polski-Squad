@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
+const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
@@ -41,16 +42,13 @@ class AIOCRService {
         try {
             logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
 
-            // Wczytaj obraz jako base64
-            const imageBuffer = await fs.readFile(imagePath);
-            const base64Image = imageBuffer.toString('base64');
+            // Konwertuj obraz na PNG używając sharp (normalizacja formatu)
+            const pngBuffer = await sharp(imagePath)
+                .png()
+                .toBuffer();
 
-            // Określ typ obrazu
-            const ext = path.extname(imagePath).toLowerCase();
-            let mediaType = 'image/png';
-            if (ext === '.jpg' || ext === '.jpeg') mediaType = 'image/jpeg';
-            else if (ext === '.gif') mediaType = 'image/gif';
-            else if (ext === '.webp') mediaType = 'image/webp';
+            const base64Image = pngBuffer.toString('base64');
+            const mediaType = 'image/png';
 
             logger.info(`[AI OCR] Wysyłam obraz do Claude Vision (${mediaType})`);
 

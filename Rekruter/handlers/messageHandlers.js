@@ -256,8 +256,23 @@ async function handleImageInput(msg, state, config, client) {
       [],
       state.userEphemeralReplies
     );
-    const aiOcrService = new AIOCRService(config);
-    stats = await aiOcrService.analyzeRecruitmentImage(imgPath);
+    try {
+      const aiOcrService = new AIOCRService(config);
+      stats = await aiOcrService.analyzeRecruitmentImage(imgPath);
+    } catch (aiError) {
+      // Jeśli AI OCR zawiedzie, fallback na tradycyjny OCR
+      await updateUserEphemeralReply(
+        msg.author.id,
+        '⚠️ AI OCR niedostępny, używam tradycyjnego OCR...',
+        [],
+        state.userEphemeralReplies
+      );
+      stats = await extractOptimizedStatsFromImage(
+        imgPath,
+        msg.author.id,
+        state.userEphemeralReplies
+      );
+    }
   } else {
     stats = await extractOptimizedStatsFromImage(
       imgPath,

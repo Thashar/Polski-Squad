@@ -1089,6 +1089,20 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**Rekruter Bot - FIX: AI OCR - Błąd "Image does not match media type":**
+- **FIX KRYTYCZNY:** Naprawiono błąd 400 "Image does not match the provided media type image/png"
+- **Problem:** Obrazy z Discord mogą być w formacie JPEG/WEBP, ale były wysyłane do API jako PNG tylko na podstawie rozszerzenia pliku
+- **Rozwiązanie:**
+  - Dodano konwersję obrazu na PNG przez `sharp` przed wysłaniem do Anthropic API
+  - Dodano fallback na tradycyjny OCR gdy AI OCR zawiedzie (try-catch)
+  - Użytkownik dostaje komunikat "⚠️ AI OCR niedostępny, używam tradycyjnego OCR..."
+- **Implementacja:**
+  - `sharp(imagePath).png().toBuffer()` - normalizacja formatu obrazu
+  - Zawsze wysyłamy `mediaType: 'image/png'` z prawdziwym PNG buforem
+- Lokalizacja zmian:
+  - `Rekruter/services/aiOcrService.js:4,45-51` (import sharp + konwersja)
+  - `Rekruter/handlers/messageHandlers.js:259-275` (try-catch + fallback)
+
 **Rekruter Bot - Rozszerzenie Poziomów Lunar Mine Expedition:**
 - **ZMIANA:** Zakres akceptowanych poziomów Lunar Mine Expedition rozszerzony z 1-12 na **1-16**
 - **Powód:** W grze pojawiło się więcej poziomów trudności ekspedycji
