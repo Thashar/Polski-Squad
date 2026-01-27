@@ -453,13 +453,15 @@ class AIChatService {
         if (q.includes('porównaj') || q.includes('vs') || q.includes('lepszy') || q.includes('gorszy')) {
             return 'compare';
         }
+        // Progres - wszystkie formy gramatyczne (progres/progresu/progresie/progresy)
         if (q.includes('progres') || q.includes('rozwój') || q.includes('wzrost') || q.includes('regres')) {
             return 'progress';
         }
         if (q.includes('ranking') || q.includes('top') || q.includes('najlepszy') || q.includes('najgorszy')) {
             return 'ranking';
         }
-        if (q.includes('statystyki') || q.includes('stats') || q.includes('jak wygląda')) {
+        // Statystyki - wszystkie formy gramatyczne (statystyki/statystyk/statystykami/stats)
+        if (q.includes('statystyk') || q.includes('stats') || q.includes('jak wygląda')) {
             return 'stats';
         }
         // Rozpoznawanie nazw klanów - różne warianty
