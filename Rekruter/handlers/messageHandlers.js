@@ -182,7 +182,7 @@ async function handleLunarPointsInput(msg, state, config) {
   const pts = parseInt(msg.content, 10);
   await safeDeleteMessage(msg);
 
-  if (isNaN(pts) || pts < 0 || pts > 1500) {
+  if (isNaN(pts) || pts < 0 || pts > 5000) {
     await updateUserEphemeralReply(
       msg.author.id,
       config.messages.invalidLunarPoints,

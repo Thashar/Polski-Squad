@@ -1089,6 +1089,16 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 
 ### Styczeń 2026
 
+**Rekruter Bot - Rozszerzenie Maksymalnych Punktów Lunar Mine Expedition:**
+- **ZMIANA:** Maksymalna liczba punktów z I fazy Lunar Mine Expedition rozszerzona z 1500 na **5000**
+- **Powód:** W grze możliwe jest uzyskanie wyższych punktów w Lunar Mine
+- **Zmiany:**
+  - Komunikat walidacji: "Podaj poprawną ilość punktów z I fazy Lunar Mine Expedition (0-5000)!"
+  - Walidacja w `handleLunarPointsInput`: `pts > 1500` → `pts > 5000`
+- Lokalizacja zmian:
+  - `Rekruter/config/messages.js:12` (komunikat)
+  - `Rekruter/handlers/messageHandlers.js:185` (walidacja)
+
 **Rekruter Bot - FIX: AI OCR - Błąd "Image does not match media type":**
 - **FIX KRYTYCZNY:** Naprawiono błąd 400 "Image does not match the provided media type image/png"
 - **Problem:** Obrazy z Discord mogą być w formacie JPEG/WEBP, ale były wysyłane do API jako PNG tylko na podstawie rozszerzenia pliku
