@@ -260,6 +260,28 @@ client.on(Events.MessageCreate, async (message) => {
 
     // ============ OBSŁUGA AI CHAT (MENTION @StalkerLME) ============
     if (message.mentions.has(client.user) && message.guild) {
+        // Ignoruj wzmianki przez role bota
+        if (!message.mentions.users.has(client.user.id)) {
+            return;
+        }
+
+        // Ignoruj @everyone i @here
+        if (message.mentions.everyone) {
+            return;
+        }
+
+        // Ignoruj odpowiedzi na wiadomości bota
+        if (message.reference) {
+            try {
+                const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+                if (repliedMessage.author.id === client.user.id) {
+                    return;
+                }
+            } catch (error) {
+                // Jeśli nie można pobrać wiadomości, kontynuuj normalnie
+            }
+        }
+
         try {
             // Wyciągnij pytanie (usuń mention)
             const question = message.content

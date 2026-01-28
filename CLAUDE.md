@@ -750,7 +750,8 @@ node manual-backup.js
 - **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
 
 **AI Chat** - System konwersacyjny z AI (mention @StalkerLME):
-- **Trigger:** Mention @StalkerLME + pytanie (max 300 znaków)
+- **Trigger:** Bezpośrednie oznaczenie @StalkerLME + pytanie (max 300 znaków)
+  - Ignoruje: wzmianki przez role bota, @everyone/@here, odpowiedzi na wiadomości bota
 - **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
 - **Limity:**
   - Cooldown: 5 minut per użytkownik
