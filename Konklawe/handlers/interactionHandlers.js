@@ -3872,6 +3872,13 @@ class InteractionHandler {
             // Aktualizuj embed
             await this.passwordEmbedService.updateEmbed(true);
 
+            // Wyślij informację na kanał start
+            const startChannel = await this.client.channels.fetch(this.config.channels.start);
+            if (startChannel && startChannel.isTextBased() && interaction.channel.id !== this.config.channels.start) {
+                const passwordMessage = this.config.messages.passwordSet.replace(/{emoji}/g, this.config.emojis.warning2);
+                await startChannel.send(passwordMessage);
+            }
+
             // Resetuj przypomnienia timery
             this.timerService.clearAllTimers();
             await this.timerService.setFirstHintReminder();
