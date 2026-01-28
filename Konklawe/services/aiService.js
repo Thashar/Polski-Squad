@@ -44,7 +44,7 @@ class AIService {
                     max_tokens: 50,
                     messages: [{
                         role: 'user',
-                        content: 'Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło może być wyszukane. Hasło musi być prawdziwe, nie może być słowem, które nie istnieje.'
+                        content: 'Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło powinno być wyszukane. Hasło musi być prawdziwe, nie może być słowem, które nie istnieje.'
                     }]
                 });
 
@@ -92,7 +92,7 @@ class AIService {
                 ? `„${previousHints.join('", „')}"`
                 : 'Brak poprzednich podpowiedzi';
 
-            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}". Napisz podpowiedź która sprawi, że hasło wciąż będzie trudne do odgadnięcia i po dodanej podpowiedzi odpowiedź nie będzie oczywista. Podpowiedź powinna być abstrakcyjna, niebanalna. Podpowiedź może zawierać od jednego do pięciu słów, powinna być maksymalnie jednym zdaniem. Poprzednie podpowiedzi to:
+            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}". Napisz podpowiedź która sprawi, że hasło wciąż będzie trudne do odgadnięcia i po dodanej podpowiedzi odpowiedź nie będzie oczywista. Podpowiedź powinna być niebanalna. Podpowiedź może zawierać od jednego do pięciu słów, powinna być maksymalnie jednym zdaniem. Poprzednie podpowiedzi to:
 ${hintsText}
 Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz podpowiedzi w " ".`;
 
