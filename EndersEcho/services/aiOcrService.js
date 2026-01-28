@@ -201,6 +201,9 @@ class AIOCRService {
             .replace(/^score[:\s]*/i, '')
             .trim();
 
+        // Normalizacja wyniku (max 5 cyfr + jednostka)
+        score = this.normalizeScore(score);
+
         // Walidacja
         const isValid = bossName && score && score.length > 0;
 
@@ -225,6 +228,94 @@ class AIOCRService {
             isValidVictory: isValid,
             error: isValid ? undefined : 'VALIDATION_FAILED'
         };
+    }
+
+    /**
+     * Normalizuje wynik - max 5 cyfr + jednostka
+     * Zasady:
+     * - Max 5 cyfr przed jednostką
+     * - Jeśli przed kropką 1 cyfra → po kropce max 2 cyfry
+     * - Jeśli przed kropką 2-5 cyfr → po kropce max 1 cyfra
+     * - Jeśli jest 6+ cyfr → obcina nadmiarowe z końca
+     * @param {string} score - Wynik do normalizacji
+     * @returns {string} - Znormalizowany wynik
+     */
+    normalizeScore(score) {
+        if (!score) return score;
+
+        // Regex: cyfry (opcjonalnie z kropką i cyframi dziesiętnymi) + opcjonalna jednostka
+        const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi)?$/i);
+        if (!match) {
+            logger.info(`[AI OCR] Normalizacja: Nie udało się sparsować wyniku "${score}"`);
+            return score;
+        }
+
+        let numberPart = match[1].replace(/,/g, '.'); // Zamień przecinki na kropki
+        const unit = match[2] || '';
+
+        // Rozdziel na część całkowitą i dziesiętną
+        const parts = numberPart.split('.');
+        let integerPart = parts[0] || '';
+        let decimalPart = parts[1] || '';
+
+        const originalScore = score;
+
+        // Jeśli jest jednostka, normalizuj liczbę cyfr
+        if (unit) {
+            // Policz łączną liczbę cyfr (bez kropki)
+            const totalDigits = integerPart.length + decimalPart.length;
+
+            if (totalDigits > 5) {
+                // Za dużo cyfr - trzeba obciąć
+                logger.warn(`[AI OCR] Normalizacja: Wykryto ${totalDigits} cyfr z jednostką ${unit} - obcinam do 5`);
+
+                // Jeśli nie ma części dziesiętnej, obetnij część całkowitą
+                if (!decimalPart) {
+                    integerPart = integerPart.substring(0, 5);
+                } else {
+                    // Obcinaj od końca, zachowując maksymalnie 5 cyfr
+                    const digitsToKeep = 5;
+                    if (integerPart.length >= digitsToKeep) {
+                        // Część całkowita ma już 5+ cyfr - usuń dziesiętną
+                        integerPart = integerPart.substring(0, digitsToKeep);
+                        decimalPart = '';
+                    } else {
+                        // Zachowaj część całkowitą, obetnij dziesiętną
+                        const decimalDigitsAllowed = digitsToKeep - integerPart.length;
+                        decimalPart = decimalPart.substring(0, decimalDigitsAllowed);
+                    }
+                }
+            }
+
+            // Sprawdź zasady dla części dziesiętnej
+            if (decimalPart) {
+                if (integerPart.length === 1) {
+                    // 1 cyfra przed kropką → max 2 po kropce
+                    if (decimalPart.length > 2) {
+                        decimalPart = decimalPart.substring(0, 2);
+                    }
+                } else {
+                    // 2-5 cyfr przed kropką → max 1 po kropce
+                    if (decimalPart.length > 1) {
+                        decimalPart = decimalPart.substring(0, 1);
+                    }
+                }
+            }
+        }
+
+        // Zbuduj znormalizowany wynik
+        let normalizedScore;
+        if (decimalPart) {
+            normalizedScore = `${integerPart}.${decimalPart}${unit}`;
+        } else {
+            normalizedScore = `${integerPart}${unit}`;
+        }
+
+        if (normalizedScore !== originalScore) {
+            logger.info(`[AI OCR] Normalizacja: "${originalScore}" → "${normalizedScore}"`);
+        }
+
+        return normalizedScore;
     }
 }
 
