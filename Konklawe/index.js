@@ -13,6 +13,7 @@ const ScheduledHintsService = require('./services/scheduledHintsService');
 const JudgmentService = require('./services/judgmentService');
 const DetailedLogger = require('./services/detailedLogger');
 const MessageCleanupService = require('./services/messageCleanupService');
+const AIService = require('./services/aiService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -31,7 +32,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService;
 let interactionHandler, messageHandler;
 
 /**
@@ -84,8 +85,11 @@ async function initializeServices() {
     const dataDir = path.join(__dirname, 'data');
     messageCleanupService = new MessageCleanupService(client, logger, dataDir);
 
+    // Inicjalizacja AI Service
+    aiService = new AIService(config);
+
     // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService);
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService);
     interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 

@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -19,6 +19,7 @@ class InteractionHandler {
         this.judgmentService = judgmentService;
         this.detailedLogger = detailedLogger;
         this.messageCleanupService = messageCleanupService;
+        this.aiService = aiService;
         this.virtuttiService = new VirtuttiService(config);
         this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
@@ -115,6 +116,17 @@ class InteractionHandler {
 
         if (customId === 'hint_remove_scheduled') {
             await this.handleRemoveScheduledButton(interaction);
+            return;
+        }
+
+        // Obsługa przycisków AI
+        if (customId === 'ai_generate_password') {
+            await this.handleGeneratePasswordButton(interaction);
+            return;
+        }
+
+        if (customId === 'ai_generate_hint') {
+            await this.handleGenerateHintButton(interaction);
             return;
         }
 
@@ -3809,6 +3821,162 @@ class InteractionHandler {
 
         // 10. Log
         logger.info(`🌑 Lucyfer (${interaction.user.tag}) użył Chaos Blessing na ${targetUser.tag}`);
+    }
+
+    /**
+     * Obsługuje przycisk generowania hasła przez AI
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleGeneratePasswordButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może generować hasło!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Sprawdź czy użytkownik jest na kanale trigger
+        if (interaction.channel.id !== this.config.channels.trigger) {
+            return await interaction.reply({
+                content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Sprawdź czy AI Service jest dostępny
+        if (!this.aiService || !this.aiService.enabled) {
+            return await interaction.reply({
+                content: '⚠️ AI Service nie jest dostępny. Skontaktuj się z administratorem.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Defer reply - generowanie może potrwać
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            // Generuj hasło przez AI
+            const password = await this.aiService.generatePassword();
+
+            if (!password) {
+                return await interaction.editReply({
+                    content: '❌ Nie udało się wygenerować hasła. Spróbuj ponownie.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Ustaw nowe hasło
+            await this.gameService.setNewPassword(password, interaction.user.id);
+
+            // Aktualizuj embed
+            await this.passwordEmbedService.updateEmbed(true);
+
+            // Resetuj przypomnienia timery
+            this.timerService.clearTimersForReset();
+            this.timerService.startFirstHintReminder(interaction, this.config.roles.papal, this.passwordEmbedService);
+            this.timerService.startSecondHintReminder(interaction, this.config.roles.papal, this.passwordEmbedService);
+            this.timerService.startPapalRoleRemovalTimer(interaction, this.config.roles.papal, this.passwordEmbedService);
+
+            await interaction.editReply({
+                content: `✅ Hasło zostało wygenerowane przez AI i ustawione:\n\n🔑 **${password}**\n\n⏰ Przypomnienie o pierwszej podpowiedzi za **15 minut**!`,
+                flags: MessageFlags.Ephemeral
+            });
+
+            logger.info(`🤖 AI wygenerowało hasło dla ${interaction.user.tag}: ${password}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas generowania hasła przez AI: ${error.message}`);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas generowania hasła. Spróbuj ponownie.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk generowania podpowiedzi przez AI
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleGenerateHintButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może generować podpowiedzi!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Sprawdź czy użytkownik jest na kanale trigger
+        if (interaction.channel.id !== this.config.channels.trigger) {
+            return await interaction.reply({
+                content: '⚠️ Ten przycisk działa tylko na kanale z hasłem!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Sprawdź czy jest aktywne hasło
+        if (!this.gameService.trigger || this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
+            return await interaction.reply({
+                content: '⚠️ Brak aktywnego hasła do którego można wygenerować podpowiedź!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Sprawdź czy AI Service jest dostępny
+        if (!this.aiService || !this.aiService.enabled) {
+            return await interaction.reply({
+                content: '⚠️ AI Service nie jest dostępny. Skontaktuj się z administratorem.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Defer reply - generowanie może potrwać
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            // Generuj podpowiedź przez AI
+            const hint = await this.aiService.generateHint(this.gameService.trigger, this.gameService.hints);
+
+            if (!hint) {
+                return await interaction.editReply({
+                    content: '❌ Nie udało się wygenerować podpowiedzi. Spróbuj ponownie.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            // Dodaj podpowiedź
+            this.gameService.addHint(hint);
+
+            // Wyślij podpowiedź na kanał command
+            const authorDisplayName = interaction.member.displayName;
+            await this.passwordEmbedService.sendHintToCommandChannel(hint, authorDisplayName);
+
+            // Aktualizuj embed
+            await this.passwordEmbedService.scheduleUpdate();
+
+            // Resetuj timer hint reminder
+            this.timerService.clearHintReminderTimer();
+            this.timerService.startHintReminderTimer(interaction, this.config.roles.papal, this.passwordEmbedService);
+
+            // Wyczyść timer 24h timeout za brak podpowiedzi
+            this.timerService.clearHintTimeoutTimer();
+
+            // Wyczyść timer przypominania co 15 minut
+            this.timerService.clearRecurringReminderTimer();
+
+            await interaction.editReply({
+                content: `✅ Podpowiedź została wygenerowana przez AI i dodana:\n\n💡 **${hint}**`,
+                flags: MessageFlags.Ephemeral
+            });
+
+            logger.info(`🤖 AI wygenerowało podpowiedź dla hasła "${this.gameService.trigger}": ${hint}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas generowania podpowiedzi przez AI: ${error.message}`);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas generowania podpowiedzi. Spróbuj ponownie.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
     }
 
 }

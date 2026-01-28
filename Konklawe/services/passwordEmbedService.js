@@ -170,7 +170,14 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('🔑');
 
-            components = [new ActionRowBuilder().addComponents(setPasswordButton)];
+            // Przycisk: Wygeneruj hasło przy pomocy AI
+            const generatePasswordButton = new ButtonBuilder()
+                .setCustomId('ai_generate_password')
+                .setLabel('Wygeneruj hasło przy pomocy AI')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🤖');
+
+            components = [new ActionRowBuilder().addComponents(setPasswordButton, generatePasswordButton)];
         }
         // PRZYPADEK 2: Hasło domyślne "Konklawe"
         else if (this.gameService.trigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
@@ -202,7 +209,14 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('🔄');
 
-            components = [new ActionRowBuilder().addComponents(changePasswordButton)];
+            // Przycisk: Wygeneruj hasło przy pomocy AI
+            const generatePasswordButton = new ButtonBuilder()
+                .setCustomId('ai_generate_password')
+                .setLabel('Wygeneruj hasło przy pomocy AI')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🤖');
+
+            components = [new ActionRowBuilder().addComponents(changePasswordButton, generatePasswordButton)];
         }
         // PRZYPADEK 3: Hasło ustawione, brak podpowiedzi
         else if (this.gameService.hints.length === 0) {
@@ -285,7 +299,7 @@ class PasswordEmbedService {
 
             embed.addFields(fields);
 
-            // Przyciski: Zmień hasło, Dodaj podpowiedź, Zaplanuj podpowiedź, Usuń zaplanowane
+            // Przyciski: Rząd 1 - Zmień hasło, Dodaj podpowiedź, Wygeneruj podpowiedź AI
             const changePasswordButton = new ButtonBuilder()
                 .setCustomId('password_change')
                 .setLabel('Zmień hasło')
@@ -298,6 +312,13 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💡');
 
+            const generateHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint')
+                .setLabel('Wygeneruj podpowiedź przy pomocy AI')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🤖');
+
+            // Przyciski: Rząd 2 - Zaplanuj podpowiedź, Usuń zaplanowane
             const scheduleHintButton = new ButtonBuilder()
                 .setCustomId('hint_schedule')
                 .setLabel('Zaplanuj podpowiedź')
@@ -311,7 +332,8 @@ class PasswordEmbedService {
                 .setEmoji('🗑️');
 
             components = [
-                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, scheduleHintButton, removeScheduledButton)
+                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, generateHintButton),
+                new ActionRowBuilder().addComponents(scheduleHintButton, removeScheduledButton)
             ];
         }
         // PRZYPADEK 4: Hasło ustawione, są podpowiedzi
@@ -419,7 +441,7 @@ class PasswordEmbedService {
 
             embed.addFields(fields);
 
-            // Przyciski: Zmień hasło, Dodaj podpowiedź, Zaplanuj podpowiedź, Usuń zaplanowane
+            // Przyciski: Rząd 1 - Zmień hasło, Dodaj podpowiedź, Wygeneruj podpowiedź AI
             const changePasswordButton = new ButtonBuilder()
                 .setCustomId('password_change')
                 .setLabel('Zmień hasło')
@@ -432,6 +454,13 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💡');
 
+            const generateHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint')
+                .setLabel('Wygeneruj podpowiedź przy pomocy AI')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🤖');
+
+            // Przyciski: Rząd 2 - Zaplanuj podpowiedź, Usuń zaplanowane
             const scheduleHintButton = new ButtonBuilder()
                 .setCustomId('hint_schedule')
                 .setLabel('Zaplanuj podpowiedź')
@@ -445,7 +474,8 @@ class PasswordEmbedService {
                 .setEmoji('🗑️');
 
             components = [
-                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, scheduleHintButton, removeScheduledButton)
+                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, generateHintButton),
+                new ActionRowBuilder().addComponents(scheduleHintButton, removeScheduledButton)
             ];
         }
 
