@@ -8907,15 +8907,25 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 async function handleWynikiCommand(interaction, sharedState) {
     const { config } = sharedState;
 
+    // NATYCHMIAST defer aby interakcja nie wygasła (Discord daje tylko 3 sekundy)
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch (deferError) {
+        if (deferError.code === 10062) {
+            logger.warn('[WYNIKI] ⚠️ Nie można odpowiedzieć na interakcję (timeout?): Unknown interaction');
+            return;
+        }
+        throw deferError;
+    }
+
     // Sprawdź czy użytkownik ma rolę klanową
     const clanRoleIds = Object.values(config.targetRoles);
     const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
     const isAdmin = interaction.member.permissions.has('Administrator');
 
     if (!hasClanRole && !isAdmin) {
-        await interaction.reply({
-            content: '❌ Komenda `/wyniki` jest dostępna tylko dla członków klanu.',
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: '❌ Komenda `/wyniki` jest dostępna tylko dla członków klanu.'
         });
         return;
     }
@@ -8929,14 +8939,11 @@ async function handleWynikiCommand(interaction, sharedState) {
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
 
     if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
-        await interaction.reply({
-            content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`,
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: `❌ Komenda \`/wyniki\` jest dostępna tylko na określonych kanałach.`
         });
         return;
     }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Utwórz select menu z klanami (bez parametru phase)
@@ -9139,15 +9146,25 @@ async function showClanStatusPage(interaction, ranking, currentPage, deleteTimes
 async function handleClanStatusCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
 
+    // NATYCHMIAST defer aby interakcja nie wygasła (Discord daje tylko 3 sekundy)
+    try {
+        await interaction.deferReply();
+    } catch (deferError) {
+        if (deferError.code === 10062) {
+            logger.warn('[CLAN-STATUS] ⚠️ Nie można odpowiedzieć na interakcję (timeout?): Unknown interaction');
+            return;
+        }
+        throw deferError;
+    }
+
     // Sprawdź czy użytkownik ma rolę klanową
     const clanRoleIds = Object.values(config.targetRoles);
     const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
     const isAdmin = interaction.member.permissions.has('Administrator');
 
     if (!hasClanRole && !isAdmin) {
-        await interaction.reply({
-            content: '❌ Komenda `/clan-status` jest dostępna tylko dla członków klanu.',
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: '❌ Komenda `/clan-status` jest dostępna tylko dla członków klanu.'
         });
         return;
     }
@@ -9161,14 +9178,11 @@ async function handleClanStatusCommand(interaction, sharedState) {
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
 
     if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
-        await interaction.reply({
-            content: `❌ Komenda \`/clan-status\` jest dostępna tylko na określonych kanałach.`,
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: `❌ Komenda \`/clan-status\` jest dostępna tylko na określonych kanałach.`
         });
         return;
     }
-
-    await interaction.deferReply();
 
     try {
         // Pobierz wszystkie dostępne tygodnie
@@ -9319,15 +9333,26 @@ async function handleClanStatusPageButton(interaction, sharedState) {
 async function handleClanProgresCommand(interaction, sharedState) {
     const { config, databaseService } = sharedState;
 
+    // NATYCHMIAST defer aby interakcja nie wygasła (Discord daje tylko 3 sekundy)
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch (deferError) {
+        // Interakcja już wygasła lub została obsłużona
+        if (deferError.code === 10062) {
+            logger.warn('[CLAN-PROGRES] ⚠️ Nie można odpowiedzieć na interakcję (timeout?): Unknown interaction');
+            return;
+        }
+        throw deferError;
+    }
+
     // Sprawdź czy użytkownik ma rolę klanową
     const clanRoleIds = Object.values(config.targetRoles);
     const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
     const isAdmin = interaction.member.permissions.has('Administrator');
 
     if (!hasClanRole && !isAdmin) {
-        await interaction.reply({
-            content: '❌ Komenda `/clan-progres` jest dostępna tylko dla członków klanu.',
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: '❌ Komenda `/clan-progres` jest dostępna tylko dla członków klanu.'
         });
         return;
     }
@@ -9341,15 +9366,11 @@ async function handleClanProgresCommand(interaction, sharedState) {
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
 
     if (!allowedChannels.includes(interaction.channelId) && !isAdmin && !hasPunishRole) {
-        await interaction.reply({
-            content: `❌ Komenda \`/clan-progres\` jest dostępna tylko na określonych kanałach.`,
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: `❌ Komenda \`/clan-progres\` jest dostępna tylko na określonych kanałach.`
         });
         return;
     }
-
-    // Defer jako ephemeral - wybór klanu jest prywatny
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Utwórz select menu z klanami
@@ -10164,19 +10185,27 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 async function handlePlayerRaportCommand(interaction, sharedState) {
     const { config } = sharedState;
 
+    // NATYCHMIAST defer aby interakcja nie wygasła (Discord daje tylko 3 sekundy)
+    try {
+        await interaction.deferReply();
+    } catch (deferError) {
+        if (deferError.code === 10062) {
+            logger.warn('[PLAYER-RAPORT] ⚠️ Nie można odpowiedzieć na interakcję (timeout?): Unknown interaction');
+            return;
+        }
+        throw deferError;
+    }
+
     // Sprawdź uprawnienia - tylko admin i moderatorzy
     const isAdmin = interaction.member.permissions.has('Administrator');
     const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
 
     if (!isAdmin && !hasPunishRole) {
-        await interaction.reply({
-            content: '❌ Komenda `/player-raport` jest dostępna tylko dla administratorów i moderatorów.',
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: '❌ Komenda `/player-raport` jest dostępna tylko dla administratorów i moderatorów.'
         });
         return;
     }
-
-    await interaction.deferReply();
 
     try {
         // Utwórz select menu z klanami
