@@ -231,12 +231,12 @@ class AIOCRService {
     }
 
     /**
-     * Normalizuje wynik - max 5 cyfr + jednostka
+     * Normalizuje wynik - max 5 cyfr PRZED kropką + jednostka
      * Zasady:
-     * - Max 5 cyfr przed jednostką
+     * - Max 5 cyfr PRZED kropką (część całkowita)
      * - Jeśli przed kropką 1 cyfra → po kropce max 2 cyfry
      * - Jeśli przed kropką 2-5 cyfr → po kropce max 1 cyfra
-     * - Jeśli jest 6+ cyfr → obcina nadmiarowe z końca
+     * - Jeśli jest 6+ cyfr przed kropką → obcina do 5
      * @param {string} score - Wynik do normalizacji
      * @returns {string} - Znormalizowany wynik
      */
@@ -262,32 +262,13 @@ class AIOCRService {
 
         // Jeśli jest jednostka, normalizuj liczbę cyfr
         if (unit) {
-            // Policz łączną liczbę cyfr (bez kropki)
-            const totalDigits = integerPart.length + decimalPart.length;
-
-            if (totalDigits > 5) {
-                // Za dużo cyfr - trzeba obciąć
-                logger.warn(`[AI OCR] Normalizacja: Wykryto ${totalDigits} cyfr z jednostką ${unit} - obcinam do 5`);
-
-                // Jeśli nie ma części dziesiętnej, obetnij część całkowitą
-                if (!decimalPart) {
-                    integerPart = integerPart.substring(0, 5);
-                } else {
-                    // Obcinaj od końca, zachowując maksymalnie 5 cyfr
-                    const digitsToKeep = 5;
-                    if (integerPart.length >= digitsToKeep) {
-                        // Część całkowita ma już 5+ cyfr - usuń dziesiętną
-                        integerPart = integerPart.substring(0, digitsToKeep);
-                        decimalPart = '';
-                    } else {
-                        // Zachowaj część całkowitą, obetnij dziesiętną
-                        const decimalDigitsAllowed = digitsToKeep - integerPart.length;
-                        decimalPart = decimalPart.substring(0, decimalDigitsAllowed);
-                    }
-                }
+            // Sprawdź część CAŁKOWITĄ (przed kropką) - max 5 cyfr
+            if (integerPart.length > 5) {
+                logger.warn(`[AI OCR] Normalizacja: Wykryto ${integerPart.length} cyfr przed kropką z jednostką ${unit} - obcinam do 5`);
+                integerPart = integerPart.substring(0, 5);
             }
 
-            // Sprawdź zasady dla części dziesiętnej
+            // Sprawdź część dziesiętną (po kropce)
             if (decimalPart) {
                 if (integerPart.length === 1) {
                     // 1 cyfra przed kropką → max 2 po kropce
