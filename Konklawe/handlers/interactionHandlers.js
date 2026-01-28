@@ -3873,10 +3873,8 @@ class InteractionHandler {
             await this.passwordEmbedService.updateEmbed(true);
 
             // Resetuj przypomnienia timery
-            this.timerService.clearTimersForReset();
-            this.timerService.startFirstHintReminder(interaction, this.config.roles.papal, this.passwordEmbedService);
-            this.timerService.startSecondHintReminder(interaction, this.config.roles.papal, this.passwordEmbedService);
-            this.timerService.startPapalRoleRemovalTimer(interaction, this.config.roles.papal, this.passwordEmbedService);
+            this.timerService.clearAllTimers();
+            await this.timerService.setFirstHintReminder();
 
             await interaction.editReply({
                 content: `✅ Hasło zostało wygenerowane przez AI i ustawione:\n\n🔑 **${password}**\n\n⏰ Przypomnienie o pierwszej podpowiedzi za **15 minut**!`,
@@ -3956,13 +3954,18 @@ class InteractionHandler {
 
             // Resetuj timer hint reminder
             this.timerService.clearHintReminderTimer();
-            this.timerService.startHintReminderTimer(interaction, this.config.roles.papal, this.passwordEmbedService);
+            await this.timerService.setHintReminderTimer();
 
             // Wyczyść timer 24h timeout za brak podpowiedzi
             this.timerService.clearHintTimeoutTimer();
 
             // Wyczyść timer przypominania co 15 minut
             this.timerService.clearRecurringReminderTimer();
+
+            // Wyczyść timery przypominania o pierwszej podpowiedzi
+            this.timerService.clearFirstHintReminderTimer();
+            this.timerService.clearSecondHintReminderTimer();
+            this.timerService.clearPapalRoleRemovalTimer();
 
             await interaction.editReply({
                 content: `✅ Podpowiedź została wygenerowana przez AI i dodana:\n\n💡 **${hint}**`,

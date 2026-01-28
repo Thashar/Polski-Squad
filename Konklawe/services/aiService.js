@@ -33,25 +33,44 @@ class AIService {
             return null;
         }
 
-        try {
-            logger.info('🤖 Generowanie hasła przez AI...');
+        const maxRetries = 3;
 
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 100,
-                messages: [{
-                    role: 'user',
-                    content: 'Gramy w grę w zgadywanie haseł, hasło musi być jednym słowem. Hasło może być wyszukane, ale nie musi. Wymyśl hasło.'
-                }]
-            });
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                logger.info(`🤖 Generowanie hasła przez AI (próba ${attempt}/${maxRetries})...`);
 
-            const password = response.content[0].text.trim();
-            logger.success(`✅ AI wygenerowało hasło: ${password}`);
-            return password;
-        } catch (error) {
-            logger.error(`❌ Błąd podczas generowania hasła przez AI: ${error.message}`);
-            return null;
+                const response = await this.client.messages.create({
+                    model: this.model,
+                    max_tokens: 50,
+                    messages: [{
+                        role: 'user',
+                        content: 'Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło może być wyszukane. Przykład poprawnej odpowiedzi: "Salamandra"'
+                    }]
+                });
+
+                const password = response.content[0].text.trim();
+
+                // Walidacja - sprawdź czy to tylko jedno słowo
+                if (password.includes(' ') || password.includes('\n')) {
+                    logger.warn(`⚠️ AI zwróciło więcej niż jedno słowo: "${password}" - powtarzam zapytanie...`);
+                    continue; // Próbuj ponownie
+                }
+
+                logger.success(`✅ AI wygenerowało hasło: ${password}`);
+                return password;
+            } catch (error) {
+                logger.error(`❌ Błąd podczas generowania hasła przez AI (próba ${attempt}/${maxRetries}): ${error.message}`);
+
+                // Jeśli to ostatnia próba, zwróć null
+                if (attempt === maxRetries) {
+                    return null;
+                }
+            }
         }
+
+        // Jeśli wszystkie próby się wyczerpały
+        logger.error('❌ Nie udało się wygenerować hasła po 3 próbach');
+        return null;
     }
 
     /**
