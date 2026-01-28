@@ -44,7 +44,7 @@ class AIService {
                     max_tokens: 50,
                     messages: [{
                         role: 'user',
-                        content: 'Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. Hasło nie powinno być przesadnie długim słowem, max kilkanaście znaków. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło powinno być wyszukane. Hasło musi być prawdziwe, nie może być słowem, które nie istnieje.'
+                        content: 'Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. Hasło nie powinno być przesadnie długim słowem, max kilkanaście znaków. Hasło musi być rzeczownikiem. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło powinno być wyszukane. Hasło musi być prawdziwe, nie może być słowem, które nie istnieje.'
                     }]
                 });
 
