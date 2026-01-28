@@ -662,7 +662,7 @@ node manual-backup.js
      - Używa tego samego modelu co AI Chat (domyślnie: Claude 3 Haiku)
      - Prompt: "Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie: <nick> - <wynik>"
      - Automatyczny fallback na tradycyjny OCR gdy AI zawiedzie
-     - Dotyczy komend: `/punish`, `/faza1`, `/faza2`
+     - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00)
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
