@@ -100,7 +100,12 @@ class AIOCRService {
             // === KROK 2: Wyciągnij nazwę bossa i wynik ===
             logger.info(`[AI OCR] KROK 2: Wyciągam nazwę bossa i wynik...`);
 
-            const extractPrompt = `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik. Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
+            const extractPrompt = `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik.
+
+WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi
+UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
+
+Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
 <nazwa bossa>
 <wynik>`;
 
@@ -242,6 +247,21 @@ class AIOCRService {
      */
     normalizeScore(score) {
         if (!score) return score;
+
+        // === POST-PROCESSING: Naprawa błędnej interpretacji jednostki Qi ===
+        // AI często myli Q z cyfrą 0, np. "364.4Qi" → "364.40i"
+        // Jeśli wynik kończy się na "0i" (gdzie 0 to pomylone Q) → zamień na "Qi"
+        if (/\d0i$/i.test(score)) {
+            const fixedScore = score.replace(/(\d)0i$/i, '$1Qi');
+            logger.info(`[AI OCR] Post-processing: Naprawiono "0i" → "Qi": "${score}" → "${fixedScore}"`);
+            score = fixedScore;
+        }
+        // Jeśli jednostka to samo "i" (bez Q przed) → zamień na "Qi"
+        else if (/\di$/i.test(score) && !/Qi$/i.test(score)) {
+            const fixedScore = score.replace(/i$/i, 'Qi');
+            logger.info(`[AI OCR] Post-processing: Naprawiono "i" → "Qi": "${score}" → "${fixedScore}"`);
+            score = fixedScore;
+        }
 
         // Regex: cyfry (opcjonalnie z kropką i cyframi dziesiętnymi) + opcjonalna jednostka
         const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi)?$/i);
