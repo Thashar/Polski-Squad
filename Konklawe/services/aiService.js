@@ -92,7 +92,7 @@ class AIService {
                 ? `„${previousHints.join('", „')}"`
                 : 'Brak poprzednich podpowiedzi';
 
-            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}". Napisz podpowiedź która sprawi, że hasło wciąż będzie trudne do odgadnięcia i po dodanej podpowiedzi odpowiedź nie będzie oczywista. Podpowiedź powinna być niebanalna. Podpowiedź może zawierać od jednego do dziesięciu słów, powinna być maksymalnie jednym zdaniem. W podpowiedzi nie może zawierać się odmiana lub cześć słowa, którym jest hasło. Poprzednie podpowiedzi to:
+            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}". Napisz podpowiedź która sprawi, że hasło wciąż będzie trudne do odgadnięcia i po dodanej podpowiedzi odpowiedź nie będzie oczywista. Podpowiedź powinna być niebanalna. Podpowiedź może zawierać od jednego do dziesięciu słów, powinna być maksymalnie jednym zdaniem. UWAGA, NAJWAŻNIEJSZE! PODPOWIEDŹ nie może zawierać słowa "${password}" ani żadnych jego odmian. Poprzednie podpowiedzi to:
 ${hintsText}
 Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz podpowiedzi w " ".`;
 
