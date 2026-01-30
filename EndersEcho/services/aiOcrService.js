@@ -100,13 +100,13 @@ class AIOCRService {
             // === KROK 2: Sprawdź czy zdjęcie nie jest fałszywe ===
             logger.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
 
-            const fakeCheckPrompt = `Sprawdź czy to zdjęcie nie zostało podrobione. Zwróć uwagę na:
+            const fakeCheckPrompt = `Sprawdź czy to zdjęcie nie zostało wyedytowane. Zwróć uwagę na to:
 - Czy czcionki są identyczne i spójne?
 - Czy ktoś nie narysował czegoś ręcznie?
 - Czy widać ślady edycji graficznej?
 
 Odpowiedz TYLKO jednym słowem:
-- "OK" jeśli zdjęcie wygląda autentycznie
+- "OK" jeśli zdjęcie nie miało edycji
 - "NOK" jeśli wykryłeś podróbkę lub edycję`;
 
             const fakeCheckMessage = await this.client.messages.create({
