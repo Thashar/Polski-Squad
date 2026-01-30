@@ -157,6 +157,18 @@ UWAGA! Zdjęcie może zostać podrobiore, zwróć uwagę na to czy czcionki są 
     parseAIResponse(responseText) {
         const lowerResponse = responseText.toLowerCase();
 
+        // === SPRAWDŹ CZY AI WYKRYŁ PODRÓBKĘ ===
+        if (lowerResponse.includes('podróbka')) {
+            logger.warn(`[AI OCR] AI wykrył PODROBIONE ZDJĘCIE!`);
+            return {
+                bossName: null,
+                score: null,
+                confidence: 0,
+                isValidVictory: false,
+                error: 'FAKE_PHOTO'
+            };
+        }
+
         // Sprawdź czy AI wykrył niepoprawny screen
         const invalidKeywords = [
             'niepoprawny screen',
