@@ -97,8 +97,59 @@ class AIOCRService {
 
             logger.info(`[AI OCR] KROK 1 - "Victory" znaleznione, przechodzę do KROKU 2`);
 
-            // === KROK 2: Wyciągnij nazwę bossa i wynik ===
-            logger.info(`[AI OCR] KROK 2: Wyciągam nazwę bossa i wynik...`);
+            // === KROK 2: Sprawdź czy zdjęcie nie jest fałszywe ===
+            logger.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
+
+            const fakeCheckPrompt = `Sprawdź czy to zdjęcie nie zostało podrobione. Zwróć uwagę na:
+- Czy czcionki są identyczne i spójne?
+- Czy ktoś nie narysował czegoś ręcznie?
+- Czy widać ślady edycji graficznej?
+
+Odpowiedz TYLKO jednym słowem:
+- "OK" jeśli zdjęcie wygląda autentycznie
+- "NOK" jeśli wykryłeś podróbkę lub edycję`;
+
+            const fakeCheckMessage = await this.client.messages.create({
+                model: this.model,
+                max_tokens: 10,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: mediaType,
+                                data: base64Image
+                            }
+                        },
+                        {
+                            type: 'text',
+                            text: fakeCheckPrompt
+                        }
+                    ]
+                }]
+            });
+
+            const fakeCheckResponse = fakeCheckMessage.content[0].text.trim().toUpperCase();
+            logger.info(`[AI OCR] KROK 2 - Odpowiedź: "${fakeCheckResponse}"`);
+
+            // Sprawdź czy zdjęcie jest autentyczne
+            if (fakeCheckResponse.includes('NOK')) {
+                logger.warn(`[AI OCR] KROK 2 - WYKRYTO PODROBIONE ZDJĘCIE!`);
+                return {
+                    bossName: null,
+                    score: null,
+                    confidence: 0,
+                    isValidVictory: false,
+                    error: 'FAKE_PHOTO'
+                };
+            }
+
+            logger.info(`[AI OCR] KROK 2 - Zdjęcie autentyczne, przechodzę do KROKU 3`);
+
+            // === KROK 3: Wyciągnij nazwę bossa i wynik ===
+            logger.info(`[AI OCR] KROK 3: Wyciągam nazwę bossa i wynik...`);
 
             const extractPrompt = `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik.
 
@@ -107,9 +158,7 @@ UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się 
 
 Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
 <nazwa bossa>
-<wynik>
-
-UWAGA! Zdjęcie może zostać podrobiore, zwróć uwagę na to czy czcionki są identyczne, albo czy ktoś narysował jakiś napis ręcznie. Jeżeli wykryjesz coś podobnego napisz jedno słowo: Podróbka`;
+<wynik>`;
 
             const extractMessage = await this.client.messages.create({
                 model: this.model,
@@ -134,12 +183,12 @@ UWAGA! Zdjęcie może zostać podrobiore, zwróć uwagę na to czy czcionki są 
             });
 
             const extractResponse = extractMessage.content[0].text;
-            logger.info(`[AI OCR] KROK 2 - Odpowiedź Claude:`);
+            logger.info(`[AI OCR] KROK 3 - Odpowiedź Claude:`);
             logger.info(extractResponse);
 
             // Parsuj odpowiedź AI
             const result = this.parseAIResponse(extractResponse);
-            logger.info(`[AI OCR] KROK 2 - Wynik parsowania:`, result);
+            logger.info(`[AI OCR] KROK 3 - Wynik parsowania:`, result);
 
             return result;
 
@@ -156,18 +205,6 @@ UWAGA! Zdjęcie może zostać podrobiore, zwróć uwagę na to czy czcionki są 
      */
     parseAIResponse(responseText) {
         const lowerResponse = responseText.toLowerCase();
-
-        // === SPRAWDŹ CZY AI WYKRYŁ PODRÓBKĘ ===
-        if (lowerResponse.includes('podróbka')) {
-            logger.warn(`[AI OCR] AI wykrył PODROBIONE ZDJĘCIE!`);
-            return {
-                bossName: null,
-                score: null,
-                confidence: 0,
-                isValidVictory: false,
-                error: 'FAKE_PHOTO'
-            };
-        }
 
         // Sprawdź czy AI wykrył niepoprawny screen
         const invalidKeywords = [
