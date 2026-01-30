@@ -100,14 +100,24 @@ class AIOCRService {
             // === KROK 2: Sprawdź czy zdjęcie nie jest fałszywe ===
             logger.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
 
-            const fakeCheckPrompt = `Sprawdź czy to zdjęcie nie zostało wyedytowane. Zwróć uwagę na to:
-- Czy czcionki są identyczne i spójne?
-- Czy ktoś nie narysował czegoś ręcznie?
-- Czy widać ślady edycji graficznej?
-
-Odpowiedz TYLKO jednym słowem:
-- "OK" jeśli zdjęcie nie miało edycji
-- "NOK" jeśli wykryłeś podróbkę lub edycję`;
+            const fakeCheckPrompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
+DOKŁADNĄ ANALIZĘ LICZB
+Sprawdzenie KAŻDEGO piksela w cyfrach
+Analiza spójności czcionkiWE WSZYSTKICH ZNAKACH
+SZCZEGÓLNA UWAGA na cyfry po przecinku
+Porównanie WSZYSTKICH znaków z oficjalnym interfejsem gry
+KLUCZOWE KRYTERIA WERYFIKACJI
+Czy KAŻDY piksel jest 100% zgodny z oryginalnym interfejsem
+Czy liczby wyglądają IDEALNIE symetrycznie
+Czy po przecinku nie ma JAKICHKOLWIEK oznak edycji
+METODOLOGIA SPRAWDZENIA
+Porównaj KAŻDY element z wzorcem oryginalnego interfejsu
+Zwróć uwagę na NAJMNIEJSZE rozbieżności
+Sprawdź KAŻDĄ literę i cyfrę pod kątem zgodności
+Sprawdz czy dostało coś dopisane odręcznie. 
+INSTRUKCJA WYKONANIA:
+Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK". 
+Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 
             const fakeCheckMessage = await this.client.messages.create({
                 model: this.model,
