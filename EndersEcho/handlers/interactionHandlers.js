@@ -229,6 +229,13 @@ class InteractionHandler {
                     } else {
                         logger.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
                         await fs.unlink(tempImagePath);
+
+                        // Specjalna obsługa podrobionego zdjęcia
+                        if (aiResult.error === 'FAKE_PHOTO') {
+                            await interaction.editReply('🚫 **WYKRYTO PODROBIONE ZDJĘCIE!**\n\nTwoje zdjęcie zostało zidentyfikowane jako sfałszowane lub zmodyfikowane. Wynik nie zostanie przyjęty.\n\n⚠️ Przerabianie screenshotów jest niedozwolone!');
+                            return;
+                        }
+
                         await interaction.editReply('❌ Niepoprawny screenshot. Upewnij się, że zdjęcie zawiera ekran po zakończeniu walki Ender\'s Echo!');
                         return;
                     }
