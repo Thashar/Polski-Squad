@@ -107,7 +107,9 @@ UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się 
 
 Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
 <nazwa bossa>
-<wynik>`;
+<wynik>
+
+UWAGA! Zdjęcie może zostać podrobiore, zwróć uwagę na to czy czcionki są identyczne, albo czy ktoś narysował jakiś napis ręcznie. Jeżeli wykryjesz coś podobnego napisz jedno słowo: Podróbka`;
 
             const extractMessage = await this.client.messages.create({
                 model: this.model,
