@@ -213,14 +213,16 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
 - Podpowiedź powinna być bezpośrednia i prawie oczywista
 - Wskazuj kategorię lub temat hasła wprost
 - Użytkownicy powinni od razu wiedzieć w jakim kierunku myśleć
-- Przykład: dla "Samochód" → "Jest to pojazd"`;
+- DŁUGOŚĆ: Każda podpowiedź musi mieć od 3 do 6 słów
+- Przykład: dla "Samochód" → "Jest to pojazd mechaniczny"`;
                     break;
                 case 'hard':
                     difficultyInstructions = `POZIOM: TRUDNA PODPOWIEDŹ
 - Podpowiedź powinna być trudna ale nie przesadnie abstrakcyjna
 - Używaj pośrednich skojarzeń i wymaga myślenia
 - Wskazuj cechy charakterystyczne ale nie wprost
-- Przykład: dla "Samochód" → "Spalinowy środek lokomocji na czterech kołach"`;
+- DŁUGOŚĆ: Każda podpowiedź musi być JEDNYM SŁOWEM (rzeczownikiem)
+- Przykład: dla "Samochód" → "Silnik"`;
                     break;
                 case 'normal':
                 default:
@@ -237,7 +239,7 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
 ${difficultyInstructions}
 
 WYMAGANIA:
-1. Każda podpowiedź od jednego do sześciu słów (maksymalnie jedno zdanie)
+1. Długość podpowiedzi jest określona w sekcji powyżej (sprawdź POZIOM)
 2. ⛔ ZAKAZ używania słowa "${password}" lub jego odmian
 3. Każda podpowiedź musi być INNA i UNIKALNA
 4. Nie używaj cudzysłowów ani numeracji
@@ -259,7 +261,21 @@ Odpowiedź TYLKO podpowiedziami, każda w nowej linii, bez dodatkowych słów.`;
                 .trim()
                 .split('\n')
                 .map(h => h.trim())
-                .filter(h => h.length > 0 && !h.includes('"'))
+                .filter(h => {
+                    if (h.length === 0 || h.includes('"')) return false;
+
+                    const wordCount = h.split(/\s+/).length;
+
+                    // Walidacja długości według poziomu trudności
+                    if (difficulty === 'easy') {
+                        return wordCount >= 3 && wordCount <= 6;
+                    } else if (difficulty === 'hard') {
+                        return wordCount === 1;
+                    }
+
+                    // Dla normal - bez ograniczeń
+                    return true;
+                })
                 .slice(0, count);
 
             if (hints.length < count) {

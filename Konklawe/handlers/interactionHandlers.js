@@ -3892,16 +3892,17 @@ class InteractionHandler {
             });
         }
 
-        // Defer reply - generowanie może potrwać
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        // Defer update - nie pokazuje "Bot myśli..."
+        await interaction.deferUpdate();
 
         try {
             // Generuj 3 hasła przez AI
             const passwords = await this.aiService.generatePasswords(3);
 
             if (!passwords || passwords.length === 0) {
-                return await interaction.editReply({
-                    content: '❌ Nie udało się wygenerować haseł. Spróbuj ponownie.'
+                return await interaction.followUp({
+                    content: '❌ Nie udało się wygenerować haseł. Spróbuj ponownie.',
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -3911,15 +3912,12 @@ class InteractionHandler {
                 passwords
             );
 
-            await interaction.editReply({
-                content: `✅ AI wygenerowało **${passwords.length} hasła**. Wybierz jedno klikając przycisk na kanale.`
-            });
-
             logger.info(`🤖 AI wygenerowało ${passwords.length} haseł dla ${interaction.user.tag}: ${passwords.join(', ')}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas generowania haseł przez AI: ${error.message}`);
-            await interaction.editReply({
-                content: '❌ Wystąpił błąd podczas generowania haseł. Spróbuj ponownie.'
+            await interaction.followUp({
+                content: '❌ Wystąpił błąd podczas generowania haseł. Spróbuj ponownie.',
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -4022,16 +4020,17 @@ class InteractionHandler {
             });
         }
 
-        // Defer reply - generowanie może potrwać
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        // Defer update - nie pokazuje "Bot myśli..."
+        await interaction.deferUpdate();
 
         try {
-            // Generuj 3 podpowiedzi przez AI
-            const hints = await this.aiService.generateHints(this.gameService.trigger, this.gameService.hints, difficulty, 3);
+            // Generuj 5 podpowiedzi przez AI
+            const hints = await this.aiService.generateHints(this.gameService.trigger, this.gameService.hints, difficulty, 5);
 
             if (!hints || hints.length === 0) {
-                return await interaction.editReply({
-                    content: '❌ Nie udało się wygenerować podpowiedzi. Spróbuj ponownie.'
+                return await interaction.followUp({
+                    content: '❌ Nie udało się wygenerować podpowiedzi. Spróbuj ponownie.',
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -4042,21 +4041,12 @@ class InteractionHandler {
                 difficulty
             );
 
-            const difficultyText = {
-                'easy': 'łatwych',
-                'normal': 'zwykłych',
-                'hard': 'trudnych'
-            };
-
-            await interaction.editReply({
-                content: `✅ AI wygenerowało **${hints.length} ${difficultyText[difficulty]} podpowiedzi**. Wybierz jedną klikając przycisk na kanale.`
-            });
-
             logger.info(`🤖 AI wygenerowało ${hints.length} podpowiedzi (${difficulty}) dla hasła "${this.gameService.trigger}": ${hints.join(', ')}`);
         } catch (error) {
             logger.error(`❌ Błąd podczas generowania podpowiedzi przez AI: ${error.message}`);
-            await interaction.editReply({
-                content: '❌ Wystąpił błąd podczas generowania podpowiedzi. Spróbuj ponownie.'
+            await interaction.followUp({
+                content: '❌ Wystąpił błąd podczas generowania podpowiedzi. Spróbuj ponownie.',
+                flags: MessageFlags.Ephemeral
             });
         }
     }
