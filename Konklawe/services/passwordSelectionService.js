@@ -29,7 +29,7 @@ class PasswordSelectionService {
             new ButtonBuilder()
                 .setCustomId(`password_select_${index}_${password}`)
                 .setLabel(password)
-                .setStyle(ButtonStyle.Primary)
+                .setStyle(ButtonStyle.Secondary)
                 .setEmoji('🔑')
         );
 
