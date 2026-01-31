@@ -127,14 +127,9 @@ class InteractionHandler {
             return;
         }
 
-        // Obsługa przycisków AI generowania podpowiedzi (3 poziomy trudności)
+        // Obsługa przycisków AI generowania podpowiedzi (2 poziomy trudności)
         if (customId === 'ai_generate_hint_easy') {
             await this.handleGenerateHintButton(interaction, 'easy');
-            return;
-        }
-
-        if (customId === 'ai_generate_hint_normal') {
-            await this.handleGenerateHintButton(interaction, 'normal');
             return;
         }
 

@@ -193,7 +193,7 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
      * @param {number} count - Liczba podpowiedzi do wygenerowania (domyślnie 3)
      * @returns {Promise<string[]|null>} - Tablica wygenerowanych podpowiedzi lub null gdy błąd
      */
-    async generateHints(password, previousHints = [], difficulty = 'normal', count = 3) {
+    async generateHints(password, previousHints = [], difficulty = 'normal', count = 5) {
         if (!this.enabled) {
             logger.error('❌ AI Service nie jest dostępny');
             return null;
@@ -217,10 +217,10 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
                     break;
                 case 'hard':
                     difficultyInstructions = `POZIOM: TRUDNA PODPOWIEDŹ
-- Podpowiedź powinna być bardzo zawiła i metaforyczna
-- Używaj skomplikowanych porównań i nieoczywistych skojarzeń
-- Wymagaj głębokiego myślenia i kreatywności
-- Przykład: dla "Samochód" → "Metalowa bestia żerująca na asfalcie"`;
+- Podpowiedź powinna być trudna ale nie przesadnie abstrakcyjna
+- Używaj pośrednich skojarzeń i wymaga myślenia
+- Wskazuj cechy charakterystyczne ale nie wprost
+- Przykład: dla "Samochód" → "Spalinowy środek lokomocji na czterech kołach"`;
                     break;
                 case 'normal':
                 default:

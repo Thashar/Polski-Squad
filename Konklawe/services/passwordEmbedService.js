@@ -317,19 +317,13 @@ class PasswordEmbedService {
                 .setCustomId('ai_generate_hint_easy')
                 .setLabel('Generuj łatwą podpowiedź')
                 .setStyle(ButtonStyle.Success)
-                .setEmoji('🟢');
-
-            const generateNormalHintButton = new ButtonBuilder()
-                .setCustomId('ai_generate_hint_normal')
-                .setLabel('Generuj podpowiedź')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔵');
+                .setEmoji('🤖');
 
             const generateHardHintButton = new ButtonBuilder()
                 .setCustomId('ai_generate_hint_hard')
                 .setLabel('Generuj trudną podpowiedź')
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji('🔴');
+                .setEmoji('🤖');
 
             // Przyciski: Rząd 3 - Zaplanuj podpowiedź, Usuń zaplanowane
             const scheduleHintButton = new ButtonBuilder()
@@ -346,7 +340,7 @@ class PasswordEmbedService {
 
             components = [
                 new ActionRowBuilder().addComponents(changePasswordButton, addHintButton),
-                new ActionRowBuilder().addComponents(generateEasyHintButton, generateNormalHintButton, generateHardHintButton),
+                new ActionRowBuilder().addComponents(generateEasyHintButton, generateHardHintButton),
                 new ActionRowBuilder().addComponents(scheduleHintButton, removeScheduledButton)
             ];
         }
@@ -473,19 +467,13 @@ class PasswordEmbedService {
                 .setCustomId('ai_generate_hint_easy')
                 .setLabel('Generuj łatwą podpowiedź')
                 .setStyle(ButtonStyle.Success)
-                .setEmoji('🟢');
-
-            const generateNormalHintButton = new ButtonBuilder()
-                .setCustomId('ai_generate_hint_normal')
-                .setLabel('Generuj podpowiedź')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔵');
+                .setEmoji('🤖');
 
             const generateHardHintButton = new ButtonBuilder()
                 .setCustomId('ai_generate_hint_hard')
                 .setLabel('Generuj trudną podpowiedź')
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji('🔴');
+                .setEmoji('🤖');
 
             // Przyciski: Rząd 3 - Zaplanuj podpowiedź, Usuń zaplanowane
             const scheduleHintButton = new ButtonBuilder()
@@ -502,7 +490,7 @@ class PasswordEmbedService {
 
             components = [
                 new ActionRowBuilder().addComponents(changePasswordButton, addHintButton),
-                new ActionRowBuilder().addComponents(generateEasyHintButton, generateNormalHintButton, generateHardHintButton),
+                new ActionRowBuilder().addComponents(generateEasyHintButton, generateHardHintButton),
                 new ActionRowBuilder().addComponents(scheduleHintButton, removeScheduledButton)
             ];
         }
