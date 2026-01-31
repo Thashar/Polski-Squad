@@ -236,7 +236,10 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
 
             const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}".
 
-⚠️ KRYTYCZNE: Musisz wygenerować DOKŁADNIE ${count} podpowiedzi. Nie więcej, nie mniej. ZAWSZE ${count} podpowiedzi!
+⚠️⚠️⚠️ ABSOLUTNIE KRYTYCZNE ⚠️⚠️⚠️
+Musisz wygenerować DOKŁADNIE ${count} podpowiedzi!
+NIE ${count - 1}, NIE ${count + 1}, tylko DOKŁADNIE ${count}!
+To znaczy ${count} linii tekstu - ani więcej, ani mniej!
 
 ${difficultyInstructions}
 
@@ -250,15 +253,15 @@ WYMAGANIA:
 ${hintsText}
 
 FORMAT ODPOWIEDZI:
-- Każda podpowiedź w osobnej linii
-- Bez żadnych dodatkowych słów, znaków, numerów
-- Razem DOKŁADNIE ${count} linii
+Musisz napisać DOKŁADNIE ${count} linii (oddzielonych enterem).
+Każda linia to jedna podpowiedź.
+Nic więcej, nic mniej.
 
-Odpowiedź:`;
+Twoja odpowiedź (${count} linii):`;
 
             const response = await this.client.messages.create({
                 model: this.model,
-                max_tokens: 200,
+                max_tokens: 300,
                 messages: [{
                     role: 'user',
                     content: prompt
