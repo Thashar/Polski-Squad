@@ -167,11 +167,9 @@ WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T
 UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
 
 ⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
-- Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie
-- NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie
-- Jeśli wynik to "27331T" (bez żadnego separatora) - napisz "27331T"
-- Jeśli wynik ma kropkę dziesiętną np. "27.3T" - napisz "27.3T"
-- NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków
+Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
+NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie.
+NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
 
 Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
 <nazwa bossa>
@@ -315,6 +313,13 @@ Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w nast�
      */
     normalizeScore(score) {
         if (!score) return score;
+
+        // === Usuwanie przecinków (AI czasem halucynuje separatory tysięcy) ===
+        if (score.includes(',')) {
+            const cleanedScore = score.replace(/,/g, '');
+            logger.info(`[AI OCR] Normalizacja: Usunięto przecinek: "${score}" → "${cleanedScore}"`);
+            score = cleanedScore;
+        }
 
         // === POST-PROCESSING: Naprawa błędnej interpretacji jednostki Qi ===
         // AI często myli Q z cyfrą 0, np. "364.4Qi" → "364.40i"
