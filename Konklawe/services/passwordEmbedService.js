@@ -312,13 +312,26 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💡');
 
-            const generateHintButton = new ButtonBuilder()
-                .setCustomId('ai_generate_hint')
-                .setLabel('Wygeneruj podpowiedź przy pomocy AI')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🤖');
+            // Przyciski: Rząd 2 - AI generowanie z poziomami trudności
+            const generateEasyHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint_easy')
+                .setLabel('Generuj łatwą podpowiedź')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🟢');
 
-            // Przyciski: Rząd 2 - Zaplanuj podpowiedź, Usuń zaplanowane
+            const generateNormalHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint_normal')
+                .setLabel('Generuj podpowiedź')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔵');
+
+            const generateHardHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint_hard')
+                .setLabel('Generuj trudną podpowiedź')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🔴');
+
+            // Przyciski: Rząd 3 - Zaplanuj podpowiedź, Usuń zaplanowane
             const scheduleHintButton = new ButtonBuilder()
                 .setCustomId('hint_schedule')
                 .setLabel('Zaplanuj podpowiedź')
@@ -332,7 +345,8 @@ class PasswordEmbedService {
                 .setEmoji('🗑️');
 
             components = [
-                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, generateHintButton),
+                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton),
+                new ActionRowBuilder().addComponents(generateEasyHintButton, generateNormalHintButton, generateHardHintButton),
                 new ActionRowBuilder().addComponents(scheduleHintButton, removeScheduledButton)
             ];
         }
@@ -454,13 +468,26 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💡');
 
-            const generateHintButton = new ButtonBuilder()
-                .setCustomId('ai_generate_hint')
-                .setLabel('Wygeneruj podpowiedź przy pomocy AI')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🤖');
+            // Przyciski: Rząd 2 - AI generowanie z poziomami trudności
+            const generateEasyHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint_easy')
+                .setLabel('Generuj łatwą podpowiedź')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🟢');
 
-            // Przyciski: Rząd 2 - Zaplanuj podpowiedź, Usuń zaplanowane
+            const generateNormalHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint_normal')
+                .setLabel('Generuj podpowiedź')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔵');
+
+            const generateHardHintButton = new ButtonBuilder()
+                .setCustomId('ai_generate_hint_hard')
+                .setLabel('Generuj trudną podpowiedź')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🔴');
+
+            // Przyciski: Rząd 3 - Zaplanuj podpowiedź, Usuń zaplanowane
             const scheduleHintButton = new ButtonBuilder()
                 .setCustomId('hint_schedule')
                 .setLabel('Zaplanuj podpowiedź')
@@ -474,7 +501,8 @@ class PasswordEmbedService {
                 .setEmoji('🗑️');
 
             components = [
-                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton, generateHintButton),
+                new ActionRowBuilder().addComponents(changePasswordButton, addHintButton),
+                new ActionRowBuilder().addComponents(generateEasyHintButton, generateNormalHintButton, generateHardHintButton),
                 new ActionRowBuilder().addComponents(scheduleHintButton, removeScheduledButton)
             ];
         }

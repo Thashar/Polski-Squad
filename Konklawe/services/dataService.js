@@ -260,6 +260,29 @@ class DataService {
         }
         return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
+
+    /**
+     * Zapisuje stan wyboru podpowiedzi
+     * @param {Object} state - Stan do zapisania
+     */
+    saveHintSelectionState(state) {
+        fs.writeFileSync(
+            path.join(this.dataPath, 'hint_selection_state.json'),
+            JSON.stringify(state, null, 2)
+        );
+    }
+
+    /**
+     * Wczytuje stan wyboru podpowiedzi
+     * @returns {Object} - Stan wyboru podpowiedzi
+     */
+    loadHintSelectionState() {
+        const filePath = path.join(this.dataPath, 'hint_selection_state.json');
+        if (!fs.existsSync(filePath)) {
+            return { activeSelectionMessageId: null };
+        }
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
 }
 
 module.exports = DataService;

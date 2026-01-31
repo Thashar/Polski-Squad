@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null, hintSelectionService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -21,6 +21,7 @@ class InteractionHandler {
         this.messageCleanupService = messageCleanupService;
         this.aiService = aiService;
         this.passwordSelectionService = passwordSelectionService;
+        this.hintSelectionService = hintSelectionService;
         this.virtuttiService = new VirtuttiService(config);
         this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
@@ -126,14 +127,31 @@ class InteractionHandler {
             return;
         }
 
-        if (customId === 'ai_generate_hint') {
-            await this.handleGenerateHintButton(interaction);
+        // Obsługa przycisków AI generowania podpowiedzi (3 poziomy trudności)
+        if (customId === 'ai_generate_hint_easy') {
+            await this.handleGenerateHintButton(interaction, 'easy');
+            return;
+        }
+
+        if (customId === 'ai_generate_hint_normal') {
+            await this.handleGenerateHintButton(interaction, 'normal');
+            return;
+        }
+
+        if (customId === 'ai_generate_hint_hard') {
+            await this.handleGenerateHintButton(interaction, 'hard');
             return;
         }
 
         // Obsługa wyboru hasła z AI
         if (customId.startsWith('password_select_')) {
             await this.handlePasswordSelectButton(interaction);
+            return;
+        }
+
+        // Obsługa wyboru podpowiedzi z AI
+        if (customId.startsWith('hint_select_')) {
+            await this.handleHintSelectButton(interaction);
             return;
         }
 
@@ -2915,6 +2933,12 @@ class InteractionHandler {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
+            // Usuń wiadomość z przyciskami AI jeśli istnieje
+            if (this.hintSelectionService) {
+                const triggerChannel = await interaction.client.channels.fetch(this.config.channels.trigger);
+                await this.hintSelectionService.deleteSelectionMessage(triggerChannel);
+            }
+
             // Dodaj podpowiedź
             this.gameService.addHint(hintText);
 
@@ -3962,7 +3986,7 @@ class InteractionHandler {
      * Obsługuje przycisk generowania podpowiedzi przez AI
      * @param {Interaction} interaction - Interakcja Discord
      */
-    async handleGenerateHintButton(interaction) {
+    async handleGenerateHintButton(interaction, difficulty = 'normal') {
         // Sprawdź czy użytkownik ma rolę papieską
         if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
             return await interaction.reply({
@@ -3995,20 +4019,73 @@ class InteractionHandler {
             });
         }
 
+        // Sprawdź czy HintSelectionService jest dostępny
+        if (!this.hintSelectionService) {
+            return await interaction.reply({
+                content: '⚠️ Hint Selection Service nie jest dostępny. Skontaktuj się z administratorem.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
         // Defer reply - generowanie może potrwać
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-            // Generuj podpowiedź przez AI
-            const hint = await this.aiService.generateHint(this.gameService.trigger, this.gameService.hints);
+            // Generuj 3 podpowiedzi przez AI
+            const hints = await this.aiService.generateHints(this.gameService.trigger, this.gameService.hints, difficulty, 3);
 
-            if (!hint) {
+            if (!hints || hints.length === 0) {
                 return await interaction.editReply({
-                    content: '❌ Nie udało się wygenerować podpowiedzi. Spróbuj ponownie.',
-                    flags: MessageFlags.Ephemeral
+                    content: '❌ Nie udało się wygenerować podpowiedzi. Spróbuj ponownie.'
                 });
             }
 
+            // Wyślij wiadomość z przyciskami wyboru
+            await this.hintSelectionService.createHintSelectionMessage(
+                interaction.channel,
+                hints,
+                difficulty
+            );
+
+            const difficultyText = {
+                'easy': 'łatwych',
+                'normal': 'zwykłych',
+                'hard': 'trudnych'
+            };
+
+            await interaction.editReply({
+                content: `✅ AI wygenerowało **${hints.length} ${difficultyText[difficulty]} podpowiedzi**. Wybierz jedną klikając przycisk na kanale.`
+            });
+
+            logger.info(`🤖 AI wygenerowało ${hints.length} podpowiedzi (${difficulty}) dla hasła "${this.gameService.trigger}": ${hints.join(', ')}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas generowania podpowiedzi przez AI: ${error.message}`);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas generowania podpowiedzi. Spróbuj ponownie.'
+            });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk wyboru podpowiedzi z AI
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handleHintSelectButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może wybrać podpowiedź!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Wyciągnij podpowiedź z customId (format: hint_select_0_Tekst podpowiedzi)
+        const parts = interaction.customId.split('_');
+        const hint = parts.slice(3).join('_');
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
             // Dodaj podpowiedź
             this.gameService.addHint(hint);
 
@@ -4018,6 +4095,9 @@ class InteractionHandler {
 
             // Aktualizuj embed
             await this.passwordEmbedService.scheduleUpdate();
+
+            // Usuń wiadomość z przyciskami
+            await this.hintSelectionService.deleteSelectionMessage(interaction.channel);
 
             // Resetuj timer hint reminder
             this.timerService.clearHintReminderTimer();
@@ -4035,16 +4115,14 @@ class InteractionHandler {
             this.timerService.clearPapalRoleRemovalTimer();
 
             await interaction.editReply({
-                content: `✅ Podpowiedź została wygenerowana przez AI i dodana:\n\n💡 **${hint}**`,
-                flags: MessageFlags.Ephemeral
+                content: `✅ Podpowiedź została wybrana i dodana:\n\n💡 **${hint}**`
             });
 
-            logger.info(`🤖 AI wygenerowało podpowiedź dla hasła "${this.gameService.trigger}": ${hint}`);
+            logger.info(`💡 ${interaction.user.tag} wybrał podpowiedź z AI: ${hint}`);
         } catch (error) {
-            logger.error(`❌ Błąd podczas generowania podpowiedzi przez AI: ${error.message}`);
+            logger.error(`❌ Błąd podczas dodawania podpowiedzi: ${error.message}`);
             await interaction.editReply({
-                content: '❌ Wystąpił błąd podczas generowania podpowiedzi. Spróbuj ponownie.',
-                flags: MessageFlags.Ephemeral
+                content: '❌ Wystąpił błąd podczas dodawania podpowiedzi. Spróbuj ponownie.'
             });
         }
     }

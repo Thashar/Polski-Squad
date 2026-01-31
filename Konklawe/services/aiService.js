@@ -184,6 +184,100 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
             return null;
         }
     }
+
+    /**
+     * Generuje wiele podpowiedzi przez AI z określonym poziomem trudności (nowa metoda)
+     * @param {string} password - Hasło do którego generujemy podpowiedzi
+     * @param {Array<string>} previousHints - Poprzednie podpowiedzi
+     * @param {string} difficulty - Poziom trudności ('easy', 'normal', 'hard')
+     * @param {number} count - Liczba podpowiedzi do wygenerowania (domyślnie 3)
+     * @returns {Promise<string[]|null>} - Tablica wygenerowanych podpowiedzi lub null gdy błąd
+     */
+    async generateHints(password, previousHints = [], difficulty = 'normal', count = 3) {
+        if (!this.enabled) {
+            logger.error('❌ AI Service nie jest dostępny');
+            return null;
+        }
+
+        try {
+            logger.info(`🤖 Generowanie ${count} podpowiedzi (${difficulty}) przez AI...`);
+
+            const hintsText = previousHints.length > 0
+                ? `„${previousHints.join('", „')}"`
+                : 'Brak poprzednich podpowiedzi';
+
+            let difficultyInstructions = '';
+            switch (difficulty) {
+                case 'easy':
+                    difficultyInstructions = `POZIOM: ŁATWA PODPOWIEDŹ
+- Podpowiedź powinna być bezpośrednia i prawie oczywista
+- Wskazuj kategorię lub temat hasła wprost
+- Użytkownicy powinni od razu wiedzieć w jakim kierunku myśleć
+- Przykład: dla "Samochód" → "Jest to pojazd"`;
+                    break;
+                case 'hard':
+                    difficultyInstructions = `POZIOM: TRUDNA PODPOWIEDŹ
+- Podpowiedź powinna być bardzo zawiła i metaforyczna
+- Używaj skomplikowanych porównań i nieoczywistych skojarzeń
+- Wymagaj głębokiego myślenia i kreatywności
+- Przykład: dla "Samochód" → "Metalowa bestia żerująca na asfalcie"`;
+                    break;
+                case 'normal':
+                default:
+                    difficultyInstructions = `POZIOM: ZWYKŁA PODPOWIEDŹ
+- Podpowiedź powinna być umiarkowanie trudna
+- Wymaga myślenia ale nie jest zbyt zawiła
+- Balans między oczywistością a trudnością
+- Przykład: dla "Samochód" → "Czterokołowy środek transportu"`;
+                    break;
+            }
+
+            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}". Wygeneruj DOKŁADNIE ${count} podpowiedzi, każda w nowej linii.
+
+${difficultyInstructions}
+
+WYMAGANIA:
+1. Każda podpowiedź od jednego do sześciu słów (maksymalnie jedno zdanie)
+2. ⛔ ZAKAZ używania słowa "${password}" lub jego odmian
+3. Każda podpowiedź musi być INNA i UNIKALNA
+4. Nie używaj cudzysłowów ani numeracji
+5. Poprzednie podpowiedzi (nie powtarzaj podobnych):
+${hintsText}
+
+Odpowiedź TYLKO podpowiedziami, każda w nowej linii, bez dodatkowych słów.`;
+
+            const response = await this.client.messages.create({
+                model: this.model,
+                max_tokens: 200,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            });
+
+            const hints = response.content[0].text
+                .trim()
+                .split('\n')
+                .map(h => h.trim())
+                .filter(h => h.length > 0 && !h.includes('"'))
+                .slice(0, count);
+
+            if (hints.length < count) {
+                logger.warn(`⚠️ AI wygenerowało tylko ${hints.length}/${count} prawidłowych podpowiedzi`);
+            }
+
+            if (hints.length === 0) {
+                logger.error('❌ AI nie wygenerowało żadnych prawidłowych podpowiedzi');
+                return null;
+            }
+
+            logger.success(`✅ AI wygenerowało ${hints.length} podpowiedzi (${difficulty}): ${hints.join(', ')}`);
+            return hints;
+        } catch (error) {
+            logger.error(`❌ Błąd podczas generowania podpowiedzi przez AI: ${error.message}`);
+            return null;
+        }
+    }
 }
 
 module.exports = AIService;

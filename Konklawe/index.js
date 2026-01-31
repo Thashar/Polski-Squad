@@ -15,6 +15,7 @@ const DetailedLogger = require('./services/detailedLogger');
 const MessageCleanupService = require('./services/messageCleanupService');
 const AIService = require('./services/aiService');
 const PasswordSelectionService = require('./services/passwordSelectionService');
+const HintSelectionService = require('./services/hintSelectionService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -33,7 +34,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService;
 let interactionHandler, messageHandler;
 
 /**
@@ -93,8 +94,12 @@ async function initializeServices() {
     passwordSelectionService = new PasswordSelectionService(config, gameService, dataService);
     passwordSelectionService.loadState();
 
+    // Inicjalizacja HintSelectionService
+    hintSelectionService = new HintSelectionService(config, gameService, dataService);
+    hintSelectionService.loadState();
+
     // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService);
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService);
     interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 
