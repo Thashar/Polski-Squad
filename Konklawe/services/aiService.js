@@ -223,8 +223,8 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
 - Podpowiedź powinna być trudna ale nie przesadnie abstrakcyjna
 - Używaj pośrednich skojarzeń i wymaga myślenia
 - Wskazuj cechy charakterystyczne ale nie wprost
-- DŁUGOŚĆ: Każda podpowiedź musi być JEDNYM SŁOWEM (rzeczownikiem)
-- Przykład: dla "Samochód" → "Silnik"`;
+- DŁUGOŚĆ: Każda podpowiedź musi mieć 1-2 słowa
+- Przykład: dla "Samochód" → "Silnik" lub "Mechaniczny pojazd"`;
                     break;
                 case 'normal':
                 default:
@@ -285,7 +285,7 @@ Twoja odpowiedź (${count} linii):`;
                     if (difficulty === 'easy') {
                         return wordCount >= 3 && wordCount <= 6;
                     } else if (difficulty === 'hard') {
-                        return wordCount === 1;
+                        return wordCount >= 1 && wordCount <= 2;
                     }
 
                     // Dla normal - bez ograniczeń
