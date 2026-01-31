@@ -100,6 +100,8 @@ class AIService {
 
             const prompt = `Gramy w grę w zgadywanie haseł. Wygeneruj DOKŁADNIE ${count} trudne hasła do odgadnięcia, każde w nowej linii.
 
+⛔ NAJWAŻNIEJSZE: HASŁA MUSZĄ BYĆ TYLKO PO POLSKU! ⛔
+
 WYMAGANIA:
 1. Każde hasło musi być JEDNYM SŁOWEM (rzeczownikiem)
 2. Maksymalnie kilkanaście znaków na słowo
@@ -109,7 +111,7 @@ WYMAGANIA:
 6. ⛔ ABSOLUTNY ZAKAZ powtarzania tych haseł:
 ${passwordsText}
 
-Odpowiedź TYLKO hasłami, każde w nowej linii, bez numeracji, bez dodatkowych słów.`;
+Odpowiedź TYLKO hasłami po polsku, każde w nowej linii, bez numeracji, bez dodatkowych słów.`;
 
             const response = await this.client.messages.create({
                 model: this.model,

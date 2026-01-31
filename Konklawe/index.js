@@ -16,6 +16,7 @@ const MessageCleanupService = require('./services/messageCleanupService');
 const AIService = require('./services/aiService');
 const PasswordSelectionService = require('./services/passwordSelectionService');
 const HintSelectionService = require('./services/hintSelectionService');
+const AIUsageLimitService = require('./services/aiUsageLimitService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -34,7 +35,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService;
+let dataService, gameService, timerService, rankingService, commandService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService, aiUsageLimitService;
 let interactionHandler, messageHandler;
 
 /**
@@ -50,12 +51,15 @@ async function initializeServices() {
     rankingService = null;
     commandService = new CommandService(config);
 
+    // Inicjalizacja AIUsageLimitService (potrzebne dla PasswordEmbedService)
+    aiUsageLimitService = new AIUsageLimitService(dataService);
+
     // Utwórz scheduledHintsService (wymaga gameService, timerService, passwordEmbedService)
     // passwordEmbedService będzie ustawiony później
     scheduledHintsService = new ScheduledHintsService(config, gameService, timerService, null);
 
-    // Utwórz passwordEmbedService z scheduledHintsService
-    passwordEmbedService = new PasswordEmbedService(config, gameService, scheduledHintsService);
+    // Utwórz passwordEmbedService z scheduledHintsService i aiUsageLimitService
+    passwordEmbedService = new PasswordEmbedService(config, gameService, scheduledHintsService, aiUsageLimitService);
 
     // Ustaw passwordEmbedService w scheduledHintsService
     scheduledHintsService.passwordEmbedService = passwordEmbedService;
@@ -99,7 +103,7 @@ async function initializeServices() {
     hintSelectionService.loadState();
 
     // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService);
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService, aiUsageLimitService);
     interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
 

@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null, hintSelectionService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null, hintSelectionService = null, aiUsageLimitService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -22,6 +22,7 @@ class InteractionHandler {
         this.aiService = aiService;
         this.passwordSelectionService = passwordSelectionService;
         this.hintSelectionService = hintSelectionService;
+        this.aiUsageLimitService = aiUsageLimitService;
         this.virtuttiService = new VirtuttiService(config);
         this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
@@ -2880,6 +2881,11 @@ class InteractionHandler {
                 await this.passwordSelectionService.deleteSelectionMessage(triggerChannel);
             }
 
+            // Zresetuj liczniki generowania haseł przez AI
+            if (this.aiUsageLimitService) {
+                this.aiUsageLimitService.resetPasswordGenerations();
+            }
+
             // Wyczyść kanał i zaktualizuj embed
             if (this.passwordEmbedService) {
                 await this.passwordEmbedService.updateEmbed(true);
@@ -3892,6 +3898,18 @@ class InteractionHandler {
             });
         }
 
+        // Sprawdź limity użycia AI dla haseł
+        if (this.aiUsageLimitService) {
+            const { canUse, remainingAttempts } = this.aiUsageLimitService.canGeneratePassword(interaction.user.id);
+
+            if (!canUse) {
+                return await interaction.reply({
+                    content: '⛔ Wykorzystałeś wszystkie 3 próby generowania haseł przez AI! Poczekaj aż papież zmieni hasło.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
         // Defer update - nie pokazuje "Bot myśli..."
         await interaction.deferUpdate();
 
@@ -3911,6 +3929,11 @@ class InteractionHandler {
                 interaction.channel,
                 passwords
             );
+
+            // Zapisz użycie AI
+            if (this.aiUsageLimitService) {
+                this.aiUsageLimitService.recordPasswordGeneration(interaction.user.id);
+            }
 
             logger.info(`🤖 AI wygenerowało ${passwords.length} haseł dla ${interaction.user.tag}: ${passwords.join(', ')}`);
         } catch (error) {
@@ -4020,6 +4043,21 @@ class InteractionHandler {
             });
         }
 
+        // Sprawdź cooldown dla tego poziomu trudności
+        if (this.aiUsageLimitService) {
+            const { canUse, cooldownRemaining } = this.aiUsageLimitService.canGenerateHints(interaction.user.id, difficulty);
+
+            if (!canUse) {
+                const timeLeft = this.aiUsageLimitService.formatCooldown(cooldownRemaining);
+                const difficultyText = difficulty === 'easy' ? 'łatwych' : 'trudnych';
+
+                return await interaction.reply({
+                    content: `⏳ Możesz generować ${difficultyText} podpowiedzi raz na godzinę! Poczekaj jeszcze **${timeLeft}**.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
         // Defer update - nie pokazuje "Bot myśli..."
         await interaction.deferUpdate();
 
@@ -4040,6 +4078,11 @@ class InteractionHandler {
                 hints,
                 difficulty
             );
+
+            // Zapisz użycie AI
+            if (this.aiUsageLimitService) {
+                this.aiUsageLimitService.recordHintGeneration(interaction.user.id, difficulty);
+            }
 
             logger.info(`🤖 AI wygenerowało ${hints.length} podpowiedzi (${difficulty}) dla hasła "${this.gameService.trigger}": ${hints.join(', ')}`);
         } catch (error) {

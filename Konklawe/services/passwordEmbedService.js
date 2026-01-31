@@ -5,10 +5,11 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Konklawe');
 
 class PasswordEmbedService {
-    constructor(config, gameService, scheduledHintsService = null) {
+    constructor(config, gameService, scheduledHintsService = null, aiUsageLimitService = null) {
         this.config = config;
         this.gameService = gameService;
         this.scheduledHintsService = scheduledHintsService;
+        this.aiUsageLimitService = aiUsageLimitService;
         this.client = null;
         this.embedMessageId = null; // ID wiadomości z embedem
         this.lastUpdateTimestamp = 0; // Timestamp ostatniej aktualizacji
@@ -177,6 +178,13 @@ class PasswordEmbedService {
                 .setStyle(ButtonStyle.Danger)
                 .setEmoji('🤖');
 
+            // Dodaj informację o limitach AI
+            embed.addFields({
+                name: '⚠️ Limity AI',
+                value: '**Generowanie hasła:** max 3 próby (reset przy zmianie hasła)\n**Podpowiedzi:** cooldown 1h per poziom trudności',
+                inline: false
+            });
+
             components = [new ActionRowBuilder().addComponents(setPasswordButton, generatePasswordButton)];
         }
         // PRZYPADEK 2: Hasło domyślne "Konklawe"
@@ -197,6 +205,13 @@ class PasswordEmbedService {
             fields.push({
                 name: '📌 Jak rozpocząć?',
                 value: `Napisz **"${this.config.messages.defaultPassword}"** na odpowiednim kanale aby rozpocząć grę i zostać papieżem!`,
+                inline: false
+            });
+
+            // POLE 3: Limity AI
+            fields.push({
+                name: '⚠️ Limity AI',
+                value: '**Generowanie hasła:** max 3 próby (reset przy zmianie hasła)\n**Podpowiedzi:** cooldown 1h per poziom trudności',
                 inline: false
             });
 
@@ -294,6 +309,13 @@ class PasswordEmbedService {
                        '• Drugie przypomnienie po **30 minutach**\n' +
                        '• Utrata roli po **1 godzinie**\n' +
                        '• Planowanie: max **10**, do **24h** od ostatniej',
+                inline: true
+            });
+
+            // POLE 9: Limity AI (inline)
+            fields.push({
+                name: '⚠️ Limity AI',
+                value: '**Generowanie hasła:** max 3 próby\n**Podpowiedzi:** cooldown 1h per poziom',
                 inline: true
             });
 
@@ -444,6 +466,13 @@ class PasswordEmbedService {
                        '• Reset po **24h** bez podpowiedzi\n' +
                        '• Papież traci rolę przy resecie\n' +
                        '• Planowanie: max **10**, do **24h** od ostatniej',
+                inline: true
+            });
+
+            // POLE 8: Limity AI (inline)
+            fields.push({
+                name: '⚠️ Limity AI',
+                value: '**Generowanie hasła:** max 3 próby\n**Podpowiedzi:** cooldown 1h per poziom',
                 inline: true
             });
 

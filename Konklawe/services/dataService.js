@@ -283,6 +283,29 @@ class DataService {
         }
         return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
+
+    /**
+     * Zapisuje dane o użyciu AI
+     * @param {Object} usage - Dane o użyciu AI
+     */
+    saveAIUsage(usage) {
+        fs.writeFileSync(
+            path.join(this.dataPath, 'ai_usage.json'),
+            JSON.stringify(usage, null, 2)
+        );
+    }
+
+    /**
+     * Wczytuje dane o użyciu AI
+     * @returns {Object} - Dane o użyciu AI (userId -> usage data)
+     */
+    loadAIUsage() {
+        const filePath = path.join(this.dataPath, 'ai_usage.json');
+        if (!fs.existsSync(filePath)) {
+            return {};
+        }
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
 }
 
 module.exports = DataService;
