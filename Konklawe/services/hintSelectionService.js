@@ -53,7 +53,7 @@ class HintSelectionService {
         const text = difficultyText[difficulty] || 'zwykłych';
 
         const message = await channel.send({
-            content: `${emoji} **AI wygenerowało 3 ${text} podpowiedzi** - wybierz jedną klikając przycisk:`,
+            content: `${emoji} **AI wygenerowało ${hints.length} ${text} ${hints.length === 1 ? 'podpowiedź' : hints.length < 5 ? 'podpowiedzi' : 'podpowiedzi'}** - wybierz jedną klikając przycisk:`,
             components: rows
         });
 

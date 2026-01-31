@@ -234,7 +234,9 @@ Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz 
                     break;
             }
 
-            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}". Wygeneruj DOKŁADNIE ${count} podpowiedzi, każda w nowej linii.
+            const prompt = `Gramy w grę w zgadywanie haseł, hasło to "${password}".
+
+⚠️ KRYTYCZNE: Musisz wygenerować DOKŁADNIE ${count} podpowiedzi. Nie więcej, nie mniej. ZAWSZE ${count} podpowiedzi!
 
 ${difficultyInstructions}
 
@@ -242,11 +244,17 @@ WYMAGANIA:
 1. Długość podpowiedzi jest określona w sekcji powyżej (sprawdź POZIOM)
 2. ⛔ ZAKAZ używania słowa "${password}" lub jego odmian
 3. Każda podpowiedź musi być INNA i UNIKALNA
-4. Nie używaj cudzysłowów ani numeracji
-5. Poprzednie podpowiedzi (nie powtarzaj podobnych):
+4. ⛔ ZAKAZ używania kropek, przecinków i innych znaków interpunkcyjnych
+5. ⛔ ZAKAZ używania cudzysłowów i numeracji
+6. Poprzednie podpowiedzi (nie powtarzaj podobnych):
 ${hintsText}
 
-Odpowiedź TYLKO podpowiedziami, każda w nowej linii, bez dodatkowych słów.`;
+FORMAT ODPOWIEDZI:
+- Każda podpowiedź w osobnej linii
+- Bez żadnych dodatkowych słów, znaków, numerów
+- Razem DOKŁADNIE ${count} linii
+
+Odpowiedź:`;
 
             const response = await this.client.messages.create({
                 model: this.model,
@@ -261,6 +269,8 @@ Odpowiedź TYLKO podpowiedziami, każda w nowej linii, bez dodatkowych słów.`;
                 .trim()
                 .split('\n')
                 .map(h => h.trim())
+                .map(h => h.replace(/[.,!?;:]+$/g, '')) // Usuń znaki interpunkcyjne z końca
+                .map(h => h.trim()) // Trim ponownie po usunięciu znaków
                 .filter(h => {
                     if (h.length === 0 || h.includes('"')) return false;
 
