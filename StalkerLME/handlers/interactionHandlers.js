@@ -1733,6 +1733,27 @@ async function handleButton(interaction, sharedState) {
             await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
 
         } catch (error) {
+            // Obsługa błędu Unknown Message (interakcja wygasła) - to normalna sytuacja
+            if (error?.code === 10008) {
+                logger.info(`[PUNISH] ℹ️ Interakcja wygasła (Unknown Message) - punkty zostały dodane poprawnie`);
+
+                // Zatrzymaj ghost ping i zakończ sesję
+                try {
+                    stopGhostPing(session);
+                } catch (stopError) {
+                    // Ignoruj błąd
+                }
+
+                // Zakończ sesję OCR
+                try {
+                    await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+                } catch (cleanupError) {
+                    // Ignoruj błąd
+                }
+
+                return;
+            }
+
             logger.error('[PUNISH] ❌ Błąd dodawania punktów karnych');
             logger.error(`[PUNISH] ❌ Error type: ${typeof error}`);
             logger.error(`[PUNISH] ❌ Error object: ${error}`);
