@@ -166,6 +166,13 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi
 UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
 
+⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
+- Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie
+- NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie
+- Jeśli wynik to "27331T" (bez żadnego separatora) - napisz "27331T"
+- Jeśli wynik ma kropkę dziesiętną np. "27.3T" - napisz "27.3T"
+- NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków
+
 Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
 <nazwa bossa>
 <wynik>`;
