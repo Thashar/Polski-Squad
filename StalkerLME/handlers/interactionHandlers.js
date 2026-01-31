@@ -157,6 +157,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'player-raport':
             await handlePlayerRaportCommand(interaction, sharedState);
             break;
+        case 'msg':
+            await handleMsgCommand(interaction, config, sharedState.broadcastMessageService, sharedState.client);
+            break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
     }
@@ -2371,7 +2374,16 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('player-raport')
-            .setDescription('Wyświetla raport problematycznych graczy w klanie (tylko dla adminów/moderatorów)')
+            .setDescription('Wyświetla raport problematycznych graczy w klanie (tylko dla adminów/moderatorów)'),
+
+        new SlashCommandBuilder()
+            .setName('msg')
+            .setDescription('Wysyła wiadomość na wszystkie kanały (admin) | Bez tekstu - usuwa wszystkie poprzednie')
+            .addStringOption(option =>
+                option.setName('tekst')
+                    .setDescription('Treść wiadomości (puste = usuń wszystkie poprzednie wiadomości)')
+                    .setRequired(false)
+            )
     ];
 
     try {
@@ -10199,6 +10211,144 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         } catch (replyError) {
             logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
+    }
+}
+
+// Funkcja obsługująca komendę /msg - wysyłanie wiadomości na wszystkie kanały
+async function handleMsgCommand(interaction, config, broadcastMessageService, client) {
+    // Sprawdź uprawnienia (tylko administratorzy/moderatorzy)
+    if (!hasPermission(interaction.member, config.allowedPunishRoles)) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub **Moderator**',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    const tekst = interaction.options.getString('tekst');
+
+    // Jeśli nie podano tekstu - usuń wszystkie poprzednie wiadomości
+    if (!tekst || tekst.trim() === '') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const messages = broadcastMessageService.getMessages();
+
+        if (messages.length === 0) {
+            await interaction.editReply('ℹ️ Brak wiadomości do usunięcia. Nie wysłano jeszcze żadnej wiadomości broadcast.');
+            return;
+        }
+
+        logger.info(`[MSG] 🗑️ Rozpoczynam usuwanie ${messages.length} wiadomości broadcast...`);
+
+        let deletedCount = 0;
+        let errorCount = 0;
+
+        for (const msg of messages) {
+            try {
+                const channel = await client.channels.fetch(msg.channelId).catch(() => null);
+                if (channel) {
+                    const message = await channel.messages.fetch(msg.messageId).catch(() => null);
+                    if (message) {
+                        await message.delete();
+                        deletedCount++;
+                        logger.info(`[MSG] ✅ Usunięto wiadomość z kanału ${channel.name}`);
+                    } else {
+                        errorCount++;
+                        logger.warn(`[MSG] ⚠️ Wiadomość ${msg.messageId} już nie istnieje`);
+                    }
+                } else {
+                    errorCount++;
+                    logger.warn(`[MSG] ⚠️ Kanał ${msg.channelId} nie istnieje`);
+                }
+
+                // Opóźnienie 1s między usuwaniem wiadomości (rate limit protection)
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error) {
+                errorCount++;
+                logger.error(`[MSG] ❌ Błąd usuwania wiadomości ${msg.messageId}: ${error.message}`);
+            }
+        }
+
+        // Wyczyść listę wiadomości
+        await broadcastMessageService.clearMessages();
+
+        const resultEmbed = new EmbedBuilder()
+            .setTitle('🗑️ Usuwanie wiadomości broadcast')
+            .setDescription(
+                `**Usunięto:** ${deletedCount} wiadomości\n` +
+                `**Błędy:** ${errorCount} wiadomości\n` +
+                `**Całkowity czas:** ~${Math.ceil((deletedCount + errorCount) * 1.0)} sekund`
+            )
+            .setColor(deletedCount > 0 ? '#00ff00' : '#ff0000')
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [resultEmbed] });
+        logger.info(`[MSG] ✅ Zakończono usuwanie wiadomości broadcast: ${deletedCount} usuniętych, ${errorCount} błędów`);
+        return;
+    }
+
+    // Jeśli podano tekst - wyślij wiadomość na wszystkie kanały
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        // Pobierz wszystkie tekstowe kanały na serwerze
+        const channels = interaction.guild.channels.cache.filter(
+            channel => channel.type === ChannelType.GuildText &&
+                      channel.permissionsFor(client.user).has('SendMessages')
+        );
+
+        if (channels.size === 0) {
+            await interaction.editReply('❌ Nie znaleziono kanałów tekstowych gdzie bot ma uprawnienia do wysyłania wiadomości.');
+            return;
+        }
+
+        logger.info(`[MSG] 📢 Rozpoczynam wysyłanie wiadomości na ${channels.size} kanałów...`);
+
+        const sentMessages = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const [channelId, channel] of channels) {
+            try {
+                const sentMessage = await channel.send(tekst);
+                sentMessages.push({
+                    channelId: channel.id,
+                    messageId: sentMessage.id,
+                    timestamp: Date.now()
+                });
+                successCount++;
+                logger.info(`[MSG] ✅ Wysłano wiadomość na kanał: ${channel.name}`);
+
+                // Opóźnienie 1s między wysyłaniem wiadomości (rate limit protection)
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error) {
+                errorCount++;
+                logger.error(`[MSG] ❌ Błąd wysyłania wiadomości na kanał ${channel.name}: ${error.message}`);
+            }
+        }
+
+        // Zapisz wysłane wiadomości w serwisie
+        if (sentMessages.length > 0) {
+            await broadcastMessageService.addMessages(sentMessages);
+        }
+
+        const resultEmbed = new EmbedBuilder()
+            .setTitle('📢 Wiadomość broadcast wysłana')
+            .setDescription(
+                `**Wysłano:** ${successCount}/${channels.size} kanałów\n` +
+                `**Błędy:** ${errorCount} kanałów\n` +
+                `**Całkowity czas:** ~${Math.ceil(channels.size * 1.0)} sekund\n\n` +
+                `💡 Aby usunąć wszystkie wysłane wiadomości, użyj \`/msg\` bez podawania tekstu.`
+            )
+            .setColor(successCount > 0 ? '#00ff00' : '#ff0000')
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [resultEmbed] });
+        logger.info(`[MSG] ✅ Zakończono wysyłanie wiadomości broadcast: ${successCount} wysłanych, ${errorCount} błędów`);
+
+    } catch (error) {
+        logger.error('[MSG] ❌ Błąd obsługi komendy /msg:', error);
+        await interaction.editReply('❌ Wystąpił błąd podczas wysyłania wiadomości.');
     }
 }
 

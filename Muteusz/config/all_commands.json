@@ -377,6 +377,12 @@
           "requiredPermission": "moderator"
         },
         {
+          "name": "/msg",
+          "description": "Wysyła wiadomość na wszystkie kanały tekstowe lub usuwa wszystkie poprzednie",
+          "usage": "/msg tekst:[tekst wiadomości] (puste = usuń wszystkie)",
+          "requiredPermission": "moderator"
+        },
+        {
           "name": "/decode",
           "description": "Dekoduje link buildu z gry Survivor.io",
           "usage": "/decode link:[https://... lub short code]",

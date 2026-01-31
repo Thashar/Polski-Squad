@@ -15,6 +15,7 @@ const VacationService = require('./services/vacationService');
 const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
 const RaportCleanupService = require('./services/raportCleanupService');
+const BroadcastMessageService = require('./services/broadcastMessageService');
 const AIChatService = require('./services/aiChatService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
@@ -41,6 +42,7 @@ const vacationService = new VacationService(config, logger);
 const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
 const raportCleanupService = new RaportCleanupService(client, logger);
+const broadcastMessageService = new BroadcastMessageService(logger);
 // Import funkcji pomocniczych do AI Chat
 const { generatePlayerProgressTextData, generatePlayerStatusTextData } = require('./handlers/interactionHandlers');
 
@@ -81,6 +83,7 @@ const sharedState = {
     survivorService,
     messageCleanupService,
     raportCleanupService,
+    broadcastMessageService,
     aiChatService,
     phaseService
 };
@@ -94,6 +97,7 @@ client.once(Events.ClientReady, async () => {
     ocrService.setClient(client); // Ustaw klienta dla systemu kolejkowania OCR
     await messageCleanupService.init();
     await raportCleanupService.initialize();
+    await broadcastMessageService.initialize();
     await reminderUsageService.loadUsageData();
 
     // Rejestracja komend slash

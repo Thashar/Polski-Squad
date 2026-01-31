@@ -654,7 +654,7 @@ node manual-backup.js
 
 ### ⚔️ StalkerLME Bot
 
-**7 Systemów:**
+**8 Systemów:**
 1. **Kary OCR** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
    - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), analiza wyników graczy przez AI
@@ -669,6 +669,7 @@ node manual-backup.js
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
 7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 5min, **pamięć kontekstu 1h**, wykrywanie "mój/moje/mnie", dynamiczny progres z X tygodni, MVP
+8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
@@ -800,7 +801,7 @@ node manual-backup.js
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/ocr-debug`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/msg`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---
