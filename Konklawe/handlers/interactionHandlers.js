@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -20,6 +20,7 @@ class InteractionHandler {
         this.detailedLogger = detailedLogger;
         this.messageCleanupService = messageCleanupService;
         this.aiService = aiService;
+        this.passwordSelectionService = passwordSelectionService;
         this.virtuttiService = new VirtuttiService(config);
         this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
@@ -127,6 +128,12 @@ class InteractionHandler {
 
         if (customId === 'ai_generate_hint') {
             await this.handleGenerateHintButton(interaction);
+            return;
+        }
+
+        // Obsługa wyboru hasła z AI
+        if (customId.startsWith('password_select_')) {
+            await this.handlePasswordSelectButton(interaction);
             return;
         }
 
@@ -2854,6 +2861,12 @@ class InteractionHandler {
             // Ustaw nowe hasło
             this.gameService.setNewPassword(newPassword, interaction.user.id);
 
+            // Usuń wiadomość z przyciskami AI jeśli istnieje
+            if (this.passwordSelectionService) {
+                const triggerChannel = await interaction.client.channels.fetch(this.config.channels.trigger);
+                await this.passwordSelectionService.deleteSelectionMessage(triggerChannel);
+            }
+
             // Wyczyść kanał i zaktualizuj embed
             if (this.passwordEmbedService) {
                 await this.passwordEmbedService.updateEmbed(true);
@@ -3852,25 +3865,74 @@ class InteractionHandler {
             });
         }
 
+        // Sprawdź czy PasswordSelectionService jest dostępny
+        if (!this.passwordSelectionService) {
+            return await interaction.reply({
+                content: '⚠️ Password Selection Service nie jest dostępny. Skontaktuj się z administratorem.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
         // Defer reply - generowanie może potrwać
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-            // Generuj hasło przez AI
-            const password = await this.aiService.generatePassword();
+            // Generuj 3 hasła przez AI
+            const passwords = await this.aiService.generatePasswords(3);
 
-            if (!password) {
+            if (!passwords || passwords.length === 0) {
                 return await interaction.editReply({
-                    content: '❌ Nie udało się wygenerować hasła. Spróbuj ponownie.',
-                    flags: MessageFlags.Ephemeral
+                    content: '❌ Nie udało się wygenerować haseł. Spróbuj ponownie.'
                 });
             }
 
+            // Wyślij wiadomość z przyciskami wyboru
+            await this.passwordSelectionService.createPasswordSelectionMessage(
+                interaction.channel,
+                passwords
+            );
+
+            await interaction.editReply({
+                content: `✅ AI wygenerowało **${passwords.length} hasła**. Wybierz jedno klikając przycisk na kanale.`
+            });
+
+            logger.info(`🤖 AI wygenerowało ${passwords.length} haseł dla ${interaction.user.tag}: ${passwords.join(', ')}`);
+        } catch (error) {
+            logger.error(`❌ Błąd podczas generowania haseł przez AI: ${error.message}`);
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas generowania haseł. Spróbuj ponownie.'
+            });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk wyboru hasła z AI
+     * @param {Interaction} interaction - Interakcja Discord
+     */
+    async handlePasswordSelectButton(interaction) {
+        // Sprawdź czy użytkownik ma rolę papieską
+        if (!interaction.member.roles.cache.has(this.config.roles.papal)) {
+            return await interaction.reply({
+                content: '⛪ Tylko papież może wybrać hasło!',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Wyciągnij hasło z customId (format: password_select_0_HasłoTekst)
+        const parts = interaction.customId.split('_');
+        const password = parts.slice(3).join('_');
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
             // Ustaw nowe hasło
             await this.gameService.setNewPassword(password, interaction.user.id);
 
             // Aktualizuj embed
             await this.passwordEmbedService.updateEmbed(true);
+
+            // Usuń wiadomość z przyciskami
+            await this.passwordSelectionService.deleteSelectionMessage(interaction.channel);
 
             // Wyślij informację na kanał start
             const startChannel = await this.client.channels.fetch(this.config.channels.start);
@@ -3884,16 +3946,14 @@ class InteractionHandler {
             await this.timerService.setFirstHintReminder();
 
             await interaction.editReply({
-                content: `✅ Hasło zostało wygenerowane przez AI i ustawione:\n\n🔑 **${password}**\n\n⏰ Przypomnienie o pierwszej podpowiedzi za **15 minut**!`,
-                flags: MessageFlags.Ephemeral
+                content: `✅ Hasło **${password}** zostało ustawione!\n\n⏰ Przypomnienie o pierwszej podpowiedzi za **15 minut**!`
             });
 
-            logger.info(`🤖 AI wygenerowało hasło dla ${interaction.user.tag}: ${password}`);
+            logger.info(`🔑 ${interaction.user.tag} wybrał hasło z AI: ${password}`);
         } catch (error) {
-            logger.error(`❌ Błąd podczas generowania hasła przez AI: ${error.message}`);
+            logger.error(`❌ Błąd podczas ustawiania hasła: ${error.message}`);
             await interaction.editReply({
-                content: '❌ Wystąpił błąd podczas generowania hasła. Spróbuj ponownie.',
-                flags: MessageFlags.Ephemeral
+                content: '❌ Wystąpił błąd podczas ustawiania hasła. Spróbuj ponownie.'
             });
         }
     }

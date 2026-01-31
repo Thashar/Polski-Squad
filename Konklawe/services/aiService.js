@@ -7,8 +7,9 @@ const logger = createBotLogger('Konklawe');
  * AI Service - Obsługa generowania haseł i podpowiedzi przez Anthropic API
  */
 class AIService {
-    constructor(config) {
+    constructor(config, dataService) {
         this.config = config;
+        this.dataService = dataService;
 
         // Anthropic API
         this.apiKey = process.env.KONKLAWE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
@@ -24,7 +25,7 @@ class AIService {
     }
 
     /**
-     * Generuje hasło przez AI
+     * Generuje hasło przez AI (stara metoda - jedno hasło)
      * @returns {Promise<string|null>} - Wygenerowane hasło lub null gdy błąd
      */
     async generatePassword() {
@@ -71,6 +72,76 @@ class AIService {
         // Jeśli wszystkie próby się wyczerpały
         logger.error('❌ Nie udało się wygenerować hasła po 3 próbach');
         return null;
+    }
+
+    /**
+     * Generuje wiele haseł przez AI (nowa metoda)
+     * @param {number} count - Liczba haseł do wygenerowania (domyślnie 3)
+     * @returns {Promise<string[]|null>} - Tablica wygenerowanych haseł lub null gdy błąd
+     */
+    async generatePasswords(count = 3) {
+        if (!this.enabled) {
+            logger.error('❌ AI Service nie jest dostępny');
+            return null;
+        }
+
+        try {
+            logger.info(`🤖 Generowanie ${count} haseł przez AI...`);
+
+            // Pobierz historię haseł (max 50)
+            const gameHistory = this.dataService.loadGameHistory();
+            const previousPasswords = gameHistory.completedGames
+                .map(game => game.password)
+                .slice(0, 50);
+
+            const passwordsText = previousPasswords.length > 0
+                ? `„${previousPasswords.join('", „')}"`
+                : 'Brak poprzednich haseł';
+
+            const prompt = `Gramy w grę w zgadywanie haseł. Wygeneruj DOKŁADNIE ${count} trudne hasła do odgadnięcia, każde w nowej linii.
+
+WYMAGANIA:
+1. Każde hasło musi być JEDNYM SŁOWEM (rzeczownikiem)
+2. Maksymalnie kilkanaście znaków na słowo
+3. Hasła muszą być prawdziwe (ze słownika języka polskiego)
+4. Hasła powinny być wyszukane
+5. ⛔ ZAKAZ używania znaków specjalnych: kropka, przecinek, myślnik, apostrof, cudzysłów itp.
+6. ⛔ ABSOLUTNY ZAKAZ powtarzania tych haseł:
+${passwordsText}
+
+Odpowiedź TYLKO hasłami, każde w nowej linii, bez numeracji, bez dodatkowych słów.`;
+
+            const response = await this.client.messages.create({
+                model: this.model,
+                max_tokens: 150,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            });
+
+            const passwords = response.content[0].text
+                .trim()
+                .split('\n')
+                .map(p => p.trim())
+                .filter(p => p.length > 0 && !p.includes(' ') && !/[.,\-'"!?;:()]/.test(p))
+                .slice(0, count);
+
+            if (passwords.length < count) {
+                logger.warn(`⚠️ AI wygenerowało tylko ${passwords.length}/${count} prawidłowych haseł`);
+            }
+
+            if (passwords.length === 0) {
+                logger.error('❌ AI nie wygenerowało żadnych prawidłowych haseł');
+                return null;
+            }
+
+            logger.success(`✅ AI wygenerowało ${passwords.length} haseł: ${passwords.join(', ')}`);
+            return passwords;
+        } catch (error) {
+            logger.error(`❌ Błąd podczas generowania haseł przez AI: ${error.message}`);
+            return null;
+        }
     }
 
     /**

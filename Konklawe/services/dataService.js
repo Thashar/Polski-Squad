@@ -237,6 +237,29 @@ class DataService {
         }
         return {};
     }
+
+    /**
+     * Zapisuje stan wyboru hasła
+     * @param {Object} state - Stan do zapisania
+     */
+    savePasswordSelectionState(state) {
+        fs.writeFileSync(
+            path.join(this.dataPath, 'password_selection_state.json'),
+            JSON.stringify(state, null, 2)
+        );
+    }
+
+    /**
+     * Wczytuje stan wyboru hasła
+     * @returns {Object} - Stan wyboru hasła
+     */
+    loadPasswordSelectionState() {
+        const filePath = path.join(this.dataPath, 'password_selection_state.json');
+        if (!fs.existsSync(filePath)) {
+            return { activeSelectionMessageId: null };
+        }
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
 }
 
 module.exports = DataService;
