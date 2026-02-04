@@ -7051,13 +7051,16 @@ function formatPositionChange(currentPosition, previousPosition) {
     }
 
     const positionDiff = previousPosition - currentPosition;
+    const superscriptMap = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
 
     if (positionDiff > 0) {
         // Awans (była pozycja 5, teraz 2 = awans o 3)
-        return ` ↗${positionDiff}`;
+        const superscriptNumber = ('' + positionDiff).split('').map(c => superscriptMap[c] || c).join('');
+        return ` ↗${superscriptNumber}`;
     } else if (positionDiff < 0) {
         // Spadek (była pozycja 2, teraz 5 = spadek o 3)
-        return ` ↘${Math.abs(positionDiff)}`;
+        const superscriptNumber = ('' + Math.abs(positionDiff)).split('').map(c => superscriptMap[c] || c).join('');
+        return ` ↘${superscriptNumber}`;
     } else {
         // Bez zmian
         return ' ━';
