@@ -7043,6 +7043,31 @@ async function getPreviousWeekRanking(databaseService, guildId, currentWeekNumbe
     }
 }
 
+// Funkcja pomocnicza do pobierania rankingu dla konkretnego tygodnia
+async function getWeekRanking(databaseService, guildId, weekNumber, year, clan) {
+    try {
+        const weekData = await databaseService.getPhase1Results(guildId, weekNumber, year, clan);
+
+        if (!weekData || !weekData.players || weekData.players.length === 0) {
+            return null;
+        }
+
+        // Utwórz mapę userId -> pozycja (sortowanie po wynikach)
+        const sortedPlayers = [...weekData.players].sort((a, b) => b.score - a.score);
+        const positionMap = new Map();
+        sortedPlayers.forEach((player, index) => {
+            if (player.userId) {
+                positionMap.set(player.userId, index + 1);
+            }
+        });
+
+        return positionMap;
+    } catch (error) {
+        logger.error('[PROGRES] Błąd pobierania rankingu tygodnia:', error);
+        return null;
+    }
+}
+
 // Funkcja formatująca zmianę pozycji
 function formatPositionChange(currentPosition, previousPosition) {
     if (!previousPosition) {
@@ -7824,11 +7849,13 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
 
         // Stwórz mapę emoji klanów dla szybkiego dostępu
         const clanEmojiMap = new Map();
+        const clanMap = new Map(); // Mapa weekKey -> clan
         playerProgressData.forEach(data => {
             const key = `${data.weekNumber}-${data.year}`;
             // Wyciągnij emoji z clanName (np. "🎮PolskiSquad⁰🎮" -> "🎮")
             const clanEmoji = data.clanName ? Array.from(data.clanName)[0] : '<:ZZ_Pusto:1209494954762829866>';
             clanEmojiMap.set(key, clanEmoji);
+            clanMap.set(key, data.clan); // Zapisz clan key (0, 1, 2, main)
         });
 
         // Przygotuj tekst z wynikami - iteruj po WSZYSTKICH 54 tygodniach
@@ -7867,7 +7894,38 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
                     differenceText = formatSmallDifference(difference);
                 }
 
-                resultsLines.push(`${clanEmoji} ${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}`);
+                // Pobierz pozycję w rankingu i zmianę pozycji
+                let rankingText = '';
+                const currentClan = clanMap.get(weekKey);
+                if (currentClan) {
+                    // Pobierz ranking tego tygodnia
+                    const currentRanking = await getWeekRanking(databaseService, interaction.guild.id, week.weekNumber, week.year, currentClan);
+                    if (currentRanking) {
+                        const currentPosition = currentRanking.get(userId);
+                        if (currentPosition) {
+                            rankingText = ` · #${currentPosition}`;
+
+                            // Pobierz ranking poprzedniego tygodnia (tego samego klanu)
+                            if (i < last54Weeks.length - 1) {
+                                const previousWeek = last54Weeks[i + 1];
+                                const previousWeekKey = `${previousWeek.weekNumber}-${previousWeek.year}`;
+                                const previousClan = clanMap.get(previousWeekKey);
+
+                                // Tylko jeśli poprzedni tydzień był w tym samym klanie
+                                if (previousClan === currentClan) {
+                                    const previousRanking = await getWeekRanking(databaseService, interaction.guild.id, previousWeek.weekNumber, previousWeek.year, previousClan);
+                                    if (previousRanking) {
+                                        const previousPosition = previousRanking.get(userId);
+                                        const positionChange = formatPositionChange(currentPosition, previousPosition);
+                                        rankingText += ` ·${positionChange}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                resultsLines.push(`${clanEmoji} ${progressBar} ${weekLabel} - ${score.toLocaleString('pl-PL')}${differenceText}${rankingText}`);
             } else {
                 // Gracz nie ma danych z tego tygodnia - pokaż pusty pasek bez wartości
                 const progressBar = '░'.repeat(barLength);
