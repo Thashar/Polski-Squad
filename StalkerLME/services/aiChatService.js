@@ -1175,10 +1175,11 @@ TWOJE MOŻLIWOŚCI:
 
 JAK DZIAŁASZ:
 - Gdy masz dane → analizuj szczegółowo, precyzyjnie, używaj liczb i faktów
-- Gdy NIE masz danych → bądź kreatywny, zabawny, możesz zmyślać w klimacie fantasy/RPG
-- Możesz opowiadać historie o bossach, lunar mine, rywalizacji klanów
-- Jeśli pytanie o konkretne dane których nie masz → powiedz że nie masz, ale z humorem
-- Możesz rozmawiać o grze, mechanikach, strategiach, życiu klanu
+- ⛔ NIGDY NIE WYMYŚLAJ DANYCH: liczb, wyników, statystyk, nazw graczy, punktów
+- Używaj TYLKO faktycznych danych które dostałeś poniżej w sekcji danych
+- Jeśli pytanie o konkretne dane których NIE MASZ → powiedz że nie masz (z humorem)
+- W ogólnej rozmowie (nie o konkretnych danych) → możesz być kreatywny, opowiadać o grze w klimacie fantasy/RPG
+- Możesz rozmawiać o mechanikach gry, strategiach, życiu klanu (ale bez wymyślania konkretnych liczb/graczy)
 
 KONTEKST PYTANIA:
 Użytkownik: ${context.asker.displayName} (${context.asker.username})
@@ -1303,6 +1304,10 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
             if (context.targetPlayer) {
                 prompt += `\n📋 Pytanie dotyczy gracza: ${targetName}\n`;
             }
+
+            // Ostrzeżenie o limitach danych dla pojedynczego gracza
+            prompt += `\n⚠️ DANE GRACZA: Masz dane TYLKO tego jednego gracza (${targetName}).\n`;
+            prompt += `NIE wymyślaj danych innych graczy - używaj TYLKO faktów powyżej.\n`;
         }
 
         // Dodaj dane dla porównania (max 5 graczy)
@@ -1383,6 +1388,13 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                     logger.warn(`AI Chat: Brak danych dla gracza ${playerNumber} userId ${player.id}`);
                 }
             }
+
+            // Ostrzeżenie o limitach danych
+            const totalCompared = playersToCompare.length;
+            if (totalCompared > 0) {
+                prompt += `\n⚠️ DANE PORÓWNANIA: Masz ${totalCompared === 1 ? 'TYLKO tego jednego gracza' : `TYLKO tych ${totalCompared} graczy`} (max 5).\n`;
+                prompt += `NIE wymyślaj innych graczy, wyników ani statystyk - używaj TYLKO danych powyżej.\n`;
+            }
         }
 
         // Dodaj SZCZEGÓŁOWE dane klanów jeśli pytanie o ranking/klan
@@ -1424,7 +1436,10 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
                 }
             }
 
-            if (totalPlayers === 0) {
+            if (totalPlayers > 0) {
+                prompt += `\n⚠️ DANE KLANÓW: Masz dane ${totalPlayers} graczy ze wszystkich 4 klanów.\n`;
+                prompt += `Każdy klan ma TOP 15 graczy pokazanych (+ info ile jest więcej). NIE wymyślaj innych graczy ani wyników.\n`;
+            } else {
                 prompt += `\n❌ Nie znaleziono danych klanów.\n`;
             }
         }
@@ -1455,9 +1470,11 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
         prompt += `- Zwięźle (max 1500 znaków), formatuj markdown Discord\n`;
         prompt += `- Użyj emoji 🎯📈📊🏆💪🔥⚡ do urozmaicenia\n`;
         prompt += `- Jeśli konkretny okres (np. "2 tygodnie") - odpowiedz TYLKO o ten okres\n`;
-        prompt += `- Gdy masz dane → bądź precyzyjny, analityczny, używaj liczb\n`;
-        prompt += `- Gdy NIE masz danych → bądź kreatywny, zabawny, opowiadaj historie w klimacie gry\n`;
-        prompt += `- Możesz rozmawiać jak normalny człowiek, nie musisz być robotem\n`;
+        prompt += `\n⛔ KRYTYCZNE ZASADY:\n`;
+        prompt += `- Gdy masz dane → używaj TYLKO tych faktycznych danych (liczby, nazwy graczy, wyniki)\n`;
+        prompt += `- Gdy NIE masz danych o graczu/statystykach → powiedz że nie masz, NIE WYMYŚLAJ liczb/graczy\n`;
+        prompt += `- W ogólnej rozmowie (nie o konkretnych danych) → możesz być kreatywny w klimacie gry\n`;
+        prompt += `- Możesz rozmawiać jak normalny człowiek, ale ZAWSZE używaj faktów gdy mówisz o konkretnych graczach/wynikach\n`;
 
         return prompt;
     }
