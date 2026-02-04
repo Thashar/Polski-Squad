@@ -750,8 +750,8 @@ node manual-backup.js
   - Sprawdza czy użytkownik jest w TOP3 swojego klanu
 - **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
 
-**AI Chat** - System konwersacyjny z AI (mention @StalkerLME):
-- **Trigger:** Bezpośrednie oznaczenie @StalkerLME + pytanie (max 300 znaków)
+**AI Chat** - Konwersacyjny system AI (mention @StalkerLME):
+- **Trigger:** Bezpośrednie oznaczenie @StalkerLME + wiadomość (max 300 znaków)
   - Ignoruje: wzmianki przez role bota, @everyone/@here, odpowiedzi na wiadomości bota
 - **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
 - **Limity:**
@@ -759,44 +759,30 @@ node manual-backup.js
   - **Administratorzy/moderatorzy:** Bez cooldownu (role MODERATOR_ROLE_1-4)
   - Persistent storage: `ai_chat_cooldowns.json`
 - **Uprawnienia:** Tylko członkowie klanów (rola TARGET_ROLE_0/1/2/MAIN)
-- **Kanały:** Wszystkie kanały na serwerze (bez ograniczeń)
-- **Przykłady pytań:**
-  - `@StalkerLME Porównaj mnie z @gracz`
-  - `@StalkerLME Porównaj @gracz1 z @gracz2 i @gracz3` (max 5 graczy)
-  - `@StalkerLME Jak wygląda mój progres?`
-  - `@StalkerLME Kto jest najlepszy w moim klanie?`
-  - `@StalkerLME Jakie mam statystyki?`
-  - `@StalkerLME Powiedz coś o thashar` (wykrywa nick w pytaniu)
-  - `@StalkerLME Porównaj thashar z @gracz` (nick + mention)
-  - `@StalkerLME Jaki był mój progres z ostatnich 3 tygodni?` (dynamiczny okres)
+- **Kanały:** Wszystkie kanały na serwerze
+- **Styl AI:**
+  - **Luźny i dowcipny** - może przeklinać ze smakiem, być zadziorny, elokwentny
+  - **Gdy ma dane** → precyzyjny, szczegółowy, analityczny
+  - **Gdy NIE ma danych** → kreatywny, zabawny, może zmyślać w klimacie gry (fantasy/RPG)
+  - Odpowiedzi po polsku z emoji 🎯📈📊🏆💪
 - **Funkcjonalność:**
-  - Wykrywanie typu pytania (compare, progress, ranking, stats, clan, general)
-  - Wykrywanie nicków w pytaniu (case-insensitive, filtruje stop words)
-  - **Rozpoznawanie pytań o siebie** ("mnie", "mój", "moje", "ja", "mojego", "moją") → zawsze używa danych pytającego
-  - **Pobieranie WSZYSTKICH dostępnych danych gracza** z phase1/phase2 (bez limitu tygodni)
-  - **Porównywanie graczy (max 5 graczy jednocześnie)** - logika inteligentna:
-    - "Porównaj mnie z X" → porównuje PYTAJĄCEGO z graczem X
-    - Jeśli są @mentions → dodaje WSZYSTKICH wspomnianych graczy
-    - Jeśli wykryty nick w pytaniu → użyje tego gracza
-    - Jeśli pytanie o siebie ("mnie") → użyje pytającego
-    - Bot zawsze pobiera dane WSZYSTKICH wspomnianych graczy (do 5)
-  - **Pytania o klany** - rankingi wszystkich 4 klanów (Main + Akademia 2/1/0), kontekst struktury klanów
-  - **Dynamiczny progres** - "progres z ostatnich X tygodni" → oblicza progres z dokładnie tego okresu
-  - **MVP** - tygodnie z największym osobistym progresem gracza (TOP 5)
-  - **Współczynniki w porównaniach** - zaangażowanie (%), trend (🚀↗️⚖️↘️🪦), MVP
-  - Odpowiedzi po polsku z emoji, dowcipne komentarze
-  - Typing indicator podczas przetwarzania
-  - **Zabezpieczenia przed halucynacjami:**
-    - Kategoryczna instrukcja: "⛔ ABSOLUTNY ZAKAZ WYMYŚLANIA DANYCH ⛔"
-    - Ostrzeżenia o limitach danych po każdej sekcji (np. "Masz TYLKO 5 graczy")
-    - AI informuje gdy nie ma danych zamiast wymyślać ("Nie mam tych informacji w bazie")
-    - Używa WYŁĄCZNIE faktów z dostarczonych danych phase1/phase2
-- **Pamięć kontekstu rozmowy:**
-  - AI pamięta poprzednie pytania i odpowiedzi w ramach sesji
-  - **Timeout:** 1 godzina nieaktywności → reset kontekstu
-  - **Limit historii:** Maksymalnie 5 ostatnich wymian (10 wiadomości)
-  - **Przechowywanie:** W pamięci RAM (reset przy restarcie bota)
-  - Przykład: `@StalkerLME Porównaj mnie z @gracz` → odpowiedź → `@StalkerLME A kto ma lepszy progres?` → AI pamięta kontekst
+  - **Automatyczne pobieranie danych** - na podstawie pytania decyduje co pobrać:
+    - Pytanie o statystyki/progres → pełne dane z `/progres` + `/player-status`
+    - Porównanie graczy → dane wszystkich wspomnianych (max 5)
+    - Pytanie o klany → dane wszystkich 4 klanów ze szczegółami
+    - Pytanie o ranking/topkę → dane wszystkich klanów z ostatniego tygodnia
+  - **Rozpoznawanie pytań o siebie** ("mnie", "mój", "moje", "ja") → używa danych pytającego
+  - **Wykrywanie nicków** w pytaniu (case-insensitive, filtruje stop words)
+  - **Pamięć kontekstu** - AI pamięta poprzednie pytania (1h timeout, max 5 wymian)
+  - **Typing indicator** podczas przetwarzania
+- **Przykłady użycia:**
+  - `@StalkerLME Porównaj mnie z @gracz1 @gracz2` (porównanie do 5 graczy)
+  - `@StalkerLME Jak wygląda mój progres?` (statystyki + progres)
+  - `@StalkerLME Kto jest najlepszy w moim klanie?` (ranking klanu)
+  - `@StalkerLME Powiedz coś o thashar` (wykrywa nick, statystyki gracza)
+  - `@StalkerLME Jaki był mój progres z ostatnich 3 tygodni?` (dynamiczny okres)
+  - `@StalkerLME Hej, jak się masz?` (normalna rozmowa, kreatywna odpowiedź)
+  - `@StalkerLME Opowiedz mi coś o Lunar Mine` (rozmowa o grze)
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
