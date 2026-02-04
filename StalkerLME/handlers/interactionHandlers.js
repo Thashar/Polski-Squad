@@ -6876,13 +6876,6 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
         }
     }
 
-    // Pobierz poprzedni ranking pozycji
-    const { databaseService: dbService } = interaction.client;
-    let previousRankingMap = null;
-    if (dbService) {
-        previousRankingMap = await getPreviousWeekRanking(dbService, interaction.guild.id, weekNumber, year, clan, view);
-    }
-
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
         const barLength = 10;
@@ -6892,14 +6885,7 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
         const isCaller = player.userId === interaction.user.id;
         const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
 
-        // Dodaj zmianę pozycji w rankingu względem poprzedniego tygodnia
-        let positionChangeText = '';
-        if (previousRankingMap && player.userId) {
-            const previousPosition = previousRankingMap.get(player.userId);
-            positionChangeText = formatPositionChange(position, previousPosition);
-        }
-
-        return `${progressBar} ${position}. ${displayName} - ${player.score}${positionChangeText}`;
+        return `${progressBar} ${position}. ${displayName} - ${player.score}`;
     }).join('\n');
 
     // Pobierz displayName osoby oglądającej
@@ -7228,10 +7214,10 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         }
     }
 
-    // Pobierz poprzedni ranking pozycji (dla wszystkich widoków)
+    // Pobierz poprzedni ranking pozycji (tylko dla Fazy 1)
     const { databaseService: dbService } = interaction.client;
     let previousRankingMap = null;
-    if (dbService) {
+    if (view === 'phase1' && dbService) {
         previousRankingMap = await getPreviousWeekRanking(dbService, interaction.guild.id, weekNumber, year, clan, view);
     }
 
@@ -7278,9 +7264,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             }
         }
 
-        // Dodaj zmianę pozycji w rankingu względem poprzedniego tygodnia
+        // Dodaj zmianę pozycji w rankingu względem poprzedniego tygodnia (tylko dla Fazy 1)
         let positionChangeText = '';
-        if (previousRankingMap && player.userId) {
+        if (view === 'phase1' && previousRankingMap && player.userId) {
             const previousPosition = previousRankingMap.get(player.userId);
             positionChangeText = formatPositionChange(position, previousPosition);
         }
