@@ -6876,6 +6876,13 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
         }
     }
 
+    // Pobierz poprzedni ranking pozycji
+    const { databaseService: dbService } = interaction.client;
+    let previousRankingMap = null;
+    if (dbService) {
+        previousRankingMap = await getPreviousWeekRanking(dbService, interaction.guild.id, weekNumber, year, clan, view);
+    }
+
     const resultsText = sortedPlayers.map((player, index) => {
         const position = index + 1;
         const barLength = 10;
@@ -6885,7 +6892,14 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
         const isCaller = player.userId === interaction.user.id;
         const displayName = isCaller ? `**${player.displayName}**` : player.displayName;
 
-        return `${progressBar} ${position}. ${displayName} - ${player.score}`;
+        // Dodaj zmianę pozycji w rankingu względem poprzedniego tygodnia
+        let positionChangeText = '';
+        if (previousRankingMap && player.userId) {
+            const previousPosition = previousRankingMap.get(player.userId);
+            positionChangeText = formatPositionChange(position, previousPosition);
+        }
+
+        return `${progressBar} ${position}. ${displayName} - ${player.score}${positionChangeText}`;
     }).join('\n');
 
     // Pobierz displayName osoby oglądającej
@@ -6960,6 +6974,108 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     }
 
     await interaction[replyMethod](replyOptions);
+}
+
+// Funkcja pomocnicza do pobierania poprzedniego rankingu pozycji
+async function getPreviousWeekRanking(databaseService, guildId, currentWeekNumber, currentYear, clan, view) {
+    try {
+        // Pobierz dostępne tygodnie dla danego klanu
+        const availableWeeks = await databaseService.getAvailableWeeks(guildId);
+        const weeksForClan = availableWeeks
+            .filter(w => w.clans.includes(clan))
+            .sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.weekNumber - a.weekNumber;
+            });
+
+        // Znajdź poprzedni tydzień przed aktualnym
+        const currentWeekIndex = weeksForClan.findIndex(w =>
+            w.weekNumber === currentWeekNumber && w.year === currentYear
+        );
+
+        if (currentWeekIndex === -1 || currentWeekIndex >= weeksForClan.length - 1) {
+            // Brak poprzedniego tygodnia
+            return null;
+        }
+
+        const previousWeek = weeksForClan[currentWeekIndex + 1];
+
+        // Pobierz dane z odpowiedniej fazy
+        let previousWeekData = null;
+        if (view === 'phase1') {
+            previousWeekData = await databaseService.getPhase1Results(
+                guildId,
+                previousWeek.weekNumber,
+                previousWeek.year,
+                clan
+            );
+        } else {
+            // Dla widoków Phase 2 (round1, round2, round3, summary)
+            previousWeekData = await databaseService.getPhase2Results(
+                guildId,
+                previousWeek.weekNumber,
+                previousWeek.year,
+                clan
+            );
+        }
+
+        if (!previousWeekData) {
+            return null;
+        }
+
+        // Pobierz graczy z odpowiedniego widoku
+        let previousPlayers = null;
+        if (view === 'phase1') {
+            previousPlayers = previousWeekData.players;
+        } else if (view === 'round1' && previousWeekData.rounds?.[0]) {
+            previousPlayers = previousWeekData.rounds[0].players;
+        } else if (view === 'round2' && previousWeekData.rounds?.[1]) {
+            previousPlayers = previousWeekData.rounds[1].players;
+        } else if (view === 'round3' && previousWeekData.rounds?.[2]) {
+            previousPlayers = previousWeekData.rounds[2].players;
+        } else if (view === 'summary') {
+            previousPlayers = previousWeekData.summary ? previousWeekData.summary.players : previousWeekData.players;
+        }
+
+        if (!previousPlayers || previousPlayers.length === 0) {
+            return null;
+        }
+
+        // Utwórz mapę userId -> pozycja (sortowanie po wynikach)
+        const sortedPreviousPlayers = [...previousPlayers].sort((a, b) => b.score - a.score);
+        const positionMap = new Map();
+        sortedPreviousPlayers.forEach((player, index) => {
+            if (player.userId) {
+                positionMap.set(player.userId, index + 1);
+            }
+        });
+
+        return positionMap;
+    } catch (error) {
+        logger.error('[WYNIKI] Błąd pobierania poprzedniego rankingu:', error);
+        return null;
+    }
+}
+
+// Funkcja formatująca zmianę pozycji
+function formatPositionChange(currentPosition, previousPosition) {
+    if (!previousPosition) {
+        // Nowy gracz - brak danych z poprzedniego tygodnia
+        return '';
+    }
+
+    const positionDiff = previousPosition - currentPosition;
+
+    if (positionDiff > 0) {
+        // Awans (była pozycja 5, teraz 2 = awans o 3)
+        return ` ↗${positionDiff}`;
+    } else if (positionDiff < 0) {
+        // Spadek (była pozycja 2, teraz 5 = spadek o 3)
+        return ` ↘${Math.abs(positionDiff)}`;
+    } else {
+        // Bez zmian
+        return ' ━';
+    }
 }
 
 async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config, isUpdate = false, useFollowUp = false) {
@@ -7112,6 +7228,13 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
         }
     }
 
+    // Pobierz poprzedni ranking pozycji (dla wszystkich widoków)
+    const { databaseService: dbService } = interaction.client;
+    let previousRankingMap = null;
+    if (dbService) {
+        previousRankingMap = await getPreviousWeekRanking(dbService, interaction.guild.id, weekNumber, year, clan, view);
+    }
+
     // Przechowuj informacje o progresie dla każdego gracza (do TOP3)
     const playerProgressData = [];
 
@@ -7155,7 +7278,14 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
             }
         }
 
-        return `${progressBar} ${position}. ${displayName} - ${player.score}${progressText}`;
+        // Dodaj zmianę pozycji w rankingu względem poprzedniego tygodnia
+        let positionChangeText = '';
+        if (previousRankingMap && player.userId) {
+            const previousPosition = previousRankingMap.get(player.userId);
+            positionChangeText = formatPositionChange(position, previousPosition);
+        }
+
+        return `${progressBar} ${position}. ${displayName} - ${player.score}${progressText}${positionChangeText}`;
     }).join('\n');
 
     // Dla Fazy 1: oblicz TOP3 progresów i regresów
