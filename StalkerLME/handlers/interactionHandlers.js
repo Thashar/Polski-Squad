@@ -7056,14 +7056,14 @@ function formatPositionChange(currentPosition, previousPosition) {
     if (positionDiff > 0) {
         // Awans (była pozycja 5, teraz 2 = awans o 3)
         const superscriptNumber = ('' + positionDiff).split('').map(c => superscriptMap[c] || c).join('');
-        return ` · ↗${superscriptNumber}`;
+        return ` ↗${superscriptNumber}`;
     } else if (positionDiff < 0) {
         // Spadek (była pozycja 2, teraz 5 = spadek o 3)
         const superscriptNumber = ('' + Math.abs(positionDiff)).split('').map(c => superscriptMap[c] || c).join('');
-        return ` · ↘${superscriptNumber}`;
+        return ` ↘${superscriptNumber}`;
     } else {
         // Bez zmian
-        return ' · ━';
+        return ' ━';
     }
 }
 
