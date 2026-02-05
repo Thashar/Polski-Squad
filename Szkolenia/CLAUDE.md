@@ -21,6 +21,12 @@
   - Wystarczy edytować plik, nie trzeba restartować bota
   - Dodawaj nowe sekcje, aktualizuj informacje
   - Bot automatycznie wczyta całą zawartość przy każdym pytaniu
+- **System zgłaszania wiedzy:**
+  - Gdy bot nie ma informacji + użytkownik z rolą klanową → przycisk "Dodaj nowe informacje"
+  - Modal (okienko) z polem tekstowym + przykładem
+  - Zgłoszenie trafia na kanał `1263240344871370804` z przyciskami zatwierdzania
+  - Administratorzy mogą zatwierdzić (✅) lub odrzucić (❌)
+  - Po zatwierdzeniu → automatyczne dodanie do `knowledge_base.md`
 - **Model:** Claude 3 Haiku (Anthropic API)
 - **Cooldown:** 5 minut (administratorzy bez limitu)
 - **Brak pamięci:** Każde pytanie niezależne

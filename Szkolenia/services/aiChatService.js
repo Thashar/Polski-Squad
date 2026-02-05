@@ -121,6 +121,17 @@ class AIChatService {
     }
 
     /**
+     * Sprawdź czy użytkownik ma rolę klanową
+     */
+    hasAnyClanRole(member) {
+        if (!member) return false;
+
+        // Role klanowe z config
+        const clanRoles = this.config.roles?.clan || [];
+        return member.roles.cache.some(role => clanRoles.includes(role.id));
+    }
+
+    /**
      * Sprawdź czy użytkownik może zadać pytanie
      */
     canAsk(userId, member = null) {
@@ -323,6 +334,17 @@ INSTRUKCJA ODPOWIADANIA:
 
             // Log usage
             logger.info(`AI Chat: ${context.asker.username} zadał pytanie`);
+
+            // Sprawdź czy odpowiedź zawiera komunikat o braku wiedzy
+            const hasNoKnowledge = answer.includes('Nie mam informacji na ten temat w mojej bazie wiedzy');
+
+            // Jeśli brak wiedzy + użytkownik ma rolę klanową → dodaj przycisk
+            if (hasNoKnowledge && this.hasAnyClanRole(message.member)) {
+                return {
+                    content: answer,
+                    showAddKnowledgeButton: true
+                };
+            }
 
             return answer;
 

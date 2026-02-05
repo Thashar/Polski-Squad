@@ -141,7 +141,26 @@ client.on(Events.MessageCreate, async (message) => {
             aiChatService.recordAsk(message.author.id, message.member);
 
             // Wyślij odpowiedź
-            await message.reply(answer);
+            if (typeof answer === 'object' && answer.showAddKnowledgeButton) {
+                // Odpowiedź z przyciskiem dodawania wiedzy
+                const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+
+                const addKnowledgeButton = new ButtonBuilder()
+                    .setCustomId('add_knowledge')
+                    .setLabel('Dodaj nowe informacje')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('📚');
+
+                const row = new ActionRowBuilder().addComponents(addKnowledgeButton);
+
+                await message.reply({
+                    content: answer.content,
+                    components: [row]
+                });
+            } else {
+                // Zwykła odpowiedź tekstowa
+                await message.reply(answer);
+            }
 
             return; // Zakończ handler - nie przetwarzaj dalej
         }
