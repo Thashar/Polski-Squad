@@ -95,8 +95,12 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 client.on(Events.MessageCreate, async (message) => {
     try {
         // === AI CHAT HANDLER ===
-        // Sprawdź czy bot jest oznaczony
-        if (message.mentions.has(client.user.id) && !message.author.bot) {
+        // Sprawdź czy bot jest oznaczony (ale nie przez @everyone/@here i nie przez odpowiedzi)
+        const isBotMentioned = message.mentions.has(client.user.id);
+        const isReplyToBot = message.reference && message.mentions.repliedUser?.id === client.user.id;
+        const isEveryoneMention = message.mentions.everyone;
+
+        if (isBotMentioned && !message.author.bot && !isReplyToBot && !isEveryoneMention) {
             // Kanał dozwolony dla wszystkich
             const allowedChannelId = '1207041051831832586';
 

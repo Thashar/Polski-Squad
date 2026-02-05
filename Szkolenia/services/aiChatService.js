@@ -350,6 +350,7 @@ INSTRUKCJA ODPOWIADANIA:
 
         } catch (error) {
             logger.error(`Błąd AI Chat: ${error.message}`);
+            logger.error(`Stack trace: ${error.stack}`);
 
             if (error.status === 401) {
                 return '⚠️ Błąd autoryzacji API. Skontaktuj się z administratorem.';
