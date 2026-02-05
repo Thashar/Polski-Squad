@@ -31,7 +31,8 @@ class AIChatService {
         // Persistent storage
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
-        this.knowledgeBaseFile = path.join(__dirname, '../knowledge_base.md');
+        this.knowledgeBaseFile = path.join(__dirname, '../knowledge_base.md'); // Zasady ogólne
+        this.knowledgeDataFile = path.join(this.dataDir, 'knowledge_data.md'); // Faktyczna baza wiedzy (gitignore)
 
         // In-memory cache
         this.cooldowns = new Map(); // userId -> timestamp
@@ -93,17 +94,41 @@ class AIChatService {
     }
 
     /**
-     * Wczytaj bazę wiedzy z pliku knowledge_base.md
+     * Wczytaj bazę wiedzy - zasady ogólne + faktyczna baza wiedzy
      */
     async loadKnowledgeBase() {
         try {
-            const content = await fs.readFile(this.knowledgeBaseFile, 'utf8');
-            return content;
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                logger.warn('⚠️ Plik knowledge_base.md nie istnieje - AI będzie działać bez bazy wiedzy');
+            // Wczytaj zasady ogólne (knowledge_base.md)
+            let baseContent = '';
+            try {
+                baseContent = await fs.readFile(this.knowledgeBaseFile, 'utf8');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    logger.warn('⚠️ Plik knowledge_base.md nie istnieje');
+                }
+            }
+
+            // Wczytaj faktyczną bazę wiedzy (knowledge_data.md)
+            let dataContent = '';
+            try {
+                dataContent = await fs.readFile(this.knowledgeDataFile, 'utf8');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    logger.warn('⚠️ Plik knowledge_data.md nie istnieje - baza wiedzy jest pusta');
+                }
+            }
+
+            // Jeśli oba pliki nie istnieją, zwróć null
+            if (!baseContent && !dataContent) {
+                logger.warn('⚠️ Brak plików bazy wiedzy - AI będzie działać bez wiedzy');
                 return null;
             }
+
+            // Połącz oba pliki (zasady + faktyczna wiedza)
+            const combined = [baseContent, dataContent].filter(Boolean).join('\n\n');
+            return combined;
+
+        } catch (error) {
             logger.error(`Błąd wczytywania bazy wiedzy: ${error.message}`);
             return null;
         }
@@ -247,23 +272,16 @@ class AIChatService {
         const knowledgeBase = await this.loadKnowledgeBase();
 
         // Podstawowy prompt
-        let prompt = `Jesteś pomocnym asystentem AI i kompendium wiedzy o grze Survivor.io.
+        let prompt = `Jesteś kompendium wiedzy o grze Survivor.io.
 
-TWOJA ROLA:
-- Gromadzisz i udostępniasz przydatne informacje na temat gry Survivor.io
-- Pomagasz graczom zrozumieć mechaniki gry, buildy, taktyki
-- Odpowiadasz ZAWSZE po polsku, zwięźle i pomocnie
-
-FORMATOWANIE ODPOWIEDZI:
-- **Ważne informacje** oznaczaj pogrubieniem: **tekst** (markdown Discord)
-- Możesz używać ikon/emoji żeby odpowiedź wyglądała ładniej (ale nie przesadzaj)
-- Przykłady ikon: ⚔️ (buildy), 🎯 (taktyki), 💎 (ekwipunek), 🏆 (osiągnięcia), ⚡ (moce)
-
-⛔ ZAKAZ WYMYŚLANIA:
-- NIGDY nie wymyślaj informacji których nie masz w bazie wiedzy
-- Jeśli nie masz informacji na dany temat → powiedz wprost że nie masz tych informacji
-- NIE zgaduj, NIE zakładaj, NIE wymyślaj faktów
-- Lepiej powiedzieć "nie wiem" niż podać nieprawdziwą informację
+ZASADY:
+- Odpowiadaj ZAWSZE po polsku
+- Odpowiadaj KRÓTKO i ZWIĘŹLE - maksymalnie 3-4 zdania
+- **Ważne informacje** oznaczaj pogrubieniem
+- Możesz używać ikon/emoji (ale nie przesadzaj): ⚔️ 🎯 💎 🏆 ⚡
+- NIGDY nie wymyślaj danych - używaj TYLKO informacji z bazy wiedzy
+- NIE pisz "Dobrze, odpowiem zgodnie z instrukcją" ani podobnych metakomentarzy
+- Odpowiadaj OD RAZU bez wstępów
 
 Użytkownik: ${context.asker.displayName}
 Pytanie: ${context.question}
@@ -281,7 +299,7 @@ ${knowledgeBase}
 
 INSTRUKCJA ODPOWIADANIA:
 1. Jeśli pytanie dotyczy informacji Z BAZY WIEDZY → użyj tych informacji do odpowiedzi
-2. Jeśli pytanie dotyczy czegoś POZA bazą wiedzy → odpowiedz: "Nie mam informacji na ten temat w mojej bazie wiedzy. Zapytaj się społeczności lub doświadczonych graczy z klanu - na pewno Ci pomogą!"
+2. Jeśli pytanie dotyczy czegoś POZA bazą wiedzy → odpowiedz krótko że nie masz informacji i zasugeruj kontakt ze społecznością. Zakończ odpowiedź frazą: "Chcesz dodać te informacje do bazy wiedzy?"
 3. NIGDY nie wymyślaj danych, statystyk, mechanik ani innych informacji których nie ma w bazie wiedzy
 `;
         } else {
@@ -335,20 +353,20 @@ INSTRUKCJA ODPOWIADANIA:
             // Log usage
             logger.info(`AI Chat: ${context.asker.username} zadał pytanie`);
 
-            // Sprawdź czy odpowiedź zawiera komunikat o braku wiedzy (różne warianty)
-            const noKnowledgePhrases = [
-                'Nie mam informacji na ten temat',
-                'nie mam szczegółowych informacji',
-                'nie mam informacji',
-                'Niestety nie mam',
-                'brak informacji w mojej bazie'
+            // Sprawdź czy odpowiedź zawiera słowa kluczowe sugerujące dodanie wiedzy
+            const addKnowledgeKeywords = [
+                'dodać',
+                'zaktualizować',
+                'chcesz dodać',
+                'dodać te informacje',
+                'uzupełnić bazę'
             ];
-            const hasNoKnowledge = noKnowledgePhrases.some(phrase =>
-                answer.toLowerCase().includes(phrase.toLowerCase())
+            const wantsToAddKnowledge = addKnowledgeKeywords.some(keyword =>
+                answer.toLowerCase().includes(keyword.toLowerCase())
             );
 
-            // Jeśli brak wiedzy + użytkownik ma rolę klanową → dodaj przycisk
-            if (hasNoKnowledge && this.hasAnyClanRole(message.member)) {
+            // Jeśli AI zasugerował dodanie wiedzy + użytkownik ma rolę klanową → dodaj przycisk
+            if (wantsToAddKnowledge && this.hasAnyClanRole(message.member)) {
                 return {
                     content: answer,
                     showAddKnowledgeButton: true

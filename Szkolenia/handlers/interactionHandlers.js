@@ -23,6 +23,8 @@ async function handleInteraction(interaction, state, config) {
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'knowledge_modal') {
                 await handleKnowledgeModalSubmit(interaction, state, config);
+            } else if (interaction.customId.startsWith('knowledge_edit_modal_')) {
+                await handleKnowledgeEditModalSubmit(interaction, state, config);
             }
             return;
         }
@@ -37,6 +39,12 @@ async function handleInteraction(interaction, state, config) {
         // AI Chat - przycisk dodawania wiedzy (działa wszędzie)
         if (customId === 'add_knowledge') {
             await handleAddKnowledge(interaction, state, config);
+            return;
+        }
+
+        // AI Chat - przycisk edycji wiedzy (działa wszędzie, tylko admini)
+        if (customId.startsWith('edit_knowledge_')) {
+            await handleEditKnowledge(interaction, state, config);
             return;
         }
 
@@ -166,19 +174,27 @@ async function handleKnowledgeModalSubmit(interaction, state, config) {
     // Utwórz przyciski zatwierdzania
     const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 
+    const timestamp = Date.now();
+
+    const editButton = new ButtonBuilder()
+        .setCustomId(`edit_knowledge_${user.id}_${timestamp}`)
+        .setLabel('Edytuj')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('✏️');
+
     const approveButton = new ButtonBuilder()
-        .setCustomId(`approve_knowledge_${user.id}_${Date.now()}`)
+        .setCustomId(`approve_knowledge_${user.id}_${timestamp}`)
         .setLabel('Zatwierdź')
         .setStyle(ButtonStyle.Success)
         .setEmoji('✅');
 
     const rejectButton = new ButtonBuilder()
-        .setCustomId(`reject_knowledge_${user.id}_${Date.now()}`)
+        .setCustomId(`reject_knowledge_${user.id}_${timestamp}`)
         .setLabel('Odrzuć')
         .setStyle(ButtonStyle.Danger)
         .setEmoji('❌');
 
-    const row = new ActionRowBuilder().addComponents(approveButton, rejectButton);
+    const row = new ActionRowBuilder().addComponents(editButton, approveButton, rejectButton);
 
     // Wyślij wiadomość do kanału
     await approvalChannel.send({
@@ -227,29 +243,30 @@ async function handleKnowledgeApproval(interaction, state, config) {
             return;
         }
 
-        // Zapisz do knowledge_base.md
+        // Zapisz do data/knowledge_data.md
         const fs = require('fs').promises;
         const path = require('path');
-        const knowledgeBasePath = path.join(__dirname, '../knowledge_base.md');
+        const knowledgeDataPath = path.join(__dirname, '../data/knowledge_data.md');
 
         try {
             // Wczytaj obecną zawartość
             let currentContent = '';
             try {
-                currentContent = await fs.readFile(knowledgeBasePath, 'utf-8');
+                currentContent = await fs.readFile(knowledgeDataPath, 'utf-8');
             } catch (err) {
-                // Plik nie istnieje - utworzymy nowy
-                currentContent = '# Baza Wiedzy - Survivor.io\n\n';
+                // Plik nie istnieje - utworzymy nowy (pusty)
+                currentContent = '';
             }
 
-            // Dodaj nową wiedzę na końcu z timestampem
-            const now = new Date();
-            const timestamp = now.toISOString().split('T')[0]; // YYYY-MM-DD
-            const newEntry = `\n\n---\n\n**Dodano ${timestamp}:**\n${knowledgeContent}\n`;
+            // Dodaj nową wiedzę na końcu (czysta wiedza, bez timestampów)
+            const separator = currentContent.trim() ? '\n\n' : ''; // Separator tylko jeśli plik nie jest pusty
+            const newEntry = `${separator}${knowledgeContent}`;
 
-            await fs.writeFile(knowledgeBasePath, currentContent + newEntry, 'utf-8');
+            await fs.writeFile(knowledgeDataPath, currentContent + newEntry, 'utf-8');
 
             // Zaktualizuj wiadomość
+            const now = new Date();
+            const timestamp = now.toISOString().split('T')[0];
             await interaction.update({
                 content: message.content + `\n\n✅ **Zatwierdzone przez ${member.displayName || user.username}** (${timestamp})`,
                 components: []
@@ -272,6 +289,115 @@ async function handleKnowledgeApproval(interaction, state, config) {
 
         logger.info(`❌ Wiedza odrzucona przez ${user.username}`);
     }
+}
+
+/**
+ * Obsługa przycisku "Edytuj" - pokazuje modal z obecną treścią wiedzy
+ */
+async function handleEditKnowledge(interaction, state, config) {
+    const { customId, user, message } = interaction;
+    const member = interaction.member;
+
+    // Sprawdź czy użytkownik jest adminem
+    const isAdmin = config.adminRoles && config.adminRoles.some(roleId => member.roles.cache.has(roleId));
+
+    if (!isAdmin) {
+        await interaction.reply({
+            content: '⚠️ Tylko administratorzy mogą edytować propozycje wiedzy.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Wyciągnij treść wiedzy z wiadomości
+    const knowledgeContent = message.content.split(':**\n\n')[1];
+
+    if (!knowledgeContent) {
+        await interaction.reply({
+            content: '⚠️ Nie udało się wyciągnąć treści wiedzy.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Pokaż modal z obecną treścią do edycji
+    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+
+    const modal = new ModalBuilder()
+        .setCustomId(`knowledge_edit_modal_${customId}`)
+        .setTitle('Edytuj propozycję wiedzy');
+
+    const knowledgeInput = new TextInputBuilder()
+        .setCustomId('edited_knowledge_content')
+        .setLabel('Edytuj informacje')
+        .setStyle(TextInputStyle.Paragraph)
+        .setValue(knowledgeContent)
+        .setRequired(true)
+        .setMinLength(10)
+        .setMaxLength(1000);
+
+    const actionRow = new ActionRowBuilder().addComponents(knowledgeInput);
+    modal.addComponents(actionRow);
+
+    await interaction.showModal(modal);
+}
+
+/**
+ * Obsługa wysłania modalu edycji - aktualizuje wiadomość z nowymi przyciskami
+ */
+async function handleKnowledgeEditModalSubmit(interaction, state, config) {
+    const editedContent = interaction.fields.getTextInputValue('edited_knowledge_content');
+    const originalCustomId = interaction.customId.replace('knowledge_edit_modal_', '');
+
+    // Pobierz wiadomość do edycji
+    const message = interaction.message;
+
+    // Wyciągnij oryginalne ID użytkownika z customId
+    const userIdMatch = originalCustomId.match(/edit_knowledge_(\d+)_/);
+    const originalUserId = userIdMatch ? userIdMatch[1] : 'unknown';
+
+    // Pobierz nazwę użytkownika z oryginalnej wiadomości
+    const usernameMatch = message.content.match(/\*\*Nowa propozycja wiedzy od (.+?):\*\*/);
+    const originalUsername = usernameMatch ? usernameMatch[1] : 'Użytkownik';
+
+    // Utwórz nowe przyciski (te same co wcześniej, ale z nową treścią)
+    const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+
+    const timestamp = Date.now();
+
+    const editButton = new ButtonBuilder()
+        .setCustomId(`edit_knowledge_${originalUserId}_${timestamp}`)
+        .setLabel('Edytuj')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('✏️');
+
+    const approveButton = new ButtonBuilder()
+        .setCustomId(`approve_knowledge_${originalUserId}_${timestamp}`)
+        .setLabel('Zatwierdź')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('✅');
+
+    const rejectButton = new ButtonBuilder()
+        .setCustomId(`reject_knowledge_${originalUserId}_${timestamp}`)
+        .setLabel('Odrzuć')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('❌');
+
+    const row = new ActionRowBuilder().addComponents(editButton, approveButton, rejectButton);
+
+    // Zaktualizuj oryginalną wiadomość
+    await message.edit({
+        content: `📚 **Nowa propozycja wiedzy od ${originalUsername}:**\n\n${editedContent}`,
+        components: [row]
+    });
+
+    // Odpowiedź do administratora
+    await interaction.reply({
+        content: '✅ Propozycja została zaktualizowana!',
+        ephemeral: true
+    });
+
+    logger.info(`✏️ Wiedza wyedytowana przez ${interaction.user.username}: ${editedContent.substring(0, 50)}...`);
 }
 
 module.exports = {
