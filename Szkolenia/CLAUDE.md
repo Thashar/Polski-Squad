@@ -32,7 +32,11 @@
   - Krótko i zwięźle (max 3-4 zdania)
   - **Ważne informacje** pogrubione
   - Minimalne użycie emoji (⚔️ 🎯 💎 🏆 ⚡)
-  - ZAKAZ wymyślania danych - tylko z bazy wiedzy
+  - **WZMOCNIONE zabezpieczenia przeciw halucynacjom:**
+    - ABSOLUTNY ZAKAZ wymyślania postaci, umiejętności, statystyk, mechanik
+    - Przykłady niepoprawnego zachowania w prompcie (np. wymyślanie nazw, statystyk)
+    - Niska temperature (0.3) = mniej kreatywności, więcej faktów
+    - Obowiązkowe sprawdzanie bazy wiedzy przed odpowiedzią
 - **Model:** Claude 3 Haiku (Anthropic API)
 - **Cooldown:** 5 minut (administratorzy bez limitu)
 - **Brak pamięci:** Każde pytanie niezależne
