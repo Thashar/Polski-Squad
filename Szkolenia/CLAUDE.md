@@ -28,7 +28,9 @@
   - Modal (okienko) z polem tekstowym (10-1000 znaków)
   - Zgłoszenie trafia na kanał `1263240344871370804` z przyciskami: Edytuj ✏️, Zatwierdź ✅, Odrzuć ❌
   - Administratorzy mogą najpierw edytować propozycję (modal z obecną treścią), potem zatwierdzić
-  - Po zatwierdzeniu → automatyczne dodanie do `data/knowledge_data.md` (czysta wiedza, bez timestampów)
+  - Po zatwierdzeniu:
+    - Automatyczne dodanie do `data/knowledge_data.md` (czysta wiedza, bez timestampów)
+    - Publikacja na kanale głównym `1207041051831832586` z informacją kto zgłosił i kto zatwierdził
 - **Styl odpowiedzi:**
   - Krótko i zwięźle (max 3-4 zdania)
   - **Ważne informacje** pogrubione
