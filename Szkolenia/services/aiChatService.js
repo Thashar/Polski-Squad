@@ -388,8 +388,8 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                 answer.toLowerCase().includes(keyword.toLowerCase())
             );
 
-            // Jeśli AI zasugerował dodanie wiedzy + użytkownik ma rolę klanową → dodaj przycisk
-            if (wantsToAddKnowledge && this.hasAnyClanRole(message.member)) {
+            // Jeśli AI zasugerował dodanie wiedzy → dodaj przycisk (każdy może dodać wiedzę)
+            if (wantsToAddKnowledge) {
                 return {
                     content: answer,
                     showAddKnowledgeButton: true
