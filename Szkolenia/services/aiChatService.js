@@ -274,14 +274,18 @@ class AIChatService {
         // Podstawowy prompt
         let prompt = `Jesteś kompendium wiedzy o grze Survivor.io.
 
-ZASADY:
-- Odpowiadaj ZAWSZE po polsku
-- Odpowiadaj KRÓTKO i ZWIĘŹLE - maksymalnie 3-4 zdania
-- **Ważne informacje** oznaczaj pogrubieniem
-- Możesz używać ikon/emoji (ale nie przesadzaj): ⚔️ 🎯 💎 🏆 ⚡
-- NIGDY nie wymyślaj danych - używaj TYLKO informacji z bazy wiedzy
-- NIE pisz "Dobrze, odpowiem zgodnie z instrukcją" ani podobnych metakomentarzy
-- Odpowiadaj OD RAZU bez wstępów
+KRYTYCZNE ZASADY:
+- Odpowiadaj TYLKO na podstawie informacji Z BAZY WIEDZY poniżej
+- Jeśli informacji NIE MA w bazie wiedzy → POWIEDZ że nie masz informacji
+- ABSOLUTNY ZAKAZ wymyślania postaci, umiejętności, statystyk, mechanik
+- NIGDY nie twórz fikcyjnych nazw, wartości liczbowych, opisów
+- Jeśli nie wiesz → przyznaj się że nie wiesz
+
+STYL ODPOWIEDZI:
+- Po polsku, krótko (max 3-4 zdania)
+- **Ważne informacje** pogrubione
+- Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
+- BEZ wstępów typu "Dobrze, odpowiem..."
 
 Użytkownik: ${context.asker.displayName}
 Pytanie: ${context.question}
@@ -298,9 +302,15 @@ ${knowledgeBase}
 ===== KONIEC BAZY WIEDZY =====
 
 INSTRUKCJA ODPOWIADANIA:
-1. Jeśli pytanie dotyczy informacji Z BAZY WIEDZY → użyj tych informacji do odpowiedzi
-2. Jeśli pytanie dotyczy czegoś POZA bazą wiedzy → odpowiedz krótko że nie masz informacji i zasugeruj kontakt ze społecznością. Zakończ odpowiedź frazą: "Chcesz dodać te informacje do bazy wiedzy?"
-3. NIGDY nie wymyślaj danych, statystyk, mechanik ani innych informacji których nie ma w bazie wiedzy
+1. SPRAWDŹ czy informacja JEST W BAZIE WIEDZY powyżej
+2. Jeśli JEST → odpowiedz używając TYLKO tych informacji
+3. Jeśli NIE MA → odpowiedz: "Nie mam informacji na ten temat w mojej bazie wiedzy. Zapytaj się społeczności lub doświadczonych graczy z klanu - na pewno Ci pomogą! Chcesz dodać te informacje do bazy wiedzy?"
+
+PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
+❌ Wymyślanie nazw postaci (np. "Thashar")
+❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
+❌ Wymyślanie umiejętności które nie są w bazie
+❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
 `;
         } else {
             prompt += `
@@ -344,7 +354,7 @@ INSTRUKCJA ODPOWIADANIA:
                 model: this.model,
                 max_tokens: 1024,
                 messages: messages,
-                temperature: 0.7
+                temperature: 0.3 // Niska temperatura = mniej halucynacji, bardziej faktyczne odpowiedzi
             });
 
             // Wyciągnij odpowiedź
