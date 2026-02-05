@@ -335,8 +335,17 @@ INSTRUKCJA ODPOWIADANIA:
             // Log usage
             logger.info(`AI Chat: ${context.asker.username} zadał pytanie`);
 
-            // Sprawdź czy odpowiedź zawiera komunikat o braku wiedzy
-            const hasNoKnowledge = answer.includes('Nie mam informacji na ten temat w mojej bazie wiedzy');
+            // Sprawdź czy odpowiedź zawiera komunikat o braku wiedzy (różne warianty)
+            const noKnowledgePhrases = [
+                'Nie mam informacji na ten temat',
+                'nie mam szczegółowych informacji',
+                'nie mam informacji',
+                'Niestety nie mam',
+                'brak informacji w mojej bazie'
+            ];
+            const hasNoKnowledge = noKnowledgePhrases.some(phrase =>
+                answer.toLowerCase().includes(phrase.toLowerCase())
+            );
 
             // Jeśli brak wiedzy + użytkownik ma rolę klanową → dodaj przycisk
             if (hasNoKnowledge && this.hasAnyClanRole(message.member)) {
