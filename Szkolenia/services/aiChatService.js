@@ -265,7 +265,7 @@ ${knowledgeBase}
 
 INSTRUKCJA ODPOWIADANIA:
 1. Jeśli pytanie dotyczy informacji Z BAZY WIEDZY → użyj tych informacji do odpowiedzi
-2. Jeśli pytanie dotyczy czegoś POZA bazą wiedzy → odpowiedz: "Nie mam informacji na ten temat w mojej bazie wiedzy. Możesz zapytać się administratorów lub sprawdzić na oficjalnych źródłach."
+2. Jeśli pytanie dotyczy czegoś POZA bazą wiedzy → odpowiedz: "Nie mam informacji na ten temat w mojej bazie wiedzy. Zapytaj się społeczności lub doświadczonych graczy z klanu - na pewno Ci pomogą!"
 3. NIGDY nie wymyślaj danych, statystyk, mechanik ani innych informacji których nie ma w bazie wiedzy
 `;
         } else {
