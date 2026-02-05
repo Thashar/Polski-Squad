@@ -264,13 +264,28 @@ async function handleKnowledgeApproval(interaction, state, config) {
 
             await fs.writeFile(knowledgeDataPath, currentContent + newEntry, 'utf-8');
 
-            // Zaktualizuj wiadomość
+            // Zaktualizuj wiadomość na kanale zatwierdzania
             const now = new Date();
             const timestamp = now.toISOString().split('T')[0];
             await interaction.update({
                 content: message.content + `\n\n✅ **Zatwierdzone przez ${member.displayName || user.username}** (${timestamp})`,
                 components: []
             });
+
+            // Wyślij wiadomość na kanał główny (gdzie działa bot Szkolenia)
+            const mainChannelId = '1207041051831832586';
+            const mainChannel = await interaction.client.channels.fetch(mainChannelId);
+
+            if (mainChannel) {
+                // Wyciągnij nazwę użytkownika który zgłosił wiedzę
+                const proposalMatch = message.content.match(/\*\*Nowa propozycja wiedzy od (.+?):\*\*/);
+                const proposerName = proposalMatch ? proposalMatch[1] : 'Użytkownik';
+
+                // Wyślij wiadomość na kanał główny
+                await mainChannel.send({
+                    content: `📚 **Nowa wiedza od ${proposerName}:**\n\n${knowledgeContent}\n\n✅ **Zatwierdzone przez ${member.displayName || user.username}** (${timestamp})`
+                });
+            }
 
             logger.info(`✅ Wiedza zatwierdzona przez ${user.username}: ${knowledgeContent.substring(0, 50)}...`);
         } catch (error) {
