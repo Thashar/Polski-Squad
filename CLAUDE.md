@@ -13,14 +13,14 @@
 - NIGDY nie pytaj użytkownika czy zacommitować - po prostu to zrób
 
 **INSTRUKCJA AKTUALIZACJI DOKUMENTACJI:**
-- Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj odpowiednią GŁÓWNĄ SEKCJĘ bota w CLAUDE.md
-- **EDYTUJ istniejące opisy** funkcji zamiast dodawać nowe wpisy do "Historia Zmian"
-- Główne sekcje botów (np. "⚔️ StalkerLME Bot", "⛪ Konklawe Bot") powinny zawierać AKTUALNY stan funkcjonalności
-- Używaj Grep + Read z offset/limit + Edit - NIE czytaj całego pliku CLAUDE.md
-- "Historia Zmian" służy TYLKO do ostatnich 30 dni - starsze wpisy usuń po przeniesieniu informacji do głównych sekcji
-- To oszczędzi tysiące tokenów w przyszłych sesjach - kolejna instancja Claude będzie wiedziała jak działa kod bez czytania źródeł
-- **PRZYKŁAD POPRAWNY**: Zmieniłeś system kolejkowania w StalkerLME → zaktualizuj sekcję "⚔️ StalkerLME Bot" punkt 5 "Kolejkowanie OCR"
-- **PRZYKŁAD BŁĘDNY**: Dodałeś nowy wpis "StalkerLME Bot - Zmiana Kolejkowania" do "Historia Zmian" (TAK NIE ROBIĆ!)
+- Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj `{Bot}/CLAUDE.md` tego bota
+- **EDYTUJ istniejące opisy** funkcji w odpowiednim pliku bot-specific
+- Każdy bot ma własny plik dokumentacji w swoim folderze (np. `StalkerLME/CLAUDE.md`, `Rekruter/CLAUDE.md`)
+- Używaj Grep + Read z offset/limit + Edit - NIE czytaj całego pliku
+- **NIE twórz** "Historii Zmian" - aktualizuj bezpośrednio opisy funkcjonalności
+- To oszczędzi tysiące tokenów - dokumentacja zawsze aktualna w jednym miejscu
+- **PRZYKŁAD POPRAWNY**: Zmieniłeś system kolejkowania w StalkerLME → zaktualizuj `StalkerLME/CLAUDE.md` punkt "Kolejkowanie OCR"
+- **PRZYKŁAD BŁĘDNY**: Dodałeś opis zmian do głównego CLAUDE.md zamiast do `StalkerLME/CLAUDE.md`
 
 **INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU:**
 - Po dodaniu NOWEJ komendy lub aktualizacji istniejącej komendy w KTÓRYMKOLWIEK bocie ZAWSZE aktualizuj `Muteusz/config/all_commands.json`
@@ -74,33 +74,38 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 
 | Sekcja | Linia | Opis |
 |--------|-------|------|
-| **🔥 OPTYMALIZACJA TOKENÓW** | 84 | Workflow: Grep→Read→Edit, Task Explore |
-| **Przegląd Projektu** | 103 | 9 botów, środowisko produkcyjne |
-| **Architektura Systemu** | 127 | Struktura projektu, wzorce architektury |
-| **Systemy Scentralizowane** | 233 | Logger, Nickname Manager, OCR Utils, Backup |
-| **Szczegóły Botów** | 588 | Dokumentacja wszystkich 9 botów |
-| └─ Rekruter Bot | 590 | OCR rekrutacja, kwalifikacja klanów |
-| └─ Szkolenia Bot | 604 | Wątki treningowe, przypomnienia |
-| └─ StalkerLME Bot | 614 | Kary OCR, punkty, urlopy, dekoder, fazy |
-| └─ Muteusz Bot | 629 | Auto-moderacja, cache mediów, chaos mode |
-| └─ EndersEcho Bot | 645 | OCR wyników, rankingi, role TOP |
-| └─ Kontroler Bot | 769 | OCR dwukanałowy (CX/Daily), loteria, Oligopoly |
-| └─ Konklawe Bot | 669 | Gra hasłowa, osiągnięcia, klątwy, blessingi |
-| └─ Wydarzynier Bot | 684 | Lobby party, zaproszenia, repozytorium |
-| └─ Gary Bot | 697 | Lunar Mine API, proxy, cache, wyszukiwanie |
-| **Komendy Deweloperskie** | 714 | npm start/dev/local, bot-config.json |
-| **Zmienne Środowiskowe** | 763 | Kompletna lista .env dla wszystkich botów |
-| **Najlepsze Praktyki** | 851 | Logowanie, błędy, konfiguracja, persistencja |
-| **Rozwiązywanie Problemów** | 862 | OCR, proxy, nicki, pamięć, rate limit |
-| **Historia Zmian** | 874 | Changelog: Listopad 2025, Styczeń 2025 |
+| **🔥 OPTYMALIZACJA TOKENÓW** | 112 | Workflow: Grep→Read→Edit, Task Explore |
+| **Przegląd Projektu** | 127 | 9 botów, środowisko produkcyjne |
+| **Architektura Systemu** | 151 | Struktura projektu, wzorce architektury |
+| **Systemy Scentralizowane** | 219 | Logger, Nickname Manager, OCR Utils, Backup |
+| **Szczegóły Botów** | 558 | Lista botów z linkami do bot-specific CLAUDE.md |
+| **Komendy Deweloperskie** | 573 | npm start/dev/local, bot-config.json |
+| **Zmienne Środowiskowe** | 622 | Kompletna lista .env dla wszystkich botów |
+| **Najlepsze Praktyki** | 743 | Logowanie, błędy, konfiguracja, persistencja |
+| **Rozwiązywanie Problemów** | 756 | OCR, proxy, nicki, pamięć, rate limit |
+
+**Szczegóły poszczególnych botów:**
+- `Rekruter/CLAUDE.md` - OCR rekrutacja, kwalifikacja klanów
+- `Szkolenia/CLAUDE.md` - Wątki treningowe, przypomnienia
+- `StalkerLME/CLAUDE.md` - 8 systemów (kary, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
+- `Muteusz/CLAUDE.md` - Auto-moderacja, cache mediów, chaos mode
+- `EndersEcho/CLAUDE.md` - OCR wyników, rankingi, role TOP
+- `Kontroler/CLAUDE.md` - OCR dwukanałowy, loteria, dywersja, Oligopoly
+- `Konklawe/CLAUDE.md` - Gra hasłowa, klątwy, błogosławieństwa, AI wspomaganie
+- `Wydarzynier/CLAUDE.md` - Lobby party, zaproszenia, repozytorium
+- `Gary/CLAUDE.md` - Lunar Mine API, proxy, cache, wyszukiwanie
 
 **Przykład użycia:**
 ```bash
-# Chcę sprawdzić system OCR w StalkerLME
-Read /home/user/Polski-Squad/CLAUDE.md offset:614 limit:15
+# Chcę sprawdzić ogólną architekturę
+Read CLAUDE.md offset:151 limit:30
 
-# Chcę zobaczyć zmienne środowiskowe dla Gary
-Read /home/user/Polski-Squad/CLAUDE.md offset:798 limit:12
+# Chcę sprawdzić szczegóły StalkerLME
+Read StalkerLME/CLAUDE.md
+
+# Chcę sprawdzić tylko system AI Chat w StalkerLME
+Grep -n "AI Chat" StalkerLME/CLAUDE.md
+Read StalkerLME/CLAUDE.md offset:{wynik_grep} limit:20
 ```
 
 ---
