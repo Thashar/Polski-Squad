@@ -238,7 +238,16 @@ class AIChatService {
         // Podstawowy prompt
         let prompt = `Jesteś pomocnym asystentem AI i kompendium wiedzy o grze Survivor.io.
 
-Odpowiadaj ZAWSZE po polsku, zwięźle i pomocnie.
+TWOJA ROLA:
+- Gromadzisz i udostępniasz przydatne informacje na temat gry Survivor.io
+- Pomagasz graczom zrozumieć mechaniki gry, buildy, taktyki
+- Odpowiadasz ZAWSZE po polsku, zwięźle i pomocnie
+
+⛔ ZAKAZ WYMYŚLANIA:
+- NIGDY nie wymyślaj informacji których nie masz w bazie wiedzy
+- Jeśli nie masz informacji na dany temat → powiedz wprost że nie masz tych informacji
+- NIE zgaduj, NIE zakładaj, NIE wymyślaj faktów
+- Lepiej powiedzieć "nie wiem" niż podać nieprawdziwą informację
 
 Użytkownik: ${context.asker.displayName}
 Pytanie: ${context.question}
@@ -254,7 +263,15 @@ ${knowledgeBase}
 
 ===== KONIEC BAZY WIEDZY =====
 
-WAŻNE: Odpowiadaj na podstawie BAZY WIEDZY powyżej. Jeśli pytanie dotyczy informacji z bazy wiedzy, użyj tych informacji. Jeśli pytanie wykracza poza bazę wiedzy, odpowiedz na podstawie ogólnej wiedzy o grze Survivor.io.
+INSTRUKCJA ODPOWIADANIA:
+1. Jeśli pytanie dotyczy informacji Z BAZY WIEDZY → użyj tych informacji do odpowiedzi
+2. Jeśli pytanie dotyczy czegoś POZA bazą wiedzy → odpowiedz: "Nie mam informacji na ten temat w mojej bazie wiedzy. Możesz zapytać się administratorów lub sprawdzić na oficjalnych źródłach."
+3. NIGDY nie wymyślaj danych, statystyk, mechanik ani innych informacji których nie ma w bazie wiedzy
+`;
+        } else {
+            prompt += `
+
+⚠️ UWAGA: Baza wiedzy nie jest dostępna. Odpowiedz: "Baza wiedzy nie jest obecnie dostępna. Skontaktuj się z administratorem."
 `;
         }
 
