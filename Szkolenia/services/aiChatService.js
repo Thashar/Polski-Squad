@@ -304,13 +304,17 @@ ${knowledgeBase}
 INSTRUKCJA ODPOWIADANIA:
 1. SPRAWDŹ czy informacja JEST W BAZIE WIEDZY powyżej
 2. Jeśli JEST → odpowiedz używając TYLKO tych informacji
-3. Jeśli NIE MA → odpowiedz: "Nie mam informacji na ten temat w mojej bazie wiedzy. Zapytaj się społeczności lub doświadczonych graczy z klanu - na pewno Ci pomogą! Chcesz dodać te informacje do bazy wiedzy?"
+3. Jeśli NIE MA → odpowiedz krótko że nie wiesz i ZAKOŃCZ DOKŁADNIE tą frazą: "Chcesz dodać te informacje do bazy wiedzy?"
+
+PRZYKŁAD POPRAWNEJ ODPOWIEDZI gdy brak wiedzy:
+"Nie mam informacji na ten temat w mojej bazie wiedzy. Zapytaj się doświadczonych graczy z klanu - na pewno Ci pomogą! Chcesz dodać te informacje do bazy wiedzy?"
 
 PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 ❌ Wymyślanie nazw postaci (np. "Thashar")
 ❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
 ❌ Wymyślanie umiejętności które nie są w bazie
 ❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
+❌ Parafrazowanie frazy końcowej (np. "możesz zaproponować dodanie" zamiast "Chcesz dodać te informacje")
 `;
         } else {
             prompt += `
@@ -365,10 +369,14 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 
             // Sprawdź czy odpowiedź zawiera słowa kluczowe sugerujące dodanie wiedzy
             const addKnowledgeKeywords = [
+                'chcesz dodać te informacje', // Dokładna fraza z instrukcji (sprawdź PIERWSZA!)
+                'dodać te informacje',
+                'chcesz dodać',
+                'możesz dodać',
+                'zaproponować dodanie',
+                'dodanie tych informacji',
                 'dodać',
                 'zaktualizować',
-                'chcesz dodać',
-                'dodać te informacje',
                 'uzupełnić bazę'
             ];
             const wantsToAddKnowledge = addKnowledgeKeywords.some(keyword =>
