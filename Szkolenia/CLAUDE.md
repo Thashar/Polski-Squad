@@ -17,16 +17,22 @@
 - **Trigger:** Mention @Szkolenia + pytanie (max 300 znaków)
 - **Kanał dozwolony:** `1207041051831832586` - każdy może używać
 - **Administratorzy:** Mogą używać na dowolnym kanale + brak cooldownu
-- **Baza wiedzy:** `knowledge_base.md` - łatwo edytowalny plik markdown
-  - Wystarczy edytować plik, nie trzeba restartować bota
-  - Dodawaj nowe sekcje, aktualizuj informacje
-  - Bot automatycznie wczyta całą zawartość przy każdym pytaniu
+- **Baza wiedzy (modularny system):**
+  - `knowledge_base.md` - zasady ogólne (w repo)
+  - `data/knowledge_data.md` - faktyczna baza wiedzy (gitignore, tylko na serwerze)
+  - Bot automatycznie wczyta oba pliki przy każdym pytaniu
+  - Nie trzeba restartować bota
 - **System zgłaszania wiedzy:**
-  - Gdy bot nie ma informacji + użytkownik z rolą klanową → przycisk "Dodaj nowe informacje"
-  - Modal (okienko) z polem tekstowym + przykładem
-  - Zgłoszenie trafia na kanał `1263240344871370804` z przyciskami zatwierdzania
-  - Administratorzy mogą zatwierdzić (✅) lub odrzucić (❌)
-  - Po zatwierdzeniu → automatyczne dodanie do `knowledge_base.md`
+  - Keyword-based trigger: gdy AI użyje słów "dodać", "zaktualizować", "chcesz dodać" + użytkownik z rolą klanową → przycisk "Dodaj nowe informacje"
+  - Modal (okienko) z polem tekstowym (10-1000 znaków)
+  - Zgłoszenie trafia na kanał `1263240344871370804` z przyciskami: Edytuj ✏️, Zatwierdź ✅, Odrzuć ❌
+  - Administratorzy mogą najpierw edytować propozycję (modal z obecną treścią), potem zatwierdzić
+  - Po zatwierdzeniu → automatyczne dodanie do `data/knowledge_data.md` (czysta wiedza, bez timestampów)
+- **Styl odpowiedzi:**
+  - Krótko i zwięźle (max 3-4 zdania)
+  - **Ważne informacje** pogrubione
+  - Minimalne użycie emoji (⚔️ 🎯 💎 🏆 ⚡)
+  - ZAKAZ wymyślania danych - tylko z bazy wiedzy
 - **Model:** Claude 3 Haiku (Anthropic API)
 - **Cooldown:** 5 minut (administratorzy bez limitu)
 - **Brak pamięci:** Każde pytanie niezależne
