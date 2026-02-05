@@ -6,6 +6,7 @@ const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
+const AIChatService = require('./services/aiChatService');
 
 const logger = createBotLogger('Szkolenia');
 
@@ -22,10 +23,14 @@ const client = new Client({
 
 let lastReminderMap = new Map();
 
+// Inicjalizuj AI Chat Service
+const aiChatService = new AIChatService(config);
+
 const sharedState = {
     lastReminderMap,
     client,
-    config
+    config,
+    aiChatService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -89,6 +94,59 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageCreate, async (message) => {
     try {
+        // === AI CHAT HANDLER ===
+        // Sprawdź czy bot jest oznaczony
+        if (message.mentions.has(client.user.id) && !message.author.bot) {
+            // Kanał dozwolony dla wszystkich
+            const allowedChannelId = '1207041051831832586';
+
+            // Sprawdź czy to dozwolony kanał LUB użytkownik jest adminem
+            const isAllowedChannel = message.channel.id === allowedChannelId;
+            const isAdmin = aiChatService.isAdmin(message.member);
+
+            if (!isAllowedChannel && !isAdmin) {
+                await message.reply('⚠️ AI Chat jest dostępny tylko na specjalnym kanale lub dla administratorów.');
+                return;
+            }
+
+            // Wyciągnij pytanie (usuń mention bota)
+            const question = message.content
+                .replace(/<@!?\d+>/g, '') // Usuń wszystkie @mentions
+                .trim();
+
+            if (!question || question.length === 0) {
+                await message.reply('❓ Zadaj mi jakieś pytanie!');
+                return;
+            }
+
+            if (question.length > 300) {
+                await message.reply('⚠️ Pytanie jest za długie (max 300 znaków).');
+                return;
+            }
+
+            // Sprawdź cooldown
+            const canAskResult = aiChatService.canAsk(message.author.id, message.member);
+            if (!canAskResult.allowed) {
+                await message.reply(`⏳ Musisz poczekać ${canAskResult.remainingMinutes} min przed następnym pytaniem.`);
+                return;
+            }
+
+            // Typing indicator
+            await message.channel.sendTyping();
+
+            // Zadaj pytanie AI
+            const answer = await aiChatService.ask(message, question);
+
+            // Zapisz cooldown
+            aiChatService.recordAsk(message.author.id, message.member);
+
+            // Wyślij odpowiedź
+            await message.reply(answer);
+
+            return; // Zakończ handler - nie przetwarzaj dalej
+        }
+
+        // === THREAD HANDLER (tylko jeśli nie AI Chat) ===
         // Sprawdź czy to wątek w kanale szkoleniowym
         if (!message.channel.isThread()) return;
         if (message.channel.parentId !== config.channels.training) return;

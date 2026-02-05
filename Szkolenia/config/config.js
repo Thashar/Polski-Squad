@@ -26,12 +26,21 @@ if (missingVars.length > 0) {
 module.exports = {
     // Dane połączenia
     token: process.env.SZKOLENIA_DISCORD_TOKEN,
-    
+
     // Kanały
     channels: {
         training: process.env.SZKOLENIA_CHANNEL_ID
     },
-    
+
+    // Role administracyjne (dla AI Chat - brak limitów)
+    adminRoles: [
+        '1196911721588199464',
+        '1196586785413795850',
+        '1170332302715396106',
+        '1170332127653531698',
+        '1268527148394610730'
+    ],
+
     // Role
     roles: {
         ping: process.env.SZKOLENIA_PING_ROLE_ID,
