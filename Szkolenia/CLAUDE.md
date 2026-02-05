@@ -23,7 +23,8 @@
   - Bot automatycznie wczyta oba pliki przy każdym pytaniu
   - Nie trzeba restartować bota
 - **System zgłaszania wiedzy:**
-  - Keyword-based trigger: gdy AI użyje słów "dodać", "zaktualizować", "chcesz dodać" + użytkownik z rolą klanową → przycisk "Dodaj nowe informacje"
+  - Keyword-based trigger: gdy AI użyje słów "dodać", "zaktualizować", "chcesz dodać" → przycisk "Dodaj nowe informacje"
+  - **KAŻDY może dodawać wiedzę** - bez ograniczenia ról
   - Modal (okienko) z polem tekstowym (10-1000 znaków)
   - Zgłoszenie trafia na kanał `1263240344871370804` z przyciskami: Edytuj ✏️, Zatwierdź ✅, Odrzuć ❌
   - Administratorzy mogą najpierw edytować propozycję (modal z obecną treścią), potem zatwierdzić
