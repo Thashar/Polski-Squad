@@ -14,7 +14,7 @@
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
-7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → pytania o graczy/statystyki/rankingi, Anthropic API (Claude 3 Haiku), cooldown 5min, **pamięć kontekstu 1h**, wykrywanie "mój/moje/mnie", dynamiczny progres z X tygodni, MVP
+7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
@@ -96,7 +96,7 @@
   - Sprawdza czy użytkownik jest w TOP3 swojego klanu
 - **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
 
-**AI Chat** - Konwersacyjny system AI (mention @StalkerLME):
+**AI Chat** - Prosty system rozmowy z AI (mention @StalkerLME):
 - **Trigger:** Bezpośrednie oznaczenie @StalkerLME + wiadomość (max 300 znaków)
   - Ignoruje: wzmianki przez role bota, @everyone/@here, odpowiedzi na wiadomości bota
 - **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
@@ -106,29 +106,15 @@
   - Persistent storage: `ai_chat_cooldowns.json`
 - **Uprawnienia:** Tylko członkowie klanów (rola TARGET_ROLE_0/1/2/MAIN)
 - **Kanały:** Wszystkie kanały na serwerze
-- **Styl AI:**
-  - **Luźny i dowcipny** - może przeklinać ze smakiem, być zadziorny, elokwentny
-  - **Gdy ma dane** → precyzyjny, szczegółowy, analityczny
-  - **Gdy NIE ma danych** → kreatywny, zabawny, może zmyślać w klimacie gry (fantasy/RPG)
-  - Odpowiedzi po polsku z emoji 🎯📈📊🏆💪
 - **Funkcjonalność:**
-  - **Automatyczne pobieranie danych** - na podstawie pytania decyduje co pobrać:
-    - Pytanie o statystyki/progres → pełne dane z `/progres` + `/player-status`
-    - Porównanie graczy → dane wszystkich wspomnianych (max 5)
-    - Pytanie o klany → dane wszystkich 4 klanów ze szczegółami
-    - Pytanie o ranking/topkę → dane wszystkich klanów z ostatniego tygodnia
-  - **Rozpoznawanie pytań o siebie** ("mnie", "mój", "moje", "ja") → używa danych pytającego
-  - **Wykrywanie nicków** w pytaniu (case-insensitive, filtruje stop words)
-  - **Pamięć kontekstu** - AI pamięta poprzednie pytania (1h timeout, max 5 wymian)
+  - Rozmowa na dowolny temat
+  - **Brak pamięci kontekstu** - każde pytanie jest niezależne
+  - Odpowiedzi po polsku
   - **Typing indicator** podczas przetwarzania
 - **Przykłady użycia:**
-  - `@StalkerLME Porównaj mnie z @gracz1 @gracz2` (porównanie do 5 graczy)
-  - `@StalkerLME Jak wygląda mój progres?` (statystyki + progres)
-  - `@StalkerLME Kto jest najlepszy w moim klanie?` (ranking klanu)
-  - `@StalkerLME Powiedz coś o thashar` (wykrywa nick, statystyki gracza)
-  - `@StalkerLME Jaki był mój progres z ostatnich 3 tygodni?` (dynamiczny okres)
-  - `@StalkerLME Hej, jak się masz?` (normalna rozmowa, kreatywna odpowiedź)
-  - `@StalkerLME Opowiedz mi coś o Lunar Mine` (rozmowa o grze)
+  - `@StalkerLME Hej, jak się masz?`
+  - `@StalkerLME Opowiedz mi dowcip`
+  - `@StalkerLME Co sądzisz o pogodzie?`
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)

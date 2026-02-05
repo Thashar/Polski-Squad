@@ -39,11 +39,6 @@ class AIChatService {
         // In-memory cache
         this.cooldowns = new Map(); // userId -> timestamp
 
-        // Historia konwersacji (pamięć kontekstu)
-        this.conversationHistory = new Map(); // odlinkowany: userId -> {lastActivity: timestamp, messages: [{role, content}]}
-        this.conversationTimeoutMs = 60 * 60 * 1000; // 1 godzina
-        this.maxHistoryMessages = 10; // Max 5 par pytanie/odpowiedź
-
         // Load data
         this.loadData();
     }
@@ -113,84 +108,6 @@ class AIChatService {
         }
     }
 
-    /**
-     * Pobierz historię konwersacji dla użytkownika (jeśli aktywna w ciągu ostatniej godziny)
-     */
-    getConversationHistory(userId) {
-        const conversation = this.conversationHistory.get(userId);
-
-        if (!conversation) {
-            return [];
-        }
-
-        // Sprawdź czy konwersacja nie wygasła (1 godzina)
-        const now = Date.now();
-        if (now - conversation.lastActivity > this.conversationTimeoutMs) {
-            this.conversationHistory.delete(userId);
-            return [];
-        }
-
-        return conversation.messages;
-    }
-
-    /**
-     * Dodaj wymianę pytanie/odpowiedź do historii konwersacji
-     */
-    addToConversationHistory(userId, userQuestion, assistantResponse) {
-        const now = Date.now();
-        let conversation = this.conversationHistory.get(userId);
-
-        if (!conversation || (now - conversation.lastActivity > this.conversationTimeoutMs)) {
-            // Nowa konwersacja lub wygasła - zacznij od nowa
-            conversation = {
-                lastActivity: now,
-                messages: []
-            };
-        }
-
-        // Dodaj nową wymianę
-        conversation.messages.push(
-            { role: 'user', content: userQuestion },
-            { role: 'assistant', content: assistantResponse }
-        );
-
-        // Ogranicz historię do max wiadomości (zachowaj ostatnie)
-        if (conversation.messages.length > this.maxHistoryMessages) {
-            conversation.messages = conversation.messages.slice(-this.maxHistoryMessages);
-        }
-
-        // Aktualizuj timestamp
-        conversation.lastActivity = now;
-
-        // Zapisz
-        this.conversationHistory.set(userId, conversation);
-
-        // Cleanup starych konwersacji (co jakiś czas)
-        this.cleanupConversationHistory();
-    }
-
-    /**
-     * Wyczyść wygasłe konwersacje z pamięci
-     */
-    cleanupConversationHistory() {
-        const now = Date.now();
-        for (const [userId, conversation] of this.conversationHistory.entries()) {
-            if (now - conversation.lastActivity > this.conversationTimeoutMs) {
-                this.conversationHistory.delete(userId);
-            }
-        }
-    }
-
-    /**
-     * Sprawdź czy użytkownik ma aktywną konwersację
-     */
-    hasActiveConversation(userId) {
-        const conversation = this.conversationHistory.get(userId);
-        if (!conversation) return false;
-
-        const now = Date.now();
-        return (now - conversation.lastActivity) <= this.conversationTimeoutMs;
-    }
 
     /**
      * Sprawdź czy użytkownik jest administratorem/moderatorem
@@ -1158,323 +1075,13 @@ class AIChatService {
      * Przygotuj prompt dla AI
      */
     async preparePrompt(context, message) {
-        let prompt = `Jesteś Botem Stalker, AI asystentem klanu Polski Squad w grze Survivor.io.
+        // Prosty, neutralny prompt - bez ograniczeń tematycznych
+        let prompt = `Jesteś pomocnym asystentem AI. Odpowiadaj ZAWSZE po polsku.
 
-KIM JESTEŚ:
-- Zarządzasz statystykami członków klanu Polski Squad w Lunar Mine Expedition
-- Odpowiadasz ZAWSZE po polsku
-- Jesteś pomocny, dowcipny, luźny w stylu - możesz przeklinać ze smakiem, być zadziorny, ale elokwentny
-- Używaj emoji do urozmaicenia 🎯📈📊🏆💪🔥⚡💥🎮
-
-TWOJE MOŻLIWOŚCI:
-- **Statystyki graczy** - wyniki z Lunar Mine Expedition, progresy, trendy, współczynniki
-- **Porównania** - zestawienia do 5 graczy jednocześnie
-- **Rankingi** - TOP gracze w każdym klanie (Main + Akademie 2/1/0)
-- **Analiza klanów** - statystyki, porównania, hierarchia klanów
-- **Rozmowa** - możesz normalnie rozmawiać o grze, życiu klanu, dawać rady
-
-JAK DZIAŁASZ:
-- Gdy masz dane → analizuj szczegółowo, precyzyjnie, używaj liczb i faktów
-- ⛔ NIGDY NIE WYMYŚLAJ DANYCH: liczb, wyników, statystyk, nazw graczy, punktów
-- Używaj TYLKO faktycznych danych które dostałeś poniżej w sekcji danych
-- Jeśli pytanie o konkretne dane których NIE MASZ → powiedz że nie masz (z humorem)
-- W ogólnej rozmowie (nie o konkretnych danych) → możesz być kreatywny, opowiadać o grze w klimacie fantasy/RPG
-- Możesz rozmawiać o mechanikach gry, strategiach, życiu klanu (ale bez wymyślania konkretnych liczb/graczy)
-
-KONTEKST PYTANIA:
-Użytkownik: ${context.asker.displayName} (${context.asker.username})
-${context.asker.clanName ? `Klan: ${context.asker.clanName}` : 'Klan: brak'}
+Użytkownik: ${context.asker.displayName}
 Pytanie: ${context.question}
-Typ pytania: ${context.queryType}
 
-STRUKTURA KLANÓW I ROZPOZNAWANIE NAZW:
-Polski Squad ma 4 klany z różnymi nazwami w pytaniach użytkownika:
-
-1. 🔥 Polski Squad (Main Klan) - NAZWY: "polski squad", "main", "główny klan", "najlepszy klan"
-   → Najsilniejsi gracze, pierwszy poziom zaawansowania
-
-2. 💥 PolskiSquad² (Akademia 2) - NAZWY: "dwójka", "dwojka", "akademia 2", "najlepsza akademia"
-   → Drugi poziom zaawansowania, silni gracze
-
-3. ⚡ PolskiSquad¹ (Akademia 1) - NAZWY: "jedynka", "akademia 1"
-   → Trzeci poziom zaawansowania, średnio zaawansowani gracze
-
-4. 🎮 PolskiSquad⁰ (Akademia 0) - NAZWY: "zerówka", "zerowka", "akademia 0", "najsłabsza akademia", "akademia dla początkujących"
-   → Czwarty poziom, klan dla początkujących graczy
-
-Hierarchia: Main > Akademia 2 > Akademia 1 > Akademia 0
-Gracze awansują między klanami na podstawie swoich wyników w Lunar Mine Expedition.
-
-MOŻLIWOŚCI SYSTEMU:
-- Porównanie: max 5 graczy jednocześnie (wszystkie dane z /progres + /player-status)
-- Statystyki gracza: pełne dane z /progres + /player-status
-- Rankingi klanów: dane wszystkich 4 klanów z ostatniego tygodnia /wyniki
-- Progres klanów: szczegółowe dane wszystkich członków każdego klanu
-
-ROZPOZNAWANIE PYTAŃ O SIEBIE:
-- Gdy użytkownik używa słów: "mój", "moje", "mnie", "ja", "mojego", "moją", "mój progres", "moje statystyki", "mój klan", "moje wyniki"
-  → ZAWSZE odpowiadaj o PYTAJĄCYM (${context.asker.displayName}), niezależnie od innych wzmianek w pytaniu
-- Gdy pytanie zawiera "porównaj mnie z X" → porównaj PYTAJĄCEGO z graczem X
-- Gdy pytanie to tylko "mój progres" lub "jak mi idzie" bez innych nicków → pokaż dane PYTAJĄCEGO
-
-DYNAMICZNY PROGRES:
-- Gdy użytkownik pyta o "progres z ostatnich X tygodni" → oblicz i pokaż progres z dokładnie tego okresu
-- Porównaj najlepszy wynik z ostatnich X tygodni z wynikiem sprzed X tygodni
-- Przykład: "progres z ostatnich 3 tygodni" = najlepszy wynik z ostatnich 3 tyg vs wynik sprzed 3 tyg
-
-WSPÓŁCZYNNIKI DO PORÓWNAŃ:
-- 📊 Zaangażowanie (%) - procent tygodni gdzie gracz zrobił progres
-- 📈 Trend - czy progres rośnie, spada, czy jest stały (🚀↗️⚖️↘️🪦)
-- ⭐ MVP - tygodnie z największym osobistym progresem (TOP wyniki gracza)
-- 🎯 Rzetelność (%) - regularność uczestnictwa w bossach
-- ⏰ Punktualność (%) - czy gracz potwierdza na czas
-- 📬 Responsywność (%) - odpowiedzi na przypomnienia
-`;
-
-        // Dodaj dane gracza którego dotyczy pytanie
-        if (['stats', 'progress'].includes(context.queryType)) {
-            // PRIORYTET: 1) Pytanie o siebie (mój, moje, mnie), 2) Wykryty nick, 3) @mention, 4) Pytający
-            let targetUserId, targetName;
-
-            if (context.askingAboutSelf) {
-                // NAJWYŻSZY PRIORYTET - użytkownik pyta o siebie (mój, moje, mnie, ja)
-                targetUserId = context.asker.id;
-                targetName = context.asker.displayName;
-                logger.info(`AI Chat: Pytanie o siebie - używam danych pytającego (${targetName})`);
-            } else if (context.detectedPlayers && context.detectedPlayers.length > 0) {
-                // Drugi priorytet - nick wykryty w pytaniu (np. "progres Slaviax")
-                targetUserId = context.detectedPlayers[0].id;
-                targetName = context.detectedPlayers[0].displayName;
-            } else if (context.mentionedUsers && context.mentionedUsers.length > 0 && context.mentionedUsers[0].id !== context.asker.id) {
-                // Trzeci priorytet - @mention (ale nie sam siebie)
-                targetUserId = context.mentionedUsers[0].id;
-                targetName = context.mentionedUsers[0].displayName;
-            } else if (context.targetPlayer) {
-                // Fallback - kompatybilność wsteczna
-                targetUserId = context.targetPlayer.id;
-                targetName = context.targetPlayer.displayName;
-            } else {
-                // Ostateczny fallback - pytający
-                targetUserId = context.asker.id;
-                targetName = context.asker.displayName;
-            }
-
-            // Użyj nowych funkcji pomocniczych z interactionHandlers
-            if (this.helperFunctions.generatePlayerProgressTextData && this.helperFunctions.generatePlayerStatusTextData) {
-                const sharedState = {
-                    config: this.config,
-                    databaseService: this.databaseService,
-                    reminderUsageService: this.reminderUsageService,
-                    punishmentService: this.punishmentService
-                };
-
-                // Pobierz dane z /progres
-                const progressResult = await this.helperFunctions.generatePlayerProgressTextData(
-                    targetUserId,
-                    context.guild.id,
-                    sharedState
-                );
-
-                // Pobierz dane z /player-status
-                const statusResult = await this.helperFunctions.generatePlayerStatusTextData(
-                    targetUserId,
-                    context.guild.id,
-                    sharedState
-                );
-
-                if (progressResult.success && statusResult.success) {
-                    // Dodaj dane z /progres
-                    prompt += `\n${progressResult.plainText}\n`;
-
-                    // Dodaj dane z /player-status
-                    prompt += `\n${statusResult.plainText}\n`;
-
-                    logger.info(`AI Chat: Pobrano dane dla gracza (userId: ${targetUserId}) z /progres i /player-status`);
-                } else {
-                    prompt += `\nDANE GRACZA (${targetName}): Nie znaleziono żadnych wyników w bazie danych.\n`;
-                    logger.warn(`AI Chat: Brak danych dla userId ${targetUserId}`);
-                }
-            } else {
-                // Fallback - stary system (nie powinien się zdarzyć)
-                prompt += `\n⚠️ BŁĄD: Brak dostępu do funkcji pomocniczych.\n`;
-                logger.error(`AI Chat: Brak helperFunctions - sprawdź inicjalizację serwisu`);
-            }
-
-            // Instrukcja czy porównywać z pytającym
-            if (context.targetPlayer) {
-                prompt += `\n📋 Pytanie dotyczy gracza: ${targetName}\n`;
-            }
-
-            // Ostrzeżenie o limitach danych dla pojedynczego gracza
-            prompt += `\n⚠️ DANE GRACZA: Masz dane TYLKO tego jednego gracza (${targetName}).\n`;
-            prompt += `NIE wymyślaj danych innych graczy - używaj TYLKO faktów powyżej.\n`;
-        }
-
-        // Dodaj dane dla porównania (max 5 graczy)
-        if (context.queryType === 'compare') {
-            const playersToCompare = [];
-            const addedUserIds = new Set(); // Zapobiegaj duplikatom
-
-            // Jeśli pytanie o siebie ("porównaj mnie z X") - ZAWSZE dodaj pytającego jako pierwszego
-            if (context.askingAboutSelf) {
-                playersToCompare.push({ id: context.asker.id, name: context.asker.displayName });
-                addedUserIds.add(context.asker.id);
-                logger.info(`AI Chat: Porównanie - dodaję pytającego (${context.asker.displayName}) jako pierwszego`);
-            }
-
-            // Jeśli są wspomnienia (@mention) - dodaj wspomnianych graczy (max 5 łącznie)
-            if (context.mentionedUsers && context.mentionedUsers.length > 0) {
-                for (const user of context.mentionedUsers.slice(0, 5)) {
-                    if (!addedUserIds.has(user.id) && playersToCompare.length < 5) {
-                        playersToCompare.push({ id: user.id, name: user.displayName });
-                        addedUserIds.add(user.id);
-                    }
-                }
-            }
-            // Jeśli wykryto nicki w pytaniu - dodaj znalezionych graczy
-            else if (context.detectedPlayers && context.detectedPlayers.length > 0) {
-                for (const player of context.detectedPlayers.slice(0, 5)) {
-                    if (!addedUserIds.has(player.id) && playersToCompare.length < 5) {
-                        playersToCompare.push({ id: player.id, name: player.displayName });
-                        addedUserIds.add(player.id);
-                    }
-                }
-            }
-            // Jeśli wykryto targetPlayer (kompatybilność wsteczna)
-            else if (context.targetPlayer && !addedUserIds.has(context.targetPlayer.id)) {
-                playersToCompare.push({ id: context.targetPlayer.id, name: context.targetPlayer.displayName });
-            }
-            // W ostateczności użyj pytającego jeśli jeszcze nie dodany
-            else if (!addedUserIds.has(context.asker.id)) {
-                playersToCompare.push({ id: context.asker.id, name: context.asker.displayName });
-            }
-
-            // Pobierz pełne dane dla każdego gracza (max 5) używając helper functions
-            const sharedState = {
-                config: this.config,
-                databaseService: this.databaseService,
-                reminderUsageService: this.reminderUsageService,
-                punishmentService: this.punishmentService
-            };
-
-            let loadedPlayersCount = 0;
-            for (let i = 0; i < playersToCompare.length; i++) {
-                const player = playersToCompare[i];
-                const playerNumber = i + 1;
-
-                // Użyj helper functions aby pobrać pełne dane
-                const progressResult = await this.helperFunctions.generatePlayerProgressTextData(
-                    player.id,
-                    context.guild.id,
-                    sharedState
-                );
-
-                const statusResult = await this.helperFunctions.generatePlayerStatusTextData(
-                    player.id,
-                    context.guild.id,
-                    sharedState
-                );
-
-                if (progressResult.success && statusResult.success) {
-                    prompt += `\n=== GRACZ ${playerNumber}: ${player.name} ===\n`;
-                    prompt += progressResult.plainText + '\n';
-                    prompt += statusResult.plainText + '\n';
-
-                    logger.info(`AI Chat: Pobrano pełne dane dla ${progressResult.data.latestNick} - ${progressResult.data.weeksWithData} tygodni`);
-                    loadedPlayersCount++;
-                } else {
-                    prompt += `\n=== GRACZ ${playerNumber}: ${player.name} ===\n`;
-                    prompt += `❌ Nie znaleziono żadnych wyników w bazie danych.\n`;
-                    logger.warn(`AI Chat: Brak danych dla gracza ${playerNumber} userId ${player.id}`);
-                }
-            }
-
-            // Ostrzeżenie o limitach danych
-            const totalCompared = playersToCompare.length;
-            if (totalCompared > 0) {
-                prompt += `\n⚠️ DANE PORÓWNANIA: Masz ${totalCompared === 1 ? 'TYLKO tego jednego gracza' : `TYLKO tych ${totalCompared} graczy`} (max 5).\n`;
-                prompt += `NIE wymyślaj innych graczy, wyników ani statystyk - używaj TYLKO danych powyżej.\n`;
-            }
-        }
-
-        // Dodaj SZCZEGÓŁOWE dane klanów jeśli pytanie o ranking/klan
-        if (['ranking', 'clan'].includes(context.queryType)) {
-            // Pobierz szczegółowe dane wszystkich 4 klanów
-            const clans = ['TARGET_ROLE_MAIN', 'TARGET_ROLE_2', 'TARGET_ROLE_1', 'TARGET_ROLE_0'];
-            const clanNames = {
-                'TARGET_ROLE_MAIN': 'Polski Squad (Main Klan)',
-                'TARGET_ROLE_2': 'PolskiSquad² (Akademia 2)',
-                'TARGET_ROLE_1': 'PolskiSquad¹ (Akademia 1)',
-                'TARGET_ROLE_0': 'PolskiSquad⁰ (Akademia 0)'
-            };
-            let totalPlayers = 0;
-
-            for (const clanKey of clans) {
-                const clanData = await this.getClanDetailedData(clanKey, context.guild.id);
-                if (clanData && clanData.players.length > 0) {
-                    prompt += `\n=== ${clanNames[clanKey]} ===\n`;
-                    prompt += `📊 STATYSTYKI KLANU:\n`;
-                    prompt += `- Liczba graczy: ${clanData.stats.totalPlayers}\n`;
-                    prompt += `- Najlepszy wynik: ${clanData.stats.topScore} pkt\n`;
-                    prompt += `- Średni max wynik: ${clanData.stats.avgMaxScore} pkt\n`;
-                    prompt += `- Średni ostatni wynik: ${clanData.stats.avgLatestScore} pkt\n`;
-                    prompt += `- Dostępne tygodnie: ${clanData.weeksCount}\n\n`;
-
-                    prompt += `👥 GRACZE (TOP 15):\n`;
-                    const top15 = clanData.players.slice(0, 15);
-                    top15.forEach((player, idx) => {
-                        prompt += `${idx + 1}. ${player.playerName} - Max: ${player.maxScore} pkt | Ostatni: ${player.latestScore} pkt | Średnia: ${player.avgScore} pkt\n`;
-                    });
-
-                    if (clanData.players.length > 15) {
-                        prompt += `... i ${clanData.players.length - 15} więcej graczy\n`;
-                    }
-
-                    totalPlayers += clanData.players.length;
-
-                    logger.info(`AI Chat: Pobrano dane klanu ${clanKey} - ${clanData.players.length} graczy, ${clanData.weeksCount} tygodni`);
-                }
-            }
-
-            if (totalPlayers > 0) {
-                prompt += `\n⚠️ DANE KLANÓW: Masz dane ${totalPlayers} graczy ze wszystkich 4 klanów.\n`;
-                prompt += `Każdy klan ma TOP 15 graczy pokazanych (+ info ile jest więcej). NIE wymyślaj innych graczy ani wyników.\n`;
-            } else {
-                prompt += `\n❌ Nie znaleziono danych klanów.\n`;
-            }
-        }
-
-        // Dodaj instrukcje specyficzne dla typu pytania
-        prompt += `\n\n📋 JAK ODPOWIADAĆ\n`;
-
-        // Specyficzne instrukcje dla każdego typu pytania
-        if (context.queryType === 'compare') {
-            prompt += `Porównanie graczy - pokaż różnice w wynikach, progresach, trendach.\n`;
-            prompt += `Dla tabel użyj bloku kodu Discord: \`\`\`\nStatystyka    Gracz1    Gracz2\n...\`\`\`\n`;
-        } else if (context.queryType === 'progress') {
-            prompt += `Progres gracza - opisz jak zmienia się wynik w czasie, trend.\n`;
-        } else if (context.queryType === 'stats') {
-            prompt += `Statystyki gracza - pokaż wszystko: wyniki, progresy, trend, mocne/słabe strony.\n`;
-        } else if (context.queryType === 'ranking') {
-            prompt += `Rankingi - pokaż ranking z numeracją (1., 2., 3., ...) i wynikami w pkt.\n`;
-        } else if (context.queryType === 'clan') {
-            prompt += `Klany - rozpoznaj nazwy (Main/główny, dwójka/Akademia 2, jedynka/Akademia 1, zerówka/Akademia 0).\n`;
-            prompt += `Porównaj statystyki klanów, pokaż TOP graczy, hierarchię (Main > Ak2 > Ak1 > Ak0).\n`;
-        } else {
-            prompt += `Rozmowa/pytanie ogólne - odpowiedz naturalnie, z humorem, możesz rozmawiać o grze.\n`;
-            prompt += `Nie masz żadnych konkretnych danych do pokazania - bądź kreatywny, zabawny w klimacie gry.\n`;
-            prompt += `Możesz opowiadać o Lunar Mine, bossach, życiu klanu, dawać rady, żartować.\n`;
-        }
-
-        prompt += `\n✨ STYL ODPOWIEDZI:\n`;
-        prompt += `- Zwięźle (max 1500 znaków), formatuj markdown Discord\n`;
-        prompt += `- Użyj emoji 🎯📈📊🏆💪🔥⚡ do urozmaicenia\n`;
-        prompt += `- Jeśli konkretny okres (np. "2 tygodnie") - odpowiedz TYLKO o ten okres\n`;
-        prompt += `\n⛔ KRYTYCZNE ZASADY:\n`;
-        prompt += `- Gdy masz dane → używaj TYLKO tych faktycznych danych (liczby, nazwy graczy, wyniki)\n`;
-        prompt += `- Gdy NIE masz danych o graczu/statystykach → powiedz że nie masz, NIE WYMYŚLAJ liczb/graczy\n`;
-        prompt += `- W ogólnej rozmowie (nie o konkretnych danych) → możesz być kreatywny w klimacie gry\n`;
-        prompt += `- Możesz rozmawiać jak normalny człowiek, ale ZAWSZE używaj faktów gdy mówisz o konkretnych graczach/wynikach\n`;
+Odpowiedz zwięźle i pomocnie.`;
 
         return prompt;
     }
@@ -1494,41 +1101,17 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
             // Zbierz kontekst
             const context = await this.gatherContext(message, question);
 
-            // Przygotuj prompt (system + dane)
+            // Przygotuj prompt
             const prompt = await this.preparePrompt(context, message);
 
-            // Pobierz historię konwersacji (jeśli aktywna w ciągu ostatniej godziny)
-            const conversationHistory = this.getConversationHistory(userId);
-            const hasHistory = conversationHistory.length > 0;
+            // Zbuduj wiadomość (bez historii - każde pytanie niezależne)
+            const messages = [{
+                role: 'user',
+                content: prompt
+            }];
 
-            // Zbuduj tablicę wiadomości
-            let messages = [];
-
-            if (hasHistory) {
-                // Dodaj informację o kontynuacji rozmowy do promptu
-                const continuationNote = `\n\n📝 KONTEKST ROZMOWY:\nTo jest kontynuacja poprzedniej rozmowy. Poniżej znajduje się historia ostatnich wymian.\nPamiętaj o wcześniejszym kontekście przy odpowiadaniu.\n`;
-
-                // Dodaj historię konwersacji
-                messages = [...conversationHistory];
-
-                // Dodaj nowe pytanie z pełnym kontekstem danych
-                messages.push({
-                    role: 'user',
-                    content: prompt + continuationNote
-                });
-
-                logger.info(`AI Chat: Kontynuacja rozmowy dla ${context.asker.username} (${conversationHistory.length / 2} poprzednich wymian)`);
-            } else {
-                // Pierwsza wiadomość - wysyłamy pełny prompt
-                messages.push({
-                    role: 'user',
-                    content: prompt
-                });
-            }
-
-            // Zapisz pełny prompt do pliku
-            const lastMessage = messages[messages.length - 1];
-            await this.savePromptToFile(lastMessage.content, context.asker.displayName);
+            // Zapisz prompt do pliku
+            await this.savePromptToFile(prompt, context.asker.displayName);
 
             // Wywołaj API
             const response = await this.client.messages.create({
@@ -1541,12 +1124,8 @@ WSPÓŁCZYNNIKI DO PORÓWNAŃ:
             // Wyciągnij odpowiedź
             const answer = response.content[0].text;
 
-            // Zapisz do historii konwersacji (uproszczone pytanie + odpowiedź)
-            // Używamy oryginalnego pytania użytkownika, nie pełnego promptu z danymi
-            this.addToConversationHistory(userId, question, answer);
-
             // Log usage
-            logger.info(`AI Chat: ${context.asker.username} zadał pytanie (typ: ${context.queryType})${hasHistory ? ' [kontynuacja]' : ''}`);
+            logger.info(`AI Chat: ${context.asker.username} zadał pytanie`);
 
             return answer;
 
