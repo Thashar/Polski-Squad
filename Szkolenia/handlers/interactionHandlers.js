@@ -273,18 +273,29 @@ async function handleKnowledgeApproval(interaction, state, config) {
             });
 
             // Wyślij wiadomość na kanał główny (gdzie działa bot Szkolenia)
-            const mainChannelId = '1207041051831832586';
-            const mainChannel = await interaction.client.channels.fetch(mainChannelId);
+            try {
+                const mainChannelId = '1207041051831832586';
+                logger.info(`📤 Próba wysłania zatwierdzonej wiedzy na kanał główny: ${mainChannelId}`);
 
-            if (mainChannel) {
-                // Wyciągnij nazwę użytkownika który zgłosił wiedzę
-                const proposalMatch = message.content.match(/\*\*Nowa propozycja wiedzy od (.+?):\*\*/);
-                const proposerName = proposalMatch ? proposalMatch[1] : 'Użytkownik';
+                const mainChannel = await interaction.client.channels.fetch(mainChannelId);
 
-                // Wyślij wiadomość na kanał główny
-                await mainChannel.send({
-                    content: `📚 **Nowa wiedza od ${proposerName}:**\n\n${knowledgeContent}\n\n✅ **Zatwierdzone przez ${member.displayName || user.username}** (${timestamp})`
-                });
+                if (mainChannel) {
+                    // Wyciągnij nazwę użytkownika który zgłosił wiedzę
+                    const proposalMatch = message.content.match(/\*\*Nowa propozycja wiedzy od (.+?):\*\*/);
+                    const proposerName = proposalMatch ? proposalMatch[1] : 'Użytkownik';
+
+                    // Wyślij wiadomość na kanał główny
+                    await mainChannel.send({
+                        content: `📚 **Nowa wiedza od ${proposerName}:**\n\n${knowledgeContent}\n\n✅ **Zatwierdzone przez ${member.displayName || user.username}** (${timestamp})`
+                    });
+
+                    logger.info(`✅ Wiedza opublikowana na kanale głównym: ${mainChannelId}`);
+                } else {
+                    logger.error(`❌ Nie znaleziono kanału głównego: ${mainChannelId}`);
+                }
+            } catch (channelError) {
+                logger.error(`❌ Błąd wysyłania na kanał główny: ${channelError.message}`);
+                logger.error(`Stack trace: ${channelError.stack}`);
             }
 
             logger.info(`✅ Wiedza zatwierdzona przez ${user.username}: ${knowledgeContent.substring(0, 50)}...`);
