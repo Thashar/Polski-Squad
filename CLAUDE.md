@@ -12,6 +12,13 @@
 - Przykład: "Dodano system kolejkowania OCR do StalkerLME"
 - NIGDY nie pytaj użytkownika czy zacommitować - po prostu to zrób
 
+**⚠️ INSTRUKCJA AKTUALIZACJI DOKUMENTACJI (KRYTYCZNE!):**
+- **Po KAŻDEJ zmianie w kodzie bota → NATYCHMIAST aktualizuj `{Bot}/CLAUDE.md`**
+- Nie czekaj do końca sesji - aktualizuj na bieżąco przy każdej zmianie
+- Jeśli dodajesz funkcję → dodaj opis do bot/CLAUDE.md
+- Jeśli zmieniasz funkcję → zaktualizuj opis w bot/CLAUDE.md
+- Jeśli usuwasz funkcję → usuń opis z bot/CLAUDE.md
+
 **INSTRUKCJA AKTUALIZACJI DOKUMENTACJI:**
 - Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj `{Bot}/CLAUDE.md` tego bota
 - **EDYTUJ istniejące opisy** funkcji w odpowiednim pliku bot-specific
