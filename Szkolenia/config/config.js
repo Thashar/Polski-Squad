@@ -69,8 +69,8 @@ module.exports = {
     // Ustawienia czasowe (w dniach/godzinach)
     timing: {
         threadArchiveDays: 1,
-        threadLockDays: 7, // Zmieniono: threadDeleteDays -> threadLockDays (wątki są zamykane, nie usuwane)
-        inactiveReminderHours: 24,
+        threadLockDays: 14, // Automatyczne zamknięcie po 14 dniach nieaktywności
+        threadReminderDays: 7, // Pytanie o zamknięcie po 7 dniach nieaktywności
         checkHour: 18, // Godzina sprawdzania wątków (18:00)
         checkMinute: 0 // Minuta sprawdzania wątków (00)
     },
@@ -85,12 +85,15 @@ module.exports = {
         
         threadLocked: 'Wątek zostanie zablokowany. Dziękuję za skorzystanie z pomocy! 🐸💚',
         
-        threadKeptOpen: 'Ok, wątek pozostanie otwarty. Przypomnę o zamknięciu za 24h jeśli nie będzie aktywności!',
+        threadKeptOpen: 'Ok, wątek pozostanie otwarty. Przypomnę o zamknięciu za 7 dni jeśli nie będzie aktywności!',
         
         ownerOnly: 'Tylko właściciel wątku może użyć tych przycisków!',
         
         inactiveReminder: (userId) =>
-            `<@${userId}> Twój wątek jest nieaktywny od 24 godzin. Czy mogę go zamknąć?`,
+            `<@${userId}> Twój wątek jest nieaktywny od 7 dni. Czy mogę go zamknąć?\nJeśli nie odpowiesz, wątek zostanie automatycznie zamknięty za kolejne 7 dni.`,
+
+        threadAlreadyOpen: (userId) =>
+            `<@${userId}> Twój wątek jest wciąż otwarty. Możesz z niego korzystać.`,
 
         ownerNeedsHelp: (userId, clanRoles) =>
             `<@${userId}> prosi o pomoc! ${clanRoles.map(roleId => `<@&${roleId}>`).join(' ')}`

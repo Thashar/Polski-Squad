@@ -1,10 +1,10 @@
 ### 🎓 Szkolenia Bot
 
 **Funkcjonalność:** Reakcja emoji N_SSS → Prywatny wątek z instrukcjami treningowymi
-**Lifecycle:** Utworzenie → 24h przypomnienie → zamknięcie po 7 dniach (automatyczne, niezależnie od reakcji użytkownika)
+**Lifecycle:** Utworzenie → pytanie o zamknięcie po 7 dniach nieaktywności → automatyczne zamknięcie po 14 dniach (7 dni po pytaniu bez odpowiedzi). Kliknięcie "nie zamykaj" resetuje cały cykl od nowa.
 **Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
 **Serwisy:**
-- `threadService.js` - Automatyzacja wątków (cron daily 18:00), 7-dniowe zamykanie PRZED sprawdzeniem threadOwner (FIX zmiany nicku)
+- `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach, sprawdzenie PRZED threadOwner (FIX zmiany nicku)
 - `reminderStorageService.js` - Persistent JSON z danymi przypomień
 - `aiChatService.js` - AI Chat z bazą wiedzy (mention @Szkolenia)
 **Uprawnienia:**
@@ -78,5 +78,5 @@ SZKOLENIA_AI_CHAT_MODEL=claude-3-haiku-20240307
 
 - **Logger:** Używaj createBotLogger('Szkolenia')
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
-- **Wątki:** Automatyczne zamykanie po 7 dniach nieaktywności
+- **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek → komunikat "wątek jest wciąż otwarty"
 - **Persistencja:** Przypomnienia zapisywane w JSON
