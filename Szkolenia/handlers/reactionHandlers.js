@@ -63,6 +63,16 @@ async function handleReactionAdd(reaction, user, state, config) {
         }
 
         if (existingThread) {
+            // Sprawdź czy wątek jest już otwarty (nie zarchiwizowany i nie zablokowany)
+            if (!existingThread.archived && !existingThread.locked) {
+                // Wątek jest wciąż otwarty - wyślij krótki komunikat
+                await existingThread.send(
+                    config.messages.threadAlreadyOpen(targetUser.id)
+                );
+                logger.info(`📌 Wątek ${existingThread.name} jest wciąż otwarty - wysłano powiadomienie`);
+                return;
+            }
+
             // WAŻNE: Kolejność operacji ma znaczenie!
             // 1. Najpierw odarchiwizuj (archived: false)
             // 2. Potem odblokuj (locked: false)
@@ -87,11 +97,11 @@ async function handleReactionAdd(reaction, user, state, config) {
                     logger.error(`❌ Nie można odblokować wątku ${existingThread.name}:`, error);
                 }
             }
-            
+
             await existingThread.send(
                 config.messages.threadCreated(user.id, config.roles.ping, targetUser.id)
             );
-            
+
             // Zresetuj status przypomnienia dla ponownie otwartego wątku
             await reminderStorage.resetReminderStatus(state.lastReminderMap, existingThread.id);
         } else {

@@ -30,7 +30,7 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
         const now = Date.now();
         const archiveThreshold = config.timing.threadArchiveDays * 24 * 60 * 60 * 1000;
         const lockThreshold = config.timing.threadLockDays * 24 * 60 * 60 * 1000; // Zmieniono: deleteThreshold -> lockThreshold
-        const reminderThreshold = config.timing.inactiveReminderHours * 60 * 60 * 1000;
+        const reminderThreshold = config.timing.threadReminderDays * 24 * 60 * 60 * 1000;
 
         let allThreads;
         
@@ -83,74 +83,65 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
  * @param {boolean} isInitialCheck - Czy to sprawdzenie przy starcie bota
  */
 async function processThread(thread, guild, state, config, now, thresholds, isInitialCheck = false) {
-    const { archiveThreshold, lockThreshold, reminderThreshold } = thresholds; // Poprawka: deleteThreshold -> lockThreshold
-    
+    const { lockThreshold, reminderThreshold } = thresholds;
+
     // Pobierz ostatnią wiadomość w wątku
     const lastMessage = await thread.messages.fetch({ limit: 1 }).then(msgs => msgs.first());
     const lastMessageTime = lastMessage ? lastMessage.createdTimestamp : thread.createdTimestamp;
     const inactiveTime = now - lastMessageTime;
 
-    // Przy sprawdzeniu startowym - zamknij wszystkie wątki starsze niż 7 dni
-    if (isInitialCheck && inactiveTime > lockThreshold) {
+    // Bezpieczeństwo: zamknij wątki nieaktywne > 14 dni od ostatniej wiadomości
+    // KRYTYCZNE: Sprawdź PRZED sprawdzeniem threadOwner - zapobiega problemowi ze zmianą nicku
+    if (inactiveTime > lockThreshold) {
         await lockThread(thread, state, config);
         return;
     }
 
-    // KRYTYCZNE: Sprawdź 7 dni PRZED sprawdzeniem threadOwner
-    // Zapobiega to problemowi gdy użytkownik zmieni nick - wątek nadal zostanie zamknięty
-    if (inactiveTime > lockThreshold) {
-        await lockThread(thread, state, config);
-        return; // Przerwij dalsze przetwarzanie
+    // Sprawdź dane przypomnienia
+    const threadData = state.lastReminderMap.get(thread.id);
+
+    // Jeśli przypomnienie było wysłane - sprawdź czy zamknąć (7 dni po przypomnieniu bez odpowiedzi)
+    if (threadData && threadData.reminderSent) {
+        if (lastMessageTime > threadData.lastReminder + 5000) {
+            // Użytkownik pisał po przypomnieniu - zresetuj cykl nieaktywności
+            await reminderStorage.resetReminderStatus(state.lastReminderMap, thread.id, lastMessageTime);
+        } else {
+            // Brak aktywności użytkownika po przypomnieniu
+            const timeSinceReminder = now - threadData.lastReminder;
+            if (timeSinceReminder > reminderThreshold) {
+                // 7 dni po przypomnieniu bez odpowiedzi - zamknij wątek
+                await lockThread(thread, state, config);
+                return;
+            }
+        }
     }
+
+    // Przy sprawdzeniu startowym - nie wysyłaj przypomnień, tylko zamykaj
+    if (isInitialCheck) return;
 
     // Sprawdź czy to wątek z naszego systemu (nazwa = nick użytkownika)
     const threadOwner = guild.members.cache.find(member =>
         (member.displayName === thread.name) || (member.user.username === thread.name)
     );
+    if (!threadOwner) return;
 
-    if (!threadOwner) return; // Pomiń wątki, które nie należą do naszego systemu (przypomnienia NIE zostaną wysłane)
+    // KRYTYCZNE: Nie wysyłaj przypomnienia jeśli wątek jest zamknięty
+    if (thread.locked) {
+        await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
+        return;
+    }
 
-    // Sprawdź czas ostatniego przypomnienia (tylko przy normalnym sprawdzaniu)
-    if (!isInitialCheck) {
-        const threadData = state.lastReminderMap.get(thread.id);
-        let lastReminder;
-        let threadCreatedTime;
-        
-        if (threadData) {
-            lastReminder = threadData.lastReminder;
-            threadCreatedTime = threadData.threadCreated;
-        }
-        
-        // Fallback - jeśli nie mamy zapisanych danych, użyj timestamp z Discord
-        if (!threadCreatedTime) {
-            threadCreatedTime = thread.createdTimestamp;
-        }
-        
-        if (!lastReminder) {
-            lastReminder = threadCreatedTime;
-        }
-        
-        const timeSinceLastReminder = now - lastReminder;
-        const threadAge = now - threadCreatedTime;
+    // Wyślij przypomnienie po 7 dniach nieaktywności (jeśli jeszcze nie wysłano)
+    const reminderAlreadySent = threadData && threadData.reminderSent;
 
+    if (inactiveTime > reminderThreshold && !reminderAlreadySent) {
+        const lastReminderTime = threadData ? threadData.lastReminder : 0;
+        const timeSinceLastReminder = lastReminderTime ? (now - lastReminderTime) : Infinity;
 
-        // Sprawdź czy przypomnienie już zostało wysłane
-        const reminderAlreadySent = threadData && threadData.reminderSent;
-        
-        // KRYTYCZNE: Nie wysyłaj przypomnienia jeśli wątek jest zamknięty
-        if (thread.locked) {
-            // Usuń dane przypomnienia dla zamkniętego wątku
-            await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
-            return;
-        }
-        
-        
-        // Wyślij przypomnienie jeśli minęło odpowiednio dużo czasu i jeszcze nie wysłano
-        if (inactiveTime > reminderThreshold && !reminderAlreadySent && timeSinceLastReminder > reminderThreshold) {
+        if (timeSinceLastReminder > reminderThreshold) {
             await sendInactivityReminder(thread, threadOwner, state, config, now);
         }
     }
-    // Usuń auto-archiwizację po 24h - wątki pozostają otwarte
 }
 
 /**

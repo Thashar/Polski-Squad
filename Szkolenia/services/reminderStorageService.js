@@ -122,11 +122,11 @@ class ReminderStorageService {
      * @param {Map} reminderMap - Mapa z danymi przypomień
      * @param {string} threadId - ID wątku
      */
-    async resetReminderStatus(reminderMap, threadId) {
+    async resetReminderStatus(reminderMap, threadId, timestamp = null) {
         const existingData = reminderMap.get(threadId);
         if (existingData) {
             existingData.reminderSent = false;
-            existingData.lastReminder = Date.now();
+            existingData.lastReminder = timestamp || Date.now();
             reminderMap.set(threadId, existingData);
             await this.saveReminders(reminderMap);
             logger.info(`🔄 Zresetowano status przypomnienia dla wątku: ${threadId}`);
