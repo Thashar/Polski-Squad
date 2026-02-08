@@ -405,7 +405,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
     ];
 
     /** ID kanału do auto-zbierania wiedzy */
-    static KNOWLEDGE_CHANNEL_ID = '1470000330556309546';
+    static KNOWLEDGE_CHANNEL_ID = '1207041051831832586';
 
     /** ID roli wymaganej do auto-zbierania wiedzy */
     static KNOWLEDGE_ROLE_ID = '1368903928468738080';
