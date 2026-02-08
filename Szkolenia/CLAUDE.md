@@ -23,15 +23,12 @@
   - **Keyword search:** Zamiast wysyłać CAŁĄ bazę do AI, bot przeszukuje ją i wysyła tylko relevantne sekcje (max 5)
   - **Prompt caching:** System prompt z `cache_control: ephemeral` - ~90% taniej za powtarzające się instrukcje (cache 5 min)
   - Nie trzeba restartować bota
-- **System zgłaszania wiedzy:**
-  - Keyword-based trigger: gdy AI użyje słów "dodać", "zaktualizować", "chcesz dodać" → przycisk "Dodaj nowe informacje"
-  - **KAŻDY może dodawać wiedzę** - bez ograniczenia ról
-  - Modal (okienko) z polem tekstowym (10-1000 znaków)
-  - Zgłoszenie trafia na kanał `1263240344871370804` z przyciskami: Edytuj ✏️, Zatwierdź ✅, Odrzuć ❌
-  - Administratorzy mogą najpierw edytować propozycję (modal z obecną treścią), potem zatwierdzić
-  - Po zatwierdzeniu:
-    - Automatyczne dodanie do `data/knowledge_data.md` (czysta wiedza, bez timestampów)
-    - Publikacja na kanale głównym `1207041051831832586` z informacją kto zgłosił i kto zatwierdził
+- **Auto-zbieranie wiedzy z kanału:**
+  - Kanał: `1470000330556309546` - wpisy od osób z rolą `1368903928468738080`
+  - Wiadomości zawierające frazy kluczowe (częściowe dopasowanie, case-insensitive) → automatyczny zapis do `data/knowledge_data.md`
+  - Frazy: pet, eq, transmute, xeno, lanca, void, eternal, chaos, tech, part, postać, najlepsz, najgorsz, fusion, astral, af, skrzynk, klucz, shop, sklep, plecak, shard, odłam, ss, skill, kalkulator, coll, synerg, core, chip, rc, legend, epic, set, zone, main, op, daily, ciast, misja
+  - Format wpisu: `[YYYY-MM-DD | NickAutora] Treść`
+  - Bez potrzeby zatwierdzania - automatyczny zapis
 - **Styl odpowiedzi:**
   - Krótko i zwięźle (max 3-4 zdania)
   - **Ważne informacje** pogrubione

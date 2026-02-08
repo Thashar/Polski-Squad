@@ -354,18 +354,13 @@ STYL ODPOWIEDZI:
 - BEZ wstępów typu "Dobrze, odpowiem..."
 
 INSTRUKCJA ODPOWIADANIA:
-1. SPRAWDŹ intencję użytkownika:
-   - Jeśli użytkownik SAM chce dodać wiedzę (pisze "dodaj wiedzę", "chcę dodać", "mam informacje")
-     → odpowiedz KRÓTKO i przyjaźnie, np: "Świetnie! Kliknij przycisk poniżej." lub "Super! Użyj przycisku aby dodać wiedzę." (różne warianty!)
-
-2. SPRAWDŹ czy informacja JEST W BAZIE WIEDZY:
-   - Jeśli JEST (nawet częściowo) → odpowiedz używając tych informacji i ZAKOŃCZ bez pytania o dodanie
-   - TYLKO jeśli NIE MA ŻADNYCH informacji → wtedy odpowiedz że nie wiesz i ZAKOŃCZ frazą: "Chcesz dodać te informacje do bazy wiedzy?"
+1. SPRAWDŹ czy informacja JEST W BAZIE WIEDZY:
+   - Jeśli JEST (nawet częściowo) → odpowiedz używając tych informacji
+   - Jeśli NIE MA żadnych informacji → odpowiedz że nie masz informacji na ten temat
 
 PRZYKŁADY ODPOWIEDZI:
-✅ Gdy użytkownik chce dodać: "Świetnie! Kliknij przycisk poniżej aby dodać nowe informacje."
 ✅ Gdy MA informacje (nawet niepełne): "Tech Party to specjalne grupy umiejętności. Znajdują się w Talent Board i powinny być maksymalnie połączone."
-✅ Gdy NIE MA żadnych informacji: "Nie mam informacji na ten temat. Zapytaj się graczy z klanu! Chcesz dodać te informacje do bazy wiedzy?"
+✅ Gdy NIE MA żadnych informacji: "Nie mam informacji na ten temat. Zapytaj się graczy z klanu!"
 
 KRYTYCZNE: NIE mów "nie mam więcej informacji" jeśli odpowiedziałeś na pytanie!
 
@@ -373,8 +368,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 ❌ Wymyślanie nazw postaci (np. "Thashar")
 ❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
 ❌ Wymyślanie umiejętności które nie są w bazie
-❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
-❌ Parafrazowanie frazy końcowej (np. "możesz zaproponować dodanie" zamiast "Chcesz dodać te informacje")`;
+❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"`;
 
         if (knowledgeRules) {
             systemPrompt += `\n\n${knowledgeRules}`;
@@ -396,6 +390,64 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
         }
 
         return prompt;
+    }
+
+    /**
+     * Frazy kluczowe do auto-zbierania wiedzy z kanału
+     * Dopasowanie częściowe (case-insensitive) - np. "najlepsz" dopasuje "najlepszy", "najlepsza"
+     */
+    static KNOWLEDGE_KEYWORDS = [
+        'pet', 'eq', 'transmute', 'xeno', 'lanca', 'void', 'eternal', 'chaos',
+        'tech', 'part', 'postać', 'najlepsz', 'najgorsz', 'fusion', 'astral',
+        'af', 'skrzynk', 'klucz', 'shop', 'sklep', 'plecak', 'shard', 'odłam',
+        'ss', 'skill', 'kalkulator', 'coll', 'synerg', 'core', 'chip', 'rc',
+        'legend', 'epic', 'set', 'zone', 'main', 'op', 'daily', 'ciast', 'misja'
+    ];
+
+    /** ID kanału do auto-zbierania wiedzy */
+    static KNOWLEDGE_CHANNEL_ID = '1470000330556309546';
+
+    /** ID roli wymaganej do auto-zbierania wiedzy */
+    static KNOWLEDGE_ROLE_ID = '1368903928468738080';
+
+    /**
+     * Sprawdź czy wiadomość zawiera frazy kluczowe do auto-zbierania wiedzy
+     * @param {string} text - Treść wiadomości
+     * @returns {boolean}
+     */
+    matchesKnowledgeKeywords(text) {
+        if (!text) return false;
+        const textLower = text.toLowerCase();
+        return AIChatService.KNOWLEDGE_KEYWORDS.some(keyword => textLower.includes(keyword));
+    }
+
+    /**
+     * Zapisz wpis wiedzy do knowledge_data.md
+     * @param {string} content - Treść wpisu
+     * @param {string} authorName - Nazwa autora
+     */
+    async saveKnowledgeEntry(content, authorName) {
+        try {
+            await fs.mkdir(this.dataDir, { recursive: true });
+
+            let currentContent = '';
+            try {
+                currentContent = await fs.readFile(this.knowledgeDataFile, 'utf-8');
+            } catch (err) {
+                // Plik nie istnieje - utworzymy nowy
+                currentContent = '';
+            }
+
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+            const separator = currentContent.trim() ? '\n\n' : '';
+            const newEntry = `${separator}[${dateStr} | ${authorName}] ${content}`;
+
+            await fs.writeFile(this.knowledgeDataFile, currentContent + newEntry, 'utf-8');
+            logger.info(`📚 Auto-zapis wiedzy od ${authorName}: ${content.substring(0, 60)}...`);
+        } catch (error) {
+            logger.error(`❌ Błąd auto-zapisu wiedzy: ${error.message}`);
+        }
     }
 
     /**
@@ -449,30 +501,6 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             const usage = response.usage || {};
             const cacheInfo = usage.cache_read_input_tokens ? ` (cache hit: ${usage.cache_read_input_tokens} tokenów)` : '';
             logger.info(`AI Chat: ${context.asker.username} zadał pytanie - ${relevantKnowledge ? 'znaleziono fragmenty' : 'brak dopasowań w bazie'}${cacheInfo}`);
-
-            // Sprawdź czy odpowiedź zawiera słowa kluczowe sugerujące dodanie wiedzy
-            const addKnowledgeKeywords = [
-                'chcesz dodać te informacje', // Dokładna fraza z instrukcji (sprawdź PIERWSZA!)
-                'dodać te informacje',
-                'chcesz dodać',
-                'możesz dodać',
-                'zaproponować dodanie',
-                'dodanie tych informacji',
-                'dodać',
-                'zaktualizować',
-                'uzupełnić bazę'
-            ];
-            const wantsToAddKnowledge = addKnowledgeKeywords.some(keyword =>
-                answer.toLowerCase().includes(keyword.toLowerCase())
-            );
-
-            // Jeśli AI zasugerował dodanie wiedzy → dodaj przycisk (każdy może dodać wiedzę)
-            if (wantsToAddKnowledge) {
-                return {
-                    content: answer,
-                    showAddKnowledgeButton: true
-                };
-            }
 
             return answer;
 
