@@ -74,13 +74,6 @@
 - Auto-usuwanie: Wiadomość użytkownika ze zdjęciem jest automatycznie usuwana po zapisie
 - Message Collector: 1 minuta na przesłanie zdjęcia, walidacja typu pliku
 
-**Komenda /transfer** - Jednorazowa migracja zdjęć z dysku na kanał Discord:
-- **Uprawnienia:** Tylko administratorzy
-- **Działanie:** Skanuje `data/ranking_images/guild_{id}/{year}/` → przesyła każde zdjęcie na kanał archiwum → zapisuje URL w JSON
-- **Pomijanie:** Automatycznie pomija zdjęcia już zmigrowane (sprawdza klucz w JSON)
-- **Rate limit:** 1s delay między uploadami
-- **Podsumowanie:** Wyświetla liczbę przeniesionych, pominiętych i błędów
-
 **Wykresy z Ikonami Klanów** - `/progres` i `/player-status` wyświetlają ikony klanów przy każdym słupku:
 - **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
 - **Ikona pustego miejsca:** `<:ZZ_Pusto:1209494954762829866>` (custom emoji) - dla tygodni bez wyniku
