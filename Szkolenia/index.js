@@ -95,23 +95,16 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 client.on(Events.MessageCreate, async (message) => {
     try {
         // === AUTO-ZBIERANIE WIEDZY ===
-        // Debug: sprawdź czy event działa i czy static field jest dostępny
-        if (!message.author.bot && !message.channel.isThread()) {
-            logger.info(`🔎 MSG kanał=${message.channel.id} | szukam=${AIChatService.KNOWLEDGE_CHANNEL_ID} | match=${message.channel.id === AIChatService.KNOWLEDGE_CHANNEL_ID}`);
-        }
-        // Zapisuj wiadomości z kanału wiedzy od osób z wymaganą rolą, jeśli zawierają frazy kluczowe
-        if (!message.author.bot && message.channel.id === AIChatService.KNOWLEDGE_CHANNEL_ID) {
-            const hasRole = message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID);
-            const hasContent = !!message.content;
-            const noQuestion = hasContent && !message.content.includes('?');
-            const matchesKeywords = hasContent && aiChatService.matchesKnowledgeKeywords(message.content);
-
-            logger.info(`📝 Kanał wiedzy: ${message.author.username} | rola: ${hasRole} | treść: ${hasContent} | bez pytajnika: ${noQuestion} | keywords: ${matchesKeywords} | fragment: "${(message.content || '').substring(0, 50)}"`);
-
-            if (hasRole && hasContent && noQuestion && matchesKeywords) {
-                const authorName = message.member.displayName || message.author.username;
-                await aiChatService.saveKnowledgeEntry(message.content, authorName);
-            }
+        if (
+            !message.author.bot &&
+            message.channel.id === AIChatService.KNOWLEDGE_CHANNEL_ID &&
+            message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID) &&
+            message.content &&
+            !message.content.includes('?') &&
+            aiChatService.matchesKnowledgeKeywords(message.content)
+        ) {
+            const authorName = message.member.displayName || message.author.username;
+            await aiChatService.saveKnowledgeEntry(message.content, authorName);
         }
 
         // === AI CHAT HANDLER ===

@@ -24,7 +24,7 @@
   - **Prompt caching:** System prompt z `cache_control: ephemeral` - ~90% taniej za powtarzające się instrukcje (cache 5 min)
   - Nie trzeba restartować bota
 - **Auto-zbieranie wiedzy z kanału:**
-  - Kanał: `1470000330556309546` - wpisy od osób z rolą `1368903928468738080`
+  - Kanał: `1207041051831832586` - wpisy od osób z rolą `1368903928468738080`
   - Wiadomości zawierające frazy kluczowe (częściowe dopasowanie, case-insensitive) → automatyczny zapis do `data/knowledge_data.md`
   - Frazy: pet, eq, transmute, xeno, lanca, void, eternal, chaos, tech, part, postać, najlepsz, najgorsz, fusion, astral, af, skrzynk, klucz, shop, sklep, plecak, shard, odłam, ss, skill, kalkulator, coll, synerg, core, chip, rc, legend, epic, set, zone, main, op, daily, ciast, misja
   - Format wpisu: `[YYYY-MM-DD | NickAutora] Treść`
