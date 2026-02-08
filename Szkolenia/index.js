@@ -101,6 +101,7 @@ client.on(Events.MessageCreate, async (message) => {
             message.channel.id === AIChatService.KNOWLEDGE_CHANNEL_ID &&
             message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID) &&
             message.content &&
+            !message.content.includes('?') &&
             aiChatService.matchesKnowledgeKeywords(message.content)
         ) {
             const authorName = message.member.displayName || message.author.username;
