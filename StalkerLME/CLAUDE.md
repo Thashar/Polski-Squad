@@ -63,7 +63,6 @@
 - Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (1 min timeout) → Repost na kanał archiwum Discord
 - **Przechowywanie:** Zdjęcia są repostowane na kanał archiwum (ID: `1470000330556309546`) z embedem zawierającym nazwę klanu i tydzień. URL obrazu zapisywany w `data/ranking_image_urls.json`
 - **Format klucza JSON:** `{guildId}_{year}_{weekNumber}_{clan}` → `{ url, messageId, channelId, addedBy, addedAt }`
-- **Kompatybilność wsteczna:** Jeśli brak URL w JSON, system sprawdza stary katalog `data/ranking_images/` (pliki lokalne)
 - **Uprawnienia:** Tylko administratorzy i moderatorzy (allowedPunishRoles)
 - **Detekcja klanu:** Automatyczna detekcja z roli użytkownika (admin/moderator musi mieć rolę klanową)
 - **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie rankingu" na embedzie kolejki OCR (drugi rząd przycisków)
@@ -74,6 +73,13 @@
 - **Wyświetlanie:** Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma) - używa URL z Discord zamiast pliku lokalnego
 - Auto-usuwanie: Wiadomość użytkownika ze zdjęciem jest automatycznie usuwana po zapisie
 - Message Collector: 1 minuta na przesłanie zdjęcia, walidacja typu pliku
+
+**Komenda /transfer** - Jednorazowa migracja zdjęć z dysku na kanał Discord:
+- **Uprawnienia:** Tylko administratorzy
+- **Działanie:** Skanuje `data/ranking_images/guild_{id}/{year}/` → przesyła każde zdjęcie na kanał archiwum → zapisuje URL w JSON
+- **Pomijanie:** Automatycznie pomija zdjęcia już zmigrowane (sprawdza klucz w JSON)
+- **Rate limit:** 1s delay między uploadami
+- **Podsumowanie:** Wyświetla liczbę przeniesionych, pominiętych i błędów
 
 **Wykresy z Ikonami Klanów** - `/progres` i `/player-status` wyświetlają ikony klanów przy każdym słupku:
 - **Ikony klanów:** 🎮 (Clan 0), ⚡ (Clan 1), 💥 (Clan 2), 🔥 (Main)
