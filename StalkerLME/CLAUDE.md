@@ -60,17 +60,18 @@
 - **Autocomplete timeout:** 2.5s protection z pustą odpowiedzią jako fallback
 
 **Komenda /img i Przycisk "📷 Dodaj zdjęcie rankingu"** - Dodawanie zdjęć z tabelą wyników:
-- Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (1 min timeout) → Zapis do katalogu
+- Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (1 min timeout) → Repost na kanał archiwum Discord
+- **Przechowywanie:** Zdjęcia są repostowane na kanał archiwum (ID: `1470000330556309546`) z embedem zawierającym nazwę klanu i tydzień. URL obrazu zapisywany w `data/ranking_image_urls.json`
+- **Format klucza JSON:** `{guildId}_{year}_{weekNumber}_{clan}` → `{ url, messageId, channelId, addedBy, addedAt }`
+- **Kompatybilność wsteczna:** Jeśli brak URL w JSON, system sprawdza stary katalog `data/ranking_images/` (pliki lokalne)
 - **Uprawnienia:** Tylko administratorzy i moderatorzy (allowedPunishRoles)
 - **Detekcja klanu:** Automatyczna detekcja z roli użytkownika (admin/moderator musi mieć rolę klanową)
 - **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie rankingu" na embedzie kolejki OCR (drugi rząd przycisków)
 - **NIE używa kolejki OCR:** Komenda nie korzysta z systemu kolejkowania OCR (działa niezależnie)
 - **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla wybranego klanu (max 25)
 - **Logika agregacji:** Tygodnie z obu faz są łączone i deduplikowane, etykieta pokazuje które fazy są dostępne (F1, F2, F1+F2)
-- Katalog: `data/ranking_images/guild_{guildId}/{year}/week-{weekNumber}_{clan}_table.{ext}`
-- Nazewnictwo: `week-{weekNumber}_{clan}_table.{png|jpg|jpeg|webp|gif}`
 - Obsługiwane formaty: PNG, JPG, JPEG, WEBP, GIF
-- **Wyświetlanie:** Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma)
+- **Wyświetlanie:** Zdjęcie pojawia się automatycznie na dole embedu w `/wyniki` dla **wszystkich widoków** (Faza 1, Runda 1, 2, 3, Suma) - używa URL z Discord zamiast pliku lokalnego
 - Auto-usuwanie: Wiadomość użytkownika ze zdjęciem jest automatycznie usuwana po zapisie
 - Message Collector: 1 minuta na przesłanie zdjęcia, walidacja typu pliku
 

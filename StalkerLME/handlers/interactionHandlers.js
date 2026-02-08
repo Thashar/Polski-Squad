@@ -5138,31 +5138,74 @@ async function handleImgWeekSelect(interaction, sharedState) {
                     return;
                 }
 
-                // Pobierz obraz
-                const fs = require('fs').promises;
-                const path = require('path');
+                // Wyślij zdjęcie na kanał archiwum obrazów
+                const IMAGE_STORAGE_CHANNEL_ID = '1470000330556309546';
+                const storageChannel = await interaction.client.channels.fetch(IMAGE_STORAGE_CHANNEL_ID);
+
+                if (!storageChannel) {
+                    logger.error('[IMG] ❌ Nie znaleziono kanału archiwum obrazów:', IMAGE_STORAGE_CHANNEL_ID);
+                    await interaction.editReply({
+                        embeds: [new EmbedBuilder()
+                            .setTitle('❌ Błąd')
+                            .setDescription('Nie znaleziono kanału archiwum obrazów. Skontaktuj się z administratorem.')
+                            .setColor('#FF0000')
+                        ],
+                        components: []
+                    });
+                    return;
+                }
+
+                // Pobierz obraz i prześlij jako załącznik na kanał archiwum
                 const axios = require('axios');
+                const { AttachmentBuilder } = require('discord.js');
 
                 const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
                 const buffer = Buffer.from(response.data);
-
-                // Określ ścieżkę do katalogu z danymi
-                const imageDir = path.join(
-                    __dirname,
-                    '../data/ranking_images',
-                    `guild_${interaction.guild.id}`,
-                    year.toString()
-                );
-
-                // Upewnij się że katalog istnieje
-                await fs.mkdir(imageDir, { recursive: true });
-
-                // Zapisz zdjęcie jako week-{weekNumber}_{clan}_table.png
                 const extension = attachment.name.split('.').pop();
-                const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${extension}`);
-                await fs.writeFile(imagePath, buffer);
+                const fileName = `week-${weekNumber}_${clan}_table.${extension}`;
 
-                logger.info(`[IMG] ✅ Zapisano zdjęcie: ${imagePath}`);
+                const fileAttachment = new AttachmentBuilder(buffer, { name: fileName });
+
+                const storageEmbed = new EmbedBuilder()
+                    .setTitle(`📷 Tabela wyników - Tydzień ${weekNumber}/${year}`)
+                    .setDescription(`**Klan:** ${clanName}\n**Tydzień:** ${weekNumber}/${year}\n**Dodane przez:** ${interaction.user.tag}`)
+                    .setImage(`attachment://${fileName}`)
+                    .setColor('#00FF00')
+                    .setTimestamp();
+
+                const storageMessage = await storageChannel.send({
+                    embeds: [storageEmbed],
+                    files: [fileAttachment]
+                });
+
+                // Pobierz trwały URL obrazu z załącznika na kanale archiwum
+                const imageUrl = storageMessage.attachments.first()?.url || storageMessage.embeds[0]?.image?.url;
+
+                // Zapisz URL w pliku JSON
+                const fs = require('fs').promises;
+                const path = require('path');
+                const urlsFilePath = path.join(__dirname, '../data/ranking_image_urls.json');
+
+                let imageUrls = {};
+                try {
+                    const data = await fs.readFile(urlsFilePath, 'utf-8');
+                    imageUrls = JSON.parse(data);
+                } catch (error) {
+                    // Plik nie istnieje - zaczynamy od pustego obiektu
+                }
+
+                const key = `${interaction.guild.id}_${year}_${weekNumber}_${clan}`;
+                imageUrls[key] = {
+                    url: imageUrl,
+                    messageId: storageMessage.id,
+                    channelId: IMAGE_STORAGE_CHANNEL_ID,
+                    addedBy: interaction.user.id,
+                    addedAt: new Date().toISOString()
+                };
+
+                await fs.writeFile(urlsFilePath, JSON.stringify(imageUrls, null, 2));
+
+                logger.info(`[IMG] ✅ Zdjęcie repostowane na kanał archiwum i URL zapisany: ${key}`);
 
                 // Usuń wiadomość użytkownika ze zdjęciem
                 try {
@@ -5177,7 +5220,7 @@ async function handleImgWeekSelect(interaction, sharedState) {
                         .setTitle('✅ Zdjęcie dodane')
                         .setDescription(`Pomyślnie dodano zdjęcie do tygodnia **${selectedWeek}** dla klanu **${clanName}**.\n\nZdjęcie będzie widoczne w komendzie \`/wyniki\`.`)
                         .setColor('#00FF00')
-                        .setImage(attachment.url)
+                        .setImage(imageUrl)
                         .setTimestamp()
                     ],
                     components: []
@@ -6919,33 +6962,44 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
                 .setStyle(view === 'summary' ? ButtonStyle.Primary : ButtonStyle.Secondary)
         );
 
-    // Sprawdź czy istnieje zdjęcie z tabelą wyników
+    // Sprawdź czy istnieje URL zdjęcia z tabelą wyników
     const fs = require('fs').promises;
     const path = require('path');
-    const { AttachmentBuilder } = require('discord.js');
-
-    const imageDir = path.join(
-        __dirname,
-        '../data/ranking_images',
-        `guild_${interaction.guild.id}`,
-        year.toString()
-    );
-
-    // Szukaj pliku ze zdjęciem (różne rozszerzenia)
-    const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
     let imageAttachment = null;
+    const urlsFilePath = path.join(__dirname, '../data/ranking_image_urls.json');
+    const imageKey = `${interaction.guild.id}_${year}_${weekNumber}_${clan}`;
 
-    for (const ext of possibleExtensions) {
-        const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${ext}`);
-        try {
-            await fs.access(imagePath);
-            // Plik istnieje - stwórz attachment
-            imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
-            embed.setImage(`attachment://table.${ext}`);
-            break;
-        } catch (error) {
-            // Plik nie istnieje - spróbuj następne rozszerzenie
-            continue;
+    try {
+        const data = await fs.readFile(urlsFilePath, 'utf-8');
+        const imageUrls = JSON.parse(data);
+        if (imageUrls[imageKey]?.url) {
+            embed.setImage(imageUrls[imageKey].url);
+        }
+    } catch (error) {
+        // Brak pliku z URL-ami lub brak wpisu - bez obrazu
+    }
+
+    // Fallback: sprawdź stary system plików (kompatybilność wsteczna)
+    if (!embed.data.image) {
+        const { AttachmentBuilder } = require('discord.js');
+        const imageDir = path.join(
+            __dirname,
+            '../data/ranking_images',
+            `guild_${interaction.guild.id}`,
+            year.toString()
+        );
+        const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+
+        for (const ext of possibleExtensions) {
+            const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${ext}`);
+            try {
+                await fs.access(imagePath);
+                imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
+                embed.setImage(`attachment://table.${ext}`);
+                break;
+            } catch (error) {
+                continue;
+            }
         }
     }
 
@@ -7429,33 +7483,44 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
                 .setDisabled(!weekDataPhase2)
         );
 
-    // Sprawdź czy istnieje zdjęcie z tabelą wyników (dla wszystkich widoków)
-    let imageAttachment = null;
+    // Sprawdź czy istnieje URL zdjęcia z tabelą wyników
     const fs = require('fs').promises;
     const path = require('path');
-    const { AttachmentBuilder } = require('discord.js');
+    let imageAttachment = null;
+    const urlsFilePath = path.join(__dirname, '../data/ranking_image_urls.json');
+    const imageKey = `${interaction.guild.id}_${year}_${weekNumber}_${clan}`;
 
-    const imageDir = path.join(
-        __dirname,
-        '../data/ranking_images',
-        `guild_${interaction.guild.id}`,
-        year.toString()
-    );
+    try {
+        const data = await fs.readFile(urlsFilePath, 'utf-8');
+        const imageUrls = JSON.parse(data);
+        if (imageUrls[imageKey]?.url) {
+            embed.setImage(imageUrls[imageKey].url);
+        }
+    } catch (error) {
+        // Brak pliku z URL-ami lub brak wpisu - bez obrazu
+    }
 
-    // Szukaj pliku ze zdjęciem (różne rozszerzenia)
-    const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+    // Fallback: sprawdź stary system plików (kompatybilność wsteczna)
+    if (!embed.data.image) {
+        const { AttachmentBuilder } = require('discord.js');
+        const imageDir = path.join(
+            __dirname,
+            '../data/ranking_images',
+            `guild_${interaction.guild.id}`,
+            year.toString()
+        );
+        const possibleExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 
-    for (const ext of possibleExtensions) {
-        const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${ext}`);
-        try {
-            await fs.access(imagePath);
-            // Plik istnieje - stwórz attachment
-            imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
-            embed.setImage(`attachment://table.${ext}`);
-            break;
-        } catch (error) {
-            // Plik nie istnieje - spróbuj następne rozszerzenie
-            continue;
+        for (const ext of possibleExtensions) {
+            const imagePath = path.join(imageDir, `week-${weekNumber}_${clan}_table.${ext}`);
+            try {
+                await fs.access(imagePath);
+                imageAttachment = new AttachmentBuilder(imagePath, { name: `table.${ext}` });
+                embed.setImage(`attachment://table.${ext}`);
+                break;
+            } catch (error) {
+                continue;
+            }
         }
     }
 
