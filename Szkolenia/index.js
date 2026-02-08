@@ -94,6 +94,19 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageCreate, async (message) => {
     try {
+        // === AUTO-ZBIERANIE WIEDZY ===
+        // Zapisuj wiadomości z kanału wiedzy od osób z wymaganą rolą, jeśli zawierają frazy kluczowe
+        if (
+            !message.author.bot &&
+            message.channel.id === AIChatService.KNOWLEDGE_CHANNEL_ID &&
+            message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID) &&
+            message.content &&
+            aiChatService.matchesKnowledgeKeywords(message.content)
+        ) {
+            const authorName = message.member.displayName || message.author.username;
+            await aiChatService.saveKnowledgeEntry(message.content, authorName);
+        }
+
         // === AI CHAT HANDLER ===
         // Sprawdź czy bot jest oznaczony (ale nie przez @everyone/@here i nie przez odpowiedzi)
         const isBotMentioned = message.mentions.has(client.user.id);
@@ -145,26 +158,7 @@ client.on(Events.MessageCreate, async (message) => {
             aiChatService.recordAsk(message.author.id, message.member);
 
             // Wyślij odpowiedź
-            if (typeof answer === 'object' && answer.showAddKnowledgeButton) {
-                // Odpowiedź z przyciskiem dodawania wiedzy
-                const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
-
-                const addKnowledgeButton = new ButtonBuilder()
-                    .setCustomId('add_knowledge')
-                    .setLabel('Dodaj nowe informacje')
-                    .setStyle(ButtonStyle.Success)
-                    .setEmoji('📚');
-
-                const row = new ActionRowBuilder().addComponents(addKnowledgeButton);
-
-                await message.reply({
-                    content: answer.content,
-                    components: [row]
-                });
-            } else {
-                // Zwykła odpowiedź tekstowa
-                await message.reply(answer);
-            }
+            await message.reply(answer);
 
             return; // Zakończ handler - nie przetwarzaj dalej
         }
