@@ -17,10 +17,11 @@
 - **Trigger:** Mention @Szkolenia + pytanie (max 300 znaków)
 - **Kanał dozwolony:** `1207041051831832586` - każdy może używać
 - **Administratorzy:** Mogą używać na dowolnym kanale + brak cooldownu
-- **Baza wiedzy (modularny system):**
-  - `knowledge_base.md` - zasady ogólne (w repo)
+- **Baza wiedzy (modularny system z keyword search):**
+  - `knowledge_base.md` - zasady ogólne (w repo, cache'owane w system prompt)
   - `data/knowledge_data.md` - faktyczna baza wiedzy (gitignore, tylko na serwerze)
-  - Bot automatycznie wczyta oba pliki przy każdym pytaniu
+  - **Keyword search:** Zamiast wysyłać CAŁĄ bazę do AI, bot przeszukuje ją i wysyła tylko relevantne sekcje (max 5)
+  - **Prompt caching:** System prompt z `cache_control: ephemeral` - ~90% taniej za powtarzające się instrukcje (cache 5 min)
   - Nie trzeba restartować bota
 - **System zgłaszania wiedzy:**
   - Keyword-based trigger: gdy AI użyje słów "dodać", "zaktualizować", "chcesz dodać" → przycisk "Dodaj nowe informacje"
@@ -40,9 +41,10 @@
     - Przykłady niepoprawnego zachowania w prompcie (np. wymyślanie nazw, statystyk)
     - Niska temperature (0.3) = mniej kreatywności, więcej faktów
     - Obowiązkowe sprawdzanie bazy wiedzy przed odpowiedzią
-- **Model:** Claude 3 Haiku (Anthropic API)
+- **Model:** Claude 3 Haiku (Anthropic API) z prompt caching
 - **Cooldown:** 5 minut (administratorzy bez limitu)
 - **Brak pamięci:** Każde pytanie niezależne
+- **Optymalizacja tokenów:** System prompt (statyczny) → cache'owany | Baza wiedzy → keyword search (tylko relevantne fragmenty)
 - **Przykłady:**
   - `@Szkolenia Jaki build jest najlepszy na bossy?`
   - `@Szkolenia Jak działają Tech Parts?`

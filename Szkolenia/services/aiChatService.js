@@ -94,44 +94,113 @@ class AIChatService {
     }
 
     /**
-     * Wczytaj bazę wiedzy - zasady ogólne + faktyczna baza wiedzy
+     * Wczytaj zasady ogólne (knowledge_base.md) - statyczne, cache'owane w system prompt
      */
-    async loadKnowledgeBase() {
+    async loadKnowledgeRules() {
         try {
-            // Wczytaj zasady ogólne (knowledge_base.md)
-            let baseContent = '';
-            try {
-                baseContent = await fs.readFile(this.knowledgeBaseFile, 'utf8');
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    logger.warn('⚠️ Plik knowledge_base.md nie istnieje');
-                }
-            }
-
-            // Wczytaj faktyczną bazę wiedzy (knowledge_data.md)
-            let dataContent = '';
-            try {
-                dataContent = await fs.readFile(this.knowledgeDataFile, 'utf8');
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    logger.warn('⚠️ Plik knowledge_data.md nie istnieje - baza wiedzy jest pusta');
-                }
-            }
-
-            // Jeśli oba pliki nie istnieją, zwróć null
-            if (!baseContent && !dataContent) {
-                logger.warn('⚠️ Brak plików bazy wiedzy - AI będzie działać bez wiedzy');
-                return null;
-            }
-
-            // Połącz oba pliki (zasady + faktyczna wiedza)
-            const combined = [baseContent, dataContent].filter(Boolean).join('\n\n');
-            return combined;
-
+            return await fs.readFile(this.knowledgeBaseFile, 'utf8');
         } catch (error) {
-            logger.error(`Błąd wczytywania bazy wiedzy: ${error.message}`);
-            return null;
+            if (error.code === 'ENOENT') {
+                logger.warn('⚠️ Plik knowledge_base.md nie istnieje');
+            }
+            return '';
         }
+    }
+
+    /**
+     * Wczytaj faktyczną bazę wiedzy (knowledge_data.md) - dynamiczna, przeszukiwana
+     */
+    async loadKnowledgeData() {
+        try {
+            return await fs.readFile(this.knowledgeDataFile, 'utf8');
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                logger.warn('⚠️ Plik knowledge_data.md nie istnieje - baza wiedzy jest pusta');
+            }
+            return '';
+        }
+    }
+
+    /**
+     * Wyszukaj relevantne sekcje z bazy wiedzy na podstawie pytania
+     * Zamiast wysyłać CAŁĄ bazę do AI, filtruje tylko pasujące fragmenty
+     * @param {string} question - Pytanie użytkownika
+     * @param {string} knowledgeData - Pełna zawartość knowledge_data.md
+     * @returns {string|null} - Relevantne fragmenty lub null jeśli brak dopasowań
+     */
+    searchKnowledge(question, knowledgeData) {
+        if (!knowledgeData || !knowledgeData.trim() || !question) return null;
+
+        // Podziel bazę wiedzy na sekcje (po podwójnych newline'ach)
+        const sections = knowledgeData.split(/\n\n+/).filter(s => s.trim().length > 0);
+        if (sections.length === 0) return null;
+
+        // Jeśli baza jest mała (≤5 sekcji), zwróć całość - nie warto filtrować
+        if (sections.length <= 5) return knowledgeData;
+
+        // Polskie stop words - pomijane przy wyszukiwaniu
+        const stopWords = new Set([
+            'jak', 'co', 'to', 'jest', 'czy', 'ile', 'jaki', 'jaka', 'jakie',
+            'gdzie', 'kiedy', 'kto', 'dlaczego', 'który', 'która', 'które',
+            'ten', 'ta', 'te', 'tym', 'tej', 'tego', 'tych',
+            'się', 'nie', 'tak', 'ale', 'lub', 'albo', 'ani',
+            'na', 'do', 'od', 'po', 'za', 'ze', 'we', 'przy',
+            'są', 'być', 'mam', 'masz', 'ma', 'mają',
+            'bardzo', 'też', 'jeszcze', 'już', 'tylko', 'może',
+            'dla', 'przez', 'pod', 'nad', 'przed', 'między',
+            'mi', 'mnie', 'ci', 'cię', 'go', 'mu', 'ich', 'im',
+            'o', 'w', 'z', 'i', 'a'
+        ]);
+
+        // Wyciągnij słowa kluczowe z pytania (min 2 znaki, bez stop words)
+        const keywords = question.toLowerCase()
+            .replace(/[^\w\sąćęłńóśźż]/g, ' ')
+            .split(/\s+/)
+            .filter(word => word.length >= 2 && !stopWords.has(word));
+
+        // Brak słów kluczowych → zwróć całą bazę (fallback)
+        if (keywords.length === 0) return knowledgeData;
+
+        // Oceń każdą sekcję pod kątem dopasowania do pytania
+        const scoredSections = sections.map(section => {
+            const sectionLower = section.toLowerCase();
+            let score = 0;
+
+            // Punkty za każde dopasowanie słowa kluczowego
+            for (const keyword of keywords) {
+                const regex = new RegExp(keyword, 'gi');
+                const matches = sectionLower.match(regex);
+                if (matches) {
+                    score += matches.length;
+                }
+            }
+
+            // Bonus za dopasowanie pełnej frazy pytania
+            const questionClean = question.toLowerCase().replace(/[^\w\sąćęłńóśźż]/g, '');
+            if (sectionLower.includes(questionClean)) {
+                score += 10;
+            }
+
+            // Bonus za bigramy (pary kolejnych słów kluczowych)
+            for (let i = 0; i < keywords.length - 1; i++) {
+                if (sectionLower.includes(keywords[i] + ' ' + keywords[i + 1])) {
+                    score += 3;
+                }
+            }
+
+            return { section, score };
+        });
+
+        // Filtruj sekcje z score > 0, sortuj malejąco, max 5
+        const relevant = scoredSections
+            .filter(s => s.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
+
+        if (relevant.length === 0) return null;
+
+        logger.info(`🔍 Keyword search: ${sections.length} sekcji → ${relevant.length} relevantnych (keywords: ${keywords.join(', ')})`);
+        return relevant.map(s => s.section).join('\n\n');
     }
 
     /**
@@ -265,14 +334,11 @@ class AIChatService {
     }
 
     /**
-     * Przygotuj prompt dla AI
+     * Zbuduj system prompt (statyczny - cache'owany przez Anthropic API)
+     * Ten prompt jest identyczny dla każdego pytania, więc prompt caching oszczędza ~90% tokenów
      */
-    async preparePrompt(context, message) {
-        // Wczytaj bazę wiedzy
-        const knowledgeBase = await this.loadKnowledgeBase();
-
-        // Podstawowy prompt
-        let prompt = `Jesteś kompendium wiedzy o grze Survivor.io.
+    buildSystemPrompt(knowledgeRules) {
+        let systemPrompt = `Jesteś kompendium wiedzy o grze Survivor.io.
 
 KRYTYCZNE ZASADY:
 - Odpowiadaj TYLKO na podstawie informacji Z BAZY WIEDZY poniżej
@@ -287,26 +353,12 @@ STYL ODPOWIEDZI:
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
 
-Użytkownik: ${context.asker.displayName}
-Pytanie: ${context.question}
-`;
-
-        // Dodaj bazę wiedzy jeśli istnieje
-        if (knowledgeBase) {
-            prompt += `
-
-===== BAZA WIEDZY O GRZE =====
-
-${knowledgeBase}
-
-===== KONIEC BAZY WIEDZY =====
-
 INSTRUKCJA ODPOWIADANIA:
 1. SPRAWDŹ intencję użytkownika:
    - Jeśli użytkownik SAM chce dodać wiedzę (pisze "dodaj wiedzę", "chcę dodać", "mam informacje")
      → odpowiedz KRÓTKO i przyjaźnie, np: "Świetnie! Kliknij przycisk poniżej." lub "Super! Użyj przycisku aby dodać wiedzę." (różne warianty!)
 
-2. SPRAWDŹ czy informacja JEST W BAZIE WIEDZY powyżej:
+2. SPRAWDŹ czy informacja JEST W BAZIE WIEDZY:
    - Jeśli JEST (nawet częściowo) → odpowiedz używając tych informacji i ZAKOŃCZ bez pytania o dodanie
    - TYLKO jeśli NIE MA ŻADNYCH informacji → wtedy odpowiedz że nie wiesz i ZAKOŃCZ frazą: "Chcesz dodać te informacje do bazy wiedzy?"
 
@@ -322,13 +374,25 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 ❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
 ❌ Wymyślanie umiejętności które nie są w bazie
 ❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
-❌ Parafrazowanie frazy końcowej (np. "możesz zaproponować dodanie" zamiast "Chcesz dodać te informacje")
-`;
-        } else {
-            prompt += `
+❌ Parafrazowanie frazy końcowej (np. "możesz zaproponować dodanie" zamiast "Chcesz dodać te informacje")`;
 
-⚠️ UWAGA: Baza wiedzy nie jest dostępna. Odpowiedz: "Baza wiedzy nie jest obecnie dostępna. Skontaktuj się z administratorem."
-`;
+        if (knowledgeRules) {
+            systemPrompt += `\n\n${knowledgeRules}`;
+        }
+
+        return systemPrompt;
+    }
+
+    /**
+     * Zbuduj user prompt (dynamiczny - zawiera pytanie + relevantne fragmenty bazy wiedzy)
+     */
+    buildUserPrompt(context, relevantKnowledge) {
+        let prompt = `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}`;
+
+        if (relevantKnowledge) {
+            prompt += `\n\n===== BAZA WIEDZY O GRZE =====\n\n${relevantKnowledge}\n\n===== KONIEC BAZY WIEDZY =====`;
+        } else {
+            prompt += `\n\n⚠️ UWAGA: Brak informacji w bazie wiedzy na ten temat. Odpowiedz że nie masz informacji i zapytaj czy użytkownik chce dodać te informacje.`;
         }
 
         return prompt;
@@ -349,31 +413,42 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             // Zbierz kontekst
             const context = await this.gatherContext(message, question);
 
-            // Przygotuj prompt
-            const prompt = await this.preparePrompt(context, message);
+            // Wczytaj zasady ogólne (statyczne) i bazę wiedzy (dynamiczną)
+            const knowledgeRules = await this.loadKnowledgeRules();
+            const knowledgeData = await this.loadKnowledgeData();
 
-            // Zbuduj wiadomość (bez historii - każde pytanie niezależne)
-            const messages = [{
-                role: 'user',
-                content: prompt
-            }];
+            // Wyszukaj relevantne fragmenty z bazy wiedzy (keyword search)
+            const relevantKnowledge = this.searchKnowledge(question, knowledgeData);
 
-            // Zapisz prompt do pliku
-            await this.savePromptToFile(prompt, context.asker.displayName);
+            // Zbuduj prompty
+            const systemPrompt = this.buildSystemPrompt(knowledgeRules);
+            const userPrompt = this.buildUserPrompt(context, relevantKnowledge);
 
-            // Wywołaj API
+            // Zapisz prompt do pliku (debug)
+            await this.savePromptToFile(`SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`, context.asker.displayName);
+
+            // Wywołaj API z prompt caching (system prompt cache'owany = ~90% taniej)
             const response = await this.client.messages.create({
                 model: this.model,
                 max_tokens: 1024,
-                messages: messages,
-                temperature: 0.3 // Niska temperatura = mniej halucynacji, bardziej faktyczne odpowiedzi
+                system: [
+                    {
+                        type: 'text',
+                        text: systemPrompt,
+                        cache_control: { type: 'ephemeral' }
+                    }
+                ],
+                messages: [{ role: 'user', content: userPrompt }],
+                temperature: 0.3
             });
 
             // Wyciągnij odpowiedź
             const answer = response.content[0].text;
 
-            // Log usage
-            logger.info(`AI Chat: ${context.asker.username} zadał pytanie`);
+            // Log usage + cache info
+            const usage = response.usage || {};
+            const cacheInfo = usage.cache_read_input_tokens ? ` (cache hit: ${usage.cache_read_input_tokens} tokenów)` : '';
+            logger.info(`AI Chat: ${context.asker.username} zadał pytanie - ${relevantKnowledge ? 'znaleziono fragmenty' : 'brak dopasowań w bazie'}${cacheInfo}`);
 
             // Sprawdź czy odpowiedź zawiera słowa kluczowe sugerujące dodanie wiedzy
             const addKnowledgeKeywords = [
