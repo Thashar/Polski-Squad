@@ -123,23 +123,38 @@ async function handleScanKnowledge(interaction, state) {
     }
 
     await interaction.deferReply();
+    const channel = interaction.channel;
+    let tokenExpired = false;
 
     try {
         const result = await state.aiChatService.scanChannelHistory(state.client, async (scanned, saved, channelName) => {
+            if (tokenExpired) return;
             try {
                 await interaction.editReply(`🔍 Skanowanie... ${scanned} wiadomości sprawdzonych, ${saved} zapisanych (kanał: #${channelName})`);
-            } catch (err) { /* ignore edit errors */ }
+            } catch (err) {
+                tokenExpired = true;
+            }
         });
 
-        await interaction.editReply(
-            `✅ **Skanowanie zakończone!**\n\n` +
+        const summary = `✅ **Skanowanie zakończone!**\n\n` +
             `📊 Sprawdzono: **${result.totalScanned}** wiadomości\n` +
             `📚 Zapisano: **${result.totalSaved}** nowych wpisów\n` +
-            `⏭️ Pominięto (duplikaty): **${result.totalSkipped}**`
-        );
+            `⏭️ Pominięto (duplikaty): **${result.totalSkipped}**`;
+
+        if (tokenExpired) {
+            await channel.send(summary);
+        } else {
+            await interaction.editReply(summary);
+        }
     } catch (error) {
         logger.error(`❌ Błąd skanowania: ${error.message}`);
-        await interaction.editReply('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
+        try {
+            if (tokenExpired) {
+                await channel.send('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
+            } else {
+                await interaction.editReply('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
+            }
+        } catch (err) { /* ignore */ }
     }
 }
 
