@@ -156,6 +156,36 @@ client.on(Events.MessageCreate, async (message) => {
                 .replace(/<@!?\d+>/g, '') // Usuń wszystkie @mentions
                 .trim();
 
+            // Komenda scan-knowledge (tylko admini) - skanuje kanały rok wstecz
+            if (question.toLowerCase() === 'scan-knowledge') {
+                if (!isAdmin) {
+                    await message.reply('⚠️ Tylko administratorzy mogą uruchomić skanowanie.');
+                    return;
+                }
+
+                const reply = await message.reply('🔍 Rozpoczynam skanowanie kanałów (ostatni rok)...');
+
+                try {
+                    const result = await aiChatService.scanChannelHistory(client, async (scanned, saved, channelName) => {
+                        try {
+                            await reply.edit(`🔍 Skanowanie... ${scanned} wiadomości sprawdzonych, ${saved} zapisanych (kanał: #${channelName})`);
+                        } catch (err) { /* ignore edit errors */ }
+                    });
+
+                    await reply.edit(
+                        `✅ **Skanowanie zakończone!**\n\n` +
+                        `📊 Sprawdzono: **${result.totalScanned}** wiadomości\n` +
+                        `📚 Zapisano: **${result.totalSaved}** nowych wpisów\n` +
+                        `⏭️ Pominięto (duplikaty): **${result.totalSkipped}**`
+                    );
+                } catch (error) {
+                    logger.error(`❌ Błąd skanowania: ${error.message}`);
+                    await reply.edit('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
+                }
+
+                return;
+            }
+
             if (!question || question.length === 0) {
                 await message.reply('❓ Zadaj mi jakieś pytanie!');
                 return;
