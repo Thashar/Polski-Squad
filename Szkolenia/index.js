@@ -103,12 +103,33 @@ client.on(Events.MessageCreate, async (message) => {
             !message.author.bot &&
             AIChatService.KNOWLEDGE_CHANNEL_IDS.includes(message.channel.id) &&
             message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID) &&
-            message.content &&
-            !message.content.includes('?') &&
-            aiChatService.matchesKnowledgeKeywords(message.content)
+            message.content
         ) {
-            const authorName = message.member.displayName || message.author.username;
-            await aiChatService.saveKnowledgeEntry(message.content, authorName);
+            let saved = false;
+
+            // Odpowiedź na pytanie z keyword → zapisz parę Pytanie: Odpowiedź:
+            if (message.reference) {
+                try {
+                    const repliedMessage = await message.fetchReference();
+                    if (
+                        repliedMessage.content?.includes('?') &&
+                        aiChatService.matchesKnowledgeKeywords(repliedMessage.content)
+                    ) {
+                        const authorName = message.member.displayName || message.author.username;
+                        await aiChatService.saveKnowledgeEntry(
+                            `Pytanie: ${repliedMessage.content} Odpowiedź: ${message.content}`,
+                            authorName
+                        );
+                        saved = true;
+                    }
+                } catch (err) { /* nie udało się pobrać oryginalnej wiadomości */ }
+            }
+
+            // Zwykła wiadomość (bez pytajnika) z keyword → zapisz jako wiedzę
+            if (!saved && !message.content.includes('?') && aiChatService.matchesKnowledgeKeywords(message.content)) {
+                const authorName = message.member.displayName || message.author.username;
+                await aiChatService.saveKnowledgeEntry(message.content, authorName);
+            }
         }
 
         // === AI CHAT HANDLER ===
