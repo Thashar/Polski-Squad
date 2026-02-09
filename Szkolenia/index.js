@@ -110,37 +110,34 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageCreate, async (message) => {
     try {
-        // === AUTO-ZBIERANIE WIEDZY ===
+        // === AUTO-ZBIERANIE WIEDZY (WSZYSTKO z kanałów) ===
+        const channelId = message.channel.id;
         if (
             !message.author.bot &&
-            AIChatService.KNOWLEDGE_CHANNEL_IDS.includes(message.channel.id) &&
-            message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID) &&
-            message.content
+            AIChatService.KNOWLEDGE_CHANNEL_IDS.includes(channelId) &&
+            message.content?.trim()
         ) {
-            let saved = false;
+            const authorName = message.member?.displayName || message.author.username;
 
-            // Odpowiedź na pytanie z keyword → zapisz parę Pytanie: Odpowiedź:
+            // Odpowiedź → zapisz jako parę Pytanie/Odpowiedź
             if (message.reference) {
                 try {
                     const repliedMessage = await message.fetchReference();
-                    if (
-                        repliedMessage.content?.includes('?') &&
-                        aiChatService.matchesKnowledgeKeywords(repliedMessage.content)
-                    ) {
-                        const authorName = message.member.displayName || message.author.username;
+                    if (repliedMessage.content?.trim()) {
                         await aiChatService.saveKnowledgeEntry(
                             `Pytanie: ${repliedMessage.content} Odpowiedź: ${message.content}`,
-                            authorName
+                            authorName,
+                            channelId
                         );
-                        saved = true;
+                    } else {
+                        await aiChatService.saveKnowledgeEntry(message.content, authorName, channelId);
                     }
-                } catch (err) { /* nie udało się pobrać oryginalnej wiadomości */ }
-            }
-
-            // Zwykła wiadomość (bez pytajnika) z keyword → zapisz jako wiedzę
-            if (!saved && !message.content.includes('?') && aiChatService.matchesKnowledgeKeywords(message.content)) {
-                const authorName = message.member.displayName || message.author.username;
-                await aiChatService.saveKnowledgeEntry(message.content, authorName);
+                } catch (err) {
+                    await aiChatService.saveKnowledgeEntry(message.content, authorName, channelId);
+                }
+            } else {
+                // Zwykła wiadomość → zapisz bezpośrednio
+                await aiChatService.saveKnowledgeEntry(message.content, authorName, channelId);
             }
         }
 
