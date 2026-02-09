@@ -39,11 +39,15 @@
     - Niska temperature (0.3) = mniej kreatywności, więcej faktów
     - Obowiązkowe sprawdzanie bazy wiedzy przed odpowiedzią
 - **Model:** Claude 3 Haiku (Anthropic API) z prompt caching
-- **Cooldown:** 5 minut (administratorzy bez limitu)
+- **Cooldown:** 1 minuta (administratorzy bez limitu)
 - **Brak pamięci:** Każde pytanie niezależne
 - **System feedbacku (👍/👎):**
   - Pod odpowiedzią AI (gdy użyto bazy wiedzy) pojawiają się przyciski 👍 i 👎
-  - 👍 dodaje `[+]` do fragmentów użytych w odpowiedzi, 👎 dodaje `[-]`
+  - Tylko osoba która zadała pytanie może ocenić odpowiedź
+  - 👍 dodaje `[+]` do fragmentów użytych w odpowiedzi
+  - 👎 otwiera modal z pytaniem (pre-filled) i polem na poprawną odpowiedź
+  - Korekty zapisywane do `data/knowledge_corrections.md` jako pary pytanie/odpowiedź
+  - AI grepuje 3 pliki: 2 kanały wiedzy + plik korekt
   - Fragmenty z wieloma `-` i oceną ≤ -5 pomijane przez grep_knowledge
   - Fragmenty z oceną ≤ -5 są automatycznie usuwane z bazy
   - Format w bazie: `[2026-02-09 | Autor] [+++] Treść` lub `[--] Treść`
