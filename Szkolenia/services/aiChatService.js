@@ -438,6 +438,16 @@ class AIChatService {
             regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         }
 
+        // Dla korekt: luźne dopasowanie po pojedynczych słowach (min 2 znaki)
+        const patternWords = pattern
+            .replace(/[.*+?^${}()|[\]\\]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length >= 2)
+            .map(w => {
+                try { return new RegExp(w, 'gi'); }
+                catch { return new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); }
+            });
+
         const correctionMatches = [];
         const regularMatches = [];
         const correctionsIndex = knowledgeDataArray.length - 1;
@@ -452,13 +462,21 @@ class AIChatService {
                 const { rating, cleanSection } = this.parseRating(section);
                 if (rating <= -5) continue;
 
-                if (regex.test(cleanSection)) {
-                    if (isCorrections) {
+                if (isCorrections) {
+                    // Korekty: dopasuj jeśli KTÓREKOLWIEK słowo z patternu pasuje
+                    const matched = patternWords.some(wordRegex => {
+                        wordRegex.lastIndex = 0;
+                        return wordRegex.test(cleanSection);
+                    });
+                    if (matched) {
                         correctionMatches.push(`[KOREKTA UŻYTKOWNIKA] ${cleanSection}`);
-                    } else {
-                        regularMatches.push(cleanSection);
                     }
-                    regex.lastIndex = 0;
+                } else {
+                    // Normalne pliki: standardowy regex
+                    if (regex.test(cleanSection)) {
+                        regularMatches.push(cleanSection);
+                        regex.lastIndex = 0;
+                    }
                 }
             }
         }
@@ -547,25 +565,8 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
     /**
      * Zbuduj user prompt (dynamiczny - tylko pytanie, baza wiedzy dostępna przez narzędzie)
      */
-    async buildUserPrompt(context) {
-        // Wczytaj korekty użytkowników - zawsze dołączone do promptu (priorytetowe)
-        let correctionsContent = '';
-        try {
-            correctionsContent = await fs.readFile(this.correctionsFile, 'utf-8');
-        } catch (err) {
-            // Plik nie istnieje - brak korekt
-        }
-
-        let prompt = `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\n`;
-
-        if (correctionsContent.trim()) {
-            prompt += `KOREKTY UŻYTKOWNIKÓW (zweryfikowane odpowiedzi - NAJWYŻSZY PRIORYTET):\n${correctionsContent.trim()}\n\n`;
-            prompt += `Jeśli korekty zawierają odpowiedź na pytanie → użyj ich BEZ szukania dalej.\nJeśli nie → użyj grep_knowledge aby przeszukać bazę wiedzy.`;
-        } else {
-            prompt += `Użyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
-        }
-
-        return prompt;
+    buildUserPrompt(context) {
+        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\nUżyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
     }
 
     /**
@@ -851,7 +852,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
 
             // Zbuduj prompty
             const systemPrompt = this.buildSystemPrompt(knowledgeRules);
-            const userPrompt = await this.buildUserPrompt(context);
+            const userPrompt = this.buildUserPrompt(context);
 
             // Zapisz prompt do pliku (debug)
             await this.savePromptToFile(`SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`, context.asker.displayName);
