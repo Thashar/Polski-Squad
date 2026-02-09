@@ -697,8 +697,8 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                     }
 
                     scanned++;
-                    if (msg.author.bot) continue;
-                    if (!msg.content || !msg.content.trim()) continue;
+                    if (msg.author.bot) { skipped++; continue; }
+                    if (!msg.content || !msg.content.trim()) { skipped++; continue; }
 
                     const authorName = msg.member?.displayName || msg.author.displayName || msg.author.username;
 
