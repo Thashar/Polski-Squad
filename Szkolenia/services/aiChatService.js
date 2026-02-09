@@ -197,14 +197,15 @@ class AIChatService {
         if (keywords.length === 0) return knowledgeData;
 
         // Oceń każdą sekcję pod kątem dopasowania do pytania + oceny użytkowników
-        const scoredSections = sections.map(section => {
+        const scoredSections = sections.map((section, index) => {
             const { rating, cleanSection } = this.parseRating(section);
 
             // Pomijaj sekcje z oceną ≤ -5 (do usunięcia)
-            if (rating <= -5) return { section, cleanSection, score: -Infinity };
+            if (rating <= -5) return { index, section, cleanSection, score: -Infinity, matchedKeywords: [] };
 
             const sectionLower = cleanSection.toLowerCase();
             let score = 0;
+            const matchedKeywords = [];
 
             // Punkty za każde dopasowanie słowa kluczowego
             for (const keyword of keywords) {
@@ -212,6 +213,7 @@ class AIChatService {
                 const matches = sectionLower.match(regex);
                 if (matches) {
                     score += matches.length;
+                    matchedKeywords.push(keyword);
                 }
             }
 
@@ -231,14 +233,24 @@ class AIChatService {
             // Bonus/kara za ocenę użytkowników (+1 za każdy plus, -1 za każdy minus)
             score += rating;
 
-            return { section, cleanSection, score };
+            return { index, section, cleanSection, score, matchedKeywords };
         });
 
-        // Filtruj sekcje z score > 0, sortuj malejąco, max 5
+        // Dla każdego keyword zbierz top 10 sekcji, potem zdeduplikuj
+        const selectedIndices = new Set();
+        for (const keyword of keywords) {
+            const keywordSections = scoredSections
+                .filter(s => s.score > 0 && s.matchedKeywords.includes(keyword))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10);
+            for (const s of keywordSections) {
+                selectedIndices.add(s.index);
+            }
+        }
+
         const relevant = scoredSections
-            .filter(s => s.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 3);
+            .filter(s => selectedIndices.has(s.index))
+            .sort((a, b) => b.score - a.score);
 
         if (relevant.length === 0) return null;
 
