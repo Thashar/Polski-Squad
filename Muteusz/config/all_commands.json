@@ -401,9 +401,9 @@
           "requiredPermission": "public"
         },
         {
-          "name": "@Szkolenia scan-knowledge",
+          "name": "/scan-knowledge",
           "description": "Skanuje kanały wiedzy rok wstecz i zapisuje pasujące wpisy do bazy",
-          "usage": "@Szkolenia scan-knowledge",
+          "usage": "/scan-knowledge",
           "requiredPermission": "administrator"
         }
       ]

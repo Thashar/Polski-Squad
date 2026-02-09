@@ -18,6 +18,14 @@ const { delay } = require('../utils/helpers');
  */
 async function handleInteraction(interaction, state, config) {
     try {
+        // Obsługa slash commands
+        if (interaction.isChatInputCommand()) {
+            if (interaction.commandName === 'scan-knowledge') {
+                await handleScanKnowledge(interaction, state);
+            }
+            return;
+        }
+
         // Obsługa przycisków
         if (!interaction.isButton()) return;
 
@@ -101,6 +109,38 @@ async function handleKeepOpen(interaction, state, config) {
 
     // Zresetuj status przypomnienia - użytkownik wybrał "jeszcze nie zamykaj"
     await reminderStorage.resetReminderStatus(state.lastReminderMap, channel.id);
+}
+
+/**
+ * Obsługa slash command /scan-knowledge (admin)
+ * Skanuje kanały wiedzy rok wstecz i zapisuje wpisy do bazy
+ */
+async function handleScanKnowledge(interaction, state) {
+    const isAdmin = state.aiChatService.isAdmin(interaction.member);
+    if (!isAdmin) {
+        await interaction.reply({ content: '⚠️ Tylko administratorzy mogą uruchomić skanowanie.', ephemeral: true });
+        return;
+    }
+
+    await interaction.deferReply();
+
+    try {
+        const result = await state.aiChatService.scanChannelHistory(state.client, async (scanned, saved, channelName) => {
+            try {
+                await interaction.editReply(`🔍 Skanowanie... ${scanned} wiadomości sprawdzonych, ${saved} zapisanych (kanał: #${channelName})`);
+            } catch (err) { /* ignore edit errors */ }
+        });
+
+        await interaction.editReply(
+            `✅ **Skanowanie zakończone!**\n\n` +
+            `📊 Sprawdzono: **${result.totalScanned}** wiadomości\n` +
+            `📚 Zapisano: **${result.totalSaved}** nowych wpisów\n` +
+            `⏭️ Pominięto (duplikaty): **${result.totalSkipped}**`
+        );
+    } catch (error) {
+        logger.error(`❌ Błąd skanowania: ${error.message}`);
+        await interaction.editReply('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
+    }
 }
 
 /**
