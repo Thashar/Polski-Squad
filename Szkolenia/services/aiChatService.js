@@ -438,27 +438,38 @@ class AIChatService {
             regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         }
 
-        const matches = [];
-        for (const data of knowledgeDataArray) {
+        const correctionMatches = [];
+        const regularMatches = [];
+        const correctionsIndex = knowledgeDataArray.length - 1;
+
+        for (let i = 0; i < knowledgeDataArray.length; i++) {
+            const data = knowledgeDataArray[i];
             if (!data || !data.trim()) continue;
             const sections = data.split(/\n\n+/).filter(s => s.trim().length > 0);
+            const isCorrections = i === correctionsIndex;
 
             for (const section of sections) {
                 const { rating, cleanSection } = this.parseRating(section);
                 if (rating <= -5) continue;
 
                 if (regex.test(cleanSection)) {
-                    matches.push(cleanSection);
+                    if (isCorrections) {
+                        correctionMatches.push(`[KOREKTA UŻYTKOWNIKA] ${cleanSection}`);
+                    } else {
+                        regularMatches.push(cleanSection);
+                    }
                     regex.lastIndex = 0;
                 }
             }
         }
 
-        if (matches.length === 0) {
+        const allMatches = [...correctionMatches, ...regularMatches];
+
+        if (allMatches.length === 0) {
             return `Brak wyników dla "${pattern}". Spróbuj innej frazy lub krótszego wzorca.`;
         }
 
-        return `Znaleziono ${matches.length} fragmentów:\n\n${matches.join('\n\n---\n\n')}`;
+        return `Znaleziono ${allMatches.length} fragmentów (${correctionMatches.length} korekt):\n\n${allMatches.join('\n\n---\n\n')}`;
     }
 
     buildSystemPrompt(knowledgeRules) {
@@ -482,6 +493,12 @@ STRATEGIA WYSZUKIWANIA:
 5. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile", konkretne liczby
 6. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi
 6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
+
+PRIORYTET KOREKT UŻYTKOWNIKÓW:
+- Wyniki oznaczone [KOREKTA UŻYTKOWNIKA] to ZWERYFIKOWANE odpowiedzi od graczy
+- ZAWSZE priorytetowo traktuj korekty - mają najwyższy priorytet nad innymi danymi
+- Jeśli korekta mówi coś innego niż reszta bazy → KOREKTA ma rację
+- Korekty zawierają dokładne pytania i poprawne odpowiedzi
 
 KRYTYCZNE ZASADY:
 - Odpowiadaj TYLKO na podstawie znalezionych informacji
