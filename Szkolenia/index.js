@@ -7,6 +7,7 @@ const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const AIChatService = require('./services/aiChatService');
+const EmbeddingService = require('./services/embeddingService');
 
 const logger = createBotLogger('Szkolenia');
 
@@ -26,6 +27,10 @@ let lastReminderMap = new Map();
 // Inicjalizuj AI Chat Service
 const aiChatService = new AIChatService(config);
 
+// Inicjalizuj Embedding Service (wyszukiwanie semantyczne)
+const embeddingService = new EmbeddingService();
+aiChatService.embeddingService = embeddingService;
+
 // Mapa feedbacku AI - przechowuje kontekst odpowiedzi do oceny (messageId -> relevantKnowledge)
 const feedbackMap = new Map();
 
@@ -34,6 +39,7 @@ const sharedState = {
     client,
     config,
     aiChatService,
+    embeddingService,
     feedbackMap
 };
 
@@ -66,6 +72,25 @@ client.once(Events.ClientReady, async () => {
     }
 
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
+
+    // Inicjalizuj model embeddingów i reindeksuj bazę wiedzy (w tle)
+    embeddingService.initialize().then(async () => {
+        if (embeddingService.ready) {
+            try {
+                const knowledgeDataArray = await aiChatService.loadAllKnowledgeData();
+                const filePaths = [
+                    ...AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id => `knowledge_${id}.md`),
+                    'knowledge_corrections.md'
+                ];
+                await embeddingService.reindex(knowledgeDataArray, filePaths);
+            } catch (error) {
+                logger.error(`❌ Błąd reindeksacji embeddingów przy starcie: ${error.message}`);
+            }
+        }
+    }).catch(error => {
+        logger.error(`❌ Błąd inicjalizacji embeddingów: ${error.message}`);
+    });
+
     await checkThreads(client, sharedState, config, true);
 
     // Uruchom automatyczne sprawdzanie wątków - codziennie o 18:00
@@ -120,24 +145,29 @@ client.on(Events.MessageCreate, async (message) => {
             const authorName = message.member?.displayName || message.author.username;
 
             // Odpowiedź → zapisz jako parę Pytanie/Odpowiedź
+            let entryText;
             if (message.reference) {
                 try {
                     const repliedMessage = await message.fetchReference();
                     if (repliedMessage.content?.trim()) {
-                        await aiChatService.saveKnowledgeEntry(
-                            `Pytanie: ${repliedMessage.content} Odpowiedź: ${message.content}`,
-                            authorName,
-                            channelId
-                        );
+                        entryText = `Pytanie: ${repliedMessage.content} Odpowiedź: ${message.content}`;
                     } else {
-                        await aiChatService.saveKnowledgeEntry(message.content, authorName, channelId);
+                        entryText = message.content;
                     }
                 } catch (err) {
-                    await aiChatService.saveKnowledgeEntry(message.content, authorName, channelId);
+                    entryText = message.content;
                 }
             } else {
-                // Zwykła wiadomość → zapisz bezpośrednio
-                await aiChatService.saveKnowledgeEntry(message.content, authorName, channelId);
+                entryText = message.content;
+            }
+
+            await aiChatService.saveKnowledgeEntry(entryText, authorName, channelId);
+
+            // Dodaj nowy wpis do indeksu embeddingów (inkrementalnie)
+            if (embeddingService.ready) {
+                const dateStr = new Date().toISOString().split('T')[0];
+                const fullEntry = `[${dateStr} | ${authorName}] ${entryText}`;
+                await embeddingService.addToIndex(fullEntry, `knowledge_${channelId}.md`);
             }
         }
 
