@@ -398,7 +398,7 @@ class AIChatService {
      */
     static GREP_TOOL = {
         name: 'grep_knowledge',
-        description: 'Przeszukuje bazę wiedzy o grze Survivor.io. Zwraca fragmenty pasujące do wzorca (regex lub tekst). Możesz wywoływać wielokrotnie z różnymi frazami, żeby znaleźć więcej informacji. Każde wywołanie zwraca max 30 wyników.',
+        description: 'Przeszukuje bazę wiedzy o grze Survivor.io. Zwraca WSZYSTKIE fragmenty pasujące do wzorca (regex lub tekst). Możesz wywoływać wielokrotnie z różnymi frazami. Szukaj aż znajdziesz dokładną odpowiedź.',
         input_schema: {
             type: 'object',
             properties: {
@@ -444,8 +444,7 @@ class AIChatService {
             return `Brak wyników dla "${pattern}". Spróbuj innej frazy lub krótszego wzorca.`;
         }
 
-        const limited = matches.slice(0, 30);
-        return `Znaleziono ${matches.length} fragmentów (pokazuję ${limited.length}):\n\n${limited.join('\n\n---\n\n')}`;
+        return `Znaleziono ${matches.length} fragmentów:\n\n${matches.join('\n\n---\n\n')}`;
     }
 
     buildSystemPrompt(knowledgeRules) {
@@ -453,17 +452,19 @@ class AIChatService {
 
 MASZ NARZĘDZIE: grep_knowledge
 - Użyj go aby przeszukać bazę wiedzy ZANIM odpowiesz
-- Możesz wywoływać WIELOKROTNIE z różnymi frazami
+- Możesz wywoływać WIELOKROTNIE z różnymi frazami - BEZ LIMITU
+- Zwraca WSZYSTKIE pasujące fragmenty
 - Szukaj po polsku I angielsku (baza zawiera oba języki)
 - Używaj krótkich fraz: "transmute", "ciastk", "pet", "xeno", "awaken"
 - Możesz używać regex: "pet.*level", "ciastk.*60"
 
 STRATEGIA WYSZUKIWANIA:
 1. ZAWSZE użyj grep_knowledge przynajmniej RAZ zanim odpowiesz
-2. Jeśli pierwsze wyszukiwanie nie daje pełnej odpowiedzi → szukaj ponownie z INNĄ frazą
-3. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile", "ciastk" itp.
+2. Jeśli pierwsze wyszukiwanie nie daje PEŁNEJ odpowiedzi → SZUKAJ DALEJ z inną frazą
+3. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile", "ciastk", konkretne liczby itp.
 4. Szukaj synonimy: "cake" = "ciastko", "pet" = "zwierzak", "awaken" = "przebudzenie"
-5. Po zebraniu wystarczających danych → odpowiedz
+5. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi lub nie wyczerpiesz pomysłów na frazy
+6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
 
 KRYTYCZNE ZASADY:
 - Odpowiadaj TYLKO na podstawie znalezionych informacji
@@ -792,7 +793,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             // Pętla tool_use - AI sam przeszukuje bazę wiedzy narzędziem grep_knowledge
             const messages = [{ role: 'user', content: userPrompt }];
             const allSearchResults = [];
-            const MAX_TOOL_CALLS = 5;
+            const MAX_TOOL_CALLS = 15;
 
             for (let i = 0; i < MAX_TOOL_CALLS; i++) {
                 const response = await this.client.messages.create({
