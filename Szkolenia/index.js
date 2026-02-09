@@ -207,7 +207,7 @@ client.on(Events.MessageCreate, async (message) => {
 
             // Zapamiętaj kontekst do oceny (auto-cleanup po 10 min)
             if (result.relevantKnowledge) {
-                feedbackMap.set(reply.id, result.relevantKnowledge);
+                feedbackMap.set(reply.id, { knowledge: result.relevantKnowledge, askerId: message.author.id });
                 setTimeout(() => feedbackMap.delete(reply.id), 10 * 60 * 1000);
             }
 

@@ -171,23 +171,33 @@ async function handleScanKnowledge(interaction, state) {
  */
 async function handleAiFeedback(interaction, state, isPositive) {
     const messageId = interaction.message.id;
-    const relevantKnowledge = state.feedbackMap?.get(messageId);
+    const feedbackData = state.feedbackMap?.get(messageId);
 
-    if (!relevantKnowledge) {
-        await interaction.update({ components: [] });
+    if (!feedbackData) {
+        try { await interaction.update({ components: [] }); } catch (err) { /* expired */ }
+        return;
+    }
+
+    // Tylko pytający może ocenić
+    if (feedbackData.askerId && interaction.user.id !== feedbackData.askerId) {
+        try {
+            await interaction.reply({ content: '⚠️ Tylko osoba która zadała pytanie może ocenić odpowiedź.', ephemeral: true });
+        } catch (err) { /* expired */ }
         return;
     }
 
     // Oceń fragmenty w bazie wiedzy
-    await state.aiChatService.rateKnowledgeFragments(relevantKnowledge, isPositive);
+    await state.aiChatService.rateKnowledgeFragments(feedbackData.knowledge, isPositive);
 
     // Usuń przyciski i pokaż wynik
     state.feedbackMap.delete(messageId);
     const emoji = isPositive ? '👍' : '👎';
-    await interaction.update({
-        content: interaction.message.content + `\n\n${emoji} *Oceniono*`,
-        components: []
-    });
+    try {
+        await interaction.update({
+            content: interaction.message.content + `\n\n${emoji} *Oceniono*`,
+            components: []
+        });
+    } catch (err) { /* interaction expired */ }
 }
 
 module.exports = {

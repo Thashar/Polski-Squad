@@ -26,7 +26,7 @@ class AIChatService {
         }
 
         // Limity
-        this.cooldownMinutes = 5; // 5 minut
+        this.cooldownMinutes = 1; // 1 minuta
 
         // Persistent storage
         this.dataDir = path.join(__dirname, '../data');
