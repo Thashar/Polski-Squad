@@ -393,15 +393,82 @@ class AIChatService {
      * Zbuduj system prompt (statyczny - cache'owany przez Anthropic API)
      * Ten prompt jest identyczny dla każdego pytania, więc prompt caching oszczędza ~90% tokenów
      */
+    /**
+     * Definicja narzędzia grep_knowledge dla AI (tool_use)
+     */
+    static GREP_TOOL = {
+        name: 'grep_knowledge',
+        description: 'Przeszukuje bazę wiedzy o grze Survivor.io. Zwraca fragmenty pasujące do wzorca (regex lub tekst). Możesz wywoływać wielokrotnie z różnymi frazami, żeby znaleźć więcej informacji. Każde wywołanie zwraca max 30 wyników.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                pattern: {
+                    type: 'string',
+                    description: 'Fraza lub regex do wyszukania w bazie wiedzy (case-insensitive). Np. "transmute", "ciastk", "pet.*awaken", "xeno.*core"'
+                }
+            },
+            required: ['pattern']
+        }
+    };
+
+    /**
+     * Wykonaj wyszukiwanie grep w bazie wiedzy
+     * @param {string} pattern - Fraza/regex do wyszukania
+     * @param {string} knowledgeData - Zawartość bazy wiedzy
+     * @returns {string} Znalezione fragmenty lub info o braku wyników
+     */
+    executeGrepKnowledge(pattern, knowledgeData) {
+        if (!knowledgeData || !pattern) return 'Baza wiedzy jest pusta.';
+
+        const sections = knowledgeData.split(/\n\n+/).filter(s => s.trim().length > 0);
+        let regex;
+        try {
+            regex = new RegExp(pattern, 'gi');
+        } catch (err) {
+            // Jeśli regex niepoprawny, szukaj jako zwykły tekst
+            regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        }
+
+        const matches = [];
+        for (const section of sections) {
+            const { rating, cleanSection } = this.parseRating(section);
+            if (rating <= -5) continue;
+
+            if (regex.test(cleanSection)) {
+                matches.push(cleanSection);
+                regex.lastIndex = 0; // Reset regex state
+            }
+        }
+
+        if (matches.length === 0) {
+            return `Brak wyników dla "${pattern}". Spróbuj innej frazy lub krótszego wzorca.`;
+        }
+
+        const limited = matches.slice(0, 30);
+        return `Znaleziono ${matches.length} fragmentów (pokazuję ${limited.length}):\n\n${limited.join('\n\n---\n\n')}`;
+    }
+
     buildSystemPrompt(knowledgeRules) {
         let systemPrompt = `Jesteś kompendium wiedzy o grze Survivor.io.
 
+MASZ NARZĘDZIE: grep_knowledge
+- Użyj go aby przeszukać bazę wiedzy ZANIM odpowiesz
+- Możesz wywoływać WIELOKROTNIE z różnymi frazami
+- Szukaj po polsku I angielsku (baza zawiera oba języki)
+- Używaj krótkich fraz: "transmute", "ciastk", "pet", "xeno", "awaken"
+- Możesz używać regex: "pet.*level", "ciastk.*60"
+
+STRATEGIA WYSZUKIWANIA:
+1. ZAWSZE użyj grep_knowledge przynajmniej RAZ zanim odpowiesz
+2. Jeśli pierwsze wyszukiwanie nie daje pełnej odpowiedzi → szukaj ponownie z INNĄ frazą
+3. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile", "ciastk" itp.
+4. Szukaj synonimy: "cake" = "ciastko", "pet" = "zwierzak", "awaken" = "przebudzenie"
+5. Po zebraniu wystarczających danych → odpowiedz
+
 KRYTYCZNE ZASADY:
-- Odpowiadaj TYLKO na podstawie informacji Z BAZY WIEDZY poniżej
-- Jeśli informacji NIE MA w bazie wiedzy → POWIEDZ że nie masz informacji
+- Odpowiadaj TYLKO na podstawie znalezionych informacji
 - ABSOLUTNY ZAKAZ wymyślania postaci, umiejętności, statystyk, mechanik
-- NIGDY nie twórz fikcyjnych nazw, wartości liczbowych, opisów
-- Jeśli nie wiesz → przyznaj się że nie wiesz
+- Jeśli po wielu wyszukiwaniach nie znalazłeś odpowiedzi → powiedz że nie masz informacji
 
 STYL ODPOWIEDZI:
 - Po polsku, krótko (max 3-4 zdania)
@@ -409,47 +476,23 @@ STYL ODPOWIEDZI:
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
 
-FOKUS NA TEMAT PYTANIA (KRYTYCZNE):
-- Baza wiedzy poniżej może zawierać fragmenty NIE związane z pytaniem - to normalne
-- MUSISZ sam ocenić które fragmenty dotyczą pytania, a które NIE
-- Fragmenty NIE związane z pytaniem → KOMPLETNIE IGNORUJ, jakby ich nie było
-- Pytanie o transmute → odpowiedz TYLKO o transmute. NIE dodawaj info o petach, AF, xeno, slotach itp.
-- Pytanie o pety → odpowiedz TYLKO o petach. NIE dodawaj info o broni, eq, transmute itp.
-- NIGDY nie zaczynaj od "Na podstawie informacji z bazy wiedzy" - po prostu odpowiedz
+FOKUS NA TEMAT PYTANIA:
+- Odpowiadaj WYŁĄCZNIE na temat pytania
+- Ignoruj znalezione fragmenty które nie dotyczą tematu
 - Lepiej krótka celna odpowiedź niż długa z domieszką niezwiązanych tematów
 
-ROZUMOWANIE I ANALIZA DANYCH:
-- Gdy w bazie są RÓŻNE fragmenty na ten sam temat → POŁĄCZ je i wyciągnij wnioski
-- Jeśli pytanie wymaga OBLICZENIA (np. "ile potrzebuję X?", "co jest lepsze?") → POLICZ na podstawie danych z bazy
-- Porównuj dane z różnych wpisów, szukaj wzorców i zależności
-- Jeśli różni gracze podają SPRZECZNE informacje → wspomnij o tym i podaj obie wersje
-- Odpowiadaj jak EKSPERT który rozumie kontekst, nie jak wyszukiwarka która cytuje fragmenty
+ROZUMOWANIE I ANALIZA:
+- Łącz dane z różnych fragmentów, obliczaj, porównuj
+- Jeśli nie masz dokładnych danych ale masz powiązane → podaj co masz i oszacuj
+- Częściowa odpowiedź > "nie wiem"
 
-NIGDY SIĘ NIE PODDAWAJ ZA SZYBKO:
-- ZANIM powiesz "nie wiem" → przeszukaj WSZYSTKIE podane fragmenty bazy wiedzy
-- Jeśli nie masz DOKŁADNEJ odpowiedzi, ale masz POWIĄZANE dane → POKAŻ je!
-- Np. pytanie "ile ciastek na peta 0-60?" → jeśli masz dane o ciastkach na inne zakresy, pokaż co masz i spróbuj wyliczyć
-- Np. pytanie "ile ciastek na xeno 90lvl?" → jeśli masz dane o kosztach ciastek na inne lvl, podaj je jako punkt odniesienia
-- Zawsze lepiej podać CZĘŚCIOWĄ odpowiedź z tym co masz niż powiedzieć "nie wiem"
-- "Nie mam informacji" → TYLKO gdy w bazie nie ma ABSOLUTNIE NIC związanego z tematem
+ZAKOŃCZENIE:
+- Zakończ: "Oceń odpowiedź kciukiem 👍/👎!"
+- NIGDY nie dodawaj "baza nie zawiera..."
 
-INSTRUKCJA ODPOWIADANIA:
-1. Przeczytaj WSZYSTKIE fragmenty bazy wiedzy
-2. Wybierz te które dotyczą tematu pytania
-3. Jeśli masz dokładną odpowiedź → podaj ją
-4. Jeśli masz częściowe dane → podaj co masz, spróbuj wyliczyć/oszacować, zaznacz że to szacunek
-5. Jeśli masz powiązane dane (np. inne zakresy, inne poziomy) → podaj jako punkt odniesienia
-6. Dopiero gdy nie ma NIC związanego → powiedz że nie masz informacji
-
-ZAKOŃCZENIE ODPOWIEDZI:
-- Zakończ zachętą: "Oceń odpowiedź kciukiem 👍/👎!"
-- NIGDY nie dodawaj "niestety nie mam więcej informacji" ani "baza nie zawiera..."
-
-PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
-❌ Wymyślanie nazw postaci (np. "Thashar")
-❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
-❌ Wymyślanie umiejętności które nie są w bazie
-❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
+PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
+❌ Wymyślanie statystyk, nazw, umiejętności
+❌ Odpowiadanie BEZ użycia grep_knowledge
 ❌ Dodawanie "niestety baza nie zawiera..." po udzieleniu odpowiedzi`;
 
         if (knowledgeRules) {
@@ -460,18 +503,10 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
     }
 
     /**
-     * Zbuduj user prompt (dynamiczny - zawiera pytanie + relevantne fragmenty bazy wiedzy)
+     * Zbuduj user prompt (dynamiczny - tylko pytanie, baza wiedzy dostępna przez narzędzie)
      */
-    buildUserPrompt(context, relevantKnowledge) {
-        let prompt = `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}`;
-
-        if (relevantKnowledge) {
-            prompt += `\n\n===== BAZA WIEDZY O GRZE =====\n\n${relevantKnowledge}\n\n===== KONIEC BAZY WIEDZY =====`;
-        } else {
-            prompt += `\n\n⚠️ UWAGA: Brak informacji w bazie wiedzy na ten temat. Odpowiedz że nie masz informacji i zapytaj czy użytkownik chce dodać te informacje.`;
-        }
-
-        return prompt;
+    buildUserPrompt(context) {
+        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\nUżyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
     }
 
     /**
@@ -747,39 +782,92 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             const knowledgeRules = await this.loadKnowledgeRules();
             const knowledgeData = await this.loadKnowledgeData();
 
-            // Wyszukaj relevantne fragmenty z bazy wiedzy (keyword search)
-            const relevantKnowledge = this.searchKnowledge(question, knowledgeData);
-
             // Zbuduj prompty
             const systemPrompt = this.buildSystemPrompt(knowledgeRules);
-            const userPrompt = this.buildUserPrompt(context, relevantKnowledge);
+            const userPrompt = this.buildUserPrompt(context);
 
             // Zapisz prompt do pliku (debug)
             await this.savePromptToFile(`SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`, context.asker.displayName);
 
-            // Wywołaj API z prompt caching (system prompt cache'owany = ~90% taniej)
-            const response = await this.client.messages.create({
+            // Pętla tool_use - AI sam przeszukuje bazę wiedzy narzędziem grep_knowledge
+            const messages = [{ role: 'user', content: userPrompt }];
+            const allSearchResults = [];
+            const MAX_TOOL_CALLS = 5;
+
+            for (let i = 0; i < MAX_TOOL_CALLS; i++) {
+                const response = await this.client.messages.create({
+                    model: this.model,
+                    max_tokens: 1024,
+                    system: [
+                        {
+                            type: 'text',
+                            text: systemPrompt,
+                            cache_control: { type: 'ephemeral' }
+                        }
+                    ],
+                    messages,
+                    tools: [AIChatService.GREP_TOOL],
+                    temperature: 0.3
+                });
+
+                // Log cache info
+                const usage = response.usage || {};
+                const cacheInfo = usage.cache_read_input_tokens ? ` (cache: ${usage.cache_read_input_tokens}t)` : '';
+
+                // Jeśli AI zakończyło (end_turn) - zwróć odpowiedź
+                if (response.stop_reason === 'end_turn') {
+                    const textBlock = response.content.find(b => b.type === 'text');
+                    const answer = textBlock ? textBlock.text : '⚠️ Brak odpowiedzi od AI.';
+                    const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
+
+                    logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${i} ${cacheInfo}`);
+                    return { content: answer, relevantKnowledge };
+                }
+
+                // Jeśli AI chce użyć narzędzia
+                if (response.stop_reason === 'tool_use') {
+                    const toolUseBlock = response.content.find(b => b.type === 'tool_use');
+                    if (!toolUseBlock || toolUseBlock.name !== 'grep_knowledge') break;
+
+                    const pattern = toolUseBlock.input.pattern;
+                    logger.info(`AI Chat: grep_knowledge("${pattern}") [${i + 1}/${MAX_TOOL_CALLS}]`);
+
+                    // Wykonaj wyszukiwanie
+                    const searchResult = this.executeGrepKnowledge(pattern, knowledgeData);
+                    allSearchResults.push(searchResult);
+
+                    // Dodaj odpowiedź AI i wynik narzędzia do konwersacji
+                    messages.push({ role: 'assistant', content: response.content });
+                    messages.push({
+                        role: 'user',
+                        content: [{
+                            type: 'tool_result',
+                            tool_use_id: toolUseBlock.id,
+                            content: searchResult
+                        }]
+                    });
+
+                    continue;
+                }
+
+                // Inny stop_reason - przerwij pętlę
+                break;
+            }
+
+            // Fallback - jeśli pętla się wyczerpała, zrób ostatni call bez narzędzi
+            const finalResponse = await this.client.messages.create({
                 model: this.model,
                 max_tokens: 1024,
-                system: [
-                    {
-                        type: 'text',
-                        text: systemPrompt,
-                        cache_control: { type: 'ephemeral' }
-                    }
-                ],
-                messages: [{ role: 'user', content: userPrompt }],
+                system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+                messages,
                 temperature: 0.3
             });
 
-            // Wyciągnij odpowiedź
-            const answer = response.content[0].text;
+            const textBlock = finalResponse.content.find(b => b.type === 'text');
+            const answer = textBlock ? textBlock.text : '⚠️ Brak odpowiedzi od AI.';
+            const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
 
-            // Log usage + cache info
-            const usage = response.usage || {};
-            const cacheInfo = usage.cache_read_input_tokens ? ` (cache hit: ${usage.cache_read_input_tokens} tokenów)` : '';
-            logger.info(`AI Chat: ${context.asker.username} zadał pytanie - ${relevantKnowledge ? 'znaleziono fragmenty' : 'brak dopasowań w bazie'}${cacheInfo}`);
-
+            logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${MAX_TOOL_CALLS} (fallback)`);
             return { content: answer, relevantKnowledge };
 
         } catch (error) {

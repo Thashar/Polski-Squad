@@ -17,14 +17,14 @@
 - **Trigger:** Mention @Szkolenia + pytanie (max 300 znaków)
 - **Kanał dozwolony:** `1207041051831832586` - każdy może używać
 - **Administratorzy:** Mogą używać na dowolnym kanale + brak cooldownu
-- **Baza wiedzy (modularny system z keyword search):**
+- **Baza wiedzy (system tool_use z grep_knowledge):**
   - `knowledge_base.md` - zasady ogólne (w repo, cache'owane w system prompt)
   - `data/knowledge_data.md` - faktyczna baza wiedzy (gitignore, tylko na serwerze)
-  - **Keyword search:** Zamiast wysyłać CAŁĄ bazę do AI, bot przeszukuje ją i wysyła tylko relevantne sekcje (max 5)
+  - **grep_knowledge (tool_use):** AI sam przeszukuje bazę wiedzy narzędziem - decyduje co szukać, może szukać wielokrotnie (max 5 wywołań), regex/tekst, max 30 wyników per search
   - **Prompt caching:** System prompt z `cache_control: ephemeral` - ~90% taniej za powtarzające się instrukcje (cache 5 min)
   - Nie trzeba restartować bota
 - **Auto-zbieranie wiedzy z kanału:**
-  - Kanał: `1207041051831832586` - wpisy od osób z rolą `1368903928468738080`
+  - Kanały: `1207041051831832586`, `1194299628905042040` - wpisy od osób z rolą `1368903928468738080`
   - Wiadomości zawierające frazy kluczowe (częściowe dopasowanie, case-insensitive) → automatyczny zapis do `data/knowledge_data.md`
   - Frazy: pet, eq, transmute, xeno, lanca, void, eternal, chaos, tech, part, postać, najlepsz, najgorsz, fusion, astral, af, skrzynk, klucz, shop, sklep, plecak, shard, odłam, ss, skill, kalkulator, coll, synerg, core, chip, rc, legend, epic, set, zone, main, op, daily, ciast, misja
   - Format wpisu: `[YYYY-MM-DD | NickAutora] Treść`
@@ -45,15 +45,14 @@
 - **System feedbacku (👍/👎):**
   - Pod odpowiedzią AI (gdy użyto bazy wiedzy) pojawiają się przyciski 👍 i 👎
   - 👍 dodaje `[+]` do fragmentów użytych w odpowiedzi, 👎 dodaje `[-]`
-  - Fragmenty z wieloma `+` dostają bonus w keyword search (wyższy priorytet)
-  - Fragmenty z wieloma `-` dostają karę (niższy priorytet)
+  - Fragmenty z wieloma `-` i oceną ≤ -5 pomijane przez grep_knowledge
   - Fragmenty z oceną ≤ -5 są automatycznie usuwane z bazy
   - Format w bazie: `[2026-02-09 | Autor] [+++] Treść` lub `[--] Treść`
   - Kontekst feedbacku (feedbackMap) przechowywany 10 min w pamięci, auto-cleanup
-- **Optymalizacja tokenów:** System prompt (statyczny) → cache'owany | Baza wiedzy → keyword search (tylko relevantne fragmenty)
+- **Optymalizacja tokenów:** System prompt (statyczny) → cache'owany | Baza wiedzy → grep_knowledge tool_use (AI sam szuka)
 - **Komenda scan-knowledge (admin):**
   - Trigger: `/scan-knowledge` (slash command)
-  - Skanuje 4 kanały wiedzy rok wstecz
+  - Skanuje 2 kanały wiedzy rok wstecz
   - Zapisuje wiadomości z keyword od osób z rolą (z oryginalną datą)
   - Obsługuje pary Pytanie/Odpowiedź (reply na pytanie z keyword)
   - Pomija duplikaty (sprawdza istniejącą bazę)
