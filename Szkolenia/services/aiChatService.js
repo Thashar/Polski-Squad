@@ -489,9 +489,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
     /** ID kanałów do auto-zbierania wiedzy */
     static KNOWLEDGE_CHANNEL_IDS = [
         '1207041051831832586',
-        '1194299628905042040',
-        '1194298890069999756',
-        '1200051393843695699'
+        '1194299628905042040'
     ];
 
     /** ID roli wymaganej do auto-zbierania wiedzy */
