@@ -396,9 +396,15 @@
       "commands": [
         {
           "name": "@Szkolenia [pytanie]",
-          "description": "AI Chat - zadaj pytanie o grę Survivor.io (baza wiedzy z keyword search)",
+          "description": "AI Chat - zadaj pytanie o grę Survivor.io (hybrydowe wyszukiwanie semantyczne + keyword)",
           "usage": "@Szkolenia Jaki build jest najlepszy na bossy?",
           "requiredPermission": "public"
+        },
+        {
+          "name": "/reindex",
+          "description": "Reindeksuje bazę wiedzy dla wyszukiwania semantycznego (z paskiem postępu)",
+          "usage": "/reindex",
+          "requiredPermission": "administrator"
         },
         {
           "name": "/scan-knowledge",

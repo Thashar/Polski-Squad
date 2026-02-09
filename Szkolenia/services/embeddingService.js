@@ -142,17 +142,20 @@ class EmbeddingService {
      * Dzieli pliki MD na sekcje i generuje embeddingi
      * @param {string[]} knowledgeDataArray - Tablica treści z plików wiedzy
      * @param {string[]} filePaths - Ścieżki plików (do identyfikacji źródła)
+     * @param {Function|null} onProgress - Callback postępu: (processed, total) => void
      */
-    async reindex(knowledgeDataArray, filePaths = []) {
+    async reindex(knowledgeDataArray, filePaths = [], onProgress = null) {
         if (!this.ready) {
             logger.warn('⚠️ Model embeddingów nie gotowy - pomijam reindeksację');
-            return;
+            return { count: 0, duration: 0 };
         }
 
         logger.info('Reindeksacja bazy wiedzy...');
         const startTime = Date.now();
         const newIndex = [];
 
+        // Zbierz wszystkie sekcje do przetworzenia
+        const allSections = [];
         for (let i = 0; i < knowledgeDataArray.length; i++) {
             const data = knowledgeDataArray[i];
             if (!data || !data.trim()) continue;
@@ -160,22 +163,32 @@ class EmbeddingService {
             const source = filePaths[i] || `file_${i}`;
             const sections = data.split(/\n\n+/).filter(s => s.trim().length > 0);
 
-            // Parsuj rating i pomijaj sekcje z oceną ≤ -5
             for (const section of sections) {
                 const { rating, cleanSection } = this.parseRating(section);
                 if (rating <= -5) continue;
-
-                // Pomijaj bardzo krótkie sekcje (mniej niż 10 znaków)
                 if (cleanSection.trim().length < 10) continue;
+                allSections.push({ cleanSection, source });
+            }
+        }
 
-                const embedding = await this.embed(cleanSection, false);
-                if (embedding) {
-                    newIndex.push({
-                        text: cleanSection,
-                        source: path.basename(source),
-                        embedding
-                    });
-                }
+        const total = allSections.length;
+
+        // Generuj embeddingi z postępem
+        for (let i = 0; i < total; i++) {
+            const { cleanSection, source } = allSections[i];
+
+            const embedding = await this.embed(cleanSection, false);
+            if (embedding) {
+                newIndex.push({
+                    text: cleanSection,
+                    source: path.basename(source),
+                    embedding
+                });
+            }
+
+            // Raportuj postęp co 25 fragmentów lub na końcu
+            if (onProgress && (i % 25 === 0 || i === total - 1)) {
+                await onProgress(i + 1, total);
             }
         }
 
@@ -185,6 +198,8 @@ class EmbeddingService {
 
         // Zapisz indeks do pliku
         await this.saveIndex();
+
+        return { count: newIndex.length, duration };
     }
 
     /**

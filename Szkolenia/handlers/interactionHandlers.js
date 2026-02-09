@@ -23,6 +23,8 @@ async function handleInteraction(interaction, state, config) {
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'scan-knowledge') {
                 await handleScanKnowledge(interaction, state);
+            } else if (interaction.commandName === 'reindex') {
+                await handleReindex(interaction, state);
             }
             return;
         }
@@ -166,29 +168,84 @@ async function handleScanKnowledge(interaction, state) {
             `✅ **Skanowanie zakończone!**\n\n` +
             `📊 Sprawdzono: **${totalScanned}** wiadomości\n` +
             `📚 Zapisano: **${totalSaved}** nowych wpisów\n` +
-            `⏭️ Pominięto (duplikaty): **${totalSkipped}**`
+            `⏭️ Pominięto (duplikaty): **${totalSkipped}**\n\n` +
+            (totalSaved > 0 ? '💡 Użyj `/reindex` aby zaktualizować wyszukiwanie semantyczne.' : '')
         );
-
-        // Reindeksacja embeddingów po skanie (jeśli zapisano nowe wpisy)
-        if (totalSaved > 0 && state.embeddingService?.ready) {
-            await channel.send('🔄 Reindeksacja wyszukiwania semantycznego...');
-            try {
-                const AIChatService = require('../services/aiChatService');
-                const knowledgeDataArray = await state.aiChatService.loadAllKnowledgeData();
-                const filePaths = [
-                    ...AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id => `knowledge_${id}.md`),
-                    'knowledge_corrections.md'
-                ];
-                await state.embeddingService.reindex(knowledgeDataArray, filePaths);
-                await channel.send(`✅ Reindeksacja zakończona: **${state.embeddingService.index.length}** fragmentów w indeksie`);
-            } catch (reindexError) {
-                logger.error(`❌ Błąd reindeksacji po skanie: ${reindexError.message}`);
-                await channel.send('⚠️ Reindeksacja nie powiodła się. Sprawdź logi.');
-            }
-        }
     } catch (error) {
         logger.error(`❌ Błąd skanowania: ${error.message}`);
         await channel.send('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
+    }
+}
+
+/**
+ * Obsługa slash command /reindex (admin)
+ * Reindeksuje bazę wiedzy dla wyszukiwania semantycznego z widocznym postępem
+ */
+async function handleReindex(interaction, state) {
+    const isAdmin = state.aiChatService.isAdmin(interaction.member);
+    if (!isAdmin) {
+        await interaction.reply({ content: '⚠️ Tylko administratorzy mogą reindeksować bazę wiedzy.', ephemeral: true });
+        return;
+    }
+
+    const embeddingService = state.embeddingService;
+    if (!embeddingService) {
+        await interaction.reply({ content: '⚠️ Serwis embeddingów nie jest skonfigurowany.', ephemeral: true });
+        return;
+    }
+
+    // Sprawdź czy model jest gotowy, jeśli nie - poczekaj
+    if (!embeddingService.ready) {
+        await interaction.reply('⏳ Model embeddingów się ładuje, czekam...');
+        const ready = await embeddingService.waitForReady(120000);
+        if (!ready) {
+            await interaction.editReply('❌ Model embeddingów nie załadował się w ciągu 2 minut. Sprawdź logi.');
+            return;
+        }
+        await interaction.editReply('✅ Model gotowy! Rozpoczynam reindeksację...');
+    } else {
+        await interaction.reply('🔄 Rozpoczynam reindeksację bazy wiedzy...');
+    }
+
+    const channel = interaction.channel;
+    let progressMsg = null;
+
+    try {
+        const AIChatService = require('../services/aiChatService');
+        const knowledgeDataArray = await state.aiChatService.loadAllKnowledgeData();
+        const filePaths = [
+            ...AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id => `knowledge_${id}.md`),
+            'knowledge_corrections.md'
+        ];
+
+        const result = await embeddingService.reindex(knowledgeDataArray, filePaths, async (processed, total) => {
+            const percent = Math.round((processed / total) * 100);
+            const bar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
+            const text = `🔄 Reindeksacja: \`${bar}\` **${percent}%** (${processed}/${total} fragmentów)`;
+
+            if (progressMsg) {
+                try { await progressMsg.edit(text); } catch (err) { /* ignore rate limit */ }
+            } else {
+                progressMsg = await channel.send(text);
+            }
+        });
+
+        // Usuń wiadomość postępu i wyślij podsumowanie
+        if (progressMsg) {
+            try { await progressMsg.delete(); } catch (err) { /* ignore */ }
+        }
+
+        await channel.send(
+            `✅ **Reindeksacja zakończona!**\n\n` +
+            `📊 Zaindeksowano: **${result.count}** fragmentów\n` +
+            `⏱️ Czas: **${result.duration}s**`
+        );
+    } catch (error) {
+        logger.error(`❌ Błąd reindeksacji: ${error.message}`);
+        if (progressMsg) {
+            try { await progressMsg.delete(); } catch (err) { /* ignore */ }
+        }
+        await channel.send('❌ Reindeksacja nie powiodła się. Sprawdź logi.');
     }
 }
 

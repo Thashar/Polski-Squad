@@ -29,7 +29,8 @@
     - Max 15 wywołań na pytanie
   - **EmbeddingService** (`services/embeddingService.js`):
     - Model ładowany przy starcie bota (kwantyzowany, ~130MB)
-    - Reindeksacja pełnej bazy przy starcie bota i po `/scan-knowledge`
+    - Istniejący indeks wczytywany z pliku przy starcie (bez auto-reindeksacji)
+    - Reindeksacja na żądanie komendą `/reindex` (admin, z paskiem postępu)
     - Inkrementalne dodawanie do indeksu przy auto-zbieraniu wiedzy i korektach
     - Indeks persistowany w `data/embeddings_index.json` (embeddingi jako base64 Float32)
     - Cosine similarity z progiem 0.35, top 10 wyników
@@ -72,11 +73,17 @@
   - Odpowiedzi jako pary Pytanie/Odpowiedź
   - Pomija duplikaty (sprawdza istniejącą bazę)
   - Raportuje postęp na bieżąco + podsumowanie na końcu
-  - Po zakończeniu automatycznie reindeksuje embeddingi (wyszukiwanie semantyczne)
+  - Po zakończeniu podpowiada użycie `/reindex`
+- **Komenda reindex (admin):**
+  - Trigger: `/reindex` (slash command)
+  - Pełna reindeksacja bazy wiedzy dla wyszukiwania semantycznego
+  - Pasek postępu aktualizowany co 25 fragmentów
+  - Podsumowanie: liczba zaindeksowanych fragmentów + czas
 - **Przykłady:**
   - `@Szkolenia Jaki build jest najlepszy na bossy?`
   - `@Szkolenia Jak działają Tech Parts?`
   - `/scan-knowledge` (admin, skan historii)
+  - `/reindex` (admin, reindeksacja embeddingów)
 
 **Env:** TOKEN, CHANNEL_ID, PING_ROLE_ID, CLAN_ROLE_0/1/2/MAIN, ANTHROPIC_API_KEY (opcjonalne), SZKOLENIA_AI_CHAT_MODEL (opcjonalne)
 
