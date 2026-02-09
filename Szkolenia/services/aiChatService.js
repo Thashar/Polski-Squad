@@ -572,18 +572,15 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
      * @param {Function} progressCallback - Callback do raportowania postępu
      * @returns {{ totalScanned: number, totalSaved: number, totalSkipped: number }}
      */
-    async scanChannelHistory(client, progressCallback) {
+    async scanChannelHistory(client, channelCallback) {
         const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
-        let totalSaved = 0;
-        let totalScanned = 0;
-        let totalSkipped = 0;
 
         // Wczytaj istniejącą bazę do sprawdzania duplikatów
         const existingContent = await this.loadKnowledgeData();
 
         // Pobierz guild i członków z wymaganą rolą
         const guild = client.guilds.cache.first();
-        if (!guild) return { totalScanned: 0, totalSaved: 0, totalSkipped: 0 };
+        if (!guild) return [];
 
         await guild.members.fetch();
         const roleMemberIds = new Set(
@@ -591,6 +588,8 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                 .filter(m => m.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID))
                 .map(m => m.id)
         );
+
+        const results = [];
 
         for (const channelId of AIChatService.KNOWLEDGE_CHANNEL_IDS) {
             let channel;
@@ -601,6 +600,9 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             }
             if (!channel) continue;
 
+            let scanned = 0;
+            let saved = 0;
+            let skipped = 0;
             let lastMessageId = null;
             let channelDone = false;
 
@@ -622,7 +624,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                         break;
                     }
 
-                    totalScanned++;
+                    scanned++;
                     if (msg.author.bot) continue;
                     if (!roleMemberIds.has(msg.author.id)) continue;
                     if (!msg.content) continue;
@@ -630,7 +632,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                     const member = guild.members.cache.get(msg.author.id);
                     const authorName = member?.displayName || msg.author.username;
 
-                    let saved = false;
+                    let entrySaved = false;
 
                     // Reply na pytanie z keyword → para Pytanie/Odpowiedź
                     if (msg.reference) {
@@ -643,39 +645,42 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                                 const entry = `Pytanie: ${repliedMessage.content} Odpowiedź: ${msg.content}`;
                                 if (!existingContent.includes(msg.content.trim())) {
                                     await this.saveKnowledgeEntry(entry, authorName, msg.createdAt);
-                                    totalSaved++;
+                                    saved++;
                                 } else {
-                                    totalSkipped++;
+                                    skipped++;
                                 }
-                                saved = true;
+                                entrySaved = true;
                             }
                         } catch (err) { /* usunięta wiadomość */ }
                     }
 
                     // Zwykła wiadomość z keyword, bez pytajnika
-                    if (!saved && !msg.content.includes('?') && this.matchesKnowledgeKeywords(msg.content)) {
+                    if (!entrySaved && !msg.content.includes('?') && this.matchesKnowledgeKeywords(msg.content)) {
                         if (!existingContent.includes(msg.content.trim())) {
                             await this.saveKnowledgeEntry(msg.content, authorName, msg.createdAt);
-                            totalSaved++;
+                            saved++;
                         } else {
-                            totalSkipped++;
+                            skipped++;
                         }
                     }
                 }
 
                 lastMessageId = messages.last().id;
 
-                // Progress callback co 500 wiadomości
-                if (progressCallback && totalScanned % 500 < 100) {
-                    await progressCallback(totalScanned, totalSaved, channel.name);
-                }
-
                 // Ochrona przed rate limitem
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
+
+            const channelResult = { channelName: channel.name, scanned, saved, skipped };
+            results.push(channelResult);
+
+            // Callback po zakończeniu kanału
+            if (channelCallback) {
+                await channelCallback(channelResult);
+            }
         }
 
-        return { totalScanned, totalSaved, totalSkipped };
+        return results;
     }
 
     /**
