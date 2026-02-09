@@ -503,7 +503,6 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             const newEntry = `${separator}[${dateStr} | ${authorName}] ${content}`;
 
             await fs.writeFile(this.knowledgeDataFile, currentContent + newEntry, 'utf-8');
-            logger.info(`📚 Auto-zapis wiedzy od ${authorName}: ${content.substring(0, 60)}...`);
         } catch (error) {
             logger.error(`❌ Błąd auto-zapisu wiedzy: ${error.message}`);
         }
