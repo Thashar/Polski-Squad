@@ -26,11 +26,15 @@ let lastReminderMap = new Map();
 // Inicjalizuj AI Chat Service
 const aiChatService = new AIChatService(config);
 
+// Mapa feedbacku AI - przechowuje kontekst odpowiedzi do oceny (messageId -> relevantKnowledge)
+const feedbackMap = new Map();
+
 const sharedState = {
     lastReminderMap,
     client,
     config,
-    aiChatService
+    aiChatService,
+    feedbackMap
 };
 
 client.once(Events.ClientReady, async () => {
@@ -152,13 +156,30 @@ client.on(Events.MessageCreate, async (message) => {
             await message.channel.sendTyping();
 
             // Zadaj pytanie AI
-            const answer = await aiChatService.ask(message, question);
+            const result = await aiChatService.ask(message, question);
 
             // Zapisz cooldown
             aiChatService.recordAsk(message.author.id, message.member);
 
-            // Wyślij odpowiedź
-            await message.reply(answer);
+            // Wyślij odpowiedź z przyciskami feedbacku (jeśli użyto bazy wiedzy)
+            const replyOptions = { content: result.content };
+
+            if (result.relevantKnowledge) {
+                const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('ai_feedback_up').setEmoji('👍').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('ai_feedback_down').setEmoji('👎').setStyle(ButtonStyle.Danger)
+                );
+                replyOptions.components = [row];
+            }
+
+            const reply = await message.reply(replyOptions);
+
+            // Zapamiętaj kontekst do oceny (auto-cleanup po 10 min)
+            if (result.relevantKnowledge) {
+                feedbackMap.set(reply.id, result.relevantKnowledge);
+                setTimeout(() => feedbackMap.delete(reply.id), 10 * 60 * 1000);
+            }
 
             return; // Zakończ handler - nie przetwarzaj dalej
         }

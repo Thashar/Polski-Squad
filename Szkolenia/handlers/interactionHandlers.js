@@ -25,6 +25,12 @@ async function handleInteraction(interaction, state, config) {
 
         const { customId, user, channel } = interaction;
 
+        // Feedback AI Chat (👍/👎)
+        if (customId === 'ai_feedback_up' || customId === 'ai_feedback_down') {
+            await handleAiFeedback(interaction, state, customId === 'ai_feedback_up');
+            return;
+        }
+
         // Sprawdź czy to właściciel wątku klika przycisk (tylko dla wątków)
         if (!channel.isThread()) return;
 
@@ -95,6 +101,31 @@ async function handleKeepOpen(interaction, state, config) {
 
     // Zresetuj status przypomnienia - użytkownik wybrał "jeszcze nie zamykaj"
     await reminderStorage.resetReminderStatus(state.lastReminderMap, channel.id);
+}
+
+/**
+ * Obsługa feedbacku AI Chat (👍/👎)
+ * Aktualizuje oceny fragmentów bazy wiedzy użytych w odpowiedzi
+ */
+async function handleAiFeedback(interaction, state, isPositive) {
+    const messageId = interaction.message.id;
+    const relevantKnowledge = state.feedbackMap?.get(messageId);
+
+    if (!relevantKnowledge) {
+        await interaction.update({ components: [] });
+        return;
+    }
+
+    // Oceń fragmenty w bazie wiedzy
+    await state.aiChatService.rateKnowledgeFragments(relevantKnowledge, isPositive);
+
+    // Usuń przyciski i pokaż wynik
+    state.feedbackMap.delete(messageId);
+    const emoji = isPositive ? '👍' : '👎';
+    await interaction.update({
+        content: interaction.message.content + `\n\n${emoji} *Oceniono*`,
+        components: []
+    });
 }
 
 module.exports = {
