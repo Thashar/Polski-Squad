@@ -19,16 +19,15 @@
 - **Administratorzy:** Mogą używać na dowolnym kanale + brak cooldownu
 - **Baza wiedzy (system tool_use z grep_knowledge):**
   - `knowledge_base.md` - zasady ogólne (w repo, cache'owane w system prompt)
-  - `data/knowledge_data.md` - faktyczna baza wiedzy (gitignore, tylko na serwerze)
-  - **grep_knowledge (tool_use):** AI sam przeszukuje bazę wiedzy narzędziem - decyduje co szukać, może szukać wielokrotnie (max 5 wywołań), regex/tekst, max 30 wyników per search
-  - **Prompt caching:** System prompt z `cache_control: ephemeral` - ~90% taniej za powtarzające się instrukcje (cache 5 min)
-  - Nie trzeba restartować bota
-- **Auto-zbieranie wiedzy z kanału:**
-  - Kanały: `1207041051831832586`, `1194299628905042040` - wpisy od osób z rolą `1368903928468738080`
-  - Wiadomości zawierające frazy kluczowe (częściowe dopasowanie, case-insensitive) → automatyczny zapis do `data/knowledge_data.md`
-  - Frazy: pet, eq, transmute, xeno, lanca, void, eternal, chaos, tech, part, postać, najlepsz, najgorsz, fusion, astral, af, skrzynk, klucz, shop, sklep, plecak, shard, odłam, ss, skill, kalkulator, coll, synerg, core, chip, rc, legend, epic, set, zone, main, op, daily, ciast, misja
+  - `data/knowledge_{channelId}.md` - osobna baza per kanał (gitignore, tylko na serwerze)
+  - **grep_knowledge (tool_use):** AI sam przeszukuje WSZYSTKIE bazy wiedzy narzędziem - regex/tekst, bez limitu wyników, max 15 wywołań
+  - **Prompt caching:** System prompt z `cache_control: ephemeral` - ~90% taniej (cache 5 min)
+- **Auto-zbieranie wiedzy z kanałów:**
+  - Kanały: `1207041051831832586`, `1194299628905042040`
+  - Zbiera WSZYSTKIE wiadomości (nie-botów) - bez filtrowania keywords
+  - Odpowiedzi zapisywane jako pary: `Pytanie: ... Odpowiedź: ...`
   - Format wpisu: `[YYYY-MM-DD | NickAutora] Treść`
-  - Bez potrzeby zatwierdzania - automatyczny zapis
+  - Każdy kanał → osobny plik bazy wiedzy
 - **Styl odpowiedzi:**
   - Krótko i zwięźle (max 3-4 zdania)
   - **Ważne informacje** pogrubione
@@ -52,9 +51,9 @@
 - **Optymalizacja tokenów:** System prompt (statyczny) → cache'owany | Baza wiedzy → grep_knowledge tool_use (AI sam szuka)
 - **Komenda scan-knowledge (admin):**
   - Trigger: `/scan-knowledge` (slash command)
-  - Skanuje 2 kanały wiedzy rok wstecz
-  - Zapisuje wiadomości z keyword od osób z rolą (z oryginalną datą)
-  - Obsługuje pary Pytanie/Odpowiedź (reply na pytanie z keyword)
+  - Skanuje 2 kanały od początku 2024 roku
+  - Zapisuje WSZYSTKIE wiadomości (nie-botów) do osobnych plików per kanał
+  - Odpowiedzi jako pary Pytanie/Odpowiedź
   - Pomija duplikaty (sprawdza istniejącą bazę)
   - Raportuje postęp na bieżąco + podsumowanie na końcu
 - **Przykłady:**

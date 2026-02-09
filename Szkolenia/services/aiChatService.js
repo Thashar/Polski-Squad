@@ -32,7 +32,10 @@ class AIChatService {
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.knowledgeBaseFile = path.join(__dirname, '../knowledge_base.md'); // Zasady ogólne
-        this.knowledgeDataFile = path.join(this.dataDir, 'knowledge_data.md'); // Faktyczna baza wiedzy (gitignore)
+        // Osobna baza wiedzy per kanał
+        this.knowledgeFiles = AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id =>
+            path.join(this.dataDir, `knowledge_${id}.md`)
+        );
 
         // In-memory cache
         this.cooldowns = new Map(); // userId -> timestamp
@@ -108,17 +111,23 @@ class AIChatService {
     }
 
     /**
-     * Wczytaj faktyczną bazę wiedzy (knowledge_data.md) - dynamiczna, przeszukiwana
+     * Wczytaj bazę wiedzy ze wszystkich plików kanałów
+     * @returns {string[]} Tablica treści z każdego pliku
      */
-    async loadKnowledgeData() {
-        try {
-            return await fs.readFile(this.knowledgeDataFile, 'utf8');
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                logger.warn('⚠️ Plik knowledge_data.md nie istnieje - baza wiedzy jest pusta');
+    async loadAllKnowledgeData() {
+        const results = [];
+        for (const filePath of this.knowledgeFiles) {
+            try {
+                const content = await fs.readFile(filePath, 'utf8');
+                results.push(content);
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.error(`❌ Błąd wczytywania ${filePath}: ${error.message}`);
+                }
+                results.push('');
             }
-            return '';
         }
+        return results;
     }
 
     /**
@@ -412,31 +421,34 @@ class AIChatService {
     };
 
     /**
-     * Wykonaj wyszukiwanie grep w bazie wiedzy
+     * Wykonaj wyszukiwanie grep w bazach wiedzy (wszystkie pliki kanałów)
      * @param {string} pattern - Fraza/regex do wyszukania
-     * @param {string} knowledgeData - Zawartość bazy wiedzy
+     * @param {string[]} knowledgeDataArray - Tablica treści z każdego pliku
      * @returns {string} Znalezione fragmenty lub info o braku wyników
      */
-    executeGrepKnowledge(pattern, knowledgeData) {
-        if (!knowledgeData || !pattern) return 'Baza wiedzy jest pusta.';
+    executeGrepKnowledge(pattern, knowledgeDataArray) {
+        if (!pattern) return 'Podaj frazę do wyszukania.';
 
-        const sections = knowledgeData.split(/\n\n+/).filter(s => s.trim().length > 0);
         let regex;
         try {
             regex = new RegExp(pattern, 'gi');
         } catch (err) {
-            // Jeśli regex niepoprawny, szukaj jako zwykły tekst
             regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         }
 
         const matches = [];
-        for (const section of sections) {
-            const { rating, cleanSection } = this.parseRating(section);
-            if (rating <= -5) continue;
+        for (const data of knowledgeDataArray) {
+            if (!data || !data.trim()) continue;
+            const sections = data.split(/\n\n+/).filter(s => s.trim().length > 0);
 
-            if (regex.test(cleanSection)) {
-                matches.push(cleanSection);
-                regex.lastIndex = 0; // Reset regex state
+            for (const section of sections) {
+                const { rating, cleanSection } = this.parseRating(section);
+                if (rating <= -5) continue;
+
+                if (regex.test(cleanSection)) {
+                    matches.push(cleanSection);
+                    regex.lastIndex = 0;
+                }
             }
         }
 
@@ -543,20 +555,22 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
     }
 
     /**
-     * Zapisz wpis wiedzy do knowledge_data.md
+     * Zapisz wpis wiedzy do pliku kanału
      * @param {string} content - Treść wpisu
      * @param {string} authorName - Nazwa autora
+     * @param {string} channelId - ID kanału
      * @param {Date} [date] - Data wpisu (domyślnie teraz)
      */
-    async saveKnowledgeEntry(content, authorName, date = null) {
+    async saveKnowledgeEntry(content, authorName, channelId, date = null) {
         try {
             await fs.mkdir(this.dataDir, { recursive: true });
 
+            const filePath = path.join(this.dataDir, `knowledge_${channelId}.md`);
+
             let currentContent = '';
             try {
-                currentContent = await fs.readFile(this.knowledgeDataFile, 'utf-8');
+                currentContent = await fs.readFile(filePath, 'utf-8');
             } catch (err) {
-                // Plik nie istnieje - utworzymy nowy
                 currentContent = '';
             }
 
@@ -565,7 +579,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             const separator = currentContent.trim() ? '\n\n' : '';
             const newEntry = `${separator}[${dateStr} | ${authorName}] ${content}`;
 
-            await fs.writeFile(this.knowledgeDataFile, currentContent + newEntry, 'utf-8');
+            await fs.writeFile(filePath, currentContent + newEntry, 'utf-8');
         } catch (error) {
             logger.error(`❌ Błąd auto-zapisu wiedzy: ${error.message}`);
         }
@@ -580,47 +594,43 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
      */
     async rateKnowledgeFragments(relevantKnowledgeStr, isPositive) {
         try {
-            let fileContent = '';
-            try {
-                fileContent = await fs.readFile(this.knowledgeDataFile, 'utf-8');
-            } catch (err) {
-                return;
-            }
-
-            const fileSections = fileContent.split(/\n\n+/).filter(s => s.trim());
             const relevantClean = relevantKnowledgeStr.split(/\n\n+/).map(s => s.trim());
 
-            let updated = false;
-            let removedCount = 0;
-            const updatedSections = [];
-
-            for (const fileSection of fileSections) {
-                const { rating: currentRating, cleanSection } = this.parseRating(fileSection);
-
-                // Sprawdź czy ten fragment pasuje do któregoś z relevantnych
-                const isRelevant = relevantClean.some(rel => cleanSection.trim() === rel.trim());
-
-                if (isRelevant) {
-                    const newRating = isPositive ? currentRating + 1 : currentRating - 1;
-
-                    // Auto-usuwanie przy ocenie ≤ -5
-                    if (newRating <= -5) {
-                        removedCount++;
-                        logger.info(`🗑️ Usunięto fragment z bazy (ocena ${newRating}): ${cleanSection.substring(0, 50)}...`);
-                        continue;
-                    }
-
-                    updatedSections.push(this.updateSectionRating(fileSection, newRating));
-                    updated = true;
-                } else {
-                    updatedSections.push(fileSection);
+            for (const filePath of this.knowledgeFiles) {
+                let fileContent = '';
+                try {
+                    fileContent = await fs.readFile(filePath, 'utf-8');
+                } catch (err) {
+                    continue;
                 }
-            }
 
-            if (updated) {
-                await fs.writeFile(this.knowledgeDataFile, updatedSections.join('\n\n'), 'utf-8');
-                const action = isPositive ? '👍' : '👎';
-                logger.info(`📊 Ocena wiedzy: ${action}${removedCount > 0 ? ` (usunięto ${removedCount} fragmentów)` : ''}`);
+                const fileSections = fileContent.split(/\n\n+/).filter(s => s.trim());
+                let updated = false;
+                let removedCount = 0;
+                const updatedSections = [];
+
+                for (const fileSection of fileSections) {
+                    const { rating: currentRating, cleanSection } = this.parseRating(fileSection);
+                    const isRelevant = relevantClean.some(rel => cleanSection.trim() === rel.trim());
+
+                    if (isRelevant) {
+                        const newRating = isPositive ? currentRating + 1 : currentRating - 1;
+                        if (newRating <= -5) {
+                            removedCount++;
+                            continue;
+                        }
+                        updatedSections.push(this.updateSectionRating(fileSection, newRating));
+                        updated = true;
+                    } else {
+                        updatedSections.push(fileSection);
+                    }
+                }
+
+                if (updated) {
+                    await fs.writeFile(filePath, updatedSections.join('\n\n'), 'utf-8');
+                    const action = isPositive ? '👍' : '👎';
+                    logger.info(`📊 Ocena wiedzy: ${action}${removedCount > 0 ? ` (usunięto ${removedCount})` : ''}`);
+                }
             }
         } catch (error) {
             logger.error(`❌ Błąd oceniania wiedzy: ${error.message}`);
@@ -628,33 +638,18 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
     }
 
     /**
-     * Skanuj historię kanałów i załaduj wiedzę z ostatniego roku
-     * Używane przez komendę @Szkolenia scan-wiedza (tylko admini)
-     * @param {Client} client - Klient Discord
-     * @param {Function} progressCallback - Callback do raportowania postępu
-     * @returns {{ totalScanned: number, totalSaved: number, totalSkipped: number }}
+     * Skanuj historię kanałów od początku 2024 i zapisuj WSZYSTKO
+     * Każdy kanał ma osobny plik bazy wiedzy
+     * Odpowiedzi na wiadomości zapisywane jako pary Pytanie: / Odpowiedź:
      */
     async scanChannelHistory(client, channelCallback) {
-        const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
+        const startOf2024 = new Date('2024-01-01').getTime();
 
-        // Wczytaj istniejącą bazę do sprawdzania duplikatów
-        const existingContent = await this.loadKnowledgeData();
-
-        // Pobierz guild i członków z wymaganą rolą
         const guild = client.guilds.cache.first();
         if (!guild) {
             logger.error('❌ Scan: brak guild');
             return [];
         }
-
-        logger.info('🔍 Scan: pobieram członków serwera...');
-        await guild.members.fetch();
-        const roleMemberIds = new Set(
-            guild.members.cache
-                .filter(m => m.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID))
-                .map(m => m.id)
-        );
-        logger.info(`🔍 Scan: znaleziono ${roleMemberIds.size} członków z wymaganą rolą`);
 
         const results = [];
 
@@ -669,6 +664,12 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             if (!channel) continue;
 
             logger.info(`🔍 Scan: rozpoczynam kanał #${channel.name} (${channelId})`);
+
+            // Wczytaj istniejącą bazę tego kanału do sprawdzania duplikatów
+            let existingContent = '';
+            try {
+                existingContent = await fs.readFile(path.join(this.dataDir, `knowledge_${channelId}.md`), 'utf-8');
+            } catch (err) { /* plik nie istnieje */ }
 
             let scanned = 0;
             let saved = 0;
@@ -690,22 +691,18 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                 if (messages.size === 0) break;
 
                 for (const [, msg] of messages) {
-                    if (msg.createdTimestamp < oneYearAgo) {
+                    if (msg.createdTimestamp < startOf2024) {
                         channelDone = true;
                         break;
                     }
 
                     scanned++;
                     if (msg.author.bot) continue;
-                    if (!roleMemberIds.has(msg.author.id)) continue;
-                    if (!msg.content) continue;
+                    if (!msg.content || !msg.content.trim()) continue;
 
-                    const member = guild.members.cache.get(msg.author.id);
-                    const authorName = member?.displayName || msg.author.username;
+                    const authorName = msg.member?.displayName || msg.author.displayName || msg.author.username;
 
-                    let entrySaved = false;
-
-                    // Reply na pytanie z keyword → para Pytanie/Odpowiedź
+                    // Jeśli to odpowiedź na inną wiadomość → zapisz jako Pytanie/Odpowiedź
                     if (msg.reference) {
                         try {
                             const fetchPromise = msg.fetchReference();
@@ -713,30 +710,25 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                                 setTimeout(() => reject(new Error('timeout')), 5000)
                             );
                             const repliedMessage = await Promise.race([fetchPromise, timeoutPromise]);
-                            if (
-                                repliedMessage.content?.includes('?') &&
-                                this.matchesKnowledgeKeywords(repliedMessage.content)
-                            ) {
+                            if (repliedMessage.content?.trim()) {
                                 const entry = `Pytanie: ${repliedMessage.content} Odpowiedź: ${msg.content}`;
                                 if (!existingContent.includes(msg.content.trim())) {
-                                    await this.saveKnowledgeEntry(entry, authorName, msg.createdAt);
+                                    await this.saveKnowledgeEntry(entry, authorName, channelId, msg.createdAt);
                                     saved++;
                                 } else {
                                     skipped++;
                                 }
-                                entrySaved = true;
+                                continue;
                             }
                         } catch (err) { /* usunięta wiadomość lub timeout */ }
                     }
 
-                    // Zwykła wiadomość z keyword, bez pytajnika
-                    if (!entrySaved && !msg.content.includes('?') && this.matchesKnowledgeKeywords(msg.content)) {
-                        if (!existingContent.includes(msg.content.trim())) {
-                            await this.saveKnowledgeEntry(msg.content, authorName, msg.createdAt);
-                            saved++;
-                        } else {
-                            skipped++;
-                        }
+                    // Zwykła wiadomość → zapisz bezpośrednio
+                    if (!existingContent.includes(msg.content.trim())) {
+                        await this.saveKnowledgeEntry(msg.content, authorName, channelId, msg.createdAt);
+                        saved++;
+                    } else {
+                        skipped++;
                     }
                 }
 
@@ -781,7 +773,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
 
             // Wczytaj zasady ogólne (statyczne) i bazę wiedzy (dynamiczną)
             const knowledgeRules = await this.loadKnowledgeRules();
-            const knowledgeData = await this.loadKnowledgeData();
+            const knowledgeDataArray = await this.loadAllKnowledgeData();
 
             // Zbuduj prompty
             const systemPrompt = this.buildSystemPrompt(knowledgeRules);
@@ -818,7 +810,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                 // Jeśli AI zakończyło (end_turn) - zwróć odpowiedź
                 if (response.stop_reason === 'end_turn') {
                     const textBlock = response.content.find(b => b.type === 'text');
-                    const answer = textBlock ? textBlock.text : '⚠️ Brak odpowiedzi od AI.';
+                    const answer = textBlock ? textBlock.text.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim() : '⚠️ Brak odpowiedzi od AI.';
                     const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
 
                     logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${i} ${cacheInfo}`);
@@ -834,7 +826,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                     logger.info(`AI Chat: grep_knowledge("${pattern}") [${i + 1}/${MAX_TOOL_CALLS}]`);
 
                     // Wykonaj wyszukiwanie
-                    const searchResult = this.executeGrepKnowledge(pattern, knowledgeData);
+                    const searchResult = this.executeGrepKnowledge(pattern, knowledgeDataArray);
                     allSearchResults.push(searchResult);
 
                     // Dodaj odpowiedź AI i wynik narzędzia do konwersacji
@@ -865,7 +857,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             });
 
             const textBlock = finalResponse.content.find(b => b.type === 'text');
-            const answer = textBlock ? textBlock.text : '⚠️ Brak odpowiedzi od AI.';
+            const answer = textBlock ? textBlock.text.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim() : '⚠️ Brak odpowiedzi od AI.';
             const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
 
             logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${MAX_TOOL_CALLS} (fallback)`);
