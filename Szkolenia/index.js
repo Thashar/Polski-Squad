@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, SlashCommandBuilder } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
@@ -53,6 +53,18 @@ client.once(Events.ClientReady, async () => {
         logger.error('❌ Błąd ładowania danych przypomień:', error.message);
     }
     
+    // Rejestracja slash commands
+    try {
+        await client.application.commands.set([
+            new SlashCommandBuilder()
+                .setName('scan-knowledge')
+                .setDescription('Skanuje kanały wiedzy rok wstecz i zapisuje wpisy do bazy (admin)')
+        ]);
+        logger.info('Zarejestrowano slash commands');
+    } catch (error) {
+        logger.error(`Błąd rejestracji slash commands: ${error.message}`);
+    }
+
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
     await checkThreads(client, sharedState, config, true);
 
@@ -155,36 +167,6 @@ client.on(Events.MessageCreate, async (message) => {
             const question = message.content
                 .replace(/<@!?\d+>/g, '') // Usuń wszystkie @mentions
                 .trim();
-
-            // Komenda scan-knowledge (tylko admini) - skanuje kanały rok wstecz
-            if (question.toLowerCase() === 'scan-knowledge') {
-                if (!isAdmin) {
-                    await message.reply('⚠️ Tylko administratorzy mogą uruchomić skanowanie.');
-                    return;
-                }
-
-                const reply = await message.reply('🔍 Rozpoczynam skanowanie kanałów (ostatni rok)...');
-
-                try {
-                    const result = await aiChatService.scanChannelHistory(client, async (scanned, saved, channelName) => {
-                        try {
-                            await reply.edit(`🔍 Skanowanie... ${scanned} wiadomości sprawdzonych, ${saved} zapisanych (kanał: #${channelName})`);
-                        } catch (err) { /* ignore edit errors */ }
-                    });
-
-                    await reply.edit(
-                        `✅ **Skanowanie zakończone!**\n\n` +
-                        `📊 Sprawdzono: **${result.totalScanned}** wiadomości\n` +
-                        `📚 Zapisano: **${result.totalSaved}** nowych wpisów\n` +
-                        `⏭️ Pominięto (duplikaty): **${result.totalSkipped}**`
-                    );
-                } catch (error) {
-                    logger.error(`❌ Błąd skanowania: ${error.message}`);
-                    await reply.edit('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
-                }
-
-                return;
-            }
 
             if (!question || question.length === 0) {
                 await message.reply('❓ Zadaj mi jakieś pytanie!');

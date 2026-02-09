@@ -52,7 +52,7 @@
   - Kontekst feedbacku (feedbackMap) przechowywany 10 min w pamięci, auto-cleanup
 - **Optymalizacja tokenów:** System prompt (statyczny) → cache'owany | Baza wiedzy → keyword search (tylko relevantne fragmenty)
 - **Komenda scan-knowledge (admin):**
-  - Trigger: `@Szkolenia scan-knowledge`
+  - Trigger: `/scan-knowledge` (slash command)
   - Skanuje 4 kanały wiedzy rok wstecz
   - Zapisuje wiadomości z keyword od osób z rolą (z oryginalną datą)
   - Obsługuje pary Pytanie/Odpowiedź (reply na pytanie z keyword)
@@ -61,7 +61,7 @@
 - **Przykłady:**
   - `@Szkolenia Jaki build jest najlepszy na bossy?`
   - `@Szkolenia Jak działają Tech Parts?`
-  - `@Szkolenia scan-knowledge` (admin, skan historii)
+  - `/scan-knowledge` (admin, skan historii)
 
 **Env:** TOKEN, CHANNEL_ID, PING_ROLE_ID, CLAN_ROLE_0/1/2/MAIN, ANTHROPIC_API_KEY (opcjonalne), SZKOLENIA_AI_CHAT_MODEL (opcjonalne)
 
