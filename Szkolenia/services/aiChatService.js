@@ -474,8 +474,9 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
      * Zapisz wpis wiedzy do knowledge_data.md
      * @param {string} content - Treść wpisu
      * @param {string} authorName - Nazwa autora
+     * @param {Date} [date] - Data wpisu (domyślnie teraz)
      */
-    async saveKnowledgeEntry(content, authorName) {
+    async saveKnowledgeEntry(content, authorName, date = null) {
         try {
             await fs.mkdir(this.dataDir, { recursive: true });
 
@@ -487,8 +488,8 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                 currentContent = '';
             }
 
-            const now = new Date();
-            const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+            const dateObj = date || new Date();
+            const dateStr = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
             const separator = currentContent.trim() ? '\n\n' : '';
             const newEntry = `${separator}[${dateStr} | ${authorName}] ${content}`;
 
@@ -553,6 +554,119 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
         } catch (error) {
             logger.error(`❌ Błąd oceniania wiedzy: ${error.message}`);
         }
+    }
+
+    /**
+     * Skanuj historię kanałów i załaduj wiedzę z ostatniego roku
+     * Używane przez komendę @Szkolenia scan-wiedza (tylko admini)
+     * @param {Client} client - Klient Discord
+     * @param {Function} progressCallback - Callback do raportowania postępu
+     * @returns {{ totalScanned: number, totalSaved: number, totalSkipped: number }}
+     */
+    async scanChannelHistory(client, progressCallback) {
+        const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
+        let totalSaved = 0;
+        let totalScanned = 0;
+        let totalSkipped = 0;
+
+        // Wczytaj istniejącą bazę do sprawdzania duplikatów
+        const existingContent = await this.loadKnowledgeData();
+
+        // Pobierz guild i członków z wymaganą rolą
+        const guild = client.guilds.cache.first();
+        if (!guild) return { totalScanned: 0, totalSaved: 0, totalSkipped: 0 };
+
+        await guild.members.fetch();
+        const roleMemberIds = new Set(
+            guild.members.cache
+                .filter(m => m.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID))
+                .map(m => m.id)
+        );
+
+        for (const channelId of AIChatService.KNOWLEDGE_CHANNEL_IDS) {
+            let channel;
+            try {
+                channel = await client.channels.fetch(channelId);
+            } catch (err) {
+                continue;
+            }
+            if (!channel) continue;
+
+            let lastMessageId = null;
+            let channelDone = false;
+
+            while (!channelDone) {
+                const options = { limit: 100 };
+                if (lastMessageId) options.before = lastMessageId;
+
+                let messages;
+                try {
+                    messages = await channel.messages.fetch(options);
+                } catch (err) {
+                    break;
+                }
+                if (messages.size === 0) break;
+
+                for (const [, msg] of messages) {
+                    if (msg.createdTimestamp < oneYearAgo) {
+                        channelDone = true;
+                        break;
+                    }
+
+                    totalScanned++;
+                    if (msg.author.bot) continue;
+                    if (!roleMemberIds.has(msg.author.id)) continue;
+                    if (!msg.content) continue;
+
+                    const member = guild.members.cache.get(msg.author.id);
+                    const authorName = member?.displayName || msg.author.username;
+
+                    let saved = false;
+
+                    // Reply na pytanie z keyword → para Pytanie/Odpowiedź
+                    if (msg.reference) {
+                        try {
+                            const repliedMessage = await msg.fetchReference();
+                            if (
+                                repliedMessage.content?.includes('?') &&
+                                this.matchesKnowledgeKeywords(repliedMessage.content)
+                            ) {
+                                const entry = `Pytanie: ${repliedMessage.content} Odpowiedź: ${msg.content}`;
+                                if (!existingContent.includes(msg.content.trim())) {
+                                    await this.saveKnowledgeEntry(entry, authorName, msg.createdAt);
+                                    totalSaved++;
+                                } else {
+                                    totalSkipped++;
+                                }
+                                saved = true;
+                            }
+                        } catch (err) { /* usunięta wiadomość */ }
+                    }
+
+                    // Zwykła wiadomość z keyword, bez pytajnika
+                    if (!saved && !msg.content.includes('?') && this.matchesKnowledgeKeywords(msg.content)) {
+                        if (!existingContent.includes(msg.content.trim())) {
+                            await this.saveKnowledgeEntry(msg.content, authorName, msg.createdAt);
+                            totalSaved++;
+                        } else {
+                            totalSkipped++;
+                        }
+                    }
+                }
+
+                lastMessageId = messages.last().id;
+
+                // Progress callback co 500 wiadomości
+                if (progressCallback && totalScanned % 500 < 100) {
+                    await progressCallback(totalScanned, totalSaved, channel.name);
+                }
+
+                // Ochrona przed rate limitem
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        return { totalScanned, totalSaved, totalSkipped };
     }
 
     /**
