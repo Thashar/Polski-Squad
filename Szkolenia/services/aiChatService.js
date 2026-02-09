@@ -818,7 +818,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                 // Jeśli AI zakończyło (end_turn) - zwróć odpowiedź
                 if (response.stop_reason === 'end_turn') {
                     const textBlock = response.content.find(b => b.type === 'text');
-                    const answer = textBlock ? textBlock.text : '⚠️ Brak odpowiedzi od AI.';
+                    const answer = textBlock ? textBlock.text.replace(/<\/?result>/gi, '').trim() : '⚠️ Brak odpowiedzi od AI.';
                     const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
 
                     logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${i} ${cacheInfo}`);
@@ -865,7 +865,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             });
 
             const textBlock = finalResponse.content.find(b => b.type === 'text');
-            const answer = textBlock ? textBlock.text : '⚠️ Brak odpowiedzi od AI.';
+            const answer = textBlock ? textBlock.text.replace(/<\/?result>/gi, '').trim() : '⚠️ Brak odpowiedzi od AI.';
             const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
 
             logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${MAX_TOOL_CALLS} (fallback)`);
