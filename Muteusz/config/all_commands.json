@@ -392,8 +392,21 @@
     },
     {
       "name": "Szkolenia",
-      "description": "Bot do automatycznego zarządzania wątkami treningowymi (bez slash commands, działa na reakcje)",
-      "commands": []
+      "description": "Bot do automatycznego zarządzania wątkami treningowymi, AI Chat z bazą wiedzy",
+      "commands": [
+        {
+          "name": "@Szkolenia [pytanie]",
+          "description": "AI Chat - zadaj pytanie o grę Survivor.io (baza wiedzy z keyword search)",
+          "usage": "@Szkolenia Jaki build jest najlepszy na bossy?",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "@Szkolenia scan-knowledge",
+          "description": "Skanuje kanały wiedzy rok wstecz i zapisuje pasujące wpisy do bazy",
+          "usage": "@Szkolenia scan-knowledge",
+          "requiredPermission": "administrator"
+        }
+      ]
     },
     {
       "name": "Wydarzynier",
