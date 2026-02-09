@@ -97,7 +97,7 @@ client.on(Events.MessageCreate, async (message) => {
         // === AUTO-ZBIERANIE WIEDZY ===
         if (
             !message.author.bot &&
-            message.channel.id === AIChatService.KNOWLEDGE_CHANNEL_ID &&
+            AIChatService.KNOWLEDGE_CHANNEL_IDS.includes(message.channel.id) &&
             message.member?.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID) &&
             message.content &&
             !message.content.includes('?') &&
