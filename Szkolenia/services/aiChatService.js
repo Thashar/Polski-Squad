@@ -32,10 +32,11 @@ class AIChatService {
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.knowledgeBaseFile = path.join(__dirname, '../knowledge_base.md'); // Zasady ogólne
-        // Osobna baza wiedzy per kanał
+        // Osobna baza wiedzy per kanał + plik korekt
         this.knowledgeFiles = AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id =>
             path.join(this.dataDir, `knowledge_${id}.md`)
         );
+        this.correctionsFile = path.join(this.dataDir, 'knowledge_corrections.md');
 
         // In-memory cache
         this.cooldowns = new Map(); // userId -> timestamp
@@ -115,8 +116,9 @@ class AIChatService {
      * @returns {string[]} Tablica treści z każdego pliku
      */
     async loadAllKnowledgeData() {
+        const allFiles = [...this.knowledgeFiles, this.correctionsFile];
         const results = [];
-        for (const filePath of this.knowledgeFiles) {
+        for (const filePath of allFiles) {
             try {
                 const content = await fs.readFile(filePath, 'utf8');
                 results.push(content);
@@ -592,6 +594,34 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             await fs.writeFile(filePath, currentContent + newEntry, 'utf-8');
         } catch (error) {
             logger.error(`❌ Błąd auto-zapisu wiedzy: ${error.message}`);
+        }
+    }
+
+    /**
+     * Zapisz korektę odpowiedzi AI do pliku korekt
+     * @param {string} question - Pytanie użytkownika
+     * @param {string} correction - Poprawna odpowiedź
+     * @param {string} authorName - Autor korekty
+     */
+    async saveCorrection(question, correction, authorName) {
+        try {
+            await fs.mkdir(this.dataDir, { recursive: true });
+
+            let currentContent = '';
+            try {
+                currentContent = await fs.readFile(this.correctionsFile, 'utf-8');
+            } catch (err) {
+                currentContent = '';
+            }
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            const separator = currentContent.trim() ? '\n\n' : '';
+            const entry = `${separator}[${dateStr} | ${authorName}] Pytanie: ${question} Odpowiedź: ${correction}`;
+
+            await fs.writeFile(this.correctionsFile, currentContent + entry, 'utf-8');
+            logger.info(`📝 Korekta od ${authorName}: "${question.substring(0, 50)}..."`);
+        } catch (error) {
+            logger.error(`❌ Błąd zapisu korekty: ${error.message}`);
         }
     }
 

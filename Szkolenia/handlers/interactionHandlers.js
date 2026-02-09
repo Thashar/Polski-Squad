@@ -1,3 +1,4 @@
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { reminderStorage } = require('../services/threadService');
 
@@ -22,6 +23,14 @@ async function handleInteraction(interaction, state, config) {
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'scan-knowledge') {
                 await handleScanKnowledge(interaction, state);
+            }
+            return;
+        }
+
+        // Obsługa modali (korekta odpowiedzi AI)
+        if (interaction.isModalSubmit()) {
+            if (interaction.customId.startsWith('ai_correction_')) {
+                await handleCorrectionModal(interaction, state);
             }
             return;
         }
@@ -186,18 +195,83 @@ async function handleAiFeedback(interaction, state, isPositive) {
         return;
     }
 
-    // Oceń fragmenty w bazie wiedzy
-    await state.aiChatService.rateKnowledgeFragments(feedbackData.knowledge, isPositive);
+    if (isPositive) {
+        // 👍 - oceń pozytywnie i zamknij
+        await state.aiChatService.rateKnowledgeFragments(feedbackData.knowledge, true);
+        state.feedbackMap.delete(messageId);
+        try {
+            await interaction.update({
+                content: interaction.message.content + '\n\n👍 *Oceniono*',
+                components: []
+            });
+        } catch (err) { /* expired */ }
+    } else {
+        // 👎 - pokaż modal z prośbą o poprawną odpowiedź
+        const question = feedbackData.question || 'Brak pytania';
+        const modal = new ModalBuilder()
+            .setCustomId(`ai_correction_${messageId}`)
+            .setTitle('Popraw odpowiedź AI')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('question')
+                        .setLabel('Pytanie które zadano')
+                        .setStyle(TextInputStyle.Short)
+                        .setValue(question.substring(0, 100))
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('correction')
+                        .setLabel('Poprawna odpowiedź')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Wpisz poprawną odpowiedź na to pytanie...')
+                        .setRequired(true)
+                        .setMaxLength(1000)
+                )
+            );
 
-    // Usuń przyciski i pokaż wynik
+        try {
+            await interaction.showModal(modal);
+        } catch (err) { /* expired */ }
+    }
+}
+
+/**
+ * Obsługa modala korekty odpowiedzi AI
+ * Zapisuje pytanie + poprawną odpowiedź do pliku korekt
+ */
+async function handleCorrectionModal(interaction, state) {
+    const messageId = interaction.customId.replace('ai_correction_', '');
+    const feedbackData = state.feedbackMap?.get(messageId);
+
+    const question = interaction.fields.getTextInputValue('question');
+    const correction = interaction.fields.getTextInputValue('correction');
+    const authorName = interaction.member?.displayName || interaction.user.username;
+
+    // Oceń negatywnie fragmenty
+    if (feedbackData?.knowledge) {
+        await state.aiChatService.rateKnowledgeFragments(feedbackData.knowledge, false);
+    }
     state.feedbackMap.delete(messageId);
-    const emoji = isPositive ? '👍' : '👎';
+
+    // Zapisz korektę do pliku
+    await state.aiChatService.saveCorrection(question, correction, authorName);
+
     try {
-        await interaction.update({
-            content: interaction.message.content + `\n\n${emoji} *Oceniono*`,
+        await interaction.reply({
+            content: '👎 *Oceniono* — poprawna odpowiedź została zapisana do bazy wiedzy. Dziękuję!',
+            ephemeral: true
+        });
+    } catch (err) { /* expired */ }
+
+    // Edytuj oryginalną wiadomość - usuń przyciski
+    try {
+        await interaction.message.edit({
+            content: interaction.message.content + '\n\n👎 *Oceniono i poprawiono*',
             components: []
         });
-    } catch (err) { /* interaction expired */ }
+    } catch (err) { /* expired */ }
 }
 
 module.exports = {
