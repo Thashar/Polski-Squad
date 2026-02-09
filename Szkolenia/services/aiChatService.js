@@ -494,11 +494,11 @@ STRATEGIA WYSZUKIWANIA:
 6. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi
 6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
 
-PRIORYTET KOREKT UŻYTKOWNIKÓW:
-- Wyniki oznaczone [KOREKTA UŻYTKOWNIKA] to ZWERYFIKOWANE odpowiedzi od graczy
-- ZAWSZE priorytetowo traktuj korekty - mają najwyższy priorytet nad innymi danymi
+KOREKTY UŻYTKOWNIKÓW:
+- Jeśli w promptie użytkownika są "KOREKTY UŻYTKOWNIKÓW" → to ZWERYFIKOWANE odpowiedzi od graczy
+- Mają NAJWYŻSZY priorytet nad innymi danymi z bazy wiedzy
+- Jeśli korekta odpowiada na pytanie → użyj jej natychmiast BEZ szukania dalej
 - Jeśli korekta mówi coś innego niż reszta bazy → KOREKTA ma rację
-- Korekty zawierają dokładne pytania i poprawne odpowiedzi
 
 KRYTYCZNE ZASADY:
 - Odpowiadaj TYLKO na podstawie znalezionych informacji
@@ -547,8 +547,25 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
     /**
      * Zbuduj user prompt (dynamiczny - tylko pytanie, baza wiedzy dostępna przez narzędzie)
      */
-    buildUserPrompt(context) {
-        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\nUżyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
+    async buildUserPrompt(context) {
+        // Wczytaj korekty użytkowników - zawsze dołączone do promptu (priorytetowe)
+        let correctionsContent = '';
+        try {
+            correctionsContent = await fs.readFile(this.correctionsFile, 'utf-8');
+        } catch (err) {
+            // Plik nie istnieje - brak korekt
+        }
+
+        let prompt = `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\n`;
+
+        if (correctionsContent.trim()) {
+            prompt += `KOREKTY UŻYTKOWNIKÓW (zweryfikowane odpowiedzi - NAJWYŻSZY PRIORYTET):\n${correctionsContent.trim()}\n\n`;
+            prompt += `Jeśli korekty zawierają odpowiedź na pytanie → użyj ich BEZ szukania dalej.\nJeśli nie → użyj grep_knowledge aby przeszukać bazę wiedzy.`;
+        } else {
+            prompt += `Użyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
+        }
+
+        return prompt;
     }
 
     /**
@@ -834,7 +851,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
 
             // Zbuduj prompty
             const systemPrompt = this.buildSystemPrompt(knowledgeRules);
-            const userPrompt = this.buildUserPrompt(context);
+            const userPrompt = await this.buildUserPrompt(context);
 
             // Zapisz prompt do pliku (debug)
             await this.savePromptToFile(`SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`, context.asker.displayName);
