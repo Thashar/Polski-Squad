@@ -238,7 +238,7 @@ class AIChatService {
         const relevant = scoredSections
             .filter(s => s.score > 0)
             .sort((a, b) => b.score - a.score)
-            .slice(0, 5);
+            .slice(0, 3);
 
         if (relevant.length === 0) return null;
 
@@ -397,6 +397,15 @@ STYL ODPOWIEDZI:
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
 
+FOKUS NA TEMAT PYTANIA (KRYTYCZNE):
+- Baza wiedzy poniżej może zawierać fragmenty NIE związane z pytaniem - to normalne
+- MUSISZ sam ocenić które fragmenty dotyczą pytania, a które NIE
+- Fragmenty NIE związane z pytaniem → KOMPLETNIE IGNORUJ, jakby ich nie było
+- Pytanie o transmute → odpowiedz TYLKO o transmute. NIE dodawaj info o petach, AF, xeno, slotach itp.
+- Pytanie o pety → odpowiedz TYLKO o petach. NIE dodawaj info o broni, eq, transmute itp.
+- NIGDY nie zaczynaj od "Na podstawie informacji z bazy wiedzy" - po prostu odpowiedz
+- Lepiej krótka celna odpowiedź niż długa z domieszką niezwiązanych tematów
+
 ROZUMOWANIE I ANALIZA DANYCH:
 - Gdy w bazie są RÓŻNE fragmenty na ten sam temat → POŁĄCZ je i wyciągnij wnioski
 - Jeśli pytanie wymaga OBLICZENIA (np. "ile potrzebuję X?", "co jest lepsze?") → POLICZ na podstawie danych z bazy
@@ -415,13 +424,17 @@ PRZYKŁADY ODPOWIEDZI:
 ✅ Gdy wymaga analizy: "Na podstawie danych z bazy, Void Lanca daje ~30% więcej DMG niż Xeno przy bossach. Jeśli masz oba na epic, lepiej inwestować w Void."
 ✅ Gdy NIE MA żadnych informacji: "Nie mam informacji na ten temat. Zapytaj się graczy z klanu!"
 
-KRYTYCZNE: NIE mów "nie mam więcej informacji" jeśli odpowiedziałeś na pytanie!
+ZAKOŃCZENIE ODPOWIEDZI:
+- Jeśli odpowiedziałeś na pytanie → NIGDY nie dodawaj "niestety nie mam więcej informacji" ani "baza nie zawiera..."
+- Zamiast tego zakończ zachętą: "Oceń odpowiedź kciukiem 👍/👎!"
+- Tylko gdy naprawdę NIE MA żadnych informacji → powiedz że nie wiesz
 
 PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 ❌ Wymyślanie nazw postaci (np. "Thashar")
 ❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
 ❌ Wymyślanie umiejętności które nie są w bazie
-❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"`;
+❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
+❌ Dodawanie "niestety baza nie zawiera..." po udzieleniu odpowiedzi`;
 
         if (knowledgeRules) {
             systemPrompt += `\n\n${knowledgeRules}`;
@@ -503,7 +516,6 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             const newEntry = `${separator}[${dateStr} | ${authorName}] ${content}`;
 
             await fs.writeFile(this.knowledgeDataFile, currentContent + newEntry, 'utf-8');
-            logger.info(`📚 Auto-zapis wiedzy od ${authorName}: ${content.substring(0, 60)}...`);
         } catch (error) {
             logger.error(`❌ Błąd auto-zapisu wiedzy: ${error.message}`);
         }
@@ -572,18 +584,15 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
      * @param {Function} progressCallback - Callback do raportowania postępu
      * @returns {{ totalScanned: number, totalSaved: number, totalSkipped: number }}
      */
-    async scanChannelHistory(client, progressCallback) {
+    async scanChannelHistory(client, channelCallback) {
         const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
-        let totalSaved = 0;
-        let totalScanned = 0;
-        let totalSkipped = 0;
 
         // Wczytaj istniejącą bazę do sprawdzania duplikatów
         const existingContent = await this.loadKnowledgeData();
 
         // Pobierz guild i członków z wymaganą rolą
         const guild = client.guilds.cache.first();
-        if (!guild) return { totalScanned: 0, totalSaved: 0, totalSkipped: 0 };
+        if (!guild) return [];
 
         await guild.members.fetch();
         const roleMemberIds = new Set(
@@ -591,6 +600,8 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                 .filter(m => m.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID))
                 .map(m => m.id)
         );
+
+        const results = [];
 
         for (const channelId of AIChatService.KNOWLEDGE_CHANNEL_IDS) {
             let channel;
@@ -601,6 +612,9 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             }
             if (!channel) continue;
 
+            let scanned = 0;
+            let saved = 0;
+            let skipped = 0;
             let lastMessageId = null;
             let channelDone = false;
 
@@ -622,7 +636,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                         break;
                     }
 
-                    totalScanned++;
+                    scanned++;
                     if (msg.author.bot) continue;
                     if (!roleMemberIds.has(msg.author.id)) continue;
                     if (!msg.content) continue;
@@ -630,7 +644,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                     const member = guild.members.cache.get(msg.author.id);
                     const authorName = member?.displayName || msg.author.username;
 
-                    let saved = false;
+                    let entrySaved = false;
 
                     // Reply na pytanie z keyword → para Pytanie/Odpowiedź
                     if (msg.reference) {
@@ -643,39 +657,42 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                                 const entry = `Pytanie: ${repliedMessage.content} Odpowiedź: ${msg.content}`;
                                 if (!existingContent.includes(msg.content.trim())) {
                                     await this.saveKnowledgeEntry(entry, authorName, msg.createdAt);
-                                    totalSaved++;
+                                    saved++;
                                 } else {
-                                    totalSkipped++;
+                                    skipped++;
                                 }
-                                saved = true;
+                                entrySaved = true;
                             }
                         } catch (err) { /* usunięta wiadomość */ }
                     }
 
                     // Zwykła wiadomość z keyword, bez pytajnika
-                    if (!saved && !msg.content.includes('?') && this.matchesKnowledgeKeywords(msg.content)) {
+                    if (!entrySaved && !msg.content.includes('?') && this.matchesKnowledgeKeywords(msg.content)) {
                         if (!existingContent.includes(msg.content.trim())) {
                             await this.saveKnowledgeEntry(msg.content, authorName, msg.createdAt);
-                            totalSaved++;
+                            saved++;
                         } else {
-                            totalSkipped++;
+                            skipped++;
                         }
                     }
                 }
 
                 lastMessageId = messages.last().id;
 
-                // Progress callback co 500 wiadomości
-                if (progressCallback && totalScanned % 500 < 100) {
-                    await progressCallback(totalScanned, totalSaved, channel.name);
-                }
-
                 // Ochrona przed rate limitem
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
+
+            const channelResult = { channelName: channel.name, scanned, saved, skipped };
+            results.push(channelResult);
+
+            // Callback po zakończeniu kanału
+            if (channelCallback) {
+                await channelCallback(channelResult);
+            }
         }
 
-        return { totalScanned, totalSaved, totalSkipped };
+        return results;
     }
 
     /**
