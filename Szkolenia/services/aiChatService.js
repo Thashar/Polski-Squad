@@ -242,7 +242,7 @@ class AIChatService {
             const keywordSections = scoredSections
                 .filter(s => s.score > 0 && s.matchedKeywords.includes(keyword))
                 .sort((a, b) => b.score - a.score)
-                .slice(0, 10);
+                .slice(0, 30);
             for (const s of keywordSections) {
                 selectedIndices.add(s.index);
             }
