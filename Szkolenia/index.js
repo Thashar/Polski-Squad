@@ -64,7 +64,10 @@ client.once(Events.ClientReady, async () => {
         await client.application.commands.set([
             new SlashCommandBuilder()
                 .setName('scan-knowledge')
-                .setDescription('Skanuje kanały wiedzy rok wstecz i zapisuje wpisy do bazy (admin)')
+                .setDescription('Skanuje kanały wiedzy rok wstecz i zapisuje wpisy do bazy (admin)'),
+            new SlashCommandBuilder()
+                .setName('reindex')
+                .setDescription('Reindeksuje bazę wiedzy dla wyszukiwania semantycznego (admin)')
         ]);
         logger.info('Zarejestrowano slash commands');
     } catch (error) {
@@ -73,21 +76,8 @@ client.once(Events.ClientReady, async () => {
 
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
 
-    // Inicjalizuj model embeddingów i reindeksuj bazę wiedzy (w tle)
-    embeddingService.initialize().then(async () => {
-        if (embeddingService.ready) {
-            try {
-                const knowledgeDataArray = await aiChatService.loadAllKnowledgeData();
-                const filePaths = [
-                    ...AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id => `knowledge_${id}.md`),
-                    'knowledge_corrections.md'
-                ];
-                await embeddingService.reindex(knowledgeDataArray, filePaths);
-            } catch (error) {
-                logger.error(`❌ Błąd reindeksacji embeddingów przy starcie: ${error.message}`);
-            }
-        }
-    }).catch(error => {
+    // Inicjalizuj model embeddingów i wczytaj istniejący indeks (bez reindeksacji - użyj /reindex)
+    embeddingService.initialize().catch(error => {
         logger.error(`❌ Błąd inicjalizacji embeddingów: ${error.message}`);
     });
 
