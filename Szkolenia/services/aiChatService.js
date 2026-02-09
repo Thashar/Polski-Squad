@@ -122,6 +122,41 @@ class AIChatService {
     }
 
     /**
+     * Parsuj ocenę z sekcji bazy wiedzy
+     * Format: [2026-02-09 | Janusz] [++] Treść → rating: 2
+     * Format: [---] Treść → rating: -3
+     */
+    parseRating(section) {
+        const match = section.match(/^(\[[\d-]+\s*\|\s*[^\]]+\]\s*)?\[([+-]+)\]\s*/);
+        if (match) {
+            const signs = match[2];
+            const rating = signs[0] === '+' ? signs.length : -signs.length;
+            const cleanSection = section.replace(/\[([+-]+)\]\s*/, '');
+            return { rating, cleanSection };
+        }
+        return { rating: 0, cleanSection: section };
+    }
+
+    /**
+     * Zaktualizuj ocenę w sekcji bazy wiedzy
+     */
+    updateSectionRating(section, newRating) {
+        const { cleanSection } = this.parseRating(section);
+
+        if (newRating === 0) return cleanSection;
+
+        const sign = newRating > 0 ? '+' : '-';
+        const marker = `[${sign.repeat(Math.abs(newRating))}] `;
+
+        // Wstaw marker po nagłówku [data | autor] lub na początku
+        const headerMatch = cleanSection.match(/^(\[[\d-]+\s*\|\s*[^\]]+\]\s*)/);
+        if (headerMatch) {
+            return headerMatch[1] + marker + cleanSection.slice(headerMatch[1].length);
+        }
+        return marker + cleanSection;
+    }
+
+    /**
      * Wyszukaj relevantne sekcje z bazy wiedzy na podstawie pytania
      * Zamiast wysyłać CAŁĄ bazę do AI, filtruje tylko pasujące fragmenty
      * @param {string} question - Pytanie użytkownika
@@ -161,9 +196,14 @@ class AIChatService {
         // Brak słów kluczowych → zwróć całą bazę (fallback)
         if (keywords.length === 0) return knowledgeData;
 
-        // Oceń każdą sekcję pod kątem dopasowania do pytania
+        // Oceń każdą sekcję pod kątem dopasowania do pytania + oceny użytkowników
         const scoredSections = sections.map(section => {
-            const sectionLower = section.toLowerCase();
+            const { rating, cleanSection } = this.parseRating(section);
+
+            // Pomijaj sekcje z oceną ≤ -5 (do usunięcia)
+            if (rating <= -5) return { section, cleanSection, score: -Infinity };
+
+            const sectionLower = cleanSection.toLowerCase();
             let score = 0;
 
             // Punkty za każde dopasowanie słowa kluczowego
@@ -188,7 +228,10 @@ class AIChatService {
                 }
             }
 
-            return { section, score };
+            // Bonus/kara za ocenę użytkowników (+1 za każdy plus, -1 za każdy minus)
+            score += rating;
+
+            return { section, cleanSection, score };
         });
 
         // Filtruj sekcje z score > 0, sortuj malejąco, max 5
@@ -200,7 +243,8 @@ class AIChatService {
         if (relevant.length === 0) return null;
 
         logger.info(`🔍 Keyword search: ${sections.length} sekcji → ${relevant.length} relevantnych (keywords: ${keywords.join(', ')})`);
-        return relevant.map(s => s.section).join('\n\n');
+        // Zwracaj czyste sekcje (bez markerów ocen) - AI nie widzi [+++]/[---]
+        return relevant.map(s => s.cleanSection).join('\n\n');
     }
 
     /**
@@ -456,12 +500,68 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
     }
 
     /**
+     * Oceń fragmenty bazy wiedzy na podstawie feedbacku użytkownika
+     * 👍 dodaje [+] do pasujących fragmentów, 👎 dodaje [-]
+     * Fragmenty z oceną ≤ -5 są automatycznie usuwane
+     * @param {string} relevantKnowledgeStr - Czyste fragmenty (bez markerów ocen)
+     * @param {boolean} isPositive - true = 👍, false = 👎
+     */
+    async rateKnowledgeFragments(relevantKnowledgeStr, isPositive) {
+        try {
+            let fileContent = '';
+            try {
+                fileContent = await fs.readFile(this.knowledgeDataFile, 'utf-8');
+            } catch (err) {
+                return;
+            }
+
+            const fileSections = fileContent.split(/\n\n+/).filter(s => s.trim());
+            const relevantClean = relevantKnowledgeStr.split(/\n\n+/).map(s => s.trim());
+
+            let updated = false;
+            let removedCount = 0;
+            const updatedSections = [];
+
+            for (const fileSection of fileSections) {
+                const { rating: currentRating, cleanSection } = this.parseRating(fileSection);
+
+                // Sprawdź czy ten fragment pasuje do któregoś z relevantnych
+                const isRelevant = relevantClean.some(rel => cleanSection.trim() === rel.trim());
+
+                if (isRelevant) {
+                    const newRating = isPositive ? currentRating + 1 : currentRating - 1;
+
+                    // Auto-usuwanie przy ocenie ≤ -5
+                    if (newRating <= -5) {
+                        removedCount++;
+                        logger.info(`🗑️ Usunięto fragment z bazy (ocena ${newRating}): ${cleanSection.substring(0, 50)}...`);
+                        continue;
+                    }
+
+                    updatedSections.push(this.updateSectionRating(fileSection, newRating));
+                    updated = true;
+                } else {
+                    updatedSections.push(fileSection);
+                }
+            }
+
+            if (updated) {
+                await fs.writeFile(this.knowledgeDataFile, updatedSections.join('\n\n'), 'utf-8');
+                const action = isPositive ? '👍' : '👎';
+                logger.info(`📊 Ocena wiedzy: ${action}${removedCount > 0 ? ` (usunięto ${removedCount} fragmentów)` : ''}`);
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd oceniania wiedzy: ${error.message}`);
+        }
+    }
+
+    /**
      * Zadaj pytanie AI (główna metoda)
      */
     async ask(message, question) {
         // Sprawdź czy enabled
         if (!this.enabled) {
-            return '⚠️ AI Chat jest obecnie wyłączony. Skontaktuj się z administratorem.';
+            return { content: '⚠️ AI Chat jest obecnie wyłączony. Skontaktuj się z administratorem.', relevantKnowledge: null };
         }
 
         const userId = message.author.id;
@@ -507,21 +607,21 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             const cacheInfo = usage.cache_read_input_tokens ? ` (cache hit: ${usage.cache_read_input_tokens} tokenów)` : '';
             logger.info(`AI Chat: ${context.asker.username} zadał pytanie - ${relevantKnowledge ? 'znaleziono fragmenty' : 'brak dopasowań w bazie'}${cacheInfo}`);
 
-            return answer;
+            return { content: answer, relevantKnowledge };
 
         } catch (error) {
             logger.error(`Błąd AI Chat: ${error.message}`);
             logger.error(`Stack trace: ${error.stack}`);
 
             if (error.status === 401) {
-                return '⚠️ Błąd autoryzacji API. Skontaktuj się z administratorem.';
+                return { content: '⚠️ Błąd autoryzacji API. Skontaktuj się z administratorem.', relevantKnowledge: null };
             } else if (error.status === 429) {
-                return '⚠️ Przekroczono limit API. Spróbuj ponownie za chwilę.';
+                return { content: '⚠️ Przekroczono limit API. Spróbuj ponownie za chwilę.', relevantKnowledge: null };
             } else if (error.status === 500) {
-                return '⚠️ Problem z serwerem API. Spróbuj ponownie za chwilę.';
+                return { content: '⚠️ Problem z serwerem API. Spróbuj ponownie za chwilę.', relevantKnowledge: null };
             }
 
-            return '⚠️ Wystąpił błąd podczas przetwarzania pytania. Spróbuj ponownie.';
+            return { content: '⚠️ Wystąpił błąd podczas przetwarzania pytania. Spróbuj ponownie.', relevantKnowledge: null };
         }
     }
 }

@@ -41,6 +41,14 @@
 - **Model:** Claude 3 Haiku (Anthropic API) z prompt caching
 - **Cooldown:** 5 minut (administratorzy bez limitu)
 - **Brak pamięci:** Każde pytanie niezależne
+- **System feedbacku (👍/👎):**
+  - Pod odpowiedzią AI (gdy użyto bazy wiedzy) pojawiają się przyciski 👍 i 👎
+  - 👍 dodaje `[+]` do fragmentów użytych w odpowiedzi, 👎 dodaje `[-]`
+  - Fragmenty z wieloma `+` dostają bonus w keyword search (wyższy priorytet)
+  - Fragmenty z wieloma `-` dostają karę (niższy priorytet)
+  - Fragmenty z oceną ≤ -5 są automatycznie usuwane z bazy
+  - Format w bazie: `[2026-02-09 | Autor] [+++] Treść` lub `[--] Treść`
+  - Kontekst feedbacku (feedbackMap) przechowywany 10 min w pamięci, auto-cleanup
 - **Optymalizacja tokenów:** System prompt (statyczny) → cache'owany | Baza wiedzy → keyword search (tylko relevantne fragmenty)
 - **Przykłady:**
   - `@Szkolenia Jaki build jest najlepszy na bossy?`
