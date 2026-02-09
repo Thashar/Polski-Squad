@@ -33,6 +33,7 @@
   - Krótko i zwięźle (max 3-4 zdania)
   - **Ważne informacje** pogrubione
   - Minimalne użycie emoji (⚔️ 🎯 💎 🏆 ⚡)
+  - **Rozumowanie i analiza:** AI łączy dane z różnych wpisów, oblicza, porównuje, wyciąga wnioski (nie tylko cytuje)
   - **WZMOCNIONE zabezpieczenia przeciw halucynacjom:**
     - ABSOLUTNY ZAKAZ wymyślania postaci, umiejętności, statystyk, mechanik
     - Przykłady niepoprawnego zachowania w prompcie (np. wymyślanie nazw, statystyk)
