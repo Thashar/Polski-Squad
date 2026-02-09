@@ -706,8 +706,9 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 
                 lastMessageId = messages.last().id;
 
-                if (scanned % 1000 === 0) {
-                    logger.info(`🔍 Scan #${channel.name}: ${scanned} wiadomości sprawdzonych, ${saved} zapisanych`);
+                // Progress callback co 500 wiadomości
+                if (channelCallback && scanned % 500 < 100) {
+                    await channelCallback({ type: 'progress', channelName: channel.name, scanned, saved });
                 }
 
                 // Ochrona przed rate limitem
@@ -716,10 +717,9 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 
             logger.info(`✅ Scan #${channel.name} zakończony: ${scanned} sprawdzonych, ${saved} zapisanych, ${skipped} duplikatów`);
 
-            const channelResult = { channelName: channel.name, scanned, saved, skipped };
+            const channelResult = { type: 'done', channelName: channel.name, scanned, saved, skipped };
             results.push(channelResult);
 
-            // Callback po zakończeniu kanału
             if (channelCallback) {
                 await channelCallback(channelResult);
             }

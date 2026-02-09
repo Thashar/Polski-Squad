@@ -124,15 +124,29 @@ async function handleScanKnowledge(interaction, state) {
 
     await interaction.reply('🔍 Rozpoczynam skanowanie kanałów (ostatni rok)...');
     const channel = interaction.channel;
+    let progressMsg = null;
 
     try {
-        const results = await state.aiChatService.scanChannelHistory(state.client, async (channelResult) => {
-            await channel.send(
-                `📁 **#${channelResult.channelName}** — ` +
-                `sprawdzono: **${channelResult.scanned}**, ` +
-                `zapisano: **${channelResult.saved}**, ` +
-                `duplikaty: **${channelResult.skipped}**`
-            );
+        const results = await state.aiChatService.scanChannelHistory(state.client, async (event) => {
+            if (event.type === 'progress') {
+                const text = `🔍 Skanowanie **#${event.channelName}**... ${event.scanned} wiadomości, ${event.saved} zapisanych`;
+                if (progressMsg) {
+                    try { await progressMsg.edit(text); } catch (err) { /* ignore */ }
+                } else {
+                    progressMsg = await channel.send(text);
+                }
+            } else if (event.type === 'done') {
+                if (progressMsg) {
+                    try { await progressMsg.delete(); } catch (err) { /* ignore */ }
+                    progressMsg = null;
+                }
+                await channel.send(
+                    `📁 **#${event.channelName}** — ` +
+                    `sprawdzono: **${event.scanned}**, ` +
+                    `zapisano: **${event.saved}**, ` +
+                    `duplikaty: **${event.skipped}**`
+                );
+            }
         });
 
         const totalScanned = results.reduce((s, r) => s + r.scanned, 0);
