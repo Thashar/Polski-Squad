@@ -238,7 +238,7 @@ class AIChatService {
         const relevant = scoredSections
             .filter(s => s.score > 0)
             .sort((a, b) => b.score - a.score)
-            .slice(0, 5);
+            .slice(0, 3);
 
         if (relevant.length === 0) return null;
 
@@ -397,12 +397,14 @@ STYL ODPOWIEDZI:
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
 
-FOKUS NA TEMAT PYTANIA:
-- Odpowiadaj WYŁĄCZNIE na temat o który pytano
-- Jeśli pytanie dotyczy "transmute" → mów TYLKO o transmute, NIE o petach, skillach, eq itp.
-- Ignoruj fragmenty bazy wiedzy które nie dotyczą bezpośrednio tematu pytania
-- NIE wymieniaj wszystkiego co jest w bazie - tylko to co odpowiada na pytanie
-- Lepiej krótka celna odpowiedź niż długa lista wszystkiego
+FOKUS NA TEMAT PYTANIA (KRYTYCZNE):
+- Baza wiedzy poniżej może zawierać fragmenty NIE związane z pytaniem - to normalne
+- MUSISZ sam ocenić które fragmenty dotyczą pytania, a które NIE
+- Fragmenty NIE związane z pytaniem → KOMPLETNIE IGNORUJ, jakby ich nie było
+- Pytanie o transmute → odpowiedz TYLKO o transmute. NIE dodawaj info o petach, AF, xeno, slotach itp.
+- Pytanie o pety → odpowiedz TYLKO o petach. NIE dodawaj info o broni, eq, transmute itp.
+- NIGDY nie zaczynaj od "Na podstawie informacji z bazy wiedzy" - po prostu odpowiedz
+- Lepiej krótka celna odpowiedź niż długa z domieszką niezwiązanych tematów
 
 ROZUMOWANIE I ANALIZA DANYCH:
 - Gdy w bazie są RÓŻNE fragmenty na ten sam temat → POŁĄCZ je i wyciągnij wnioski
@@ -422,13 +424,17 @@ PRZYKŁADY ODPOWIEDZI:
 ✅ Gdy wymaga analizy: "Na podstawie danych z bazy, Void Lanca daje ~30% więcej DMG niż Xeno przy bossach. Jeśli masz oba na epic, lepiej inwestować w Void."
 ✅ Gdy NIE MA żadnych informacji: "Nie mam informacji na ten temat. Zapytaj się graczy z klanu!"
 
-KRYTYCZNE: NIE mów "nie mam więcej informacji" jeśli odpowiedziałeś na pytanie!
+ZAKOŃCZENIE ODPOWIEDZI:
+- Jeśli odpowiedziałeś na pytanie → NIGDY nie dodawaj "niestety nie mam więcej informacji" ani "baza nie zawiera..."
+- Zamiast tego zakończ zachętą: "Oceń odpowiedź kciukiem 👍/👎!"
+- Tylko gdy naprawdę NIE MA żadnych informacji → powiedz że nie wiesz
 
 PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 ❌ Wymyślanie nazw postaci (np. "Thashar")
 ❌ Wymyślanie statystyk (np. "500 HP", "30% damage")
 ❌ Wymyślanie umiejętności które nie są w bazie
-❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"`;
+❌ Tworzenie fikcyjnych informacji "na podstawie wiedzy ogólnej"
+❌ Dodawanie "niestety baza nie zawiera..." po udzieleniu odpowiedzi`;
 
         if (knowledgeRules) {
             systemPrompt += `\n\n${knowledgeRules}`;
