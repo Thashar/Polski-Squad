@@ -438,6 +438,16 @@ class AIChatService {
             regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         }
 
+        // Dla korekt: luźne dopasowanie po pojedynczych słowach (min 2 znaki)
+        const patternWords = pattern
+            .replace(/[.*+?^${}()|[\]\\]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length >= 2)
+            .map(w => {
+                try { return new RegExp(w, 'gi'); }
+                catch { return new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); }
+            });
+
         const correctionMatches = [];
         const regularMatches = [];
         const correctionsIndex = knowledgeDataArray.length - 1;
@@ -452,13 +462,21 @@ class AIChatService {
                 const { rating, cleanSection } = this.parseRating(section);
                 if (rating <= -5) continue;
 
-                if (regex.test(cleanSection)) {
-                    if (isCorrections) {
+                if (isCorrections) {
+                    // Korekty: dopasuj jeśli KTÓREKOLWIEK słowo z patternu pasuje
+                    const matched = patternWords.some(wordRegex => {
+                        wordRegex.lastIndex = 0;
+                        return wordRegex.test(cleanSection);
+                    });
+                    if (matched) {
                         correctionMatches.push(`[KOREKTA UŻYTKOWNIKA] ${cleanSection}`);
-                    } else {
-                        regularMatches.push(cleanSection);
                     }
-                    regex.lastIndex = 0;
+                } else {
+                    // Normalne pliki: standardowy regex
+                    if (regex.test(cleanSection)) {
+                        regularMatches.push(cleanSection);
+                        regex.lastIndex = 0;
+                    }
                 }
             }
         }
@@ -494,11 +512,11 @@ STRATEGIA WYSZUKIWANIA:
 6. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi
 6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
 
-PRIORYTET KOREKT UŻYTKOWNIKÓW:
-- Wyniki oznaczone [KOREKTA UŻYTKOWNIKA] to ZWERYFIKOWANE odpowiedzi od graczy
-- ZAWSZE priorytetowo traktuj korekty - mają najwyższy priorytet nad innymi danymi
+KOREKTY UŻYTKOWNIKÓW:
+- Jeśli w promptie użytkownika są "KOREKTY UŻYTKOWNIKÓW" → to ZWERYFIKOWANE odpowiedzi od graczy
+- Mają NAJWYŻSZY priorytet nad innymi danymi z bazy wiedzy
+- Jeśli korekta odpowiada na pytanie → użyj jej natychmiast BEZ szukania dalej
 - Jeśli korekta mówi coś innego niż reszta bazy → KOREKTA ma rację
-- Korekty zawierają dokładne pytania i poprawne odpowiedzi
 
 KRYTYCZNE ZASADY:
 - Odpowiadaj TYLKO na podstawie znalezionych informacji
