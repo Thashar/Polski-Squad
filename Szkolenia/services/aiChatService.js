@@ -8,10 +8,14 @@ const logger = createBotLogger('Szkolenia');
 /**
  * AI Chat Service - Kompendium wiedzy o grze Survivor.io
  * Wspiera mention @Szkolenia z bazą wiedzy z pliku knowledge_base.md
+ * Hybrydowe wyszukiwanie: semantyczne (embeddingi) + keyword (regex)
  */
 class AIChatService {
     constructor(config) {
         this.config = config;
+
+        // Embedding service (ustawiany z index.js po inicjalizacji)
+        this.embeddingService = null;
 
         // Anthropic API
         this.apiKey = process.env.ANTHROPIC_API_KEY;
@@ -405,17 +409,18 @@ class AIChatService {
      * Ten prompt jest identyczny dla każdego pytania, więc prompt caching oszczędza ~90% tokenów
      */
     /**
-     * Definicja narzędzia grep_knowledge dla AI (tool_use)
+     * Definicja narzędzia search_knowledge dla AI (tool_use)
+     * Hybrydowe wyszukiwanie: semantyczne (embeddingi) + keyword (regex)
      */
     static GREP_TOOL = {
-        name: 'grep_knowledge',
-        description: 'Przeszukuje bazę wiedzy o grze Survivor.io. Zwraca WSZYSTKIE fragmenty pasujące do wzorca (regex lub tekst). Możesz wywoływać wielokrotnie z różnymi frazami. Szukaj aż znajdziesz dokładną odpowiedź.',
+        name: 'search_knowledge',
+        description: 'Przeszukuje bazę wiedzy o grze Survivor.io HYBRYDOWO: semantycznie (rozumie synonimy i kontekst) + po słowach kluczowych (regex). Zwraca najlepiej dopasowane fragmenty. Możesz wywoływać wielokrotnie z różnymi frazami.',
         input_schema: {
             type: 'object',
             properties: {
                 pattern: {
                     type: 'string',
-                    description: 'Fraza lub regex do wyszukania w bazie wiedzy (case-insensitive). Np. "transmute", "ciastk", "pet.*awaken", "xeno.*core"'
+                    description: 'Fraza do wyszukania w bazie wiedzy. Może być naturalne pytanie ("jak rozwijać zwierzaki"), słowo kluczowe ("transmute") lub regex ("pet.*awaken"). Wyszukiwanie semantyczne automatycznie znajdzie też synonimy i powiązane tematy.'
                 }
             },
             required: ['pattern']
@@ -423,14 +428,15 @@ class AIChatService {
     };
 
     /**
-     * Wykonaj wyszukiwanie grep w bazach wiedzy (wszystkie pliki kanałów)
+     * Hybrydowe wyszukiwanie: semantyczne (embeddingi) + keyword (regex)
      * @param {string} pattern - Fraza/regex do wyszukania
      * @param {string[]} knowledgeDataArray - Tablica treści z każdego pliku
-     * @returns {string} Znalezione fragmenty lub info o braku wyników
+     * @returns {Promise<string>} Znalezione fragmenty lub info o braku wyników
      */
-    executeGrepKnowledge(pattern, knowledgeDataArray) {
+    async executeGrepKnowledge(pattern, knowledgeDataArray) {
         if (!pattern) return 'Podaj frazę do wyszukania.';
 
+        // --- 1. WYSZUKIWANIE KEYWORD (regex) - istniejąca logika ---
         let regex;
         try {
             regex = new RegExp(pattern, 'gi');
@@ -438,7 +444,6 @@ class AIChatService {
             regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         }
 
-        // Dla korekt: luźne dopasowanie po pojedynczych słowach (min 2 znaki)
         const patternWords = pattern
             .replace(/[.*+?^${}()|[\]\\]/g, ' ')
             .split(/\s+/)
@@ -449,7 +454,7 @@ class AIChatService {
             });
 
         const correctionMatches = [];
-        const regularMatches = [];
+        const keywordMatches = [];
         const correctionsIndex = knowledgeDataArray.length - 1;
 
         for (let i = 0; i < knowledgeDataArray.length; i++) {
@@ -463,7 +468,6 @@ class AIChatService {
                 if (rating <= -5) continue;
 
                 if (isCorrections) {
-                    // Korekty: dopasuj jeśli KTÓREKOLWIEK słowo z patternu pasuje
                     const matched = patternWords.some(wordRegex => {
                         wordRegex.lastIndex = 0;
                         return wordRegex.test(cleanSection);
@@ -472,44 +476,86 @@ class AIChatService {
                         correctionMatches.push(`[KOREKTA UŻYTKOWNIKA] ${cleanSection}`);
                     }
                 } else {
-                    // Normalne pliki: standardowy regex
                     if (regex.test(cleanSection)) {
-                        regularMatches.push(cleanSection);
+                        keywordMatches.push(cleanSection);
                         regex.lastIndex = 0;
                     }
                 }
             }
         }
 
-        const allMatches = [...correctionMatches, ...regularMatches];
+        // --- 2. WYSZUKIWANIE SEMANTYCZNE (embeddingi) ---
+        let semanticMatches = [];
+        if (this.embeddingService && this.embeddingService.ready) {
+            try {
+                const results = await this.embeddingService.search(pattern, 10, 0.35);
+                semanticMatches = results.map(r => r.text);
+            } catch (error) {
+                logger.warn(`⚠️ Błąd wyszukiwania semantycznego: ${error.message}`);
+            }
+        }
 
-        if (allMatches.length === 0) {
+        // --- 3. MERGE: korekty > semantyczne + keyword (deduplikacja) ---
+        const seen = new Set();
+        const merged = [];
+
+        // Korekty mają najwyższy priorytet
+        for (const match of correctionMatches) {
+            const key = match.substring(0, 100);
+            if (!seen.has(key)) {
+                seen.add(key);
+                merged.push(match);
+            }
+        }
+
+        // Wyniki semantyczne i keyword - przeplatane (interleave)
+        const maxLen = Math.max(semanticMatches.length, keywordMatches.length);
+        for (let i = 0; i < maxLen; i++) {
+            if (i < semanticMatches.length) {
+                const key = semanticMatches[i].substring(0, 100);
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    merged.push(semanticMatches[i]);
+                }
+            }
+            if (i < keywordMatches.length) {
+                const key = keywordMatches[i].substring(0, 100);
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    merged.push(keywordMatches[i]);
+                }
+            }
+        }
+
+        if (merged.length === 0) {
             return `Brak wyników dla "${pattern}". Spróbuj innej frazy lub krótszego wzorca.`;
         }
 
-        return `Znaleziono ${allMatches.length} fragmentów (${correctionMatches.length} korekt):\n\n${allMatches.join('\n\n---\n\n')}`;
+        const semanticCount = semanticMatches.length;
+        const keywordCount = keywordMatches.length;
+        return `Znaleziono ${merged.length} fragmentów (${correctionMatches.length} korekt, ${semanticCount} semantycznych, ${keywordCount} keyword):\n\n${merged.join('\n\n---\n\n')}`;
     }
 
     buildSystemPrompt(knowledgeRules) {
         let systemPrompt = `Jesteś kompendium wiedzy o grze Survivor.io.
 
-MASZ NARZĘDZIE: grep_knowledge
+MASZ NARZĘDZIE: search_knowledge
+- Wyszukiwanie HYBRYDOWE: semantyczne (rozumie synonimy, kontekst) + keyword (regex)
 - Użyj go aby przeszukać bazę wiedzy ZANIM odpowiesz
-- Możesz wywoływać WIELOKROTNIE z różnymi frazami - BEZ LIMITU
-- Zwraca WSZYSTKIE pasujące fragmenty
-- Używaj krótkich fraz: "transmute", "ciastk", "pet", "xeno", "awaken"
-- Możesz używać regex: "pet.*level", "ciastk.*60"
+- Możesz wywoływać WIELOKROTNIE z różnymi frazami
+- Zwraca najlepiej dopasowane fragmenty z obu metod
+- Możesz podawać naturalny tekst ("jak rozwijać zwierzaki") lub regex ("pet.*level")
+- Wyszukiwanie semantyczne automatycznie znajdzie też synonimy i powiązane tematy
 
 STRATEGIA WYSZUKIWANIA:
-1. ZAWSZE NAJPIERW szukaj DOKŁADNIE słów z pytania użytkownika (po polsku!)
-   - Pytanie "najlepsza broń" → szukaj "broń", NIE "weapon"
-   - Pytanie "rozwój petów" → szukaj "pet", NIE "evolve"
-   - Pytanie "ile ciastek" → szukaj "ciast", NIE "cake"
-2. NIGDY nie tłumacz polskich słów na angielski w pierwszym wyszukiwaniu
-3. Dopiero jeśli polskie frazy nic nie dają → spróbuj angielskich odpowiedników
-4. Jeśli pierwsze wyszukiwanie nie daje PEŁNEJ odpowiedzi → SZUKAJ DALEJ z inną frazą
-5. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile", konkretne liczby
-6. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi
+1. ZAWSZE NAJPIERW szukaj naturalnym pytaniem po polsku (semantyka to złapie!)
+   - Pytanie "najlepsza broń" → szukaj "najlepsza broń" (semantyka znajdzie też "weapon", "eq")
+   - Pytanie "rozwój petów" → szukaj "rozwój petów" (semantyka znajdzie też "pet evolution")
+2. Jeśli semantyka nie dała pełnej odpowiedzi → szukaj KONKRETNYCH słów kluczowych
+   - Przykład: "transmute", "xeno", "ciastk", "awaken"
+3. Możesz też użyć regex dla precyzyjnych wzorców: "pet.*level", "ciastk.*60"
+4. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile"
+5. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi
 6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
 
 KOREKTY UŻYTKOWNIKÓW:
@@ -552,7 +598,7 @@ ZAKOŃCZENIE:
 
 PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
 ❌ Wymyślanie statystyk, nazw, umiejętności
-❌ Odpowiadanie BEZ użycia grep_knowledge
+❌ Odpowiadanie BEZ użycia search_knowledge
 ❌ Dodawanie "niestety baza nie zawiera..." po udzieleniu odpowiedzi`;
 
         if (knowledgeRules) {
@@ -566,7 +612,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
      * Zbuduj user prompt (dynamiczny - tylko pytanie, baza wiedzy dostępna przez narzędzie)
      */
     buildUserPrompt(context) {
-        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\nUżyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
+        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\nUżyj narzędzia search_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
     }
 
     /**
@@ -857,7 +903,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             // Zapisz prompt do pliku (debug)
             await this.savePromptToFile(`SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`, context.asker.displayName);
 
-            // Pętla tool_use - AI sam przeszukuje bazę wiedzy narzędziem grep_knowledge
+            // Pętla tool_use - AI sam przeszukuje bazę wiedzy narzędziem search_knowledge (hybryda semantic + keyword)
             const messages = [{ role: 'user', content: userPrompt }];
             const allSearchResults = [];
             const MAX_TOOL_CALLS = 15;
@@ -895,13 +941,13 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
                 // Jeśli AI chce użyć narzędzia
                 if (response.stop_reason === 'tool_use') {
                     const toolUseBlock = response.content.find(b => b.type === 'tool_use');
-                    if (!toolUseBlock || toolUseBlock.name !== 'grep_knowledge') break;
+                    if (!toolUseBlock || toolUseBlock.name !== 'search_knowledge') break;
 
                     const pattern = toolUseBlock.input.pattern;
-                    logger.info(`AI Chat: grep_knowledge("${pattern}") [${i + 1}/${MAX_TOOL_CALLS}]`);
+                    logger.info(`AI Chat: search_knowledge("${pattern}") [${i + 1}/${MAX_TOOL_CALLS}]`);
 
-                    // Wykonaj wyszukiwanie
-                    const searchResult = this.executeGrepKnowledge(pattern, knowledgeDataArray);
+                    // Wykonaj wyszukiwanie hybrydowe (semantic + keyword)
+                    const searchResult = await this.executeGrepKnowledge(pattern, knowledgeDataArray);
                     allSearchResults.push(searchResult);
 
                     // Dodaj odpowiedź AI i wynik narzędzia do konwersacji

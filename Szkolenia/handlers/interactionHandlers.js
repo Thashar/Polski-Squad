@@ -168,6 +168,24 @@ async function handleScanKnowledge(interaction, state) {
             `📚 Zapisano: **${totalSaved}** nowych wpisów\n` +
             `⏭️ Pominięto (duplikaty): **${totalSkipped}**`
         );
+
+        // Reindeksacja embeddingów po skanie (jeśli zapisano nowe wpisy)
+        if (totalSaved > 0 && state.embeddingService?.ready) {
+            await channel.send('🔄 Reindeksacja wyszukiwania semantycznego...');
+            try {
+                const AIChatService = require('../services/aiChatService');
+                const knowledgeDataArray = await state.aiChatService.loadAllKnowledgeData();
+                const filePaths = [
+                    ...AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id => `knowledge_${id}.md`),
+                    'knowledge_corrections.md'
+                ];
+                await state.embeddingService.reindex(knowledgeDataArray, filePaths);
+                await channel.send(`✅ Reindeksacja zakończona: **${state.embeddingService.index.length}** fragmentów w indeksie`);
+            } catch (reindexError) {
+                logger.error(`❌ Błąd reindeksacji po skanie: ${reindexError.message}`);
+                await channel.send('⚠️ Reindeksacja nie powiodła się. Sprawdź logi.');
+            }
+        }
     } catch (error) {
         logger.error(`❌ Błąd skanowania: ${error.message}`);
         await channel.send('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
@@ -257,6 +275,13 @@ async function handleCorrectionModal(interaction, state) {
 
     // Zapisz korektę do pliku
     await state.aiChatService.saveCorrection(question, correction, authorName);
+
+    // Dodaj korektę do indeksu embeddingów
+    if (state.embeddingService?.ready) {
+        const dateStr = new Date().toISOString().split('T')[0];
+        const fullEntry = `[${dateStr} | ${authorName}] Pytanie: ${question} Odpowiedź: ${correction}`;
+        await state.embeddingService.addToIndex(fullEntry, 'knowledge_corrections.md');
+    }
 
     try {
         await interaction.reply({
