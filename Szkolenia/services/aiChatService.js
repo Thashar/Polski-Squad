@@ -606,14 +606,19 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 
         // Pobierz guild i członków z wymaganą rolą
         const guild = client.guilds.cache.first();
-        if (!guild) return [];
+        if (!guild) {
+            logger.error('❌ Scan: brak guild');
+            return [];
+        }
 
+        logger.info('🔍 Scan: pobieram członków serwera...');
         await guild.members.fetch();
         const roleMemberIds = new Set(
             guild.members.cache
                 .filter(m => m.roles.cache.has(AIChatService.KNOWLEDGE_ROLE_ID))
                 .map(m => m.id)
         );
+        logger.info(`🔍 Scan: znaleziono ${roleMemberIds.size} członków z wymaganą rolą`);
 
         const results = [];
 
@@ -622,9 +627,12 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
             try {
                 channel = await client.channels.fetch(channelId);
             } catch (err) {
+                logger.warn(`⚠️ Scan: nie można pobrać kanału ${channelId}: ${err.message}`);
                 continue;
             }
             if (!channel) continue;
+
+            logger.info(`🔍 Scan: rozpoczynam kanał #${channel.name} (${channelId})`);
 
             let scanned = 0;
             let saved = 0;
@@ -640,6 +648,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                 try {
                     messages = await channel.messages.fetch(options);
                 } catch (err) {
+                    logger.warn(`⚠️ Scan: błąd pobierania wiadomości z #${channel.name}: ${err.message}`);
                     break;
                 }
                 if (messages.size === 0) break;
@@ -663,7 +672,11 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                     // Reply na pytanie z keyword → para Pytanie/Odpowiedź
                     if (msg.reference) {
                         try {
-                            const repliedMessage = await msg.fetchReference();
+                            const fetchPromise = msg.fetchReference();
+                            const timeoutPromise = new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('timeout')), 5000)
+                            );
+                            const repliedMessage = await Promise.race([fetchPromise, timeoutPromise]);
                             if (
                                 repliedMessage.content?.includes('?') &&
                                 this.matchesKnowledgeKeywords(repliedMessage.content)
@@ -677,7 +690,7 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
                                 }
                                 entrySaved = true;
                             }
-                        } catch (err) { /* usunięta wiadomość */ }
+                        } catch (err) { /* usunięta wiadomość lub timeout */ }
                     }
 
                     // Zwykła wiadomość z keyword, bez pytajnika
@@ -693,9 +706,15 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA (NIGDY tak nie rób):
 
                 lastMessageId = messages.last().id;
 
+                if (scanned % 1000 === 0) {
+                    logger.info(`🔍 Scan #${channel.name}: ${scanned} wiadomości sprawdzonych, ${saved} zapisanych`);
+                }
+
                 // Ochrona przed rate limitem
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
+
+            logger.info(`✅ Scan #${channel.name} zakończony: ${scanned} sprawdzonych, ${saved} zapisanych, ${skipped} duplikatów`);
 
             const channelResult = { channelName: channel.name, scanned, saved, skipped };
             results.push(channelResult);
