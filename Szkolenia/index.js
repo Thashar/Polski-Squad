@@ -314,7 +314,14 @@ client.on(Events.MessageCreate, async (message) => {
 
             if (result.relevantKnowledge) {
                 feedbackMap.set(reply.id, { knowledge: result.relevantKnowledge, askerId: message.author.id, question });
-                setTimeout(() => feedbackMap.delete(reply.id), 10 * 60 * 1000);
+
+                // Po 5 min usuń przyciski i dane feedbacku
+                setTimeout(async () => {
+                    feedbackMap.delete(reply.id);
+                    try {
+                        await reply.edit({ components: [] });
+                    } catch { /* wiadomość już usunięta lub edytowana */ }
+                }, 5 * 60 * 1000);
             }
 
             return;

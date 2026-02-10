@@ -115,16 +115,15 @@ async function handleAiFeedback(interaction, state, isPositive) {
         return;
     }
 
-    // Tylko pytający może ocenić
-    if (feedbackData.askerId && interaction.user.id !== feedbackData.askerId) {
-        try {
-            await interaction.reply({ content: '⚠️ Tylko osoba która zadała pytanie może ocenić odpowiedź.', ephemeral: true });
-        } catch (err) { /* expired */ }
-        return;
-    }
-
     if (isPositive) {
-        // 👍 - oceń pozytywnie
+        // 👍 - tylko pytający może ocenić pozytywnie
+        if (feedbackData.askerId && interaction.user.id !== feedbackData.askerId) {
+            try {
+                await interaction.reply({ content: '⚠️ Tylko osoba która zadała pytanie może ocenić pozytywnie.', ephemeral: true });
+            } catch (err) { /* expired */ }
+            return;
+        }
+
         const fragments = feedbackData.knowledge.split(/\n\n+/).map(s => s.trim()).filter(s => s);
         await state.knowledgeService.rateEntries(fragments, true);
         state.feedbackMap.delete(messageId);
@@ -135,7 +134,7 @@ async function handleAiFeedback(interaction, state, isPositive) {
             });
         } catch (err) { /* expired */ }
     } else {
-        // 👎 - pokaż modal z prośbą o poprawną odpowiedź
+        // 👎 - każdy może kliknąć i zaproponować korektę (przyciski zostają)
         const question = feedbackData.question || 'Brak pytania';
         const modal = new ModalBuilder()
             .setCustomId(`ai_correction_${messageId}`)
@@ -179,12 +178,11 @@ async function handleCorrectionModal(interaction, state) {
     const correction = interaction.fields.getTextInputValue('correction');
     const authorName = interaction.member?.displayName || interaction.user.username;
 
-    // Oceń negatywnie fragmenty
+    // Oceń negatywnie fragmenty (tylko raz per wiadomość - nie usuwaj z feedbackMap)
     if (feedbackData?.knowledge) {
         const fragments = feedbackData.knowledge.split(/\n\n+/).map(s => s.trim()).filter(s => s);
         await state.knowledgeService.rateEntries(fragments, false);
     }
-    state.feedbackMap.delete(messageId);
 
     // Dodaj korektę jako wpis do bazy wiedzy
     const correctionId = await state.knowledgeService.addCorrectionEntry(question, correction, authorName);
@@ -215,16 +213,8 @@ async function handleCorrectionModal(interaction, state) {
 
     try {
         await interaction.reply({
-            content: '👎 *Oceniono* — poprawna odpowiedź została zapisana do bazy wiedzy. Dziękuję!',
+            content: '✅ Twoja korekta została zapisana do bazy wiedzy. Dziękuję!',
             ephemeral: true
-        });
-    } catch (err) { /* expired */ }
-
-    // Usuń przyciski z oryginalnej wiadomości
-    try {
-        await interaction.message.edit({
-            content: interaction.message.content + '\n\n👎 *Oceniono i poprawiono*',
-            components: []
         });
     } catch (err) { /* expired */ }
 }
