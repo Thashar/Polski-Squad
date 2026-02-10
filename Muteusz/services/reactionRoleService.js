@@ -48,6 +48,14 @@ class ReactionRoleService {
             'ru': '1409808370122227796' // ID roli dla flagi rosji (możliwe skrócenie)
         };
         
+        // Konfiguracja reaction roles na konkretnych wiadomościach
+        // Format: messageId -> [{ emoji, roleId }]
+        this.messageReactionRoles = {
+            '1470745800211562576': [
+                { emoji: '✅', roleId: '1470702781638901834', channelId: '1278621023205458015' }
+            ]
+        };
+
         // Czas trzymania roli w milisekundach (5 minut)
         this.roleHoldTime = 5 * 60 * 1000;
         
@@ -478,6 +486,10 @@ class ReactionRoleService {
             // Ignoruj boty
             if (user.bot) return;
 
+            // Sprawdź reaction roles na konkretnych wiadomościach
+            const messageRoleHandled = await this.handleMessageReactionAdd(reaction, user);
+            if (messageRoleHandled) return;
+
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
             // Sprawdź czy emoji jest skonfigurowane - loguj tylko jeśli TAK
@@ -576,6 +588,10 @@ class ReactionRoleService {
         try {
             // Ignoruj boty
             if (user.bot) return;
+
+            // Sprawdź reaction roles na konkretnych wiadomościach
+            const messageRoleHandled = await this.handleMessageReactionRemove(reaction, user);
+            if (messageRoleHandled) return;
 
             const emojiName = this.getEmojiIdentifier(reaction.emoji);
             
@@ -812,6 +828,74 @@ class ReactionRoleService {
         } catch (error) {
             this.logger.error('❌ Błąd podczas synchronizacji flag:', error);
         }
+    }
+
+    /**
+     * Obsługuje dodanie reakcji na konkretnej wiadomości (reaction roles)
+     * @returns {boolean} true jeśli reakcja została obsłużona
+     */
+    async handleMessageReactionAdd(reaction, user) {
+        const messageId = reaction.message.id;
+        const config = this.messageReactionRoles[messageId];
+        if (!config) return false;
+
+        const emojiName = this.getEmojiIdentifier(reaction.emoji);
+
+        for (const entry of config) {
+            if (emojiName !== entry.emoji) continue;
+            if (entry.channelId && reaction.message.channelId !== entry.channelId) continue;
+
+            const guild = reaction.message.guild;
+            const member = await guild.members.fetch(user.id);
+            const role = guild.roles.cache.get(entry.roleId);
+
+            if (!role) {
+                this.logger.error(`❌ Reaction role: nie znaleziono roli ${entry.roleId}`);
+                return true;
+            }
+
+            if (member.roles.cache.has(entry.roleId)) return true;
+
+            await member.roles.add(role);
+            this.logger.info(`✅ Reaction role: nadano rolę "${role.name}" dla ${user.tag} (wiadomość ${messageId})`);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Obsługuje usunięcie reakcji na konkretnej wiadomości (reaction roles)
+     * @returns {boolean} true jeśli reakcja została obsłużona
+     */
+    async handleMessageReactionRemove(reaction, user) {
+        const messageId = reaction.message.id;
+        const config = this.messageReactionRoles[messageId];
+        if (!config) return false;
+
+        const emojiName = this.getEmojiIdentifier(reaction.emoji);
+
+        for (const entry of config) {
+            if (emojiName !== entry.emoji) continue;
+            if (entry.channelId && reaction.message.channelId !== entry.channelId) continue;
+
+            const guild = reaction.message.guild;
+            const member = await guild.members.fetch(user.id);
+            const role = guild.roles.cache.get(entry.roleId);
+
+            if (!role) {
+                this.logger.error(`❌ Reaction role: nie znaleziono roli ${entry.roleId}`);
+                return true;
+            }
+
+            if (!member.roles.cache.has(entry.roleId)) return true;
+
+            await member.roles.remove(role);
+            this.logger.info(`❌ Reaction role: usunięto rolę "${role.name}" dla ${user.tag} (wiadomość ${messageId})`);
+            return true;
+        }
+
+        return false;
     }
 
     /**
