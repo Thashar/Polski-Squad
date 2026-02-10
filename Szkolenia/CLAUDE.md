@@ -25,7 +25,7 @@
 - **Narzędzie:** `grep_knowledge` - przeszukuje bazę wiedzy regex/tekstem, max 20 wyników, max 15000 znaków
 - **Tool-use loop:** Max 15 wywołań grep_knowledge na pytanie
 - **Cooldown:** 1 min dla zwykłych użytkowników, brak dla adminów
-- **Feedback:** 👍/👎 pod odpowiedziami AI. 👍 = pozytywna ocena wpisów. 👎 = modal z korektą + negatywna ocena
+- **Feedback:** 👍/👎 pod odpowiedziami AI. 👍 = pozytywna ocena wpisów. 👎 = modal z korektą + negatywna ocena + korekta trafia do bazy wiedzy i na kanał zatwierdzania (identycznie jak wpisy z ✅)
 
 ## Baza Wiedzy (Reakcje ✅)
 
@@ -41,8 +41,8 @@
 
 **Przechowywanie:**
 - Baza wiedzy: `data/knowledge_base.json` (JSON, klucz = message ID)
-- Korekty użytkowników: `data/knowledge_corrections.md` (Markdown)
-- Wpis: `{ content, author, date, reactedBy, approvalMsgId, active, rating }`
+- Korekty użytkowników: zapisywane jako wpisy w `knowledge_base.json` z flagą `isCorrection: true` i prefixem `[KOREKTA UŻYTKOWNIKA]` w wyszukiwaniu
+- Wpis: `{ content, author, date, reactedBy, approvalMsgId, active, rating, isCorrection? }`
 - Wpisy z `rating < -5` są ukrywane z wyszukiwania
 
 ---

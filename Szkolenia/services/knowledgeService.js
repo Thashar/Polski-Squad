@@ -121,7 +121,10 @@ class KnowledgeService {
         if (active.length === 0) return '';
 
         return active
-            .map(([_, e]) => `[${e.date} | ${e.author}] ${e.content}`)
+            .map(([_, e]) => {
+                const prefix = e.isCorrection ? '[KOREKTA UŻYTKOWNIKA] ' : '';
+                return `${prefix}[${e.date} | ${e.author}] ${e.content}`;
+            })
             .join('\n\n');
     }
 
@@ -155,39 +158,26 @@ class KnowledgeService {
     }
 
     /**
-     * Zapisz korektę od użytkownika (👎 + poprawna odpowiedź)
+     * Dodaj korektę jako wpis do bazy wiedzy (z syntetycznym ID)
+     * @returns {string|null} ID wpisu lub null przy błędzie
      */
-    async saveCorrection(question, correction, authorName) {
-        try {
-            await fs.mkdir(this.dataDir, { recursive: true });
+    async addCorrectionEntry(question, correction, authorName) {
+        const correctionId = `correction_${Date.now()}`;
+        const content = `Pytanie: ${question}\nOdpowiedź: ${correction}`;
 
-            let currentContent = '';
-            try {
-                currentContent = await fs.readFile(this.correctionsFile, 'utf-8');
-            } catch (err) {
-                currentContent = '';
-            }
-
-            const dateStr = new Date().toISOString().split('T')[0];
-            const separator = currentContent.trim() ? '\n\n' : '';
-            const entry = `${separator}[${dateStr} | ${authorName}] Pytanie: ${question} Odpowiedź: ${correction}`;
-
-            await fs.writeFile(this.correctionsFile, currentContent + entry, 'utf-8');
-            logger.info(`📝 Korekta od ${authorName}: "${question.substring(0, 50)}..."`);
-        } catch (error) {
-            logger.error(`❌ Błąd zapisu korekty: ${error.message}`);
-        }
-    }
-
-    /**
-     * Wczytaj plik korekt
-     */
-    async loadCorrections() {
-        try {
-            return await fs.readFile(this.correctionsFile, 'utf8');
-        } catch (error) {
-            return '';
-        }
+        this.entries[correctionId] = {
+            content,
+            author: authorName,
+            date: new Date().toISOString().split('T')[0],
+            reactedBy: authorName,
+            approvalMsgId: null,
+            active: true,
+            rating: 0,
+            isCorrection: true
+        };
+        await this.save();
+        logger.info(`📝 Korekta od ${authorName}: "${question.substring(0, 50)}..."`);
+        return correctionId;
     }
 }
 

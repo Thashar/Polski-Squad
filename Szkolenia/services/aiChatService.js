@@ -120,69 +120,35 @@ class AIChatService {
             regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
         }
 
-        // Słowa z patternu do luźnego dopasowania korekt
-        const patternWords = pattern
-            .replace(/[.*+?^${}()|[\]\\]/g, ' ')
-            .split(/\s+/)
-            .filter(w => w.length >= 2)
-            .map(w => {
-                try { return new RegExp(w, 'gi'); }
-                catch { return new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); }
-            });
-
         const MAX_RESULTS = 20;
         const MAX_CHARS = 15000;
-        const correctionMatches = [];
-        const regularMatches = [];
+        const matches = [];
 
-        // Przeszukaj bazę wiedzy (aktywne wpisy)
+        // Przeszukaj bazę wiedzy (aktywne wpisy + korekty z prefixem)
         const knowledgeText = this.knowledgeService.getActiveEntriesText();
         if (knowledgeText) {
             const sections = knowledgeText.split(/\n\n+/).filter(s => s.trim().length > 0);
-            for (const section of sections) {
+            // Korekty najpierw (mają priorytet)
+            const corrections = sections.filter(s => s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
+            const regular = sections.filter(s => !s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
+
+            for (const section of [...corrections, ...regular]) {
+                if (matches.length >= MAX_RESULTS) break;
                 regex.lastIndex = 0;
                 if (regex.test(section)) {
-                    regularMatches.push(section);
+                    const totalChars = matches.reduce((sum, m) => sum + m.length, 0);
+                    if (totalChars + section.length > MAX_CHARS) break;
+                    matches.push(section);
                 }
             }
         }
 
-        // Przeszukaj korekty
-        const corrections = await this.knowledgeService.loadCorrections();
-        if (corrections) {
-            const sections = corrections.split(/\n\n+/).filter(s => s.trim().length > 0);
-            for (const section of sections) {
-                const matched = patternWords.some(wordRegex => {
-                    wordRegex.lastIndex = 0;
-                    return wordRegex.test(section);
-                });
-                if (matched) {
-                    correctionMatches.push(`[KOREKTA UŻYTKOWNIKA] ${section}`);
-                }
-            }
-        }
-
-        // Merge z limitem
-        const merged = [];
-        let totalChars = 0;
-
-        for (const match of correctionMatches) {
-            if (merged.length >= MAX_RESULTS || totalChars >= MAX_CHARS) break;
-            merged.push(match);
-            totalChars += match.length;
-        }
-
-        for (const match of regularMatches) {
-            if (merged.length >= MAX_RESULTS || totalChars >= MAX_CHARS) break;
-            merged.push(match);
-            totalChars += match.length;
-        }
-
-        if (merged.length === 0) {
+        if (matches.length === 0) {
             return `Brak wyników dla "${pattern}". Spróbuj innej frazy lub krótszego wzorca.`;
         }
 
-        return `Znaleziono ${merged.length} fragmentów (${correctionMatches.length} korekt):\n\n${merged.join('\n\n---\n\n')}`;
+        const corrCount = matches.filter(m => m.startsWith('[KOREKTA UŻYTKOWNIKA]')).length;
+        return `Znaleziono ${matches.length} fragmentów (${corrCount} korekt):\n\n${matches.join('\n\n---\n\n')}`;
     }
 
     buildSystemPrompt() {

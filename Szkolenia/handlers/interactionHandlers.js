@@ -1,4 +1,4 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { reminderStorage } = require('../services/threadService');
 
@@ -155,6 +155,8 @@ async function handleAiFeedback(interaction, state, isPositive) {
 /**
  * Obsługa modala korekty odpowiedzi AI
  */
+const APPROVAL_CHANNEL_ID = '1470703877924978772';
+
 async function handleCorrectionModal(interaction, state) {
     const messageId = interaction.customId.replace('ai_correction_', '');
     const feedbackData = state.feedbackMap?.get(messageId);
@@ -170,8 +172,32 @@ async function handleCorrectionModal(interaction, state) {
     }
     state.feedbackMap.delete(messageId);
 
-    // Zapisz korektę
-    await state.knowledgeService.saveCorrection(question, correction, authorName);
+    // Dodaj korektę jako wpis do bazy wiedzy
+    const correctionId = await state.knowledgeService.addCorrectionEntry(question, correction, authorName);
+
+    // Wyślij na kanał zatwierdzania
+    if (correctionId) {
+        try {
+            const approvalChannel = await state.client.channels.fetch(APPROVAL_CHANNEL_ID);
+            if (approvalChannel) {
+                const content = `Pytanie: ${question}\nOdpowiedź: ${correction}`;
+                const embed = new EmbedBuilder()
+                    .setTitle('📝 Korekta odpowiedzi AI')
+                    .setDescription(content.length > 4000 ? content.substring(0, 4000) + '...' : content)
+                    .addFields(
+                        { name: 'Autor korekty', value: authorName, inline: true }
+                    )
+                    .setFooter({ text: 'Zaznacz ✅ aby usunąć z bazy wiedzy' })
+                    .setTimestamp()
+                    .setColor(0xe67e22);
+
+                const approvalMsg = await approvalChannel.send({ embeds: [embed] });
+                await state.knowledgeService.setApprovalMsgId(correctionId, approvalMsg.id);
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd wysyłania korekty na kanał zatwierdzania: ${error.message}`);
+        }
+    }
 
     try {
         await interaction.reply({
