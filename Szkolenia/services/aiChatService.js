@@ -262,8 +262,14 @@ MASZ NARZĘDZIE: grep_knowledge
 - Dla precyzji: krótsze frazy "transmut", "ciastk", "pet"
 - Regex też działa: "pet.*level", "ciastk.*60"
 
+KRYTYCZNE - WYSZUKIWANIE:
+- ZAWSZE szukaj DOKŁADNYMI słowami z pytania użytkownika - NIE parafrazuj, NIE zmieniaj osoby/formy!
+- Pytanie "kim jesteś?" → szukaj "kim jesteś" (NIE "kim jestem"!)
+- Pytanie "jak budować?" → szukaj "jak budować" (NIE "budowanie"!)
+- System sam obsługuje stemming i odmiany - Ty podaj ORYGINALNE słowa
+
 STRATEGIA WYSZUKIWANIA:
-1. PIERWSZA PRÓBA: użyj kluczowych słów z pytania użytkownika (po polsku!)
+1. PIERWSZA PRÓBA: użyj DOKŁADNYCH słów z pytania użytkownika (bez zmiany osoby/formy!)
 2. Jeśli brak wyników → spróbuj krótszych rdzeni słów: "budow" zamiast "budować"
 3. Jeśli nadal brak → spróbuj angielskich odpowiedników
 4. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu
