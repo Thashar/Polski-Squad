@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require('d
 const cron = require('node-cron');
 
 const config = require('./config/config');
-const { handleInteraction } = require('./handlers/interactionHandlers');
+const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -62,6 +62,7 @@ client.once(Events.ClientReady, async () => {
     }
 
     await knowledgeService.load();
+    await registerSlashCommands(client);
 
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, baza wiedzy, AI Chat');
 
@@ -119,7 +120,11 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         // --- ✅ na kanale zatwierdzania → deaktywuj wpis ---
         if (channelId === APPROVAL_CHANNEL_ID) {
             const result = await knowledgeService.deactivateByApproval(message.id);
-            if (result) {
+            if (result && result.entry.reactedById) {
+                // -2 punkty za odrzucenie wiedzy
+                await knowledgeService.addPoints(result.entry.reactedById, result.entry.reactedBy, -2);
+                logger.info(`📋 Wpis zatwierdzony (deaktywowany): ${result.messageId} przez ${user.tag} | -2 pkt dla ${result.entry.reactedBy}`);
+            } else if (result) {
                 logger.info(`📋 Wpis zatwierdzony (deaktywowany): ${result.messageId} przez ${user.tag}`);
             }
             return;
@@ -156,14 +161,19 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         if (!content.trim()) return;
 
         // Dodaj do bazy wiedzy
+        const reactorName = member.displayName || user.username;
         const added = await knowledgeService.addEntry(
             message.id,
             content,
             authorName,
-            member.displayName || user.username
+            reactorName,
+            user.id
         );
 
         if (!added) return; // Już istnieje
+
+        // +1 punkt za dodanie wiedzy
+        await knowledgeService.addPoints(user.id, reactorName, 1);
 
         logger.info(`📚 Dodano do bazy wiedzy: "${content.substring(0, 60)}..." przez ${user.tag}`);
 
@@ -240,7 +250,9 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 
         const removed = await knowledgeService.removeEntry(message.id);
         if (removed) {
-            logger.info(`🗑️ Usunięto z bazy wiedzy: wiadomość ${message.id} przez ${user.tag}`);
+            // -1 punkt za usunięcie własnej wiedzy
+            await knowledgeService.addPoints(user.id, member.displayName || user.username, -1);
+            logger.info(`🗑️ Usunięto z bazy wiedzy: wiadomość ${message.id} przez ${user.tag} | -1 pkt`);
         }
 
     } catch (error) {
@@ -302,7 +314,14 @@ client.on(Events.MessageCreate, async (message) => {
 
             if (result.relevantKnowledge) {
                 feedbackMap.set(reply.id, { knowledge: result.relevantKnowledge, askerId: message.author.id, question });
-                setTimeout(() => feedbackMap.delete(reply.id), 10 * 60 * 1000);
+
+                // Po 5 min usuń przyciski i dane feedbacku
+                setTimeout(async () => {
+                    feedbackMap.delete(reply.id);
+                    try {
+                        await reply.edit({ components: [] });
+                    } catch { /* wiadomość już usunięta lub edytowana */ }
+                }, 5 * 60 * 1000);
             }
 
             return;

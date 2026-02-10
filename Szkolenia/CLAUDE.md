@@ -26,6 +26,7 @@
 - **Tool-use loop:** Max 15 wywołań grep_knowledge na pytanie
 - **Cooldown:** 1 min dla zwykłych użytkowników, brak dla adminów
 - **Feedback:** 👍/👎 pod odpowiedziami AI. 👍 = pozytywna ocena wpisów. 👎 = modal z korektą + negatywna ocena + korekta trafia do bazy wiedzy i na kanał zatwierdzania (identycznie jak wpisy z ✅)
+- **Komenda:** `/ranking-pomocy` - ranking osób budujących bazę wiedzy, z nawigacją po miesiącach
 
 ## Baza Wiedzy (Reakcje ✅)
 
@@ -44,6 +45,16 @@
 - Korekty użytkowników: zapisywane jako wpisy w `knowledge_base.json` z flagą `isCorrection: true` i prefixem `[KOREKTA UŻYTKOWNIKA]` w wyszukiwaniu
 - Wpis: `{ content, author, date, reactedBy, approvalMsgId, active, rating, isCorrection? }`
 - Wpisy z `rating < -5` są ukrywane z wyszukiwania
+- Punkty pomocy: `data/knowledge_points.json` (miesięczne rankingi, `{ "YYYY-MM": { userId: { displayName, points } } }`)
+
+## System Punktów Pomocy
+
+- **+1 pkt** - dodanie wiedzy do bazy (reakcja ✅)
+- **-1 pkt** - usunięcie własnej reakcji ✅ (usunięcie wiedzy)
+- **-2 pkt** - odrzucenie wiedzy na kanale zatwierdzania (✅ na approval channel)
+- Można mieć ujemną liczbę punktów
+- Rankingi miesięczne - co miesiąc nowy ranking
+- `/ranking-pomocy` - wyświetla własne punkty + TOP 10, nawigacja ◀/▶ po miesiącach
 
 ---
 

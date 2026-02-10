@@ -399,6 +399,12 @@
           "description": "Zadaj pytanie AI o grze Survivor.io - przeszukuje bazę wiedzy i odpowiada",
           "usage": "@Szkolenia <pytanie>",
           "requiredPermission": "public"
+        },
+        {
+          "name": "/ranking-pomocy",
+          "description": "Wyświetla ranking osób budujących bazę wiedzy (miesięczny, z nawigacją po miesiącach)",
+          "usage": "/ranking-pomocy",
+          "requiredPermission": "public"
         }
       ]
     },
