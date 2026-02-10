@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
@@ -6,8 +6,15 @@ const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
+const AIChatService = require('./services/aiChatService');
+const KnowledgeService = require('./services/knowledgeService');
 
 const logger = createBotLogger('Szkolenia');
+
+// Rola kuratora wiedzy i kanał zatwierdzania
+const KNOWLEDGE_CURATOR_ROLE = '1470702781638901834';
+const APPROVAL_CHANNEL_ID = '1470703877924978772';
+const AI_CHAT_CHANNEL_ID = '1207041051831832586';
 
 const client = new Client({
     intents: [
@@ -22,10 +29,20 @@ const client = new Client({
 
 let lastReminderMap = new Map();
 
+// Inicjalizacja serwisów
+const knowledgeService = new KnowledgeService();
+const aiChatService = new AIChatService(config, knowledgeService);
+
+// Mapa feedbacku AI (messageId -> { knowledge, askerId, question })
+const feedbackMap = new Map();
+
 const sharedState = {
     lastReminderMap,
     client,
-    config
+    config,
+    aiChatService,
+    knowledgeService,
+    feedbackMap
 };
 
 client.once(Events.ClientReady, async () => {
@@ -36,7 +53,7 @@ client.once(Events.ClientReady, async () => {
         logger.info(`- ${guild.name} (${guild.id})`);
     });
 
-    // Załaduj dane przypomień z pliku
+    // Załaduj dane
     try {
         lastReminderMap = await reminderStorage.loadReminders();
         sharedState.lastReminderMap = lastReminderMap;
@@ -44,11 +61,12 @@ client.once(Events.ClientReady, async () => {
         logger.error('❌ Błąd ładowania danych przypomień:', error.message);
     }
 
-    logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
+    await knowledgeService.load();
+
+    logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, baza wiedzy, AI Chat');
 
     await checkThreads(client, sharedState, config, true);
 
-    // Uruchom automatyczne sprawdzanie wątków - codziennie o 18:00
     const cronExpression = `${config.timing.checkMinute} ${config.timing.checkHour} * * *`;
     cron.schedule(cronExpression, () => {
         logger.info(`🕐 Rozpoczynam zaplanowane sprawdzanie wątków (${config.timing.checkHour}:${config.timing.checkMinute.toString().padStart(2, '0')})`);
@@ -58,7 +76,6 @@ client.once(Events.ClientReady, async () => {
     });
 
     logger.info(`📅 Zaplanowano sprawdzanie wątków: codziennie o ${config.timing.checkHour}:${config.timing.checkMinute.toString().padStart(2, '0')} (strefa: Europe/Warsaw)`);
-
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -66,89 +83,271 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await handleInteraction(interaction, sharedState, config);
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);
-
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
-                    ephemeral: true
-                });
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas przetwarzania komendy.', ephemeral: true });
             } else if (interaction.deferred) {
-                await interaction.editReply({
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
-                });
+                await interaction.editReply({ content: '❌ Wystąpił błąd podczas przetwarzania komendy.' });
             }
         } catch (replyError) {
-            logger.error('❌ Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
+            logger.error('❌ Nie można odpowiedzieć na interakcję:', replyError.message);
         }
     }
 });
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    // Obsługa reakcji N_SSS (wątki treningowe)
     await handleReactionAdd(reaction, user, sharedState, config);
+
+    // Obsługa reakcji ✅ (baza wiedzy)
+    try {
+        if (user.bot) return;
+
+        // Fetch partials
+        if (reaction.partial) {
+            try { await reaction.fetch(); } catch { return; }
+        }
+        if (reaction.message.partial) {
+            try { await reaction.message.fetch(); } catch { return; }
+        }
+
+        if (reaction.emoji.name !== '✅') return;
+
+        const message = reaction.message;
+        const channelId = message.channel.id;
+
+        // --- ✅ na kanale zatwierdzania → deaktywuj wpis ---
+        if (channelId === APPROVAL_CHANNEL_ID) {
+            const result = await knowledgeService.deactivateByApproval(message.id);
+            if (result) {
+                logger.info(`📋 Wpis zatwierdzony (deaktywowany): ${result.messageId} przez ${user.tag}`);
+            }
+            return;
+        }
+
+        // --- ✅ na innym kanale → dodaj do bazy wiedzy ---
+        // Sprawdź rolę kuratora
+        const guild = message.guild;
+        if (!guild) return;
+
+        let member;
+        try {
+            member = await guild.members.fetch(user.id);
+        } catch { return; }
+
+        if (!member.roles.cache.has(KNOWLEDGE_CURATOR_ROLE)) return;
+
+        // Pobierz treść wiadomości
+        let content = message.content || '';
+        const authorName = message.member?.displayName || message.author?.username || 'Nieznany';
+
+        // Jeśli to odpowiedź → pobierz pytanie
+        if (message.reference) {
+            try {
+                const referencedMsg = await message.fetchReference();
+                if (referencedMsg.content?.trim()) {
+                    content = `Pytanie: ${referencedMsg.content}\nOdpowiedź: ${content}`;
+                }
+            } catch (err) {
+                // Nie udało się pobrać - zachowaj samą odpowiedź
+            }
+        }
+
+        if (!content.trim()) return;
+
+        // Dodaj do bazy wiedzy
+        const added = await knowledgeService.addEntry(
+            message.id,
+            content,
+            authorName,
+            member.displayName || user.username
+        );
+
+        if (!added) return; // Już istnieje
+
+        logger.info(`📚 Dodano do bazy wiedzy: "${content.substring(0, 60)}..." przez ${user.tag}`);
+
+        // Wyślij na kanał zatwierdzania
+        try {
+            const approvalChannel = await client.channels.fetch(APPROVAL_CHANNEL_ID);
+            if (approvalChannel) {
+                const embed = new EmbedBuilder()
+                    .setTitle('📚 Nowy wpis do bazy wiedzy')
+                    .setDescription(content.length > 4000 ? content.substring(0, 4000) + '...' : content)
+                    .addFields(
+                        { name: 'Autor wiadomości', value: authorName, inline: true },
+                        { name: 'Dodał do bazy', value: member.displayName || user.username, inline: true }
+                    )
+                    .setFooter({ text: `Zaznacz ✅ aby usunąć z bazy wiedzy` })
+                    .setTimestamp()
+                    .setColor(0x2ecc71);
+
+                // Link do oryginalnej wiadomości
+                if (message.url) {
+                    embed.addFields({ name: 'Źródło', value: `[Przejdź do wiadomości](${message.url})` });
+                }
+
+                const approvalMsg = await approvalChannel.send({ embeds: [embed] });
+
+                // Zapisz ID wiadomości na kanale zatwierdzania
+                await knowledgeService.setApprovalMsgId(message.id, approvalMsg.id);
+            }
+        } catch (error) {
+            logger.error(`❌ Błąd wysyłania na kanał zatwierdzania: ${error.message}`);
+        }
+
+    } catch (error) {
+        logger.error(`❌ Błąd obsługi reakcji ✅ (add): ${error.message}`);
+    }
+});
+
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+    try {
+        if (user.bot) return;
+
+        // Fetch partials
+        if (reaction.partial) {
+            try { await reaction.fetch(); } catch { return; }
+        }
+        if (reaction.message.partial) {
+            try { await reaction.message.fetch(); } catch { return; }
+        }
+
+        if (reaction.emoji.name !== '✅') return;
+
+        const message = reaction.message;
+        const channelId = message.channel.id;
+
+        // --- ✅ usunięta z kanału zatwierdzania → reaktywuj wpis ---
+        if (channelId === APPROVAL_CHANNEL_ID) {
+            const result = await knowledgeService.reactivateByApproval(message.id);
+            if (result) {
+                logger.info(`📋 Wpis reaktywowany: ${result.messageId} przez ${user.tag}`);
+            }
+            return;
+        }
+
+        // --- ✅ usunięta z oryginalnej wiadomości → usuń z bazy ---
+        const guild = message.guild;
+        if (!guild) return;
+
+        let member;
+        try {
+            member = await guild.members.fetch(user.id);
+        } catch { return; }
+
+        if (!member.roles.cache.has(KNOWLEDGE_CURATOR_ROLE)) return;
+
+        const removed = await knowledgeService.removeEntry(message.id);
+        if (removed) {
+            logger.info(`🗑️ Usunięto z bazy wiedzy: wiadomość ${message.id} przez ${user.tag}`);
+        }
+
+    } catch (error) {
+        logger.error(`❌ Błąd obsługi reakcji ✅ (remove): ${error.message}`);
+    }
 });
 
 client.on(Events.MessageCreate, async (message) => {
     try {
-        // === THREAD HANDLER ===
-        // Sprawdź czy to wątek w kanale szkoleniowym
-        if (!message.channel.isThread()) return;
-        if (message.channel.parentId !== config.channels.training) return;
+        // === AI CHAT HANDLER ===
+        const isBotMentioned = message.mentions.has(client.user.id);
+        const isReplyToBot = message.reference && message.mentions.repliedUser?.id === client.user.id;
+        const isEveryoneMention = message.mentions.everyone;
 
-        // Sprawdź czy to bot
-        if (message.author.bot) return;
+        if (isBotMentioned && !message.author.bot && !isReplyToBot && !isEveryoneMention) {
+            const isAllowedChannel = message.channel.id === AI_CHAT_CHANNEL_ID;
+            const isAdmin = aiChatService.isAdmin(message.member);
 
-        // Pobierz właściciela wątku z thread.ownerId (ustawiane automatycznie przez Discord)
-        let threadOwnerId = message.channel.ownerId;
-
-        // Jeśli brak ownerId, spróbuj znaleźć właściciela po nazwie wątku w cache
-        if (!threadOwnerId) {
-            logger.warn(`⚠️ Wątek nie ma ownerId, szukam po nazwie: ${message.channel.name}`);
-
-            const threadName = message.channel.name;
-            const guild = message.guild;
-
-            // Szukaj w cache (bez fetchowania!)
-            const threadOwner = guild.members.cache.find(member =>
-                member.displayName === threadName || member.user.username === threadName
-            );
-
-            if (!threadOwner) {
-                logger.warn(`⚠️ Nie znaleziono właściciela wątku w cache: ${threadName}`);
+            if (!isAllowedChannel && !isAdmin) {
+                await message.reply('⚠️ AI Chat jest dostępny tylko na specjalnym kanale lub dla administratorów.');
                 return;
             }
 
+            const question = message.content.replace(/<@!?\d+>/g, '').trim();
+
+            if (!question || question.length === 0) {
+                await message.reply('❓ Zadaj mi jakieś pytanie!');
+                return;
+            }
+
+            if (question.length > 300) {
+                await message.reply('⚠️ Pytanie jest za długie (max 300 znaków).');
+                return;
+            }
+
+            const canAskResult = aiChatService.canAsk(message.author.id, message.member);
+            if (!canAskResult.allowed) {
+                await message.reply(`⏳ Musisz poczekać ${canAskResult.remainingMinutes} min przed następnym pytaniem.`);
+                return;
+            }
+
+            await message.channel.sendTyping();
+
+            const result = await aiChatService.ask(message, question);
+            aiChatService.recordAsk(message.author.id, message.member);
+
+            const replyOptions = { content: result.content };
+
+            if (result.relevantKnowledge) {
+                const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('ai_feedback_up').setEmoji('👍').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('ai_feedback_down').setEmoji('👎').setStyle(ButtonStyle.Danger)
+                );
+                replyOptions.components = [row];
+            }
+
+            const reply = await message.reply(replyOptions);
+
+            if (result.relevantKnowledge) {
+                feedbackMap.set(reply.id, { knowledge: result.relevantKnowledge, askerId: message.author.id, question });
+                setTimeout(() => feedbackMap.delete(reply.id), 10 * 60 * 1000);
+            }
+
+            return;
+        }
+
+        // === THREAD HANDLER ===
+        if (!message.channel.isThread()) return;
+        if (message.channel.parentId !== config.channels.training) return;
+        if (message.author.bot) return;
+
+        let threadOwnerId = message.channel.ownerId;
+
+        if (!threadOwnerId) {
+            logger.warn(`⚠️ Wątek nie ma ownerId, szukam po nazwie: ${message.channel.name}`);
+            const threadOwner = message.guild.members.cache.find(member =>
+                member.displayName === message.channel.name || member.user.username === message.channel.name
+            );
+            if (!threadOwner) {
+                logger.warn(`⚠️ Nie znaleziono właściciela wątku w cache: ${message.channel.name}`);
+                return;
+            }
             threadOwnerId = threadOwner.id;
             logger.info(`✅ Znaleziono właściciela w cache: ${threadOwner.displayName} (${threadOwnerId})`);
         }
 
-        // Sprawdź czy to właściciel wątku pisze
         if (message.author.id !== threadOwnerId) return;
 
         logger.info(`👤 Wiadomość od właściciela wątku: ${message.author.tag}`);
 
-        // Sprawdź czy to pierwsza wiadomość właściciela w tym wątku
-        // Pobierz ostatnie 100 wiadomości z wątku
         const messages = await message.channel.messages.fetch({ limit: 100 });
-
-        // Policz wiadomości właściciela (nie licząc wiadomości bota)
         const ownerMessagesCount = messages.filter(msg =>
             msg.author.id === threadOwnerId && !msg.author.bot
         ).size;
 
         logger.info(`📊 Liczba wiadomości właściciela: ${ownerMessagesCount}`);
 
-        // Jeśli to pierwsza wiadomość właściciela - wyślij ping do ról klanowych
         if (ownerMessagesCount === 1) {
             await message.channel.send(
                 config.messages.ownerNeedsHelp(threadOwnerId, config.roles.clan)
             );
-
             logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${message.channel.name}`);
         }
 
     } catch (error) {
-        logger.error('❌ Błąd podczas obsługi wiadomości w wątku:', error);
+        logger.error('❌ Błąd podczas obsługi wiadomości:', error);
     }
 });
 
