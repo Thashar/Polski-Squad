@@ -248,11 +248,15 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 
         if (!member.roles.cache.has(KNOWLEDGE_CURATOR_ROLE)) return;
 
-        const removed = await knowledgeService.removeEntry(message.id);
-        if (removed) {
-            // -1 punkt za usunięcie własnej wiedzy
-            await knowledgeService.addPoints(user.id, member.displayName || user.username, -1);
-            logger.info(`🗑️ Usunięto z bazy wiedzy: wiadomość ${message.id} przez ${user.tag} | -1 pkt`);
+        const removedEntry = await knowledgeService.removeEntry(message.id);
+        if (removedEntry) {
+            // -1 punkt tylko jeśli wpis był aktywny (nie odrzucony na kanale zatwierdzania)
+            if (removedEntry.active) {
+                await knowledgeService.addPoints(user.id, member.displayName || user.username, -1);
+                logger.info(`🗑️ Usunięto z bazy wiedzy: wiadomość ${message.id} przez ${user.tag} | -1 pkt`);
+            } else {
+                logger.info(`🗑️ Usunięto z bazy wiedzy (już odrzucony): wiadomość ${message.id} przez ${user.tag} | 0 pkt`);
+            }
         }
 
     } catch (error) {
