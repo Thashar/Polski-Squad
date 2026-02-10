@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
 const cron = require('node-cron');
 
 const config = require('./config/config');
@@ -6,8 +6,6 @@ const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
-const AIChatService = require('./services/aiChatService');
-const EmbeddingService = require('./services/embeddingService');
 
 const logger = createBotLogger('Szkolenia');
 
@@ -24,33 +22,20 @@ const client = new Client({
 
 let lastReminderMap = new Map();
 
-// Inicjalizuj AI Chat Service
-const aiChatService = new AIChatService(config);
-
-// Inicjalizuj Embedding Service (wyszukiwanie semantyczne)
-const embeddingService = new EmbeddingService();
-aiChatService.embeddingService = embeddingService;
-
-// Mapa feedbacku AI - przechowuje kontekst odpowiedzi do oceny (messageId -> relevantKnowledge)
-const feedbackMap = new Map();
-
 const sharedState = {
     lastReminderMap,
     client,
-    config,
-    aiChatService,
-    embeddingService,
-    feedbackMap
+    config
 };
 
 client.once(Events.ClientReady, async () => {
     logger.info(`Bot zalogowany jako ${client.user.tag}`);
     logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
-    
+
     client.guilds.cache.forEach(guild => {
         logger.info(`- ${guild.name} (${guild.id})`);
     });
-    
+
     // Załaduj dane przypomień z pliku
     try {
         lastReminderMap = await reminderStorage.loadReminders();
@@ -58,28 +43,8 @@ client.once(Events.ClientReady, async () => {
     } catch (error) {
         logger.error('❌ Błąd ładowania danych przypomień:', error.message);
     }
-    
-    // Rejestracja slash commands
-    try {
-        await client.application.commands.set([
-            new SlashCommandBuilder()
-                .setName('scan-knowledge')
-                .setDescription('Skanuje kanały wiedzy rok wstecz i zapisuje wpisy do bazy (admin)'),
-            new SlashCommandBuilder()
-                .setName('reindex')
-                .setDescription('Reindeksuje bazę wiedzy dla wyszukiwania semantycznego (admin)')
-        ]);
-        logger.info('Zarejestrowano slash commands');
-    } catch (error) {
-        logger.error(`Błąd rejestracji slash commands: ${error.message}`);
-    }
 
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, automatyczne przypomnienia');
-
-    // Inicjalizuj model embeddingów i wczytaj istniejący indeks (bez reindeksacji - użyj /reindex)
-    embeddingService.initialize().catch(error => {
-        logger.error(`❌ Błąd inicjalizacji embeddingów: ${error.message}`);
-    });
 
     await checkThreads(client, sharedState, config, true);
 
@@ -101,16 +66,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await handleInteraction(interaction, sharedState, config);
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);
-        
+
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    ephemeral: true
                 });
             } else if (interaction.deferred) {
-                await interaction.editReply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
                 });
             }
         } catch (replyError) {
@@ -125,116 +90,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageCreate, async (message) => {
     try {
-        // === AUTO-ZBIERANIE WIEDZY (WSZYSTKO z kanałów) ===
-        const channelId = message.channel.id;
-        if (
-            !message.author.bot &&
-            AIChatService.KNOWLEDGE_CHANNEL_IDS.includes(channelId) &&
-            message.content?.trim()
-        ) {
-            const authorName = message.member?.displayName || message.author.username;
-
-            // Odpowiedź → zapisz jako parę Pytanie/Odpowiedź
-            let entryText;
-            if (message.reference) {
-                try {
-                    const repliedMessage = await message.fetchReference();
-                    if (repliedMessage.content?.trim()) {
-                        entryText = `Pytanie: ${repliedMessage.content} Odpowiedź: ${message.content}`;
-                    } else {
-                        entryText = message.content;
-                    }
-                } catch (err) {
-                    entryText = message.content;
-                }
-            } else {
-                entryText = message.content;
-            }
-
-            await aiChatService.saveKnowledgeEntry(entryText, authorName, channelId);
-
-            // Dodaj nowy wpis do indeksu embeddingów (inkrementalnie)
-            if (embeddingService.ready) {
-                const dateStr = new Date().toISOString().split('T')[0];
-                const fullEntry = `[${dateStr} | ${authorName}] ${entryText}`;
-                await embeddingService.addToIndex(fullEntry, `knowledge_${channelId}.md`);
-            }
-        }
-
-        // === AI CHAT HANDLER ===
-        // Sprawdź czy bot jest oznaczony (ale nie przez @everyone/@here i nie przez odpowiedzi)
-        const isBotMentioned = message.mentions.has(client.user.id);
-        const isReplyToBot = message.reference && message.mentions.repliedUser?.id === client.user.id;
-        const isEveryoneMention = message.mentions.everyone;
-
-        if (isBotMentioned && !message.author.bot && !isReplyToBot && !isEveryoneMention) {
-            // Kanał dozwolony dla wszystkich
-            const allowedChannelId = '1207041051831832586';
-
-            // Sprawdź czy to dozwolony kanał LUB użytkownik jest adminem
-            const isAllowedChannel = message.channel.id === allowedChannelId;
-            const isAdmin = aiChatService.isAdmin(message.member);
-
-            if (!isAllowedChannel && !isAdmin) {
-                await message.reply('⚠️ AI Chat jest dostępny tylko na specjalnym kanale lub dla administratorów.');
-                return;
-            }
-
-            // Wyciągnij pytanie (usuń mention bota)
-            const question = message.content
-                .replace(/<@!?\d+>/g, '') // Usuń wszystkie @mentions
-                .trim();
-
-            if (!question || question.length === 0) {
-                await message.reply('❓ Zadaj mi jakieś pytanie!');
-                return;
-            }
-
-            if (question.length > 300) {
-                await message.reply('⚠️ Pytanie jest za długie (max 300 znaków).');
-                return;
-            }
-
-            // Sprawdź cooldown
-            const canAskResult = aiChatService.canAsk(message.author.id, message.member);
-            if (!canAskResult.allowed) {
-                await message.reply(`⏳ Musisz poczekać ${canAskResult.remainingMinutes} min przed następnym pytaniem.`);
-                return;
-            }
-
-            // Typing indicator
-            await message.channel.sendTyping();
-
-            // Zadaj pytanie AI
-            const result = await aiChatService.ask(message, question);
-
-            // Zapisz cooldown
-            aiChatService.recordAsk(message.author.id, message.member);
-
-            // Wyślij odpowiedź z przyciskami feedbacku (jeśli użyto bazy wiedzy)
-            const replyOptions = { content: result.content };
-
-            if (result.relevantKnowledge) {
-                const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('ai_feedback_up').setEmoji('👍').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId('ai_feedback_down').setEmoji('👎').setStyle(ButtonStyle.Danger)
-                );
-                replyOptions.components = [row];
-            }
-
-            const reply = await message.reply(replyOptions);
-
-            // Zapamiętaj kontekst do oceny (auto-cleanup po 10 min)
-            if (result.relevantKnowledge) {
-                feedbackMap.set(reply.id, { knowledge: result.relevantKnowledge, askerId: message.author.id, question });
-                setTimeout(() => feedbackMap.delete(reply.id), 10 * 60 * 1000);
-            }
-
-            return; // Zakończ handler - nie przetwarzaj dalej
-        }
-
-        // === THREAD HANDLER (tylko jeśli nie AI Chat) ===
+        // === THREAD HANDLER ===
         // Sprawdź czy to wątek w kanale szkoleniowym
         if (!message.channel.isThread()) return;
         if (message.channel.parentId !== config.channels.training) return;
