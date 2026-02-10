@@ -146,12 +146,23 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         let content = message.content || '';
         const authorName = message.member?.displayName || message.author?.username || 'Nieznany';
 
-        // Jeśli to odpowiedź → pobierz pytanie
+        // Dołącz linki do załączników (zdjęcia, pliki)
+        if (message.attachments?.size > 0) {
+            const attachmentLinks = message.attachments.map(a => a.url).join('\n');
+            content = content ? `${content}\n${attachmentLinks}` : attachmentLinks;
+        }
+
+        // Jeśli to odpowiedź → pobierz pytanie (z załącznikami)
         if (message.reference) {
             try {
                 const referencedMsg = await message.fetchReference();
-                if (referencedMsg.content?.trim()) {
-                    content = `Pytanie: ${referencedMsg.content}\nOdpowiedź: ${content}`;
+                let refContent = referencedMsg.content || '';
+                if (referencedMsg.attachments?.size > 0) {
+                    const refAttachments = referencedMsg.attachments.map(a => a.url).join('\n');
+                    refContent = refContent ? `${refContent}\n${refAttachments}` : refAttachments;
+                }
+                if (refContent.trim()) {
+                    content = `Pytanie: ${refContent}\nOdpowiedź: ${content}`;
                 }
             } catch (err) {
                 // Nie udało się pobrać - zachowaj samą odpowiedź
