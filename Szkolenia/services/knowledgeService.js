@@ -137,14 +137,16 @@ class KnowledgeService {
 
     /**
      * Usuń wpis z bazy wiedzy (przy usunięciu ✅ z oryginalnej wiadomości)
+     * @returns {object|null} usunięty wpis lub null
      */
     async removeEntry(messageId) {
         if (this.entries[messageId]) {
+            const entry = { ...this.entries[messageId] };
             delete this.entries[messageId];
             await this.save();
-            return true;
+            return entry;
         }
-        return false;
+        return null;
     }
 
     /**
