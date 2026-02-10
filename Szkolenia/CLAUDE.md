@@ -22,7 +22,7 @@
 
 **Mention @Szkolenia** na kanale `1207041051831832586` (lub admin gdziekolwiek) → wyszukiwanie grep w bazie wiedzy → odpowiedź AI.
 - **Model:** Anthropic Claude (configurable via `SZKOLENIA_AI_CHAT_MODEL`)
-- **Narzędzie:** `grep_knowledge` - przeszukuje bazę wiedzy regex/tekstem, max 20 wyników, max 15000 znaków
+- **Narzędzie:** `grep_knowledge` - zaawansowane wyszukiwanie (3 strategie: exact regex + dopasowanie per słowo + polski stemming, scoring trafności, priorytet korekt), max 20 wyników, max 15000 znaków
 - **Tool-use loop:** Max 15 wywołań grep_knowledge na pytanie
 - **Cooldown:** 1 min dla zwykłych użytkowników, brak dla adminów
 - **Feedback:** 👍/👎 pod odpowiedziami AI. 👍 = pozytywna ocena wpisów. 👎 = modal z korektą + negatywna ocena + korekta trafia do bazy wiedzy i na kanał zatwierdzania (identycznie jak wpisy z ✅)
