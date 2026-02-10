@@ -291,12 +291,20 @@ STYL ODPOWIEDZI:
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
 
-EMOJI DISCORD I OBRAZKI (KRYTYCZNE):
+EMOJI DISCORD I OBRAZKI (NAJWYŻSZY PRIORYTET!):
 - Baza wiedzy zawiera custom emoji Discorda w formacie <:nazwa:id> lub <a:nazwa:id>
-- ZAWSZE kopiuj je DOKŁADNIE tak jak są w bazie wiedzy - to ikony gry które wyświetlą się na Discordzie
-- NIGDY nie zamieniaj ich na tekst np. (II_AW) - wklej oryginał: <:II_AW:123456789>
-- Jeśli w bazie wiedzy są linki do obrazków (https://...png, https://...jpg itp.) - wklej je w odpowiedź gdy są istotne dla kontekstu
-- Zachowuj DOKŁADNY format z bazy: <:nazwa:id> → <:nazwa:id>, NIE nazwa ani (nazwa)
+- MUSISZ kopiować je ZNAK PO ZNAKU, DOKŁADNIE tak jak są w bazie wiedzy
+- To jedyny sposób aby ikony wyświetliły się na Discordzie - Discord potrzebuje pełnego formatu z ID
+- ZAKAZANE jest jakiekolwiek przetwarzanie emoji - kopiuj literalnie cały ciąg znaków
+- Jeśli w bazie jest <:II_PetAW:1407383326830104658> → pisz <:II_PetAW:1407383326830104658>
+- NIGDY nie pisz: :nazwa:, (nazwa), nazwa, ani własnej interpretacji co emoji oznacza
+- Jeśli w bazie wiedzy są linki do obrazków (https://...png, https://...jpg, https://...webp) → wklej link w odpowiedź gdy wynika z kontekstu
+PRZYKŁAD:
+- Baza: "skupić na <:II_AW:123>, <:II_PetAW:456>"
+- ✅ POPRAWNIE: "Skup się na <:II_AW:123> i <:II_PetAW:456>"
+- ❌ ŹLE: "Skup się na :II_AW: i :II_PetAW:"
+- ❌ ŹLE: "Skup się na (II_AW) i (II_PetAW)"
+- ❌ ŹLE: "Skup się na awansowaniu postaci i petów"
 
 AKTUALNOŚĆ DANYCH (WAŻNE):
 - Każdy wpis ma datę: [YYYY-MM-DD | Autor]
