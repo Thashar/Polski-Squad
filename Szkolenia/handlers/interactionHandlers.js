@@ -267,13 +267,13 @@ function buildRankingEmbed(state, month, userId) {
     const row = new ActionRowBuilder();
 
     const prevButton = new ButtonBuilder()
-        .setCustomId(`ranking_nav_${availableMonths[currentIndex + 1] || 'none'}`)
+        .setCustomId(`ranking_nav_prev_${availableMonths[currentIndex + 1] || 'none'}`)
         .setLabel('◀ Starszy')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentIndex >= availableMonths.length - 1);
 
     const nextButton = new ButtonBuilder()
-        .setCustomId(`ranking_nav_${availableMonths[currentIndex - 1] || 'none'}`)
+        .setCustomId(`ranking_nav_next_${availableMonths[currentIndex - 1] || 'none'}`)
         .setLabel('Nowszy ▶')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentIndex <= 0);
@@ -308,7 +308,7 @@ async function handleRankingPomocy(interaction, state) {
  * Obsługa nawigacji po miesiącach (przyciski ◀ / ▶)
  */
 async function handleRankingNav(interaction, state) {
-    const month = interaction.customId.replace('ranking_nav_', '');
+    const month = interaction.customId.replace(/^ranking_nav_(prev|next)_/, '');
     if (month === 'none') return;
 
     const { embed, row } = buildRankingEmbed(state, month, interaction.user.id);
