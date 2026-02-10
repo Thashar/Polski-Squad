@@ -108,39 +108,138 @@ class AIChatService {
     };
 
     /**
-     * Wyszukiwanie grep w bazie wiedzy + korektach
+     * Prosty stemming polski - obcina typowe końcówki fleksyjne
+     */
+    stemPolish(word) {
+        word = word.toLowerCase();
+        if (word.length <= 3) return word;
+
+        // Końcówki czasowników (od najdłuższych)
+        const verbSuffixes = [
+            'ować', 'iwać', 'ywać', 'ącej', 'ącym', 'ącego',
+            'enie', 'anie', 'ienie', 'ości', 'ość',
+            'eście', 'ście', 'ałem', 'ałeś', 'ałam', 'ałaś',
+            'iesz', 'jesz', 'ował', 'iemy', 'jemy',
+            'uje', 'uje', 'ają', 'emy', 'esz', 'isz', 'ysz',
+            'ać', 'ić', 'yć', 'eć', 'uć',
+            'ał', 'ił', 'ył', 'ęł',
+            'am', 'em', 'asz', 'esz', 'asz',
+            'ię', 'ię',
+        ];
+
+        // Końcówki rzeczowników/przymiotników
+        const nounSuffixes = [
+            'owego', 'owej', 'owym', 'owych', 'owym',
+            'iego', 'iej', 'imi', 'ich',
+            'owi', 'ach', 'ami', 'ów',
+            'om', 'ie', 'ek', 'ka', 'ki', 'ku', 'ką', 'kiem',
+            'em', 'ą', 'ę', 'y', 'i', 'u', 'e', 'ó',
+        ];
+
+        for (const suffix of [...verbSuffixes, ...nounSuffixes]) {
+            if (word.length > suffix.length + 2 && word.endsWith(suffix)) {
+                return word.slice(0, -suffix.length);
+            }
+        }
+
+        return word;
+    }
+
+    /**
+     * Zaawansowane wyszukiwanie grep w bazie wiedzy
+     * Strategie: exact regex → słowa osobno → stemming → luźne dopasowanie
      */
     async executeGrepKnowledge(pattern) {
         if (!pattern) return 'Podaj frazę do wyszukania.';
 
-        let regex;
-        try {
-            regex = new RegExp(pattern, 'gi');
-        } catch (err) {
-            regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-        }
-
         const MAX_RESULTS = 20;
         const MAX_CHARS = 15000;
-        const matches = [];
 
-        // Przeszukaj bazę wiedzy (aktywne wpisy + korekty z prefixem)
         const knowledgeText = this.knowledgeService.getActiveEntriesText();
-        if (knowledgeText) {
-            const sections = knowledgeText.split(/\n\n+/).filter(s => s.trim().length > 0);
-            // Korekty najpierw (mają priorytet)
-            const corrections = sections.filter(s => s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
-            const regular = sections.filter(s => !s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
+        if (!knowledgeText) return 'Baza wiedzy jest pusta.';
 
-            for (const section of [...corrections, ...regular]) {
-                if (matches.length >= MAX_RESULTS) break;
-                regex.lastIndex = 0;
-                if (regex.test(section)) {
-                    const totalChars = matches.reduce((sum, m) => sum + m.length, 0);
-                    if (totalChars + section.length > MAX_CHARS) break;
-                    matches.push(section);
+        const sections = knowledgeText.split(/\n\n+/).filter(s => s.trim().length > 0);
+        // Korekty najpierw
+        const corrections = sections.filter(s => s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
+        const regular = sections.filter(s => !s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
+        const allSections = [...corrections, ...regular];
+
+        // Mapa: sekcja → najwyższy score
+        const scored = new Map();
+
+        // === Strategia 1: Exact regex (pełna fraza) → score 100 ===
+        try {
+            const exactRegex = new RegExp(pattern, 'gi');
+            for (const section of allSections) {
+                exactRegex.lastIndex = 0;
+                if (exactRegex.test(section)) {
+                    scored.set(section, (scored.get(section) || 0) + 100);
                 }
             }
+        } catch { /* invalid regex - skip */ }
+
+        // === Strategia 2: Każde słowo osobno (case-insensitive) → score 10 per słowo ===
+        const words = pattern
+            .replace(/[.*+?^${}()|[\]\\]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length >= 2);
+
+        if (words.length > 0) {
+            for (const section of allSections) {
+                const lower = section.toLowerCase();
+                let wordScore = 0;
+                for (const word of words) {
+                    if (lower.includes(word.toLowerCase())) {
+                        wordScore += 10;
+                    }
+                }
+                if (wordScore > 0) {
+                    scored.set(section, (scored.get(section) || 0) + wordScore);
+                }
+            }
+        }
+
+        // === Strategia 3: Stemming polski → score 5 per stem ===
+        if (words.length > 0) {
+            const stems = words.map(w => this.stemPolish(w)).filter(s => s.length >= 2);
+            const uniqueStems = [...new Set(stems)];
+
+            for (const section of allSections) {
+                const lower = section.toLowerCase();
+                let stemScore = 0;
+                for (const stem of uniqueStems) {
+                    if (lower.includes(stem)) {
+                        stemScore += 5;
+                    }
+                }
+                if (stemScore > 0 && !scored.has(section)) {
+                    scored.set(section, stemScore);
+                } else if (stemScore > 0) {
+                    scored.set(section, scored.get(section) + stemScore);
+                }
+            }
+        }
+
+        // Bonus: korekty mają +50
+        for (const [section, score] of scored) {
+            if (section.startsWith('[KOREKTA UŻYTKOWNIKA]')) {
+                scored.set(section, score + 50);
+            }
+        }
+
+        // Sortuj po score malejąco
+        const sorted = [...scored.entries()]
+            .sort((a, b) => b[1] - a[1]);
+
+        // Zbierz wyniki z limitem
+        const matches = [];
+        let totalChars = 0;
+
+        for (const [section] of sorted) {
+            if (matches.length >= MAX_RESULTS) break;
+            if (totalChars + section.length > MAX_CHARS) break;
+            matches.push(section);
+            totalChars += section.length;
         }
 
         if (matches.length === 0) {
@@ -155,20 +254,21 @@ class AIChatService {
         return `Jesteś kompendium wiedzy o grze Survivor.io.
 
 MASZ NARZĘDZIE: grep_knowledge
-- Użyj go aby przeszukać bazę wiedzy ZANIM odpowiesz
-- Możesz wywoływać WIELOKROTNIE z różnymi frazami - BEZ LIMITU
-- Zwraca WSZYSTKIE pasujące fragmenty
-- Używaj krótkich fraz: "transmute", "ciastk", "pet", "xeno", "awaken"
-- Możesz używać regex: "pet.*level", "ciastk.*60"
+- Używa ZAAWANSOWANEGO wyszukiwania: exact regex + dopasowanie per słowo + polski stemming
+- Wyniki sortowane po trafności (relevance scoring)
+- Korekty użytkowników mają najwyższy priorytet w wynikach
+- Możesz wywoływać WIELOKROTNIE z różnymi frazami
+- Używaj NATURALNYCH fraz z pytania: "kim jesteś", "jak transmutować"
+- Dla precyzji: krótsze frazy "transmut", "ciastk", "pet"
+- Regex też działa: "pet.*level", "ciastk.*60"
 
 STRATEGIA WYSZUKIWANIA:
-1. ZAWSZE NAJPIERW szukaj DOKŁADNIE słów z pytania użytkownika (po polsku!)
-2. NIGDY nie tłumacz polskich słów na angielski w pierwszym wyszukiwaniu
-3. Dopiero jeśli polskie frazy nic nie dają → spróbuj angielskich odpowiedników
-4. Jeśli pierwsze wyszukiwanie nie daje PEŁNEJ odpowiedzi → SZUKAJ DALEJ z inną frazą
-5. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu, potem po "koszt", "ile"
-6. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj dopóki nie znajdziesz dokładnej odpowiedzi
-7. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
+1. PIERWSZA PRÓBA: użyj kluczowych słów z pytania użytkownika (po polsku!)
+2. Jeśli brak wyników → spróbuj krótszych rdzeni słów: "budow" zamiast "budować"
+3. Jeśli nadal brak → spróbuj angielskich odpowiedników
+4. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu
+5. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj z różnymi frazami
+6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
 
 KOREKTY UŻYTKOWNIKÓW:
 - Jeśli w wynikach są "KOREKTY UŻYTKOWNIKÓW" → to ZWERYFIKOWANE odpowiedzi od graczy
