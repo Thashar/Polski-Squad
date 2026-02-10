@@ -392,27 +392,8 @@
     },
     {
       "name": "Szkolenia",
-      "description": "Bot do automatycznego zarządzania wątkami treningowymi, AI Chat z bazą wiedzy",
-      "commands": [
-        {
-          "name": "@Szkolenia [pytanie]",
-          "description": "AI Chat - zadaj pytanie o grę Survivor.io (hybrydowe wyszukiwanie semantyczne + keyword)",
-          "usage": "@Szkolenia Jaki build jest najlepszy na bossy?",
-          "requiredPermission": "public"
-        },
-        {
-          "name": "/reindex",
-          "description": "Reindeksuje bazę wiedzy dla wyszukiwania semantycznego (z paskiem postępu)",
-          "usage": "/reindex",
-          "requiredPermission": "administrator"
-        },
-        {
-          "name": "/scan-knowledge",
-          "description": "Skanuje kanały wiedzy rok wstecz i zapisuje pasujące wpisy do bazy",
-          "usage": "/scan-knowledge",
-          "requiredPermission": "administrator"
-        }
-      ]
+      "description": "Bot do automatycznego zarządzania wątkami treningowymi",
+      "commands": []
     },
     {
       "name": "Wydarzynier",

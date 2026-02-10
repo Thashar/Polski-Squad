@@ -1,4 +1,3 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { reminderStorage } = require('../services/threadService');
 
@@ -12,43 +11,19 @@ const logger = createBotLogger('Szkolenia');
 const { delay } = require('../utils/helpers');
 
 /**
- * Główna funkcja obsługi interakcji przycisków i modali
+ * Główna funkcja obsługi interakcji przycisków
  * @param {Interaction} interaction - Interakcja Discord
  * @param {Object} state - Stan współdzielony aplikacji
  * @param {Object} config - Konfiguracja aplikacji
  */
 async function handleInteraction(interaction, state, config) {
     try {
-        // Obsługa slash commands
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'scan-knowledge') {
-                await handleScanKnowledge(interaction, state);
-            } else if (interaction.commandName === 'reindex') {
-                await handleReindex(interaction, state);
-            }
-            return;
-        }
-
-        // Obsługa modali (korekta odpowiedzi AI)
-        if (interaction.isModalSubmit()) {
-            if (interaction.customId.startsWith('ai_correction_')) {
-                await handleCorrectionModal(interaction, state);
-            }
-            return;
-        }
-
         // Obsługa przycisków
         if (!interaction.isButton()) return;
 
         await delay(1000); // Drobny debounce
 
         const { customId, user, channel } = interaction;
-
-        // Feedback AI Chat (👍/👎)
-        if (customId === 'ai_feedback_up' || customId === 'ai_feedback_down') {
-            await handleAiFeedback(interaction, state, customId === 'ai_feedback_up');
-            return;
-        }
 
         // Sprawdź czy to właściciel wątku klika przycisk (tylko dla wątków)
         if (!channel.isThread()) return;
@@ -120,240 +95,6 @@ async function handleKeepOpen(interaction, state, config) {
 
     // Zresetuj status przypomnienia - użytkownik wybrał "jeszcze nie zamykaj"
     await reminderStorage.resetReminderStatus(state.lastReminderMap, channel.id);
-}
-
-/**
- * Obsługa slash command /scan-knowledge (admin)
- * Skanuje kanały wiedzy rok wstecz i zapisuje wpisy do bazy
- */
-async function handleScanKnowledge(interaction, state) {
-    const isAdmin = state.aiChatService.isAdmin(interaction.member);
-    if (!isAdmin) {
-        await interaction.reply({ content: '⚠️ Tylko administratorzy mogą uruchomić skanowanie.', ephemeral: true });
-        return;
-    }
-
-    await interaction.reply('🔍 Rozpoczynam skanowanie kanałów (ostatni rok)...');
-    const channel = interaction.channel;
-    let progressMsg = null;
-
-    try {
-        const results = await state.aiChatService.scanChannelHistory(state.client, async (event) => {
-            if (event.type === 'progress') {
-                const text = `🔍 Skanowanie **#${event.channelName}**... ${event.scanned} wiadomości, ${event.saved} zapisanych`;
-                if (progressMsg) {
-                    try { await progressMsg.edit(text); } catch (err) { /* ignore */ }
-                } else {
-                    progressMsg = await channel.send(text);
-                }
-            } else if (event.type === 'done') {
-                if (progressMsg) {
-                    try { await progressMsg.delete(); } catch (err) { /* ignore */ }
-                    progressMsg = null;
-                }
-                await channel.send(
-                    `📁 **#${event.channelName}** — ` +
-                    `sprawdzono: **${event.scanned}**, ` +
-                    `zapisano: **${event.saved}**, ` +
-                    `duplikaty: **${event.skipped}**`
-                );
-            }
-        });
-
-        const totalScanned = results.reduce((s, r) => s + r.scanned, 0);
-        const totalSaved = results.reduce((s, r) => s + r.saved, 0);
-        const totalSkipped = results.reduce((s, r) => s + r.skipped, 0);
-
-        await channel.send(
-            `✅ **Skanowanie zakończone!**\n\n` +
-            `📊 Sprawdzono: **${totalScanned}** wiadomości\n` +
-            `📚 Zapisano: **${totalSaved}** nowych wpisów\n` +
-            `⏭️ Pominięto (duplikaty): **${totalSkipped}**\n\n` +
-            (totalSaved > 0 ? '💡 Użyj `/reindex` aby zaktualizować wyszukiwanie semantyczne.' : '')
-        );
-    } catch (error) {
-        logger.error(`❌ Błąd skanowania: ${error.message}`);
-        await channel.send('❌ Wystąpił błąd podczas skanowania. Sprawdź logi.');
-    }
-}
-
-/**
- * Obsługa slash command /reindex (admin)
- * Reindeksuje bazę wiedzy dla wyszukiwania semantycznego z widocznym postępem
- */
-async function handleReindex(interaction, state) {
-    const isAdmin = state.aiChatService.isAdmin(interaction.member);
-    if (!isAdmin) {
-        await interaction.reply({ content: '⚠️ Tylko administratorzy mogą reindeksować bazę wiedzy.', ephemeral: true });
-        return;
-    }
-
-    const embeddingService = state.embeddingService;
-    if (!embeddingService) {
-        await interaction.reply({ content: '⚠️ Serwis embeddingów nie jest skonfigurowany.', ephemeral: true });
-        return;
-    }
-
-    // Sprawdź czy model jest gotowy, jeśli nie - poczekaj
-    if (!embeddingService.ready) {
-        await interaction.reply('⏳ Model embeddingów się ładuje, czekam...');
-        const ready = await embeddingService.waitForReady(120000);
-        if (!ready) {
-            await interaction.editReply('❌ Model embeddingów nie załadował się w ciągu 2 minut. Sprawdź logi.');
-            return;
-        }
-        await interaction.editReply('✅ Model gotowy! Rozpoczynam reindeksację...');
-    } else {
-        await interaction.reply('🔄 Rozpoczynam reindeksację bazy wiedzy...');
-    }
-
-    const channel = interaction.channel;
-    let progressMsg = null;
-
-    try {
-        const AIChatService = require('../services/aiChatService');
-        const knowledgeDataArray = await state.aiChatService.loadAllKnowledgeData();
-        const filePaths = [
-            ...AIChatService.KNOWLEDGE_CHANNEL_IDS.map(id => `knowledge_${id}.md`),
-            'knowledge_corrections.md'
-        ];
-
-        const result = await embeddingService.reindex(knowledgeDataArray, filePaths, async (processed, total) => {
-            const percent = Math.round((processed / total) * 100);
-            const bar = '█'.repeat(Math.floor(percent / 5)) + '░'.repeat(20 - Math.floor(percent / 5));
-            const text = `🔄 Reindeksacja: \`${bar}\` **${percent}%** (${processed}/${total} fragmentów)`;
-
-            if (progressMsg) {
-                try { await progressMsg.edit(text); } catch (err) { /* ignore rate limit */ }
-            } else {
-                progressMsg = await channel.send(text);
-            }
-        });
-
-        // Usuń wiadomość postępu i wyślij podsumowanie
-        if (progressMsg) {
-            try { await progressMsg.delete(); } catch (err) { /* ignore */ }
-        }
-
-        await channel.send(
-            `✅ **Reindeksacja zakończona!**\n\n` +
-            `📊 Zaindeksowano: **${result.count}** fragmentów\n` +
-            `⏱️ Czas: **${result.duration}s**`
-        );
-    } catch (error) {
-        logger.error(`❌ Błąd reindeksacji: ${error.message}`);
-        if (progressMsg) {
-            try { await progressMsg.delete(); } catch (err) { /* ignore */ }
-        }
-        await channel.send('❌ Reindeksacja nie powiodła się. Sprawdź logi.');
-    }
-}
-
-/**
- * Obsługa feedbacku AI Chat (👍/👎)
- * Aktualizuje oceny fragmentów bazy wiedzy użytych w odpowiedzi
- */
-async function handleAiFeedback(interaction, state, isPositive) {
-    const messageId = interaction.message.id;
-    const feedbackData = state.feedbackMap?.get(messageId);
-
-    if (!feedbackData) {
-        try { await interaction.update({ components: [] }); } catch (err) { /* expired */ }
-        return;
-    }
-
-    // Tylko pytający może ocenić
-    if (feedbackData.askerId && interaction.user.id !== feedbackData.askerId) {
-        try {
-            await interaction.reply({ content: '⚠️ Tylko osoba która zadała pytanie może ocenić odpowiedź.', ephemeral: true });
-        } catch (err) { /* expired */ }
-        return;
-    }
-
-    if (isPositive) {
-        // 👍 - oceń pozytywnie i zamknij
-        await state.aiChatService.rateKnowledgeFragments(feedbackData.knowledge, true);
-        state.feedbackMap.delete(messageId);
-        try {
-            await interaction.update({
-                content: interaction.message.content + '\n\n👍 *Oceniono*',
-                components: []
-            });
-        } catch (err) { /* expired */ }
-    } else {
-        // 👎 - pokaż modal z prośbą o poprawną odpowiedź
-        const question = feedbackData.question || 'Brak pytania';
-        const modal = new ModalBuilder()
-            .setCustomId(`ai_correction_${messageId}`)
-            .setTitle('Popraw odpowiedź AI')
-            .addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('question')
-                        .setLabel('Pytanie które zadano')
-                        .setStyle(TextInputStyle.Short)
-                        .setValue(question.substring(0, 100))
-                        .setRequired(true)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('correction')
-                        .setLabel('Poprawna odpowiedź')
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setPlaceholder('Wpisz poprawną odpowiedź na to pytanie...')
-                        .setRequired(true)
-                        .setMaxLength(1000)
-                )
-            );
-
-        try {
-            await interaction.showModal(modal);
-        } catch (err) { /* expired */ }
-    }
-}
-
-/**
- * Obsługa modala korekty odpowiedzi AI
- * Zapisuje pytanie + poprawną odpowiedź do pliku korekt
- */
-async function handleCorrectionModal(interaction, state) {
-    const messageId = interaction.customId.replace('ai_correction_', '');
-    const feedbackData = state.feedbackMap?.get(messageId);
-
-    const question = interaction.fields.getTextInputValue('question');
-    const correction = interaction.fields.getTextInputValue('correction');
-    const authorName = interaction.member?.displayName || interaction.user.username;
-
-    // Oceń negatywnie fragmenty
-    if (feedbackData?.knowledge) {
-        await state.aiChatService.rateKnowledgeFragments(feedbackData.knowledge, false);
-    }
-    state.feedbackMap.delete(messageId);
-
-    // Zapisz korektę do pliku
-    await state.aiChatService.saveCorrection(question, correction, authorName);
-
-    // Dodaj korektę do indeksu embeddingów
-    if (state.embeddingService?.ready) {
-        const dateStr = new Date().toISOString().split('T')[0];
-        const fullEntry = `[${dateStr} | ${authorName}] Pytanie: ${question} Odpowiedź: ${correction}`;
-        await state.embeddingService.addToIndex(fullEntry, 'knowledge_corrections.md');
-    }
-
-    try {
-        await interaction.reply({
-            content: '👎 *Oceniono* — poprawna odpowiedź została zapisana do bazy wiedzy. Dziękuję!',
-            ephemeral: true
-        });
-    } catch (err) { /* expired */ }
-
-    // Edytuj oryginalną wiadomość - usuń przyciski
-    try {
-        await interaction.message.edit({
-            content: interaction.message.content + '\n\n👎 *Oceniono i poprawiono*',
-            components: []
-        });
-    } catch (err) { /* expired */ }
 }
 
 module.exports = {
