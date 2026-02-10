@@ -12,8 +12,9 @@ class KnowledgeService {
     constructor() {
         this.dataDir = path.join(__dirname, '../data');
         this.knowledgeFile = path.join(this.dataDir, 'knowledge_base.json');
-        this.correctionsFile = path.join(this.dataDir, 'knowledge_corrections.md');
+        this.pointsFile = path.join(this.dataDir, 'knowledge_points.json');
         this.entries = {};
+        this.points = {}; // { "YYYY-MM": { "userId": { displayName, points } } }
     }
 
     async load() {
@@ -30,6 +31,21 @@ class KnowledgeService {
             }
             this.entries = {};
         }
+
+        // Wczytaj punkty
+        try {
+            const content = await fs.readFile(this.pointsFile, 'utf8');
+            this.points = JSON.parse(content);
+            const currentMonth = this.getCurrentMonth();
+            const currentMonthData = this.points[currentMonth] || {};
+            const usersCount = Object.keys(currentMonthData).length;
+            logger.info(`📊 Wczytano punkty pomocy: ${usersCount} użytkowników w ${currentMonth}`);
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                logger.error(`❌ Błąd wczytywania punktów: ${error.message}`);
+            }
+            this.points = {};
+        }
     }
 
     async save() {
@@ -41,11 +57,68 @@ class KnowledgeService {
         }
     }
 
+    async savePoints() {
+        try {
+            await fs.mkdir(this.dataDir, { recursive: true });
+            await fs.writeFile(this.pointsFile, JSON.stringify(this.points, null, 2));
+        } catch (error) {
+            logger.error(`❌ Błąd zapisu punktów: ${error.message}`);
+        }
+    }
+
+    getCurrentMonth() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    /**
+     * Dodaj/odejmij punkty użytkownikowi
+     * @param {string} userId
+     * @param {string} displayName
+     * @param {number} delta - ilość punktów (+1, -1, -2)
+     */
+    async addPoints(userId, displayName, delta) {
+        const month = this.getCurrentMonth();
+        if (!this.points[month]) this.points[month] = {};
+        if (!this.points[month][userId]) {
+            this.points[month][userId] = { displayName, points: 0 };
+        }
+        this.points[month][userId].displayName = displayName;
+        this.points[month][userId].points += delta;
+        await this.savePoints();
+    }
+
+    /**
+     * Pobierz ranking dla danego miesiąca
+     * @param {string} month - format "YYYY-MM"
+     * @returns {{ userId: string, displayName: string, points: number }[]}
+     */
+    getRanking(month) {
+        const monthData = this.points[month] || {};
+        return Object.entries(monthData)
+            .map(([userId, data]) => ({ userId, displayName: data.displayName, points: data.points }))
+            .sort((a, b) => b.points - a.points);
+    }
+
+    /**
+     * Pobierz punkty konkretnego użytkownika w danym miesiącu
+     */
+    getUserPoints(userId, month) {
+        return this.points[month]?.[userId]?.points || 0;
+    }
+
+    /**
+     * Pobierz dostępne miesiące (posortowane od najnowszego)
+     */
+    getAvailableMonths() {
+        return Object.keys(this.points).sort().reverse();
+    }
+
     /**
      * Dodaj wpis do bazy wiedzy
      * @returns {boolean} true jeśli dodano nowy wpis, false jeśli już istniał
      */
-    async addEntry(messageId, content, author, reactedBy) {
+    async addEntry(messageId, content, author, reactedBy, reactedById) {
         if (this.entries[messageId]) return false;
 
         this.entries[messageId] = {
@@ -53,6 +126,7 @@ class KnowledgeService {
             author,
             date: new Date().toISOString().split('T')[0],
             reactedBy,
+            reactedById,
             approvalMsgId: null,
             active: true,
             rating: 0

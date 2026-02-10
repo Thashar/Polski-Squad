@@ -1,4 +1,4 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, SlashCommandBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { reminderStorage } = require('../services/threadService');
 
@@ -11,6 +11,14 @@ const { delay } = require('../utils/helpers');
  */
 async function handleInteraction(interaction, state, config) {
     try {
+        // Obsługa slash commandów
+        if (interaction.isChatInputCommand()) {
+            if (interaction.commandName === 'ranking-pomocy') {
+                await handleRankingPomocy(interaction, state);
+            }
+            return;
+        }
+
         // Obsługa modali (korekta odpowiedzi AI)
         if (interaction.isModalSubmit()) {
             if (interaction.customId.startsWith('ai_correction_')) {
@@ -29,6 +37,12 @@ async function handleInteraction(interaction, state, config) {
         // Feedback AI Chat (👍/👎)
         if (customId === 'ai_feedback_up' || customId === 'ai_feedback_down') {
             await handleAiFeedback(interaction, state, customId === 'ai_feedback_up');
+            return;
+        }
+
+        // Nawigacja rankingu (◀ / ▶)
+        if (customId.startsWith('ranking_nav_')) {
+            await handleRankingNav(interaction, state);
             return;
         }
 
@@ -215,6 +229,127 @@ async function handleCorrectionModal(interaction, state) {
     } catch (err) { /* expired */ }
 }
 
+/**
+ * Formatowanie nazwy miesiąca po polsku
+ */
+const MONTH_NAMES = [
+    'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+    'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
+];
+
+function formatMonth(monthStr) {
+    const [year, month] = monthStr.split('-');
+    return `${MONTH_NAMES[parseInt(month) - 1]} ${year}`;
+}
+
+/**
+ * Buduje embed rankingu dla danego miesiąca
+ */
+function buildRankingEmbed(state, month, userId) {
+    const ranking = state.knowledgeService.getRanking(month);
+    const userPoints = state.knowledgeService.getUserPoints(userId, month);
+    const availableMonths = state.knowledgeService.getAvailableMonths();
+
+    const embed = new EmbedBuilder()
+        .setTitle(`📊 Ranking Pomocy — ${formatMonth(month)}`)
+        .setColor(0x3498db)
+        .setTimestamp();
+
+    // Twoje punkty na górze
+    embed.setDescription(`**Twoje punkty:** ${userPoints} pkt`);
+
+    // TOP 10
+    if (ranking.length === 0) {
+        embed.addFields({ name: 'Top 10', value: '*Brak danych w tym miesiącu*' });
+    } else {
+        const medals = ['🥇', '🥈', '🥉'];
+        const top10 = ranking.slice(0, 10);
+        const lines = top10.map((entry, i) => {
+            const prefix = i < 3 ? medals[i] : `**${i + 1}.**`;
+            const highlight = entry.userId === userId ? ' ⬅️' : '';
+            return `${prefix} ${entry.displayName} — **${entry.points}** pkt${highlight}`;
+        });
+        embed.addFields({ name: 'Top 10', value: lines.join('\n') });
+    }
+
+    // Przyciski nawigacji
+    const currentIndex = availableMonths.indexOf(month);
+    const row = new ActionRowBuilder();
+
+    const prevButton = new ButtonBuilder()
+        .setCustomId(`ranking_nav_${availableMonths[currentIndex + 1] || 'none'}`)
+        .setLabel('◀ Starszy')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentIndex >= availableMonths.length - 1);
+
+    const nextButton = new ButtonBuilder()
+        .setCustomId(`ranking_nav_${availableMonths[currentIndex - 1] || 'none'}`)
+        .setLabel('Nowszy ▶')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentIndex <= 0);
+
+    row.addComponents(prevButton, nextButton);
+
+    return { embed, row };
+}
+
+/**
+ * Obsługa komendy /ranking-pomocy
+ */
+async function handleRankingPomocy(interaction, state) {
+    const currentMonth = state.knowledgeService.getCurrentMonth();
+    const availableMonths = state.knowledgeService.getAvailableMonths();
+
+    // Jeśli brak danych, pokaż aktualny miesiąc (pusty)
+    const month = availableMonths.length > 0 && availableMonths.includes(currentMonth)
+        ? currentMonth
+        : (availableMonths[0] || currentMonth);
+
+    const { embed, row } = buildRankingEmbed(state, month, interaction.user.id);
+
+    await interaction.reply({
+        embeds: [embed],
+        components: [row],
+        flags: 64
+    });
+}
+
+/**
+ * Obsługa nawigacji po miesiącach (przyciski ◀ / ▶)
+ */
+async function handleRankingNav(interaction, state) {
+    const month = interaction.customId.replace('ranking_nav_', '');
+    if (month === 'none') return;
+
+    const { embed, row } = buildRankingEmbed(state, month, interaction.user.id);
+
+    try {
+        await interaction.update({
+            embeds: [embed],
+            components: [row]
+        });
+    } catch (err) { /* expired */ }
+}
+
+/**
+ * Rejestracja slash commandów
+ */
+async function registerSlashCommands(client) {
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('ranking-pomocy')
+            .setDescription('Wyświetla ranking osób, które pomogły budować bazę wiedzy')
+    ];
+
+    try {
+        await client.application.commands.set(commands);
+        logger.info('✅ Komendy slash zarejestrowane');
+    } catch (error) {
+        logger.error(`❌ Błąd rejestracji komend slash: ${error.message}`);
+    }
+}
+
 module.exports = {
-    handleInteraction
+    handleInteraction,
+    registerSlashCommands
 };
