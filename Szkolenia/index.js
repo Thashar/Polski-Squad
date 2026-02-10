@@ -248,7 +248,7 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 
         if (!member.roles.cache.has(KNOWLEDGE_CURATOR_ROLE)) return;
 
-        const removedEntry = await knowledgeService.removeEntry(message.id);
+        const removedEntry = await knowledgeService.removeEntry(message.id, user.id);
         if (removedEntry) {
             // -1 punkt tylko jeśli wpis był aktywny (nie odrzucony na kanale zatwierdzania)
             if (removedEntry.active) {

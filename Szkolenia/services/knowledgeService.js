@@ -137,10 +137,16 @@ class KnowledgeService {
 
     /**
      * Usuń wpis z bazy wiedzy (przy usunięciu ✅ z oryginalnej wiadomości)
+     * @param {string} messageId
+     * @param {string} [userId] - jeśli podany, usuwa tylko jeśli to ta sama osoba co dodała
      * @returns {object|null} usunięty wpis lub null
      */
-    async removeEntry(messageId) {
+    async removeEntry(messageId, userId = null) {
         if (this.entries[messageId]) {
+            // Sprawdź czy to ta sama osoba co dodała reakcję
+            if (userId && this.entries[messageId].reactedById !== userId) {
+                return null;
+            }
             const entry = { ...this.entries[messageId] };
             delete this.entries[messageId];
             await this.save();
