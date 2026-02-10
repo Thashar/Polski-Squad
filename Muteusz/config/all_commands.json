@@ -392,8 +392,15 @@
     },
     {
       "name": "Szkolenia",
-      "description": "Bot do automatycznego zarządzania wątkami treningowymi",
-      "commands": []
+      "description": "Bot do automatycznego zarządzania wątkami treningowymi i AI Chat z bazą wiedzy",
+      "commands": [
+        {
+          "name": "@Szkolenia",
+          "description": "Zadaj pytanie AI o grze Survivor.io - przeszukuje bazę wiedzy i odpowiada",
+          "usage": "@Szkolenia <pytanie>",
+          "requiredPermission": "public"
+        }
+      ]
     },
     {
       "name": "Wydarzynier",
