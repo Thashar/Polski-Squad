@@ -495,34 +495,43 @@ class AIChatService {
             }
         }
 
-        // --- 3. MERGE: korekty > semantyczne + keyword (deduplikacja) ---
+        // --- 3. MERGE: korekty > semantyczne + keyword (deduplikacja, limit rozmiaru) ---
+        const MAX_RESULTS = 20;
+        const MAX_CHARS = 15000; // ~4K tokenów - bezpieczny limit
         const seen = new Set();
         const merged = [];
+        let totalChars = 0;
 
         // Korekty mają najwyższy priorytet
         for (const match of correctionMatches) {
+            if (merged.length >= MAX_RESULTS || totalChars >= MAX_CHARS) break;
             const key = match.substring(0, 100);
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(match);
+                totalChars += match.length;
             }
         }
 
         // Wyniki semantyczne i keyword - przeplatane (interleave)
         const maxLen = Math.max(semanticMatches.length, keywordMatches.length);
         for (let i = 0; i < maxLen; i++) {
+            if (merged.length >= MAX_RESULTS || totalChars >= MAX_CHARS) break;
             if (i < semanticMatches.length) {
                 const key = semanticMatches[i].substring(0, 100);
                 if (!seen.has(key)) {
                     seen.add(key);
                     merged.push(semanticMatches[i]);
+                    totalChars += semanticMatches[i].length;
                 }
             }
+            if (merged.length >= MAX_RESULTS || totalChars >= MAX_CHARS) break;
             if (i < keywordMatches.length) {
                 const key = keywordMatches[i].substring(0, 100);
                 if (!seen.has(key)) {
                     seen.add(key);
                     merged.push(keywordMatches[i]);
+                    totalChars += keywordMatches[i].length;
                 }
             }
         }
