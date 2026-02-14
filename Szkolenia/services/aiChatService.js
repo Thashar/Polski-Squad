@@ -49,8 +49,8 @@ class AIChatService {
             }
         }
 
-        // Cooldown: Grok 5 min (web_search kosztuje więcej), Anthropic 1 min
-        this.cooldownMinutes = this.provider === 'grok' ? 5 : 1;
+        // Cooldown: Grok 60 min (web_search kosztuje więcej), Anthropic 1 min
+        this.cooldownMinutes = this.provider === 'grok' ? 60 : 1;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.promptsDir = path.join(this.dataDir, 'prompts');
