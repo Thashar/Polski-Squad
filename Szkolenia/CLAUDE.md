@@ -32,9 +32,11 @@
 
 ### Provider: Grok (xAI)
 - **Model:** Grok (configurable via `SZKOLENIA_GROK_MODEL`, domyślnie `grok-4`)
-- **API:** `https://api.x.ai/v1/chat/completions` (OpenAI-compatible)
-- **Prompt:** Prosty system prompt - bot szkoleniowy dla graczy Survivor.io
-- **Bez kompendium wiedzy** (brak grep_knowledge), **bez feedbacku** (brak 👍/👎)
+- **API:** `https://api.x.ai/v1/responses` (Responses API z web_search)
+- **Web Search:** Grok przeszukuje internet w czasie rzeczywistym aby znaleźć aktualne informacje o Survivor.io
+- **Prompt:** Rozbudowany system prompt - kompendium wiedzy o Survivor.io z instrukcjami wyszukiwania
+- **Bez kompendium lokalnego** (brak grep_knowledge), ale **z dostępem do sieci** przez web_search
+- **Cooldown:** 5 minut per użytkownik (administratorzy bez limitu)
 
 ### Komenda
 - `/ranking-pomocy` - ranking osób budujących bazę wiedzy, z nawigacją po miesiącach
@@ -103,4 +105,4 @@ SZKOLENIA_GROK_MODEL=grok-4
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
 - **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
 - **Persistencja:** Przypomnienia w JSON, baza wiedzy w JSON, cooldowny AI Chat w JSON
-- **AI Chat:** Dwa providery (Anthropic z grep_knowledge / Grok prosty chat). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Anthropic: wyszukiwanie Grep, korekty mają priorytet. Grok: prosty prompt bez kompendium wiedzy.
+- **AI Chat:** Dwa providery (Anthropic z grep_knowledge / Grok z web_search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Anthropic: lokalna baza wiedzy + grep_knowledge, korekty mają priorytet. Grok: Responses API z web_search (przeszukiwanie internetu w czasie rzeczywistym), cooldown 5 min (admini bez limitu).
