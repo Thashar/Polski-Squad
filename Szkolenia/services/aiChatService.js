@@ -49,8 +49,8 @@ class AIChatService {
             }
         }
 
-        // Cooldown
-        this.cooldownMinutes = 1;
+        // Cooldown: Grok 5 min (web_search kosztuje więcej), Anthropic 1 min
+        this.cooldownMinutes = this.provider === 'grok' ? 5 : 1;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.promptsDir = path.join(this.dataDir, 'prompts');
@@ -357,31 +357,48 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
     }
 
     /**
-     * Zadaj pytanie przez Grok API (prosty chat bez kompendium wiedzy)
+     * Zadaj pytanie przez Grok API (Responses API z web_search)
      */
     async askGrok(message, question) {
         try {
             const displayName = message.member?.displayName || message.author.username;
 
-            const systemPrompt = 'Jesteś botem szkoleniowym dla graczy w Survivor.io. Odpowiadaj po polsku, krótko i konkretnie.';
-            const userPrompt = question;
+            const systemPrompt = `Jesteś kompendium wiedzy o grze Survivor.io na Discordzie.
+
+MASZ NARZĘDZIE: web_search - przeszukuje internet w czasie rzeczywistym.
+- ZAWSZE używaj web_search aby znaleźć aktualne informacje o Survivor.io
+- Szukaj po angielsku: "Survivor.io" + temat pytania (np. "Survivor.io best pets 2026")
+- Szukaj też po polsku jeśli pytanie dotyczy polskiej społeczności
+
+ZASADY:
+- Odpowiadaj PO POLSKU, krótko (max 3-4 zdania)
+- **Ważne informacje** pogrubione
+- Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
+- BEZ wstępów typu "Dobrze, odpowiem..."
+- Jeśli nie znalazłeś informacji w sieci → powiedz że nie masz aktualnych danych
+- ABSOLUTNY ZAKAZ wymyślania statystyk, nazw, umiejętności
+
+ZAKOŃCZENIE:
+- Zakończ: "Oceń odpowiedź kciukiem 👍/👎!"`;
+
+            const userPrompt = `Użytkownik: ${displayName}\nPytanie: ${question}\n\nUżyj web_search aby znaleźć aktualne informacje i odpowiedzieć na pytanie.`;
 
             await this.savePromptToFile(`[GROK] SYSTEM:\n${systemPrompt}\n\nUSER (${displayName}):\n${userPrompt}`, displayName);
 
-            const response = await fetch('https://api.x.ai/v1/chat/completions', {
+            const response = await fetch('https://api.x.ai/v1/responses', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.apiKey}`
                 },
                 body: JSON.stringify({
-                    messages: [
+                    model: this.model,
+                    input: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    model: this.model,
-                    stream: false,
-                    temperature: 0.7
+                    tools: [{ type: 'web_search' }],
+                    store: false
                 })
             });
 
@@ -391,9 +408,10 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
             }
 
             const data = await response.json();
-            const answer = data.choices?.[0]?.message?.content || '⚠️ Brak odpowiedzi od AI.';
+            const answer = data.output_text || '⚠️ Brak odpowiedzi od AI.';
 
-            logger.info(`AI Chat [Grok]: ${message.author.username} pytanie="${question.substring(0, 50)}"`);
+            const citationCount = data.citations?.length || 0;
+            logger.info(`AI Chat [Grok]: ${message.author.username} pytanie="${question.substring(0, 50)}" citations=${citationCount}`);
             return { content: answer, relevantKnowledge: null };
 
         } catch (error) {
