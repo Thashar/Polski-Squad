@@ -13,7 +13,7 @@ const logger = createBotLogger('Szkolenia');
 
 /**
  * AI Chat Service - Kompendium wiedzy o grze Survivor.io
- * Obsługuje dwa providery: Anthropic (z kompendium wiedzy) i Grok (prosty chat)
+ * Obsługuje trzech providerów: Anthropic (z kompendium wiedzy), Grok i Perplexity (web search)
  * Przełączanie przez SZKOLENIA_AI_PROVIDER w .env
  */
 class AIChatService {
@@ -21,7 +21,7 @@ class AIChatService {
         this.config = config;
         this.knowledgeService = knowledgeService;
 
-        // Wybór providera AI: "anthropic" lub "grok"
+        // Wybór providera AI: "anthropic", "grok" lub "perplexity"
         this.provider = (process.env.SZKOLENIA_AI_PROVIDER || 'anthropic').toLowerCase();
 
         if (this.provider === 'grok') {
@@ -34,6 +34,17 @@ class AIChatService {
                 logger.success(`✅ AI Chat aktywny - provider: Grok, model: ${this.model}`);
             } else {
                 logger.warn('⚠️ AI Chat wyłączony - brak XAI_API_KEY');
+            }
+        } else if (this.provider === 'perplexity') {
+            // Perplexity API
+            this.apiKey = process.env.PERPLEXITY_API_KEY;
+            this.enabled = !!this.apiKey;
+
+            if (this.enabled) {
+                this.model = process.env.SZKOLENIA_PERPLEXITY_MODEL || 'sonar-pro';
+                logger.success(`✅ AI Chat aktywny - provider: Perplexity, model: ${this.model}`);
+            } else {
+                logger.warn('⚠️ AI Chat wyłączony - brak PERPLEXITY_API_KEY');
             }
         } else {
             // Anthropic API (domyślny)
@@ -49,8 +60,8 @@ class AIChatService {
             }
         }
 
-        // Cooldown: Grok 60 min (web_search kosztuje więcej), Anthropic 1 min
-        this.cooldownMinutes = this.provider === 'grok' ? 60 : 1;
+        // Cooldown: Grok/Perplexity 60 min (web_search kosztuje więcej), Anthropic 1 min
+        this.cooldownMinutes = (this.provider === 'grok' || this.provider === 'perplexity') ? 60 : 1;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.promptsDir = path.join(this.dataDir, 'prompts');
@@ -459,6 +470,80 @@ ZAKOŃCZENIE:
     }
 
     /**
+     * Zadaj pytanie przez Perplexity API (Chat Completions z web search)
+     */
+    async askPerplexity(message, question) {
+        try {
+            const displayName = message.member?.displayName || message.author.username;
+
+            const systemPrompt = `Jesteś kompendium wiedzy o grze Survivor.io na Discordzie.
+
+MASZ WBUDOWANE WYSZUKIWANIE INTERNETOWE - przeszukujesz internet w czasie rzeczywistym.
+- ZAWSZE szukaj aktualnych informacji o Survivor.io
+- PRIORYTET: Szukaj NAJPIERW na Reddit - dodawaj "site:reddit.com" do zapytań
+  Przykład: "Survivor.io best pets 2026 site:reddit.com"
+- Jeśli Reddit nie daje wyników → szukaj bez ograniczenia domeny
+- Szukaj po angielsku: "Survivor.io" + temat pytania
+- Szukaj też po polsku jeśli pytanie dotyczy polskiej społeczności
+- ZAWSZE preferuj najnowsze wyniki - dodawaj aktualny rok do zapytań (np. "2026")
+
+ZASADY:
+- Odpowiadaj PO POLSKU, wyczerpująco i szczegółowo - pisz ile trzeba, nie skracaj
+- **Ważne informacje** pogrubione
+- Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
+- BEZ wstępów typu "Dobrze, odpowiem..."
+- Jeśli nie znalazłeś informacji w sieci → powiedz że nie masz aktualnych danych
+- ABSOLUTNY ZAKAZ wymyślania statystyk, nazw, umiejętności
+
+ZAKOŃCZENIE:
+- Zakończ: "Oceń odpowiedź kciukiem 👍/👎!"`;
+
+            const userPrompt = `Użytkownik: ${displayName}\nPytanie: ${question}\n\nPrzeszukaj internet aby znaleźć najświeższe informacje (priorytet: Reddit, potem reszta internetu) i odpowiedzieć na pytanie.`;
+
+            await this.savePromptToFile(`[PERPLEXITY] SYSTEM:\n${systemPrompt}\n\nUSER (${displayName}):\n${userPrompt}`, displayName);
+
+            const response = await fetch('https://api.perplexity.ai/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: this.model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    search_recency_filter: 'month'
+                })
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text().catch(() => '');
+                throw new Error(`Perplexity API ${response.status}: ${errorBody}`);
+            }
+
+            const data = await response.json();
+
+            logger.info(`AI Chat [Perplexity] response keys: ${Object.keys(data).join(', ')}`);
+
+            let answer = data.choices?.[0]?.message?.content;
+
+            if (!answer) {
+                answer = '⚠️ Brak odpowiedzi od AI.';
+            }
+
+            const citationCount = data.citations?.length || 0;
+            logger.info(`AI Chat [Perplexity]: ${message.author.username} pytanie="${question.substring(0, 50)}" citations=${citationCount} answer_len=${answer.length}`);
+            return { content: answer, relevantKnowledge: null };
+
+        } catch (error) {
+            logger.error(`❌ Błąd Perplexity AI Chat: ${error.message}`);
+            return { content: '⚠️ Przepraszam, wystąpił błąd. Spróbuj ponownie za chwilę.', relevantKnowledge: null };
+        }
+    }
+
+    /**
      * Zadaj pytanie AI - deleguje do odpowiedniego providera
      */
     async ask(message, question) {
@@ -468,6 +553,10 @@ ZAKOŃCZENIE:
 
         if (this.provider === 'grok') {
             return this.askGrok(message, question);
+        }
+
+        if (this.provider === 'perplexity') {
+            return this.askPerplexity(message, question);
         }
 
         try {
