@@ -382,8 +382,7 @@ MASZ NARZĘDZIE: web_search - przeszukuje Reddit w czasie rzeczywistym.
 - ZAWSZE dodawaj "site:reddit.com" do zapytań
   Przykład: "Survivor.io best pets ${currentYear} site:reddit.com"
 - Szukaj po angielsku: "Survivor.io" + temat pytania
-- IGNORUJ wyniki starsze niż 1 rok - szukaj TYLKO postów z ostatnich 12 miesięcy
-- Dodawaj aktualny rok (${currentYear}) do zapytań aby uzyskać najnowsze wyniki
+- Preferuj nowsze wyniki, ale NIE odrzucaj starszych jeśli są wartościowe
 - Ogranicz się do max 10 najważniejszych wyników - nie przeszukuj więcej
 
 ZASADY:
