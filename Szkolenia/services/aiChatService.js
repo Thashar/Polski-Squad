@@ -408,10 +408,44 @@ ZAKOŃCZENIE:
             }
 
             const data = await response.json();
-            const answer = data.output_text || '⚠️ Brak odpowiedzi od AI.';
+
+            // Logowanie struktury odpowiedzi dla debugowania
+            logger.info(`AI Chat [Grok] response keys: ${Object.keys(data).join(', ')}`);
+            if (!data.output_text) {
+                logger.warn(`AI Chat [Grok] brak output_text, status: ${data.status}, output type: ${typeof data.output}, output length: ${Array.isArray(data.output) ? data.output.length : 'N/A'}`);
+                if (data.output) {
+                    logger.warn(`AI Chat [Grok] output: ${JSON.stringify(data.output).substring(0, 500)}`);
+                }
+                if (data.error) {
+                    logger.error(`AI Chat [Grok] error w odpowiedzi: ${JSON.stringify(data.error)}`);
+                }
+            }
+
+            // Parsowanie odpowiedzi - output_text lub fallback do output array
+            let answer = data.output_text;
+            if (!answer && Array.isArray(data.output)) {
+                // Szukaj tekstu w output array
+                for (const item of data.output) {
+                    if (item.type === 'message' && Array.isArray(item.content)) {
+                        const textBlock = item.content.find(b => b.type === 'output_text' || b.type === 'text');
+                        if (textBlock?.text) {
+                            answer = textBlock.text;
+                            break;
+                        }
+                    }
+                }
+            }
+            // Fallback: choices (Chat Completions format)
+            if (!answer && data.choices?.[0]?.message?.content) {
+                answer = data.choices[0].message.content;
+            }
+
+            if (!answer) {
+                answer = '⚠️ Brak odpowiedzi od AI.';
+            }
 
             const citationCount = data.citations?.length || 0;
-            logger.info(`AI Chat [Grok]: ${message.author.username} pytanie="${question.substring(0, 50)}" citations=${citationCount}`);
+            logger.info(`AI Chat [Grok]: ${message.author.username} pytanie="${question.substring(0, 50)}" citations=${citationCount} answer_len=${answer.length}`);
             return { content: answer, relevantKnowledge: null };
 
         } catch (error) {
