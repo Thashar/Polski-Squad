@@ -314,18 +314,50 @@ client.on(Events.MessageCreate, async (message) => {
             const result = await aiChatService.ask(message, question);
             aiChatService.recordAsk(message.author.id, message.member);
 
-            const replyOptions = { content: result.content };
+            // Dzielenie długich odpowiedzi na części po max 2000 znaków
+            const splitMessage = (text, maxLen = 2000) => {
+                if (text.length <= maxLen) return [text];
+                const parts = [];
+                let remaining = text;
+                while (remaining.length > 0) {
+                    if (remaining.length <= maxLen) {
+                        parts.push(remaining);
+                        break;
+                    }
+                    // Szukaj najlepszego miejsca do podziału
+                    let splitAt = remaining.lastIndexOf('\n\n', maxLen);
+                    if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf('\n', maxLen);
+                    if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf('. ', maxLen);
+                    if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf(' ', maxLen);
+                    if (splitAt < maxLen * 0.3) splitAt = maxLen;
+                    parts.push(remaining.substring(0, splitAt + 1).trimEnd());
+                    remaining = remaining.substring(splitAt + 1).trimStart();
+                }
+                return parts;
+            };
 
+            const parts = splitMessage(result.content);
+
+            let row = null;
             if (result.relevantKnowledge) {
                 const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
-                const row = new ActionRowBuilder().addComponents(
+                row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('ai_feedback_up').setEmoji('👍').setStyle(ButtonStyle.Success),
                     new ButtonBuilder().setCustomId('ai_feedback_down').setEmoji('👎').setStyle(ButtonStyle.Danger)
                 );
-                replyOptions.components = [row];
             }
 
-            const reply = await message.reply(replyOptions);
+            // Pierwsza część jako reply
+            const firstReplyOptions = { content: parts[0] };
+            if (parts.length === 1 && row) firstReplyOptions.components = [row];
+            const reply = await message.reply(firstReplyOptions);
+
+            // Kolejne części jako follow-up wiadomości
+            for (let i = 1; i < parts.length; i++) {
+                const followUpOptions = { content: parts[i] };
+                if (i === parts.length - 1 && row) followUpOptions.components = [row];
+                await message.channel.send(followUpOptions);
+            }
 
             if (result.relevantKnowledge) {
                 feedbackMap.set(reply.id, { knowledge: result.relevantKnowledge, askerId: message.author.id, question });

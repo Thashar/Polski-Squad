@@ -49,8 +49,8 @@ class AIChatService {
             }
         }
 
-        // Cooldown: Grok 5 min (web_search kosztuje więcej), Anthropic 1 min
-        this.cooldownMinutes = this.provider === 'grok' ? 5 : 1;
+        // Cooldown: Grok 60 min (web_search kosztuje więcej), Anthropic 1 min
+        this.cooldownMinutes = this.provider === 'grok' ? 60 : 1;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.promptsDir = path.join(this.dataDir, 'prompts');
@@ -375,7 +375,7 @@ MASZ NARZĘDZIE: web_search - przeszukuje internet w czasie rzeczywistym.
 - ZAWSZE preferuj najnowsze wyniki - dodawaj aktualny rok do zapytań (np. "2026")
 
 ZASADY:
-- Odpowiadaj PO POLSKU, wyczerpująco - wykorzystaj dostępne miejsce (limit 2000 znaków)
+- Odpowiadaj PO POLSKU, wyczerpująco i szczegółowo - pisz ile trzeba, nie skracaj
 - **Ważne informacje** pogrubione
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
