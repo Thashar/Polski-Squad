@@ -367,8 +367,12 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
 
 MASZ NARZĘDZIE: web_search - przeszukuje internet w czasie rzeczywistym.
 - ZAWSZE używaj web_search aby znaleźć aktualne informacje o Survivor.io
-- Szukaj po angielsku: "Survivor.io" + temat pytania (np. "Survivor.io best pets 2026")
+- PRIORYTET: Szukaj NAJPIERW na Reddit - dodawaj "site:reddit.com" do zapytań
+  Przykład: "Survivor.io best pets 2026 site:reddit.com"
+- Jeśli Reddit nie daje wyników → szukaj bez ograniczenia domeny
+- Szukaj po angielsku: "Survivor.io" + temat pytania
 - Szukaj też po polsku jeśli pytanie dotyczy polskiej społeczności
+- ZAWSZE preferuj najnowsze wyniki - dodawaj aktualny rok do zapytań (np. "2026")
 
 ZASADY:
 - Odpowiadaj PO POLSKU, krótko (max 3-4 zdania)
@@ -381,7 +385,7 @@ ZASADY:
 ZAKOŃCZENIE:
 - Zakończ: "Oceń odpowiedź kciukiem 👍/👎!"`;
 
-            const userPrompt = `Użytkownik: ${displayName}\nPytanie: ${question}\n\nUżyj web_search aby znaleźć aktualne informacje i odpowiedzieć na pytanie.`;
+            const userPrompt = `Użytkownik: ${displayName}\nPytanie: ${question}\n\nUżyj web_search aby znaleźć najświeższe informacje (priorytet: Reddit, potem reszta internetu) i odpowiedzieć na pytanie.`;
 
             await this.savePromptToFile(`[GROK] SYSTEM:\n${systemPrompt}\n\nUSER (${displayName}):\n${userPrompt}`, displayName);
 
