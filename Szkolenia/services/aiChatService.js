@@ -1,29 +1,52 @@
 const fs = require('fs').promises;
 const path = require('path');
-const Anthropic = require('@anthropic-ai/sdk');
 const { createBotLogger } = require('../../utils/consoleLogger');
+
+let Anthropic;
+try {
+    Anthropic = require('@anthropic-ai/sdk');
+} catch {
+    // Anthropic SDK niedostępne - nie problem jeśli provider to grok
+}
 
 const logger = createBotLogger('Szkolenia');
 
 /**
  * AI Chat Service - Kompendium wiedzy o grze Survivor.io
- * Mention @Szkolenia → wyszukiwanie grep w bazie wiedzy → odpowiedź AI
+ * Obsługuje dwa providery: Anthropic (z kompendium wiedzy) i Grok (prosty chat)
+ * Przełączanie przez SZKOLENIA_AI_PROVIDER w .env
  */
 class AIChatService {
     constructor(config, knowledgeService) {
         this.config = config;
         this.knowledgeService = knowledgeService;
 
-        // Anthropic API
-        this.apiKey = process.env.ANTHROPIC_API_KEY;
-        this.enabled = !!this.apiKey;
+        // Wybór providera AI: "anthropic" lub "grok"
+        this.provider = (process.env.SZKOLENIA_AI_PROVIDER || 'anthropic').toLowerCase();
 
-        if (this.enabled) {
-            this.client = new Anthropic({ apiKey: this.apiKey });
-            this.model = process.env.SZKOLENIA_AI_CHAT_MODEL || 'claude-3-haiku-20240307';
-            logger.success('✅ AI Chat aktywny - model: ' + this.model);
+        if (this.provider === 'grok') {
+            // Grok (xAI) API
+            this.apiKey = process.env.XAI_API_KEY;
+            this.enabled = !!this.apiKey;
+
+            if (this.enabled) {
+                this.model = process.env.SZKOLENIA_GROK_MODEL || 'grok-4';
+                logger.success(`✅ AI Chat aktywny - provider: Grok, model: ${this.model}`);
+            } else {
+                logger.warn('⚠️ AI Chat wyłączony - brak XAI_API_KEY');
+            }
         } else {
-            logger.warn('⚠️ AI Chat wyłączony - brak ANTHROPIC_API_KEY');
+            // Anthropic API (domyślny)
+            this.apiKey = process.env.ANTHROPIC_API_KEY;
+            this.enabled = !!this.apiKey;
+
+            if (this.enabled) {
+                this.client = new Anthropic({ apiKey: this.apiKey });
+                this.model = process.env.SZKOLENIA_AI_CHAT_MODEL || 'claude-3-haiku-20240307';
+                logger.success(`✅ AI Chat aktywny - provider: Anthropic, model: ${this.model}`);
+            } else {
+                logger.warn('⚠️ AI Chat wyłączony - brak ANTHROPIC_API_KEY');
+            }
         }
 
         // Cooldown
@@ -334,11 +357,61 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
     }
 
     /**
-     * Zadaj pytanie AI z pętlą tool_use
+     * Zadaj pytanie przez Grok API (prosty chat bez kompendium wiedzy)
+     */
+    async askGrok(message, question) {
+        try {
+            const displayName = message.member?.displayName || message.author.username;
+
+            const systemPrompt = 'Jesteś botem szkoleniowym dla graczy w Survivor.io. Odpowiadaj po polsku, krótko i konkretnie.';
+            const userPrompt = question;
+
+            await this.savePromptToFile(`[GROK] SYSTEM:\n${systemPrompt}\n\nUSER (${displayName}):\n${userPrompt}`, displayName);
+
+            const response = await fetch('https://api.x.ai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    model: this.model,
+                    stream: false,
+                    temperature: 0.7
+                })
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text().catch(() => '');
+                throw new Error(`Grok API ${response.status}: ${errorBody}`);
+            }
+
+            const data = await response.json();
+            const answer = data.choices?.[0]?.message?.content || '⚠️ Brak odpowiedzi od AI.';
+
+            logger.info(`AI Chat [Grok]: ${message.author.username} pytanie="${question.substring(0, 50)}"`);
+            return { content: answer, relevantKnowledge: null };
+
+        } catch (error) {
+            logger.error(`❌ Błąd Grok AI Chat: ${error.message}`);
+            return { content: '⚠️ Przepraszam, wystąpił błąd. Spróbuj ponownie za chwilę.', relevantKnowledge: null };
+        }
+    }
+
+    /**
+     * Zadaj pytanie AI - deleguje do odpowiedniego providera
      */
     async ask(message, question) {
         if (!this.enabled) {
             return { content: '⚠️ AI Chat jest obecnie wyłączony. Skontaktuj się z administratorem.', relevantKnowledge: null };
+        }
+
+        if (this.provider === 'grok') {
+            return this.askGrok(message, question);
         }
 
         try {
