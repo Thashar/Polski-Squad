@@ -33,8 +33,9 @@
 ### Provider: Grok (xAI)
 - **Model:** Grok (configurable via `SZKOLENIA_GROK_MODEL`, domyślnie `grok-4`)
 - **API:** `https://api.x.ai/v1/responses` (Responses API z web_search)
-- **Web Search:** Grok przeszukuje internet w czasie rzeczywistym aby znaleźć aktualne informacje o Survivor.io
-- **Prompt:** Rozbudowany system prompt - kompendium wiedzy o Survivor.io z instrukcjami wyszukiwania
+- **Web Search:** Ograniczony TYLKO do Reddit (`allowed_domains: ['reddit.com']`), wyniki z ostatniego roku, max 10 stron
+- **Limity:** `max_output_tokens: 10000` na zapytanie
+- **Prompt:** Kompendium wiedzy o Survivor.io - wyszukiwanie wyłącznie na Reddit
 
 ### Provider: Perplexity
 - **Model:** Perplexity (configurable via `SZKOLENIA_PERPLEXITY_MODEL`, domyślnie `sonar-pro`)

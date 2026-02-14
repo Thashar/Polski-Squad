@@ -374,29 +374,30 @@ PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
         try {
             const displayName = message.member?.displayName || message.author.username;
 
+            const currentYear = new Date().getFullYear();
             const systemPrompt = `Jesteś kompendium wiedzy o grze Survivor.io na Discordzie.
 
-MASZ NARZĘDZIE: web_search - przeszukuje internet w czasie rzeczywistym.
-- ZAWSZE używaj web_search aby znaleźć aktualne informacje o Survivor.io
-- PRIORYTET: Szukaj NAJPIERW na Reddit - dodawaj "site:reddit.com" do zapytań
-  Przykład: "Survivor.io best pets 2026 site:reddit.com"
-- Jeśli Reddit nie daje wyników → szukaj bez ograniczenia domeny
+MASZ NARZĘDZIE: web_search - przeszukuje Reddit w czasie rzeczywistym.
+- Wyszukiwanie ograniczone TYLKO do Reddit (reddit.com)
+- ZAWSZE dodawaj "site:reddit.com" do zapytań
+  Przykład: "Survivor.io best pets ${currentYear} site:reddit.com"
 - Szukaj po angielsku: "Survivor.io" + temat pytania
-- Szukaj też po polsku jeśli pytanie dotyczy polskiej społeczności
-- ZAWSZE preferuj najnowsze wyniki - dodawaj aktualny rok do zapytań (np. "2026")
+- IGNORUJ wyniki starsze niż 1 rok - szukaj TYLKO postów z ostatnich 12 miesięcy
+- Dodawaj aktualny rok (${currentYear}) do zapytań aby uzyskać najnowsze wyniki
+- Ogranicz się do max 10 najważniejszych wyników - nie przeszukuj więcej
 
 ZASADY:
 - Odpowiadaj PO POLSKU, wyczerpująco i szczegółowo - pisz ile trzeba, nie skracaj
 - **Ważne informacje** pogrubione
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
-- Jeśli nie znalazłeś informacji w sieci → powiedz że nie masz aktualnych danych
+- Jeśli nie znalazłeś informacji na Reddit → powiedz że nie masz aktualnych danych
 - ABSOLUTNY ZAKAZ wymyślania statystyk, nazw, umiejętności
 
 ZAKOŃCZENIE:
 - Zakończ: "Oceń odpowiedź kciukiem 👍/👎!"`;
 
-            const userPrompt = `Użytkownik: ${displayName}\nPytanie: ${question}\n\nUżyj web_search aby znaleźć najświeższe informacje (priorytet: Reddit, potem reszta internetu) i odpowiedzieć na pytanie.`;
+            const userPrompt = `Użytkownik: ${displayName}\nPytanie: ${question}\n\nUżyj web_search aby znaleźć najświeższe informacje na Reddit i odpowiedzieć na pytanie.`;
 
             await this.savePromptToFile(`[GROK] SYSTEM:\n${systemPrompt}\n\nUSER (${displayName}):\n${userPrompt}`, displayName);
 
@@ -412,7 +413,8 @@ ZAKOŃCZENIE:
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    tools: [{ type: 'web_search' }],
+                    tools: [{ type: 'web_search', allowed_domains: ['reddit.com'] }],
+                    max_output_tokens: 10000,
                     store: false
                 })
             });
