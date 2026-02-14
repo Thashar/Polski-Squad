@@ -6,9 +6,11 @@
    - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa walidacja
      - Włączany przez `USE_ENDERSECHO_AI_OCR=true` w .env
      - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
-     - Dwuetapowa walidacja (dwa osobne requesty do API):
+     - Trzyetapowa walidacja (trzy osobne requesty do API):
        - **KROK 1 (pierwszy request):** Sprawdza czy jest "Victory" (50 tokenów)
-       - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "Victory" → wyciąga nazwę bossa i wynik (500 tokenów)
+       - **KROK 2 (drugi request):** Sprawdza autentyczność zdjęcia (10 tokenów)
+       - **KROK 3 (trzeci request):** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
+     - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta (usunięcie dodatkowej cyfry przed jednostką, np. "18540Q" → "1854Q")
      - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, fallback na tradycyjny OCR
 2. **Rankingi** - `rankingService.js`: Persistent JSON (userId_bossName), funkcje: add/update, getTop, remove
 3. **Role TOP** - `roleManagementService.js`: 5 poziomów (top1, top2, top3-nieużywane, top4-10, top11-30), auto-update

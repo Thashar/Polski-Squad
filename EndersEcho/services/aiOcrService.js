@@ -161,19 +161,23 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
             // === KROK 3: Wyciągnij nazwę bossa i wynik ===
             logger.info(`[AI OCR] KROK 3: Wyciągam nazwę bossa i wynik...`);
 
-            const extractPrompt = `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik.
+            const extractPrompt = `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
 
 WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi
 UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
+UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
 
 ⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
 Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
 NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie.
 NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
+NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
+Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
 
-Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w następującym formacie:
+Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i napisz w następującym formacie:
 <nazwa bossa>
-<wynik>`;
+<wynik>
+<total>`;
 
             const extractMessage = await this.client.messages.create({
                 model: this.model,
@@ -246,7 +250,7 @@ Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w nast�
             }
         }
 
-        // Wyciągnij nazwę bossa i wynik - pierwsze dwie niepuste linie
+        // Wyciągnij nazwę bossa, wynik i total - pierwsze trzy niepuste linie
         const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
         if (lines.length < 2) {
@@ -270,10 +274,26 @@ Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w nast�
         let score = lines[1]
             .replace(/^wynik[:\s]*/i, '')
             .replace(/^score[:\s]*/i, '')
+            .replace(/^best[:\s]*/i, '')
             .trim();
+
+        // Trzecia linia = total (opcjonalna)
+        let total = null;
+        if (lines.length >= 3) {
+            total = lines[2]
+                .replace(/^total[:\s]*/i, '')
+                .trim();
+            total = this.normalizeScore(total);
+            logger.info(`[AI OCR] Odczytano Total: "${total}"`);
+        }
 
         // Normalizacja wyniku (max 5 cyfr + jednostka)
         score = this.normalizeScore(score);
+
+        // Walidacja score vs Total - jeśli score > total, prawdopodobnie AI dodał cyfrę 0 zamiast rozpoznać literę jednostki
+        if (score && total) {
+            score = this.validateScoreAgainstTotal(score, total);
+        }
 
         // Walidacja
         const isValid = bossName && score && score.length > 0;
@@ -390,6 +410,75 @@ Odczytaj nazwę bossa oraz dokładny wynik wraz z jednostką i napisz go w nast�
         }
 
         return normalizedScore;
+    }
+
+    /**
+     * Konwertuje wynik z jednostką na liczbę do porównania
+     * np. "1854Q" → 1854e15, "6513.3Q" → 6513.3e15
+     * @param {string} score - Wynik z jednostką
+     * @returns {number|null} - Wartość liczbowa lub null jeśli nie da się sparsować
+     */
+    parseScoreToNumber(score) {
+        if (!score) return null;
+
+        const unitMultipliers = {
+            'K': 1e3,
+            'M': 1e6,
+            'B': 1e9,
+            'T': 1e12,
+            'Q': 1e15,
+            'QI': 1e18
+        };
+
+        const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi)?$/i);
+        if (!match) return null;
+
+        const number = parseFloat(match[1]);
+        const unit = (match[2] || '').toUpperCase();
+        const multiplier = unitMultipliers[unit] || 1;
+
+        return number * multiplier;
+    }
+
+    /**
+     * Waliduje score vs Total - jeśli score > total, prawdopodobnie AI dodał cyfrę zamiast jednostki
+     * np. AI odczytał "18540Q" zamiast "1854Q" (0 to w rzeczywistości Q)
+     * @param {string} score - Wynik Best
+     * @param {string} total - Wynik Total
+     * @returns {string} - Skorygowany wynik
+     */
+    validateScoreAgainstTotal(score, total) {
+        const scoreNum = this.parseScoreToNumber(score);
+        const totalNum = this.parseScoreToNumber(total);
+
+        if (scoreNum === null || totalNum === null) return score;
+
+        // Jeśli score > total → coś jest nie tak
+        if (scoreNum > totalNum) {
+            logger.warn(`[AI OCR] Walidacja Total: score (${score} = ${scoreNum}) > total (${total} = ${totalNum}) - próbuję skorygować`);
+
+            // Spróbuj usunąć ostatnią cyfrę przed jednostką (np. "18540Q" → "1854Q")
+            const match = score.match(/^([\d.]+)(K|M|B|T|Q|QI|Qi)$/i);
+            if (match) {
+                const numberPart = match[1];
+                const unit = match[2];
+
+                // Usuń ostatnią cyfrę z części liczbowej
+                if (numberPart.length > 1) {
+                    const corrected = numberPart.slice(0, -1) + unit;
+                    const correctedNum = this.parseScoreToNumber(corrected);
+
+                    if (correctedNum !== null && correctedNum <= totalNum) {
+                        logger.info(`[AI OCR] Walidacja Total: Skorygowano "${score}" → "${corrected}" (usunięto dodatkową cyfrę przed jednostką)`);
+                        return corrected;
+                    }
+                }
+            }
+
+            logger.warn(`[AI OCR] Walidacja Total: Nie udało się automatycznie skorygować wyniku "${score}"`);
+        }
+
+        return score;
     }
 }
 
