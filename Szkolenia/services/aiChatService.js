@@ -60,8 +60,8 @@ class AIChatService {
             }
         }
 
-        // Cooldown: Grok/Perplexity 60 min (web_search kosztuje więcej), Anthropic 1 min
-        this.cooldownMinutes = (this.provider === 'grok' || this.provider === 'perplexity') ? 60 : 1;
+        // Cooldown: Grok/Perplexity 1x dziennie (24h), Anthropic 1 min
+        this.cooldownMinutes = (this.provider === 'grok' || this.provider === 'perplexity') ? 1440 : 1;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'ai_chat_cooldowns.json');
         this.promptsDir = path.join(this.dataDir, 'prompts');
@@ -115,7 +115,10 @@ class AIChatService {
         const elapsed = Date.now() - lastAsk;
         const cooldownMs = this.cooldownMinutes * 60 * 1000;
         if (elapsed >= cooldownMs) return { allowed: true };
-        return { allowed: false, remainingMinutes: Math.ceil((cooldownMs - elapsed) / 60000) };
+        const remainingMs = cooldownMs - elapsed;
+        const remainingHours = Math.floor(remainingMs / 3600000);
+        const remainingMins = Math.ceil((remainingMs % 3600000) / 60000);
+        return { allowed: false, remainingHours, remainingMinutes: remainingMins };
     }
 
     recordAsk(userId, member) {
