@@ -305,7 +305,10 @@ client.on(Events.MessageCreate, async (message) => {
 
             const canAskResult = aiChatService.canAsk(message.author.id, message.member);
             if (!canAskResult.allowed) {
-                await message.reply(`⏳ Musisz poczekać ${canAskResult.remainingMinutes} min przed następnym pytaniem.`);
+                const timeStr = canAskResult.remainingHours > 0
+                    ? `${canAskResult.remainingHours}h ${canAskResult.remainingMinutes}min`
+                    : `${canAskResult.remainingMinutes} min`;
+                await message.reply(`⏳ Możesz zadać pytanie raz dziennie. Następne za ${timeStr}.`);
                 return;
             }
 
