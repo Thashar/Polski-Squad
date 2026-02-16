@@ -41,8 +41,25 @@ function generateProcessedFilename(botName, type) {
 async function cleanupOldProcessedFiles(processedDir, maxFiles, logger) {
     try {
         const files = await fs.readdir(processedDir);
-        const imageFiles = files.filter(file => file.endsWith('.png'));
-        
+
+        // Najpierw usuń osierocone pliki temp (starsze niż 10 minut)
+        const tempFiles = files.filter(file => file.startsWith('temp_') && file.endsWith('.png'));
+        if (tempFiles.length > 0) {
+            const now = Date.now();
+            for (const file of tempFiles) {
+                try {
+                    const filePath = path.join(processedDir, file);
+                    const stats = await fs.stat(filePath);
+                    if (now - stats.mtimeMs > 10 * 60 * 1000) {
+                        await fs.unlink(filePath);
+                        logger.info(`🗑️ Usunięto osierocony plik temp: ${file}`);
+                    }
+                } catch (err) { /* plik mógł być już usunięty */ }
+            }
+        }
+
+        const imageFiles = files.filter(file => file.endsWith('.png') && !file.startsWith('temp_'));
+
         if (imageFiles.length <= maxFiles) {
             return;
         }
@@ -110,8 +127,52 @@ async function saveProcessedImage(sourcePath, processedDir, botName, type, maxFi
     }
 }
 
+/**
+ * Czyści osierocone pliki tymczasowe (temp_*.png) starsze niż maxAgeMs
+ * @param {string} processedDir - Ścieżka do folderu z przetworzonymi plikami
+ * @param {number} maxAgeMs - Maksymalny wiek pliku w ms (domyślnie 10 minut)
+ * @param {Function} logger - Logger do logowania informacji
+ */
+async function cleanupOrphanedTempFiles(processedDir, maxAgeMs = 10 * 60 * 1000, logger) {
+    try {
+        const files = await fs.readdir(processedDir);
+        const tempFiles = files.filter(file => file.startsWith('temp_') && file.endsWith('.png'));
+
+        if (tempFiles.length === 0) return 0;
+
+        const now = Date.now();
+        let deletedCount = 0;
+
+        for (const file of tempFiles) {
+            try {
+                const filePath = path.join(processedDir, file);
+                const stats = await fs.stat(filePath);
+
+                if (now - stats.mtimeMs > maxAgeMs) {
+                    await fs.unlink(filePath);
+                    deletedCount++;
+                }
+            } catch (err) {
+                // Plik mógł zostać usunięty przez inny proces
+            }
+        }
+
+        if (deletedCount > 0 && logger) {
+            logger.info(`🧹 Usunięto ${deletedCount} osieroconych plików temp z processed_ocr/`);
+        }
+
+        return deletedCount;
+    } catch (error) {
+        if (logger) {
+            logger.error(`Błąd czyszczenia plików temp: ${error.message}`);
+        }
+        return 0;
+    }
+}
+
 module.exports = {
     generateProcessedFilename,
     cleanupOldProcessedFiles,
+    cleanupOrphanedTempFiles,
     saveProcessedImage
 };
