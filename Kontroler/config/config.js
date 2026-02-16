@@ -61,7 +61,7 @@ module.exports = {
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
-        saveProcessedImages: true,
+        saveProcessedImages: false,
         processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 400,
         languages: 'pol+eng',

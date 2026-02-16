@@ -93,7 +93,7 @@ module.exports = {
         useAI: process.env.USE_AI_OCR === 'true',
 
         // Zapisywanie przetworzonych obrazów
-        saveProcessedImages: true,
+        saveProcessedImages: false,
         processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 400,
 
