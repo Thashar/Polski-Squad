@@ -13,7 +13,7 @@
    - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
 
 **Serwisy:**
-- `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje
+- `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje, powiadomienia o odejściu (link do profilu + nick serwerowy)
 - `roleMonitoringService.js` - Cron 6h, ostrzeżenia po 24h bez ról
 - `roleConflictService.js` - Auto-usuwanie ról rekrutacyjnych gdy dostaje klanową
 
