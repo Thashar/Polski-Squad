@@ -16,9 +16,11 @@ class MemberCacheService {
         // Klient Discord
         this.client = null;
 
-        // System kolejkowania zapisów
+        // System kolejkowania zapisów z debounce
         this.saveQueue = [];
         this.isSaving = false;
+        this.saveDebounceTimer = null;
+        this.saveDebounceDelay = 5000;
 
         // Deduplikacja eventów
         this.recentEvents = new Map(); // userId -> { timestamp, premiumSince }
@@ -212,13 +214,26 @@ class MemberCacheService {
     }
 
     /**
-     * Kolejkuje zapis cache do pliku (thread-safe)
+     * Kolejkuje zapis cache do pliku z debounce (thread-safe)
      */
     async queueSaveToFile() {
         return new Promise((resolve, reject) => {
             this.saveQueue.push({ resolve, reject });
-            this.processSaveQueue();
+            this.scheduleSave();
         });
+    }
+
+    /**
+     * Planuje zapis z debounce - grupuje wiele zmian w jeden zapis
+     */
+    scheduleSave() {
+        if (this.saveDebounceTimer) {
+            clearTimeout(this.saveDebounceTimer);
+        }
+        this.saveDebounceTimer = setTimeout(() => {
+            this.saveDebounceTimer = null;
+            this.processSaveQueue();
+        }, this.saveDebounceDelay);
     }
 
     /**
@@ -712,8 +727,20 @@ class MemberCacheService {
      */
     async cleanup() {
         try {
-            // Ostatni zapis przed zamknięciem
-            await this.queueSaveToFile();
+            // Anuluj debounce i wymuś natychmiastowy zapis
+            if (this.saveDebounceTimer) {
+                clearTimeout(this.saveDebounceTimer);
+                this.saveDebounceTimer = null;
+            }
+
+            // Ostatni zapis przed zamknięciem (bezpośrednio, bez debounce)
+            await this.saveCacheToFile();
+
+            // Rozwiąż oczekujące promise
+            while (this.saveQueue.length > 0) {
+                const { resolve } = this.saveQueue.shift();
+                resolve();
+            }
 
             // Wyczyść mapy
             this.memberBoostCache.clear();

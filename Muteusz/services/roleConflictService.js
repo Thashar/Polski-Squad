@@ -28,6 +28,10 @@ class RoleConflictService {
         
         // Klient Discord (zostanie ustawiony w initialize)
         this.client = null;
+
+        // Debounce zapisu timerów - max 1 zapis co 5 sekund
+        this.saveDebounceTimer = null;
+        this.saveDebounceDelay = 5000;
     }
 
     /**
@@ -287,19 +291,32 @@ class RoleConflictService {
     }
 
     /**
+     * Debounced save - grupuje wiele zmian w jeden zapis
+     */
+    debouncedSaveTimers() {
+        if (this.saveDebounceTimer) {
+            clearTimeout(this.saveDebounceTimer);
+        }
+        this.saveDebounceTimer = setTimeout(() => {
+            this.saveDebounceTimer = null;
+            this.saveTimersToFile();
+        }, this.saveDebounceDelay);
+    }
+
+    /**
      * Dodaje timer do persystencji
      */
     async addTimerToPersistence(userId, guildId, expiresAt, groups, oldRoles = []) {
         const timerInfo = { userId, guildId, expiresAt, groups, oldRoles };
-        
+
         // Usuń ewentualny poprzedni timer dla tego użytkownika
         this.persistentTimers = this.persistentTimers.filter(
             timer => !(timer.userId === userId && timer.guildId === guildId)
         );
-        
+
         // Dodaj nowy timer
         this.persistentTimers.push(timerInfo);
-        await this.saveTimersToFile();
+        this.debouncedSaveTimers();
     }
 
     /**
@@ -309,19 +326,26 @@ class RoleConflictService {
         this.persistentTimers = this.persistentTimers.filter(
             timer => !(timer.userId === userId && timer.guildId === guildId)
         );
-        await this.saveTimersToFile();
+        this.debouncedSaveTimers();
     }
 
     /**
      * Czyści wszystkie aktywne timery (przy wyłączaniu bota)
      */
-    cleanup() {
+    async cleanup() {
         this.logger.info(`🧹 Czyszczenie ${this.conflictCheckTimers.size} aktywnych timerów konfliktów ról`);
-        
+
+        // Wymuś natychmiastowy zapis jeśli jest oczekujący
+        if (this.saveDebounceTimer) {
+            clearTimeout(this.saveDebounceTimer);
+            this.saveDebounceTimer = null;
+            await this.saveTimersToFile();
+        }
+
         for (const timer of this.conflictCheckTimers.values()) {
             clearTimeout(timer);
         }
-        
+
         this.conflictCheckTimers.clear();
     }
 
