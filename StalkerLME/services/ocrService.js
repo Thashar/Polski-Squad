@@ -5,7 +5,7 @@ const path = require('path');
 const { calculateNameSimilarity } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
-const { saveProcessedImage } = require('../../utils/ocrFileUtils');
+const { saveProcessedImage, cleanupOrphanedTempFiles } = require('../../utils/ocrFileUtils');
 const { EmbedBuilder } = require('discord.js');
 const { stopGhostPing } = require('../handlers/interactionHandlers');
 const AIOCRService = require('./aiOcrService');
@@ -58,6 +58,13 @@ class OCRService {
             if (this.config.ocr.saveProcessedImages) {
                 await fs.mkdir(this.processedDir, { recursive: true });
             }
+
+            // Wyczyść osierocone pliki temp z poprzedniej sesji
+            const cleaned = await cleanupOrphanedTempFiles(this.processedDir, 0, logger);
+            if (cleaned > 0) {
+                logger.info(`[OCR] 🧹 Wyczyszczono ${cleaned} osieroconych plików temp z poprzedniej sesji`);
+            }
+
             logger.info('[OCR] ✅ Serwis OCR zainicjalizowany');
         } catch (error) {
             logger.error('[OCR] ❌ Błąd inicjalizacji OCR:', error);
@@ -236,7 +243,9 @@ class OCRService {
                 );
                 
                 // Usuń plik tymczasowy
-                await fs.unlink(tempOutputPath).catch(() => {});
+                await fs.unlink(tempOutputPath).catch(err => {
+                    logger.warn(`⚠️ Nie udało się usunąć temp pliku ${tempOutputPath}: ${err.message}`);
+                });
             }
             
             // Zwróć buffer do OCR
@@ -1861,6 +1870,9 @@ class OCRService {
         this.activeProcessing.delete(guildId);
         logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR`);
 
+        // Wyczyść osierocone pliki temp z processed_ocr/
+        await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);
+
         // Opóźnienie przed czyszczeniem kanału i powiadomieniem następnej osoby
         const delay = immediate ? 0 : 5000; // 5 sekund jeśli nie immediate
 
@@ -1909,6 +1921,9 @@ class OCRService {
         // Usuń z aktywnego przetwarzania
         this.activeProcessing.delete(guildId);
         logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
+
+        // Wyczyść osierocone pliki temp z processed_ocr/
+        await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);
 
         // Zatrzymaj ghost pingi i wyczyść sesje remind/punish/phase
         // REMINDER
