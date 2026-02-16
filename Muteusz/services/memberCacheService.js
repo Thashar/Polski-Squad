@@ -19,6 +19,10 @@ class MemberCacheService {
 
         // ID kanału do logowania zmian ról
         this.roleChangeLogChannelId = '1407485227927998545';
+
+        // Debounce zapisu - max 1 zapis co 5 sekund
+        this.saveDebounceTimer = null;
+        this.saveDebounceDelay = 5000;
     }
 
     /**
@@ -121,12 +125,25 @@ class MemberCacheService {
         // Aktualizuj cache
         this.memberRolesCache.set(userId, [...newRoleIds]);
         
-        // Zapisz do pliku (async, nie czekamy)
-        this.saveCacheToFile().catch(error => {
-            this.logger.error('❌ Błąd podczas zapisywania cache po aktualizacji:', error);
-        });
+        // Zapisz do pliku z debounce (max 1 zapis co 5s)
+        this.debouncedSave();
         
         return previousRoles;
+    }
+
+    /**
+     * Debounced save - grupuje wiele zmian w jeden zapis
+     */
+    debouncedSave() {
+        if (this.saveDebounceTimer) {
+            clearTimeout(this.saveDebounceTimer);
+        }
+        this.saveDebounceTimer = setTimeout(() => {
+            this.saveDebounceTimer = null;
+            this.saveCacheToFile().catch(error => {
+                this.logger.error('❌ Błąd podczas zapisywania cache po aktualizacji:', error);
+            });
+        }, this.saveDebounceDelay);
     }
 
     /**
@@ -263,6 +280,10 @@ class MemberCacheService {
      * Czyści cache (przy wyłączaniu bota)
      */
     async cleanup() {
+        if (this.saveDebounceTimer) {
+            clearTimeout(this.saveDebounceTimer);
+            this.saveDebounceTimer = null;
+        }
         await this.saveCacheToFile();
         this.memberRolesCache.clear();
     }
