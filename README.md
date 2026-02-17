@@ -197,7 +197,7 @@ Każdy bot wymaga własnych zmiennych w pliku `.env`. Zobacz szczegóły w [CLAU
 
 ### Logi
 - **Konsola**: Kolorowe real-time
-- **Plik**: `logs/bots.log`
+- **Plik**: `logs/bots-YYYY-MM-DD.log` (dzienna rotacja, auto-usuwanie po 30 dniach)
 - **Discord**: Webhook (rate-limited)
 
 ### Obrazy OCR
