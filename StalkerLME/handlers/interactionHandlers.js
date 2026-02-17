@@ -6719,6 +6719,8 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
 async function handleWynikiWeekPaginationButton(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
+    await interaction.deferUpdate();
+
     try {
         // Format customId: wyniki_weeks_prev|clanKey|page lub wyniki_weeks_next|clanKey|page
         const customIdParts = interaction.customId.split('|');
@@ -6734,19 +6736,19 @@ async function handleWynikiWeekPaginationButton(interaction, sharedState) {
             newPage = currentPage + 1;
         }
 
-        // Wywołaj ponownie handleWynikiClanSelect z nową stroną
-        // Musimy przygotować mock interaction z values
+        // Przygotuj mock interaction z values i metodami proxy do prawdziwej interakcji
         const mockInteraction = {
             ...interaction,
             values: [clan],
-            deferUpdate: async () => {} // Mock - już jest deferred
+            deferUpdate: async () => {},
+            editReply: (...args) => interaction.editReply(...args)
         };
 
         await handleWynikiClanSelect(mockInteraction, sharedState, newPage);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd paginacji tygodni:', error);
-        await interaction.update({
+        await interaction.editReply({
             content: '❌ Wystąpił błąd podczas zmiany strony.',
             embeds: [],
             components: []
@@ -7479,13 +7481,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
     let response;
     if (useFollowUp) {
-        // Dla /wyniki - wyślij publiczną wiadomość
-        await interaction.editReply({
-            content: '✅ Wyniki zostały wysłane publicznie poniżej.',
-            embeds: [],
-            components: []
-        });
+        // Dla /wyniki - wyślij publiczną wiadomość i usuń ephemeral
         response = await interaction.followUp(replyOptions);
+        await interaction.deleteReply().catch(() => {});
     } else if (isUpdate) {
         // Dla przycisków nawigacji
         response = await interaction.update(replyOptions);
