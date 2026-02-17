@@ -6678,16 +6678,52 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0, clanOv
         // Dodaj przyciski nawigacji jeśli jest więcej niż jedna strona
         if (totalPages > 1) {
             const navRow = new ActionRowBuilder();
+            const polishMonths = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+
+            // Helper: oblicz miesiąc z numeru tygodnia ISO
+            const getMonthFromWeek = (weekNum, year) => {
+                const jan4 = new Date(year, 0, 4);
+                const dayOfWeek = jan4.getDay() || 7;
+                const week1Monday = new Date(jan4);
+                week1Monday.setDate(jan4.getDate() - (dayOfWeek - 1));
+                const targetDate = new Date(week1Monday);
+                targetDate.setDate(week1Monday.getDate() + (weekNum - 1) * 7);
+                return targetDate.getMonth();
+            };
+
+            // Helper: zakres miesięcy dla danej strony (od starszego do nowszego)
+            const getPageMonthLabel = (targetPage) => {
+                const s = targetPage * weeksPerPage;
+                const e = Math.min(s + weeksPerPage, weeksForClan.length);
+                const pw = weeksForClan.slice(s, e);
+                if (pw.length === 0) return '';
+                // Weeks posortowane malejąco - pierwszy=najnowszy, ostatni=najstarszy
+                const newest = pw[0];
+                const oldest = pw[pw.length - 1];
+                const newestMonth = getMonthFromWeek(newest.weekNumber, newest.year);
+                const oldestMonth = getMonthFromWeek(oldest.weekNumber, oldest.year);
+                if (newest.year === oldest.year && newestMonth === oldestMonth) {
+                    return polishMonths[newestMonth];
+                }
+                // Od starszego do nowszego
+                if (newest.year === oldest.year) {
+                    return `${polishMonths[oldestMonth]} - ${polishMonths[newestMonth]}`;
+                }
+                return `${polishMonths[oldestMonth]} '${oldest.year % 100} - ${polishMonths[newestMonth]} '${newest.year % 100}`;
+            };
+
+            const prevLabel = page > 0 ? `◀ ${getPageMonthLabel(page - 1)}` : '◀';
+            const nextLabel = page < totalPages - 1 ? `${getPageMonthLabel(page + 1)} ▶` : '▶';
 
             const prevButton = new ButtonBuilder()
                 .setCustomId(`wyniki_weeks_prev|${selectedClan}|${page}`)
-                .setLabel('◀ Poprzednia')
+                .setLabel(prevLabel)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page === 0);
 
             const nextButton = new ButtonBuilder()
                 .setCustomId(`wyniki_weeks_next|${selectedClan}|${page}`)
-                .setLabel('Następna ▶')
+                .setLabel(nextLabel)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages - 1);
 
