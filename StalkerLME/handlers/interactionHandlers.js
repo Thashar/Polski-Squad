@@ -6687,15 +6687,16 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0, clanOv
                 // Weeks posortowane malejąco - pierwszy=najnowszy, ostatni=najstarszy
                 const newest = pw[0];
                 const oldest = pw[pw.length - 1];
-                const fmtWeek = (w) => `${String(w.weekNumber).padStart(2, '0')}/${w.year % 100}`;
+                const fmtWeek = (w) => `${String(w.weekNumber).padStart(2, '0')}/${w.year}`;
                 if (newest.weekNumber === oldest.weekNumber && newest.year === oldest.year) {
                     return fmtWeek(newest);
                 }
                 return `${fmtWeek(oldest)} - ${fmtWeek(newest)}`;
             };
 
-            const prevLabel = page > 0 ? `◀ ${getPageWeekLabel(page - 1)}` : '◀';
-            const nextLabel = page < totalPages - 1 ? `${getPageWeekLabel(page + 1)} ▶` : '▶';
+            const currentLabel = getPageWeekLabel(page);
+            const prevLabel = page > 0 ? `◀ ${getPageWeekLabel(page - 1)}` : `◀ ${currentLabel}`;
+            const nextLabel = page < totalPages - 1 ? `${getPageWeekLabel(page + 1)} ▶` : `${currentLabel} ▶`;
 
             const prevButton = new ButtonBuilder()
                 .setCustomId(`wyniki_weeks_prev|${selectedClan}|${page}`)
