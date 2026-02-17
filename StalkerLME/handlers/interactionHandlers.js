@@ -6678,21 +6678,8 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0, clanOv
         // Dodaj przyciski nawigacji jeśli jest więcej niż jedna strona
         if (totalPages > 1) {
             const navRow = new ActionRowBuilder();
-            const polishMonths = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
-
-            // Helper: oblicz miesiąc z numeru tygodnia ISO
-            const getMonthFromWeek = (weekNum, year) => {
-                const jan4 = new Date(year, 0, 4);
-                const dayOfWeek = jan4.getDay() || 7;
-                const week1Monday = new Date(jan4);
-                week1Monday.setDate(jan4.getDate() - (dayOfWeek - 1));
-                const targetDate = new Date(week1Monday);
-                targetDate.setDate(week1Monday.getDate() + (weekNum - 1) * 7);
-                return targetDate.getMonth();
-            };
-
-            // Helper: zakres miesięcy dla danej strony (od starszego do nowszego)
-            const getPageMonthLabel = (targetPage) => {
+            // Helper: zakres tygodni dla danej strony (format: "TT/RR - TT/RR", od starszego do nowszego)
+            const getPageWeekLabel = (targetPage) => {
                 const s = targetPage * weeksPerPage;
                 const e = Math.min(s + weeksPerPage, weeksForClan.length);
                 const pw = weeksForClan.slice(s, e);
@@ -6700,20 +6687,15 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0, clanOv
                 // Weeks posortowane malejąco - pierwszy=najnowszy, ostatni=najstarszy
                 const newest = pw[0];
                 const oldest = pw[pw.length - 1];
-                const newestMonth = getMonthFromWeek(newest.weekNumber, newest.year);
-                const oldestMonth = getMonthFromWeek(oldest.weekNumber, oldest.year);
-                if (newest.year === oldest.year && newestMonth === oldestMonth) {
-                    return polishMonths[newestMonth];
+                const fmtWeek = (w) => `${String(w.weekNumber).padStart(2, '0')}/${w.year % 100}`;
+                if (newest.weekNumber === oldest.weekNumber && newest.year === oldest.year) {
+                    return fmtWeek(newest);
                 }
-                // Od starszego do nowszego
-                if (newest.year === oldest.year) {
-                    return `${polishMonths[oldestMonth]} - ${polishMonths[newestMonth]}`;
-                }
-                return `${polishMonths[oldestMonth]} '${oldest.year % 100} - ${polishMonths[newestMonth]} '${newest.year % 100}`;
+                return `${fmtWeek(oldest)} - ${fmtWeek(newest)}`;
             };
 
-            const prevLabel = page > 0 ? `◀ ${getPageMonthLabel(page - 1)}` : '◀';
-            const nextLabel = page < totalPages - 1 ? `${getPageMonthLabel(page + 1)} ▶` : '▶';
+            const prevLabel = page > 0 ? `◀ ${getPageWeekLabel(page - 1)}` : '◀';
+            const nextLabel = page < totalPages - 1 ? `${getPageWeekLabel(page + 1)} ▶` : '▶';
 
             const prevButton = new ButtonBuilder()
                 .setCustomId(`wyniki_weeks_prev|${selectedClan}|${page}`)
