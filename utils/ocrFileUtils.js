@@ -40,6 +40,7 @@ function generateProcessedFilename(botName, type) {
  */
 async function cleanupOldProcessedFiles(processedDir, maxFiles, logger) {
     try {
+        await fs.mkdir(processedDir, { recursive: true });
         const files = await fs.readdir(processedDir);
 
         // Najpierw usuń osierocone pliki temp (starsze niż 10 minut)
@@ -135,6 +136,7 @@ async function saveProcessedImage(sourcePath, processedDir, botName, type, maxFi
  */
 async function cleanupOrphanedTempFiles(processedDir, maxAgeMs = 10 * 60 * 1000, logger) {
     try {
+        await fs.mkdir(processedDir, { recursive: true });
         const files = await fs.readdir(processedDir);
         const tempFiles = files.filter(file => file.startsWith('temp_') && file.endsWith('.png'));
 
