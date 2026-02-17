@@ -7481,13 +7481,9 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
 
     let response;
     if (useFollowUp) {
-        // Dla /wyniki - wyślij publiczną wiadomość
-        await interaction.editReply({
-            content: '✅ Wyniki zostały wysłane publicznie poniżej.',
-            embeds: [],
-            components: []
-        });
+        // Dla /wyniki - wyślij publiczną wiadomość i usuń ephemeral
         response = await interaction.followUp(replyOptions);
+        await interaction.deleteReply().catch(() => {});
     } else if (isUpdate) {
         // Dla przycisków nawigacji
         response = await interaction.update(replyOptions);
