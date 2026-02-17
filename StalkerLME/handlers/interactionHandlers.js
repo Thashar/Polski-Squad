@@ -6576,13 +6576,13 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
 
 // =============== WYNIKI HANDLERS ===============
 
-async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
+async function handleWynikiClanSelect(interaction, sharedState, page = 0, clanOverride = null) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
 
     try {
-        const selectedClan = interaction.values[0];
+        const selectedClan = clanOverride || interaction.values[0];
         const clanName = config.roleDisplayNames[selectedClan];
 
         // Pobierz dostępne tygodnie dla wybranego klanu z obu faz
@@ -6719,8 +6719,6 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
 async function handleWynikiWeekPaginationButton(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
-    await interaction.deferUpdate();
-
     try {
         // Format customId: wyniki_weeks_prev|clanKey|page lub wyniki_weeks_next|clanKey|page
         const customIdParts = interaction.customId.split('|');
@@ -6736,15 +6734,7 @@ async function handleWynikiWeekPaginationButton(interaction, sharedState) {
             newPage = currentPage + 1;
         }
 
-        // Przygotuj mock interaction z values i metodami proxy do prawdziwej interakcji
-        const mockInteraction = {
-            ...interaction,
-            values: [clan],
-            deferUpdate: async () => {},
-            editReply: (...args) => interaction.editReply(...args)
-        };
-
-        await handleWynikiClanSelect(mockInteraction, sharedState, newPage);
+        await handleWynikiClanSelect(interaction, sharedState, newPage, clan);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd paginacji tygodni:', error);
