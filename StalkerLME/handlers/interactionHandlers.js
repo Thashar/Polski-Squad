@@ -6576,13 +6576,13 @@ async function handleModyfikujConfirmButton(interaction, sharedState) {
 
 // =============== WYNIKI HANDLERS ===============
 
-async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
+async function handleWynikiClanSelect(interaction, sharedState, page = 0, clanOverride = null) {
     const { databaseService, config } = sharedState;
 
     await interaction.deferUpdate();
 
     try {
-        const selectedClan = interaction.values[0];
+        const selectedClan = clanOverride || interaction.values[0];
         const clanName = config.roleDisplayNames[selectedClan];
 
         // Pobierz dostępne tygodnie dla wybranego klanu z obu faz
@@ -6678,16 +6678,34 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
         // Dodaj przyciski nawigacji jeśli jest więcej niż jedna strona
         if (totalPages > 1) {
             const navRow = new ActionRowBuilder();
+            // Helper: zakres tygodni dla danej strony (format: "TT/RR - TT/RR", od starszego do nowszego)
+            const getPageWeekLabel = (targetPage) => {
+                const s = targetPage * weeksPerPage;
+                const e = Math.min(s + weeksPerPage, weeksForClan.length);
+                const pw = weeksForClan.slice(s, e);
+                if (pw.length === 0) return '';
+                // Weeks posortowane malejąco - pierwszy=najnowszy, ostatni=najstarszy
+                const newest = pw[0];
+                const oldest = pw[pw.length - 1];
+                const fmtWeek = (w) => `${String(w.weekNumber).padStart(2, '0')}/${w.year % 100}`;
+                if (newest.weekNumber === oldest.weekNumber && newest.year === oldest.year) {
+                    return fmtWeek(newest);
+                }
+                return `${fmtWeek(oldest)} - ${fmtWeek(newest)}`;
+            };
+
+            const prevLabel = page > 0 ? `◀ ${getPageWeekLabel(page - 1)}` : '◀';
+            const nextLabel = page < totalPages - 1 ? `${getPageWeekLabel(page + 1)} ▶` : '▶';
 
             const prevButton = new ButtonBuilder()
                 .setCustomId(`wyniki_weeks_prev|${selectedClan}|${page}`)
-                .setLabel('◀ Poprzednia')
+                .setLabel(prevLabel)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page === 0);
 
             const nextButton = new ButtonBuilder()
                 .setCustomId(`wyniki_weeks_next|${selectedClan}|${page}`)
-                .setLabel('Następna ▶')
+                .setLabel(nextLabel)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages - 1);
 
@@ -6719,8 +6737,6 @@ async function handleWynikiClanSelect(interaction, sharedState, page = 0) {
 async function handleWynikiWeekPaginationButton(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
-    await interaction.deferUpdate();
-
     try {
         // Format customId: wyniki_weeks_prev|clanKey|page lub wyniki_weeks_next|clanKey|page
         const customIdParts = interaction.customId.split('|');
@@ -6736,15 +6752,7 @@ async function handleWynikiWeekPaginationButton(interaction, sharedState) {
             newPage = currentPage + 1;
         }
 
-        // Przygotuj mock interaction z values i metodami proxy do prawdziwej interakcji
-        const mockInteraction = {
-            ...interaction,
-            values: [clan],
-            deferUpdate: async () => {},
-            editReply: (...args) => interaction.editReply(...args)
-        };
-
-        await handleWynikiClanSelect(mockInteraction, sharedState, newPage);
+        await handleWynikiClanSelect(interaction, sharedState, newPage, clan);
 
     } catch (error) {
         logger.error('[WYNIKI] ❌ Błąd paginacji tygodni:', error);
