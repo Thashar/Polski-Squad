@@ -13,7 +13,7 @@
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
-6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
+6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
 7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 
