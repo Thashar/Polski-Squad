@@ -77,7 +77,50 @@ let lastWebhookBotName = null;
 
 // Konfiguracja logowania do pliku
 const LOG_DIR = path.join(__dirname, '../logs');
-const LOG_FILE = path.join(LOG_DIR, 'bots.log');
+const LOG_MAX_AGE_DAYS = 30;
+
+// Generuj nazwę pliku logu na podstawie daty (bots-YYYY-MM-DD.log)
+function getLogFilePath() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return path.join(LOG_DIR, `bots-${year}-${month}-${day}.log`);
+}
+
+// Usuwanie logów starszych niż LOG_MAX_AGE_DAYS
+function cleanupOldLogs() {
+    try {
+        if (!fs.existsSync(LOG_DIR)) return;
+
+        const files = fs.readdirSync(LOG_DIR);
+        const now = Date.now();
+        const maxAge = LOG_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+        for (const file of files) {
+            // Obsługuj zarówno nowy format (bots-YYYY-MM-DD.log) jak i stary (bots.log)
+            if (!file.startsWith('bots') || !file.endsWith('.log')) continue;
+
+            const filePath = path.join(LOG_DIR, file);
+            try {
+                const stats = fs.statSync(filePath);
+                if (now - stats.mtimeMs > maxAge) {
+                    fs.unlinkSync(filePath);
+                }
+            } catch (e) {
+                // Ignoruj błędy pojedynczych plików
+            }
+        }
+    } catch (error) {
+        // Nie przerywaj aplikacji przy błędach czyszczenia
+    }
+}
+
+// Wyczyść stare logi przy starcie
+cleanupOldLogs();
+
+// Planuj czyszczenie co 24h
+setInterval(cleanupOldLogs, 24 * 60 * 60 * 1000);
 
 // Ładowanie .env na początku
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
@@ -125,7 +168,7 @@ function writeToLogFile(botName, message, level = 'info') {
         }
         
         const logEntry = `[${timestamp}] ${emoji} ${botName.toUpperCase()} ${levelEmoji} ${message}\n`;
-        fs.appendFileSync(LOG_FILE, logEntry, 'utf8');
+        fs.appendFileSync(getLogFilePath(), logEntry, 'utf8');
     } catch (error) {
         // Jeśli nie można zapisać do pliku, nie przerywamy aplikacji
         console.error('Błąd zapisu do pliku log:', error.message);

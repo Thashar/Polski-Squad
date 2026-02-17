@@ -173,7 +173,7 @@ To jest kolekcja botów Discord dla Polski Squad, zawierająca **9 oddzielnych b
 - `utils/` - consoleLogger, nicknameManager, ocrFileUtils, discordLogger
 - `shared_data/` - Dane cross-bot (nickname effects, configs)
 - `processed_ocr/` - Przetworzone obrazy OCR (wszystkie boty)
-- `logs/bots.log` - Scentralizowane logi
+- `logs/bots-YYYY-MM-DD.log` - Scentralizowane logi (dzienna rotacja, auto-usuwanie po 30 dniach)
 
 **Boty (każdy z podobną strukturą):**
 - `{Bot}/index.js` - Główny plik bota
@@ -277,7 +277,7 @@ const serwis = new JakiśSerwis(config, logger);
 - 🎨 **Kolorowe wyjście** według botów (każdy bot ma własny kolor)
 - 📝 **Wiele miejsc docelowych**:
   - Konsola z kolorowaniem
-  - Plik `logs/bots.log` z timestampami
+  - Plik `logs/bots-YYYY-MM-DD.log` z timestampami (dzienna rotacja, auto-usuwanie po 30 dniach)
   - Discord webhook (opcjonalne, rate-limited 1s delay)
 - 🚀 **Zoptymalizowany start** - Jednoliniowe komunikaty statusu: `✅ [NazwaBota] gotowy - [funkcje]`
 - 🔍 **Inteligentne separatory** - Wizualne separatory tylko przy przełączaniu między różnymi botami
@@ -768,11 +768,11 @@ DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ## Rozwiązywanie Problemów
 
 **OCR:** `/ocr-debug true`, min 800x600px, `processed_ocr/`, języki PL+EN
-**Proxy:** `/proxy-test`, `/proxy-refresh`, logi `logs/bots.log`
+**Proxy:** `/proxy-test`, `/proxy-refresh`, logi `logs/bots-YYYY-MM-DD.log`
 **Nicki:** `shared_data/active_nickname_effects.json`, logi managera
 **Pamięć:** OCR max 400, cache 2GB, `rm -rf */temp/*`
 **Rate Limit:** Kolejka webhook, delay między requestami
-**Start:** `logs/bots.log`, env vars, uprawnienia Discord, `npm run botname`
+**Start:** `logs/bots-YYYY-MM-DD.log`, env vars, uprawnienia Discord, `npm run botname`
 **Backup:** Token wygasł → auto-refresh (event 'tokens'), `node authorize-google.js`, limit 50 tokenów/user
 
 
