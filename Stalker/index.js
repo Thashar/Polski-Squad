@@ -1,5 +1,43 @@
 const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType } = require('discord.js');
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
+
+// Migracja z StalkerLME/ do Stalker/ (jednorazowa, po zmianie nazwy katalogu)
+(function migrateStalkerLME() {
+    const oldDir = path.join(__dirname, '..', 'StalkerLME');
+    const newDir = __dirname; // Stalker/
+
+    if (!fs.existsSync(oldDir)) return;
+
+    const itemsToMigrate = ['.env', 'data', 'temp'];
+
+    for (const item of itemsToMigrate) {
+        const oldPath = path.join(oldDir, item);
+        const newPath = path.join(newDir, item);
+
+        if (!fs.existsSync(oldPath)) continue;
+        if (fs.existsSync(newPath)) continue; // Nie nadpisuj jeśli już istnieje
+
+        try {
+            fs.renameSync(oldPath, newPath);
+            console.log(`[MIGRACJA] Przeniesiono ${oldPath} → ${newPath}`);
+        } catch (e) {
+            console.error(`[MIGRACJA] Błąd przenoszenia ${item}: ${e.message}`);
+        }
+    }
+
+    // Usuń stary katalog jeśli jest pusty
+    try {
+        const remaining = fs.readdirSync(oldDir);
+        if (remaining.length === 0) {
+            fs.rmdirSync(oldDir);
+            console.log(`[MIGRACJA] Usunięto pusty katalog StalkerLME/`);
+        }
+    } catch (e) {
+        // Ignoruj - katalog może być jeszcze używany
+    }
+})();
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
