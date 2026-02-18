@@ -14,7 +14,7 @@
 - Admin/moderator/specjalne role -> mogą otworzyć wątek każdemu (reakcja pod czyimkolwiek postem)
 - Użytkownik z rolą klanową -> może otworzyć wątek tylko sobie (reakcja pod własnym postem)
 **Ping ról klanowych:** Po pierwszej wiadomości właściciela wątku bot automatycznie pinguje wszystkie 4 role klanowe (działa również po ponownym otwarciu wątku)
-**Komendy:** `/decode` (integracja sio-tools, tylko informacja w wiadomości - komenda w StalkerLME)
+**Komendy:** `/decode` (integracja sio-tools, tylko informacja w wiadomości - komenda w Stalker)
 
 ---
 

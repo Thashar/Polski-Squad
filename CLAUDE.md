@@ -9,7 +9,7 @@
 - Jeżeli jakiś hook zaraportuje, że są niezacommitowane zmiany to zacommituj i pushuj
 - W commitach używaj krótkiego opisu zmian PO POLSKU
 - Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
-- Przykład: "Dodano system kolejkowania OCR do StalkerLME"
+- Przykład: "Dodano system kolejkowania OCR do Stalker"
 - NIGDY nie pytaj użytkownika czy zacommitować - po prostu to zrób
 
 **⚠️ INSTRUKCJA AKTUALIZACJI DOKUMENTACJI (KRYTYCZNE!):**
@@ -22,12 +22,12 @@
 **INSTRUKCJA AKTUALIZACJI DOKUMENTACJI:**
 - Po wprowadzeniu zmian w funkcjonalności bota ZAWSZE aktualizuj `{Bot}/CLAUDE.md` tego bota
 - **EDYTUJ istniejące opisy** funkcji w odpowiednim pliku bot-specific
-- Każdy bot ma własny plik dokumentacji w swoim folderze (np. `StalkerLME/CLAUDE.md`, `Rekruter/CLAUDE.md`)
+- Każdy bot ma własny plik dokumentacji w swoim folderze (np. `Stalker/CLAUDE.md`, `Rekruter/CLAUDE.md`)
 - Używaj Grep + Read z offset/limit + Edit - NIE czytaj całego pliku
 - **NIE twórz** "Historii Zmian" - aktualizuj bezpośrednio opisy funkcjonalności
 - To oszczędzi tysiące tokenów - dokumentacja zawsze aktualna w jednym miejscu
-- **PRZYKŁAD POPRAWNY**: Zmieniłeś system kolejkowania w StalkerLME → zaktualizuj `StalkerLME/CLAUDE.md` punkt "Kolejkowanie OCR"
-- **PRZYKŁAD BŁĘDNY**: Dodałeś opis zmian do głównego CLAUDE.md zamiast do `StalkerLME/CLAUDE.md`
+- **PRZYKŁAD POPRAWNY**: Zmieniłeś system kolejkowania w Stalker → zaktualizuj `Stalker/CLAUDE.md` punkt "Kolejkowanie OCR"
+- **PRZYKŁAD BŁĘDNY**: Dodałeś opis zmian do głównego CLAUDE.md zamiast do `Stalker/CLAUDE.md`
 
 **INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU:**
 - Po dodaniu NOWEJ komendy lub aktualizacji istniejącej komendy w KTÓRYMKOLWIEK bocie ZAWSZE aktualizuj `Muteusz/config/all_commands.json`
@@ -94,7 +94,7 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 **Szczegóły poszczególnych botów:**
 - `Rekruter/CLAUDE.md` - OCR rekrutacja, kwalifikacja klanów
 - `Szkolenia/CLAUDE.md` - Wątki treningowe, przypomnienia
-- `StalkerLME/CLAUDE.md` - 8 systemów (kary, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
+- `Stalker/CLAUDE.md` - 8 systemów (kary, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
 - `Muteusz/CLAUDE.md` - Auto-moderacja, cache mediów, chaos mode
 - `EndersEcho/CLAUDE.md` - OCR wyników, rankingi, role TOP
 - `Kontroler/CLAUDE.md` - OCR dwukanałowy, loteria, dywersja, Oligopoly
@@ -107,12 +107,12 @@ Ten plik zawiera szczegółową dokumentację techniczną dla Claude Code podcza
 # Chcę sprawdzić ogólną architekturę
 Read CLAUDE.md offset:151 limit:30
 
-# Chcę sprawdzić szczegóły StalkerLME
-Read StalkerLME/CLAUDE.md
+# Chcę sprawdzić szczegóły Stalker
+Read Stalker/CLAUDE.md
 
-# Chcę sprawdzić tylko system AI Chat w StalkerLME
-Grep -n "AI Chat" StalkerLME/CLAUDE.md
-Read StalkerLME/CLAUDE.md offset:{wynik_grep} limit:20
+# Chcę sprawdzić tylko system AI Chat w Stalker
+Grep -n "AI Chat" Stalker/CLAUDE.md
+Read Stalker/CLAUDE.md offset:{wynik_grep} limit:20
 ```
 
 ---
@@ -150,7 +150,7 @@ To jest kolekcja botów Discord dla Polski Squad, zawierająca **9 oddzielnych b
 ### Lista Botów
 1. **Rekruter Bot** - Zaawansowany system rekrutacji z OCR i kwalifikacjami klanowymi
 2. **Szkolenia Bot** - Zarządzanie wątkami treningowymi z automatycznymi przypomnieniami
-3. **StalkerLME Bot** - System kar za uczestnictwo w bossach z OCR + dekoder buildów + system faz
+3. **Stalker Bot** - System kar za uczestnictwo w bossach z OCR + dekoder buildów + system faz
 4. **Muteusz Bot** - Kompleksowa moderacja z cache'owaniem mediów i zarządzaniem rolami
 5. **EndersEcho Bot** - System rankingów bossów z OCR i automatycznymi rolami TOP
 6. **Kontroler Bot** - Dwukanałowa weryfikacja OCR + zaawansowana loteria z datami + system Oligopoly
@@ -573,7 +573,7 @@ node manual-backup.js
 
 1. **[Rekruter Bot](Rekruter/CLAUDE.md)** - System rekrutacji z OCR (Tesseract + AI), kwalifikacja klanów
 2. **[Szkolenia Bot](Szkolenia/CLAUDE.md)** - Wątki treningowe z przypomnieniami, auto-zamykanie po 7 dniach
-3. **[StalkerLME Bot](StalkerLME/CLAUDE.md)** - 8 systemów (kary OCR, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
+3. **[Stalker Bot](Stalker/CLAUDE.md)** - 8 systemów (kary OCR, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
 4. **[Muteusz Bot](Muteusz/CLAUDE.md)** - Auto-moderacja, cache mediów, zarządzanie rolami, chaos mode
 5. **[EndersEcho Bot](EndersEcho/CLAUDE.md)** - Rankingi bossów z OCR (Tesseract + AI), role TOP
 6. **[Kontroler Bot](Kontroler/CLAUDE.md)** - OCR dwukanałowy, loteria z datami, dywersja, Oligopoly
@@ -616,7 +616,7 @@ npm run gary
     "rekruter",
     "endersecho",
     "szkolenia",
-    "stalkerlme",
+    "stalker",
     "kontroler",
     "konklawe",
     "muteusz",

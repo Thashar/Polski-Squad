@@ -271,7 +271,7 @@
       ]
     },
     {
-      "name": "StalkerLME",
+      "name": "Stalker",
       "description": "Bot do systemu kar za nieudział w Lunar Expedition, zbierania wyników faz i dekodowania buildów",
       "commands": [
         {

@@ -32,7 +32,7 @@ const colors = {
 const botColors = {
     'Rekruter': colors.cyan,
     'Szkolenia': colors.green,
-    'StalkerLME': colors.red,
+    'Stalker': colors.red,
     'Muteusz': colors.magenta,
     'EndersEcho': colors.yellow,
     'Kontroler': colors.blue,
@@ -46,7 +46,7 @@ const botColors = {
 const botEmojis = {
     'Rekruter': '🎯',
     'Szkolenia': '🎓',
-    'StalkerLME': '⚔️',
+    'Stalker': '⚔️',
     'Muteusz': '🤖',
     'EndersEcho': '🏆',
     'Kontroler': '🎯',

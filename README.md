@@ -39,7 +39,7 @@ System wątków treningowych tworzonych przez reakcję emoji. Automatyczna archi
 
 ---
 
-### ⚔️ StalkerLME Bot - *System Kar*
+### ⚔️ Stalker Bot - *System Kar*
 Zbiera wyniki z rozgrywek klanowych (Lunar Expedition) przez OCR - Faza 1 (screeny całej listy uczestników) i Faza 2 (3 rundy walki z bossem). Wykrywa graczy z 0 obrażeń. System punktowy (2+: kara, 3+: ban loterii). Zarządzanie urlopami, cotygodniowe czyszczenie punktów. Dekoder buildów Survivor.io.
 
 **Główne Komendy:** `/decode`, `/faza1`, `/faza2`, `/wyniki`
@@ -160,7 +160,7 @@ npm run gary
 ### bot-config.json
 ```json
 {
-  "production": ["rekruter", "endersecho", "szkolenia", "stalkerlme", "kontroler", "konklawe", "muteusz", "wydarzynier", "gary"],
+  "production": ["rekruter", "endersecho", "szkolenia", "stalker", "kontroler", "konklawe", "muteusz", "wydarzynier", "gary"],
   "development": ["gary"]
 }
 ```

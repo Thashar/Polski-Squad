@@ -1,7 +1,7 @@
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Walidacja wymaganych zmiennych środowiskowych
@@ -31,7 +31,7 @@ const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
     logger.error('❌ Brakujące zmienne środowiskowe:', missingVars.join(', '));
-    logger.error('Sprawdź plik StalkerLME/.env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
+    logger.error('Sprawdź plik Stalker/.env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
     process.exit(1);
 }
 
@@ -40,11 +40,11 @@ module.exports = {
     
     // Pliki bazy danych
     database: {
-        punishments: './StalkerLME/data/punishments.json',
-        weeklyRemoval: './StalkerLME/data/weekly_removal.json',
-        reminderConfirmations: './StalkerLME/data/reminder_confirmations.json',
-        activeReminderDMs: './StalkerLME/data/active_reminder_dms.json',
-        reminderStatusTracking: './StalkerLME/data/reminder_status_tracking.json'
+        punishments: './Stalker/data/punishments.json',
+        weeklyRemoval: './Stalker/data/weekly_removal.json',
+        reminderConfirmations: './Stalker/data/reminder_confirmations.json',
+        activeReminderDMs: './Stalker/data/active_reminder_dms.json',
+        reminderStatusTracking: './Stalker/data/reminder_status_tracking.json'
     },
     
     // Strefa czasowa i deadline
@@ -123,7 +123,7 @@ module.exports = {
         saveProcessedImages: false,
         processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 400,
-        tempDir: './StalkerLME/temp',
+        tempDir: './Stalker/temp',
         
         // Szczegółowe logowanie OCR
         detailedLogging: {

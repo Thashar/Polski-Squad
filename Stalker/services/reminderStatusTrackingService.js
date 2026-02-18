@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 class ReminderStatusTrackingService {
     constructor(config) {

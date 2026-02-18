@@ -1,4 +1,4 @@
-### ⚔️ StalkerLME Bot
+### ⚔️ Stalker Bot
 
 **8 Systemów:**
 1. **Kary OCR** - Dwa tryby:
@@ -14,7 +14,7 @@
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
-7. **AI Chat** - `aiChatService.js`: Mention @StalkerLME → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
+7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
@@ -96,8 +96,8 @@
   - Sprawdza czy użytkownik jest w TOP3 swojego klanu
 - **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
 
-**AI Chat** - Prosty system rozmowy z AI (mention @StalkerLME):
-- **Trigger:** Bezpośrednie oznaczenie @StalkerLME + wiadomość (max 300 znaków)
+**AI Chat** - Prosty system rozmowy z AI (mention @Stalker):
+- **Trigger:** Bezpośrednie oznaczenie @Stalker + wiadomość (max 300 znaków)
   - Ignoruje: wzmianki przez role bota, @everyone/@here, odpowiedzi na wiadomości bota
 - **Model:** Claude 3 Haiku (Anthropic API) - szybki, tani (~$0.0006 za pytanie)
 - **Limity:**
@@ -112,9 +112,9 @@
   - Odpowiedzi po polsku
   - **Typing indicator** podczas przetwarzania
 - **Przykłady użycia:**
-  - `@StalkerLME Hej, jak się masz?`
-  - `@StalkerLME Opowiedz mi dowcip`
-  - `@StalkerLME Co sądzisz o pogodzie?`
+  - `@Stalker Hej, jak się masz?`
+  - `@Stalker Opowiedz mi dowcip`
+  - `@Stalker Co sądzisz o pogodzie?`
 - **Graceful degradation:** Bot działa normalnie jeśli `ANTHROPIC_API_KEY` nie jest ustawiony (AI Chat wyłączony)
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
@@ -173,7 +173,7 @@ STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
 
 ## Najlepsze Praktyki
 
-- **Logger:** createBotLogger('StalkerLME')
+- **Logger:** createBotLogger('Stalker')
 - **OCR Debug:** `/ocr-debug true` dla szczegółowych logów
 - **Throttling:** safeFetchMembers() z 30s cooldownem
 - **Cache:** playerIndexCache dla szybkiego autocomplete

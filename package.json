@@ -10,7 +10,7 @@
     "backup": "node manual-backup.js",
     "rekruter": "cd Rekruter && node index.js",
     "szkolenia": "cd Szkolenia && node index.js",
-    "stalker": "cd StalkerLME && node index.js",
+    "stalker": "cd Stalker && node index.js",
     "muteusz": "cd Muteusz && node index.js",
     "endersecho": "cd EndersEcho && node index.js",
     "kontroler": "cd Kontroler && node index.js",

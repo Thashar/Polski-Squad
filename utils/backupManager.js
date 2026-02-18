@@ -24,7 +24,7 @@ class BackupManager {
             'Kontroler',
             'Muteusz',
             'Rekruter',
-            'StalkerLME',
+            'Stalker',
             'Szkolenia',
             'Wydarzynier'
         ];

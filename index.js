@@ -26,10 +26,10 @@ const botConfigs = [
         path: './Szkolenia/index'
     },
     {
-        name: 'Stalker LME Bot',
-        loggerName: 'StalkerLME',
+        name: 'Stalker Bot',
+        loggerName: 'Stalker',
         emoji: '⚔️',
-        path: './StalkerLME/index'
+        path: './Stalker/index'
     },
     {
         name: 'Muteusz Bot',

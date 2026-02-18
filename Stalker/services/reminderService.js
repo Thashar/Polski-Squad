@@ -1,4 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const messages = require('../config/messages');
 const fs = require('fs').promises;
 const path = require('path');
 const https = require('https');
@@ -6,14 +7,17 @@ const https = require('https');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 
-const logger = createBotLogger('StalkerLME');
-class PunishmentService {
-    constructor(config, databaseService) {
+const logger = createBotLogger('Stalker');
+class ReminderService {
+    constructor(config) {
         this.config = config;
-        this.db = databaseService;
         this.activeSessions = new Map(); // sessionId → session
-        this.tempDir = './StalkerLME/temp';
+        this.activeReminderDMs = new Map(); // userId → { roleId, guildId, confirmationChannelId, sentAt }
+        this.tempDir = './Stalker/temp';
         this.ocrService = null; // Będzie ustawione przez setOCRService
+
+        // Załaduj aktywne sesje DM z pliku
+        this.loadActiveReminderDMs();
     }
 
     /**
@@ -21,335 +25,291 @@ class PunishmentService {
      */
     setOCRService(ocrService) {
         this.ocrService = ocrService;
-        logger.info('[PUNISH] ✅ OCR Service przypisany do PunishmentService');
+        logger.info('[REMIND] ✅ OCR Service przypisany do ReminderService');
     }
 
-    async processPunishments(guild, foundUsers) {
+    async sendReminders(guild, foundUsers) {
         try {
-            logger.info('Dodawanie punktów');
-            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
-            logger.info(`👥 Liczba użytkowników: ${foundUsers.length}`);
-            
-            const results = [];
-            
+
+            const timeUntilDeadline = this.calculateTimeUntilDeadline();
+            const roleGroups = new Map();
+            let sentMessages = 0;
+
+            // Grupuj użytkowników według ról
             for (const userData of foundUsers) {
                 // POPRAWKA: userData.user zawiera {userId, member, displayName}
                 const member = userData.user.member;
-                const userId = userData.user.userId;
-                const matchedName = userData.detectedNick;
 
-                logger.info(`\n👤 Przetwarzanie: ${member.displayName} (${userId})`);
-                const userPunishment = await this.db.addPunishmentPoints(guild.id, userId, 1, 'Niepokonanie bossa');
-                
-                logger.info(`📊 Nowa liczba punktów: ${userPunishment.points}`);
-                
-                const roleResult = await this.updateUserRoles(member, userPunishment.points);
-                logger.info(`🎭 ${roleResult}`);
-                
-                const warningResult = await this.sendWarningIfNeeded(guild, member, userPunishment.points);
-                if (warningResult) {
-                    logger.info(`📢 ${warningResult}`);
+                if (!member) {
+                    logger.warn(`⚠️ Brak member dla użytkownika: ${userData.detectedNick}`);
+                    continue;
                 }
-                
-                results.push({
-                    user: member,
-                    points: userPunishment.points,
-                    matchedName: matchedName
-                });
-                
-                logger.info(`✅ Pomyślnie zaktualizowano punkty dla ${member.displayName}`);
-            }
-            
-            logger.info(`\n✅ Zakończono dodawanie punktów dla ${results.length} użytkowników`);
-            return results;
-        } catch (error) {
-            logger.error('Błąd dodawania punktów');
-            logger.error('❌ Błąd przetwarzania kar:', error);
-            throw error;
-        }
-    }
 
-    async updateUserRoles(member, points) {
-        try {
-            logger.info('Aktualizacja ról');
-            logger.info(`👤 Użytkownik: ${member.displayName} (${member.id})`);
-            logger.info(`📊 Punkty: ${points}`);
-            
-            const punishmentRole = member.guild.roles.cache.get(this.config.punishmentRoleId);
-            const lotteryBanRole = member.guild.roles.cache.get(this.config.lotteryBanRoleId);
-            
-            if (!punishmentRole) {
-                return '❌ Nie znaleziono roli karania';
-            }
-            
-            if (!lotteryBanRole) {
-                return '❌ Nie znaleziono roli zakazu loterii';
-            }
-            
-            const hasPunishmentRole = member.roles.cache.has(this.config.punishmentRoleId);
-            const hasLotteryBanRole = member.roles.cache.has(this.config.lotteryBanRoleId);
-            
-            let messages = [];
-            
-            // Logika dla 3+ punktów (zakaz loterii)
-            if (points >= this.config.pointLimits.lotteryBan) {
-                logger.info('🚫 Użytkownik ma 3+ punktów - stosowanie zakazu loterii');
-                
-                // Usuń rolę karania (2+ punktów) jeśli ma
-                if (hasPunishmentRole) {
-                    await member.roles.remove(punishmentRole);
-                    messages.push(`➖ Usunięto rolę karania`);
-                    logger.info('➖ Usunięto rolę karania (2+ punktów)');
-                }
-                
-                // Dodaj rolę zakazu loterii (3+ punktów) jeśli nie ma
-                if (!hasLotteryBanRole) {
-                    await member.roles.add(lotteryBanRole);
-                    messages.push(`🚨 Nadano rolę zakazu loterii`);
-                    logger.info('🚨 Nadano rolę zakazu loterii (3+ punktów)');
-                } else {
-                    logger.info('Użytkownik już ma rolę zakazu loterii');
-                }
-                
-            // Logika dla 2 punktów (tylko rola karania)
-            } else if (points >= this.config.pointLimits.punishmentRole) {
-                logger.info('⚠️ Użytkownik ma 2 punkty - stosowanie roli karania');
-                
-                // Usuń rolę zakazu loterii jeśli ma
-                if (hasLotteryBanRole) {
-                    await member.roles.remove(lotteryBanRole);
-                    messages.push(`➖ Usunięto rolę zakazu loterii`);
-                    logger.info('➖ Usunięto rolę zakazu loterii');
-                }
-                
-                // Dodaj rolę karania jeśli nie ma
-                if (!hasPunishmentRole) {
-                    await member.roles.add(punishmentRole);
-                    messages.push(`🎭 Nadano rolę karania`);
-                    logger.info('🎭 Nadano rolę karania (2+ punktów)');
-                } else {
-                    logger.info('Użytkownik już ma rolę karania');
-                }
-                
-            // Logika dla 0-1 punktów (brak ról karnych)
-            } else {
-                logger.info('✅ Użytkownik ma mniej niż 2 punkty - usuwanie wszystkich ról karnych');
-                
-                if (hasLotteryBanRole) {
-                    await member.roles.remove(lotteryBanRole);
-                    messages.push(`➖ Usunięto rolę zakazu loterii`);
-                    logger.info('➖ Usunięto rolę zakazu loterii');
-                }
-                
-                if (hasPunishmentRole) {
-                    await member.roles.remove(punishmentRole);
-                    messages.push(`➖ Usunięto rolę karania`);
-                    logger.info('➖ Usunięto rolę karania');
-                }
-                
-                if (!hasLotteryBanRole && !hasPunishmentRole) {
-                    logger.info('Użytkownik nie ma ról karnych');
-                }
-            }
-            
-            const result = messages.length > 0 ? messages.join(', ') : 'Brak zmian w rolach';
-            logger.info(`✅ Zakończono aktualizację ról: ${result}`);
-            
-            return `${member.displayName}: ${result}`;
-        } catch (error) {
-            logger.error(`❌ Błąd aktualizacji ról: ${error.message}`);
-            return `❌ Błąd aktualizacji ról: ${error.message}`;
-        }
-    }
-
-    async sendWarningIfNeeded(guild, member, points) {
-        try {
-            if (points !== 2 && points !== 3 && points !== 5) {
-                return `Nie wysyłam ostrzeżenia dla ${points} punktów (tylko dla 2, 3 i 5)`;
-            }
-            
-            const userRoleId = this.getUserRoleId(member);
-            if (!userRoleId) {
-                return '❌ Nie znaleziono roli użytkownika';
-            }
-            
-            const warningChannelId = this.config.warningChannels[userRoleId];
-            if (!warningChannelId) {
-                return `❌ Brak kanału ostrzeżeń dla roli ${userRoleId}`;
-            }
-            
-            const warningChannel = guild.channels.cache.get(warningChannelId);
-            if (!warningChannel) {
-                return `❌ Nie znaleziono kanału ostrzeżeń ${warningChannelId}`;
-            }
-            
-            let message = '';
-            if (points === 2) {
-                message = `⚠️ **OSTRZEŻENIE** ⚠️\n\n${member} otrzymał rolę karną za zebrane punkty karne!\n\n**Aktualne punkty kary:** ${points}\n**Przyczyna:** Niewystarczająca ilość walk z bossem`;
-            } else if (points === 3) {
-                message = `🚨 **ZAKAZ LOTERII** 🚨\n\n${member} został wykluczony z loterii Glory!\n\n**Aktualne punkty kary:** ${points}\n**Przyczyna:** Przekroczenie limitu 3 punktów kary`;
-            } else if (points === 5) {
-                message = `🔴 **WYDALENIE Z KLANU** 🔴\n\n${member} osiągnął maksymalną ilość punktów karnych i zostaje wydalony z klanu!\n\n**Aktualne punkty kary:** ${points}\n**Przyczyna:** Osiągnięcie maksymalnego limitu punktów kary`;
-            }
-            
-            if (message) {
-                await warningChannel.send(message);
-                return `✅ Pomyślnie wysłano ostrzeżenie dla ${points} punktów na kanał ${warningChannel.name} (${warningChannel.id})`;
-            }
-            
-            return '❌ Brak wiadomości do wysłania';
-        } catch (error) {
-            return `❌ Błąd wysyłania ostrzeżenia: ${error.message}`;
-        }
-    }
-
-    getUserRoleId(member) {
-        for (const roleId of Object.values(this.config.targetRoles)) {
-            if (member.roles.cache.has(roleId)) {
-                return roleId;
-            }
-        }
-        return null;
-    }
-
-    getUserWarningChannel(member) {
-        for (const [roleId, channelId] of Object.entries(this.config.warningChannels)) {
-            if (member.roles.cache.has(roleId)) {
-                return channelId;
-            }
-        }
-        return null;
-    }
-
-    async addPointsManually(guild, userId, points) {
-        try {
-            const member = await guild.members.fetch(userId);
-            
-            if (!member) {
-                throw new Error('Nie znaleziono użytkownika');
-            }
-            
-            const userPunishment = await this.db.addPunishmentPoints(guild.id, userId, points, 'Ręczne dodanie punktów');
-            
-            await this.updateUserRoles(member, userPunishment.points);
-            await this.sendWarningIfNeeded(guild, member, userPunishment.points);
-            
-            return userPunishment;
-        } catch (error) {
-            logger.error('[PUNISHMENT] ❌ Błąd ręcznego dodawania punktów:', error);
-            throw error;
-        }
-    }
-
-    async removePointsManually(guild, userId, points) {
-        try {
-            const member = await guild.members.fetch(userId);
-            
-            if (!member) {
-                throw new Error('Nie znaleziono użytkownika');
-            }
-            
-            const userPunishment = await this.db.removePunishmentPoints(guild.id, userId, points);
-            
-            if (userPunishment) {
-                await this.updateUserRoles(member, userPunishment.points);
-            } else {
-                await this.updateUserRoles(member, 0);
-            }
-            
-            return userPunishment;
-        } catch (error) {
-            logger.error('[PUNISHMENT] ❌ Błąd ręcznego usuwania punktów:', error);
-            throw error;
-        }
-    }
-
-    async getRankingForRole(guild, roleId) {
-        try {
-            const guildPunishments = await this.db.getGuildPunishments(guild.id);
-            const ranking = [];
-            
-            for (const [userId, userData] of Object.entries(guildPunishments)) {
-                if (userData.points > 0) {
-                    try {
-                        const member = await guild.members.fetch(userId);
-                        
-                        if (member && member.roles.cache.has(roleId)) {
-                            ranking.push({
-                                member: member,
-                                points: userData.points,
-                                history: userData.history
-                            });
+                for (const [roleKey, roleId] of Object.entries(this.config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        if (!roleGroups.has(roleKey)) {
+                            roleGroups.set(roleKey, []);
                         }
-                    } catch (error) {
-                        logger.info(`[PUNISHMENT] ⚠️ Nie można znaleźć użytkownika ${userId}`);
+                        roleGroups.get(roleKey).push(member);
+                        break;
                     }
                 }
             }
-            
-            ranking.sort((a, b) => b.points - a.points);
-            
-            return ranking;
+
+            // Wyślij przypomnienia dla każdej grupy ról
+            for (const [roleKey, members] of roleGroups) {
+                const roleId = this.config.targetRoles[roleKey];
+                const warningChannelId = this.config.warningChannels[roleId];
+
+                if (warningChannelId) {
+                    const warningChannel = guild.channels.cache.get(warningChannelId);
+
+                    if (warningChannel) {
+                        const userMentions = members.map(member => member.toString()).join(' ');
+                        const timeMessage = messages.formatTimeMessage(timeUntilDeadline);
+                        const reminderMessage = messages.reminderMessage(timeMessage, userMentions);
+
+                        await warningChannel.send(reminderMessage);
+                        sentMessages++;
+
+                        logger.info(`✅ Wysłano przypomnienie do kanału ${warningChannel.name} dla ${members.length} użytkowników`);
+
+                        // Wyślij wiadomości prywatne do każdego użytkownika
+                        let dmsSent = 0;
+                        let dmsFailed = 0;
+
+                        for (const member of members) {
+                            try {
+                                // W wiadomościach prywatnych nie dodajemy pingu użytkownika
+                                const dmMessage = messages.reminderMessage(timeMessage, '');
+
+                                // Utwórz przycisk "Potwierdź odbiór" z guildId (dla obsługi DM)
+                                const confirmButton = new ButtonBuilder()
+                                    .setCustomId(`confirm_reminder_${member.id}_${roleId}_${guild.id}`)
+                                    .setLabel('Potwierdź odbiór')
+                                    .setStyle(ButtonStyle.Danger)
+                                    .setEmoji('✅');
+
+                                const row = new ActionRowBuilder()
+                                    .addComponents(confirmButton);
+
+                                await member.send({
+                                    content: dmMessage,
+                                    components: [row]
+                                });
+
+                                // Dodaj użytkownika do aktywnych sesji DM (do śledzenia wiadomości)
+                                const confirmationChannelId = this.config.confirmationChannels[roleId];
+                                this.activeReminderDMs.set(member.id, {
+                                    roleId: roleId,
+                                    guildId: guild.id,
+                                    confirmationChannelId: confirmationChannelId,
+                                    sentAt: Date.now(),
+                                    repliedToMessage: false // Czy bot już odpowiedział na wiadomość użytkownika
+                                });
+                                // Zapisz do pliku
+                                await this.saveActiveReminderDMs();
+
+                                dmsSent++;
+                                logger.info(`📨 Wysłano DM do ${member.user.tag}`);
+                            } catch (dmError) {
+                                dmsFailed++;
+                                logger.warn(`⚠️ Nie udało się wysłać DM do ${member.user.tag}: ${dmError.message}`);
+                            }
+                        }
+
+                        logger.info(`📬 Podsumowanie DM: ${dmsSent} wysłane, ${dmsFailed} niepowodzeń`);
+                    }
+                }
+            }
+
+            logger.info(`✅ Wysłano ${sentMessages} przypomnień dla ${foundUsers.length} użytkowników`);
+
+            return {
+                sentMessages: sentMessages,
+                roleGroups: roleGroups.size,
+                totalUsers: foundUsers.length
+            };
         } catch (error) {
-            logger.error('[PUNISHMENT] ❌ Błąd pobierania rankingu:', error);
+            logger.error('Błąd przypomnień');
+            logger.error('❌ Błąd wysyłania przypomnień:', error.message);
+            logger.error('❌ Stack trace:', error.stack);
             throw error;
         }
     }
 
-    async cleanupAllUsers(guild) {
+    calculateTimeUntilDeadline() {
+        const now = new Date();
+        const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+        
+        const deadline = new Date(polandTime);
+        deadline.setHours(this.config.bossDeadline.hour, this.config.bossDeadline.minute, 0, 0);
+        
+        if (polandTime >= deadline) {
+            deadline.setDate(deadline.getDate() + 1);
+        }
+        
+        const timeDiff = deadline - polandTime;
+        const totalMinutes = Math.floor(timeDiff / (1000 * 60));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        
+        return {
+            totalMinutes: totalMinutes,
+            hours: hours,
+            minutes: minutes
+        };
+    }
+
+    async sendRoleReminders(guild, roleId) {
         try {
-            logger.info('Tygodniowe czyszczenie');
+            logger.info('Przypomnienia dla roli');
             logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info(`🎭 Rola: ${roleId}`);
             
-            const guildPunishments = await this.db.getGuildPunishments(guild.id);
+            const role = guild.roles.cache.get(roleId);
             
-            let usersProcessed = 0;
-            let rolesUpdated = 0;
+            if (!role) {
+                throw new Error('Nie znaleziono roli');
+            }
             
-            for (const [userId, userData] of Object.entries(guildPunishments)) {
+            const members = role.members;
+            const remindersSent = [];
+            
+            for (const [userId, member] of members) {
                 try {
-                    const member = await guild.members.fetch(userId);
+                    const timeLeft = this.calculateTimeUntilDeadline();
+                    const timeMessage = messages.formatTimeMessage(timeLeft);
                     
-                    if (member) {
-                        logger.info(`👤 Czyszczenie ról dla: ${member.displayName}`);
-                        const result = await this.updateUserRoles(member, 0);
-                        
-                        if (!result.includes('Brak zmian')) {
-                            rolesUpdated++;
-                        }
-                        
-                        usersProcessed++;
-                    }
+                    const embed = new EmbedBuilder()
+                        .setTitle('⏰ PRZYPOMNIENIE O BOSSIE')
+                        .setDescription(`${timeMessage}\n\nPamiętaj o pokonaniu bossa, aby uniknąć punktów karnych!`)
+                        .setColor('#FFA500')
+                        .setTimestamp()
+                        .setFooter({ text: 'System automatycznych przypomnień' });
+                    
+                    await member.send({ embeds: [embed] });
+                    remindersSent.push(member);
+                    
+                    logger.info(`✅ Wysłano przypomnienie do ${member.displayName} (${member.id})`);
                 } catch (error) {
-                    logger.info(`⚠️ Nie można zaktualizować ról dla użytkownika ${userId}: ${error.message}`);
+                    logger.info(`⚠️ Nie udało się wysłać przypomnienia do ${member.displayName}: ${error.message}`);
                 }
             }
             
-            await this.db.cleanupWeeklyPoints();
+            logger.info('Podsumowanie przypomnień roli:');
+            logger.info(`📤 Wysłanych przypomnień: ${remindersSent.length}`);
+            logger.info(`👥 Członków roli: ${members.size}`);
+            logger.info('✅ Przypomnienia dla roli zostały zakończone');
             
-            logger.info('Podsumowanie tygodniowego czyszczenia:');
-            logger.info(`👥 Użytkowników przetworzonych: ${usersProcessed}`);
-            logger.info(`🎭 Role zaktualizowane: ${rolesUpdated}`);
-            logger.info('✅ Zakończono tygodniowe czyszczenie kar');
+            return remindersSent;
         } catch (error) {
-            logger.error('Błąd czyszczenia');
-            logger.error('❌ Błąd czyszczenia kar:', error);
+            logger.error('Błąd przypomnień roli');
+            logger.error('❌ Błąd wysyłania przypomnień do roli:', error);
+            throw error;
+        }
+    }
+
+    async sendBulkReminder(guild, roleId, customMessage = null) {
+        try {
+            logger.info('Masowe przypomnienie');
+            logger.info(`🏰 Serwer: ${guild.name} (${guild.id})`);
+            logger.info(`🎭 Rola: ${roleId}`);
+            
+            const role = guild.roles.cache.get(roleId);
+            
+            if (!role) {
+                throw new Error('Nie znaleziono roli');
+            }
+            
+            const timeLeft = this.calculateTimeUntilDeadline();
+            const timeMessage = messages.formatTimeMessage(timeLeft);
+            
+            const embed = new EmbedBuilder()
+                .setTitle('⏰ PRZYPOMNIENIE O BOSSIE')
+                .setDescription(customMessage || `${timeMessage}\n\nPamiętaj o pokonaniu bossa, aby uniknąć punktów karnych!`)
+                .setColor('#FFA500')
+                .setTimestamp()
+                .setFooter({ text: 'System automatycznych przypomnień' });
+            
+            const warningChannelId = this.config.warningChannels[roleId];
+            
+            if (warningChannelId) {
+                const warningChannel = guild.channels.cache.get(warningChannelId);
+                
+                if (warningChannel) {
+                    await warningChannel.send({ 
+                        content: `${role}`,
+                        embeds: [embed] 
+                    });
+                    
+                    logger.info(`✅ Wysłano masowe przypomnienie do kanału ${warningChannel.name} (${warningChannel.id})`);
+                    logger.info(`💬 Treść: ${customMessage ? 'Niestandardowa wiadomość' : 'Standardowe przypomnienie'}`);
+                    return true;
+                }
+            }
+            
+            throw new Error('Nie znaleziono kanału ostrzeżeń dla tej roli');
+        } catch (error) {
+            logger.error('Błąd masowego przypomnienia');
+            logger.error('❌ Błąd wysyłania masowego przypomnienia:', error);
+            throw error;
+        }
+    }
+
+    isDeadlinePassed() {
+        const now = new Date();
+        const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+        
+        const deadline = new Date(polandTime);
+        deadline.setHours(this.config.bossDeadline.hour, this.config.bossDeadline.minute, 0, 0);
+        
+        return polandTime >= deadline;
+    }
+
+    getNextDeadline() {
+        const now = new Date();
+        const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+        
+        const deadline = new Date(polandTime);
+        deadline.setHours(this.config.bossDeadline.hour, this.config.bossDeadline.minute, 0, 0);
+        
+        if (polandTime >= deadline) {
+            deadline.setDate(deadline.getDate() + 1);
+        }
+        
+        return deadline;
+    }
+
+    formatTimeLeft(timeLeft) {
+        if (timeLeft <= 0) {
+            return 'Deadline minął!';
+        }
+
+        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else {
+            return `${minutes}m`;
         }
     }
 
     // ============ ZARZĄDZANIE SESJAMI ============
 
     /**
-     * Tworzy nową sesję dla /punish
+     * Tworzy nową sesję dla /remind
      */
-    createSession(userId, guildId, channelId, ocrExpiresAt = null) {
-        const sessionId = `punish_${userId}_${Date.now()}`;
+    createSession(userId, guildId, channelId, userClanRoleId, ocrExpiresAt = null) {
+        const sessionId = `remind_${userId}_${Date.now()}`;
 
         const session = {
             sessionId,
             userId,
             guildId,
             channelId,
+            userClanRoleId,
             stage: 'awaiting_images', // 'awaiting_images' | 'confirming_complete'
             downloadedFiles: [], // ścieżki do pobranych plików
             processedImages: [], // wyniki OCR
@@ -367,7 +327,7 @@ class PunishmentService {
             this.cleanupSession(sessionId);
         }, 15 * 60 * 1000);
 
-        logger.info(`[PUNISH] 📝 Utworzono sesję: ${sessionId}`);
+        logger.info(`[REMIND] 📝 Utworzono sesję: ${sessionId}`);
         return sessionId;
     }
 
@@ -413,7 +373,7 @@ class PunishmentService {
         const session = this.activeSessions.get(sessionId);
         if (!session) return;
 
-        logger.info(`[PUNISH] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
+        logger.info(`[REMIND] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
 
         if (session.timeout) {
             clearTimeout(session.timeout);
@@ -424,7 +384,7 @@ class PunishmentService {
         if (session.blinkTimer) {
             clearInterval(session.blinkTimer);
             session.blinkTimer = null;
-            logger.info('[PUNISH] ⏹️ Zatrzymano timer migania podczas czyszczenia sesji');
+            logger.info('[REMIND] ⏹️ Zatrzymano timer migania podczas czyszczenia sesji');
         }
 
         // Usuń pliki z temp
@@ -433,11 +393,11 @@ class PunishmentService {
         // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
         if (this.ocrService && session.guildId && session.userId) {
             await this.ocrService.endOCRSession(session.guildId, session.userId, true);
-            logger.info(`[PUNISH] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+            logger.info(`[REMIND] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
         }
 
         this.activeSessions.delete(sessionId);
-        logger.info(`[PUNISH] ✅ Sesja usunięta: ${sessionId}`);
+        logger.info(`[REMIND] ✅ Sesja usunięta: ${sessionId}`);
     }
 
     /**
@@ -451,11 +411,11 @@ class PunishmentService {
             for (const file of sessionFiles) {
                 const filepath = path.join(this.tempDir, file);
                 await fs.unlink(filepath);
-                logger.info(`[PUNISH] 🗑️ Usunięto plik: ${file}`);
+                logger.info(`[REMIND] 🗑️ Usunięto plik: ${file}`);
             }
         } catch (error) {
             if (error.code !== 'ENOENT') {
-                logger.error('[PUNISH] ❌ Błąd czyszczenia plików sesji:', error);
+                logger.error('[REMIND] ❌ Błąd czyszczenia plików sesji:', error);
             }
         }
     }
@@ -470,7 +430,7 @@ class PunishmentService {
                 '**Instrukcja:**\n' +
                 '1. Wyślij zdjęcia jako załączniki na tym kanale (możesz wysłać wiele zdjęć jednocześnie)\n' +
                 '2. Bot automatycznie je przeanalizuje\n' +
-                '3. Po przeanalizowaniu wszystkich zdjęć potwierdź dodanie punktów karnych\n\n' +
+                '3. Po przeanalizowaniu wszystkich zdjęć potwierdź wysłanie przypomnienia\n\n' +
                 '**Uwaga:** Wiadomość ze zdjęciami zostanie automatycznie usunięta po przetworzeniu.'
             )
             .setColor('#FFA500')
@@ -478,7 +438,7 @@ class PunishmentService {
             .setFooter({ text: 'Sesja wygaśnie po 15 minutach nieaktywności' });
 
         const cancelButton = new ButtonBuilder()
-            .setCustomId('punish_cancel_session')
+            .setCustomId('remind_cancel_session')
             .setLabel('❌ Anuluj')
             .setStyle(ButtonStyle.Danger);
 
@@ -505,7 +465,7 @@ class PunishmentService {
         description += `**Znaleziono:** ${uniqueNicks.length} ${uniqueNicks.length === 1 ? 'unikalny nick' : 'unikalnych nicków'} z wynikiem 0\n\n`;
 
         if (uniqueNicks.length > 0) {
-            description += `**📋 Lista graczy do ukarania:**\n`;
+            description += `**📋 Lista graczy z zerem:**\n`;
             // Pokaż maksymalnie 20 nicków w embedzie (limit Discord)
             const displayNicks = uniqueNicks.slice(0, 20);
             description += displayNicks.map(nick => `• ${nick}`).join('\n');
@@ -523,7 +483,7 @@ class PunishmentService {
             .setColor('#FFA500')
             .setTimestamp();
 
-        // Dodaj zdjęcia jako załączniki do embeda
+        // Przygotuj zdjęcia jako osobne załączniki (poza embedem)
         const files = [];
         for (let i = 0; i < session.processedImages.length; i++) {
             const imagePath = session.processedImages[i].filepath;
@@ -533,20 +493,17 @@ class PunishmentService {
                 });
                 files.push(attachment);
             } catch (error) {
-                logger.error(`[PUNISH] ❌ Błąd dodawania załącznika ${imagePath}:`, error);
+                logger.error(`[REMIND] ❌ Błąd dodawania załącznika ${imagePath}:`, error);
             }
         }
 
-        // Dodaj obrazy do embeda (tylko jeśli są jakieś zdjęcia)
-        if (files.length > 0) {
-            embed.setImage(`attachment://screenshot_1.png`);
-        }
+        // Zdjęcia są teraz poza embedem - jako osobne załączniki w wiadomości
 
         let row;
         if (uniqueNicks.length === 0) {
             // Brak graczy z zerem - tylko przycisk Zakończ
             const endButton = new ButtonBuilder()
-                .setCustomId('punish_cancel_session')
+                .setCustomId('remind_cancel_session')
                 .setLabel('✅ Zakończ')
                 .setStyle(ButtonStyle.Danger);
 
@@ -555,12 +512,12 @@ class PunishmentService {
         } else {
             // Są gracze z zerem - standardowe przyciski
             const confirmButton = new ButtonBuilder()
-                .setCustomId('punish_complete_yes')
-                .setLabel('✅ Dodaj punkty karne')
+                .setCustomId('remind_complete_yes')
+                .setLabel('✅ Wyślij przypomnienia')
                 .setStyle(ButtonStyle.Success);
 
             const cancelButton = new ButtonBuilder()
-                .setCustomId('punish_cancel_session')
+                .setCustomId('remind_cancel_session')
                 .setLabel('❌ Anuluj')
                 .setStyle(ButtonStyle.Danger);
 
@@ -572,7 +529,7 @@ class PunishmentService {
     }
 
     /**
-     * Tworzy embed z potwierdzeniem przetworzonych zdjęć (stara metoda - nie używana już dla /punish)
+     * Tworzy embed z potwierdzeniem przetworzonych zdjęć (stara metoda - nie używana już dla /remind)
      */
     createProcessedImagesEmbed(processedCount, totalImages) {
         const embed = new EmbedBuilder()
@@ -585,17 +542,17 @@ class PunishmentService {
             .setTimestamp();
 
         const addMoreButton = new ButtonBuilder()
-            .setCustomId('punish_add_more')
+            .setCustomId('remind_add_more')
             .setLabel('➕ Dodaj więcej zdjęć')
             .setStyle(ButtonStyle.Primary);
 
         const confirmButton = new ButtonBuilder()
-            .setCustomId('punish_complete_yes')
+            .setCustomId('remind_complete_yes')
             .setLabel('✅ Przejdź do potwierdzenia')
             .setStyle(ButtonStyle.Success);
 
         const cancelButton = new ButtonBuilder()
-            .setCustomId('punish_cancel_session')
+            .setCustomId('remind_cancel_session')
             .setLabel('❌ Anuluj')
             .setStyle(ButtonStyle.Danger);
 
@@ -614,7 +571,7 @@ class PunishmentService {
         try {
             await fs.mkdir(this.tempDir, { recursive: true });
         } catch (error) {
-            logger.error('[PUNISH] ❌ Błąd tworzenia katalogu temp:', error);
+            logger.error('[REMIND] ❌ Błąd tworzenia katalogu temp:', error);
         }
     }
 
@@ -634,7 +591,7 @@ class PunishmentService {
 
                 fileStream.on('finish', () => {
                     fileStream.close();
-                    logger.info(`[PUNISH] 💾 Zapisano zdjęcie: ${filename}`);
+                    logger.info(`[REMIND] 💾 Zapisano zdjęcie: ${filename}`);
                     resolve(filepath);
                 });
 
@@ -648,7 +605,7 @@ class PunishmentService {
     }
 
     /**
-     * Przetwarza zdjęcia z dysku dla /punish
+     * Przetwarza zdjęcia z dysku dla /remind
      */
     async processImagesFromDisk(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
         const session = this.getSession(sessionId);
@@ -699,19 +656,27 @@ class PunishmentService {
                         { name: '👥 Suma unikalnych graczy', value: `${session.uniqueNicks.size}`, inline: true }
                     );
 
+                    const cancelRow = new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('remind_cancel_session')
+                                .setLabel('❌ Anuluj')
+                                .setStyle(ButtonStyle.Danger)
+                        );
+
                     await session.publicInteraction.editReply({
                         embeds: [processingEmbed],
-                        components: []
+                        components: [cancelRow]
                     });
                 } catch (error) {
-                    logger.error('[PUNISH] ❌ Błąd aktualizacji migania:', error.message);
+                    logger.error('[REMIND] ❌ Błąd aktualizacji migania:', error.message);
                 } finally {
                     session.isUpdatingProgress = false;
                 }
             }
         }, 1000);
 
-        logger.info(`[PUNISH] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
+        logger.info(`[REMIND] 🔄 Przetwarzanie ${downloadedFiles.length} zdjęć z dysku dla sesji ${sessionId}`);
 
         // Odśwież cache członków przed przetwarzaniem
         await safeFetchMembers(guild, logger);
@@ -720,6 +685,14 @@ class PunishmentService {
 
         // Progress bar - aktualizacja na żywo
         const totalImages = downloadedFiles.length;
+
+        const cancelRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('remind_cancel_session')
+                    .setLabel('❌ Anuluj')
+                    .setStyle(ButtonStyle.Danger)
+            );
 
         for (let i = 0; i < downloadedFiles.length; i++) {
             const file = downloadedFiles[i];
@@ -756,10 +729,10 @@ class PunishmentService {
                     try {
                         await session.publicInteraction.editReply({
                             embeds: [processingEmbed],
-                            components: []
+                            components: [cancelRow]
                         });
                     } catch (error) {
-                        logger.error('[PUNISH] ❌ Błąd aktualizacji embeda przed przetworzeniem:', error);
+                        logger.error('[REMIND] ❌ Błąd aktualizacji embeda przed przetworzeniem:', error);
                     }
                 }
 
@@ -797,7 +770,7 @@ class PunishmentService {
                     }
                 });
 
-                logger.info(`[PUNISH] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych (${newUniquesFromThisImage} nowych unikalnych)`);
+                logger.info(`[REMIND] ✅ Zdjęcie ${imageIndex}/${totalImages} przetworzone: ${foundPlayers.length} graczy znalezionych (${newUniquesFromThisImage} nowych unikalnych)`);
 
                 // Zaktualizuj progress bar PO przetworzeniu zdjęcia (pomarańczowe → zielone)
                 const completedBar = this.createProgressBar(imageIndex, totalImages, 'completed', session.blinkState);
@@ -826,10 +799,10 @@ class PunishmentService {
                     try {
                         await session.publicInteraction.editReply({
                             embeds: [completedEmbed],
-                            components: []
+                            components: [cancelRow]
                         });
                     } catch (error) {
-                        logger.error('[PUNISH] ❌ Błąd aktualizacji embeda po przetworzeniu:', error);
+                        logger.error('[REMIND] ❌ Błąd aktualizacji embeda po przetworzeniu:', error);
                     }
                 }
 
@@ -839,7 +812,7 @@ class PunishmentService {
                 }
 
             } catch (error) {
-                logger.error(`[PUNISH] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
+                logger.error(`[REMIND] ❌ Błąd przetwarzania zdjęcia ${imageIndex}:`, error);
                 results.push({
                     imageIndex,
                     error: error.message
@@ -857,13 +830,13 @@ class PunishmentService {
             }
         }
 
-        logger.info(`[PUNISH] ✅ Zakończono przetwarzanie ${totalImages} zdjęć, znaleziono ${session.uniqueNicks.size} unikalnych nicków`);
+        logger.info(`[REMIND] ✅ Zakończono przetwarzanie ${totalImages} zdjęć, znaleziono ${session.uniqueNicks.size} unikalnych nicków`);
 
         // Zatrzymaj timer migania
         if (session.blinkTimer) {
             clearInterval(session.blinkTimer);
             session.blinkTimer = null;
-            logger.info('[PUNISH] ⏹️ Zatrzymano timer migania');
+            logger.info('[REMIND] ⏹️ Zatrzymano timer migania');
         }
 
         // Poczekaj na zakończenie ostatniego wywołania updateProgress (race condition fix)
@@ -873,7 +846,7 @@ class PunishmentService {
             waitCount++;
         }
         if (waitCount > 0) {
-            logger.info(`[PUNISH] ✅ Zakończono oczekiwanie na ostatnią aktualizację progress (${waitCount * 100}ms)`);
+            logger.info(`[REMIND] ✅ Zakończono oczekiwanie na ostatnią aktualizację progress (${waitCount * 100}ms)`);
         }
 
         // Wyczyść aktualnie przetwarzane dane
@@ -924,6 +897,181 @@ class PunishmentService {
 
         return `${bar} ${percentage}%`;
     }
+
+    // ============ ZARZĄDZANIE AKTYWNYMI SESJAMI DM ============
+
+    /**
+     * Ładuje aktywne sesje DM z pliku i usuwa wygasłe
+     */
+    async loadActiveReminderDMs() {
+        try {
+            const data = await fs.readFile(this.config.database.activeReminderDMs, 'utf8');
+            const sessions = JSON.parse(data);
+
+            // Sprawdź czy deadline nie minął - jeśli tak, wyczyść wszystkie sesje
+            if (this.isDeadlinePassed()) {
+                logger.info('[REMINDER-DM] ⏰ Deadline minął - czyszczenie wszystkich aktywnych sesji DM');
+                this.activeReminderDMs.clear();
+                await this.saveActiveReminderDMs();
+                return;
+            }
+
+            // Załaduj sesje do Map
+            let loadedCount = 0;
+            for (const [userId, sessionData] of Object.entries(sessions)) {
+                this.activeReminderDMs.set(userId, sessionData);
+                loadedCount++;
+            }
+
+            logger.info(`[REMINDER-DM] 📂 Załadowano ${loadedCount} aktywnych sesji DM z pliku`);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                // Plik nie istnieje - utwórz pusty
+                logger.info('[REMINDER-DM] 📝 Brak pliku aktywnych sesji DM - utworzono nowy');
+                await this.saveActiveReminderDMs();
+            } else {
+                logger.error('[REMINDER-DM] ❌ Błąd ładowania aktywnych sesji DM:', error);
+            }
+        }
+    }
+
+    /**
+     * Zapisuje aktywne sesje DM do pliku
+     */
+    async saveActiveReminderDMs() {
+        try {
+            const sessions = {};
+            for (const [userId, sessionData] of this.activeReminderDMs.entries()) {
+                sessions[userId] = sessionData;
+            }
+
+            await fs.writeFile(
+                this.config.database.activeReminderDMs,
+                JSON.stringify(sessions, null, 2),
+                'utf8'
+            );
+        } catch (error) {
+            logger.error('[REMINDER-DM] ❌ Błąd zapisywania aktywnych sesji DM:', error);
+        }
+    }
+
+    /**
+     * Usuwa użytkownika z aktywnych sesji DM (gdy potwierdzi przycisk)
+     */
+    async removeActiveReminderDM(userId) {
+        const removed = this.activeReminderDMs.delete(userId);
+        if (removed) {
+            logger.info(`[REMINDER-DM] 🗑️ Usunięto aktywną sesję DM dla użytkownika ${userId}`);
+            await this.saveActiveReminderDMs();
+        }
+        return removed;
+    }
+
+    /**
+     * Sprawdza czy użytkownik ma aktywną sesję DM przypomnienia
+     */
+    hasActiveReminderDM(userId) {
+        return this.activeReminderDMs.has(userId);
+    }
+
+    /**
+     * Pobiera dane aktywnej sesji DM użytkownika
+     */
+    getActiveReminderDM(userId) {
+        return this.activeReminderDMs.get(userId);
+    }
+
+    /**
+     * Oznacza że bot już odpowiedział użytkownikowi na DM
+     */
+    async markReminderDMAsReplied(userId) {
+        const sessionData = this.activeReminderDMs.get(userId);
+        if (sessionData) {
+            sessionData.repliedToMessage = true;
+            await this.saveActiveReminderDMs();
+            logger.info(`[REMINDER-DM] ✅ Oznaczono że bot odpowiedział użytkownikowi ${userId}`);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Wyłącza przyciski potwierdzenia po wygaśnięciu deadline
+     * Wywołuje się automatycznie przez cron po deadline
+     */
+    async disableExpiredConfirmationButtons(client) {
+        try {
+            // Sprawdź czy deadline minął
+            if (!this.isDeadlinePassed()) {
+                logger.info('[REMINDER-EXPIRE] ⏰ Deadline jeszcze nie minął - pomijam');
+                return;
+            }
+
+            logger.info('[REMINDER-EXPIRE] 🔄 Rozpoczynam wyłączanie wygasłych przycisków potwierdzenia...');
+
+            let updatedCount = 0;
+            let failedCount = 0;
+
+            // Przejdź przez wszystkie aktywne sesje DM
+            for (const [userId, sessionData] of this.activeReminderDMs.entries()) {
+                try {
+                    // Pobierz użytkownika
+                    const user = await client.users.fetch(userId);
+
+                    if (!user) {
+                        logger.warn(`[REMINDER-EXPIRE] ⚠️ Nie znaleziono użytkownika ${userId}`);
+                        failedCount++;
+                        continue;
+                    }
+
+                    // Pobierz kanał DM
+                    const dmChannel = await user.createDM();
+
+                    // Znajdź ostatnią wiadomość z przyciskiem potwierdzenia
+                    // Szukamy wiadomości wysłanej około czasu sentAt
+                    const messages = await dmChannel.messages.fetch({ limit: 20 });
+
+                    let foundMessage = null;
+                    for (const message of messages.values()) {
+                        // Sprawdź czy wiadomość jest od bota i ma przyciski
+                        if (message.author.id === client.user.id &&
+                            message.components.length > 0 &&
+                            message.components[0].components.some(c => c.customId?.startsWith('confirm_reminder_'))) {
+                            foundMessage = message;
+                            break;
+                        }
+                    }
+
+                    if (foundMessage) {
+                        // Zaktualizuj wiadomość - usuń przyciski i dodaj tekst
+                        await foundMessage.edit({
+                            content: foundMessage.content + '\n\n⏰ **Czas na potwierdzenie minął!**',
+                            components: []
+                        });
+
+                        logger.info(`[REMINDER-EXPIRE] ✅ Zaktualizowano wiadomość dla użytkownika ${user.tag}`);
+                        updatedCount++;
+                    } else {
+                        logger.warn(`[REMINDER-EXPIRE] ⚠️ Nie znaleziono wiadomości z przyciskiem dla ${user.tag}`);
+                        failedCount++;
+                    }
+
+                } catch (error) {
+                    logger.error(`[REMINDER-EXPIRE] ❌ Błąd aktualizacji dla użytkownika ${userId}: ${error.message}`);
+                    failedCount++;
+                }
+            }
+
+            // Wyczyść wszystkie aktywne sesje DM po deadline
+            this.activeReminderDMs.clear();
+            await this.saveActiveReminderDMs();
+
+            logger.info(`[REMINDER-EXPIRE] ✅ Zakończono wyłączanie przycisków: ${updatedCount} zaktualizowanych, ${failedCount} błędów`);
+
+        } catch (error) {
+            logger.error('[REMINDER-EXPIRE] ❌ Błąd podczas wyłączania przycisków:', error);
+        }
+    }
 }
 
-module.exports = PunishmentService;
+module.exports = ReminderService;

@@ -10,14 +10,14 @@ const { EmbedBuilder } = require('discord.js');
 const { stopGhostPing } = require('../handlers/interactionHandlers');
 const AIOCRService = require('./aiOcrService');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 class OCRService {
     constructor(config, client = null) {
         this.config = config;
         this.client = client;
-        this.tempDir = this.config.ocr.tempDir || './StalkerLME/temp';
-        this.processedDir = this.config.ocr.processedDir || './StalkerLME/processed';
+        this.tempDir = this.config.ocr.tempDir || './Stalker/temp';
+        this.processedDir = this.config.ocr.processedDir || './Stalker/processed';
 
         // Inicjalizuj AI OCR Service (opcjonalny)
         this.aiOcrService = new AIOCRService(config);
