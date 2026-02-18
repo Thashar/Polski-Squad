@@ -8776,7 +8776,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
                 const progress = currentWeekScore.score - previousBestScore;
 
-                if (progress > 0) {
+                // Tylko jeśli gracz miał wcześniejszy wynik > 0 (tak samo jak w /wyniki)
+                // Bez tego warunku, pierwszy tydzień gracza w oknie 12 tygodni
+                // daje progress = cały wynik (bo previousBestScore = 0)
+                if (progress > 0 && previousBestScore > 0) {
                     progressData.push({
                         userId: playerId,
                         displayName: currentWeekScore.displayName,

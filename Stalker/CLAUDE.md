@@ -92,9 +92,10 @@
   - Buduje TOP3 TYLKO dla tego klanu (identycznie jak `/wyniki` pokazuje TOP3 dla wybranego klanu)
   - Dla każdego gracza z tego klanu: szuka NAJLEPSZEGO wyniku przed tym tygodniem
   - Oblicza progres = aktualny wynik - najlepszy historyczny wynik
+  - **Warunek:** Gracz musi mieć wcześniejszy wynik > 0 (tak samo jak w `/wyniki`) - zapobiega liczeniu pełnego wyniku jako progresu dla nowych graczy
   - Sortuje po progresie i wybiera TOP3
   - Sprawdza czy użytkownik jest w TOP3 swojego klanu
-- **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem
+- **Spójność:** Używa tej samej metodologii co `/wyniki` - TOP3 per klan, porównanie z najlepszym historycznym wynikiem, wymóg previousBestScore > 0
 
 **AI Chat** - Prosty system rozmowy z AI (mention @Stalker):
 - **Trigger:** Bezpośrednie oznaczenie @Stalker + wiadomość (max 300 znaków)
