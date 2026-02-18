@@ -99,7 +99,7 @@ class MessageCleanupService {
     async deleteMessage(messageData) {
         try {
             // Pobierz klienta Discord z globalnego kontekstu
-            const client = global.stalkerLMEClient;
+            const client = global.stalkerClient;
             if (!client) {
                 this.logger.warn(`[MESSAGE_CLEANUP] ⚠️ Brak dostępu do klienta Discord dla wiadomości ${messageData.messageId}`);
                 return;

@@ -5,7 +5,7 @@
 1. **Tradycyjny:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing Sharp, ekstrakcja nick+atak
 2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa analiza przez AI
    - Włączany przez `USE_AI_OCR=true` w .env
-   - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+   - Używa tego samego modelu co Stalker AI Chat (domyślnie: Claude 3 Haiku)
    - Dwuetapowa walidacja (dwa osobne requesty do API):
      - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (50 tokenów)
        - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu

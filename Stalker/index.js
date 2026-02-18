@@ -20,7 +20,7 @@ const AIChatService = require('./services/aiChatService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 const client = new Client({
     intents: [
@@ -63,8 +63,7 @@ ocrService.setServices(reminderService, punishmentService, phaseService);
 reminderService.setOCRService(ocrService);
 punishmentService.setOCRService(ocrService);
 
-global.stalkerLMEClient = client;
-global.stalkerClient = client; // Alias dla reminderStatusTrackingService
+global.stalkerClient = client;
 
 // Dodaj serwisy do klienta dla łatwego dostępu w handlerach
 client.messageCleanupService = messageCleanupService;
@@ -89,7 +88,7 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logger.success('✅ StalkerLME gotowy - kary za bossów (OCR), urlopy');
+    logger.success('✅ Stalker gotowy - kary za bossów (OCR), urlopy');
 
     // Inicjalizacja serwisów
     await databaseService.initializeDatabase();
@@ -262,7 +261,7 @@ client.on(Events.MessageCreate, async (message) => {
         logger.error(`❌ Błąd podczas obsługi wiadomości urlopowej: ${error.message}`);
     }
 
-    // ============ OBSŁUGA AI CHAT (MENTION @StalkerLME) ============
+    // ============ OBSŁUGA AI CHAT (MENTION @Stalker) ============
     if (message.mentions.has(client.user) && message.guild) {
         // Ignoruj wzmianki przez role bota
         if (!message.mentions.users.has(client.user.id)) {

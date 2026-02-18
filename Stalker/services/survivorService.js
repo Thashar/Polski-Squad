@@ -8,7 +8,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 class SurvivorService {
     constructor(config, logger) {
         this.config = config;
-        this.logger = logger || createBotLogger('StalkerLME');
+        this.logger = logger || createBotLogger('Stalker');
         this.equipmentDatabase = this.initializeEquipmentDB();
     }
 

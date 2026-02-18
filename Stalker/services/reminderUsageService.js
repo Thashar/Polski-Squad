@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 class ReminderUsageService {
     constructor(config) {

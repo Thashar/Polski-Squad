@@ -3,11 +3,11 @@ const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 /**
  * AI Chat Service - Obsługa rozmów z użytkownikami przez Anthropic API
- * Wspiera mention @StalkerLME z kontekstem danych gracza/klanu
+ * Wspiera mention @Stalker z kontekstem danych gracza/klanu
  */
 class AIChatService {
     constructor(config, databaseService, reminderUsageService = null, punishmentService = null, helperFunctions = null) {

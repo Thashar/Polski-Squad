@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeParse } = require('../../utils/safeJSON');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 const path = require('path');
 
 class DatabaseService {

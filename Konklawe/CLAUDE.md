@@ -7,7 +7,7 @@
 4. **AI Wspomaganie** - `aiService.js`: Generowanie haseł i podpowiedzi przez Anthropic API (Claude Vision)
    - **Generowanie hasła:** Przycisk "Wygeneruj hasło przy pomocy AI" (🤖, czerwony) - pojawia się przy braku hasła lub hasło domyślne
    - **Generowanie podpowiedzi:** Przycisk "Wygeneruj podpowiedź przy pomocy AI" (🤖, czerwony) - pojawia się gdy hasło jest aktywne
-   - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+   - Używa tego samego modelu co Stalker AI Chat (domyślnie: Claude 3 Haiku)
    - Prompt generowania hasła: "Gramy w grę w zgadywanie haseł, hasło musi być jednym słowem. Hasło może być wyszukane, ale nie musi. Wymyśl hasło."
    - Prompt generowania podpowiedzi: Uwzględnia aktualne hasło i poprzednie podpowiedzi, generuje nową podpowiedź która nie jest podobna do poprzednich
    - Opcjonalne (wyłączone gdy brak KONKLAWE_ANTHROPIC_API_KEY lub ANTHROPIC_API_KEY)

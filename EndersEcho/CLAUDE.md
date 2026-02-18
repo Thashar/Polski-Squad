@@ -5,7 +5,7 @@
    - **Tradycyjny:** `ocrService.js` - Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
    - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa walidacja
      - Włączany przez `USE_ENDERSECHO_AI_OCR=true` w .env
-     - Używa tego samego modelu co StalkerLME AI Chat (domyślnie: Claude 3 Haiku)
+     - Używa tego samego modelu co Stalker AI Chat (domyślnie: Claude 3 Haiku)
      - Trzyetapowa walidacja (trzy osobne requesty do API):
        - **KROK 1 (pierwszy request):** Sprawdza czy jest "Victory" (50 tokenów)
        - **KROK 2 (drugi request):** Sprawdza autentyczność zdjęcia (10 tokenów)

@@ -4,7 +4,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 /**
  * AI OCR Service - Analiza zdjęć z wynikami graczy przez Anthropic API

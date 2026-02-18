@@ -4,7 +4,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const fs = require('fs').promises;
 
-const logger = createBotLogger('StalkerLME');
+const logger = createBotLogger('Stalker');
 
 const confirmationData = new Map();
 

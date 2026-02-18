@@ -97,7 +97,7 @@ async function preprocessImageForWhiteTextOriginal(inputPath, outputPath) {
 async function preprocessImageStalkerStyle(inputPath, outputPath) {
     try {
         logger.info(`[IMAGE] Przetwarzanie obrazu w stylu Stalker: ${inputPath} -> ${outputPath}`);
-        // Zaawansowane przetwarzanie obrazu jak w StalkerLME
+        // Zaawansowane przetwarzanie obrazu jak w Stalker
         const originalImage = sharp(inputPath);
         const originalMetadata = await originalImage.metadata();
         await sharp(inputPath)

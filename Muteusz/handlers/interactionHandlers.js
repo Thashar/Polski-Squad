@@ -2882,7 +2882,7 @@ class InteractionHandler {
             const hasVirtuttiRole = member.roles.cache.has(virtuttiRoleId);
 
             // Kolejność botów - Muteusz na pierwszym miejscu
-            const botOrder = ['Muteusz', 'Rekruter', 'Gary', 'Kontroler', 'StalkerLME', 'Szkolenia', 'Wydarzynier', 'Konklawe', 'EndersEcho'];
+            const botOrder = ['Muteusz', 'Rekruter', 'Gary', 'Kontroler', 'Stalker', 'Szkolenia', 'Wydarzynier', 'Konklawe', 'EndersEcho'];
 
             // Filtruj i sortuj boty według uprawnień
             const availableBots = [];
@@ -2937,7 +2937,7 @@ class InteractionHandler {
                 'Rekruter': '1383838374795935914',
                 'Gary': '1414880986872811562',
                 'Kontroler': '1378061337548034158',
-                'StalkerLME': '1391011355376488570',
+                'Stalker': '1391011355376488570',
                 'Szkolenia': '1377967442805915758',
                 'Wydarzynier': '1400198466180743408',
                 'Konklawe': '1377388570196836382',
