@@ -57,20 +57,22 @@ class MemberNotificationService {
                 return;
             }
 
-            // Link do profilu (<@id>) + nick serwerowy jeśli się różni od nazwy użytkownika
+            // Czytelny tekst jako główna informacja + <@id> jako klikalny link do profilu
             const mention = `<@${member.user.id}>`;
             const nickname = member.nickname;
-            const username = member.user.displayName || member.user.username;
+            const discordName = member.user.displayName || member.user.username;
 
             let leaveMessage;
-            if (nickname && nickname !== username) {
-                leaveMessage = `${mention} (nick: **${nickname}**) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
+            if (nickname && nickname !== discordName) {
+                // Nick serwerowy różni się od nazwy Discord - pokaż oba
+                leaveMessage = `**${nickname}** (${mention} · \`${discordName}\`) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
             } else {
-                leaveMessage = `${mention} odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
+                // Nick taki sam lub brak nicku serwerowego
+                leaveMessage = `**${discordName}** (${mention}) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
             }
-            
+
             await channel.send(leaveMessage);
-            logger.info(`📤 Powiadomienie o opuszczeniu: ${member.user.tag}`);
+            logger.info(`📤 Powiadomienie o opuszczeniu: ${member.user.tag}${nickname ? ` (nick: ${nickname})` : ''}`);
         } catch (error) {
             logger.error(`❌ Błąd wysyłania powiadomienia o opuszczeniu: ${error.message}`);
         }
