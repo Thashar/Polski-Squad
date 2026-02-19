@@ -4,13 +4,15 @@
 1. **Gra Hasłowa** - `gameService.js`: Hasło "Konklawe" (admin może zmienić), poprawna→rola papieska
 2. **Osiągnięcia** - Medal Virtutti Papajlari: 30+ odpowiedzi, reset rankingu, specjalne uprawnienia
 3. **Timery** - `timerService.js`: 15/30/60min przypomnienia, auto-reset, persistent (`game_state.json`), restore po restarcie
-4. **AI Wspomaganie** - `aiService.js`: Generowanie haseł i podpowiedzi przez Anthropic API (Claude Vision)
+4. **AI Wspomaganie** - `aiService.js`: Generowanie haseł i podpowiedzi przez Anthropic lub Grok API
+   - **Provider:** Przełączany przez `KONKLAWE_AI_PROVIDER` w .env (`anthropic` domyślny lub `grok`)
    - **Generowanie hasła:** Przycisk "Wygeneruj hasło przy pomocy AI" (🤖, czerwony) - pojawia się przy braku hasła lub hasło domyślne
    - **Generowanie podpowiedzi:** Przycisk "Wygeneruj podpowiedź przy pomocy AI" (🤖, czerwony) - pojawia się gdy hasło jest aktywne
-   - Używa tego samego modelu co Stalker AI Chat (domyślnie: Claude 3 Haiku)
+   - **Anthropic:** domyślnie Claude 3 Haiku, wymaga `KONKLAWE_ANTHROPIC_API_KEY`
+   - **Grok:** domyślnie grok-3-mini, wymaga `XAI_API_KEY`, używa xAI Responses API
    - Prompt generowania hasła: "Gramy w grę w zgadywanie haseł, hasło musi być jednym słowem. Hasło może być wyszukane, ale nie musi. Wymyśl hasło."
    - Prompt generowania podpowiedzi: Uwzględnia aktualne hasło i poprzednie podpowiedzi, generuje nową podpowiedź która nie jest podobna do poprzednich
-   - Opcjonalne (wyłączone gdy brak KONKLAWE_ANTHROPIC_API_KEY lub ANTHROPIC_API_KEY)
+   - Opcjonalne (wyłączone gdy brak odpowiedniego klucza API dla wybranego providera)
 5. **System Many i Frakcji** - `virtuttiService.js`:
    - **Gabriel:** max 150 many, regeneracja 1pkt/10min, start z pełną maną
    - **Lucyfer:** max 100 many, regeneracja 10-30min/pkt (dynamiczna), start z pełną maną
@@ -30,7 +32,7 @@
 8. **Losowe Odpowiedzi** - Użytkownicy papiescy: 1/100 szansa, emoji JP2roll
 
 **Komendy:** `/podpowiedz`, `/podpowiedzi`, `/statystyki`, `/blessing`, `/curse`, `/revenge`, `/virtue-check`
-**Env:** TOKEN, CLIENT_ID, GUILD_ID, KONKLAWE_ANTHROPIC_API_KEY (opcjonalne), KONKLAWE_AI_MODEL (opcjonalne)
+**Env:** TOKEN, CLIENT_ID, GUILD_ID, KONKLAWE_AI_PROVIDER (opcjonalne), KONKLAWE_ANTHROPIC_API_KEY (opcjonalne), KONKLAWE_AI_MODEL (opcjonalne), KONKLAWE_GROK_MODEL (opcjonalne), XAI_API_KEY (opcjonalne)
 
 ---
 
@@ -42,9 +44,16 @@ KONKLAWE_TOKEN=bot_token_here
 KONKLAWE_CLIENT_ID=client_id
 KONKLAWE_GUILD_ID=guild_id
 
-# AI Wspomaganie (opcjonalne)
+# AI Wspomaganie - wybór providera (opcjonalne)
+KONKLAWE_AI_PROVIDER=anthropic          # "anthropic" (domyślny) lub "grok"
+
+# Anthropic (gdy provider=anthropic)
 KONKLAWE_ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 KONKLAWE_AI_MODEL=claude-3-haiku-20240307
+
+# Grok / xAI (gdy provider=grok)
+XAI_API_KEY=xai-xxxxxxxxxxxxx
+KONKLAWE_GROK_MODEL=grok-3-mini
 ```
 
 ## Najlepsze Praktyki

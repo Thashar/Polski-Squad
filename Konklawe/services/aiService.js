@@ -4,24 +4,115 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Konklawe');
 
 /**
- * AI Service - Obsługa generowania haseł i podpowiedzi przez Anthropic API
+ * AI Service - Obsługa generowania haseł i podpowiedzi przez Anthropic/Grok API
  */
 class AIService {
     constructor(config, dataService) {
         this.config = config;
         this.dataService = dataService;
 
-        // Anthropic API
-        this.apiKey = process.env.KONKLAWE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
-        this.enabled = !!this.apiKey;
+        // Wybór providera AI: "anthropic" (domyślny) lub "grok"
+        this.provider = (process.env.KONKLAWE_AI_PROVIDER || 'anthropic').toLowerCase();
 
-        if (this.enabled) {
-            this.client = new Anthropic({ apiKey: this.apiKey });
-            this.model = process.env.KONKLAWE_AI_MODEL || 'claude-3-haiku-20240307';
-            logger.success('✅ AI Service aktywny - model: ' + this.model);
+        if (this.provider === 'grok') {
+            // Grok (xAI) API
+            this.apiKey = process.env.XAI_API_KEY;
+            this.enabled = !!this.apiKey;
+
+            if (this.enabled) {
+                this.model = process.env.KONKLAWE_GROK_MODEL || 'grok-3-mini';
+                logger.success(`✅ AI Service aktywny - provider: Grok, model: ${this.model}`);
+            } else {
+                logger.warn('⚠️ AI Service wyłączony - brak XAI_API_KEY');
+            }
         } else {
-            logger.warn('⚠️ AI Service wyłączony - brak KONKLAWE_ANTHROPIC_API_KEY lub ANTHROPIC_API_KEY');
+            // Anthropic API (domyślny)
+            this.apiKey = process.env.KONKLAWE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+            this.enabled = !!this.apiKey;
+
+            if (this.enabled) {
+                this.client = new Anthropic({ apiKey: this.apiKey });
+                this.model = process.env.KONKLAWE_AI_MODEL || 'claude-3-haiku-20240307';
+                logger.success(`✅ AI Service aktywny - provider: Anthropic, model: ${this.model}`);
+            } else {
+                logger.warn('⚠️ AI Service wyłączony - brak KONKLAWE_ANTHROPIC_API_KEY lub ANTHROPIC_API_KEY');
+            }
         }
+    }
+
+    /**
+     * Wywołuje AI API (Anthropic lub Grok) i zwraca tekst odpowiedzi
+     * @param {string} prompt - Treść promptu
+     * @param {number} maxTokens - Maksymalna liczba tokenów odpowiedzi
+     * @returns {Promise<string>} - Tekst odpowiedzi AI
+     */
+    async callAI(prompt, maxTokens) {
+        if (this.provider === 'grok') {
+            return this._callGrok(prompt, maxTokens);
+        }
+        return this._callAnthropic(prompt, maxTokens);
+    }
+
+    /**
+     * Wywołanie Anthropic API
+     */
+    async _callAnthropic(prompt, maxTokens) {
+        const response = await this.client.messages.create({
+            model: this.model,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: prompt }]
+        });
+        return response.content[0].text;
+    }
+
+    /**
+     * Wywołanie Grok (xAI) API - Responses API
+     */
+    async _callGrok(prompt, maxTokens) {
+        const response = await fetch('https://api.x.ai/v1/responses', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.apiKey}`
+            },
+            body: JSON.stringify({
+                model: this.model,
+                input: [{ role: 'user', content: prompt }],
+                max_output_tokens: maxTokens,
+                store: false
+            })
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            throw new Error(`Grok API ${response.status}: ${errorBody}`);
+        }
+
+        const data = await response.json();
+
+        // Parsowanie odpowiedzi - output_text lub fallback do output array
+        let answer = data.output_text;
+        if (!answer && Array.isArray(data.output)) {
+            for (const item of data.output) {
+                if (item.type === 'message' && Array.isArray(item.content)) {
+                    const textBlock = item.content.find(b => b.type === 'output_text' || b.type === 'text');
+                    if (textBlock?.text) {
+                        answer = textBlock.text;
+                        break;
+                    }
+                }
+            }
+        }
+        // Fallback: choices (Chat Completions format)
+        if (!answer && data.choices?.[0]?.message?.content) {
+            answer = data.choices[0].message.content;
+        }
+
+        if (!answer) {
+            throw new Error('Brak odpowiedzi od Grok API');
+        }
+
+        return answer;
     }
 
     /**
@@ -40,16 +131,9 @@ class AIService {
             try {
                 logger.info(`🤖 Generowanie hasła przez AI (próba ${attempt}/${maxRetries})...`);
 
-                const response = await this.client.messages.create({
-                    model: this.model,
-                    max_tokens: 50,
-                    messages: [{
-                        role: 'user',
-                        content: 'Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. Hasło nie powinno być przesadnie długim słowem, max kilkanaście znaków. Hasło musi być rzeczownikiem. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło powinno być wyszukane. Hasło musi być prawdziwe, nie może być słowem, które nie istnieje. Hasło powinno zawierać się w słowniku języka Polskiego.'
-                    }]
-                });
+                const text = await this.callAI('Gramy w grę w zgadywanie haseł. Wymyśl TYLKO JEDNO SŁOWO - trudne hasło do odgadnięcia. Hasło nie powinno być przesadnie długim słowem, max kilkanaście znaków. Hasło musi być rzeczownikiem. WAŻNE: Odpowiedz WYŁĄCZNIE jednym słowem, bez żadnych dodatkowych słów, znaków interpunkcyjnych czy wyjaśnień. Hasło powinno być wyszukane. Hasło musi być prawdziwe, nie może być słowem, które nie istnieje. Hasło powinno zawierać się w słowniku języka Polskiego.', 50);
 
-                const password = response.content[0].text.trim();
+                const password = text.trim();
 
                 // Walidacja - sprawdź czy to tylko jedno słowo
                 if (password.includes(' ') || password.includes('\n')) {
@@ -113,16 +197,9 @@ ${passwordsText}
 
 Odpowiedź TYLKO hasłami po polsku, każde w nowej linii, bez numeracji, bez dodatkowych słów.`;
 
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 150,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
+            const text = await this.callAI(prompt, 150);
 
-            const passwords = response.content[0].text
+            const passwords = text
                 .trim()
                 .split('\n')
                 .map(p => p.trim())
@@ -169,16 +246,9 @@ Odpowiedź TYLKO hasłami po polsku, każde w nowej linii, bez numeracji, bez do
 ${hintsText}
 Pamiętaj, że nowa podpowiedź nie może być podobna do poprzednich. Nie pisz podpowiedzi w " ".`;
 
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 150,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
+            const text = await this.callAI(prompt, 150);
 
-            const hint = response.content[0].text.trim();
+            const hint = text.trim();
             logger.success(`✅ AI wygenerowało podpowiedź: ${hint}`);
             return hint;
         } catch (error) {
@@ -261,16 +331,9 @@ Nic więcej, nic mniej.
 
 Twoja odpowiedź (${count} linii):`;
 
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 300,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
+            const text = await this.callAI(prompt, 300);
 
-            const hints = response.content[0].text
+            const hints = text
                 .trim()
                 .split('\n')
                 .map(h => h.trim())
