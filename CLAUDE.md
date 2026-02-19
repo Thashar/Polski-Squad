@@ -442,15 +442,27 @@ Narzędzie uruchamiane automatycznie przy starcie botów (jeśli `AUTO_NPM_FIX=t
 - 🔍 **Skanowanie vulnerabilities** - `npm audit --json` z parsowaniem wyników
 - 🔧 **Automatyczna naprawa** - `npm audit fix` (bezpieczne aktualizacje)
 - 💪 **Tryb force** - `npm audit fix --force` jeśli `AUTO_NPM_FIX_FORCE=true`
+- 💾 **Backup przed naprawą** - Automatyczny backup `package.json` i `package-lock.json`
+- 🛡️ **Weryfikacja krytycznych pakietów** - Po naprawie sprawdza czy `discord.js` (GatewayIntentBits, Client) nadal działa
+- 🔄 **Automatyczny rollback** - Jeśli naprawa złamała pakiety → przywraca backup i reinstaluje
 - 📊 **Raportowanie** - Przed/po porównanie z kategoryzacją (krytyczne, wysokie, średnie, niskie)
-- 📦 **Podsumowanie zmian** - Ile pakietów dodano/usunięto/zmieniono
 
 #### Zmienne Środowiskowe
 
 ```env
 AUTO_NPM_FIX=false          # true = włącz automatyczną naprawę przy starcie
-AUTO_NPM_FIX_FORCE=false    # true = wymuszaj fix (może złamać kompatybilność!)
+AUTO_NPM_FIX_FORCE=false    # true = eskaluj do --force gdy zwykły fix nie pomoże (z rollbackiem!)
 ```
+
+#### Przepływ działania
+
+1. Skanuj vulnerabilities (`npm audit --json`)
+2. Backup `package.json` + `package-lock.json`
+3. Uruchom `npm audit fix` (bezpieczny)
+4. Weryfikuj `discord.js` → jeśli złamany → rollback
+5. Jeśli `AUTO_NPM_FIX_FORCE=true` i nadal są vulnerabilities → `npm audit fix --force`
+6. Weryfikuj ponownie → jeśli złamany → rollback do stanu sprzed --force
+7. Cleanup backupu
 
 #### Przykład Wyjścia
 
@@ -458,10 +470,13 @@ AUTO_NPM_FIX_FORCE=false    # true = wymuszaj fix (może złamać kompatybilnoś
 🔧 AUTO_NPM_FIX włączony - sprawdzam vulnerabilities npm...
 🔍 Sprawdzam vulnerabilities npm (v10.2.0)...
 ⚠️ Wykryto 6 vulnerabilities: 3 wysokich, 2 średnich, 1 niskich
+💾 Backup package.json i package-lock.json utworzony
 🔧 Uruchamiam npm audit fix...
-✅ Naprawiono 4/6 vulnerabilities
-⚠️ Pozostało 2: 1 wysokich, 1 średnich
-📦 Zmiany w pakietach: +2 dodanych, ~3 zmienionych
+✅ Bezpieczny fix naprawił 4/6 vulnerabilities
+⚠️ Pozostało 2 vulnerabilities - próbuję --force...
+❌ --force złamał krytyczne pakiety: discord.js (GatewayIntentBits.Guilds nie istnieje)
+🔄 Automatyczny rollback...
+✅ Rollback udany - pakiety przywrócone do stanu sprzed --force
 ```
 
 ---
