@@ -771,9 +771,14 @@ KONTROLER_GUILD_ID=guild_id
 KONKLAWE_TOKEN=bot_token_here
 KONKLAWE_CLIENT_ID=client_id
 KONKLAWE_GUILD_ID=guild_id
-# AI Wspomaganie (opcjonalne)
+# AI Wspomaganie - wybór providera (opcjonalne)
+KONKLAWE_AI_PROVIDER=anthropic          # "anthropic" (domyślny) lub "grok"
+# Anthropic (gdy provider=anthropic)
 KONKLAWE_ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 KONKLAWE_AI_MODEL=claude-3-haiku-20240307
+# Grok / xAI (gdy provider=grok)
+XAI_API_KEY=xai-xxxxxxxxxxxxx
+KONKLAWE_GROK_MODEL=grok-3-mini
 
 # ===== WYDARZYNIER BOT =====
 WYDARZYNIER_TOKEN=bot_token_here
