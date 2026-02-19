@@ -165,8 +165,35 @@ function setupShutdownHandlers() {
     });
 }
 
+/**
+ * Sprawdza czy node_modules jest zdrowy (discord.js ładowalny)
+ * Jeśli nie - automatycznie uruchamia npm install
+ */
+async function ensureNodeModules() {
+    try {
+        require.resolve('discord.js');
+        return true;
+    } catch (error) {
+        logger.warn('⚠️ Brak node_modules lub uszkodzone pakiety - uruchamiam npm install...');
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            await execAsync('npm install 2>&1', { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
+            logger.success('✅ npm install zakończony - pakiety przywrócone');
+            return true;
+        } catch (installError) {
+            logger.error(`❌ npm install nie powiódł się: ${installError.message}`);
+            return false;
+        }
+    }
+}
+
 // Główna funkcja uruchamiająca
 async function main() {
+    // Sprawdź czy node_modules jest OK (ZAWSZE, przed wszystkim innym)
+    await ensureNodeModules();
+
     // Git auto-fix (jeśli włączony w .env)
     if (process.env.AUTO_GIT_FIX === 'true') {
         logger.info('🔧 AUTO_GIT_FIX włączony - sprawdzam repozytorium git...');
