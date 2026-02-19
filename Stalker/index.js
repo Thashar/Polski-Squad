@@ -22,6 +22,9 @@ const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 
 const logger = createBotLogger('Stalker');
 
+// Cooldown kalkulatora - raz na godzinę per kanał
+const calculatorCooldowns = new Map();
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -612,6 +615,23 @@ client.on(Events.MessageCreate, async (message) => {
 
     // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
     // Ten blok kodu nie jest już używany, ale zostawiam dla referencji w przypadku problemów
+
+    // ============ ODPOWIEDŹ NA "KALKULATOR" ============
+    if (message.guild && message.content.toLowerCase().includes('kalkulator')) {
+        const now = Date.now();
+        const lastUsed = calculatorCooldowns.get(message.channelId) || 0;
+        const COOLDOWN_MS = 60 * 60 * 1000; // 1 godzina
+
+        if (now - lastUsed >= COOLDOWN_MS) {
+            try {
+                await message.channel.send('https://sio-tools.vercel.app/ <:PFrogMaszRacje:1341894087598669985>');
+                calculatorCooldowns.set(message.channelId, now);
+                logger.info(`[KALKULATOR] 🧮 Odpowiedź na kanale #${message.channel.name} (trigger: ${message.author.tag})`);
+            } catch (error) {
+                logger.error(`[KALKULATOR] ❌ Błąd wysyłania odpowiedzi: ${error.message}`);
+            }
+        }
+    }
 
     // Automatyczne czyszczenie kanału kolejki - usuń wszystkie wiadomości od użytkowników
     const queueChannelId = '1437122516974829679';

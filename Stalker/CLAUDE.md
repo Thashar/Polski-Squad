@@ -16,6 +16,7 @@
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
 7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
+9. **Kalkulator** - Auto-odpowiedź na słowo "kalkulator" w wiadomości → link do sio-tools.vercel.app, cooldown 1h per kanał (w RAM)
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
