@@ -431,7 +431,42 @@ ocr: {
 
 ---
 
-### 4. System Backup do Google Drive
+### 4. Automatyczna Naprawa NPM (NpmAuditFix)
+
+**Plik:** `utils/npmAuditFix.js`
+
+#### Funkcjonalność
+
+Narzędzie uruchamiane automatycznie przy starcie botów (jeśli `AUTO_NPM_FIX=true` w `.env`).
+
+- 🔍 **Skanowanie vulnerabilities** - `npm audit --json` z parsowaniem wyników
+- 🔧 **Automatyczna naprawa** - `npm audit fix` (bezpieczne aktualizacje)
+- 💪 **Tryb force** - `npm audit fix --force` jeśli `AUTO_NPM_FIX_FORCE=true`
+- 📊 **Raportowanie** - Przed/po porównanie z kategoryzacją (krytyczne, wysokie, średnie, niskie)
+- 📦 **Podsumowanie zmian** - Ile pakietów dodano/usunięto/zmieniono
+
+#### Zmienne Środowiskowe
+
+```env
+AUTO_NPM_FIX=false          # true = włącz automatyczną naprawę przy starcie
+AUTO_NPM_FIX_FORCE=false    # true = wymuszaj fix (może złamać kompatybilność!)
+```
+
+#### Przykład Wyjścia
+
+```
+🔧 AUTO_NPM_FIX włączony - sprawdzam vulnerabilities npm...
+🔍 Sprawdzam vulnerabilities npm (v10.2.0)...
+⚠️ Wykryto 6 vulnerabilities: 3 wysokich, 2 średnich, 1 niskich
+🔧 Uruchamiam npm audit fix...
+✅ Naprawiono 4/6 vulnerabilities
+⚠️ Pozostało 2: 1 wysokich, 1 średnich
+📦 Zmiany w pakietach: +2 dodanych, ~3 zmienionych
+```
+
+---
+
+### 5. System Backup do Google Drive
 
 **Pliki:**
 - `utils/backupManager.js` - Główny manager backupów
@@ -745,6 +780,13 @@ GARY_WEBSHARE_URL=https://proxy.webshare.io/api/v2/proxy/list/
 # Rozwiązuje problem: "fatal: Need to specify how to reconcile divergent branches"
 # ZALECANE dla serwerów produkcyjnych (Pterodactyl) gdzie nie można ręcznie naprawić git
 AUTO_GIT_FIX=false
+
+# ===== NPM AUTO-FIX (ZALECANE DLA SERWERÓW PRODUKCYJNYCH) =====
+# Automatyczna naprawa vulnerabilities npm przed startem botów
+# Wykonuje npm audit fix przy starcie - bezpieczne aktualizacje pakietów
+# AUTO_NPM_FIX_FORCE=true wymusza aktualizacje (npm audit fix --force) - może złamać kompatybilność!
+AUTO_NPM_FIX=false
+AUTO_NPM_FIX_FORCE=false
 
 # ===== DISCORD WEBHOOK (OPCJONALNE) =====
 DISCORD_LOG_WEBHOOK_URL=webhook_url_here
