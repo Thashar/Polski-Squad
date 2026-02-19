@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const cron = require('node-cron');
 const fs = require('fs').promises;
 const path = require('path');
@@ -43,6 +43,28 @@ async function saveCalculatorCooldowns() {
         await fs.writeFile(calculatorCooldownsFile, JSON.stringify(Object.fromEntries(calculatorCooldowns), null, 2));
     } catch (error) {
         logger.error(`[KALKULATOR] ❌ Błąd zapisu cooldownów: ${error.message}`);
+    }
+}
+
+// Cooldown "zbij bossa" - raz dziennie per kanał warning, kasuje się o północy
+const boroxoningCooldownsFile = path.join(__dirname, 'data', 'boroxoning_cooldowns.json');
+let boroxoningCooldowns = new Map(); // channelId -> dateString (YYYY-MM-DD)
+
+async function loadBoroxoningCooldowns() {
+    try {
+        const data = await fs.readFile(boroxoningCooldownsFile, 'utf8');
+        boroxoningCooldowns = new Map(Object.entries(JSON.parse(data)));
+    } catch {
+        boroxoningCooldowns = new Map();
+    }
+}
+
+async function saveBoroxoningCooldowns() {
+    try {
+        await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
+        await fs.writeFile(boroxoningCooldownsFile, JSON.stringify(Object.fromEntries(boroxoningCooldowns), null, 2));
+    } catch (error) {
+        logger.error(`[BOROXONING] ❌ Błąd zapisu cooldownów: ${error.message}`);
     }
 }
 
@@ -123,6 +145,7 @@ client.once(Events.ClientReady, async () => {
     await broadcastMessageService.initialize();
     await reminderUsageService.loadUsageData();
     await loadCalculatorCooldowns();
+    await loadBoroxoningCooldowns();
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
@@ -652,6 +675,40 @@ client.on(Events.MessageCreate, async (message) => {
                 logger.info(`[KALKULATOR] 🧮 Odpowiedź na kanale #${message.channel.name} (trigger: ${message.author.tag})`);
             } catch (error) {
                 logger.error(`[KALKULATOR] ❌ Błąd wysyłania odpowiedzi: ${error.message}`);
+            }
+        }
+    }
+
+    // ============ ODPOWIEDŹ NA "ZBIJ BOSSA" (reply do innej wiadomości) ============
+    const warningChannelIds = Object.values(config.warningChannels).filter(Boolean);
+    if (message.guild && message.reference && warningChannelIds.includes(message.channelId) &&
+        message.content.toLowerCase().includes('zbij bossa')) {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const lastUsedDate = boroxoningCooldowns.get(message.channelId);
+
+        if (lastUsedDate !== today) {
+            try {
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('boroxoning_tak')
+                        .setLabel('Tak')
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId('boroxoning_nie')
+                        .setLabel('Nie')
+                        .setStyle(ButtonStyle.Success)
+                );
+
+                await message.channel.send({
+                    content: 'Wykryto zaawansowany Boroxoning <a:PepeAlarmMan:1341086085089857619>\nCzy aktywować procedurę eksterminacji?',
+                    components: [row]
+                });
+
+                boroxoningCooldowns.set(message.channelId, today);
+                await saveBoroxoningCooldowns();
+                logger.info(`[BOROXONING] 🎯 Odpowiedź na kanale #${message.channel.name} (trigger: ${message.author.tag})`);
+            } catch (error) {
+                logger.error(`[BOROXONING] ❌ Błąd wysyłania odpowiedzi: ${error.message}`);
             }
         }
     }
