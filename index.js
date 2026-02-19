@@ -164,54 +164,8 @@ function setupShutdownHandlers() {
     });
 }
 
-/**
- * Sprawdza czy krytyczne pakiety (discord.js v14) działają poprawnie
- * Jeśli nie - usuwa package-lock.json i reinstaluje z package.json
- */
-async function ensureNodeModules() {
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const fs = require('fs');
-    const execAsync = promisify(exec);
-
-    let needsFix = false;
-
-    try {
-        const djs = require('discord.js');
-        if (!djs.GatewayIntentBits || !djs.GatewayIntentBits.Guilds) {
-            logger.warn('⚠️ discord.js zainstalowany w złej wersji (brak GatewayIntentBits)');
-            needsFix = true;
-        }
-    } catch (error) {
-        logger.warn('⚠️ discord.js nie znaleziony w node_modules');
-        needsFix = true;
-    }
-
-    if (!needsFix) return true;
-
-    try {
-        // Usunięcie package-lock.json wymusza npm install z package.json (^14.25.1)
-        if (fs.existsSync('./package-lock.json')) {
-            fs.unlinkSync('./package-lock.json');
-            logger.info('🗑️ Usunięto uszkodzony package-lock.json');
-        }
-
-        logger.info('🔧 Uruchamiam npm install...');
-        const { stdout } = await execAsync('npm install 2>&1', { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
-        logger.success('✅ npm install zakończony - pakiety przywrócone');
-        logger.info(stdout.split('\n').filter(l => l.includes('added') || l.includes('packages')).join('\n'));
-        return true;
-    } catch (installError) {
-        logger.error(`❌ npm install nie powiódł się: ${installError.message}`);
-        return false;
-    }
-}
-
 // Główna funkcja uruchamiająca
 async function main() {
-    // Sprawdź czy node_modules jest OK (ZAWSZE, przed wszystkim innym)
-    await ensureNodeModules();
-
     // Git auto-fix (jeśli włączony w .env)
     if (process.env.AUTO_GIT_FIX === 'true') {
         logger.info('🔧 AUTO_GIT_FIX włączony - sprawdzam repozytorium git...');
