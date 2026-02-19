@@ -675,6 +675,26 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
 async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService, phaseService } = sharedState;
 
+    // ============ BOROXONING - przyciski Tak/Nie ============
+    if (interaction.customId === 'boroxoning_tak' || interaction.customId === 'boroxoning_nie') {
+        try {
+            const responseText = interaction.customId === 'boroxoning_tak'
+                ? 'Procedura rozpoczęta!'
+                : 'Procedura została dezaktywowana!';
+
+            await interaction.reply({
+                content: responseText,
+                flags: MessageFlags.Ephemeral
+            });
+
+            // Usuń przyciski z oryginalnej wiadomości
+            await interaction.message.edit({ components: [] });
+        } catch (error) {
+            logger.error(`[BOROXONING] ❌ Błąd obsługi przycisku: ${error.message}`);
+        }
+        return;
+    }
+
     // Obsługa przycisków paginacji buildów
     if (interaction.customId === 'statystyki_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'legend_colls_page' || interaction.customId === 'epic_colls_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
         if (!sharedState.buildPagination) {
