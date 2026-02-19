@@ -136,36 +136,43 @@ class NpmAuditFix {
      * Wykonuje npm audit fix (bezpieczne aktualizacje)
      */
     async runAuditFix() {
-        try {
-            this.logger.info('🔧 Uruchamiam npm audit fix...');
+        this.logger.info('🔧 Uruchamiam npm audit fix...');
 
+        let output = '';
+
+        try {
             const { stdout, stderr } = await execAsync('npm audit fix 2>&1', {
                 timeout: 120000,
                 maxBuffer: 10 * 1024 * 1024
             });
-
-            const output = stdout + stderr;
-
-            // Sprawdź czy coś zostało naprawione
-            const fixedMatch = output.match(/fixed\s+(\d+)\s+of\s+(\d+)/i);
-            const addedMatch = output.match(/added\s+(\d+)/);
-            const removedMatch = output.match(/removed\s+(\d+)/);
-            const changedMatch = output.match(/changed\s+(\d+)/);
-
-            const result = {
-                success: true,
-                fixed: fixedMatch ? parseInt(fixedMatch[1]) : 0,
-                totalBefore: fixedMatch ? parseInt(fixedMatch[2]) : 0,
-                added: addedMatch ? parseInt(addedMatch[1]) : 0,
-                removed: removedMatch ? parseInt(removedMatch[1]) : 0,
-                changed: changedMatch ? parseInt(changedMatch[1]) : 0
-            };
-
-            return result;
+            output = (stdout || '') + (stderr || '');
         } catch (error) {
-            this.logger.error(`Błąd npm audit fix: ${error.message}`);
-            return { success: false, error: error.message };
+            // npm audit fix zwraca exit code > 0 gdy nie wszystko naprawił
+            // ale to nie znaczy że całkowicie się nie udało
+            output = (error.stdout || '') + (error.stderr || '');
+
+            // Jeśli brak jakiegokolwiek outputu - prawdziwy błąd
+            if (!output.trim()) {
+                this.logger.error(`Błąd npm audit fix: ${error.message}`);
+                return { success: false, error: error.message };
+            }
         }
+
+        // Parsuj wynik niezależnie od exit code
+        const fixedMatch = output.match(/fixed\s+(\d+)\s+of\s+(\d+)/i);
+        const addedMatch = output.match(/added\s+(\d+)/);
+        const removedMatch = output.match(/removed\s+(\d+)/);
+        const changedMatch = output.match(/changed\s+(\d+)/);
+
+        return {
+            success: true,
+            fixed: fixedMatch ? parseInt(fixedMatch[1]) : 0,
+            totalBefore: fixedMatch ? parseInt(fixedMatch[2]) : 0,
+            added: addedMatch ? parseInt(addedMatch[1]) : 0,
+            removed: removedMatch ? parseInt(removedMatch[1]) : 0,
+            changed: changedMatch ? parseInt(changedMatch[1]) : 0,
+            output: output.substring(0, 1000)
+        };
     }
 
     /**
@@ -250,8 +257,14 @@ class NpmAuditFix {
                     });
                     this.logger.success('✅ npm audit fix --force zakończone');
                 } catch (forceError) {
-                    this.logger.error(`❌ npm audit fix --force nie powiódł się: ${forceError.message}`);
-                    return false;
+                    // npm audit fix --force też może zwrócić exit code > 0
+                    const forceOutput = (forceError.stdout || '') + (forceError.stderr || '');
+                    if (forceOutput.trim()) {
+                        this.logger.success('✅ npm audit fix --force zakończone');
+                    } else {
+                        this.logger.error(`❌ npm audit fix --force nie powiódł się: ${forceError.message}`);
+                        return false;
+                    }
                 }
             } else {
                 return false;
