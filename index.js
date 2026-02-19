@@ -190,19 +190,19 @@ async function ensureNodeModules() {
     if (!needsFix) return true;
 
     try {
-        // Usunięcie package-lock.json wymusza npm install z package.json (^14.25.1)
-        if (fs.existsSync('./package-lock.json')) {
-            fs.unlinkSync('./package-lock.json');
-            logger.info('🗑️ Usunięto uszkodzony package-lock.json');
+        // Usunięcie złej wersji discord.js i wymuszenie instalacji v14
+        const djsPath = require('path').join(process.cwd(), 'node_modules', 'discord.js');
+        if (fs.existsSync(djsPath)) {
+            fs.rmSync(djsPath, { recursive: true });
+            logger.info('🗑️ Usunięto złą wersję discord.js');
         }
 
-        logger.info('🔧 Uruchamiam npm install...');
-        const { stdout } = await execAsync('npm install 2>&1', { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
-        logger.success('✅ npm install zakończony - pakiety przywrócone');
-        logger.info(stdout.split('\n').filter(l => l.includes('added') || l.includes('packages')).join('\n'));
+        logger.info('🔧 Instaluję discord.js@14...');
+        await execAsync('npm install discord.js@14 2>&1', { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
+        logger.success('✅ discord.js v14 zainstalowany');
         return true;
     } catch (installError) {
-        logger.error(`❌ npm install nie powiódł się: ${installError.message}`);
+        logger.error(`❌ Instalacja discord.js nie powiodła się: ${installError.message}`);
         return false;
     }
 }
