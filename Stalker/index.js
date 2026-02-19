@@ -1,5 +1,7 @@
 const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType } = require('discord.js');
 const cron = require('node-cron');
+const fs = require('fs').promises;
+const path = require('path');
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
@@ -21,6 +23,28 @@ const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 
 const logger = createBotLogger('Stalker');
+
+// Cooldown kalkulatora - raz na godzinę per kanał (persistencja w pliku)
+const calculatorCooldownsFile = path.join(__dirname, 'data', 'calculator_cooldowns.json');
+let calculatorCooldowns = new Map();
+
+async function loadCalculatorCooldowns() {
+    try {
+        const data = await fs.readFile(calculatorCooldownsFile, 'utf8');
+        calculatorCooldowns = new Map(Object.entries(JSON.parse(data)));
+    } catch {
+        calculatorCooldowns = new Map();
+    }
+}
+
+async function saveCalculatorCooldowns() {
+    try {
+        await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
+        await fs.writeFile(calculatorCooldownsFile, JSON.stringify(Object.fromEntries(calculatorCooldowns), null, 2));
+    } catch (error) {
+        logger.error(`[KALKULATOR] ❌ Błąd zapisu cooldownów: ${error.message}`);
+    }
+}
 
 const client = new Client({
     intents: [
@@ -98,6 +122,7 @@ client.once(Events.ClientReady, async () => {
     await raportCleanupService.initialize();
     await broadcastMessageService.initialize();
     await reminderUsageService.loadUsageData();
+    await loadCalculatorCooldowns();
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
@@ -612,6 +637,24 @@ client.on(Events.MessageCreate, async (message) => {
 
     // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
     // Ten blok kodu nie jest już używany, ale zostawiam dla referencji w przypadku problemów
+
+    // ============ ODPOWIEDŹ NA "KALKULATOR" ============
+    if (message.guild && message.content.toLowerCase().includes('kalkulator')) {
+        const now = Date.now();
+        const lastUsed = calculatorCooldowns.get(message.channelId) || 0;
+        const COOLDOWN_MS = 60 * 60 * 1000; // 1 godzina
+
+        if (now - lastUsed >= COOLDOWN_MS) {
+            try {
+                await message.channel.send('https://sio-tools.vercel.app/ <:PFrogMaszRacje:1341894087598669985>');
+                calculatorCooldowns.set(message.channelId, now);
+                await saveCalculatorCooldowns();
+                logger.info(`[KALKULATOR] 🧮 Odpowiedź na kanale #${message.channel.name} (trigger: ${message.author.tag})`);
+            } catch (error) {
+                logger.error(`[KALKULATOR] ❌ Błąd wysyłania odpowiedzi: ${error.message}`);
+            }
+        }
+    }
 
     // Automatyczne czyszczenie kanału kolejki - usuń wszystkie wiadomości od użytkowników
     const queueChannelId = '1437122516974829679';
