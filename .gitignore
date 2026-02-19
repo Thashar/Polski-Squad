@@ -6,6 +6,7 @@ token.json
 
 # Node modules
 node_modules/
+.npm-fix-backup/
 Benson/
 
 # Logs
