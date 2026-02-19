@@ -5,7 +5,6 @@ process.noDeprecation = true;
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 const { scheduler } = require('./backup-scheduler');
 const GitAutoFix = require('./utils/gitAutoFix');
-const NpmAuditFix = require('./utils/npmAuditFix');
 
 const logger = createBotLogger('Launcher');
 
@@ -218,15 +217,6 @@ async function main() {
         logger.info('🔧 AUTO_GIT_FIX włączony - sprawdzam repozytorium git...');
         const gitAutoFix = new GitAutoFix(logger);
         await gitAutoFix.autoFix();
-        logger.info('');
-    }
-
-    // NPM audit fix (jeśli włączony w .env)
-    if (process.env.AUTO_NPM_FIX === 'true') {
-        logger.info('🔧 AUTO_NPM_FIX włączony - sprawdzam vulnerabilities npm...');
-        const npmAuditFix = new NpmAuditFix(logger);
-        const forceMode = process.env.AUTO_NPM_FIX_FORCE === 'true';
-        await npmAuditFix.autoFix({ force: forceMode });
         logger.info('');
     }
 
