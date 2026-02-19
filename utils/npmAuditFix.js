@@ -176,6 +176,42 @@ class NpmAuditFix {
     }
 
     /**
+     * Wykonuje npm audit fix --force (agresywne aktualizacje, mogą złamać kompatybilność)
+     */
+    async runForceAuditFix() {
+        this.logger.info('🔧 Uruchamiam npm audit fix --force...');
+
+        try {
+            const { stdout, stderr } = await execAsync('npm audit fix --force 2>&1', {
+                timeout: 180000,
+                maxBuffer: 10 * 1024 * 1024
+            });
+            this.logger.success('✅ npm audit fix --force zakończone');
+
+            const output = (stdout || '') + (stderr || '');
+            const addedMatch = output.match(/added\s+(\d+)/);
+            const removedMatch = output.match(/removed\s+(\d+)/);
+            const changedMatch = output.match(/changed\s+(\d+)/);
+
+            if (addedMatch || removedMatch || changedMatch) {
+                const changes = [];
+                if (addedMatch) changes.push(`+${addedMatch[1]} dodanych`);
+                if (removedMatch) changes.push(`-${removedMatch[1]} usuniętych`);
+                if (changedMatch) changes.push(`~${changedMatch[1]} zmienionych`);
+                this.logger.info(`📦 Zmiany (--force): ${changes.join(', ')}`);
+            }
+        } catch (error) {
+            // npm audit fix --force też może zwrócić exit code > 0
+            const output = (error.stdout || '') + (error.stderr || '');
+            if (output.trim()) {
+                this.logger.success('✅ npm audit fix --force zakończone');
+            } else {
+                this.logger.error(`❌ npm audit fix --force nie powiódł się: ${error.message}`);
+            }
+        }
+    }
+
+    /**
      * Sprawdza zdeprecjonowane pakiety
      */
     async getDeprecatedPackages() {
@@ -242,59 +278,58 @@ class NpmAuditFix {
         // Są vulnerabilities - pokaż raport
         this.logger.warn(`⚠️ Wykryto ${auditBefore.total} vulnerabilities: ${this.formatVulnReport(auditBefore)}`);
 
-        // Uruchom naprawę
+        // Krok 1: Uruchom bezpieczny npm audit fix
         const fixResult = await this.runAuditFix();
 
         if (!fixResult.success) {
             this.logger.error(`❌ npm audit fix nie powiódł się: ${fixResult.error}`);
-
-            if (force) {
-                this.logger.info('🔧 Próbuję npm audit fix --force...');
-                try {
-                    await execAsync('npm audit fix --force 2>&1', {
-                        timeout: 180000,
-                        maxBuffer: 10 * 1024 * 1024
-                    });
-                    this.logger.success('✅ npm audit fix --force zakończone');
-                } catch (forceError) {
-                    // npm audit fix --force też może zwrócić exit code > 0
-                    const forceOutput = (forceError.stdout || '') + (forceError.stderr || '');
-                    if (forceOutput.trim()) {
-                        this.logger.success('✅ npm audit fix --force zakończone');
-                    } else {
-                        this.logger.error(`❌ npm audit fix --force nie powiódł się: ${forceError.message}`);
-                        return false;
-                    }
-                }
-            } else {
-                return false;
+        } else {
+            // Podsumowanie zmian w pakietach
+            if (fixResult.added || fixResult.removed || fixResult.changed) {
+                const changes = [];
+                if (fixResult.added) changes.push(`+${fixResult.added} dodanych`);
+                if (fixResult.removed) changes.push(`-${fixResult.removed} usuniętych`);
+                if (fixResult.changed) changes.push(`~${fixResult.changed} zmienionych`);
+                this.logger.info(`📦 Zmiany w pakietach: ${changes.join(', ')}`);
             }
         }
 
-        // Sprawdź wynik po naprawie
-        const auditAfter = await this.getAuditReport();
+        // Krok 2: Sprawdź wynik po bezpiecznym fix
+        let auditAfter = await this.getAuditReport();
 
         if (auditAfter.success && auditAfter.total === 0) {
             this.logger.success('✅ Wszystkie vulnerabilities naprawione!');
-        } else if (auditAfter.success) {
-            const fixed = auditBefore.total - auditAfter.total;
-            if (fixed > 0) {
-                this.logger.success(`✅ Naprawiono ${fixed}/${auditBefore.total} vulnerabilities`);
-                this.logger.warn(`⚠️ Pozostało ${auditAfter.total}: ${this.formatVulnReport(auditAfter)}`);
-                this.logger.info('ℹ️  Pozostałe wymagają ręcznej aktualizacji lub npm audit fix --force');
-            } else {
-                this.logger.warn(`⚠️ Nie udało się naprawić automatycznie (${auditAfter.total} vulnerabilities)`);
-                this.logger.info('ℹ️  Spróbuj: npm audit fix --force lub ręcznie zaktualizuj pakiety');
-            }
+            return true;
         }
 
-        // Podsumowanie zmian w pakietach
-        if (fixResult.added || fixResult.removed || fixResult.changed) {
-            const changes = [];
-            if (fixResult.added) changes.push(`+${fixResult.added} dodanych`);
-            if (fixResult.removed) changes.push(`-${fixResult.removed} usuniętych`);
-            if (fixResult.changed) changes.push(`~${fixResult.changed} zmienionych`);
-            this.logger.info(`📦 Zmiany w pakietach: ${changes.join(', ')}`);
+        // Krok 3: Jeśli nadal są vulnerabilities i force jest włączony - eskaluj
+        if (auditAfter.success && auditAfter.total > 0) {
+            const fixedSafe = auditBefore.total - auditAfter.total;
+
+            if (fixedSafe > 0) {
+                this.logger.success(`✅ Bezpieczny fix naprawił ${fixedSafe}/${auditBefore.total} vulnerabilities`);
+            }
+
+            if (force) {
+                this.logger.warn(`⚠️ Pozostało ${auditAfter.total} vulnerabilities - próbuję --force...`);
+                await this.runForceAuditFix();
+
+                // Sprawdź ponownie po force
+                const auditFinal = await this.getAuditReport();
+                if (auditFinal.success && auditFinal.total === 0) {
+                    this.logger.success('✅ Wszystkie vulnerabilities naprawione (--force)!');
+                } else if (auditFinal.success) {
+                    const totalFixed = auditBefore.total - auditFinal.total;
+                    if (totalFixed > 0) {
+                        this.logger.success(`✅ Naprawiono ${totalFixed}/${auditBefore.total} vulnerabilities`);
+                    }
+                    this.logger.warn(`⚠️ Pozostało ${auditFinal.total}: ${this.formatVulnReport(auditFinal)}`);
+                    this.logger.info('ℹ️  Pozostałe wymagają ręcznej aktualizacji pakietów');
+                }
+            } else {
+                this.logger.warn(`⚠️ Nie udało się naprawić automatycznie (${auditAfter.total} vulnerabilities)`);
+                this.logger.info('ℹ️  Ustaw AUTO_NPM_FIX_FORCE=true lub ręcznie: npm audit fix --force');
+            }
         }
 
         return true;
