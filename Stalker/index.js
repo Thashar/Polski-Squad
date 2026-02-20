@@ -700,7 +700,7 @@ client.on(Events.MessageCreate, async (message) => {
                 );
 
                 await message.channel.send({
-                    content: 'Wykryto zaawansowany Borixoning <a:PepeAlarmMan:1341086085089857619>\nCzy aktywować procedurę eksterminacji?',
+                    content: '# Wykryto zaawansowany Borixoning <a:PepeAlarmMan:1341086085089857619>\nCzy aktywować procedurę eksterminacji?',
                     components: [row]
                 });
 

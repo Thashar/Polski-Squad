@@ -684,7 +684,7 @@ async function handleButton(interaction, sharedState) {
 
             // Edytuj oryginalną wiadomość - zamień drugą linijkę i usuń przyciski
             await interaction.update({
-                content: `Wykryto zaawansowany Borixoning <a:PepeAlarmMan:1341086085089857619>\n${responseText}`,
+                content: `# Wykryto zaawansowany Borixoning <a:PepeAlarmMan:1341086085089857619>\n${responseText}`,
                 components: []
             });
         } catch (error) {
