@@ -17,7 +17,7 @@
 7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 9. **Kalkulator** - Auto-odpowiedź na słowo "kalkulator" w wiadomości → link do sio-tools.vercel.app, cooldown 1h per kanał (persistencja w `data/calculator_cooldowns.json`)
-10. **Boroxoning** - Auto-odpowiedź na reply "zbij bossa" na kanałach WARNING → komunikat "Wykryto zaawansowany Boroxoning" z przyciskami Tak/Nie (ephemeral), cooldown raz dziennie per kanał (kasuje się o północy, persistencja w `data/boroxoning_cooldowns.json`)
+10. **Borixoning** - Auto-odpowiedź na reply "zbij bossa" na kanałach WARNING → komunikat "Wykryto zaawansowany Borixoning" z przyciskami Tak/Nie (ephemeral), cooldown raz dziennie per kanał (kasuje się o północy, persistencja w `data/boroxoning_cooldowns.json`)
 
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku

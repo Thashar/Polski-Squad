@@ -50,7 +50,7 @@ async function saveCalculatorCooldowns() {
 const boroxoningCooldownsFile = path.join(__dirname, 'data', 'boroxoning_cooldowns.json');
 let boroxoningCooldowns = new Map(); // channelId -> dateString (YYYY-MM-DD)
 
-async function loadBoroxoningCooldowns() {
+async function loadBorixoningCooldowns() {
     try {
         const data = await fs.readFile(boroxoningCooldownsFile, 'utf8');
         boroxoningCooldowns = new Map(Object.entries(JSON.parse(data)));
@@ -59,7 +59,7 @@ async function loadBoroxoningCooldowns() {
     }
 }
 
-async function saveBoroxoningCooldowns() {
+async function saveBorixoningCooldowns() {
     try {
         await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
         await fs.writeFile(boroxoningCooldownsFile, JSON.stringify(Object.fromEntries(boroxoningCooldowns), null, 2));
@@ -145,7 +145,7 @@ client.once(Events.ClientReady, async () => {
     await broadcastMessageService.initialize();
     await reminderUsageService.loadUsageData();
     await loadCalculatorCooldowns();
-    await loadBoroxoningCooldowns();
+    await loadBorixoningCooldowns();
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
@@ -700,12 +700,12 @@ client.on(Events.MessageCreate, async (message) => {
                 );
 
                 await message.channel.send({
-                    content: 'Wykryto zaawansowany Boroxoning <a:PepeAlarmMan:1341086085089857619>\nCzy aktywować procedurę eksterminacji?',
+                    content: 'Wykryto zaawansowany Borixoning <a:PepeAlarmMan:1341086085089857619>\nCzy aktywować procedurę eksterminacji?',
                     components: [row]
                 });
 
                 boroxoningCooldowns.set(message.channelId, today);
-                await saveBoroxoningCooldowns();
+                await saveBorixoningCooldowns();
                 logger.info(`[BOROXONING] 🎯 Odpowiedź na kanale #${message.channel.name} (trigger: ${message.author.tag})`);
             } catch (error) {
                 logger.error(`[BOROXONING] ❌ Błąd wysyłania odpowiedzi: ${error.message}`);
