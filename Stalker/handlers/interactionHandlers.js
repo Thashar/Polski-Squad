@@ -682,13 +682,11 @@ async function handleButton(interaction, sharedState) {
                 ? 'Procedura rozpoczęta!'
                 : 'Procedura została dezaktywowana!';
 
-            await interaction.reply({
-                content: responseText,
-                flags: MessageFlags.Ephemeral
+            // Edytuj oryginalną wiadomość - zamień drugą linijkę i usuń przyciski
+            await interaction.update({
+                content: `Wykryto zaawansowany Boroxoning <a:PepeAlarmMan:1341086085089857619>\n${responseText}`,
+                components: []
             });
-
-            // Usuń przyciski z oryginalnej wiadomości
-            await interaction.message.edit({ components: [] });
         } catch (error) {
             logger.error(`[BOROXONING] ❌ Błąd obsługi przycisku: ${error.message}`);
         }
