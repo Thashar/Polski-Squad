@@ -8613,7 +8613,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTitle(`⚔️ PORÓWNANIE  —  ${name1}  vs  ${name2}`)
             .setColor('#9B59B6')
             .setTimestamp()
-            .setFooter({ text: 'Ostatnie 12 tygodni' })
+            .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
                 { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers), inline: true },
                 { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers), inline: true },
@@ -8678,7 +8678,19 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             logger.warn('[player-compare] Nie udało się wygenerować wykresów:', e.message);
         }
 
-        await interaction.editReply(replyPayload);
+        const compareResponse = await interaction.editReply(replyPayload);
+
+        // Zaplanuj usunięcie wiadomości (5 minut — tak samo jak player-status)
+        const messageCleanupService = interaction.client.messageCleanupService;
+        const deleteAt = Date.now() + (5 * 60 * 1000);
+        if (compareResponse && messageCleanupService) {
+            await messageCleanupService.scheduleMessageDeletion(
+                compareResponse.id,
+                compareResponse.channelId,
+                deleteAt,
+                interaction.user.id
+            );
+        }
 
     } catch (error) {
         logger.error('[player-compare] ❌ Błąd:', error);
