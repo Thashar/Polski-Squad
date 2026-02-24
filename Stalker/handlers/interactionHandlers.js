@@ -8207,16 +8207,20 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             return data;
         }
 
-        // Oblicz metryki gracza
+        // Oblicz metryki gracza (z trendRatio do porównania winner)
         function calcMetrics(data) {
-            const m = { monthlyProgress: null, monthlyPercent: null, bestScore: 0, engagementFactor: null, trendDescription: null, trendIcon: null };
+            const m = {
+                monthlyProgress: null, monthlyPercent: null,
+                bestScore: 0, engagementFactor: null,
+                trendDescription: null, trendIcon: null, trendRatio: null
+            };
             if (data.length === 0) return m;
             m.bestScore = Math.max(...data.map(d => d.score).filter(s => s > 0), 0);
             const last4Scores = data.slice(0, 4).map(d => d.score).filter(s => s > 0);
             if (last4Scores.length > 0) {
                 const curScore = Math.max(...last4Scores);
                 const compEntry = data.slice(4).find(d => d.score > 0);
-                const compScore = compEntry ? compEntry.score : (data.length > 1 ? data.filter(d => d.score > 0).pop()?.score : null);
+                const compScore = compEntry ? compEntry.score : data.filter(d => d.score > 0).pop()?.score;
                 if (compScore) {
                     m.monthlyProgress = curScore - compScore;
                     m.monthlyPercent = (m.monthlyProgress / compScore) * 100;
@@ -8238,31 +8242,41 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 const first = data[data.length - 1].score;
                 const last = data[0].score;
                 const adj = Math.abs((last - first) / (data.length - 1) * 4) || 1;
-                const ratio = m.monthlyProgress / adj;
-                if (ratio >= 1.5) { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
-                else if (ratio > 1.1) { m.trendDescription = 'Rosnący'; m.trendIcon = '↗️'; }
-                else if (ratio >= 0.9) { m.trendDescription = 'Constans'; m.trendIcon = '⚖️'; }
-                else if (ratio >= 0.5) { m.trendDescription = 'Malejący'; m.trendIcon = '↘️'; }
+                m.trendRatio = m.monthlyProgress / adj;
+                if (m.trendRatio >= 1.5) { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
+                else if (m.trendRatio > 1.1) { m.trendDescription = 'Rosnący'; m.trendIcon = '↗️'; }
+                else if (m.trendRatio >= 0.9) { m.trendDescription = 'Constans'; m.trendIcon = '⚖️'; }
+                else if (m.trendRatio >= 0.5) { m.trendDescription = 'Malejący'; m.trendIcon = '↘️'; }
                 else { m.trendDescription = 'Gwałtownie malejący'; m.trendIcon = '🪦'; }
             }
             return m;
         }
 
-        // Generuj sparkline (od najstarszego do najnowszego)
-        function genSparkline(data) {
+        // Generuj sparkline trendu na podstawie diff od najlepszego historycznego (ten sam mechanizm co trend słowny)
+        // Każdy tydzień = 2 znaki → szerszy wykres; ▄ = neutralny, wyżej = progres, niżej = regres
+        function genTrendSparkline(data) {
             const sparkChars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-            const scores = last12Weeks.map(w => {
-                const found = data.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
-                return found ? found.score : 0;
-            }).reverse();
-            const nonZero = scores.filter(s => s > 0);
-            if (nonZero.length === 0) return '·'.repeat(12);
-            const minS = Math.min(...nonZero);
-            const maxS = Math.max(...nonZero);
-            return scores.map(s => {
-                if (s === 0) return '·';
-                if (maxS === minS) return '▄';
-                return sparkChars[Math.min(Math.floor(((s - minS) / (maxS - minS)) * 7), 7)];
+            const orderedWeeks = [...last12Weeks].reverse();
+            const rawDiffs = orderedWeeks.map(w => {
+                const dataIdx = data.findIndex(d => d.weekNumber === w.weekNumber && d.year === w.year);
+                if (dataIdx === -1) return null;
+                let bestBefore = 0;
+                for (let j = dataIdx + 1; j < data.length; j++) {
+                    if (data[j].score > bestBefore) bestBefore = data[j].score;
+                }
+                return bestBefore > 0 ? data[dataIdx].score - bestBefore : 0;
+            });
+            const validDiffs = rawDiffs.filter(d => d !== null);
+            if (validDiffs.length === 0) return '··'.repeat(orderedWeeks.length);
+            const maxPos = Math.max(...validDiffs.filter(d => d > 0), 1);
+            const maxNeg = Math.max(...validDiffs.filter(d => d < 0).map(d => -d), 1);
+            return rawDiffs.map(d => {
+                if (d === null) return '··';
+                let level;
+                if (d > 0) { level = 3 + Math.min(4, Math.ceil((d / maxPos) * 4)); }
+                else if (d < 0) { level = 3 - Math.min(3, Math.ceil((-d / maxNeg) * 3)); }
+                else { level = 3; }
+                return sparkChars[Math.min(7, Math.max(0, level))].repeat(2);
             }).join('');
         }
 
@@ -8275,7 +8289,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         function fmtProgress(prog, pct) {
-            if (prog === null) return 'brak danych';
+            if (prog === null) return '*brak danych*';
             const sign = prog >= 0 ? '▲' : '▼';
             const color = prog >= 0 ? '🟢' : '🔴';
             return `${sign} ${Math.abs(prog).toLocaleString('pl-PL')} (${Math.abs(pct).toFixed(1)}%) ${color}`;
@@ -8295,61 +8309,128 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             return;
         }
 
-        // Sprawdź dane CX
-        let hasCx1 = false;
-        let hasCx2 = false;
+        // Pobierz punkty kar (mniej = lepiej)
+        const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
+        const lifePts1 = guildPunishments[userInfo1.userId]?.lifetime_points || 0;
+        const lifePts2 = guildPunishments[userInfo2.userId]?.lifetime_points || 0;
+
+        // Sprawdź dane CX (hasCx = kiedykolwiek, hasCxRecent = ostatni miesiąc, hasCxElite = 2700+ w ostatnim miesiącu)
+        let hasCx1 = false, hasCxRecent1 = false, hasCxElite1 = false;
+        let hasCx2 = false, hasCxRecent2 = false, hasCxElite2 = false;
         try {
             const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
             const cxRaw = await fs.readFile(cxHistoryPath, 'utf8');
             const cxHistory = JSON.parse(cxRaw);
-            hasCx1 = !!(cxHistory[userInfo1.userId]?.scores?.length > 0);
-            hasCx2 = !!(cxHistory[userInfo2.userId]?.scores?.length > 0);
+            const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+            const u1 = cxHistory[userInfo1.userId];
+            if (u1?.scores?.length > 0) {
+                hasCx1 = true;
+                const r1 = u1.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
+                hasCxRecent1 = r1.length > 0;
+                hasCxElite1 = r1.some(s => s.score >= 2700);
+            }
+            const u2 = cxHistory[userInfo2.userId];
+            if (u2?.scores?.length > 0) {
+                hasCx2 = true;
+                const r2 = u2.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
+                hasCxRecent2 = r2.length > 0;
+                hasCxElite2 = r2.some(s => s.score >= 2700);
+            }
         } catch (e) { /* brak pliku - ok */ }
 
         const m1 = calcMetrics(data1);
         const m2 = calcMetrics(data2);
 
-        // Boost CX
-        if (hasCx1 && m1.engagementFactor !== null) m1.engagementFactor = Math.min(100, m1.engagementFactor + 5);
-        if (hasCx2 && m2.engagementFactor !== null) m2.engagementFactor = Math.min(100, m2.engagementFactor + 5);
+        // Boost CX do zaangażowania - tylko za aktywność w ostatnim miesiącu
+        if (hasCxRecent1 && m1.engagementFactor !== null) m1.engagementFactor = Math.min(100, m1.engagementFactor + 5);
+        if (hasCxRecent2 && m2.engagementFactor !== null) m2.engagementFactor = Math.min(100, m2.engagementFactor + 5);
 
         const name1 = userInfo1.latestNick;
         const name2 = userInfo2.latestNick;
-        const spark1 = genSparkline(data1);
-        const spark2 = genSparkline(data2);
-
         const latestWeek1 = data1[0];
         const latestWeek2 = data2[0];
         const wLabel1 = `${String(latestWeek1.weekNumber).padStart(2, '0')}/${String(latestWeek1.year).slice(-2)}`;
         const wLabel2 = `${String(latestWeek2.weekNumber).padStart(2, '0')}/${String(latestWeek2.year).slice(-2)}`;
 
-        let desc = '';
-        desc += `## ⚔️ PORÓWNANIE GRACZY\n\n`;
-        desc += `**${name1}** *(${wLabel1}: ${latestWeek1.score.toLocaleString('pl-PL')})* vs **${name2}** *(${wLabel2}: ${latestWeek2.score.toLocaleString('pl-PL')})*\n\n`;
+        // Oblicz wynik porównania - kto wygrywa w każdej kategorii
+        let wins1 = 0;
+        let wins2 = 0;
+        const victories1 = [];
+        const victories2 = [];
 
-        desc += `### 📊 STATYSTYKI\n`;
-        desc += `🔹 **Miesiąc (4 tyg.):**\n`;
-        desc += `  **${name1}:** ${fmtProgress(m1.monthlyProgress, m1.monthlyPercent)}\n`;
-        desc += `  **${name2}:** ${fmtProgress(m2.monthlyProgress, m2.monthlyPercent)}\n\n`;
-        desc += `🏆 **Najlepszy wynik:**\n`;
-        desc += `  **${name1}:** ${m1.bestScore.toLocaleString('pl-PL')}\n`;
-        desc += `  **${name2}:** ${m2.bestScore.toLocaleString('pl-PL')}\n\n`;
+        // Miesiąc (wyższy progres = lepiej)
+        if (m1.monthlyProgress !== null && m2.monthlyProgress !== null) {
+            if (m1.monthlyProgress > m2.monthlyProgress) { wins1++; victories1.push('Miesiąc 📈'); }
+            else if (m2.monthlyProgress > m1.monthlyProgress) { wins2++; victories2.push('Miesiąc 📈'); }
+        }
+        // Najlepszy wynik (wyższy = lepiej)
+        if (m1.bestScore > m2.bestScore) { wins1++; victories1.push('Best score 🎯'); }
+        else if (m2.bestScore > m1.bestScore) { wins2++; victories2.push('Best score 🎯'); }
+        // Zaangażowanie (wyższy % = lepiej)
+        const eng1 = m1.engagementFactor ?? 100;
+        const eng2 = m2.engagementFactor ?? 100;
+        if (eng1 > eng2 + 0.5) { wins1++; victories1.push('Zaangażowanie 💪'); }
+        else if (eng2 > eng1 + 0.5) { wins2++; victories2.push('Zaangażowanie 💪'); }
+        // Trend ratio (wyższy = bardziej rosnący)
+        if (m1.trendRatio !== null && m2.trendRatio !== null) {
+            if (m1.trendRatio > m2.trendRatio + 0.05) { wins1++; victories1.push('Trend 💨'); }
+            else if (m2.trendRatio > m1.trendRatio + 0.05) { wins2++; victories2.push('Trend 💨'); }
+        }
+        // CX (aktywność w ostatnim miesiącu = plus)
+        if (hasCxRecent1 && !hasCxRecent2) { wins1++; victories1.push('CX 🏆'); }
+        else if (hasCxRecent2 && !hasCxRecent1) { wins2++; victories2.push('CX 🏆'); }
+        // Kary (mniej punktów karnych = lepiej)
+        if (lifePts1 < lifePts2) { wins1++; victories1.push('Mniej kar ⚠️'); }
+        else if (lifePts2 < lifePts1) { wins2++; victories2.push('Mniej kar ⚠️'); }
 
-        desc += `### 🌡️ WSPÓŁCZYNNIKI\n`;
-        desc += `💪 **Zaangażowanie:** ${engCircle(m1.engagementFactor)}${hasCx1 ? ' ⭐' : ''} | ${engCircle(m2.engagementFactor)}${hasCx2 ? ' ⭐' : ''}\n`;
-        desc += `🏆 **Wykonuje CX:** ${hasCx1 ? 'Tak ✅' : 'Nie'} | ${hasCx2 ? 'Tak ✅' : 'Nie'}\n\n`;
+        // Formatuj pole statystyk gracza (do inline field)
+        // hasCxRecent = aktywny w ostatnim miesiącu, hasCxElite = 2700+ w ostatnim miesiącu
+        function fmtPlayerField(m, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel) {
+            const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
+            let f = '';
+            f += `📊 **Aktualny:** ${latestScore.toLocaleString('pl-PL')} *(${wLabel})*\n`;
+            f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
+            f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
+            f += `💪 **Zaangażowanie:** ${engCircle(m.engagementFactor)}${cxStar}\n`;
+            f += `💨 **Trend:** ${m.trendDescription ? `${m.trendDescription} ${m.trendIcon}` : '*brak*'}\n`;
+            f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
+            f += `⚠️ **Pkt. kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
+            return f;
+        }
 
-        desc += `### 💨 TREND\n`;
-        desc += `**${name1}:** ${m1.trendDescription ? `**${m1.trendDescription}** ${m1.trendIcon}` : 'brak danych'}\n`;
-        desc += `\`${spark1}\`\n\n`;
-        desc += `**${name2}:** ${m2.trendDescription ? `**${m2.trendDescription}** ${m2.trendIcon}` : 'brak danych'}\n`;
-        desc += `\`${spark2}\``;
+        // Sparkline trendu (diff-based, każdy tydzień = 2 znaki)
+        const spark1 = genTrendSparkline(data1);
+        const spark2 = genTrendSparkline(data2);
+
+        const trendsField = `**${name1}:**\n\`${spark1}\`\n\n**${name2}:**\n\`${spark2}\``;
+
+        // Podsumowanie wygranego
+        let winnerField = '';
+        if (wins1 > wins2) {
+            winnerField = `🥇 **${name1}** wygrywa **${wins1} - ${wins2}**\n\n`;
+            if (victories1.length > 0) winnerField += `✅ ${name1} lepszy w: ${victories1.join(', ')}\n`;
+            if (victories2.length > 0) winnerField += `✅ ${name2} lepszy w: ${victories2.join(', ')}`;
+        } else if (wins2 > wins1) {
+            winnerField = `🥇 **${name2}** wygrywa **${wins2} - ${wins1}**\n\n`;
+            if (victories2.length > 0) winnerField += `✅ ${name2} lepszy w: ${victories2.join(', ')}\n`;
+            if (victories1.length > 0) winnerField += `✅ ${name1} lepszy w: ${victories1.join(', ')}`;
+        } else {
+            winnerField = `⚖️ **Remis ${wins1} - ${wins2}**\n\n`;
+            if (victories1.length > 0) winnerField += `✅ ${name1} lepszy w: ${victories1.join(', ')}\n`;
+            if (victories2.length > 0) winnerField += `✅ ${name2} lepszy w: ${victories2.join(', ')}`;
+        }
 
         const embed = new EmbedBuilder()
-            .setDescription(desc)
+            .setTitle(`⚔️ ${name1}  vs  ${name2}`)
             .setColor('#9B59B6')
             .setTimestamp()
-            .setFooter({ text: `${name1} vs ${name2} • Ostatnie 12 tygodni` });
+            .setFooter({ text: 'Ostatnie 12 tygodni' })
+            .addFields(
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2), inline: true },
+                { name: '💨 SPARKLINE TRENDU', value: trendsField },
+                { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
+            );
 
         await interaction.editReply({ embeds: [embed] });
 
@@ -8469,12 +8550,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         });
 
         // Wczytaj dane CX gracza ze shared_data (zapisywane przez Kontroler bot)
+        // hasCxData = kiedykolwiek grał CX (do "Wykonuje CX: Tak/Nie")
+        // hasCxRecent = grał CX w ostatnim miesiącu (do gwiazdki i boost zaangażowania)
+        // hasCxElite = osiągnął 2700+ w ostatnim miesiącu (do gwiazdki 🌟 zamiast ⭐)
         let hasCxData = false;
+        let hasCxRecent = false;
+        let hasCxElite = false;
         try {
             const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
             const cxHistoryRaw = await fs.readFile(cxHistoryPath, 'utf8');
             const cxHistory = JSON.parse(cxHistoryRaw);
-            hasCxData = !!(cxHistory[userId] && cxHistory[userId].scores && cxHistory[userId].scores.length > 0);
+            const userData = cxHistory[userId];
+            if (userData && userData.scores && userData.scores.length > 0) {
+                hasCxData = true;
+                const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+                const recentScores = userData.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
+                hasCxRecent = recentScores.length > 0;
+                hasCxElite = recentScores.some(s => s.score >= 2700);
+            }
         } catch (e) {
             // Plik nie istnieje jeszcze lub brak danych - ok
         }
@@ -8876,8 +8969,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        // Bonus CX do zaangażowania - gracz wykonujący CX dostaje +5% (nie karze za brak CX)
-        if (hasCxData && engagementFactor !== null) {
+        // Bonus CX do zaangażowania - tylko za aktywność w ostatnim miesiącu (nie karze za brak CX)
+        if (hasCxRecent && engagementFactor !== null) {
             engagementFactor = Math.min(100, engagementFactor + 5);
         }
 
@@ -9322,7 +9415,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
         }
-        description += `💪 **Zaangażowanie:** ${engagementCircle}${hasCxData ? ' ⭐' : ''}\n`;
+        const cxStarDisplay = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
+        description += `💪 **Zaangażowanie:** ${engagementCircle}${cxStarDisplay}\n`;
 
         // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
         let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -9341,28 +9435,45 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `\n`;
 
         // Sekcja 3b: Trend - osobna sekcja poniżej współczynników z grafiką sparkline
+        // Sparkline na podstawie tempa progresu (diff od najlepszego historycznego) - ten sam mechanizm co trend słowny
         if (trendIcon !== null && trendDescription !== null) {
             description += `### 💨 TREND\n`;
             description += `**${trendDescription}** ${trendIcon}\n`;
 
-            // Sparkline ostatnich 12 tygodni (od najstarszego do najnowszego - lewo do prawo)
-            const sparklineData = last12Weeks.map(w => {
-                const found = playerProgressData.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
-                return found ? found.score : 0;
-            }).reverse();
+            const sparkChars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+            const orderedWeeks = [...last12Weeks].reverse(); // od najstarszego do najnowszego
 
-            const nonZeroSparkline = sparklineData.filter(s => s > 0);
-            if (nonZeroSparkline.length > 0) {
-                const minS = Math.min(...nonZeroSparkline);
-                const maxS = Math.max(...nonZeroSparkline);
-                const sparkChars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-                const sparklineStr = sparklineData.map(s => {
-                    if (s === 0) return '·';
-                    if (maxS === minS) return '▄';
-                    const level = Math.floor(((s - minS) / (maxS - minS)) * 7);
-                    return sparkChars[Math.min(level, 7)];
+            // Oblicz diff dla każdego tygodnia: wynik - najlepszy wynik przed tym tygodniem
+            // Pozytywny diff = progres (wyższy słupek), negatywny = regres (niższy słupek), 0 = neutralny
+            const rawDiffs = orderedWeeks.map(w => {
+                const dataIdx = playerProgressData.findIndex(d => d.weekNumber === w.weekNumber && d.year === w.year);
+                if (dataIdx === -1) return null;
+                let bestBefore = 0;
+                for (let j = dataIdx + 1; j < playerProgressData.length; j++) {
+                    if (playerProgressData[j].score > bestBefore) bestBefore = playerProgressData[j].score;
+                }
+                return bestBefore > 0 ? playerProgressData[dataIdx].score - bestBefore : 0;
+            });
+
+            const validDiffs = rawDiffs.filter(d => d !== null);
+            if (validDiffs.length > 0) {
+                const maxPos = Math.max(...validDiffs.filter(d => d > 0), 1);
+                const maxNeg = Math.max(...validDiffs.filter(d => d < 0).map(d => -d), 1);
+
+                const sparklineStr = rawDiffs.map(d => {
+                    if (d === null) return '··';
+                    let level;
+                    if (d > 0) {
+                        level = 3 + Math.min(4, Math.ceil((d / maxPos) * 4));
+                    } else if (d < 0) {
+                        level = 3 - Math.min(3, Math.ceil((-d / maxNeg) * 3));
+                    } else {
+                        level = 3; // ▄ = neutralny (wynik = best historyczny)
+                    }
+                    return sparkChars[Math.min(7, Math.max(0, level))].repeat(2);
                 }).join('');
-                description += `\`${sparklineStr}\` *(12 tyg.)*\n`;
+
+                description += `\`${sparklineStr}\`\n`;
             }
             description += `\n`;
         }
