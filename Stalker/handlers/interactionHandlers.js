@@ -12039,10 +12039,9 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     ).join('\n    ');
 
     // Kółka na punktach
-    const dotsSvg = pts.map((p, i) => {
-        const isLast = i === pts.length - 1;
-        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.85}"/>`;
-    }).join('\n    ');
+    const dotsSvg = pts.map((p) =>
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.2" opacity="0.85"/>`
+    ).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
@@ -12119,11 +12118,10 @@ async function generateProgressChart(playerProgressData, playerNick) {
     ).join('\n    ');
 
     // Punkty z wartościami nad każdym
-    const dotsSvg = pts.map((p, i) => {
-        const isLast = i === pts.length - 1;
+    const dotsSvg = pts.map((p) => {
         const scoreLbl = p.score.toLocaleString('pl-PL');
-        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 3}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.5}"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="${isLast ? 11 : 9}" font-weight="${isLast ? 'bold' : 'normal'}" fill="${isLast ? lineColor : '#B5BAC1'}" text-anchor="middle">${scoreLbl}</text>`;
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -12341,10 +12339,9 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     ).join('\n    ');
 
     function buildDots(pts, color) {
-        return pts.map((p, i) => {
-            const isLast = i === pts.length - 1;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.85}"/>`;
-        }).join('\n    ');
+        return pts.map((p) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2" opacity="0.85"/>`
+        ).join('\n    ');
     }
 
     const trendColorMap = { 'Gwałtownie rosnący': '#00E676', 'Rosnący': '#43B581', 'Constans': '#FAA61A', 'Malejący': '#FF8A65', 'Gwałtownie malejący': '#F04747' };
@@ -12466,13 +12463,10 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
         else { lastProgOff1 = 6; lastProgOff2 = -6; }
     }
 
-    function buildDots(pts, color, lastOff = 0) {
-        return pts.map((p, i) => {
-            const isLast = i === pts.length - 1;
-            const dy = isLast ? lastOff : 0;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${(p.y + dy).toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
-    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y + dy - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : ''}`;
-        }).join('\n    ');
+    function buildDots(pts, color) {
+        return pts.map((p) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
+        ).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
@@ -12621,13 +12615,10 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
         else { lastRankOff1 = 6; lastRankOff2 = -6; }
     }
 
-    function buildDots(pts, color, lastOff = 0) {
-        return pts.map((p, i) => {
-            const isLast = i === pts.length - 1;
-            const dy = isLast ? lastOff : 0;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${(p.y + dy).toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
-    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y + dy - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : ''}`;
-        }).join('\n    ');
+    function buildDots(pts, color) {
+        return pts.map((p) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
+        ).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
