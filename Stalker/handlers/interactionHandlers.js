@@ -8314,23 +8314,36 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         const lifePts1 = guildPunishments[userInfo1.userId]?.lifetime_points || 0;
         const lifePts2 = guildPunishments[userInfo2.userId]?.lifetime_points || 0;
 
-        // Sprawdź dane CX
-        let hasCx1 = false;
-        let hasCx2 = false;
+        // Sprawdź dane CX (hasCx = kiedykolwiek, hasCxRecent = ostatni miesiąc, hasCxElite = 2700+ w ostatnim miesiącu)
+        let hasCx1 = false, hasCxRecent1 = false, hasCxElite1 = false;
+        let hasCx2 = false, hasCxRecent2 = false, hasCxElite2 = false;
         try {
             const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
             const cxRaw = await fs.readFile(cxHistoryPath, 'utf8');
             const cxHistory = JSON.parse(cxRaw);
-            hasCx1 = !!(cxHistory[userInfo1.userId]?.scores?.length > 0);
-            hasCx2 = !!(cxHistory[userInfo2.userId]?.scores?.length > 0);
+            const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+            const u1 = cxHistory[userInfo1.userId];
+            if (u1?.scores?.length > 0) {
+                hasCx1 = true;
+                const r1 = u1.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
+                hasCxRecent1 = r1.length > 0;
+                hasCxElite1 = r1.some(s => s.score >= 2700);
+            }
+            const u2 = cxHistory[userInfo2.userId];
+            if (u2?.scores?.length > 0) {
+                hasCx2 = true;
+                const r2 = u2.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
+                hasCxRecent2 = r2.length > 0;
+                hasCxElite2 = r2.some(s => s.score >= 2700);
+            }
         } catch (e) { /* brak pliku - ok */ }
 
         const m1 = calcMetrics(data1);
         const m2 = calcMetrics(data2);
 
-        // Boost CX do zaangażowania
-        if (hasCx1 && m1.engagementFactor !== null) m1.engagementFactor = Math.min(100, m1.engagementFactor + 5);
-        if (hasCx2 && m2.engagementFactor !== null) m2.engagementFactor = Math.min(100, m2.engagementFactor + 5);
+        // Boost CX do zaangażowania - tylko za aktywność w ostatnim miesiącu
+        if (hasCxRecent1 && m1.engagementFactor !== null) m1.engagementFactor = Math.min(100, m1.engagementFactor + 5);
+        if (hasCxRecent2 && m2.engagementFactor !== null) m2.engagementFactor = Math.min(100, m2.engagementFactor + 5);
 
         const name1 = userInfo1.latestNick;
         const name2 = userInfo2.latestNick;
@@ -8363,20 +8376,22 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (m1.trendRatio > m2.trendRatio + 0.05) { wins1++; victories1.push('Trend 💨'); }
             else if (m2.trendRatio > m1.trendRatio + 0.05) { wins2++; victories2.push('Trend 💨'); }
         }
-        // CX (uczestnictwo = plus)
-        if (hasCx1 && !hasCx2) { wins1++; victories1.push('CX 🏆'); }
-        else if (hasCx2 && !hasCx1) { wins2++; victories2.push('CX 🏆'); }
+        // CX (aktywność w ostatnim miesiącu = plus)
+        if (hasCxRecent1 && !hasCxRecent2) { wins1++; victories1.push('CX 🏆'); }
+        else if (hasCxRecent2 && !hasCxRecent1) { wins2++; victories2.push('CX 🏆'); }
         // Kary (mniej punktów karnych = lepiej)
         if (lifePts1 < lifePts2) { wins1++; victories1.push('Mniej kar ⚠️'); }
         else if (lifePts2 < lifePts1) { wins2++; victories2.push('Mniej kar ⚠️'); }
 
         // Formatuj pole statystyk gracza (do inline field)
-        function fmtPlayerField(m, hasCx, lifePts, latestScore, wLabel) {
+        // hasCxRecent = aktywny w ostatnim miesiącu, hasCxElite = 2700+ w ostatnim miesiącu
+        function fmtPlayerField(m, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel) {
+            const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
             let f = '';
             f += `📊 **Aktualny:** ${latestScore.toLocaleString('pl-PL')} *(${wLabel})*\n`;
             f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
-            f += `💪 **Zaangażowanie:** ${engCircle(m.engagementFactor)}${hasCx ? ' ⭐' : ''}\n`;
+            f += `💪 **Zaangażowanie:** ${engCircle(m.engagementFactor)}${cxStar}\n`;
             f += `💨 **Trend:** ${m.trendDescription ? `${m.trendDescription} ${m.trendIcon}` : '*brak*'}\n`;
             f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
             f += `⚠️ **Pkt. kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
@@ -8411,8 +8426,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, hasCx1, lifePts1, latestWeek1.score, wLabel1), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, hasCx2, lifePts2, latestWeek2.score, wLabel2), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2), inline: true },
                 { name: '💨 SPARKLINE TRENDU', value: trendsField },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
@@ -8535,12 +8550,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         });
 
         // Wczytaj dane CX gracza ze shared_data (zapisywane przez Kontroler bot)
+        // hasCxData = kiedykolwiek grał CX (do "Wykonuje CX: Tak/Nie")
+        // hasCxRecent = grał CX w ostatnim miesiącu (do gwiazdki i boost zaangażowania)
+        // hasCxElite = osiągnął 2700+ w ostatnim miesiącu (do gwiazdki 🌟 zamiast ⭐)
         let hasCxData = false;
+        let hasCxRecent = false;
+        let hasCxElite = false;
         try {
             const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
             const cxHistoryRaw = await fs.readFile(cxHistoryPath, 'utf8');
             const cxHistory = JSON.parse(cxHistoryRaw);
-            hasCxData = !!(cxHistory[userId] && cxHistory[userId].scores && cxHistory[userId].scores.length > 0);
+            const userData = cxHistory[userId];
+            if (userData && userData.scores && userData.scores.length > 0) {
+                hasCxData = true;
+                const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
+                const recentScores = userData.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
+                hasCxRecent = recentScores.length > 0;
+                hasCxElite = recentScores.some(s => s.score >= 2700);
+            }
         } catch (e) {
             // Plik nie istnieje jeszcze lub brak danych - ok
         }
@@ -8942,8 +8969,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        // Bonus CX do zaangażowania - gracz wykonujący CX dostaje +5% (nie karze za brak CX)
-        if (hasCxData && engagementFactor !== null) {
+        // Bonus CX do zaangażowania - tylko za aktywność w ostatnim miesiącu (nie karze za brak CX)
+        if (hasCxRecent && engagementFactor !== null) {
             engagementFactor = Math.min(100, engagementFactor + 5);
         }
 
@@ -9388,7 +9415,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
         }
-        description += `💪 **Zaangażowanie:** ${engagementCircle}${hasCxData ? ' ⭐' : ''}\n`;
+        const cxStarDisplay = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
+        description += `💪 **Zaangażowanie:** ${engagementCircle}${cxStarDisplay}\n`;
 
         // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
         let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
