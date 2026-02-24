@@ -9729,7 +9729,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         try {
             const [trendBuf, progressBuf, rankBuf] = await Promise.all([
                 (trendDescription !== null && trendIcon !== null)
-                    ? generateTrendChart(allPlayerData, trendDescription, trendIcon, latestNick)
+                    ? generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick)
                     : Promise.resolve(null),
                 generateProgressChart(playerProgressData, latestNick),
                 clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick, config.roleDisplayNames) : Promise.resolve(null)
