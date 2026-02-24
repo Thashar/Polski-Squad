@@ -9688,7 +9688,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     ? generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick)
                     : Promise.resolve(null),
                 generateProgressChart(playerProgressData, latestNick),
-                clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick) : Promise.resolve(null)
+                clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick, config.roleDisplayNames) : Promise.resolve(null)
             ]);
             if (trendBuf) {
                 chartFiles.push(new AttachmentBuilder(trendBuf, { name: 'trend.png' }));
@@ -11891,31 +11891,17 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
     }
 }
 
-// Wykres trendu jako linia regresji liniowej + punkty referencyjne
+// Wykres trendu — konceptualna linia kierunku (nie dane surowe)
+// Nachylenie linii odpowiada opisowi tekstowemu trendu
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
     const rawData = [...playerProgressData].reverse().filter(d => d.score > 0);
     if (rawData.length < 2) return null;
 
-    const W = 800, H = 260;
-    const M = { top: 42, right: 28, bottom: 44, left: 68 };
+    const W = 800, H = 220;
+    const M = { top: 44, right: 32, bottom: 28, left: 32 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
-
-    const scores = rawData.map(d => d.score);
-    const minScore = Math.min(...scores);
-    const maxScore = Math.max(...scores);
-    const scoreRange = maxScore - minScore || 1;
-    const yMin = Math.max(0, minScore - scoreRange * 0.2);
-    const yMax = maxScore + scoreRange * 0.25; // miejsce na etykiety
-
-    const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
-    const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
-
-    const pts = rawData.map((d, i) => ({
-        x: toX(i), y: toY(d.score), score: d.score,
-        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
-    }));
 
     const trendColorMap = {
         'Gwałtownie rosnący': '#00E676',
@@ -11926,41 +11912,36 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     };
     const lineColor = trendColorMap[trendDescription] || '#5865F2';
 
-    // Liniowa regresja (trend line przez punkty Y)
-    const n = pts.length;
-    const sumX = n * (n - 1) / 2;
-    const sumY = pts.reduce((s, p) => s + p.y, 0);
-    const sumXX = pts.reduce((s, _, i) => s + i * i, 0);
-    const sumXY = pts.reduce((s, p, i) => s + i * p.y, 0);
-    const denom = n * sumXX - sumX * sumX;
-    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-    const intercept = (sumY - slope * sumX) / n;
-    const regY0 = intercept;
-    const regYn = slope * (n - 1) + intercept;
+    // Konceptualna linia — nachylenie wynika z trendDescription, bez danych surowych
+    const slopeMap = {
+        'Gwałtownie rosnący': { startPct: 0.85, endPct: 0.10 },
+        'Rosnący':            { startPct: 0.68, endPct: 0.25 },
+        'Constans':           { startPct: 0.50, endPct: 0.50 },
+        'Malejący':           { startPct: 0.25, endPct: 0.68 },
+        'Gwałtownie malejący':{ startPct: 0.10, endPct: 0.85 }
+    };
+    const sp = slopeMap[trendDescription] || { startPct: 0.50, endPct: 0.50 };
+    const x1 = M.left + 20, x2 = W - M.right - 20;
+    const y1 = M.top + sp.startPct * cH;
+    const y2 = M.top + sp.endPct * cH;
 
-    // Siatka Y
+    // Subtelna siatka bez etykiet
     const gridLines = Array.from({ length: 5 }, (_, i) => {
-        const s = yMin + (yMax - yMin) * (i / 4);
-        const y = toY(s);
-        const lbl = s >= 1000 ? `${(s / 1000).toFixed(1)}k` : Math.round(s).toString();
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
-    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#72767D" text-anchor="end">${lbl}</text>`;
-    }).join('\n    ');
+        const y = M.top + (i / 4) * cH;
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="0.8" stroke-dasharray="4,6"/>`;
+    }).join('\n  ');
 
-    // Etykiety X — każdy tydzień
-    const xLabels = pts.map(p =>
-        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
-    ).join('\n    ');
-
-    // Punkty referencyjne (małe szare kółka) z wartościami nad nimi
-    const refDots = pts.map(p => {
-        const scoreLbl = p.score >= 1000 ? `${(p.score / 1000).toFixed(1)}k` : p.score.toString();
-        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#393C43" stroke="#72767D" stroke-width="1.2"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
-    }).join('\n    ');
+    // Gradient pod linią (rosnące) lub nad (malejące)
+    const isRising = sp.startPct >= sp.endPct;
+    const fillAnchorY = isRising ? (M.top + cH).toFixed(1) : M.top.toFixed(1);
+    const fillPath = `M ${x1.toFixed(1)},${y1.toFixed(1)} L ${x2.toFixed(1)},${y2.toFixed(1)} L ${x2.toFixed(1)},${fillAnchorY} L ${x1.toFixed(1)},${fillAnchorY} Z`;
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
+    <linearGradient id="fill" x1="0" y1="${isRising ? '1' : '0'}" x2="0" y2="${isRising ? '0' : '1'}">
+      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.01"/>
+    </linearGradient>
     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="3" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -11971,12 +11952,12 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     <tspan x="${M.left}" fill="#B5BAC1">${playerNick}</tspan>
     <tspan fill="${lineColor}">  ${trendIcon} ${trendDescription}</tspan>
   </text>
+  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Trend</text>
   ${gridLines}
-  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  ${refDots}
-  <line x1="${pts[0].x.toFixed(1)}" y1="${regY0.toFixed(1)}" x2="${pts[n-1].x.toFixed(1)}" y2="${regYn.toFixed(1)}" stroke="${lineColor}" stroke-width="3.5" filter="url(#glow)"/>
-  ${xLabels}
+  <path d="${fillPath}" fill="url(#fill)"/>
+  <line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${lineColor}" stroke-width="3.5" stroke-linecap="round" filter="url(#glow)"/>
+  <circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="5" fill="${lineColor}" opacity="0.85"/>
+  <circle cx="${x2.toFixed(1)}" cy="${y2.toFixed(1)}" r="5" fill="${lineColor}" opacity="0.85"/>
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
@@ -12043,7 +12024,7 @@ async function generateProgressChart(playerProgressData, playerNick) {
     // Punkty z wartościami nad każdym
     const dotsSvg = pts.map((p, i) => {
         const isLast = i === pts.length - 1;
-        const scoreLbl = p.score >= 1000 ? `${(p.score / 1000).toFixed(1)}k` : p.score.toLocaleString('pl-PL');
+        const scoreLbl = p.score.toLocaleString('pl-PL');
         return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 3}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.5}"/>
     <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="${isLast ? 11 : 9}" font-weight="${isLast ? 'bold' : 'normal'}" fill="${isLast ? lineColor : '#B5BAC1'}" text-anchor="middle">${scoreLbl}</text>`;
     }).join('\n    ');
@@ -12074,8 +12055,9 @@ async function generateProgressChart(playerProgressData, playerNick) {
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-// Wykres pozycji w klanie (linie per klan, oś Y odwrócona — miejsce 1 na górze)
-async function generateClanRankingChart(clanRankData, playerNick) {
+// Wykres pozycji w klanie (oś Y odwrócona — miejsce 1 na górze)
+// clanNames = config.roleDisplayNames (prawdziwe nazwy klanów)
+async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}) {
     const sharp = require('sharp');
     if (clanRankData.length < 2) return null;
 
@@ -12084,7 +12066,7 @@ async function generateClanRankingChart(clanRankData, playerNick) {
     );
 
     const W = 800, H = 280;
-    const M = { top: 52, right: 120, bottom: 44, left: 52 };
+    const M = { top: 52, right: 130, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
@@ -12095,12 +12077,15 @@ async function generateClanRankingChart(clanRankData, playerNick) {
     const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
     const toY = (pos) => M.top + ((pos - minPos) / (Math.max(maxPos - minPos, 1))) * cH;
 
-    const clanStyle = {
-        'main': { color: '#FFD700', name: 'Main' },
-        '2':    { color: '#5865F2', name: 'Clan 2' },
-        '1':    { color: '#43B581', name: 'Clan 1' },
-        '0':    { color: '#9B59B6', name: 'Clan 0' }
+    const clanColors = {
+        'main': '#FFD700',
+        '2':    '#5865F2',
+        '1':    '#43B581',
+        '0':    '#9B59B6'
     };
+    const getClanColor = (clan) => clanColors[clan] || '#FFFFFF';
+    // Nazwa klanu z config, fallback na klucz
+    const getClanName = (clan) => clanNames[clan] || clan;
 
     const pts = rawData.map((d, i) => ({
         x: toX(i), y: toY(d.position),
@@ -12108,22 +12093,19 @@ async function generateClanRankingChart(clanRankData, playerNick) {
         lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
     }));
 
-    // Linie per klan (połącz punkty tego samego klanu w kolejności chronologicznej)
+    // Linie między WSZYSTKIMI kolejnymi punktami; kolor = klan punktu ŹRÓDŁOWEGO (pts[i])
     const seenClans = new Set();
     const linesSvg = [];
-    // Segmenty: gdy zmienia się klan, rysuj osobny segment
     for (let i = 0; i < pts.length - 1; i++) {
-        if (pts[i].clan === pts[i+1].clan) {
-            const color = (clanStyle[pts[i].clan] || { color: '#FFFFFF' }).color;
-            linesSvg.push(`<line x1="${pts[i].x.toFixed(1)}" y1="${pts[i].y.toFixed(1)}" x2="${pts[i+1].x.toFixed(1)}" y2="${pts[i+1].y.toFixed(1)}" stroke="${color}" stroke-width="2.5"/>`);
-        }
+        const color = getClanColor(pts[i].clan);
+        linesSvg.push(`<line x1="${pts[i].x.toFixed(1)}" y1="${pts[i].y.toFixed(1)}" x2="${pts[i+1].x.toFixed(1)}" y2="${pts[i+1].y.toFixed(1)}" stroke="${color}" stroke-width="2.5"/>`);
         seenClans.add(pts[i].clan);
     }
-    if (pts.length > 0) seenClans.add(pts[pts.length-1].clan);
+    if (pts.length > 0) seenClans.add(pts[pts.length - 1].clan);
 
     // Punkty z pozycjami nad każdym
     const dotsSvg = pts.map(p => {
-        const color = (clanStyle[p.clan] || { color: '#FFFFFF' }).color;
+        const color = getClanColor(p.clan);
         const labelY = p.y < M.top + 16 ? p.y + 18 : p.y - 9;
         return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="${color}" stroke="#2B2D31" stroke-width="1.5"/>
     <text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="${color}" text-anchor="middle" font-weight="bold">#${p.position}</text>`;
@@ -12135,21 +12117,23 @@ async function generateClanRankingChart(clanRankData, playerNick) {
     ).join('\n    ');
 
     // Siatka Y (pozycje)
-    const gridPositions = [];
-    for (let p = minPos; p <= maxPos; p++) gridPositions.push(p);
     const gridStep = maxPos > 10 ? Math.ceil(maxPos / 6) : 1;
-    const gridLines = gridPositions.filter(p => p === 1 || p === maxPos || p % gridStep === 0).map(pos => {
-        const y = toY(pos);
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
-    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">#${pos}</text>`;
-    }).join('\n    ');
+    const gridLines = [];
+    for (let pos = minPos; pos <= maxPos; pos++) {
+        if (pos === minPos || pos === maxPos || pos % gridStep === 0) {
+            const y = toY(pos);
+            gridLines.push(`<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">#${pos}</text>`);
+        }
+    }
 
-    // Legenda (po prawej)
+    // Legenda (po prawej) — prawdziwe nazwy klanów
     const legendSvg = [...seenClans].map((clan, i) => {
-        const style = clanStyle[clan] || { color: '#FFFFFF', name: clan };
-        const ly = M.top + i * 22;
-        return `<rect x="${W - M.right + 10}" y="${ly}" width="12" height="12" rx="2" fill="${style.color}"/>
-    <text x="${W - M.right + 26}" y="${ly + 10}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${style.name}</text>`;
+        const color = getClanColor(clan);
+        const name = getClanName(clan);
+        const ly = M.top + i * 24;
+        return `<rect x="${W - M.right + 10}" y="${ly}" width="12" height="12" rx="2" fill="${color}"/>
+    <text x="${W - M.right + 26}" y="${ly + 10}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${name}</text>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -12157,7 +12141,7 @@ async function generateClanRankingChart(clanRankData, playerNick) {
   <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${playerNick}</text>
   <text x="${(M.left + W - M.right) / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Pozycja w klanie</text>
   ${legendSvg}
-  ${gridLines}
+  ${gridLines.join('\n    ')}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   ${linesSvg.join('\n  ')}
