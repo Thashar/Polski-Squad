@@ -9729,7 +9729,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         try {
             const [trendBuf, progressBuf, rankBuf] = await Promise.all([
                 (trendDescription !== null && trendIcon !== null)
-                    ? generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick)
+                    ? generateTrendChart(allPlayerData, trendDescription, trendIcon, latestNick)
                     : Promise.resolve(null),
                 generateProgressChart(playerProgressData, latestNick),
                 clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick, config.roleDisplayNames) : Promise.resolve(null)
@@ -11939,32 +11939,30 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
 // Rosnące okno: min(i, 4) tygodni — pierwsze punkty używają krótszego okna żeby pokryć wszystkie 12 tygodni
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
-    // Dane chronologicznie (od najstarszego), max 12 tygodni
+    // Wszystkie dane chronologicznie (od najstarszego) — baseline z pełnej historii
     const chronological = [...playerProgressData].reverse().filter(d => d.score > 0);
     if (chronological.length < 3) return null;
 
-    // Rolling trendRatio z rosnącym oknem:
+    // Rolling trendRatio z rosnącym oknem (obliczane na WSZYSTKICH danych):
     //   windowSize         = min(i, 4)                             (1→2→3→4→4→4...)
     //   recentProgress     = score[i] - score[i - windowSize]      (progres w oknie)
-    //   historicalAvgSame  = (score[i] - score[0]) / i * windowSize (avg za ten sam okres)
+    //   historicalAvgSame  = (score[i] - score[0]) / i * windowSize (avg za ten sam okres, baseline = cała historia)
     //   ratio = recentProgress / |historicalAvgSame|
-    // Dzięki temu mamy punkt dla KAŻDEGO tygodnia (11 punktów przy 12 tygodniach danych)
-    const rawRatios = [];
+    const allRawRatios = [];
     for (let i = 1; i < chronological.length; i++) {
         const windowSize = Math.min(i, 4);
         const monthlyProgress = chronological[i].score - chronological[i - windowSize].score;
         const longerTermProgress = chronological[i].score - chronological[0].score;
         const historicalAvgPer4 = (longerTermProgress / i) * windowSize;
         const baseline = Math.abs(historicalAvgPer4) > 0 ? Math.abs(historicalAvgPer4) : 1;
-        rawRatios.push({
+        allRawRatios.push({
             ratio: Math.min(2.0, Math.max(0, monthlyProgress / baseline)),
             lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
         });
     }
-    if (rawRatios.length < 2) return null;
-
-    // Bez dodatkowego wygładzenia — 4-tygodniowe okno już wygładza dane wystarczająco
-    const ratioData = rawRatios;
+    // Wyświetlamy tylko ostatnie 11 punktów (= 12 tygodni na osi X)
+    const ratioData = allRawRatios.slice(-11);
+    if (ratioData.length < 2) return null;
 
     const W = 800, H = 260;
     const M = { top: 44, right: 28, bottom: 44, left: 52 };
@@ -12175,8 +12173,8 @@ async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}
     const minPos = 1;
     // Y odwrócona: pozycja 1 = góra wykresu
     const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
-    const isFlat = maxPos === minPos;
-    const toY = (pos) => isFlat ? M.top + cH / 2 : M.top + ((pos - minPos) / (maxPos - minPos)) * cH;
+    const allSameSinglePos = positions.every(p => p === positions[0]);
+    const toY = (pos) => allSameSinglePos ? M.top + cH / 2 : M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
 
     const clanColors = {
         'main': '#FFD700',
@@ -12285,12 +12283,14 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const ratios2 = computeRollingRatios(data2);
     if (ratios1.length < 2 && ratios2.length < 2) return null;
 
-    // Wspólna oś X — unia tygodni z obu zbiorów
+    // Wspólna oś X — unia tygodni z obu zbiorów, ograniczona do ostatnich 12
     const weekSet = new Map();
     for (const r of [...ratios1, ...ratios2]) {
         if (!weekSet.has(r.key)) weekSet.set(r.key, { weekNumber: r.weekNumber, year: r.year, key: r.key });
     }
-    const allWeeks = [...weekSet.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    const sortedWeeks = [...weekSet.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    // Wyświetlaj tylko ostatnie 12 tygodni (baseline z całej historii wewnątrz computeRollingRatios)
+    const allWeeks = sortedWeeks.slice(-12);
     if (allWeeks.length < 2) return null;
 
     const W = 800, H = 270;
@@ -12542,8 +12542,8 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const maxPos = Math.max(...allPositions);
     const minPos = 1;
     const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
-    const isFlatRank = maxPos === minPos;
-    const toY = (pos) => isFlatRank ? M.top + cH / 2 : M.top + ((pos - minPos) / (maxPos - minPos)) * cH;
+    const allSameComparePos = allPositions.every(p => p === allPositions[0]);
+    const toY = (pos) => allSameComparePos ? M.top + cH / 2 : M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
 
     function getPlayerPts(posMap) {
         return allWeeks.map((w, i) => {
