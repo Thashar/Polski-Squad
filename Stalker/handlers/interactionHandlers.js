@@ -9729,7 +9729,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         try {
             const [trendBuf, progressBuf, rankBuf] = await Promise.all([
                 (trendDescription !== null && trendIcon !== null)
-                    ? generateTrendChart(allPlayerData, trendDescription, trendIcon, latestNick)
+                    ? generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick)
                     : Promise.resolve(null),
                 generateProgressChart(playerProgressData, latestNick),
                 clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick, config.roleDisplayNames) : Promise.resolve(null)
@@ -12175,7 +12175,8 @@ async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}
     const minPos = 1;
     // Y odwrócona: pozycja 1 = góra wykresu
     const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
-    const toY = (pos) => M.top + ((pos - minPos) / (Math.max(maxPos - minPos, 1))) * cH;
+    const isFlat = maxPos === minPos;
+    const toY = (pos) => isFlat ? M.top + cH / 2 : M.top + ((pos - minPos) / (maxPos - minPos)) * cH;
 
     const clanColors = {
         'main': '#FFD700',
@@ -12325,6 +12326,11 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
     const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
 
+    // Legenda: drugi nick tuż za pierwszym po lewej
+    const leg1TrendLabel = `${name1}: ${trendIcon1} ${trendDesc1}`;
+    const leg2TrendCX = Math.round(M.left + leg1TrendLabel.length * 6.2 + 25);
+    const leg2TrendTX = leg2TrendCX + 10;
+
     const thresholds = [
         { value: 1.5, color: '#00E676', label: '1.5' },
         { value: 1.1, color: '#43B581', label: '1.1' },
@@ -12368,8 +12374,8 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
   <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Trend</text>
   <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
   <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${name1}: ${trendIcon1} ${trendDesc1}</text>
-  <circle cx="${W / 2 + 10}" cy="33" r="5" fill="${color2}"/>
-  <text x="${W / 2 + 20}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}: ${trendIcon2} ${trendDesc2}</text>
+  <circle cx="${leg2TrendCX}" cy="33" r="5" fill="${color2}"/>
+  <text x="${leg2TrendTX}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}: ${trendIcon2} ${trendDesc2}</text>
   ${thresholdLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
@@ -12455,13 +12461,28 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
         `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
     ).join('\n    ');
 
-    function buildDots(pts, color) {
+    // Separacja ostatnich kropek gdy się nakładają (lepszy gracz wyżej)
+    const lastProg1 = pts1.length > 0 ? pts1[pts1.length - 1] : null;
+    const lastProg2 = pts2.length > 0 ? pts2[pts2.length - 1] : null;
+    let lastProgOff1 = 0, lastProgOff2 = 0;
+    if (lastProg1 && lastProg2 && Math.abs(lastProg1.y - lastProg2.y) < 12) {
+        // Niższe y = wyższy wynik = zostaje wyżej
+        if (lastProg1.y <= lastProg2.y) { lastProgOff1 = -6; lastProgOff2 = 6; }
+        else { lastProgOff1 = 6; lastProgOff2 = -6; }
+    }
+
+    function buildDots(pts, color, lastOff = 0) {
         return pts.map((p, i) => {
             const isLast = i === pts.length - 1;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
-    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : ''}`;
+            const dy = isLast ? lastOff : 0;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${(p.y + dy).toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
+    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y + dy - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : ''}`;
         }).join('\n    ');
     }
+
+    // Legenda: drugi nick tuż za pierwszym po lewej
+    const leg2ProgCX = Math.round(M.left + name1.length * 6.5 + 25);
+    const leg2ProgTX = leg2ProgCX + 10;
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -12478,15 +12499,15 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
   <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Progres</text>
   <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
   <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${name1}</text>
-  <circle cx="${W / 2 + 10}" cy="33" r="5" fill="${color2}"/>
-  <text x="${W / 2 + 20}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}</text>
+  <circle cx="${leg2ProgCX}" cy="33" r="5" fill="${color2}"/>
+  <text x="${leg2ProgTX}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}</text>
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
   ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
-  ${buildDots(pts1, color1)}
-  ${buildDots(pts2, color2)}
+  ${buildDots(pts1, color1, lastProgOff1)}
+  ${buildDots(pts2, color2, lastProgOff2)}
   ${xLabels}
 </svg>`;
     return sharp(Buffer.from(svg)).png().toBuffer();
@@ -12521,7 +12542,8 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const maxPos = Math.max(...allPositions);
     const minPos = 1;
     const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
-    const toY = (pos) => M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
+    const isFlatRank = maxPos === minPos;
+    const toY = (pos) => isFlatRank ? M.top + cH / 2 : M.top + ((pos - minPos) / (maxPos - minPos)) * cH;
 
     function getPlayerPts(posMap) {
         return allWeeks.map((w, i) => {
@@ -12561,13 +12583,28 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
         `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
     ).join('\n    ');
 
-    function buildDots(pts, color) {
+    // Separacja ostatnich kropek gdy się nakładają
+    const lastRank1 = pts1.length > 0 ? pts1[pts1.length - 1] : null;
+    const lastRank2 = pts2.length > 0 ? pts2[pts2.length - 1] : null;
+    let lastRankOff1 = 0, lastRankOff2 = 0;
+    if (lastRank1 && lastRank2 && Math.abs(lastRank1.y - lastRank2.y) < 12) {
+        // Niższe y = lepsza pozycja (bliżej góry) = zostaje wyżej
+        if (lastRank1.y <= lastRank2.y) { lastRankOff1 = -6; lastRankOff2 = 6; }
+        else { lastRankOff1 = 6; lastRankOff2 = -6; }
+    }
+
+    function buildDots(pts, color, lastOff = 0) {
         return pts.map((p, i) => {
             const isLast = i === pts.length - 1;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
-    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : ''}`;
+            const dy = isLast ? lastOff : 0;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${(p.y + dy).toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
+    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y + dy - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : ''}`;
         }).join('\n    ');
     }
+
+    // Legenda: drugi nick tuż za pierwszym po lewej
+    const leg2RankCX = Math.round(M.left + name1.length * 6.5 + 25);
+    const leg2RankTX = leg2RankCX + 10;
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -12584,15 +12621,15 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
   <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Pozycja w klanie</text>
   <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
   <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${name1}</text>
-  <circle cx="${W / 2 + 10}" cy="33" r="5" fill="${color2}"/>
-  <text x="${W / 2 + 20}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}</text>
+  <circle cx="${leg2RankCX}" cy="33" r="5" fill="${color2}"/>
+  <text x="${leg2RankTX}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}</text>
   ${gridLines.join('\n  ')}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
   ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
-  ${buildDots(pts1, color1)}
-  ${buildDots(pts2, color2)}
+  ${buildDots(pts1, color1, lastRankOff1)}
+  ${buildDots(pts2, color2, lastRankOff2)}
   ${xLabels}
 </svg>`;
     return sharp(Buffer.from(svg)).png().toBuffer();
