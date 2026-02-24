@@ -19,6 +19,7 @@ const MessageCleanupService = require('./services/messageCleanupService');
 const RaportCleanupService = require('./services/raportCleanupService');
 const BroadcastMessageService = require('./services/broadcastMessageService');
 const AIChatService = require('./services/aiChatService');
+const { fixMissingImageUrls } = require('./services/imageUrlFixer');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 
@@ -146,6 +147,13 @@ client.once(Events.ClientReady, async () => {
     await reminderUsageService.loadUsageData();
     await loadCalculatorCooldowns();
     await loadBorixoningCooldowns();
+
+    // Napraw brakujące URL zdjęć po migracji transferowej
+    try {
+        await fixMissingImageUrls(client, logger);
+    } catch (error) {
+        logger.error(`❌ Błąd naprawy URL zdjęć: ${error.message}`);
+    }
 
     // Rejestracja komend slash
     await registerSlashCommands(client);

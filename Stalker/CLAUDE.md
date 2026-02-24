@@ -65,6 +65,7 @@
 - Workflow: Wybór tygodnia (z listy wszystkich dostępnych) → Upload zdjęcia (1 min timeout) → Repost na kanał archiwum Discord
 - **Przechowywanie:** Zdjęcia są repostowane na kanał archiwum (ID: `1470000330556309546`) z embedem zawierającym nazwę klanu i tydzień. URL obrazu zapisywany w `data/ranking_image_urls.json`
 - **Format klucza JSON:** `{guildId}_{year}_{weekNumber}_{clan}` → `{ url, messageId, channelId, addedBy, addedAt }`
+- **Auto-naprawa przy starcie:** `imageUrlFixer.js` - wykrywa wpisy bez `url` (np. z transferu), pobiera wiadomość po `messageId` z kanału archiwum i uzupełnia brakujący URL. Uruchamia się przy każdym starcie bota.
 - **Uprawnienia:** Tylko administratorzy i moderatorzy (allowedPunishRoles)
 - **Detekcja klanu:** Automatyczna detekcja z roli użytkownika (admin/moderator musi mieć rolę klanową)
 - **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie rankingu" na embedzie kolejki OCR (drugi rząd przycisków)
