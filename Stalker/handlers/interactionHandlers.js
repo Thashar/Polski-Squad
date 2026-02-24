@@ -8918,6 +8918,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const weeksSinceLast12 = last12Data.length;
         let reminderCountLast12 = 0;
         let confirmationCountLast12 = 0;
+        let recentPoints = 0;
 
         if (weeksSinceLast12 > 0) {
             const oldest12Week = last12Data[last12Data.length - 1];
@@ -8942,6 +8943,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     confirmationCountLast12++;
                 }
             }
+
+            // Punkty karne z ostatnich 12 tygodni (tylko dodatnie wpisy)
+            for (const entry of (userPunishment?.history || [])) {
+                if (entry.points > 0 && new Date(entry.date).getTime() >= startTimestamp12) {
+                    recentPoints += entry.points;
+                }
+            }
         }
 
         // Oblicz współczynniki — wszystkie na bazie ostatnich 12 tygodni
@@ -8949,7 +8957,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let timingFactor = null;
 
         if (weeksSinceLast12 > 0) {
-            wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + lifetimePoints * 0.2) / weeksSinceLast12) * 100);
+            wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + recentPoints * 0.2) / weeksSinceLast12) * 100);
             timingFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.125) / weeksSinceLast12) * 100);
         }
 
@@ -11367,6 +11375,7 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     // Ostatnie 12 tygodni — wspólna baza dla wszystkich współczynników (playerProgressData jest już ≤12 tyg.)
     const weeksSinceLast12 = playerProgressData.length;
     let reminderCountLast12 = 0;
+    let recentPoints = 0;
 
     if (weeksSinceLast12 > 0) {
         const oldest12Week = playerProgressData[playerProgressData.length - 1];
@@ -11379,10 +11388,18 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
         const startDate12 = getWeekStartDate(oldest12Week.weekNumber, oldest12Week.year);
         const startDateStr12 = formatDate(startDate12);
+        const startTimestamp12 = startDate12.getTime();
 
         if (reminderData.receivers?.[userId]) {
             for (const [dateStr, pings] of Object.entries(reminderData.receivers[userId].dailyPings || {})) {
                 if (dateStr >= startDateStr12) reminderCountLast12 += pings.length;
+            }
+        }
+
+        // Punkty karne z ostatnich 12 tygodni (tylko dodatnie wpisy)
+        for (const entry of (userPunishment?.history || [])) {
+            if (entry.points > 0 && new Date(entry.date).getTime() >= startTimestamp12) {
+                recentPoints += entry.points;
             }
         }
     }
@@ -11392,7 +11409,7 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     let timingFactor = null;
 
     if (weeksSinceLast12 > 0) {
-        wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + lifetimePoints * 0.2) / weeksSinceLast12) * 100);
+        wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + recentPoints * 0.2) / weeksSinceLast12) * 100);
         timingFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.125) / weeksSinceLast12) * 100);
     }
 
