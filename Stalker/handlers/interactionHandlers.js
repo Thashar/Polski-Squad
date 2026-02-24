@@ -12476,9 +12476,11 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
     }
 
     function buildDots(pts, color) {
-        return pts.map((p) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
-        ).join('\n    ');
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>` +
+                (isLast ? `\n    <text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : '');
+        }).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
@@ -12594,7 +12596,8 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const sorted2cc = [...rankData2].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
     const clanChanges1 = detectClanChanges(sorted1cc);
     const clanChanges2 = detectClanChanges(sorted2cc);
-    const clanLbl = (clan) => `→${clanNames[clan] || clan}`;
+    const stripEmoji = (s) => (s || '').replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]/gu, '').trim();
+    const clanLbl = (clan) => `→${stripEmoji(clanNames[clan] || clan)}`;
     const clanChangesSvg = [
         ...clanChanges1.map(c =>
             `<line x1="${c.x.toFixed(1)}" y1="${M.top}" x2="${c.x.toFixed(1)}" y2="${M.top + cH}" stroke="${color1}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>` +
@@ -12628,9 +12631,11 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     }
 
     function buildDots(pts, color) {
-        return pts.map((p) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
-        ).join('\n    ');
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>` +
+                (isLast ? `\n    <text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : '');
+        }).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
