@@ -11964,11 +11964,22 @@ async function generateProgressChart(playerProgressData, playerNick) {
         `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
     ).join('\n    ');
 
+    // Oblicz offsety etykiet — unikaj pionowego nachodzeniana siebie
+    const labelOffsets = pts.map(() => 8);
+    for (let i = 1; i < pts.length; i++) {
+        const prevLabelY = pts[i - 1].y - labelOffsets[i - 1];
+        const desiredLabelY = pts[i].y - 8;
+        if (Math.abs(desiredLabelY - prevLabelY) < 11) {
+            const newLabelY = Math.max(M.top - 10, Math.min(prevLabelY - 11, desiredLabelY));
+            labelOffsets[i] = pts[i].y - newLabelY;
+        }
+    }
+
     // Punkty z wartościami nad każdym
-    const dotsSvg = pts.map((p) => {
+    const dotsSvg = pts.map((p, idx) => {
         const scoreLbl = p.score.toLocaleString('pl-PL');
         return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
+    <text x="${p.x.toFixed(1)}" y="${(p.y - labelOffsets[idx]).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
