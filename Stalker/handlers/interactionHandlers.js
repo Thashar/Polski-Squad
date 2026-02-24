@@ -8613,7 +8613,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTitle(`⚔️ PORÓWNANIE  —  ${name1}  vs  ${name2}`)
             .setColor('#9B59B6')
             .setTimestamp()
-            .setFooter({ text: 'Ostatnie 12 tygodni' })
+            .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
                 { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers), inline: true },
                 { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers), inline: true },
@@ -8657,7 +8657,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                     : Promise.resolve(null),
                 generateCompareProgressChart(data1, data2, name1, name2),
                 (rankData1.length >= 2 || rankData2.length >= 2)
-                    ? generateCompareClanRankingChart(rankData1, rankData2, name1, name2)
+                    ? generateCompareClanRankingChart(rankData1, rankData2, name1, name2, config.roleDisplayNames)
                     : Promise.resolve(null)
             ]);
             const files = [];
@@ -8678,7 +8678,19 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             logger.warn('[player-compare] Nie udało się wygenerować wykresów:', e.message);
         }
 
-        await interaction.editReply(replyPayload);
+        const compareResponse = await interaction.editReply(replyPayload);
+
+        // Zaplanuj usunięcie wiadomości (5 minut — tak samo jak player-status)
+        const messageCleanupService = interaction.client.messageCleanupService;
+        const deleteAt = Date.now() + (5 * 60 * 1000);
+        if (compareResponse && messageCleanupService) {
+            await messageCleanupService.scheduleMessageDeletion(
+                compareResponse.id,
+                compareResponse.channelId,
+                deleteAt,
+                interaction.user.id
+            );
+        }
 
     } catch (error) {
         logger.error('[player-compare] ❌ Błąd:', error);
@@ -12039,10 +12051,9 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     ).join('\n    ');
 
     // Kółka na punktach
-    const dotsSvg = pts.map((p, i) => {
-        const isLast = i === pts.length - 1;
-        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.85}"/>`;
-    }).join('\n    ');
+    const dotsSvg = pts.map((p) =>
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.2" opacity="0.85"/>`
+    ).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
@@ -12119,11 +12130,10 @@ async function generateProgressChart(playerProgressData, playerNick) {
     ).join('\n    ');
 
     // Punkty z wartościami nad każdym
-    const dotsSvg = pts.map((p, i) => {
-        const isLast = i === pts.length - 1;
+    const dotsSvg = pts.map((p) => {
         const scoreLbl = p.score.toLocaleString('pl-PL');
-        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 3}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.5}"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="${isLast ? 11 : 9}" font-weight="${isLast ? 'bold' : 'normal'}" fill="${isLast ? lineColor : '#B5BAC1'}" text-anchor="middle">${scoreLbl}</text>`;
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -12341,10 +12351,9 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     ).join('\n    ');
 
     function buildDots(pts, color) {
-        return pts.map((p, i) => {
-            const isLast = i === pts.length - 1;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.85}"/>`;
-        }).join('\n    ');
+        return pts.map((p) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2" opacity="0.85"/>`
+        ).join('\n    ');
     }
 
     const trendColorMap = { 'Gwałtownie rosnący': '#00E676', 'Rosnący': '#43B581', 'Constans': '#FAA61A', 'Malejący': '#FF8A65', 'Gwałtownie malejący': '#F04747' };
@@ -12466,13 +12475,10 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
         else { lastProgOff1 = 6; lastProgOff2 = -6; }
     }
 
-    function buildDots(pts, color, lastOff = 0) {
-        return pts.map((p, i) => {
-            const isLast = i === pts.length - 1;
-            const dy = isLast ? lastOff : 0;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${(p.y + dy).toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
-    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y + dy - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : ''}`;
-        }).join('\n    ');
+    function buildDots(pts, color) {
+        return pts.map((p) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
+        ).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
@@ -12509,7 +12515,7 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
 }
 
 // Wykres pozycji w klanie porównawczy — dwie krzywe pozycji na jednym wykresie (oś Y odwrócona)
-async function generateCompareClanRankingChart(rankData1, rankData2, name1, name2) {
+async function generateCompareClanRankingChart(rankData1, rankData2, name1, name2, clanNames = {}) {
     const sharp = require('sharp');
     const color1 = '#5865F2';
     const color2 = '#EB459E';
@@ -12588,7 +12594,7 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const sorted2cc = [...rankData2].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
     const clanChanges1 = detectClanChanges(sorted1cc);
     const clanChanges2 = detectClanChanges(sorted2cc);
-    const clanLbl = (clan) => clan === 'main' ? '→KM' : `→K${clan}`;
+    const clanLbl = (clan) => `→${clanNames[clan] || clan}`;
     const clanChangesSvg = [
         ...clanChanges1.map(c =>
             `<line x1="${c.x.toFixed(1)}" y1="${M.top}" x2="${c.x.toFixed(1)}" y2="${M.top + cH}" stroke="${color1}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>` +
@@ -12621,13 +12627,10 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
         else { lastRankOff1 = 6; lastRankOff2 = -6; }
     }
 
-    function buildDots(pts, color, lastOff = 0) {
-        return pts.map((p, i) => {
-            const isLast = i === pts.length - 1;
-            const dy = isLast ? lastOff : 0;
-            return `<circle cx="${p.x.toFixed(1)}" cy="${(p.y + dy).toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
-    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y + dy - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : ''}`;
-        }).join('\n    ');
+    function buildDots(pts, color) {
+        return pts.map((p) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
+        ).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
