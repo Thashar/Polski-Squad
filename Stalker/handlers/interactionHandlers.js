@@ -8187,11 +8187,12 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         const last12Weeks = allWeeks.slice(0, 12);
+        const last54Weeks = allWeeks.slice(0, 54);
 
-        // Wczytaj dane gracza z ostatnich 12 tygodni
+        // Wczytaj dane gracza z ostatnich 54 tygodni (pełna historia dla wykresu trendu)
         async function loadPlayerData(userId) {
             const data = [];
-            for (const week of last12Weeks) {
+            for (const week of last54Weeks) {
                 for (const clan of week.clans) {
                     const weekData = await databaseService.getPhase1Results(interaction.guild.id, week.weekNumber, week.year, clan);
                     if (weekData && weekData.players) {
@@ -8321,9 +8322,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
 
         // Pobierz dane pomocnicze równolegle
         const members = await safeFetchMembers(interaction.guild);
-        const [guildPunishments, last54Weeks] = await Promise.all([
-            databaseService.getGuildPunishments(interaction.guild.id),
-            Promise.resolve(allWeeks.slice(0, 54))
+        const [guildPunishments] = await Promise.all([
+            databaseService.getGuildPunishments(interaction.guild.id)
         ]);
         const lifePts1 = guildPunishments[userInfo1.userId]?.lifetime_points || 0;
         const lifePts2 = guildPunishments[userInfo2.userId]?.lifetime_points || 0;
@@ -8607,14 +8607,45 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
 
-        // Generuj wykresy porównawcze (trend + progres z dwoma graczami)
+        // Oblicz pozycje klanowe dla obu graczy (ostatnie 12 tygodni)
+        async function loadClanRankData(data, userId) {
+            const rankData = [];
+            try {
+                const last12 = data.slice(0, 12);
+                const results = await Promise.all(
+                    last12.map(week =>
+                        databaseService.getPhase1Results(interaction.guild.id, week.weekNumber, week.year, week.clan)
+                            .then(wd => ({ week, wd })).catch(() => ({ week, wd: null }))
+                    )
+                );
+                for (const { week, wd } of results) {
+                    if (!wd?.players) continue;
+                    const sorted = wd.players.filter(p => p.score > 0).sort((a, b) => b.score - a.score);
+                    const pos = sorted.findIndex(p => p.userId === userId) + 1;
+                    if (pos > 0) rankData.push({ weekNumber: week.weekNumber, year: week.year, clan: week.clan, position: pos, total: sorted.length });
+                }
+            } catch (e) { /* ignoruj błędy rankingu */ }
+            return rankData;
+        }
+
+        // Generuj wykresy porównawcze (trend + progres + ranking klanowy)
         const replyPayload = { embeds: [embed] };
         try {
-            const [trendBuf, progressBuf] = await Promise.all([
+            // Dane do wykresów: trend = pełna historia, progres = ostatnie 12 tygodni
+            const prog1 = data1.slice(0, 12);
+            const prog2 = data2.slice(0, 12);
+            const [rankData1, rankData2] = await Promise.all([
+                loadClanRankData(data1, userInfo1.userId),
+                loadClanRankData(data2, userInfo2.userId)
+            ]);
+            const [trendBuf, progressBuf, rankBuf] = await Promise.all([
                 (m1.trendDescription && m2.trendDescription)
                     ? generateCompareTrendChart(data1, data2, name1, name2, m1.trendDescription, m1.trendIcon, m2.trendDescription, m2.trendIcon)
                     : Promise.resolve(null),
-                generateCompareProgressChart(data1, data2, name1, name2)
+                generateCompareProgressChart(prog1, prog2, name1, name2),
+                (rankData1.length >= 2 || rankData2.length >= 2)
+                    ? generateCompareClanRankingChart(rankData1, rankData2, name1, name2)
+                    : Promise.resolve(null)
             ]);
             const files = [];
             if (trendBuf) {
@@ -8624,6 +8655,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (progressBuf) {
                 files.push(new AttachmentBuilder(progressBuf, { name: 'compare_progress.png' }));
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_progress.png'));
+            }
+            if (rankBuf) {
+                files.push(new AttachmentBuilder(rankBuf, { name: 'compare_ranking.png' }));
+                replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_ranking.png'));
             }
             if (files.length > 0) replyPayload.files = files;
         } catch (e) {
@@ -8701,12 +8736,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             return;
         }
 
+        // Wczytaj do 54 tygodni historii (dla wykresu trendu z pełną historią)
+        const last54Weeks = allWeeks.slice(0, 54);
         const last12Weeks = allWeeks.slice(0, 12);
 
-        // Zbierz dane gracza ze wszystkich tygodni i klanów (ostatnie 12 tygodni)
-        const playerProgressData = [];
+        // Zbierz dane gracza ze wszystkich dostępnych tygodni (do 54) — pełna historia dla trendu
+        const allPlayerData = [];
 
-        for (const week of last12Weeks) {
+        for (const week of last54Weeks) {
             for (const clan of week.clans) {
                 const weekData = await databaseService.getPhase1Results(
                     interaction.guild.id,
@@ -8719,7 +8756,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     const player = weekData.players.find(p => p.userId === userId);
 
                     if (player) {
-                        playerProgressData.push({
+                        allPlayerData.push({
                             weekNumber: week.weekNumber,
                             year: week.year,
                             clan: clan,
@@ -8734,18 +8771,21 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        if (playerProgressData.length === 0) {
+        if (allPlayerData.length === 0) {
             await interaction.editReply({
-                content: `❌ Nie znaleziono żadnych wyników dla gracza **${latestNick}** w ostatnich 12 tygodniach.`
+                content: `❌ Nie znaleziono żadnych wyników dla gracza **${latestNick}** w ostatnich 54 tygodniach.`
             });
             return;
         }
 
-        // Posortuj dane od najnowszych do najstarszych
-        playerProgressData.sort((a, b) => {
+        // Posortuj od najnowszych do najstarszych
+        allPlayerData.sort((a, b) => {
             if (a.year !== b.year) return b.year - a.year;
             return b.weekNumber - a.weekNumber;
         });
+
+        // playerProgressData = ostatnie 12 tygodni (embed + wykres progresu)
+        const playerProgressData = allPlayerData.slice(0, 12);
 
         // Wczytaj dane CX gracza ze shared_data (zapisywane przez Kontroler bot)
         // hasCxData = kiedykolwiek grał CX (do "Wykonuje CX: Tak/Nie")
@@ -8796,7 +8836,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const clanDisplay = currentClan || 'Aktualnie poza strukturami';
 
         // Oblicz globalną pozycję w rankingu
-        const last54Weeks = allWeeks.slice(0, 54); // Dla globalnego rankingu używamy 54 tygodni
+        // last54Weeks już zadeklarowane wyżej
         const globalRanking = await createGlobalPlayerRanking(
             interaction.guild,
             databaseService,
@@ -9689,7 +9729,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         try {
             const [trendBuf, progressBuf, rankBuf] = await Promise.all([
                 (trendDescription !== null && trendIcon !== null)
-                    ? generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick)
+                    ? generateTrendChart(allPlayerData, trendDescription, trendIcon, latestNick)
                     : Promise.resolve(null),
                 generateProgressChart(playerProgressData, latestNick),
                 clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick, config.roleDisplayNames) : Promise.resolve(null)
@@ -12284,8 +12324,6 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
 
     const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
     const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
-    const bottomY = (M.top + cH).toFixed(1);
-    const fillPath1 = linePath1 ? `${linePath1} L ${pts1[pts1.length - 1].x.toFixed(1)},${bottomY} L ${pts1[0].x.toFixed(1)},${bottomY} Z` : '';
 
     const thresholds = [
         { value: 1.5, color: '#00E676', label: '1.5' },
@@ -12317,10 +12355,6 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="fg1" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color1}" stop-opacity="0.14"/>
-      <stop offset="100%" stop-color="${color1}" stop-opacity="0.01"/>
-    </linearGradient>
     <filter id="glow1" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="2.5" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -12339,7 +12373,6 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
   ${thresholdLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  ${fillPath1 ? `<path d="${fillPath1}" fill="url(#fg1)"/>` : ''}
   ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
   ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
   ${buildDots(pts1, color1)}
@@ -12409,9 +12442,6 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
 
     const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
     const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
-    const bottomY = (M.top + cH).toFixed(1);
-    const fillPath1 = linePath1 ? `${linePath1} L ${pts1[pts1.length - 1].x.toFixed(1)},${bottomY} L ${pts1[0].x.toFixed(1)},${bottomY} Z` : '';
-    const fillPath2 = linePath2 ? `${linePath2} L ${pts2[pts2.length - 1].x.toFixed(1)},${bottomY} L ${pts2[0].x.toFixed(1)},${bottomY} Z` : '';
 
     const gridLines = Array.from({ length: 5 }, (_, i) => {
         const s = yMin + (yMax - yMin) * (i / 4);
@@ -12435,14 +12465,6 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="fg1" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color1}" stop-opacity="0.14"/>
-      <stop offset="100%" stop-color="${color1}" stop-opacity="0.01"/>
-    </linearGradient>
-    <linearGradient id="fg2" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color2}" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="${color2}" stop-opacity="0.01"/>
-    </linearGradient>
     <filter id="glow1" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="2.5" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -12461,9 +12483,113 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  ${fillPath1 ? `<path d="${fillPath1}" fill="url(#fg1)"/>` : ''}
   ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
-  ${fillPath2 ? `<path d="${fillPath2}" fill="url(#fg2)"/>` : ''}
+  ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
+  ${buildDots(pts1, color1)}
+  ${buildDots(pts2, color2)}
+  ${xLabels}
+</svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// Wykres pozycji w klanie porównawczy — dwie krzywe pozycji na jednym wykresie (oś Y odwrócona)
+async function generateCompareClanRankingChart(rankData1, rankData2, name1, name2) {
+    const sharp = require('sharp');
+    const color1 = '#5865F2';
+    const color2 = '#EB459E';
+
+    // Wspólna oś X — unia tygodni z obu zbiorów
+    const weekMap = new Map();
+    for (const d of [...rankData1, ...rankData2]) {
+        const key = `${d.year}-${String(d.weekNumber).padStart(2, '0')}`;
+        if (!weekMap.has(key)) weekMap.set(key, { weekNumber: d.weekNumber, year: d.year, key });
+    }
+    const allWeeks = [...weekMap.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    if (allWeeks.length < 2) return null;
+
+    const posMap1 = new Map(rankData1.map(d => [`${d.year}-${String(d.weekNumber).padStart(2, '0')}`, d.position]));
+    const posMap2 = new Map(rankData2.map(d => [`${d.year}-${String(d.weekNumber).padStart(2, '0')}`, d.position]));
+    const allPositions = [...posMap1.values(), ...posMap2.values()];
+    if (allPositions.length < 2) return null;
+
+    const W = 800, H = 270;
+    const M = { top: 54, right: 28, bottom: 44, left: 52 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    // Oś Y odwrócona: pozycja 1 = góra wykresu
+    const maxPos = Math.max(...allPositions);
+    const minPos = 1;
+    const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
+    const toY = (pos) => M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
+
+    function getPlayerPts(posMap) {
+        return allWeeks.map((w, i) => {
+            const pos = posMap.get(w.key);
+            if (pos === undefined) return null;
+            return { x: toX(i), y: toY(pos), pos };
+        }).filter(Boolean);
+    }
+    const pts1 = getPlayerPts(posMap1);
+    const pts2 = getPlayerPts(posMap2);
+    if (pts1.length < 2 && pts2.length < 2) return null;
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i]; const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
+    const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
+
+    // Siatka Y — poziome linie pozycji
+    const gridLines = [];
+    for (let pos = minPos; pos <= maxPos; pos++) {
+        const y = toY(pos);
+        gridLines.push(`<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">#${pos}</text>`);
+    }
+
+    const xLabels = allWeeks.map((w, i) =>
+        `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
+    ).join('\n    ');
+
+    function buildDots(pts, color) {
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
+    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : ''}`;
+        }).join('\n    ');
+    }
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow1" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Pozycja w klanie</text>
+  <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
+  <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${name1}</text>
+  <circle cx="${W / 2 + 10}" cy="33" r="5" fill="${color2}"/>
+  <text x="${W / 2 + 20}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}</text>
+  ${gridLines.join('\n  ')}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
   ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
   ${buildDots(pts1, color1)}
   ${buildDots(pts2, color2)}
