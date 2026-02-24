@@ -8640,7 +8640,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             ]);
             const [trendBuf, progressBuf, rankBuf] = await Promise.all([
                 (m1.trendDescription && m2.trendDescription)
-                    ? generateCompareTrendChart(data1, data2, name1, name2, m1.trendDescription, m1.trendIcon, m2.trendDescription, m2.trendIcon)
+                    ? generateCompareTrendChart(prog1, prog2, name1, name2, m1.trendDescription, m1.trendIcon, m2.trendDescription, m2.trendIcon)
                     : Promise.resolve(null),
                 generateCompareProgressChart(prog1, prog2, name1, name2),
                 (rankData1.length >= 2 || rankData2.length >= 2)
@@ -12175,8 +12175,8 @@ async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}
     const minPos = 1;
     // Y odwrócona: pozycja 1 = góra wykresu
     const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
-    const isFlat = maxPos === minPos;
-    const toY = (pos) => isFlat ? M.top + cH / 2 : M.top + ((pos - minPos) / (maxPos - minPos)) * cH;
+    const allSameSinglePos = positions.every(p => p === positions[0]);
+    const toY = (pos) => allSameSinglePos ? M.top + cH / 2 : M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
 
     const clanColors = {
         'main': '#FFD700',
@@ -12542,8 +12542,8 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const maxPos = Math.max(...allPositions);
     const minPos = 1;
     const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
-    const isFlatRank = maxPos === minPos;
-    const toY = (pos) => isFlatRank ? M.top + cH / 2 : M.top + ((pos - minPos) / (maxPos - minPos)) * cH;
+    const allSameComparePos = allPositions.every(p => p === allPositions[0]);
+    const toY = (pos) => allSameComparePos ? M.top + cH / 2 : M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
 
     function getPlayerPts(posMap) {
         return allWeeks.map((w, i) => {
