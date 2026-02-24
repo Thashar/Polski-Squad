@@ -9660,19 +9660,51 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')} | Wygasa: za 5 min`
         });
 
-        // Generuj wykres liniowy trendu (SVG→PNG) i dołącz do embeda
-        const replyPayload = { embeds: [embed] };
-        if (trendDescription !== null && trendIcon !== null) {
-            try {
-                const chartBuffer = await generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick);
-                if (chartBuffer) {
-                    const attachment = new AttachmentBuilder(chartBuffer, { name: 'trend.png' });
-                    embed.setImage('attachment://trend.png');
-                    replyPayload.files = [attachment];
-                }
-            } catch (e) {
-                logger.warn('[player-status] Nie udało się wygenerować wykresu trendu:', e.message);
+        // Oblicz pozycje w klanie per tydzień (do wykresu rankingowego)
+        const clanRankData = [];
+        try {
+            const rankResults = await Promise.all(
+                playerProgressData.map(week =>
+                    databaseService.getPhase1Results(interaction.guild.id, week.weekNumber, week.year, week.clan)
+                        .then(wd => ({ week, wd })).catch(() => ({ week, wd: null }))
+                )
+            );
+            for (const { week, wd } of rankResults) {
+                if (!wd?.players) continue;
+                const sorted = wd.players.filter(p => p.score > 0).sort((a, b) => b.score - a.score);
+                const pos = sorted.findIndex(p => p.userId === userId) + 1;
+                if (pos > 0) clanRankData.push({
+                    weekNumber: week.weekNumber, year: week.year, clan: week.clan, position: pos, total: sorted.length
+                });
             }
+        } catch (e) { logger.warn('[player-status] Błąd obliczania pozycji klanowych:', e.message); }
+
+        // Generuj wykresy (trend, progres, ranking klanowy)
+        const replyPayload = { embeds: [embed] };
+        const chartFiles = [];
+        try {
+            const [trendBuf, progressBuf, rankBuf] = await Promise.all([
+                (trendDescription !== null && trendIcon !== null)
+                    ? generateTrendChart(playerProgressData, trendDescription, trendIcon, latestNick)
+                    : Promise.resolve(null),
+                generateProgressChart(playerProgressData, latestNick),
+                clanRankData.length >= 2 ? generateClanRankingChart(clanRankData, latestNick) : Promise.resolve(null)
+            ]);
+            if (trendBuf) {
+                chartFiles.push(new AttachmentBuilder(trendBuf, { name: 'trend.png' }));
+                embed.setImage('attachment://trend.png');
+            }
+            if (progressBuf) {
+                chartFiles.push(new AttachmentBuilder(progressBuf, { name: 'progress.png' }));
+                replyPayload.embeds.push(new EmbedBuilder().setColor('#5865F2').setImage('attachment://progress.png'));
+            }
+            if (rankBuf) {
+                chartFiles.push(new AttachmentBuilder(rankBuf, { name: 'ranking.png' }));
+                replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://ranking.png'));
+            }
+            if (chartFiles.length > 0) replyPayload.files = chartFiles;
+        } catch (e) {
+            logger.warn('[player-status] Nie udało się wygenerować wykresów:', e.message);
         }
 
         const response = await interaction.editReply(replyPayload);
@@ -11859,28 +11891,23 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
     }
 }
 
-// Generuj wykres trendu jako PNG (SVG → sharp → PNG buffer)
-// Używa catmull-rom interpolacji dla płynnej krzywej
+// Wykres trendu jako linia regresji liniowej + punkty referencyjne
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
-
-    // Przygotuj dane: filtruj zera, odwróć do kolejności chronologicznej
     const rawData = [...playerProgressData].reverse().filter(d => d.score > 0);
     if (rawData.length < 2) return null;
 
-    // Wymiary
     const W = 800, H = 260;
-    const M = { top: 36, right: 28, bottom: 44, left: 68 };
+    const M = { top: 42, right: 28, bottom: 44, left: 68 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
-    // Zakres Y — min z buforem 15%, max z buforem 10%
     const scores = rawData.map(d => d.score);
     const minScore = Math.min(...scores);
     const maxScore = Math.max(...scores);
     const scoreRange = maxScore - minScore || 1;
-    const yMin = Math.max(0, minScore - scoreRange * 0.15);
-    const yMax = maxScore + scoreRange * 0.12;
+    const yMin = Math.max(0, minScore - scoreRange * 0.2);
+    const yMax = maxScore + scoreRange * 0.25; // miejsce na etykiety
 
     const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
     const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
@@ -11890,7 +11917,6 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
         lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
     }));
 
-    // Kolor linii na podstawie trendu
     const trendColorMap = {
         'Gwałtownie rosnący': '#00E676',
         'Rosnący': '#43B581',
@@ -11900,31 +11926,19 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     };
     const lineColor = trendColorMap[trendDescription] || '#5865F2';
 
-    // Catmull-Rom → Cubic Bezier dla płynnej krzywej
-    function buildPath(points) {
-        if (points.length < 2) return '';
-        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = i > 0 ? points[i - 1] : points[i];
-            const p1 = points[i];
-            const p2 = points[i + 1];
-            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
-            const cp1x = (p1.x + (p2.x - p0.x) / 6).toFixed(1);
-            const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1);
-            const cp2x = (p2.x - (p3.x - p1.x) / 6).toFixed(1);
-            const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1);
-            d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-        }
-        return d;
-    }
+    // Liniowa regresja (trend line przez punkty Y)
+    const n = pts.length;
+    const sumX = n * (n - 1) / 2;
+    const sumY = pts.reduce((s, p) => s + p.y, 0);
+    const sumXX = pts.reduce((s, _, i) => s + i * i, 0);
+    const sumXY = pts.reduce((s, p, i) => s + i * p.y, 0);
+    const denom = n * sumXX - sumX * sumX;
+    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+    const intercept = (sumY - slope * sumX) / n;
+    const regY0 = intercept;
+    const regYn = slope * (n - 1) + intercept;
 
-    const linePath = buildPath(pts);
-    const firstPt = pts[0];
-    const lastPt = pts[pts.length - 1];
-    const bottomY = (M.top + cH).toFixed(1);
-    const fillPath = `${linePath} L ${lastPt.x.toFixed(1)},${bottomY} L ${firstPt.x.toFixed(1)},${bottomY} Z`;
-
-    // Linie siatki Y (5 poziomów)
+    // Siatka Y
     const gridLines = Array.from({ length: 5 }, (_, i) => {
         const s = yMin + (yMax - yMin) * (i / 4);
         const y = toY(s);
@@ -11933,20 +11947,105 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#72767D" text-anchor="end">${lbl}</text>`;
     }).join('\n    ');
 
-    // Etykiety X (co 2 tygodnie gdy > 8 punktów)
-    const step = rawData.length > 8 ? 2 : 1;
-    const xLabels = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map(p =>
-        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
+    // Etykiety X — każdy tydzień
+    const xLabels = pts.map(p =>
+        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
     ).join('\n    ');
 
-    // Punkty danych (ostatni wyróżniony)
+    // Punkty referencyjne (małe szare kółka) z wartościami nad nimi
+    const refDots = pts.map(p => {
+        const scoreLbl = p.score >= 1000 ? `${(p.score / 1000).toFixed(1)}k` : p.score.toString();
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#393C43" stroke="#72767D" stroke-width="1.2"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
+    }).join('\n    ');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text y="26" font-family="Arial,sans-serif" font-size="12" font-weight="bold">
+    <tspan x="${M.left}" fill="#B5BAC1">${playerNick}</tspan>
+    <tspan fill="${lineColor}">  ${trendIcon} ${trendDescription}</tspan>
+  </text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${refDots}
+  <line x1="${pts[0].x.toFixed(1)}" y1="${regY0.toFixed(1)}" x2="${pts[n-1].x.toFixed(1)}" y2="${regYn.toFixed(1)}" stroke="${lineColor}" stroke-width="3.5" filter="url(#glow)"/>
+  ${xLabels}
+</svg>`;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// Wykres progresu tygodniowego (krzywa Catmull-Rom, wartości nad każdym punktem)
+async function generateProgressChart(playerProgressData, playerNick) {
+    const sharp = require('sharp');
+    const rawData = [...playerProgressData].reverse().filter(d => d.score > 0);
+    if (rawData.length < 2) return null;
+
+    const W = 800, H = 260;
+    const M = { top: 42, right: 28, bottom: 44, left: 68 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const scores = rawData.map(d => d.score);
+    const minScore = Math.min(...scores);
+    const maxScore = Math.max(...scores);
+    const scoreRange = maxScore - minScore || 1;
+    const yMin = Math.max(0, minScore - scoreRange * 0.15);
+    const yMax = maxScore + scoreRange * 0.28; // większy bufor na etykiety
+
+    const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
+    const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
+
+    const pts = rawData.map((d, i) => ({
+        x: toX(i), y: toY(d.score), score: d.score,
+        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    }));
+
+    const lineColor = '#5865F2';
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath = buildCatmullRom(pts);
+    const bottomY = (M.top + cH).toFixed(1);
+    const fillPath = `${linePath} L ${pts[pts.length-1].x.toFixed(1)},${bottomY} L ${pts[0].x.toFixed(1)},${bottomY} Z`;
+
+    const gridLines = Array.from({ length: 5 }, (_, i) => {
+        const s = yMin + (yMax - yMin) * (i / 4);
+        const y = toY(s);
+        const lbl = s >= 1000 ? `${(s / 1000).toFixed(1)}k` : Math.round(s).toString();
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#72767D" text-anchor="end">${lbl}</text>`;
+    }).join('\n    ');
+
+    // Etykiety X — każdy tydzień
+    const xLabels = pts.map(p =>
+        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
+    ).join('\n    ');
+
+    // Punkty z wartościami nad każdym
     const dotsSvg = pts.map((p, i) => {
         const isLast = i === pts.length - 1;
-        const dot = `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.5}"/>`;
-        const scoreLabel = isLast
-            ? `<text x="${(p.x + 9).toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="${lineColor}">${p.score.toLocaleString('pl-PL')}</text>`
-            : '';
-        return dot + scoreLabel;
+        const scoreLbl = p.score >= 1000 ? `${(p.score / 1000).toFixed(1)}k` : p.score.toLocaleString('pl-PL');
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 3}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.5}"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="${isLast ? 11 : 9}" font-weight="${isLast ? 'bold' : 'normal'}" fill="${isLast ? lineColor : '#B5BAC1'}" text-anchor="middle">${scoreLbl}</text>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -11961,13 +12060,107 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     </filter>
   </defs>
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
-  <text x="${M.left}" y="22" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${playerNick}</text>
-  <text x="${W - M.right}" y="22" font-family="Arial,sans-serif" font-size="12" fill="${lineColor}" text-anchor="end" font-weight="bold">${trendDescription} ${trendIcon}</text>
+  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${playerNick}</text>
+  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Progres</text>
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <path d="${fillPath}" fill="url(#fg)"/>
   <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none" filter="url(#glow)"/>
+  ${dotsSvg}
+  ${xLabels}
+</svg>`;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// Wykres pozycji w klanie (linie per klan, oś Y odwrócona — miejsce 1 na górze)
+async function generateClanRankingChart(clanRankData, playerNick) {
+    const sharp = require('sharp');
+    if (clanRankData.length < 2) return null;
+
+    const rawData = [...clanRankData].sort((a, b) =>
+        a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
+    );
+
+    const W = 800, H = 280;
+    const M = { top: 52, right: 120, bottom: 44, left: 52 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const positions = rawData.map(d => d.position);
+    const maxPos = Math.max(...positions);
+    const minPos = 1;
+    // Y odwrócona: pozycja 1 = góra wykresu
+    const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
+    const toY = (pos) => M.top + ((pos - minPos) / (Math.max(maxPos - minPos, 1))) * cH;
+
+    const clanStyle = {
+        'main': { color: '#FFD700', name: 'Main' },
+        '2':    { color: '#5865F2', name: 'Clan 2' },
+        '1':    { color: '#43B581', name: 'Clan 1' },
+        '0':    { color: '#9B59B6', name: 'Clan 0' }
+    };
+
+    const pts = rawData.map((d, i) => ({
+        x: toX(i), y: toY(d.position),
+        position: d.position, clan: d.clan,
+        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    }));
+
+    // Linie per klan (połącz punkty tego samego klanu w kolejności chronologicznej)
+    const seenClans = new Set();
+    const linesSvg = [];
+    // Segmenty: gdy zmienia się klan, rysuj osobny segment
+    for (let i = 0; i < pts.length - 1; i++) {
+        if (pts[i].clan === pts[i+1].clan) {
+            const color = (clanStyle[pts[i].clan] || { color: '#FFFFFF' }).color;
+            linesSvg.push(`<line x1="${pts[i].x.toFixed(1)}" y1="${pts[i].y.toFixed(1)}" x2="${pts[i+1].x.toFixed(1)}" y2="${pts[i+1].y.toFixed(1)}" stroke="${color}" stroke-width="2.5"/>`);
+        }
+        seenClans.add(pts[i].clan);
+    }
+    if (pts.length > 0) seenClans.add(pts[pts.length-1].clan);
+
+    // Punkty z pozycjami nad każdym
+    const dotsSvg = pts.map(p => {
+        const color = (clanStyle[p.clan] || { color: '#FFFFFF' }).color;
+        const labelY = p.y < M.top + 16 ? p.y + 18 : p.y - 9;
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="${color}" stroke="#2B2D31" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="${color}" text-anchor="middle" font-weight="bold">#${p.position}</text>`;
+    }).join('\n    ');
+
+    // Etykiety X — każdy tydzień
+    const xLabels = pts.map(p =>
+        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
+    ).join('\n    ');
+
+    // Siatka Y (pozycje)
+    const gridPositions = [];
+    for (let p = minPos; p <= maxPos; p++) gridPositions.push(p);
+    const gridStep = maxPos > 10 ? Math.ceil(maxPos / 6) : 1;
+    const gridLines = gridPositions.filter(p => p === 1 || p === maxPos || p % gridStep === 0).map(pos => {
+        const y = toY(pos);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">#${pos}</text>`;
+    }).join('\n    ');
+
+    // Legenda (po prawej)
+    const legendSvg = [...seenClans].map((clan, i) => {
+        const style = clanStyle[clan] || { color: '#FFFFFF', name: clan };
+        const ly = M.top + i * 22;
+        return `<rect x="${W - M.right + 10}" y="${ly}" width="12" height="12" rx="2" fill="${style.color}"/>
+    <text x="${W - M.right + 26}" y="${ly + 10}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${style.name}</text>`;
+    }).join('\n    ');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${playerNick}</text>
+  <text x="${(M.left + W - M.right) / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Pozycja w klanie</text>
+  ${legendSvg}
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${linesSvg.join('\n  ')}
   ${dotsSvg}
   ${xLabels}
 </svg>`;
