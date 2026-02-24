@@ -12571,6 +12571,33 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
     const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
 
+    // Wykrywanie zmian klanu — pionowe linie adnotacyjne
+    const weekToIndex = new Map(allWeeks.map((w, i) => [w.key, i]));
+    function detectClanChanges(sortedRankData) {
+        const changes = [];
+        for (let i = 1; i < sortedRankData.length; i++) {
+            if (sortedRankData[i].clan !== sortedRankData[i - 1].clan) {
+                const key = `${sortedRankData[i].year}-${String(sortedRankData[i].weekNumber).padStart(2, '0')}`;
+                const idx = weekToIndex.get(key);
+                if (idx !== undefined) changes.push({ x: toX(idx), newClan: sortedRankData[i].clan });
+            }
+        }
+        return changes;
+    }
+    const sorted1cc = [...rankData1].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    const sorted2cc = [...rankData2].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    const clanChanges1 = detectClanChanges(sorted1cc);
+    const clanChanges2 = detectClanChanges(sorted2cc);
+    const clanLbl = (clan) => clan === 'main' ? '→KM' : `→K${clan}`;
+    const clanChangesSvg = [
+        ...clanChanges1.map(c =>
+            `<line x1="${c.x.toFixed(1)}" y1="${M.top}" x2="${c.x.toFixed(1)}" y2="${M.top + cH}" stroke="${color1}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>` +
+            `<text x="${c.x.toFixed(1)}" y="${M.top - 4}" font-family="Arial,sans-serif" font-size="8" fill="${color1}" text-anchor="middle">${clanLbl(c.newClan)}</text>`),
+        ...clanChanges2.map(c =>
+            `<line x1="${c.x.toFixed(1)}" y1="${M.top}" x2="${c.x.toFixed(1)}" y2="${M.top + cH}" stroke="${color2}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>` +
+            `<text x="${c.x.toFixed(1)}" y="${M.top + cH + 9}" font-family="Arial,sans-serif" font-size="8" fill="${color2}" text-anchor="middle">${clanLbl(c.newClan)}</text>`)
+    ].join('\n  ');
+
     // Siatka Y — co 5 pozycji (1, 5, 10, 15, ...)
     const gridLines = [];
     for (let pos = minPos; pos <= maxPos; pos++) {
@@ -12627,6 +12654,7 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
   ${gridLines.join('\n  ')}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${clanChangesSvg}
   ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
   ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
   ${buildDots(pts1, color1, lastRankOff1)}
