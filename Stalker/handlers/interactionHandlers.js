@@ -11896,24 +11896,25 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
 }
 
 // Wykres trendu — oś Y = rolling trendRatio (ta sama formuła co główny wskaźnik)
-// trendRatio_i = (progres ostatnich 4 tygodni) / (historyczna średnia na 4 tygodnie)
-// 1 słaby tydzień to tylko 25% okna — znacznie stabilniejsze niż per-tydzień
+// Rosnące okno: min(i, 4) tygodni — pierwsze punkty używają krótszego okna żeby pokryć wszystkie 12 tygodni
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
     // Dane chronologicznie (od najstarszego), max 12 tygodni
     const chronological = [...playerProgressData].reverse().filter(d => d.score > 0);
-    if (chronological.length < 5) return null; // min 5 tygodni żeby mieć 1 punkt rolling ratio
+    if (chronological.length < 3) return null;
 
-    // Rolling trendRatio: dla każdego tygodnia i (od 4. wzwyż):
-    //   monthlyProgress    = score[i] - score[i-4]         (okno 4 tygodni)
-    //   historicalAvgPer4  = (score[i] - score[0]) / i * 4 (cały dostępny okres → 4 tyg)
-    //   ratio = monthlyProgress / |historicalAvgPer4|
-    // Identyczna logika jak calcMetrics / główny trendRatio w Player Status
+    // Rolling trendRatio z rosnącym oknem:
+    //   windowSize         = min(i, 4)                             (1→2→3→4→4→4...)
+    //   recentProgress     = score[i] - score[i - windowSize]      (progres w oknie)
+    //   historicalAvgSame  = (score[i] - score[0]) / i * windowSize (avg za ten sam okres)
+    //   ratio = recentProgress / |historicalAvgSame|
+    // Dzięki temu mamy punkt dla KAŻDEGO tygodnia (11 punktów przy 12 tygodniach danych)
     const rawRatios = [];
-    for (let i = 4; i < chronological.length; i++) {
-        const monthlyProgress = chronological[i].score - chronological[i - 4].score;
+    for (let i = 1; i < chronological.length; i++) {
+        const windowSize = Math.min(i, 4);
+        const monthlyProgress = chronological[i].score - chronological[i - windowSize].score;
         const longerTermProgress = chronological[i].score - chronological[0].score;
-        const historicalAvgPer4 = (longerTermProgress / i) * 4;
+        const historicalAvgPer4 = (longerTermProgress / i) * windowSize;
         const baseline = Math.abs(historicalAvgPer4) > 0 ? Math.abs(historicalAvgPer4) : 1;
         rawRatios.push({
             ratio: Math.min(2.0, Math.max(0, monthlyProgress / baseline)),
@@ -12218,16 +12219,17 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const color1 = '#5865F2'; // gracz 1 — niebieski
     const color2 = '#EB459E'; // gracz 2 — różowy
 
-    // Rolling trendRatio — ta sama formuła co generateTrendChart
+    // Rolling trendRatio z rosnącym oknem — ta sama formuła co generateTrendChart
     function computeRollingRatios(data) {
         const chron = [...data].reverse().filter(d => d.score > 0);
-        if (chron.length < 5) return [];
+        if (chron.length < 3) return [];
         const raw = [];
-        for (let i = 4; i < chron.length; i++) {
-            const monthly = chron[i].score - chron[i - 4].score;
+        for (let i = 1; i < chron.length; i++) {
+            const windowSize = Math.min(i, 4);
+            const monthly = chron[i].score - chron[i - windowSize].score;
             const longer = chron[i].score - chron[0].score;
-            const avgPer4 = (longer / i) * 4;
-            const base = Math.abs(avgPer4) > 0 ? Math.abs(avgPer4) : 1;
+            const avgPerWindow = (longer / i) * windowSize;
+            const base = Math.abs(avgPerWindow) > 0 ? Math.abs(avgPerWindow) : 1;
             raw.push({
                 ratio: Math.min(2.0, Math.max(0, monthly / base)),
                 weekNumber: chron[i].weekNumber,
@@ -12235,13 +12237,7 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
                 key: `${chron[i].year}-${String(chron[i].weekNumber).padStart(2, '0')}`
             });
         }
-        return raw.map((d, i, arr) => {
-            let s;
-            if (i === 0) s = arr.length > 1 ? 0.75 * d.ratio + 0.25 * arr[1].ratio : d.ratio;
-            else if (i === arr.length - 1) s = 0.25 * arr[i - 1].ratio + 0.75 * d.ratio;
-            else s = 0.25 * arr[i - 1].ratio + 0.5 * d.ratio + 0.25 * arr[i + 1].ratio;
-            return { ...d, ratio: s };
-        });
+        return raw;
     }
 
     const ratios1 = computeRollingRatios(data1);
