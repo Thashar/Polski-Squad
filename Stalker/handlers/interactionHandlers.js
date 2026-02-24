@@ -8597,7 +8597,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         else winnerField = `⚖️ **Remis ${fmt(wins1)} - ${fmt(wins2)}**`;
 
         const embed = new EmbedBuilder()
-            .setTitle(`⚔️ ${name1}  vs  ${name2}`)
+            .setTitle(`⚔️ PORÓWNANIE  —  ${name1}  vs  ${name2}`)
             .setColor('#9B59B6')
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni' })
@@ -12558,9 +12558,10 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
     const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
 
-    // Siatka Y — poziome linie pozycji
+    // Siatka Y — co 5 pozycji (1, 5, 10, 15, ...)
     const gridLines = [];
     for (let pos = minPos; pos <= maxPos; pos++) {
+        if (pos !== minPos && pos % 5 !== 0) continue;
         const y = toY(pos);
         gridLines.push(`<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
     <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">#${pos}</text>`);
