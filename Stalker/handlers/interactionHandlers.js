@@ -9628,11 +9628,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         description += `\n`;
 
-        // Sekcja 3b: Trend — nagłówek z nazwą trendu, wykres jako obraz
-        if (trendIcon !== null && trendDescription !== null) {
-            description += `### 💨 TREND — ${trendDescription} ${trendIcon}\n`;
-        }
-
         // Sekcja 4: Progres (ostatnie 12 tygodni)
         description += `### 📈 PROGRES (OSTATNIE 12 TYGODNI)\n${resultsText}\n\n`;
 
@@ -9643,7 +9638,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
-        description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}`;
+        description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
+
+        // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
+        if (trendIcon !== null && trendDescription !== null) {
+            description += `\n### 💨 TREND — ${trendDescription} ${trendIcon}\n`;
+        }
 
         // Stwórz embed z pełnym description
         const embed = new EmbedBuilder()
@@ -11891,35 +11891,34 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
     }
 }
 
-// Wykres trendu — oś Y = wartości Ratio (progres tygodnia / średni tygodniowy progres)
-// Pokazuje jak ratio zmieniało się przez ostatnie 12 tygodni z liniami progów trendu
+// Wykres trendu — oś Y = rolling trendRatio (ta sama formuła co główny wskaźnik)
+// trendRatio_i = (progres ostatnich 4 tygodni) / (historyczna średnia na 4 tygodnie)
+// 1 słaby tydzień to tylko 25% okna — znacznie stabilniejsze niż per-tydzień
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
     // Dane chronologicznie (od najstarszego), max 12 tygodni
     const chronological = [...playerProgressData].reverse().filter(d => d.score > 0);
-    if (chronological.length < 3) return null;
+    if (chronological.length < 5) return null; // min 5 tygodni żeby mieć 1 punkt rolling ratio
 
-    // Baseline: średni tygodniowy progres z całego dostępnego okresu
-    const firstScore = chronological[0].score;
-    const lastScore = chronological[chronological.length - 1].score;
-    const totalProgress = lastScore - firstScore;
-    const totalWeeks = chronological.length - 1;
-    const avgWeekly = totalWeeks > 0 ? totalProgress / totalWeeks : 1;
-    const baseline = Math.abs(avgWeekly) > 0 ? Math.abs(avgWeekly) : 1;
-
-    // Ratio per tydzień = progres_tego_tygodnia / średni_tygodniowy_progres
-    // Ratio 1.0 = dokładnie średnia, >1 = szybciej niż średnia, <1 = wolniej
+    // Rolling trendRatio: dla każdego tygodnia i (od 4. wzwyż):
+    //   monthlyProgress    = score[i] - score[i-4]         (okno 4 tygodni)
+    //   historicalAvgPer4  = (score[i] - score[0]) / i * 4 (cały dostępny okres → 4 tyg)
+    //   ratio = monthlyProgress / |historicalAvgPer4|
+    // Identyczna logika jak calcMetrics / główny trendRatio w Player Status
     const rawRatios = [];
-    for (let i = 1; i < chronological.length; i++) {
-        const weekProgress = chronological[i].score - chronological[i - 1].score;
+    for (let i = 4; i < chronological.length; i++) {
+        const monthlyProgress = chronological[i].score - chronological[i - 4].score;
+        const longerTermProgress = chronological[i].score - chronological[0].score;
+        const historicalAvgPer4 = (longerTermProgress / i) * 4;
+        const baseline = Math.abs(historicalAvgPer4) > 0 ? Math.abs(historicalAvgPer4) : 1;
         rawRatios.push({
-            ratio: Math.min(2.0, Math.max(0, weekProgress / baseline)), // przycinamy do [0, 2.0]
+            ratio: Math.min(2.0, Math.max(0, monthlyProgress / baseline)),
             lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
         });
     }
     if (rawRatios.length < 2) return null;
 
-    // Wygładzanie: ważona średnia krocząca [0.25, 0.5, 0.25] dla płynniejszych przejść
+    // Lekkie wygładzenie [0.25, 0.5, 0.25] — dane są już stabilne dzięki 4-tygodniowemu oknu
     const ratioData = rawRatios.map((d, i, arr) => {
         let smoothed;
         if (i === 0) {
