@@ -8211,6 +8211,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         function calcMetrics(data) {
             const m = {
                 monthlyProgress: null, monthlyPercent: null,
+                quarterlyProgress: null, quarterlyPercent: null,
                 bestScore: 0, engagementFactor: null,
                 trendDescription: null, trendIcon: null, trendRatio: null
             };
@@ -8224,6 +8225,15 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 if (compScore) {
                     m.monthlyProgress = curScore - compScore;
                     m.monthlyPercent = (m.monthlyProgress / compScore) * 100;
+                }
+            }
+            // Kwartalny: best ostatnich 4 tyg vs najstarszy dostępny wynik z historii
+            if (data.length >= 6) {
+                const recentBest = Math.max(...data.slice(0, 4).map(d => d.score).filter(s => s > 0), 0);
+                const oldestEntry = data.filter(d => d.score > 0).pop();
+                if (recentBest > 0 && oldestEntry && oldestEntry.score > 0) {
+                    m.quarterlyProgress = recentBest - oldestEntry.score;
+                    m.quarterlyPercent = (m.quarterlyProgress / oldestEntry.score) * 100;
                 }
             }
             if (data.length >= 2) {
@@ -8267,16 +8277,16 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 return bestBefore > 0 ? data[dataIdx].score - bestBefore : 0;
             });
             const validDiffs = rawDiffs.filter(d => d !== null);
-            if (validDiffs.length === 0) return '··'.repeat(orderedWeeks.length);
+            if (validDiffs.length === 0) return '···'.repeat(orderedWeeks.length);
             const maxPos = Math.max(...validDiffs.filter(d => d > 0), 1);
             const maxNeg = Math.max(...validDiffs.filter(d => d < 0).map(d => -d), 1);
             return rawDiffs.map(d => {
-                if (d === null) return '··';
+                if (d === null) return '···';
                 let level;
                 if (d > 0) { level = 3 + Math.min(4, Math.ceil((d / maxPos) * 4)); }
                 else if (d < 0) { level = 3 - Math.min(3, Math.ceil((-d / maxNeg) * 3)); }
                 else { level = 3; }
-                return sparkChars[Math.min(7, Math.max(0, level))].repeat(2);
+                return sparkChars[Math.min(7, Math.max(0, level))].repeat(3);
             }).join('');
         }
 
@@ -8352,45 +8362,113 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         const wLabel1 = `${String(latestWeek1.weekNumber).padStart(2, '0')}/${String(latestWeek1.year).slice(-2)}`;
         const wLabel2 = `${String(latestWeek2.weekNumber).padStart(2, '0')}/${String(latestWeek2.year).slice(-2)}`;
 
+        // Oblicz liczbę MVP (TOP3 progresu w tygodniu, w klanie) dla obu graczy
+        let mvpCount1 = 0;
+        let mvpCount2 = 0;
+        try {
+            // Zbuduj indeks wyników wszystkich graczy (wszystkie klany, wszystkie tygodnie)
+            const allScoresIndex = new Map(); // userId → Map(weekKey → {score, clan})
+            for (const week of last12Weeks) {
+                for (const clan of ['0', '1', '2', 'main']) {
+                    const weekData = await databaseService.getPhase1Results(
+                        interaction.guild.id, week.weekNumber, week.year, clan
+                    );
+                    if (weekData && weekData.players) {
+                        for (const player of weekData.players) {
+                            if (!player.userId) continue;
+                            if (!allScoresIndex.has(player.userId)) allScoresIndex.set(player.userId, new Map());
+                            const weekKey = `${week.weekNumber}-${week.year}`;
+                            const existing = allScoresIndex.get(player.userId).get(weekKey);
+                            if (!existing || player.score > existing.score) {
+                                allScoresIndex.get(player.userId).set(weekKey, { score: player.score, clan });
+                            }
+                        }
+                    }
+                }
+            }
+            // Dla każdego tygodnia sprawdź TOP3 progresu
+            for (let wi = 0; wi < last12Weeks.length; wi++) {
+                const week = last12Weeks[wi];
+                const weekKey = `${week.weekNumber}-${week.year}`;
+                // Zbierz progres wszystkich graczy w tym tygodniu (per klan)
+                const progressByClan = {};
+                for (const [pid, weekMap] of allScoresIndex.entries()) {
+                    const cur = weekMap.get(weekKey);
+                    if (!cur || cur.score <= 0) continue;
+                    let prevBest = 0;
+                    for (let j = wi + 1; j < last12Weeks.length; j++) {
+                        const pk = `${last12Weeks[j].weekNumber}-${last12Weeks[j].year}`;
+                        const prev = weekMap.get(pk);
+                        if (prev && prev.score > prevBest) prevBest = prev.score;
+                    }
+                    const prog = cur.score - prevBest;
+                    if (prog > 0 && prevBest > 0) {
+                        if (!progressByClan[cur.clan]) progressByClan[cur.clan] = [];
+                        progressByClan[cur.clan].push({ userId: pid, progress: prog });
+                    }
+                }
+                // Sprawdź obu graczy
+                for (const [playerIdx, uid] of [[1, userInfo1.userId], [2, userInfo2.userId]]) {
+                    const userEntry = allScoresIndex.get(uid)?.get(weekKey);
+                    if (!userEntry) continue;
+                    const clanList = (progressByClan[userEntry.clan] || [])
+                        .sort((a, b) => b.progress - a.progress)
+                        .slice(0, 3);
+                    if (clanList.some(p => p.userId === uid)) {
+                        if (playerIdx === 1) mvpCount1++;
+                        else mvpCount2++;
+                    }
+                }
+            }
+        } catch (e) { /* błąd MVP - ok */ }
+
         // Oblicz wynik porównania - kto wygrywa w każdej kategorii
         let wins1 = 0;
         let wins2 = 0;
-        const victories1 = [];
-        const victories2 = [];
 
         // Miesiąc (wyższy progres = lepiej)
         if (m1.monthlyProgress !== null && m2.monthlyProgress !== null) {
-            if (m1.monthlyProgress > m2.monthlyProgress) { wins1++; victories1.push('Miesiąc 📈'); }
-            else if (m2.monthlyProgress > m1.monthlyProgress) { wins2++; victories2.push('Miesiąc 📈'); }
+            if (m1.monthlyProgress > m2.monthlyProgress) { wins1++; }
+            else if (m2.monthlyProgress > m1.monthlyProgress) { wins2++; }
+        }
+        // Kwartał (wyższy progres kwartalny = lepiej)
+        if (m1.quarterlyProgress !== null && m2.quarterlyProgress !== null) {
+            if (m1.quarterlyProgress > m2.quarterlyProgress) { wins1++; }
+            else if (m2.quarterlyProgress > m1.quarterlyProgress) { wins2++; }
         }
         // Najlepszy wynik (wyższy = lepiej)
-        if (m1.bestScore > m2.bestScore) { wins1++; victories1.push('Best score 🎯'); }
-        else if (m2.bestScore > m1.bestScore) { wins2++; victories2.push('Best score 🎯'); }
+        if (m1.bestScore > m2.bestScore) { wins1++; }
+        else if (m2.bestScore > m1.bestScore) { wins2++; }
         // Zaangażowanie (wyższy % = lepiej)
         const eng1 = m1.engagementFactor ?? 100;
         const eng2 = m2.engagementFactor ?? 100;
-        if (eng1 > eng2 + 0.5) { wins1++; victories1.push('Zaangażowanie 💪'); }
-        else if (eng2 > eng1 + 0.5) { wins2++; victories2.push('Zaangażowanie 💪'); }
+        if (eng1 > eng2 + 0.5) { wins1++; }
+        else if (eng2 > eng1 + 0.5) { wins2++; }
         // Trend ratio (wyższy = bardziej rosnący)
         if (m1.trendRatio !== null && m2.trendRatio !== null) {
-            if (m1.trendRatio > m2.trendRatio + 0.05) { wins1++; victories1.push('Trend 💨'); }
-            else if (m2.trendRatio > m1.trendRatio + 0.05) { wins2++; victories2.push('Trend 💨'); }
+            if (m1.trendRatio > m2.trendRatio + 0.05) { wins1++; }
+            else if (m2.trendRatio > m1.trendRatio + 0.05) { wins2++; }
         }
+        // MVP (więcej razy w TOP3 progresu = lepiej)
+        if (mvpCount1 > mvpCount2) { wins1++; }
+        else if (mvpCount2 > mvpCount1) { wins2++; }
         // CX (aktywność w ostatnim miesiącu = plus)
-        if (hasCxRecent1 && !hasCxRecent2) { wins1++; victories1.push('CX 🏆'); }
-        else if (hasCxRecent2 && !hasCxRecent1) { wins2++; victories2.push('CX 🏆'); }
+        if (hasCxRecent1 && !hasCxRecent2) { wins1++; }
+        else if (hasCxRecent2 && !hasCxRecent1) { wins2++; }
         // Kary (mniej punktów karnych = lepiej)
-        if (lifePts1 < lifePts2) { wins1++; victories1.push('Mniej kar ⚠️'); }
-        else if (lifePts2 < lifePts1) { wins2++; victories2.push('Mniej kar ⚠️'); }
+        if (lifePts1 < lifePts2) { wins1++; }
+        else if (lifePts2 < lifePts1) { wins2++; }
 
         // Formatuj pole statystyk gracza (do inline field)
         // hasCxRecent = aktywny w ostatnim miesiącu, hasCxElite = 2700+ w ostatnim miesiącu
-        function fmtPlayerField(m, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel) {
+        function fmtPlayerField(m, hasCx, hasCxRecent, hasCxElite, mvpCount, lifePts, latestScore, wLabel) {
             const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
             let f = '';
             f += `📊 **Aktualny:** ${latestScore.toLocaleString('pl-PL')} *(${wLabel})*\n`;
             f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
+            f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
+            f += `⭐ **MVP (12 tyg):** ${mvpCount > 0 ? `${mvpCount}x` : 'brak'}\n`;
             f += `💪 **Zaangażowanie:** ${engCircle(m.engagementFactor)}${cxStar}\n`;
             f += `💨 **Trend:** ${m.trendDescription ? `${m.trendDescription} ${m.trendIcon}` : '*brak*'}\n`;
             f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
@@ -8407,17 +8485,11 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         // Podsumowanie wygranego
         let winnerField = '';
         if (wins1 > wins2) {
-            winnerField = `🥇 **${name1}** wygrywa **${wins1} - ${wins2}**\n\n`;
-            if (victories1.length > 0) winnerField += `✅ ${name1} lepszy w: ${victories1.join(', ')}\n`;
-            if (victories2.length > 0) winnerField += `✅ ${name2} lepszy w: ${victories2.join(', ')}`;
+            winnerField = `🥇 **${name1}** wygrywa **${wins1} - ${wins2}**`;
         } else if (wins2 > wins1) {
-            winnerField = `🥇 **${name2}** wygrywa **${wins2} - ${wins1}**\n\n`;
-            if (victories2.length > 0) winnerField += `✅ ${name2} lepszy w: ${victories2.join(', ')}\n`;
-            if (victories1.length > 0) winnerField += `✅ ${name1} lepszy w: ${victories1.join(', ')}`;
+            winnerField = `🥇 **${name2}** wygrywa **${wins2} - ${wins1}**`;
         } else {
-            winnerField = `⚖️ **Remis ${wins1} - ${wins2}**\n\n`;
-            if (victories1.length > 0) winnerField += `✅ ${name1} lepszy w: ${victories1.join(', ')}\n`;
-            if (victories2.length > 0) winnerField += `✅ ${name2} lepszy w: ${victories2.join(', ')}`;
+            winnerField = `⚖️ **Remis ${wins1} - ${wins2}**`;
         }
 
         const embed = new EmbedBuilder()
@@ -8426,8 +8498,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, hasCx1, hasCxRecent1, hasCxElite1, mvpCount1, lifePts1, latestWeek1.score, wLabel1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, hasCx2, hasCxRecent2, hasCxElite2, mvpCount2, lifePts2, latestWeek2.score, wLabel2), inline: true },
                 { name: '💨 SPARKLINE TRENDU', value: trendsField },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
@@ -9286,8 +9358,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             playerIcon = '🧑🏻‍🦽'; // Ikona wózka dla ujemnego progresu
         }
 
-        // Główny nagłówek
-        description += `## ${playerIcon} STATUS GRACZA: ${latestNick}\n\n`;
+        // Główny nagłówek z trendem słownym
+        description += `## ${playerIcon} STATUS GRACZA: ${latestNick}\n`;
+        if (trendDescription !== null && trendIcon !== null) {
+            description += `### ${trendIcon} ${trendDescription}\n`;
+        }
+        description += `\n`;
 
         // Sekcja 1: Ranking
         description += `### 🏆 RANKING\n`;
@@ -9461,7 +9537,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const maxNeg = Math.max(...validDiffs.filter(d => d < 0).map(d => -d), 1);
 
                 const sparklineStr = rawDiffs.map(d => {
-                    if (d === null) return '··';
+                    if (d === null) return '···';
                     let level;
                     if (d > 0) {
                         level = 3 + Math.min(4, Math.ceil((d / maxPos) * 4));
@@ -9470,10 +9546,17 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     } else {
                         level = 3; // ▄ = neutralny (wynik = best historyczny)
                     }
-                    return sparkChars[Math.min(7, Math.max(0, level))].repeat(2);
+                    return sparkChars[Math.min(7, Math.max(0, level))].repeat(3);
                 }).join('');
 
+                // Legenda pod wykresem (starszy → nowszy), dopasowana szerokością do wykresu
+                const legendLeft = '◂ stary ';
+                const legendRight = ' nowy ▸';
+                const dots = Math.max(0, sparklineStr.length - legendLeft.length - legendRight.length);
+                const legendLine = legendLeft + '·'.repeat(dots) + legendRight;
+
                 description += `\`${sparklineStr}\`\n`;
+                description += `\`${legendLine}\`\n`;
             }
             description += `\n`;
         }
