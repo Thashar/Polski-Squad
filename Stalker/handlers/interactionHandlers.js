@@ -8918,6 +8918,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const weeksSinceLast12 = last12Data.length;
         let reminderCountLast12 = 0;
         let confirmationCountLast12 = 0;
+        let recentPoints = 0;
 
         if (weeksSinceLast12 > 0) {
             const oldest12Week = last12Data[last12Data.length - 1];
@@ -8942,6 +8943,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                     confirmationCountLast12++;
                 }
             }
+
+            // Punkty karne z ostatnich 12 tygodni (tylko dodatnie wpisy)
+            for (const entry of (userPunishment?.history || [])) {
+                if (entry.points > 0 && new Date(entry.date).getTime() >= startTimestamp12) {
+                    recentPoints += entry.points;
+                }
+            }
         }
 
         // Oblicz współczynniki — wszystkie na bazie ostatnich 12 tygodni
@@ -8949,7 +8957,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let timingFactor = null;
 
         if (weeksSinceLast12 > 0) {
-            wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + lifetimePoints * 0.2) / weeksSinceLast12) * 100);
+            wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + recentPoints * 0.2) / weeksSinceLast12) * 100);
             timingFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.125) / weeksSinceLast12) * 100);
         }
 
@@ -9151,82 +9159,26 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             engagementFactor = Math.min(100, engagementFactor + 5);
         }
 
-        // Oblicz współczynnik Trend (tempo progresu)
-        // Porównuje średnie tempo z miesiąca ze średnim tempem z dłuższego okresu (WARTOŚCI PUNKTOWE, NIE PROCENTOWE)
+        // Oblicz Trend — identyczna formuła co wykres (ostatni punkt allPlayerData, pełna historia)
         let trendRatio = null;
         let trendDescription = null;
         let trendIcon = null;
-        let monthlyValue = null;
-        let longerTermValue = null;
-        let adjustedLongerTermValue = null;
 
-        if (monthlyProgress !== null) {
+        const chronologicalAll = [...allPlayerData].reverse().filter(d => d.score > 0);
+        if (chronologicalAll.length >= 3) {
+            const lastIdx = chronologicalAll.length - 1;
+            const windowSize = Math.min(lastIdx, 4);
+            const recentProgress = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - windowSize].score;
+            const longerTermProgress = chronologicalAll[lastIdx].score - chronologicalAll[0].score;
+            const historicalAvgPer4 = (longerTermProgress / lastIdx) * windowSize;
+            const baseline = Math.abs(historicalAvgPer4) > 0 ? Math.abs(historicalAvgPer4) : 1;
+            trendRatio = Math.min(2.0, Math.max(0, recentProgress / baseline));
 
-            // Scenariusz 1: Mamy pełne dane kwartalne (13 tygodni)
-            if (quarterlyProgress !== null && quarterlyWeeksCount === 12) {
-                // Miesięczny progres już jest za 4 tygodnie (wartość punktowa)
-                monthlyValue = monthlyProgress;
-                // Kwartalny progres jest za 12 tygodni, dzielimy przez 3 aby uzyskać równowartość 4 tygodni (wartość punktowa)
-                longerTermValue = quarterlyProgress / 3;
-            }
-            // Scenariusz 2: Nie mamy pełnych danych kwartalnych, liczymy średni tygodniowy progres
-            else if (playerProgressData.length >= 2) {
-                // Średni tygodniowy progres z miesiąca (miesięczny progres punktowy / liczba tygodni)
-                monthlyValue = monthlyProgress / (monthlyWeeksCount || 4);
-
-                // Średni tygodniowy progres z całości (całkowity progres punktowy / liczba tygodni między pierwszym a ostatnim)
-                const firstScore = playerProgressData[playerProgressData.length - 1].score;
-                const lastScore = playerProgressData[0].score;
-
-                const totalProgressPoints = lastScore - firstScore;
-
-                // Oblicz zakres tygodni (nie liczbę tygodni z danymi, ale zakres czasowy)
-                const firstWeek = playerProgressData[playerProgressData.length - 1];
-                const lastWeek = playerProgressData[0];
-                let totalWeeksSpan = 0;
-
-                if (firstWeek.year === lastWeek.year) {
-                    totalWeeksSpan = lastWeek.weekNumber - firstWeek.weekNumber;
-                } else {
-                    const weeksInFirstYear = 52 - firstWeek.weekNumber;
-                    totalWeeksSpan = weeksInFirstYear + lastWeek.weekNumber;
-                }
-
-                if (totalWeeksSpan > 0) {
-                    longerTermValue = totalProgressPoints / totalWeeksSpan;
-                }
-            }
-
-            // Określ opis i ikonę trendu na podstawie stosunku
-            if (monthlyValue !== null && longerTermValue !== null && longerTermValue !== 0) {
-                // Jeżeli longerTermValue jest ujemny, traktuj go jako dodatni
-                // aby uniknąć błędnej klasyfikacji trendu (dwa minusy dają plus)
-                adjustedLongerTermValue = longerTermValue < 0 ? Math.abs(longerTermValue) : longerTermValue;
-                trendRatio = monthlyValue / adjustedLongerTermValue;
-
-                // Progi dla klasyfikacji trendu
-                if (trendRatio >= 1.5) {
-                    // Gwałtownie rosnący - miesięczny co najmniej 1.5x szybszy
-                    trendDescription = 'Gwałtownie rosnący';
-                    trendIcon = '🚀';
-                } else if (trendRatio > 1.1) {
-                    // Rosnący - miesięczny wyraźnie szybszy (powyżej 110%)
-                    trendDescription = 'Rosnący';
-                    trendIcon = '↗️';
-                } else if (trendRatio >= 0.9) {
-                    // Constans - stabilne tempo (+/-10%: 90%-110%)
-                    trendDescription = 'Constans';
-                    trendIcon = '⚖️';
-                } else if (trendRatio > 0.5) {
-                    // Malejący - miesięczny wyraźnie wolniejszy (poniżej 90%)
-                    trendDescription = 'Malejący';
-                    trendIcon = '↘️';
-                } else {
-                    // Gwałtownie malejący - miesięczny co najmniej 2x wolniejszy
-                    trendDescription = 'Gwałtownie malejący';
-                    trendIcon = '🪦';
-                }
-            }
+            if (trendRatio >= 1.5)      { trendDescription = 'Gwałtownie rosnący'; trendIcon = '🚀'; }
+            else if (trendRatio > 1.1)  { trendDescription = 'Rosnący';            trendIcon = '↗️'; }
+            else if (trendRatio >= 0.9) { trendDescription = 'Constans';           trendIcon = '⚖️'; }
+            else if (trendRatio > 0.5)  { trendDescription = 'Malejący';           trendIcon = '↘️'; }
+            else                        { trendDescription = 'Gwałtownie malejący'; trendIcon = '🪦'; }
         }
 
         // Oblicz TOP3 MVP - tygodnie gdzie gracz był w TOP3 progresu
@@ -11367,6 +11319,7 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     // Ostatnie 12 tygodni — wspólna baza dla wszystkich współczynników (playerProgressData jest już ≤12 tyg.)
     const weeksSinceLast12 = playerProgressData.length;
     let reminderCountLast12 = 0;
+    let recentPoints = 0;
 
     if (weeksSinceLast12 > 0) {
         const oldest12Week = playerProgressData[playerProgressData.length - 1];
@@ -11379,10 +11332,18 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
         const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
         const startDate12 = getWeekStartDate(oldest12Week.weekNumber, oldest12Week.year);
         const startDateStr12 = formatDate(startDate12);
+        const startTimestamp12 = startDate12.getTime();
 
         if (reminderData.receivers?.[userId]) {
             for (const [dateStr, pings] of Object.entries(reminderData.receivers[userId].dailyPings || {})) {
                 if (dateStr >= startDateStr12) reminderCountLast12 += pings.length;
+            }
+        }
+
+        // Punkty karne z ostatnich 12 tygodni (tylko dodatnie wpisy)
+        for (const entry of (userPunishment?.history || [])) {
+            if (entry.points > 0 && new Date(entry.date).getTime() >= startTimestamp12) {
+                recentPoints += entry.points;
             }
         }
     }
@@ -11392,7 +11353,7 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     let timingFactor = null;
 
     if (weeksSinceLast12 > 0) {
-        wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + lifetimePoints * 0.2) / weeksSinceLast12) * 100);
+        wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + recentPoints * 0.2) / weeksSinceLast12) * 100);
         timingFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.125) / weeksSinceLast12) * 100);
     }
 
