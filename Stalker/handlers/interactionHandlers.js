@@ -12130,10 +12130,11 @@ async function generateProgressChart(playerProgressData, playerNick) {
     ).join('\n    ');
 
     // Punkty z wartościami nad każdym
-    const dotsSvg = pts.map((p) => {
+    const dotsSvg = pts.map((p, i) => {
+        const isLast = i === pts.length - 1;
         const scoreLbl = p.score.toLocaleString('pl-PL');
         return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${scoreLbl}</text>`;
+    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-family="Arial,sans-serif" font-size="${isLast ? 11 : 9}" font-weight="${isLast ? 'bold' : 'normal'}" fill="${isLast ? lineColor : '#B5BAC1'}" text-anchor="middle">${scoreLbl}</text>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -12476,9 +12477,11 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
     }
 
     function buildDots(pts, color) {
-        return pts.map((p) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
-        ).join('\n    ');
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>` +
+                (isLast ? `\n    <text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : '');
+        }).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
@@ -12628,9 +12631,11 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     }
 
     function buildDots(pts, color) {
-        return pts.map((p) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>`
-        ).join('\n    ');
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>` +
+                (isLast ? `\n    <text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">#${p.pos}</text>` : '');
+        }).join('\n    ');
     }
 
     // Legenda: drugi nick tuż za pierwszym po lewej
