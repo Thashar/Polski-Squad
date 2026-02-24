@@ -11960,8 +11960,9 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
             lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
         });
     }
-    // Wyświetlamy tylko ostatnie 11 punktów (= 12 tygodni na osi X)
-    const ratioData = allRawRatios.slice(-11);
+    // Wyświetlamy N-4 punkty (pomijamy pierwsze 4 z małym oknem, gdzie ratio≈1), max 20
+    const displayCount = Math.min(20, Math.max(2, allRawRatios.length - 4));
+    const ratioData = allRawRatios.slice(-displayCount);
     if (ratioData.length < 2) return null;
 
     const W = 800, H = 260;
@@ -12002,8 +12003,6 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     }
 
     const linePath = buildCatmullRom(pts);
-    const bottomY = (M.top + cH).toFixed(1);
-    const fillPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)},${bottomY} L ${pts[0].x.toFixed(1)},${bottomY} Z`;
 
     // Linie progów — granice kategorii trendu
     const thresholds = [
@@ -12033,16 +12032,6 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.20"/>
-      <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.01"/>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
   <text y="26" font-family="Arial,sans-serif" font-size="12" font-weight="bold">
     <tspan x="${M.left}" fill="#B5BAC1">${playerNick}</tspan>
@@ -12052,8 +12041,7 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
   ${thresholdLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  <path d="${fillPath}" fill="url(#fg)"/>
-  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none" filter="url(#glow)"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none"/>
   ${dotsSvg}
   ${xLabels}
 </svg>`;
@@ -12103,8 +12091,6 @@ async function generateProgressChart(playerProgressData, playerNick) {
     }
 
     const linePath = buildCatmullRom(pts);
-    const bottomY = (M.top + cH).toFixed(1);
-    const fillPath = `${linePath} L ${pts[pts.length-1].x.toFixed(1)},${bottomY} L ${pts[0].x.toFixed(1)},${bottomY} Z`;
 
     const gridLines = Array.from({ length: 5 }, (_, i) => {
         const s = yMin + (yMax - yMin) * (i / 4);
@@ -12128,24 +12114,13 @@ async function generateProgressChart(playerProgressData, playerNick) {
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.01"/>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
   <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${playerNick}</text>
   <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Progres</text>
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  <path d="${fillPath}" fill="url(#fg)"/>
-  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none" filter="url(#glow)"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none"/>
   ${dotsSvg}
   ${xLabels}
 </svg>`;
@@ -12283,14 +12258,16 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const ratios2 = computeRollingRatios(data2);
     if (ratios1.length < 2 && ratios2.length < 2) return null;
 
-    // Wspólna oś X — unia tygodni z obu zbiorów, ograniczona do ostatnich 12
+    // Wspólna oś X — unia tygodni z obu zbiorów
     const weekSet = new Map();
     for (const r of [...ratios1, ...ratios2]) {
         if (!weekSet.has(r.key)) weekSet.set(r.key, { weekNumber: r.weekNumber, year: r.year, key: r.key });
     }
     const sortedWeeks = [...weekSet.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
-    // Wyświetlaj tylko ostatnie 12 tygodni (baseline z całej historii wewnątrz computeRollingRatios)
-    const allWeeks = sortedWeeks.slice(-12);
+    // Wyświetlaj N-4 tygodnie (max 20) — N = player z większą liczbą ratio, pomija pierwsze 4 (ratio≈1)
+    const maxRatioLen = Math.max(ratios1.length, ratios2.length);
+    const displayCount = Math.min(20, Math.max(2, maxRatioLen - 4));
+    const allWeeks = sortedWeeks.slice(-displayCount);
     if (allWeeks.length < 2) return null;
 
     const W = 800, H = 270;
@@ -12302,7 +12279,9 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const toY = (r) => M.top + cH - (r / maxRatio) * cH;
 
     function getPlayerPts(ratios) {
-        return ratios.map(r => {
+        // Pomijamy pierwsze 4 ratio każdego gracza (małe okno, ratio≈1)
+        const meaningful = ratios.slice(4);
+        return meaningful.map(r => {
             const idx = allWeeks.findIndex(w => w.key === r.key);
             if (idx === -1) return null;
             return { x: toX(idx), y: toY(r.ratio) };
@@ -12546,7 +12525,12 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const minPos = 1;
     const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
     const allSameComparePos = allPositions.every(p => p === allPositions[0]);
-    const toY = (pos) => allSameComparePos ? M.top + cH / 2 : M.top + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * cH;
+    // 8% margines wewnętrzny — linia przy maxPos nie nakłada się z osią X
+    const innerH = cH * 0.86;
+    const innerOffset = cH * 0.07;
+    const toY = (pos) => allSameComparePos
+        ? M.top + cH / 2
+        : M.top + innerOffset + ((pos - minPos) / Math.max(maxPos - minPos, 1)) * innerH;
 
     function getPlayerPts(posMap) {
         return allWeeks.map((w, i) => {
