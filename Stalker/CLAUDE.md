@@ -84,6 +84,33 @@
 - **Logika:** Ikona wyciągana z pierwszego znaku `clanName` (np. "🎮PolskiSquad⁰🎮" → "🎮")
 - **Implementacja:** `clanEmojiMap` - mapa weekKey → emoji klanu dla szybkiego dostępu
 
+**Integracja CX w `/player-status`** - Dane z Kontroler Bot (shared_data/cx_history.json):
+- **Wczytywanie:** Po posortowaniu `playerProgressData`, bot odczytuje `shared_data/cx_history.json` szukając `userId` gracza
+- **Zaangażowanie bonus:** Jeśli gracz ma dane CX → +5% do `engagementFactor` (max 100%) - CX nie karze za brak
+- **Złota gwiazdka ⭐:** Przy kółku Zaangażowania jeśli gracz wykonuje CX (`💪 **Zaangażowanie:** 🟢 ⭐`)
+- **Kary i status:** `🏆 **Wykonuje CX:** Tak ✅` lub `Nie` na końcu sekcji
+- **Źródło danych:** Kontroler Bot zapisuje wyniki przy udanym OCR na kanale CX do `shared_data/cx_history.json` (userId jako klucz, historia do 20 wyników)
+
+**Graficzny Trend w `/player-status`** - Osobna sekcja poniżej współczynników:
+- **Nagłówek:** `### 💨 TREND` z opisem słownym i ikoną (`**Rosnący** ↗️`)
+- **Sparkline:** 12 znaków Unicode blokowych (`▁▂▃▄▅▆▇█`) od najstarszego (lewo) do najnowszego (prawo)
+- **Puste tygodnie:** Symbol `·` dla tygodni bez danych
+- **Format:** `` `▁▂▃▄▅▆▇█····` *(12 tyg.)* ``
+- **Skala:** Dynamiczna - min(nonZero) = `▁`, max(nonZero) = `█`, proporcjonalnie dla reszty
+- **Implementacja:** `sparklineData = last12Weeks.map(...).reverse()` - reverse bo last12Weeks jest od najnowszego
+
+**Komenda `/player-compare`** - Porównanie dwóch graczy:
+- **Parametry:** `gracz1` (autocomplete), `gracz2` (autocomplete) - obydwa z listy graczy
+- **Dostęp:** Publiczny (publicCommands) - dostępny dla wszystkich członków klanu
+- **Sekcje embeda (kolor #9B59B6):**
+  - Nagłówek: `⚔️ PORÓWNANIE GRACZY` + ostatni wynik każdego
+  - `📊 STATYSTYKI`: Miesięczny progres i najlepszy wynik side-by-side
+  - `🌡️ WSPÓŁCZYNNIKI`: Zaangażowanie (z ⭐ jeśli CX) + Wykonuje CX po obu stronach
+  - `💨 TREND`: Opis trendu + sparkline dla każdego gracza
+- **Autocomplete:** Wspólny handler z `/progres` i `/player-status`
+- **Logika:** `loadPlayerData()`, `calcMetrics()`, `genSparkline()` - lokalne funkcje pomocnicze wewnątrz komendy
+- **CX boost:** Identyczny jak w `/player-status` - +5% do zaangażowania
+
 **Sekcja MVP w `/player-status`** - Tygodnie gdzie gracz był w TOP3 progresu:
 - **Nazwa sekcji:** `### ⭐ MVP TYGODNIA`
 - **Lokalizacja:** Pod sekcją "STATYSTYKI", przed "WSPÓŁCZYNNIKI"
@@ -123,7 +150,7 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/clan-status`, `/clan-progres`, `/player-raport`, `/msg`, `/ocr-debug`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/msg`, `/ocr-debug`
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---

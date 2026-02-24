@@ -26,7 +26,8 @@ class BackupManager {
             'Rekruter',
             'Stalker',
             'Szkolenia',
-            'Wydarzynier'
+            'Wydarzynier',
+            'shared_data'
         ];
 
         // Inicjalizacja Google Drive API
@@ -203,7 +204,10 @@ class BackupManager {
     async createBotArchive(botName) {
         return new Promise(async (resolve, reject) => {
             try {
-                const dataFolder = path.join(this.botsFolder, botName, 'data');
+                // shared_data to specjalny folder w głównym katalogu projektu (bez podfolderu 'data')
+                const dataFolder = botName === 'shared_data'
+                    ? path.join(this.botsFolder, 'shared_data')
+                    : path.join(this.botsFolder, botName, 'data');
 
                 // Sprawdź czy folder data istnieje
                 if (!fs.existsSync(dataFolder)) {
