@@ -8913,138 +8913,52 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         };
 
-        // Oblicz zakres dat dla ostatnich 12 tygodni (tylko do współczynników)
-        const numberOfWeeksWithData = playerProgressData.length;
-        let reminderCountLast12Weeks = 0;
-        let confirmationCountLast12Weeks = 0;
-        let reminderCountForReliability = 0;  // Dla Rzetelności i Punktualności (próg 45/2025)
-        let reminderCountForResponsiveness = 0;  // Dla Responsywności - pingi (próg 49/2025)
-        let confirmationCountForResponsiveness = 0;  // Dla Responsywności - potwierdzenia (próg 49/2025)
+        // Ostatnie 12 tygodni — wspólna baza dla wszystkich współczynników
+        const last12Data = playerProgressData.slice(0, 12);
+        const weeksSinceLast12 = last12Data.length;
+        let reminderCountLast12 = 0;
+        let confirmationCountLast12 = 0;
 
-        // Dla Rzetelności i Punktualności - filtr 45/2025
-        const weeksSince45_2025 = playerProgressData.filter(data => {
-            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
-        }).length;
-
-        // Dla Responsywności - filtr 49/2025
-        const weeksSince49_2025 = playerProgressData.filter(data => {
-            return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 49);
-        }).length;
-
-        if (numberOfWeeksWithData > 0) {
-            // Znajdź najstarszy i najnowszy tydzień w danych gracza
-            const oldestWeek = playerProgressData[playerProgressData.length - 1];
-            const newestWeek = playerProgressData[0];
-
-            // Sprawdź czy używać progów 45/2025 i 49/2025
-            const weeksSinceThreshold45 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 45, 2025);
-            const weeksSinceThreshold49 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 49, 2025);
-
-            const useThreshold45 = weeksSinceThreshold45 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 45));
-            const useThreshold49 = weeksSinceThreshold49 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 49));
-
-            // Oblicz przybliżone daty dla zakresu (używamy początku tygodnia)
+        if (weeksSinceLast12 > 0) {
+            const oldest12Week = last12Data[last12Data.length - 1];
             const getWeekStartDate = (weekNumber, year) => {
-                // Przybliżone obliczenie: 1 stycznia + (numer_tygodnia - 1) * 7 dni
                 const date = new Date(year, 0, 1);
                 const dayOfWeek = date.getDay();
-                const diff = (weekNumber - 1) * 7 - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
-                date.setDate(date.getDate() + diff);
+                date.setDate(date.getDate() + (weekNumber - 1) * 7 - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
                 return date;
             };
+            const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+            const startDate12 = getWeekStartDate(oldest12Week.weekNumber, oldest12Week.year);
+            const startDateStr12 = formatDate(startDate12);
+            const startTimestamp12 = startDate12.getTime();
 
-            const startDate = getWeekStartDate(oldestWeek.weekNumber, oldestWeek.year);
-            const startDate45 = useThreshold45 ? getWeekStartDate(45, 2025) : startDate;
-            const startDate49 = useThreshold49 ? getWeekStartDate(49, 2025) : startDate;
-            const endDate = new Date(); // Do dzisiaj
-
-            // Konwertuj na format YYYY-MM-DD dla porównań
-            const formatDate = (date) => {
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            };
-
-            const startDateStr = formatDate(startDate);
-            const startDate45Str = formatDate(startDate45);
-            const startDate49Str = formatDate(startDate49);
-
-            // Zlicz pingi z różnych zakresów
-            if (reminderData.receivers && reminderData.receivers[userId]) {
-                const userPings = reminderData.receivers[userId].dailyPings || {};
-
-                for (const dateStr in userPings) {
-                    // Dla ostatnich 12 tygodni (Zaangażowanie)
-                    if (dateStr >= startDateStr) {
-                        reminderCountLast12Weeks += userPings[dateStr].length;
-                    }
-                    // Dla Rzetelności i Punktualności (próg 45/2025 lub 12 tygodni)
-                    if (dateStr >= startDate45Str) {
-                        reminderCountForReliability += userPings[dateStr].length;
-                    }
-                    // Dla Responsywności - pingi (próg 49/2025 lub 12 tygodni)
-                    if (dateStr >= startDate49Str) {
-                        reminderCountForResponsiveness += userPings[dateStr].length;
-                    }
+            if (reminderData.receivers?.[userId]) {
+                for (const [dateStr, pings] of Object.entries(reminderData.receivers[userId].dailyPings || {})) {
+                    if (dateStr >= startDateStr12) reminderCountLast12 += pings.length;
                 }
             }
-
-            // Zlicz potwierdzenia z różnych zakresów
-            const startTimestamp = startDate.getTime();
-            const startTimestamp45 = startDate45.getTime();
-            const startTimestamp49 = startDate49.getTime();
-
-            for (const sessionKey in confirmations.sessions) {
-                const session = confirmations.sessions[sessionKey];
-                const sessionDate = new Date(session.createdAt);
-                const sessionTimestamp = sessionDate.getTime();
-
-                if (session.confirmedUsers && session.confirmedUsers.includes(userId)) {
-                    // Dla ostatnich 12 tygodni (Zaangażowanie)
-                    if (sessionTimestamp >= startTimestamp) {
-                        confirmationCountLast12Weeks++;
-                    }
-                    // Dla Responsywności (próg 49/2025 lub 12 tygodni)
-                    if (sessionTimestamp >= startTimestamp49) {
-                        confirmationCountForResponsiveness++;
-                    }
+            for (const session of Object.values(confirmations.sessions || {})) {
+                if (new Date(session.createdAt).getTime() >= startTimestamp12 && session.confirmedUsers?.includes(userId)) {
+                    confirmationCountLast12++;
                 }
             }
         }
 
-        // Oblicz współczynniki Rzetelność i Punktualność (używając progu 45/2025 jeśli dotyczy)
+        // Oblicz współczynniki — wszystkie na bazie ostatnich 12 tygodni
         let wyjebanieFactor = null;
         let timingFactor = null;
 
-        if (weeksSince45_2025 > 0) {
-            const penaltyScore = (reminderCountForReliability * 0.025) + (lifetimePoints * 0.2);
-            const rawFactor = (penaltyScore / weeksSince45_2025) * 100;
-            wyjebanieFactor = Math.max(0, 100 - rawFactor); // Nie może być ujemne
-
-            // Oblicz współczynnik Timing (bez punktów kary)
-            // Wzór: 100% - ((przypomnienia × 0.125) / liczba_tygodni × 100%)
-            const timingPenaltyScore = reminderCountForReliability * 0.125;
-            const rawTimingFactor = (timingPenaltyScore / weeksSince45_2025) * 100;
-            timingFactor = Math.max(0, 100 - rawTimingFactor); // Nie może być ujemne
+        if (weeksSinceLast12 > 0) {
+            wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + lifetimePoints * 0.2) / weeksSinceLast12) * 100);
+            timingFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.125) / weeksSinceLast12) * 100);
         }
 
-        // Oblicz współczynnik Responsywność (używając progu 49/2025 jeśli dotyczy)
         let responsivenessFactor = null;
 
-        if (weeksSince49_2025 > 0) {
-            // Oblicz współczynnik Responsywność
-            // Wzór: (liczba_potwierdzeń / liczba_pingów) × 100%
-            if (reminderCountForResponsiveness > 0) {
-                responsivenessFactor = (confirmationCountForResponsiveness / reminderCountForResponsiveness) * 100;
-                responsivenessFactor = Math.min(100, responsivenessFactor); // Nie może być więcej niż 100%
-            } else if (reminderCountForResponsiveness === 0 && confirmationCountForResponsiveness === 0) {
-                // Jeśli nie było ani pingów, ani potwierdzeń - 100%
-                responsivenessFactor = 100;
-            } else {
-                // Nie powinno się zdarzyć, ale dla bezpieczeństwa
-                responsivenessFactor = 0;
-            }
+        if (weeksSinceLast12 > 0) {
+            responsivenessFactor = reminderCountLast12 > 0
+                ? Math.min(100, (confirmationCountLast12 / reminderCountLast12) * 100)
+                : 100;
         }
 
         // Oblicz współczynnik Zaangażowanie (liczba tygodni z progresem)
@@ -11450,60 +11364,25 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     const userPunishment = guildPunishments[userId];
     const lifetimePoints = userPunishment ? (userPunishment.lifetime_points || 0) : 0;
 
-    // Oblicz tygodnie z danymi (dla progów czasowych)
-    const weeksSince45_2025 = playerProgressData.filter(data => {
-        return data.year > 2025 || (data.year === 2025 && data.weekNumber >= 45);
-    }).length;
+    // Ostatnie 12 tygodni — wspólna baza dla wszystkich współczynników (playerProgressData jest już ≤12 tyg.)
+    const weeksSinceLast12 = playerProgressData.length;
+    let reminderCountLast12 = 0;
 
-
-    // Oblicz liczby przypomnień (z progami czasowymi)
-    let reminderCountForReliability = 0;
-
-    // Helper do obliczania różnicy tygodni
-    const getWeeksDifference = (weekNum1, year1, weekNum2, year2) => {
-        if (year1 === year2) {
-            return weekNum1 - weekNum2;
-        } else {
-            return (year1 - year2) * 52 + (weekNum1 - weekNum2);
-        }
-    };
-
-    if (playerProgressData.length > 0) {
+    if (weeksSinceLast12 > 0) {
+        const oldest12Week = playerProgressData[playerProgressData.length - 1];
         const getWeekStartDate = (weekNumber, year) => {
             const date = new Date(year, 0, 1);
             const dayOfWeek = date.getDay();
-            const diff = (weekNumber - 1) * 7 - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
-            date.setDate(date.getDate() + diff);
+            date.setDate(date.getDate() + (weekNumber - 1) * 7 - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
             return date;
         };
+        const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+        const startDate12 = getWeekStartDate(oldest12Week.weekNumber, oldest12Week.year);
+        const startDateStr12 = formatDate(startDate12);
 
-        const oldestWeek = playerProgressData[playerProgressData.length - 1];
-        const newestWeek = playerProgressData[0];
-
-        const weeksSinceThreshold45 = getWeeksDifference(newestWeek.weekNumber, newestWeek.year, 45, 2025);
-
-        const useThreshold45 = weeksSinceThreshold45 < 12 && (oldestWeek.year < 2025 || (oldestWeek.year === 2025 && oldestWeek.weekNumber < 45));
-
-        const startDate = getWeekStartDate(oldestWeek.weekNumber, oldestWeek.year);
-        const startDate45 = useThreshold45 ? getWeekStartDate(45, 2025) : startDate;
-
-        const formatDate = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        const startDate45Str = formatDate(startDate45);
-
-        // Zlicz pingi
-        if (reminderData.receivers && reminderData.receivers[userId]) {
-            const userPings = reminderData.receivers[userId].dailyPings || {};
-
-            for (const dateStr in userPings) {
-                if (dateStr >= startDate45Str) {
-                    reminderCountForReliability += userPings[dateStr].length;
-                }
+        if (reminderData.receivers?.[userId]) {
+            for (const [dateStr, pings] of Object.entries(reminderData.receivers[userId].dailyPings || {})) {
+                if (dateStr >= startDateStr12) reminderCountLast12 += pings.length;
             }
         }
     }
@@ -11512,14 +11391,9 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     let wyjebanieFactor = null;
     let timingFactor = null;
 
-    if (weeksSince45_2025 > 0) {
-        const penaltyScore = (reminderCountForReliability * 0.025) + (lifetimePoints * 0.2);
-        const rawFactor = (penaltyScore / weeksSince45_2025) * 100;
-        wyjebanieFactor = Math.max(0, 100 - rawFactor);
-
-        const timingPenaltyScore = reminderCountForReliability * 0.125;
-        const rawTimingFactor = (timingPenaltyScore / weeksSince45_2025) * 100;
-        timingFactor = Math.max(0, 100 - rawTimingFactor);
+    if (weeksSinceLast12 > 0) {
+        wyjebanieFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.025 + lifetimePoints * 0.2) / weeksSinceLast12) * 100);
+        timingFactor = Math.max(0, 100 - ((reminderCountLast12 * 0.125) / weeksSinceLast12) * 100);
     }
 
 
