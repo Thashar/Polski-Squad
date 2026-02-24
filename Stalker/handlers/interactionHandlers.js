@@ -8642,7 +8642,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 (m1.trendDescription && m2.trendDescription)
                     ? generateCompareTrendChart(data1, data2, name1, name2, m1.trendDescription, m1.trendIcon, m2.trendDescription, m2.trendIcon)
                     : Promise.resolve(null),
-                generateCompareProgressChart(prog1, prog2, name1, name2),
+                generateCompareProgressChart(data1, data2, name1, name2),
                 (rankData1.length >= 2 || rankData2.length >= 2)
                     ? generateCompareClanRankingChart(rankData1, rankData2, name1, name2)
                     : Promise.resolve(null)
@@ -12394,7 +12394,7 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
     const color1 = '#5865F2';
     const color2 = '#EB459E';
 
-    // Zbierz wszystkie tygodnie z obu zbiorów (chronologicznie)
+    // Zbierz unię tygodni z obu zbiorów, wyświetlaj tylko ostatnie 12
     const weekMap = new Map();
     for (const d of [...data1, ...data2]) {
         if (d.score > 0) {
@@ -12402,21 +12402,24 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
             if (!weekMap.has(key)) weekMap.set(key, { weekNumber: d.weekNumber, year: d.year, key });
         }
     }
-    const allWeeks = [...weekMap.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    const allWeeks = [...weekMap.values()]
+        .sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber)
+        .slice(-12);
     if (allWeeks.length < 2) return null;
 
     const scoreMap1 = new Map(data1.filter(d => d.score > 0).map(d => [`${d.year}-${String(d.weekNumber).padStart(2, '0')}`, d.score]));
     const scoreMap2 = new Map(data2.filter(d => d.score > 0).map(d => [`${d.year}-${String(d.weekNumber).padStart(2, '0')}`, d.score]));
-    const allScores = [...scoreMap1.values(), ...scoreMap2.values()];
-    if (allScores.length < 2) return null;
+    // Skala Y tylko z wyświetlanych tygodni
+    const displayedScores = allWeeks.flatMap(w => [scoreMap1.get(w.key), scoreMap2.get(w.key)]).filter(s => s !== undefined);
+    if (displayedScores.length < 2) return null;
 
     const W = 800, H = 270;
     const M = { top: 54, right: 28, bottom: 44, left: 68 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
-    const minScore = Math.min(...allScores);
-    const maxScore = Math.max(...allScores);
+    const minScore = Math.min(...displayedScores);
+    const maxScore = Math.max(...displayedScores);
     const range = maxScore - minScore || 1;
     const yMin = Math.max(0, minScore - range * 0.15);
     const yMax = maxScore + range * 0.28;
