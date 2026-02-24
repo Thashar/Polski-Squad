@@ -8521,7 +8521,6 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         // Formatuj pole statystyk gracza (pełne inline field)
         function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos) {
             const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
-            const spark = genTrendSparkline(m._data);
             let f = '';
             f += `🏰 **${clanDisplay}**\n`;
             f += position > 0
@@ -8533,7 +8532,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
             f += `\n`;
-            f += `📈 **Trend:** \`${spark}\` ${m.trendIcon || ''}\n`;
+            f += `📈 **Trend:** ${m.trendIcon || ''} ${m.trendDescription || '-'}\n`;
             f += `\n`;
             f += `🎯 **Rzetelność:** ${fmtCoeff(coeff.wyjebanieFactor)}\n`;
             f += `💪 **Zaangażowanie:** ${fmtCoeff(m.engagementFactor)}${cxStar}\n`;
@@ -8546,74 +8545,56 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             return f;
         }
 
-        // Przechowaj dane surowe w m1/m2 dla sparkline
+        // dane surowe potrzebne do wykresów porównawczych
         m1._data = data1;
         m2._data = data2;
 
-        // Oblicz wynik porównania - kto wygrywa w każdej kategorii
+        // Oblicz wynik porównania — wygrana = 1 pkt, remis = 0.5 pkt dla każdego
         let wins1 = 0;
         let wins2 = 0;
 
+        function addResult(val1, val2, threshold = 0) {
+            if (val1 === null || val2 === null) return;
+            if (val1 > val2 + threshold) wins1++;
+            else if (val2 > val1 + threshold) wins2++;
+            else { wins1 += 0.5; wins2 += 0.5; } // remis
+        }
+
         // Progres miesięczny
-        if (m1.monthlyProgress !== null && m2.monthlyProgress !== null) {
-            if (m1.monthlyProgress > m2.monthlyProgress) wins1++;
-            else if (m2.monthlyProgress > m1.monthlyProgress) wins2++;
-        }
+        if (m1.monthlyProgress !== null && m2.monthlyProgress !== null) addResult(m1.monthlyProgress, m2.monthlyProgress);
         // Progres kwartalny
-        if (m1.quarterlyProgress !== null && m2.quarterlyProgress !== null) {
-            if (m1.quarterlyProgress > m2.quarterlyProgress) wins1++;
-            else if (m2.quarterlyProgress > m1.quarterlyProgress) wins2++;
-        }
+        if (m1.quarterlyProgress !== null && m2.quarterlyProgress !== null) addResult(m1.quarterlyProgress, m2.quarterlyProgress);
         // Best score
-        if (m1.bestScore > m2.bestScore) wins1++;
-        else if (m2.bestScore > m1.bestScore) wins2++;
+        addResult(m1.bestScore, m2.bestScore);
         // Trend
-        if (m1.trendRatio !== null && m2.trendRatio !== null) {
-            if (m1.trendRatio > m2.trendRatio + 0.05) wins1++;
-            else if (m2.trendRatio > m1.trendRatio + 0.05) wins2++;
-        }
+        if (m1.trendRatio !== null && m2.trendRatio !== null) addResult(m1.trendRatio, m2.trendRatio, 0.05);
         // Rzetelność
-        if (coeff1.wyjebanieFactor !== null && coeff2.wyjebanieFactor !== null) {
-            if (coeff1.wyjebanieFactor > coeff2.wyjebanieFactor + 0.5) wins1++;
-            else if (coeff2.wyjebanieFactor > coeff1.wyjebanieFactor + 0.5) wins2++;
-        }
+        if (coeff1.wyjebanieFactor !== null && coeff2.wyjebanieFactor !== null) addResult(coeff1.wyjebanieFactor, coeff2.wyjebanieFactor, 0.5);
         // Zaangażowanie
-        const eng1 = m1.engagementFactor ?? 100;
-        const eng2 = m2.engagementFactor ?? 100;
-        if (eng1 > eng2 + 0.5) wins1++;
-        else if (eng2 > eng1 + 0.5) wins2++;
+        addResult(m1.engagementFactor ?? 100, m2.engagementFactor ?? 100, 0.5);
         // Punktualność
-        if (coeff1.timingFactor !== null && coeff2.timingFactor !== null) {
-            if (coeff1.timingFactor > coeff2.timingFactor + 0.5) wins1++;
-            else if (coeff2.timingFactor > coeff1.timingFactor + 0.5) wins2++;
-        }
+        if (coeff1.timingFactor !== null && coeff2.timingFactor !== null) addResult(coeff1.timingFactor, coeff2.timingFactor, 0.5);
         // Responsywność
-        if (coeff1.responsivenessFactor !== null && coeff2.responsivenessFactor !== null) {
-            if (coeff1.responsivenessFactor > coeff2.responsivenessFactor + 0.5) wins1++;
-            else if (coeff2.responsivenessFactor > coeff1.responsivenessFactor + 0.5) wins2++;
-        }
+        if (coeff1.responsivenessFactor !== null && coeff2.responsivenessFactor !== null) addResult(coeff1.responsivenessFactor, coeff2.responsivenessFactor, 0.5);
         // MVP (waga: złoto=3, srebro=2, brąz=1)
         const mvpScore1 = mvp1.gold * 3 + mvp1.silver * 2 + mvp1.bronze;
         const mvpScore2 = mvp2.gold * 3 + mvp2.silver * 2 + mvp2.bronze;
-        if (mvpScore1 > mvpScore2) wins1++;
-        else if (mvpScore2 > mvpScore1) wins2++;
+        addResult(mvpScore1, mvpScore2);
         // CX
         if (hasCxRecent1 && !hasCxRecent2) wins1++;
         else if (hasCxRecent2 && !hasCxRecent1) wins2++;
+        else if (hasCxRecent1 && hasCxRecent2) { wins1 += 0.5; wins2 += 0.5; }
         // Pozycja globalna (niższa = lepsza)
-        if (pos1 > 0 && pos2 > 0) {
-            if (pos1 < pos2) wins1++;
-            else if (pos2 < pos1) wins2++;
-        }
-        // Kary
-        if (lifePts1 < lifePts2) wins1++;
-        else if (lifePts2 < lifePts1) wins2++;
+        if (pos1 > 0 && pos2 > 0) addResult(pos2, pos1); // odwrócone: niższa pozycja = lepiej
+        // Kary (mniej = lepiej)
+        addResult(lifePts2, lifePts1); // odwrócone: mniej kar = lepiej
 
-        // Wynik
+        // Wynik — wyświetlaj jako liczby całkowite lub z .5
+        const fmt = (n) => Number.isInteger(n) ? n.toString() : n.toFixed(1);
         let winnerField = '';
-        if (wins1 > wins2) winnerField = `🥇 **${name1}** wygrywa **${wins1} - ${wins2}**`;
-        else if (wins2 > wins1) winnerField = `🥇 **${name2}** wygrywa **${wins2} - ${wins1}**`;
-        else winnerField = `⚖️ **Remis ${wins1} - ${wins2}**`;
+        if (wins1 > wins2) winnerField = `🥇 **${name1}** wygrywa **${fmt(wins1)} - ${fmt(wins2)}**`;
+        else if (wins2 > wins1) winnerField = `🥇 **${name2}** wygrywa **${fmt(wins2)} - ${fmt(wins1)}**`;
+        else winnerField = `⚖️ **Remis ${fmt(wins1)} - ${fmt(wins2)}**`;
 
         const embed = new EmbedBuilder()
             .setTitle(`⚔️ ${name1}  vs  ${name2}`)
@@ -8626,7 +8607,30 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
 
-        await interaction.editReply({ embeds: [embed] });
+        // Generuj wykresy porównawcze (trend + progres z dwoma graczami)
+        const replyPayload = { embeds: [embed] };
+        try {
+            const [trendBuf, progressBuf] = await Promise.all([
+                (m1.trendDescription && m2.trendDescription)
+                    ? generateCompareTrendChart(data1, data2, name1, name2, m1.trendDescription, m1.trendIcon, m2.trendDescription, m2.trendIcon)
+                    : Promise.resolve(null),
+                generateCompareProgressChart(data1, data2, name1, name2)
+            ]);
+            const files = [];
+            if (trendBuf) {
+                files.push(new AttachmentBuilder(trendBuf, { name: 'compare_trend.png' }));
+                embed.setImage('attachment://compare_trend.png');
+            }
+            if (progressBuf) {
+                files.push(new AttachmentBuilder(progressBuf, { name: 'compare_progress.png' }));
+                replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_progress.png'));
+            }
+            if (files.length > 0) replyPayload.files = files;
+        } catch (e) {
+            logger.warn('[player-compare] Nie udało się wygenerować wykresów:', e.message);
+        }
+
+        await interaction.editReply(replyPayload);
 
     } catch (error) {
         logger.error('[player-compare] ❌ Błąd:', error);
@@ -11918,18 +11922,8 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     }
     if (rawRatios.length < 2) return null;
 
-    // Lekkie wygładzenie [0.25, 0.5, 0.25] — dane są już stabilne dzięki 4-tygodniowemu oknu
-    const ratioData = rawRatios.map((d, i, arr) => {
-        let smoothed;
-        if (i === 0) {
-            smoothed = arr.length > 1 ? 0.75 * d.ratio + 0.25 * arr[1].ratio : d.ratio;
-        } else if (i === arr.length - 1) {
-            smoothed = 0.25 * arr[i - 1].ratio + 0.75 * d.ratio;
-        } else {
-            smoothed = 0.25 * arr[i - 1].ratio + 0.5 * d.ratio + 0.25 * arr[i + 1].ratio;
-        }
-        return { ratio: smoothed, lbl: d.lbl };
-    });
+    // Bez dodatkowego wygładzenia — 4-tygodniowe okno już wygładza dane wystarczająco
+    const ratioData = rawRatios;
 
     const W = 800, H = 260;
     const M = { top: 44, right: 28, bottom: 44, left: 52 };
@@ -12215,6 +12209,270 @@ async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}
   ${xLabels}
 </svg>`;
 
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// Wykres trendu porównawczy — dwie krzywe rolling trendRatio na jednym wykresie
+async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1, trendIcon1, trendDesc2, trendIcon2) {
+    const sharp = require('sharp');
+    const color1 = '#5865F2'; // gracz 1 — niebieski
+    const color2 = '#EB459E'; // gracz 2 — różowy
+
+    // Rolling trendRatio — ta sama formuła co generateTrendChart
+    function computeRollingRatios(data) {
+        const chron = [...data].reverse().filter(d => d.score > 0);
+        if (chron.length < 5) return [];
+        const raw = [];
+        for (let i = 4; i < chron.length; i++) {
+            const monthly = chron[i].score - chron[i - 4].score;
+            const longer = chron[i].score - chron[0].score;
+            const avgPer4 = (longer / i) * 4;
+            const base = Math.abs(avgPer4) > 0 ? Math.abs(avgPer4) : 1;
+            raw.push({
+                ratio: Math.min(2.0, Math.max(0, monthly / base)),
+                weekNumber: chron[i].weekNumber,
+                year: chron[i].year,
+                key: `${chron[i].year}-${String(chron[i].weekNumber).padStart(2, '0')}`
+            });
+        }
+        return raw.map((d, i, arr) => {
+            let s;
+            if (i === 0) s = arr.length > 1 ? 0.75 * d.ratio + 0.25 * arr[1].ratio : d.ratio;
+            else if (i === arr.length - 1) s = 0.25 * arr[i - 1].ratio + 0.75 * d.ratio;
+            else s = 0.25 * arr[i - 1].ratio + 0.5 * d.ratio + 0.25 * arr[i + 1].ratio;
+            return { ...d, ratio: s };
+        });
+    }
+
+    const ratios1 = computeRollingRatios(data1);
+    const ratios2 = computeRollingRatios(data2);
+    if (ratios1.length < 2 && ratios2.length < 2) return null;
+
+    // Wspólna oś X — unia tygodni z obu zbiorów
+    const weekSet = new Map();
+    for (const r of [...ratios1, ...ratios2]) {
+        if (!weekSet.has(r.key)) weekSet.set(r.key, { weekNumber: r.weekNumber, year: r.year, key: r.key });
+    }
+    const allWeeks = [...weekSet.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    if (allWeeks.length < 2) return null;
+
+    const W = 800, H = 270;
+    const M = { top: 54, right: 28, bottom: 44, left: 52 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+    const maxRatio = 2.0;
+    const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
+    const toY = (r) => M.top + cH - (r / maxRatio) * cH;
+
+    function getPlayerPts(ratios) {
+        return ratios.map(r => {
+            const idx = allWeeks.findIndex(w => w.key === r.key);
+            if (idx === -1) return null;
+            return { x: toX(idx), y: toY(r.ratio) };
+        }).filter(Boolean);
+    }
+    const pts1 = getPlayerPts(ratios1);
+    const pts2 = getPlayerPts(ratios2);
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i]; const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
+    const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
+    const bottomY = (M.top + cH).toFixed(1);
+    const fillPath1 = linePath1 ? `${linePath1} L ${pts1[pts1.length - 1].x.toFixed(1)},${bottomY} L ${pts1[0].x.toFixed(1)},${bottomY} Z` : '';
+
+    const thresholds = [
+        { value: 1.5, color: '#00E676', label: '1.5' },
+        { value: 1.1, color: '#43B581', label: '1.1' },
+        { value: 1.0, color: '#B5BAC1', label: '1.0' },
+        { value: 0.9, color: '#FAA61A', label: '0.9' },
+        { value: 0.5, color: '#FF8A65', label: '0.5' },
+    ];
+    const thresholdLines = thresholds.map(t => {
+        const y = toY(t.value);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="${t.color}" stroke-width="${t.value === 1.0 ? 1 : 0.8}" stroke-dasharray="5,5" opacity="${t.value === 1.0 ? 0.35 : 0.55}"/>
+    <text x="${M.left - 4}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${t.color}" text-anchor="end" opacity="0.9">${t.label}</text>`;
+    }).join('\n    ');
+
+    const xLabels = allWeeks.map((w, i) =>
+        `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
+    ).join('\n    ');
+
+    function buildDots(pts, color) {
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.85}"/>`;
+        }).join('\n    ');
+    }
+
+    const trendColorMap = { 'Gwałtownie rosnący': '#00E676', 'Rosnący': '#43B581', 'Constans': '#FAA61A', 'Malejący': '#FF8A65', 'Gwałtownie malejący': '#F04747' };
+    const tc1 = trendColorMap[trendDesc1] || color1;
+    const tc2 = trendColorMap[trendDesc2] || color2;
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color1}" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="${color1}" stop-opacity="0.01"/>
+    </linearGradient>
+    <filter id="glow1" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Trend</text>
+  <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
+  <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${name1}: ${trendIcon1} ${trendDesc1}</text>
+  <circle cx="${W / 2 + 10}" cy="33" r="5" fill="${color2}"/>
+  <text x="${W / 2 + 20}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}: ${trendIcon2} ${trendDesc2}</text>
+  ${thresholdLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${fillPath1 ? `<path d="${fillPath1}" fill="url(#fg1)"/>` : ''}
+  ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
+  ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
+  ${buildDots(pts1, color1)}
+  ${buildDots(pts2, color2)}
+  ${xLabels}
+</svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// Wykres progresu porównawczy — dwie krzywe wyników na jednym wykresie
+async function generateCompareProgressChart(data1, data2, name1, name2) {
+    const sharp = require('sharp');
+    const color1 = '#5865F2';
+    const color2 = '#EB459E';
+
+    // Zbierz wszystkie tygodnie z obu zbiorów (chronologicznie)
+    const weekMap = new Map();
+    for (const d of [...data1, ...data2]) {
+        if (d.score > 0) {
+            const key = `${d.year}-${String(d.weekNumber).padStart(2, '0')}`;
+            if (!weekMap.has(key)) weekMap.set(key, { weekNumber: d.weekNumber, year: d.year, key });
+        }
+    }
+    const allWeeks = [...weekMap.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+    if (allWeeks.length < 2) return null;
+
+    const scoreMap1 = new Map(data1.filter(d => d.score > 0).map(d => [`${d.year}-${String(d.weekNumber).padStart(2, '0')}`, d.score]));
+    const scoreMap2 = new Map(data2.filter(d => d.score > 0).map(d => [`${d.year}-${String(d.weekNumber).padStart(2, '0')}`, d.score]));
+    const allScores = [...scoreMap1.values(), ...scoreMap2.values()];
+    if (allScores.length < 2) return null;
+
+    const W = 800, H = 270;
+    const M = { top: 54, right: 28, bottom: 44, left: 68 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const minScore = Math.min(...allScores);
+    const maxScore = Math.max(...allScores);
+    const range = maxScore - minScore || 1;
+    const yMin = Math.max(0, minScore - range * 0.15);
+    const yMax = maxScore + range * 0.28;
+    const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
+    const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
+
+    function getPlayerPts(scoreMap) {
+        return allWeeks.map((w, i) => {
+            const score = scoreMap.get(w.key);
+            if (score === undefined) return null;
+            return { x: toX(i), y: toY(score), score };
+        }).filter(Boolean);
+    }
+    const pts1 = getPlayerPts(scoreMap1);
+    const pts2 = getPlayerPts(scoreMap2);
+    if (pts1.length < 2 && pts2.length < 2) return null;
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i]; const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath1 = pts1.length >= 2 ? buildCatmullRom(pts1) : '';
+    const linePath2 = pts2.length >= 2 ? buildCatmullRom(pts2) : '';
+    const bottomY = (M.top + cH).toFixed(1);
+    const fillPath1 = linePath1 ? `${linePath1} L ${pts1[pts1.length - 1].x.toFixed(1)},${bottomY} L ${pts1[0].x.toFixed(1)},${bottomY} Z` : '';
+    const fillPath2 = linePath2 ? `${linePath2} L ${pts2[pts2.length - 1].x.toFixed(1)},${bottomY} L ${pts2[0].x.toFixed(1)},${bottomY} Z` : '';
+
+    const gridLines = Array.from({ length: 5 }, (_, i) => {
+        const s = yMin + (yMax - yMin) * (i / 4);
+        const y = toY(s);
+        const lbl = s >= 1000 ? `${(s / 1000).toFixed(1)}k` : Math.round(s).toString();
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#72767D" text-anchor="end">${lbl}</text>`;
+    }).join('\n    ');
+
+    const xLabels = allWeeks.map((w, i) =>
+        `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
+    ).join('\n    ');
+
+    function buildDots(pts, color) {
+        return pts.map((p, i) => {
+            const isLast = i === pts.length - 1;
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 5 : 2.5}" fill="${isLast ? color : '#2B2D31'}" stroke="${color}" stroke-width="${isLast ? 0 : 1.2}"/>
+    ${isLast ? `<text x="${p.x.toFixed(1)}" y="${(p.y - 9).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${p.score.toLocaleString('pl-PL')}</text>` : ''}`;
+        }).join('\n    ');
+    }
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color1}" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="${color1}" stop-opacity="0.01"/>
+    </linearGradient>
+    <linearGradient id="fg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color2}" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="${color2}" stop-opacity="0.01"/>
+    </linearGradient>
+    <filter id="glow1" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Progres</text>
+  <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
+  <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${name1}</text>
+  <circle cx="${W / 2 + 10}" cy="33" r="5" fill="${color2}"/>
+  <text x="${W / 2 + 20}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${name2}</text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${fillPath1 ? `<path d="${fillPath1}" fill="url(#fg1)"/>` : ''}
+  ${linePath1 ? `<path d="${linePath1}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#glow1)"/>` : ''}
+  ${fillPath2 ? `<path d="${fillPath2}" fill="url(#fg2)"/>` : ''}
+  ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
+  ${buildDots(pts1, color1)}
+  ${buildDots(pts2, color2)}
+  ${xLabels}
+</svg>`;
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
