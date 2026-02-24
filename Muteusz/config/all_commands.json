@@ -353,6 +353,12 @@
           "requiredPermission": "moderator"
         },
         {
+          "name": "/player-compare",
+          "description": "Porównuje dwóch graczy - progres, współczynniki, trend i dane CX side-by-side",
+          "usage": "/player-compare gracz1:[nick] gracz2:[nick]",
+          "requiredPermission": "clan_member"
+        },
+        {
           "name": "/player-status",
           "description": "Kompleksowy raport o graczu: progres, kary, status w klanie i ranking (tylko członkowie klanu)",
           "usage": "/player-status nick:[wyszukaj gracza] - wpisz i wybierz z listy",

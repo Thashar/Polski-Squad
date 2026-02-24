@@ -329,6 +329,43 @@ class MessageHandler {
             }
         }
 
+        // Zapisz wynik CX do shared_data dla innych botów (np. Stalker /player-status)
+        if (channelConfig.name === 'CX') {
+            try {
+                const cxHistoryPath = path.join(__dirname, '../../shared_data/cx_history.json');
+                let cxHistory = {};
+                try {
+                    const raw = await fs.readFile(cxHistoryPath, 'utf8');
+                    cxHistory = JSON.parse(raw);
+                } catch (e) {
+                    // Plik nie istnieje jeszcze, tworzymy nowy
+                }
+
+                const userId = member.user.id;
+                if (!cxHistory[userId]) {
+                    cxHistory[userId] = { scores: [] };
+                }
+
+                cxHistory[userId].displayName = member.displayName;
+                cxHistory[userId].lastCxDate = new Date().toISOString();
+                cxHistory[userId].scores.push({
+                    score: result.score,
+                    date: new Date().toISOString(),
+                    guildId: guild.id
+                });
+
+                // Ogranicz historię do ostatnich 20 wyników
+                if (cxHistory[userId].scores.length > 20) {
+                    cxHistory[userId].scores = cxHistory[userId].scores.slice(-20);
+                }
+
+                await fs.writeFile(cxHistoryPath, JSON.stringify(cxHistory, null, 2), 'utf8');
+                logger.info(`💾 Zapisano wynik CX gracza ${member.displayName}: ${result.score} pkt`);
+            } catch (e) {
+                logger.error(`❌ Błąd zapisu CX history: ${e.message}`);
+            }
+        }
+
         if (roleResult.success) {
             const message = this.messageService.formatResultMessage(result, roleResult, channelConfig, specialRoleResult);
             await safeEditMessage(analysisMessage, message);

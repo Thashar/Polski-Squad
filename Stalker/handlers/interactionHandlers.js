@@ -77,7 +77,7 @@ async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'clan-status', 'clan-progres'];
+    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -135,6 +135,9 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'player-status':
             await handlePlayerStatusCommand(interaction, sharedState);
+            break;
+        case 'player-compare':
+            await handlePlayerCompareCommand(interaction, sharedState);
             break;
         case 'modyfikuj':
             await handleModyfikujCommand(interaction, sharedState);
@@ -2387,6 +2390,22 @@ async function registerSlashCommands(client) {
             .addStringOption(option =>
                 option.setName('nick')
                     .setDescription('Nick gracza (wyszukaj z listy lub wpisz własny)')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            ),
+
+        new SlashCommandBuilder()
+            .setName('player-compare')
+            .setDescription('Porównuje dwóch graczy - progres, współczynniki i statystyki')
+            .addStringOption(option =>
+                option.setName('gracz1')
+                    .setDescription('Nick pierwszego gracza')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
+            .addStringOption(option =>
+                option.setName('gracz2')
+                    .setDescription('Nick drugiego gracza')
                     .setRequired(true)
                     .setAutocomplete(true)
             ),
@@ -7550,7 +7569,7 @@ async function handleAutocomplete(interaction, sharedState) {
     const { databaseService, config } = sharedState;
 
     try {
-        if (interaction.commandName === 'progres' || interaction.commandName === 'player-status') {
+        if (interaction.commandName === 'progres' || interaction.commandName === 'player-status' || interaction.commandName === 'player-compare') {
             const focusedValue = interaction.options.getFocused();
             const focusedValueLower = focusedValue.toLowerCase();
 
@@ -8137,6 +8156,211 @@ async function handleProgresCommand(interaction, sharedState) {
     }
 }
 
+// Funkcja obsługująca komendę /player-compare
+async function handlePlayerCompareCommand(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    await interaction.deferReply();
+
+    try {
+        const nick1 = interaction.options.getString('gracz1');
+        const nick2 = interaction.options.getString('gracz2');
+
+        const [userInfo1, userInfo2] = await Promise.all([
+            databaseService.findUserIdByNick(interaction.guild.id, nick1),
+            databaseService.findUserIdByNick(interaction.guild.id, nick2)
+        ]);
+
+        if (!userInfo1) {
+            await interaction.editReply({ content: `❌ Nie znaleziono gracza **${nick1}**.` });
+            return;
+        }
+        if (!userInfo2) {
+            await interaction.editReply({ content: `❌ Nie znaleziono gracza **${nick2}**.` });
+            return;
+        }
+
+        const allWeeks = await databaseService.getAvailableWeeks(interaction.guild.id);
+        if (allWeeks.length === 0) {
+            await interaction.editReply({ content: '❌ Brak zapisanych wyników.' });
+            return;
+        }
+
+        const last12Weeks = allWeeks.slice(0, 12);
+
+        // Wczytaj dane gracza z ostatnich 12 tygodni
+        async function loadPlayerData(userId) {
+            const data = [];
+            for (const week of last12Weeks) {
+                for (const clan of week.clans) {
+                    const weekData = await databaseService.getPhase1Results(interaction.guild.id, week.weekNumber, week.year, clan);
+                    if (weekData && weekData.players) {
+                        const player = weekData.players.find(p => p.userId === userId);
+                        if (player) {
+                            data.push({ weekNumber: week.weekNumber, year: week.year, clan, score: player.score });
+                            break;
+                        }
+                    }
+                }
+            }
+            data.sort((a, b) => (a.year !== b.year ? b.year - a.year : b.weekNumber - a.weekNumber));
+            return data;
+        }
+
+        // Oblicz metryki gracza
+        function calcMetrics(data) {
+            const m = { monthlyProgress: null, monthlyPercent: null, bestScore: 0, engagementFactor: null, trendDescription: null, trendIcon: null };
+            if (data.length === 0) return m;
+            m.bestScore = Math.max(...data.map(d => d.score).filter(s => s > 0), 0);
+            const last4Scores = data.slice(0, 4).map(d => d.score).filter(s => s > 0);
+            if (last4Scores.length > 0) {
+                const curScore = Math.max(...last4Scores);
+                const compEntry = data.slice(4).find(d => d.score > 0);
+                const compScore = compEntry ? compEntry.score : (data.length > 1 ? data.filter(d => d.score > 0).pop()?.score : null);
+                if (compScore) {
+                    m.monthlyProgress = curScore - compScore;
+                    m.monthlyPercent = (m.monthlyProgress / compScore) * 100;
+                }
+            }
+            if (data.length >= 2) {
+                let progWeeks = 0;
+                for (let i = 0; i < data.length - 1; i++) {
+                    let best = 0;
+                    for (let j = i + 1; j < data.length; j++) { if (data[j].score > best) best = data[j].score; }
+                    const diff = data[i].score - best;
+                    if (data[i].score === 0) { /* skip */ }
+                    else if (diff > 0) { progWeeks += 1.0; }
+                    else if (diff === 0 && best > 0) { progWeeks += 0.8; }
+                }
+                m.engagementFactor = (progWeeks / (data.length - 1)) * 100;
+            }
+            if (m.monthlyProgress !== null && data.length >= 5) {
+                const first = data[data.length - 1].score;
+                const last = data[0].score;
+                const adj = Math.abs((last - first) / (data.length - 1) * 4) || 1;
+                const ratio = m.monthlyProgress / adj;
+                if (ratio >= 1.5) { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
+                else if (ratio > 1.1) { m.trendDescription = 'Rosnący'; m.trendIcon = '↗️'; }
+                else if (ratio >= 0.9) { m.trendDescription = 'Constans'; m.trendIcon = '⚖️'; }
+                else if (ratio >= 0.5) { m.trendDescription = 'Malejący'; m.trendIcon = '↘️'; }
+                else { m.trendDescription = 'Gwałtownie malejący'; m.trendIcon = '🪦'; }
+            }
+            return m;
+        }
+
+        // Generuj sparkline (od najstarszego do najnowszego)
+        function genSparkline(data) {
+            const sparkChars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+            const scores = last12Weeks.map(w => {
+                const found = data.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
+                return found ? found.score : 0;
+            }).reverse();
+            const nonZero = scores.filter(s => s > 0);
+            if (nonZero.length === 0) return '·'.repeat(12);
+            const minS = Math.min(...nonZero);
+            const maxS = Math.max(...nonZero);
+            return scores.map(s => {
+                if (s === 0) return '·';
+                if (maxS === minS) return '▄';
+                return sparkChars[Math.min(Math.floor(((s - minS) / (maxS - minS)) * 7), 7)];
+            }).join('');
+        }
+
+        function engCircle(val) {
+            if (val === null) return '🟢';
+            if (val >= 90) return '🟢';
+            if (val >= 80) return '🟡';
+            if (val >= 70) return '🟠';
+            return '🔴';
+        }
+
+        function fmtProgress(prog, pct) {
+            if (prog === null) return 'brak danych';
+            const sign = prog >= 0 ? '▲' : '▼';
+            const color = prog >= 0 ? '🟢' : '🔴';
+            return `${sign} ${Math.abs(prog).toLocaleString('pl-PL')} (${Math.abs(pct).toFixed(1)}%) ${color}`;
+        }
+
+        const [data1, data2] = await Promise.all([
+            loadPlayerData(userInfo1.userId),
+            loadPlayerData(userInfo2.userId)
+        ]);
+
+        if (data1.length === 0) {
+            await interaction.editReply({ content: `❌ Brak danych dla gracza **${userInfo1.latestNick}**.` });
+            return;
+        }
+        if (data2.length === 0) {
+            await interaction.editReply({ content: `❌ Brak danych dla gracza **${userInfo2.latestNick}**.` });
+            return;
+        }
+
+        // Sprawdź dane CX
+        let hasCx1 = false;
+        let hasCx2 = false;
+        try {
+            const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
+            const cxRaw = await fs.readFile(cxHistoryPath, 'utf8');
+            const cxHistory = JSON.parse(cxRaw);
+            hasCx1 = !!(cxHistory[userInfo1.userId]?.scores?.length > 0);
+            hasCx2 = !!(cxHistory[userInfo2.userId]?.scores?.length > 0);
+        } catch (e) { /* brak pliku - ok */ }
+
+        const m1 = calcMetrics(data1);
+        const m2 = calcMetrics(data2);
+
+        // Boost CX
+        if (hasCx1 && m1.engagementFactor !== null) m1.engagementFactor = Math.min(100, m1.engagementFactor + 5);
+        if (hasCx2 && m2.engagementFactor !== null) m2.engagementFactor = Math.min(100, m2.engagementFactor + 5);
+
+        const name1 = userInfo1.latestNick;
+        const name2 = userInfo2.latestNick;
+        const spark1 = genSparkline(data1);
+        const spark2 = genSparkline(data2);
+
+        const latestWeek1 = data1[0];
+        const latestWeek2 = data2[0];
+        const wLabel1 = `${String(latestWeek1.weekNumber).padStart(2, '0')}/${String(latestWeek1.year).slice(-2)}`;
+        const wLabel2 = `${String(latestWeek2.weekNumber).padStart(2, '0')}/${String(latestWeek2.year).slice(-2)}`;
+
+        let desc = '';
+        desc += `## ⚔️ PORÓWNANIE GRACZY\n\n`;
+        desc += `**${name1}** *(${wLabel1}: ${latestWeek1.score.toLocaleString('pl-PL')})* vs **${name2}** *(${wLabel2}: ${latestWeek2.score.toLocaleString('pl-PL')})*\n\n`;
+
+        desc += `### 📊 STATYSTYKI\n`;
+        desc += `🔹 **Miesiąc (4 tyg.):**\n`;
+        desc += `  **${name1}:** ${fmtProgress(m1.monthlyProgress, m1.monthlyPercent)}\n`;
+        desc += `  **${name2}:** ${fmtProgress(m2.monthlyProgress, m2.monthlyPercent)}\n\n`;
+        desc += `🏆 **Najlepszy wynik:**\n`;
+        desc += `  **${name1}:** ${m1.bestScore.toLocaleString('pl-PL')}\n`;
+        desc += `  **${name2}:** ${m2.bestScore.toLocaleString('pl-PL')}\n\n`;
+
+        desc += `### 🌡️ WSPÓŁCZYNNIKI\n`;
+        desc += `💪 **Zaangażowanie:** ${engCircle(m1.engagementFactor)}${hasCx1 ? ' ⭐' : ''} | ${engCircle(m2.engagementFactor)}${hasCx2 ? ' ⭐' : ''}\n`;
+        desc += `🏆 **Wykonuje CX:** ${hasCx1 ? 'Tak ✅' : 'Nie'} | ${hasCx2 ? 'Tak ✅' : 'Nie'}\n\n`;
+
+        desc += `### 💨 TREND\n`;
+        desc += `**${name1}:** ${m1.trendDescription ? `**${m1.trendDescription}** ${m1.trendIcon}` : 'brak danych'}\n`;
+        desc += `\`${spark1}\`\n\n`;
+        desc += `**${name2}:** ${m2.trendDescription ? `**${m2.trendDescription}** ${m2.trendIcon}` : 'brak danych'}\n`;
+        desc += `\`${spark2}\``;
+
+        const embed = new EmbedBuilder()
+            .setDescription(desc)
+            .setColor('#9B59B6')
+            .setTimestamp()
+            .setFooter({ text: `${name1} vs ${name2} • Ostatnie 12 tygodni` });
+
+        await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+        logger.error('[player-compare] ❌ Błąd:', error);
+        try {
+            await interaction.editReply({ content: '❌ Wystąpił błąd podczas porównania graczy.' });
+        } catch (e) {}
+    }
+}
+
 // Funkcja obsługująca komendę /player-status
 async function handlePlayerStatusCommand(interaction, sharedState) {
     const { config, databaseService, reminderUsageService } = sharedState;
@@ -8243,6 +8467,17 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (a.year !== b.year) return b.year - a.year;
             return b.weekNumber - a.weekNumber;
         });
+
+        // Wczytaj dane CX gracza ze shared_data (zapisywane przez Kontroler bot)
+        let hasCxData = false;
+        try {
+            const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
+            const cxHistoryRaw = await fs.readFile(cxHistoryPath, 'utf8');
+            const cxHistory = JSON.parse(cxHistoryRaw);
+            hasCxData = !!(cxHistory[userId] && cxHistory[userId].scores && cxHistory[userId].scores.length > 0);
+        } catch (e) {
+            // Plik nie istnieje jeszcze lub brak danych - ok
+        }
 
         // Pobierz obecny klan gracza i jego członka Discord
         const members = await safeFetchMembers(interaction.guild);
@@ -8639,6 +8874,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (totalComparisons > 0) {
                 engagementFactor = (progressWeeksCount / totalComparisons) * 100;
             }
+        }
+
+        // Bonus CX do zaangażowania - gracz wykonujący CX dostaje +5% (nie karze za brak CX)
+        if (hasCxData && engagementFactor !== null) {
+            engagementFactor = Math.min(100, engagementFactor + 5);
         }
 
         // Oblicz współczynnik Trend (tempo progresu)
@@ -9082,7 +9322,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
         }
-        description += `💪 **Zaangażowanie:** ${engagementCircle}\n`;
+        description += `💪 **Zaangażowanie:** ${engagementCircle}${hasCxData ? ' ⭐' : ''}\n`;
 
         // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
         let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -9098,11 +9338,34 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
         description += `📨 **Responsywność:** ${responsivenessCircle}\n`;
 
-        // Trend - tylko jeśli dostępny
-        if (trendIcon !== null && trendDescription !== null) {
-            description += `💨 **Trend:** ${trendDescription} ${trendIcon}\n`;
-        }
         description += `\n`;
+
+        // Sekcja 3b: Trend - osobna sekcja poniżej współczynników z grafiką sparkline
+        if (trendIcon !== null && trendDescription !== null) {
+            description += `### 💨 TREND\n`;
+            description += `**${trendDescription}** ${trendIcon}\n`;
+
+            // Sparkline ostatnich 12 tygodni (od najstarszego do najnowszego - lewo do prawo)
+            const sparklineData = last12Weeks.map(w => {
+                const found = playerProgressData.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
+                return found ? found.score : 0;
+            }).reverse();
+
+            const nonZeroSparkline = sparklineData.filter(s => s > 0);
+            if (nonZeroSparkline.length > 0) {
+                const minS = Math.min(...nonZeroSparkline);
+                const maxS = Math.max(...nonZeroSparkline);
+                const sparkChars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+                const sparklineStr = sparklineData.map(s => {
+                    if (s === 0) return '·';
+                    if (maxS === minS) return '▄';
+                    const level = Math.floor(((s - minS) / (maxS - minS)) * 7);
+                    return sparkChars[Math.min(level, 7)];
+                }).join('');
+                description += `\`${sparklineStr}\` *(12 tyg.)*\n`;
+            }
+            description += `\n`;
+        }
 
         // Sekcja 4: Progres (ostatnie 12 tygodni)
         description += `### 📈 PROGRES (OSTATNIE 12 TYGODNI)\n${resultsText}\n\n`;
@@ -9113,7 +9376,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `✅ **Potwierdzenia:** ${confirmationCountTotal > 0 ? confirmationCountTotal : 'brak'}\n`;
         description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
-        description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}`;
+        description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
+        description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}`;
 
         // Stwórz embed z pełnym description
         const embed = new EmbedBuilder()
