@@ -11891,15 +11891,15 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
     }
 }
 
-// Wykres trendu — konceptualna linia kierunku (nie dane surowe)
-// Nachylenie linii odpowiada opisowi tekstowemu trendu
+// Wykres trendu — rzeczywiste dane tygodniowe (krzywa) + linia regresji jako overlay
+// Kolor krzywej/linii wynika z trendDescription; tygodnie na osi X
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
     const rawData = [...playerProgressData].reverse().filter(d => d.score > 0);
     if (rawData.length < 2) return null;
 
-    const W = 800, H = 220;
-    const M = { top: 44, right: 32, bottom: 28, left: 32 };
+    const W = 800, H = 260;
+    const M = { top: 44, right: 28, bottom: 44, left: 60 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
@@ -11912,38 +11912,75 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     };
     const lineColor = trendColorMap[trendDescription] || '#5865F2';
 
-    // Konceptualna linia — nachylenie wynika z trendDescription, bez danych surowych
-    const slopeMap = {
-        'Gwałtownie rosnący': { startPct: 0.85, endPct: 0.10 },
-        'Rosnący':            { startPct: 0.68, endPct: 0.25 },
-        'Constans':           { startPct: 0.50, endPct: 0.50 },
-        'Malejący':           { startPct: 0.25, endPct: 0.68 },
-        'Gwałtownie malejący':{ startPct: 0.10, endPct: 0.85 }
-    };
-    const sp = slopeMap[trendDescription] || { startPct: 0.50, endPct: 0.50 };
-    const x1 = M.left + 20, x2 = W - M.right - 20;
-    const y1 = M.top + sp.startPct * cH;
-    const y2 = M.top + sp.endPct * cH;
+    const scores = rawData.map(d => d.score);
+    const minScore = Math.min(...scores);
+    const maxScore = Math.max(...scores);
+    const scoreRange = maxScore - minScore || 1;
+    const yMin = Math.max(0, minScore - scoreRange * 0.15);
+    const yMax = maxScore + scoreRange * 0.15;
 
-    // Subtelna siatka bez etykiet
+    const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
+    const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
+
+    const pts = rawData.map((d, i) => ({
+        x: toX(i), y: toY(d.score), score: d.score,
+        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    }));
+
+    // Krzywa Catmull-Rom przez rzeczywiste dane
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+    const linePath = buildCatmullRom(pts);
+    const bottomY = (M.top + cH).toFixed(1);
+    const fillPath = `${linePath} L ${pts[pts.length-1].x.toFixed(1)},${bottomY} L ${pts[0].x.toFixed(1)},${bottomY} Z`;
+
+    // Linia regresji liniowej (overlay — przerywana, wskazuje ogólny kierunek)
+    const n = pts.length;
+    const sumX = n * (n - 1) / 2;
+    const sumY = pts.reduce((s, p) => s + p.y, 0);
+    const sumXX = pts.reduce((s, _, i) => s + i * i, 0);
+    const sumXY = pts.reduce((s, p, i) => s + i * p.y, 0);
+    const denom = n * sumXX - sumX * sumX;
+    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+    const intercept = (sumY - slope * sumX) / n;
+    const regY0 = intercept;
+    const regYn = slope * (n - 1) + intercept;
+
+    // Subtelna siatka Y (bez etykiet liczbowych)
     const gridLines = Array.from({ length: 5 }, (_, i) => {
         const y = M.top + (i / 4) * cH;
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="0.8" stroke-dasharray="4,6"/>`;
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="0.8"/>`;
     }).join('\n  ');
 
-    // Gradient pod linią (rosnące) lub nad (malejące)
-    const isRising = sp.startPct >= sp.endPct;
-    const fillAnchorY = isRising ? (M.top + cH).toFixed(1) : M.top.toFixed(1);
-    const fillPath = `M ${x1.toFixed(1)},${y1.toFixed(1)} L ${x2.toFixed(1)},${y2.toFixed(1)} L ${x2.toFixed(1)},${fillAnchorY} L ${x1.toFixed(1)},${fillAnchorY} Z`;
+    // Etykiety X — każdy tydzień
+    const xLabels = pts.map(p =>
+        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
+    ).join('\n    ');
+
+    // Małe kółka na danych (bez etykiet wartości)
+    const dotsSvg = pts.map((p, i) => {
+        const isLast = i === pts.length - 1;
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.7}"/>`;
+    }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="fill" x1="0" y1="${isRising ? '1' : '0'}" x2="0" y2="${isRising ? '0' : '1'}">
-      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.20"/>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.01"/>
     </linearGradient>
     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
@@ -11954,10 +11991,13 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
   </text>
   <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Trend</text>
   ${gridLines}
-  <path d="${fillPath}" fill="url(#fill)"/>
-  <line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${lineColor}" stroke-width="3.5" stroke-linecap="round" filter="url(#glow)"/>
-  <circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="5" fill="${lineColor}" opacity="0.85"/>
-  <circle cx="${x2.toFixed(1)}" cy="${y2.toFixed(1)}" r="5" fill="${lineColor}" opacity="0.85"/>
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <path d="${fillPath}" fill="url(#fg)"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.2" fill="none" filter="url(#glow)"/>
+  ${dotsSvg}
+  <line x1="${pts[0].x.toFixed(1)}" y1="${regY0.toFixed(1)}" x2="${pts[n-1].x.toFixed(1)}" y2="${regYn.toFixed(1)}" stroke="${lineColor}" stroke-width="2" stroke-dasharray="8,5" opacity="0.65"/>
+  ${xLabels}
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
@@ -12084,8 +12124,9 @@ async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}
         '0':    '#9B59B6'
     };
     const getClanColor = (clan) => clanColors[clan] || '#FFFFFF';
-    // Nazwa klanu z config, fallback na klucz
-    const getClanName = (clan) => clanNames[clan] || clan;
+    // Nazwa klanu z config (bez emoji — nie renderują się w SVG), fallback na klucz
+    const stripEmoji = (str) => (str || '').replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]/gu, '').trim();
+    const getClanName = (clan) => stripEmoji(clanNames[clan] || clan);
 
     const pts = rawData.map((d, i) => ({
         x: toX(i), y: toY(d.position),
