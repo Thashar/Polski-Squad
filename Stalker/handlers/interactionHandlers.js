@@ -11909,23 +11909,36 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
 
     // Ratio per tydzień = progres_tego_tygodnia / średni_tygodniowy_progres
     // Ratio 1.0 = dokładnie średnia, >1 = szybciej niż średnia, <1 = wolniej
-    const ratioData = [];
+    const rawRatios = [];
     for (let i = 1; i < chronological.length; i++) {
         const weekProgress = chronological[i].score - chronological[i - 1].score;
-        ratioData.push({
-            ratio: Math.max(0, weekProgress / baseline),
+        rawRatios.push({
+            ratio: Math.min(2.0, Math.max(0, weekProgress / baseline)), // przycinamy do [0, 2.0]
             lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
         });
     }
-    if (ratioData.length < 2) return null;
+    if (rawRatios.length < 2) return null;
+
+    // Wygładzanie: ważona średnia krocząca [0.25, 0.5, 0.25] dla płynniejszych przejść
+    const ratioData = rawRatios.map((d, i, arr) => {
+        let smoothed;
+        if (i === 0) {
+            smoothed = arr.length > 1 ? 0.75 * d.ratio + 0.25 * arr[1].ratio : d.ratio;
+        } else if (i === arr.length - 1) {
+            smoothed = 0.25 * arr[i - 1].ratio + 0.75 * d.ratio;
+        } else {
+            smoothed = 0.25 * arr[i - 1].ratio + 0.5 * d.ratio + 0.25 * arr[i + 1].ratio;
+        }
+        return { ratio: smoothed, lbl: d.lbl };
+    });
 
     const W = 800, H = 260;
     const M = { top: 44, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
-    // Oś Y od 0 do max ratio (minimum 2.0, żeby progi trendu były zawsze widoczne)
-    const maxRatio = Math.max(2.0, ...ratioData.map(d => d.ratio)) * 1.1;
+    // Oś Y stała: od 0 do 2.0
+    const maxRatio = 2.0;
     const toX = (i) => M.left + (i / (ratioData.length - 1)) * cW;
     const toY = (r) => M.top + cH - (r / maxRatio) * cH;
 
@@ -11967,7 +11980,7 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
         { value: 1.0, color: '#B5BAC1', label: '1.0' },
         { value: 0.9, color: '#FAA61A', label: '0.9' },
         { value: 0.5, color: '#FF8A65', label: '0.5' },
-    ].filter(t => t.value <= maxRatio);
+    ];
 
     const thresholdLines = thresholds.map(t => {
         const y = toY(t.value);
