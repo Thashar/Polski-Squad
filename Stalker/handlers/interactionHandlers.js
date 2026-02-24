@@ -8657,7 +8657,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                     : Promise.resolve(null),
                 generateCompareProgressChart(data1, data2, name1, name2),
                 (rankData1.length >= 2 || rankData2.length >= 2)
-                    ? generateCompareClanRankingChart(rankData1, rankData2, name1, name2)
+                    ? generateCompareClanRankingChart(rankData1, rankData2, name1, name2, config.roleDisplayNames)
                     : Promise.resolve(null)
             ]);
             const files = [];
@@ -12509,7 +12509,7 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
 }
 
 // Wykres pozycji w klanie porównawczy — dwie krzywe pozycji na jednym wykresie (oś Y odwrócona)
-async function generateCompareClanRankingChart(rankData1, rankData2, name1, name2) {
+async function generateCompareClanRankingChart(rankData1, rankData2, name1, name2, clanNames = {}) {
     const sharp = require('sharp');
     const color1 = '#5865F2';
     const color2 = '#EB459E';
@@ -12588,7 +12588,7 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const sorted2cc = [...rankData2].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
     const clanChanges1 = detectClanChanges(sorted1cc);
     const clanChanges2 = detectClanChanges(sorted2cc);
-    const clanLbl = (clan) => clan === 'main' ? '→KM' : `→K${clan}`;
+    const clanLbl = (clan) => `→${clanNames[clan] || clan}`;
     const clanChangesSvg = [
         ...clanChanges1.map(c =>
             `<line x1="${c.x.toFixed(1)}" y1="${M.top}" x2="${c.x.toFixed(1)}" y2="${M.top + cH}" stroke="${color1}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>` +
