@@ -11891,17 +11891,43 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
     }
 }
 
-// Wykres trendu — rzeczywiste dane tygodniowe (krzywa) + linia regresji jako overlay
-// Kolor krzywej/linii wynika z trendDescription; tygodnie na osi X
+// Wykres trendu — oś Y = wartości Ratio (progres tygodnia / średni tygodniowy progres)
+// Pokazuje jak ratio zmieniało się przez ostatnie 12 tygodni z liniami progów trendu
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
-    const rawData = [...playerProgressData].reverse().filter(d => d.score > 0);
-    if (rawData.length < 2) return null;
+    // Dane chronologicznie (od najstarszego), max 12 tygodni
+    const chronological = [...playerProgressData].reverse().filter(d => d.score > 0);
+    if (chronological.length < 3) return null;
+
+    // Baseline: średni tygodniowy progres z całego dostępnego okresu
+    const firstScore = chronological[0].score;
+    const lastScore = chronological[chronological.length - 1].score;
+    const totalProgress = lastScore - firstScore;
+    const totalWeeks = chronological.length - 1;
+    const avgWeekly = totalWeeks > 0 ? totalProgress / totalWeeks : 1;
+    const baseline = Math.abs(avgWeekly) > 0 ? Math.abs(avgWeekly) : 1;
+
+    // Ratio per tydzień = progres_tego_tygodnia / średni_tygodniowy_progres
+    // Ratio 1.0 = dokładnie średnia, >1 = szybciej niż średnia, <1 = wolniej
+    const ratioData = [];
+    for (let i = 1; i < chronological.length; i++) {
+        const weekProgress = chronological[i].score - chronological[i - 1].score;
+        ratioData.push({
+            ratio: Math.max(0, weekProgress / baseline),
+            lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
+        });
+    }
+    if (ratioData.length < 2) return null;
 
     const W = 800, H = 260;
-    const M = { top: 44, right: 28, bottom: 44, left: 60 };
+    const M = { top: 44, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
+
+    // Oś Y od 0 do max ratio (minimum 2.0, żeby progi trendu były zawsze widoczne)
+    const maxRatio = Math.max(2.0, ...ratioData.map(d => d.ratio)) * 1.1;
+    const toX = (i) => M.left + (i / (ratioData.length - 1)) * cW;
+    const toY = (r) => M.top + cH - (r / maxRatio) * cH;
 
     const trendColorMap = {
         'Gwałtownie rosnący': '#00E676',
@@ -11912,22 +11938,11 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     };
     const lineColor = trendColorMap[trendDescription] || '#5865F2';
 
-    const scores = rawData.map(d => d.score);
-    const minScore = Math.min(...scores);
-    const maxScore = Math.max(...scores);
-    const scoreRange = maxScore - minScore || 1;
-    const yMin = Math.max(0, minScore - scoreRange * 0.15);
-    const yMax = maxScore + scoreRange * 0.15;
-
-    const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
-    const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
-
-    const pts = rawData.map((d, i) => ({
-        x: toX(i), y: toY(d.score), score: d.score,
-        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    const pts = ratioData.map((d, i) => ({
+        x: toX(i), y: toY(d.ratio), ratio: d.ratio, lbl: d.lbl
     }));
 
-    // Krzywa Catmull-Rom przez rzeczywiste dane
+    // Krzywa Catmull-Rom przez wartości ratio
     function buildCatmullRom(points) {
         if (points.length < 2) return '';
         let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
@@ -11940,43 +11955,42 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
         }
         return d;
     }
+
     const linePath = buildCatmullRom(pts);
     const bottomY = (M.top + cH).toFixed(1);
-    const fillPath = `${linePath} L ${pts[pts.length-1].x.toFixed(1)},${bottomY} L ${pts[0].x.toFixed(1)},${bottomY} Z`;
+    const fillPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)},${bottomY} L ${pts[0].x.toFixed(1)},${bottomY} Z`;
 
-    // Linia regresji liniowej (overlay — przerywana, wskazuje ogólny kierunek)
-    const n = pts.length;
-    const sumX = n * (n - 1) / 2;
-    const sumY = pts.reduce((s, p) => s + p.y, 0);
-    const sumXX = pts.reduce((s, _, i) => s + i * i, 0);
-    const sumXY = pts.reduce((s, p, i) => s + i * p.y, 0);
-    const denom = n * sumXX - sumX * sumX;
-    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-    const intercept = (sumY - slope * sumX) / n;
-    const regY0 = intercept;
-    const regYn = slope * (n - 1) + intercept;
+    // Linie progów — granice kategorii trendu
+    const thresholds = [
+        { value: 1.5, color: '#00E676', label: '1.5' },
+        { value: 1.1, color: '#43B581', label: '1.1' },
+        { value: 1.0, color: '#B5BAC1', label: '1.0' },
+        { value: 0.9, color: '#FAA61A', label: '0.9' },
+        { value: 0.5, color: '#FF8A65', label: '0.5' },
+    ].filter(t => t.value <= maxRatio);
 
-    // Subtelna siatka Y (bez etykiet liczbowych)
-    const gridLines = Array.from({ length: 5 }, (_, i) => {
-        const y = M.top + (i / 4) * cH;
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="0.8"/>`;
-    }).join('\n  ');
+    const thresholdLines = thresholds.map(t => {
+        const y = toY(t.value);
+        const isBase = t.value === 1.0;
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="${t.color}" stroke-width="${isBase ? 1 : 0.8}" stroke-dasharray="5,5" opacity="${isBase ? 0.35 : 0.55}"/>
+    <text x="${M.left - 4}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${t.color}" text-anchor="end" opacity="0.9">${t.label}</text>`;
+    }).join('\n    ');
 
     // Etykiety X — każdy tydzień
     const xLabels = pts.map(p =>
         `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
     ).join('\n    ');
 
-    // Małe kółka na danych (bez etykiet wartości)
+    // Kółka na punktach
     const dotsSvg = pts.map((p, i) => {
         const isLast = i === pts.length - 1;
-        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.7}"/>`;
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast ? 4.5 : 2.5}" fill="${isLast ? lineColor : '#2B2D31'}" stroke="${lineColor}" stroke-width="${isLast ? 0 : 1.2}" opacity="${isLast ? 1 : 0.85}"/>`;
     }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.18"/>
+      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.20"/>
       <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.01"/>
     </linearGradient>
     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -11990,13 +12004,12 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     <tspan fill="${lineColor}">  ${trendIcon} ${trendDescription}</tspan>
   </text>
   <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Trend</text>
-  ${gridLines}
+  ${thresholdLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <path d="${fillPath}" fill="url(#fg)"/>
-  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.2" fill="none" filter="url(#glow)"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none" filter="url(#glow)"/>
   ${dotsSvg}
-  <line x1="${pts[0].x.toFixed(1)}" y1="${regY0.toFixed(1)}" x2="${pts[n-1].x.toFixed(1)}" y2="${regYn.toFixed(1)}" stroke="${lineColor}" stroke-width="2" stroke-dasharray="8,5" opacity="0.65"/>
   ${xLabels}
 </svg>`;
 
