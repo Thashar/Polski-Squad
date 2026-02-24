@@ -9628,11 +9628,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         description += `\n`;
 
-        // Sekcja 3b: Trend — nagłówek z nazwą trendu, wykres jako obraz
-        if (trendIcon !== null && trendDescription !== null) {
-            description += `### 💨 TREND — ${trendDescription} ${trendIcon}\n`;
-        }
-
         // Sekcja 4: Progres (ostatnie 12 tygodni)
         description += `### 📈 PROGRES (OSTATNIE 12 TYGODNI)\n${resultsText}\n\n`;
 
@@ -9643,7 +9638,12 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
-        description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}`;
+        description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
+
+        // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
+        if (trendIcon !== null && trendDescription !== null) {
+            description += `\n### 💨 TREND — ${trendDescription} ${trendIcon}\n`;
+        }
 
         // Stwórz embed z pełnym description
         const embed = new EmbedBuilder()
