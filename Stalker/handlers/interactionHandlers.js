@@ -8158,7 +8158,7 @@ async function handleProgresCommand(interaction, sharedState) {
 
 // Funkcja obsługująca komendę /player-compare
 async function handlePlayerCompareCommand(interaction, sharedState) {
-    const { config, databaseService } = sharedState;
+    const { config, databaseService, reminderUsageService } = sharedState;
 
     await interaction.deferReply();
 
@@ -8319,10 +8319,93 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             return;
         }
 
-        // Pobierz punkty kar (mniej = lepiej)
-        const guildPunishments = await databaseService.getGuildPunishments(interaction.guild.id);
+        // Pobierz dane pomocnicze równolegle
+        const members = await safeFetchMembers(interaction.guild);
+        const [guildPunishments, last54Weeks] = await Promise.all([
+            databaseService.getGuildPunishments(interaction.guild.id),
+            Promise.resolve(allWeeks.slice(0, 54))
+        ]);
         const lifePts1 = guildPunishments[userInfo1.userId]?.lifetime_points || 0;
         const lifePts2 = guildPunishments[userInfo2.userId]?.lifetime_points || 0;
+
+        // Wczytaj dane o przypomnieniach i potwierdzeniach
+        await reminderUsageService.loadUsageData();
+        const reminderData = reminderUsageService.usageData;
+        const confirmations = await loadConfirmations(config);
+
+        // Ranking globalny (pozycja #N / M)
+        const globalRanking = await createGlobalPlayerRanking(interaction.guild, databaseService, config, last54Weeks, members);
+        const totalPlayers = globalRanking.length;
+        const pos1 = globalRanking.findIndex(p => p.userId === userInfo1.userId) + 1;
+        const pos2 = globalRanking.findIndex(p => p.userId === userInfo2.userId) + 1;
+
+        // Klan gracza (z roli Discord lub ostatnich danych)
+        function getClanDisplay(member, progressData) {
+            if (member) {
+                for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        return config.roleDisplayNames[clanKey] || clanKey;
+                    }
+                }
+            }
+            if (progressData.length > 0 && progressData[0].clan) {
+                return config.roleDisplayNames[progressData[0].clan] || progressData[0].clan;
+            }
+            return 'Brak';
+        }
+        const clanDisplay1 = getClanDisplay(members.get(userInfo1.userId), data1);
+        const clanDisplay2 = getClanDisplay(members.get(userInfo2.userId), data2);
+
+        // Oblicz współczynniki Rzetelność, Punktualność, Responsywność dla gracza
+        function computeCoefficients(userId, progressData, lifetimePoints) {
+            const result = { wyjebanieFactor: null, timingFactor: null, responsivenessFactor: null };
+            if (progressData.length === 0) return result;
+            const getWeekStart = (weekNumber, year) => {
+                const d = new Date(year, 0, 1);
+                const dow = d.getDay();
+                d.setDate(d.getDate() + (weekNumber - 1) * 7 - (dow === 0 ? 6 : dow - 1));
+                return d;
+            };
+            const fmtD = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            const getWeeksDiff = (w1, y1, w2, y2) => y1 === y2 ? w1 - w2 : (y1 - y2) * 52 + (w1 - w2);
+
+            const weeksSince45 = progressData.filter(d => d.year > 2025 || (d.year === 2025 && d.weekNumber >= 45)).length;
+            const weeksSince49 = progressData.filter(d => d.year > 2025 || (d.year === 2025 && d.weekNumber >= 49)).length;
+            const oldest = progressData[progressData.length - 1];
+            const newest = progressData[0];
+            const useT45 = getWeeksDiff(newest.weekNumber, newest.year, 45, 2025) < 12
+                && (oldest.year < 2025 || (oldest.year === 2025 && oldest.weekNumber < 45));
+            const useT49 = getWeeksDiff(newest.weekNumber, newest.year, 49, 2025) < 12
+                && (oldest.year < 2025 || (oldest.year === 2025 && oldest.weekNumber < 49));
+            const startBase = getWeekStart(oldest.weekNumber, oldest.year);
+            const start45 = useT45 ? getWeekStart(45, 2025) : startBase;
+            const start49 = useT49 ? getWeekStart(49, 2025) : startBase;
+            const sd45 = fmtD(start45), sd49 = fmtD(start49);
+
+            let remRel = 0, remResp = 0, confResp = 0;
+            if (reminderData.receivers?.[userId]) {
+                for (const [dateStr, pings] of Object.entries(reminderData.receivers[userId].dailyPings || {})) {
+                    if (dateStr >= sd45) remRel += pings.length;
+                    if (dateStr >= sd49) remResp += pings.length;
+                }
+            }
+            for (const session of Object.values(confirmations.sessions || {})) {
+                if (new Date(session.createdAt).getTime() >= start49.getTime()
+                    && session.confirmedUsers?.includes(userId)) confResp++;
+            }
+            if (weeksSince45 > 0) {
+                result.wyjebanieFactor = Math.max(0, 100 - ((remRel * 0.025 + lifetimePoints * 0.2) / weeksSince45) * 100);
+                result.timingFactor   = Math.max(0, 100 - ((remRel * 0.125) / weeksSince45) * 100);
+            }
+            if (weeksSince49 > 0) {
+                result.responsivenessFactor = remResp > 0
+                    ? Math.min(100, (confResp / remResp) * 100)
+                    : 100;
+            }
+            return result;
+        }
+        const coeff1 = computeCoefficients(userInfo1.userId, data1, lifePts1);
+        const coeff2 = computeCoefficients(userInfo2.userId, data2, lifePts2);
 
         // Sprawdź dane CX (hasCx = kiedykolwiek, hasCxRecent = ostatni miesiąc, hasCxElite = 2700+ w ostatnim miesiącu)
         let hasCx1 = false, hasCxRecent1 = false, hasCxElite1 = false;
@@ -8362,9 +8445,9 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         const wLabel1 = `${String(latestWeek1.weekNumber).padStart(2, '0')}/${String(latestWeek1.year).slice(-2)}`;
         const wLabel2 = `${String(latestWeek2.weekNumber).padStart(2, '0')}/${String(latestWeek2.year).slice(-2)}`;
 
-        // Oblicz liczbę MVP (TOP3 progresu w tygodniu, w klanie) dla obu graczy
-        let mvpCount1 = 0;
-        let mvpCount2 = 0;
+        // Oblicz MVP z rozróżnieniem medali (🥇🥈🥉) dla obu graczy
+        let mvp1 = { gold: 0, silver: 0, bronze: 0 };
+        let mvp2 = { gold: 0, silver: 0, bronze: 0 };
         try {
             // Zbuduj indeks wyników wszystkich graczy (wszystkie klany, wszystkie tygodnie)
             const allScoresIndex = new Map(); // userId → Map(weekKey → {score, clan})
@@ -8390,7 +8473,6 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             for (let wi = 0; wi < last12Weeks.length; wi++) {
                 const week = last12Weeks[wi];
                 const weekKey = `${week.weekNumber}-${week.year}`;
-                // Zbierz progres wszystkich graczy w tym tygodniu (per klan)
                 const progressByClan = {};
                 for (const [pid, weekMap] of allScoresIndex.entries()) {
                     const cur = weekMap.get(weekKey);
@@ -8407,90 +8489,131 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                         progressByClan[cur.clan].push({ userId: pid, progress: prog });
                     }
                 }
-                // Sprawdź obu graczy
+                // Sprawdź obu graczy i przypisz medal za pozycję
                 for (const [playerIdx, uid] of [[1, userInfo1.userId], [2, userInfo2.userId]]) {
                     const userEntry = allScoresIndex.get(uid)?.get(weekKey);
                     if (!userEntry) continue;
-                    const clanList = (progressByClan[userEntry.clan] || [])
+                    const top3 = (progressByClan[userEntry.clan] || [])
                         .sort((a, b) => b.progress - a.progress)
                         .slice(0, 3);
-                    if (clanList.some(p => p.userId === uid)) {
-                        if (playerIdx === 1) mvpCount1++;
-                        else mvpCount2++;
-                    }
+                    const pos = top3.findIndex(p => p.userId === uid);
+                    if (pos === -1) continue;
+                    const mvpObj = playerIdx === 1 ? mvp1 : mvp2;
+                    if (pos === 0) mvpObj.gold++;
+                    else if (pos === 1) mvpObj.silver++;
+                    else mvpObj.bronze++;
                 }
             }
         } catch (e) { /* błąd MVP - ok */ }
+
+        // Formatuj współczynnik jako kółko + procent (lub brak danych)
+        function fmtCoeff(val) {
+            if (val === null) return '🟢 *brak*';
+            const c = val >= 90 ? '🟢' : val >= 80 ? '🟡' : val >= 70 ? '🟠' : '🔴';
+            return `${c} ${val.toFixed(1)}%`;
+        }
+
+        // Format MVP: 🥇×2  🥈×1  🥉×3
+        function fmtMvp(mvp) {
+            return `🥇×${mvp.gold}  🥈×${mvp.silver}  🥉×${mvp.bronze}`;
+        }
+
+        // Formatuj pole statystyk gracza (pełne inline field)
+        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos) {
+            const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
+            const spark = genTrendSparkline(m._data);
+            let f = '';
+            f += `🏰 **${clanDisplay}**\n`;
+            f += position > 0
+                ? `🌍 **#${position} / ${totalPos}**\n`
+                : `🌍 **Brak pozycji**\n`;
+            f += `\n`;
+            f += `📊 **Aktualny:** ${latestScore.toLocaleString('pl-PL')} *(${wLabel})*\n`;
+            f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
+            f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
+            f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
+            f += `\n`;
+            f += `📈 **Trend:** \`${spark}\` ${m.trendIcon || ''}\n`;
+            f += `\n`;
+            f += `🎯 **Rzetelność:** ${fmtCoeff(coeff.wyjebanieFactor)}\n`;
+            f += `💪 **Zaangażowanie:** ${fmtCoeff(m.engagementFactor)}${cxStar}\n`;
+            f += `⏱️ **Punktualność:** ${fmtCoeff(coeff.timingFactor)}\n`;
+            f += `📨 **Responsywność:** ${fmtCoeff(coeff.responsivenessFactor)}\n`;
+            f += `\n`;
+            f += `⭐ **MVP:** ${fmtMvp(mvp)}\n`;
+            f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
+            f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
+            return f;
+        }
+
+        // Przechowaj dane surowe w m1/m2 dla sparkline
+        m1._data = data1;
+        m2._data = data2;
 
         // Oblicz wynik porównania - kto wygrywa w każdej kategorii
         let wins1 = 0;
         let wins2 = 0;
 
-        // Miesiąc (wyższy progres = lepiej)
+        // Progres miesięczny
         if (m1.monthlyProgress !== null && m2.monthlyProgress !== null) {
-            if (m1.monthlyProgress > m2.monthlyProgress) { wins1++; }
-            else if (m2.monthlyProgress > m1.monthlyProgress) { wins2++; }
+            if (m1.monthlyProgress > m2.monthlyProgress) wins1++;
+            else if (m2.monthlyProgress > m1.monthlyProgress) wins2++;
         }
-        // Kwartał (wyższy progres kwartalny = lepiej)
+        // Progres kwartalny
         if (m1.quarterlyProgress !== null && m2.quarterlyProgress !== null) {
-            if (m1.quarterlyProgress > m2.quarterlyProgress) { wins1++; }
-            else if (m2.quarterlyProgress > m1.quarterlyProgress) { wins2++; }
+            if (m1.quarterlyProgress > m2.quarterlyProgress) wins1++;
+            else if (m2.quarterlyProgress > m1.quarterlyProgress) wins2++;
         }
-        // Najlepszy wynik (wyższy = lepiej)
-        if (m1.bestScore > m2.bestScore) { wins1++; }
-        else if (m2.bestScore > m1.bestScore) { wins2++; }
-        // Zaangażowanie (wyższy % = lepiej)
+        // Best score
+        if (m1.bestScore > m2.bestScore) wins1++;
+        else if (m2.bestScore > m1.bestScore) wins2++;
+        // Trend
+        if (m1.trendRatio !== null && m2.trendRatio !== null) {
+            if (m1.trendRatio > m2.trendRatio + 0.05) wins1++;
+            else if (m2.trendRatio > m1.trendRatio + 0.05) wins2++;
+        }
+        // Rzetelność
+        if (coeff1.wyjebanieFactor !== null && coeff2.wyjebanieFactor !== null) {
+            if (coeff1.wyjebanieFactor > coeff2.wyjebanieFactor + 0.5) wins1++;
+            else if (coeff2.wyjebanieFactor > coeff1.wyjebanieFactor + 0.5) wins2++;
+        }
+        // Zaangażowanie
         const eng1 = m1.engagementFactor ?? 100;
         const eng2 = m2.engagementFactor ?? 100;
-        if (eng1 > eng2 + 0.5) { wins1++; }
-        else if (eng2 > eng1 + 0.5) { wins2++; }
-        // Trend ratio (wyższy = bardziej rosnący)
-        if (m1.trendRatio !== null && m2.trendRatio !== null) {
-            if (m1.trendRatio > m2.trendRatio + 0.05) { wins1++; }
-            else if (m2.trendRatio > m1.trendRatio + 0.05) { wins2++; }
+        if (eng1 > eng2 + 0.5) wins1++;
+        else if (eng2 > eng1 + 0.5) wins2++;
+        // Punktualność
+        if (coeff1.timingFactor !== null && coeff2.timingFactor !== null) {
+            if (coeff1.timingFactor > coeff2.timingFactor + 0.5) wins1++;
+            else if (coeff2.timingFactor > coeff1.timingFactor + 0.5) wins2++;
         }
-        // MVP (więcej razy w TOP3 progresu = lepiej)
-        if (mvpCount1 > mvpCount2) { wins1++; }
-        else if (mvpCount2 > mvpCount1) { wins2++; }
-        // CX (aktywność w ostatnim miesiącu = plus)
-        if (hasCxRecent1 && !hasCxRecent2) { wins1++; }
-        else if (hasCxRecent2 && !hasCxRecent1) { wins2++; }
-        // Kary (mniej punktów karnych = lepiej)
-        if (lifePts1 < lifePts2) { wins1++; }
-        else if (lifePts2 < lifePts1) { wins2++; }
-
-        // Formatuj pole statystyk gracza (do inline field)
-        // hasCxRecent = aktywny w ostatnim miesiącu, hasCxElite = 2700+ w ostatnim miesiącu
-        function fmtPlayerField(m, hasCx, hasCxRecent, hasCxElite, mvpCount, lifePts, latestScore, wLabel) {
-            const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
-            let f = '';
-            f += `📊 **Aktualny:** ${latestScore.toLocaleString('pl-PL')} *(${wLabel})*\n`;
-            f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
-            f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
-            f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
-            f += `⭐ **MVP (12 tyg):** ${mvpCount > 0 ? `${mvpCount}x` : 'brak'}\n`;
-            f += `💪 **Zaangażowanie:** ${engCircle(m.engagementFactor)}${cxStar}\n`;
-            f += `💨 **Trend:** ${m.trendDescription ? `${m.trendDescription} ${m.trendIcon}` : '*brak*'}\n`;
-            f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
-            f += `⚠️ **Pkt. kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
-            return f;
+        // Responsywność
+        if (coeff1.responsivenessFactor !== null && coeff2.responsivenessFactor !== null) {
+            if (coeff1.responsivenessFactor > coeff2.responsivenessFactor + 0.5) wins1++;
+            else if (coeff2.responsivenessFactor > coeff1.responsivenessFactor + 0.5) wins2++;
         }
+        // MVP (waga: złoto=3, srebro=2, brąz=1)
+        const mvpScore1 = mvp1.gold * 3 + mvp1.silver * 2 + mvp1.bronze;
+        const mvpScore2 = mvp2.gold * 3 + mvp2.silver * 2 + mvp2.bronze;
+        if (mvpScore1 > mvpScore2) wins1++;
+        else if (mvpScore2 > mvpScore1) wins2++;
+        // CX
+        if (hasCxRecent1 && !hasCxRecent2) wins1++;
+        else if (hasCxRecent2 && !hasCxRecent1) wins2++;
+        // Pozycja globalna (niższa = lepsza)
+        if (pos1 > 0 && pos2 > 0) {
+            if (pos1 < pos2) wins1++;
+            else if (pos2 < pos1) wins2++;
+        }
+        // Kary
+        if (lifePts1 < lifePts2) wins1++;
+        else if (lifePts2 < lifePts1) wins2++;
 
-        // Sparkline trendu (diff-based, każdy tydzień = 2 znaki)
-        const spark1 = genTrendSparkline(data1);
-        const spark2 = genTrendSparkline(data2);
-
-        const trendsField = `**${name1}:**\n\`${spark1}\`\n\n**${name2}:**\n\`${spark2}\``;
-
-        // Podsumowanie wygranego
+        // Wynik
         let winnerField = '';
-        if (wins1 > wins2) {
-            winnerField = `🥇 **${name1}** wygrywa **${wins1} - ${wins2}**`;
-        } else if (wins2 > wins1) {
-            winnerField = `🥇 **${name2}** wygrywa **${wins2} - ${wins1}**`;
-        } else {
-            winnerField = `⚖️ **Remis ${wins1} - ${wins2}**`;
-        }
+        if (wins1 > wins2) winnerField = `🥇 **${name1}** wygrywa **${wins1} - ${wins2}**`;
+        else if (wins2 > wins1) winnerField = `🥇 **${name2}** wygrywa **${wins2} - ${wins1}**`;
+        else winnerField = `⚖️ **Remis ${wins1} - ${wins2}**`;
 
         const embed = new EmbedBuilder()
             .setTitle(`⚔️ ${name1}  vs  ${name2}`)
@@ -8498,9 +8621,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, hasCx1, hasCxRecent1, hasCxElite1, mvpCount1, lifePts1, latestWeek1.score, wLabel1), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, hasCx2, hasCxRecent2, hasCxElite2, mvpCount2, lifePts2, latestWeek2.score, wLabel2), inline: true },
-                { name: '💨 SPARKLINE TRENDU', value: trendsField },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers), inline: true },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
 
