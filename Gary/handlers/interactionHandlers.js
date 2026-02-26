@@ -341,7 +341,7 @@ class InteractionHandler {
                 const guildSummary =
                     `**👥 Members:** ${guild.members.length}\n` +
                     `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                    `**<:II_RC:1385139885924421653> RC:** ${guild.totalRelicCores}+\n` +
+                    `**<:II_RC:1385139885924421653> RC+TC:** ${guild.totalRelicCores}+\n` +
                     `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                     `**⭐ Level:** ${guild.level || 'N/A'}\n` +
                     `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
@@ -410,10 +410,10 @@ class InteractionHandler {
                 return;
             }
 
-            const guildSummary = 
+            const guildSummary =
                 `**👥 Members:** ${guild.members.length}\n` +
                 `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                `**<:II_RC:1385139885924421653> RC:** ${guild.totalRelicCores}+\n` +
+                `**<:II_RC:1385139885924421653> RC+TC:** ${guild.totalRelicCores}+\n` +
                 `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                 `**⭐ Level:** ${guild.level || 'N/A'}\n` +
                 `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
@@ -670,7 +670,7 @@ class InteractionHandler {
                 const guildSummary =
                     `**👥 Members:** ${guild.members.length}\n` +
                     `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                    `**<:II_RC:1385139885924421653> RC:** ${guild.totalRelicCores}+\n` +
+                    `**<:II_RC:1385139885924421653> RC+TC:** ${guild.totalRelicCores}+\n` +
                     `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                     `**⭐ Level:** ${guild.level || 'N/A'}\n` +
                     `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
