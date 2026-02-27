@@ -143,6 +143,12 @@
       "description": "Bot do analizy gildii w Lunar Mine Expedition, wyszukiwania graczy i zarządzania proxy",
       "commands": [
         {
+          "name": "/lme-snapshot",
+          "description": "Ręcznie uruchamia pełny snapshot Lunar Mine — analizuje gildie, zapisuje historię klanów i graczy (nie trzeba czekać do środy)",
+          "usage": "/lme-snapshot",
+          "requiredPermission": "administrator"
+        },
+        {
           "name": "/lunarmine",
           "description": "Analizuje 4 gildie podczas ekspedycji Lunar Mine (modal z 4 polami ID)",
           "usage": "/lunarmine → wypełnij formularz z ID gildii",
@@ -381,6 +387,12 @@
           "description": "Dodaje zdjęcie z tabelą wyników do tygodnia Fazy 2",
           "usage": "/img → wybierz tydzień → prześlij zdjęcie (30s timeout)",
           "requiredPermission": "moderator"
+        },
+        {
+          "name": "/lme-snapshot",
+          "description": "Uruchamia ingestion danych RC+TC i Atak z Gary do lokalnej bazy Stalkera (uruchom po /lme-snapshot w Gary)",
+          "usage": "/lme-snapshot",
+          "requiredPermission": "administrator"
         },
         {
           "name": "/msg",
