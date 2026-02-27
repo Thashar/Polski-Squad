@@ -2,16 +2,16 @@ const fs = require('fs');
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 
-const SHARED_COMBAT_FILE = path.join(__dirname, '../../shared_data/player_combat_history.json');
+const WEEKLY_DIR      = path.join(__dirname, '../../shared_data/lme_weekly');
 const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.json');
 
 /**
  * Serwis do ingestowania danych graczy z Gary bota do lokalnej bazy Stalkera.
  *
  * Przepływ:
- * 1. Gary co tydzień zapisuje dane graczy (RC+TC, atak) do shared_data/player_combat_history.json
- *    z kluczem = nick w grze (lowercase).
- * 2. Ten serwis (uruchamiany w środę o 18:55 i przy starcie) czyta te dane,
+ * 1. Gary co tydzień zapisuje dane graczy (RC+TC, atak) do shared_data/lme_weekly/week_YYYY_WW.json
+ *    z kluczem = nick w grze (lowercase). Każdy tydzień to osobny plik.
+ * 2. Ten serwis (uruchamiany w środę o 18:55 i przy starcie) agreguje wszystkie pliki weekly,
  *    dopasowuje fuzzy nicki do członków Discorda z ról klanowych,
  *    i zapisuje do Stalker/data/player_combat_discord.json z kluczem = userId Discord.
  * 3. Komendy /player-status i /player-compare czytają z lokalnej bazy po userId.
@@ -127,13 +127,61 @@ class GaryCombatIngestionService {
      */
     async ingest() {
         try {
-            if (!fs.existsSync(SHARED_COMBAT_FILE)) {
-                this.logger.info('📊 GaryCombatIngestion: brak danych Gary (shared_data/player_combat_history.json)');
+            // Agreguj dane ze wszystkich plików weekly (shared_data/lme_weekly/week_YYYY_WW.json)
+            if (!fs.existsSync(WEEKLY_DIR)) {
+                this.logger.info('📊 GaryCombatIngestion: brak katalogu shared_data/lme_weekly — uruchom /lme-snapshot w Gary');
                 return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
             }
 
-            const garyData = JSON.parse(fs.readFileSync(SHARED_COMBAT_FILE, 'utf8'));
-            if (!garyData?.players) return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
+            const weekFiles = fs.readdirSync(WEEKLY_DIR)
+                .filter(f => f.startsWith('week_') && f.endsWith('.json'))
+                .sort(); // week_YYYY_WW — sortowanie leksykograficzne = chronologiczne
+
+            if (weekFiles.length === 0) {
+                this.logger.info('📊 GaryCombatIngestion: brak plików weekly — uruchom /lme-snapshot w Gary');
+                return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
+            }
+
+            // Zbuduj strukturę garyData agregując wszystkie tygodnie
+            const garyData = { players: {} };
+            for (const file of weekFiles) {
+                let weekData;
+                try {
+                    weekData = JSON.parse(fs.readFileSync(path.join(WEEKLY_DIR, file), 'utf8'));
+                } catch (_) {
+                    this.logger.warn(`GaryCombatIngestion: pominięto uszkodzony plik ${file}`);
+                    continue;
+                }
+                if (!weekData?.players || !weekData.weekNumber || !weekData.year) continue;
+
+                for (const [key, player] of Object.entries(weekData.players)) {
+                    if (!garyData.players[key]) {
+                        garyData.players[key] = { originalName: player.originalName || key, weeks: [] };
+                    }
+                    garyData.players[key].originalName = player.originalName || key;
+                    // Upsert tygodnia (plik per-tydzień zawiera już dokładnie jeden wpis per gracz)
+                    const existingIdx = garyData.players[key].weeks.findIndex(
+                        w => w.weekNumber === weekData.weekNumber && w.year === weekData.year
+                    );
+                    const entry = {
+                        weekNumber: weekData.weekNumber,
+                        year:       weekData.year,
+                        attack:     player.attack      || 0,
+                        relicCores: player.relicCores  || 0
+                    };
+                    if (existingIdx >= 0) {
+                        garyData.players[key].weeks[existingIdx] = entry;
+                    } else {
+                        garyData.players[key].weeks.push(entry);
+                    }
+                }
+            }
+
+            if (!garyData.players || Object.keys(garyData.players).length === 0) {
+                return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
+            }
+
+            this.logger.info(`📊 GaryCombatIngestion: zaagregowano ${weekFiles.length} plików weekly`);
 
             // Wczytaj istniejące dane lokalne lub zacznij od zera
             let localData = { players: {}, lastUpdated: '' };

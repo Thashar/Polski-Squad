@@ -3,7 +3,7 @@ const path = require('path');
 
 // Shared data directory (accessible by all bots in the project)
 const SHARED_DATA_DIR = path.join(__dirname, '../../shared_data');
-const PLAYER_COMBAT_FILE = path.join(SHARED_DATA_DIR, 'player_combat_history.json');
+const WEEKLY_DIR = path.join(SHARED_DATA_DIR, 'lme_weekly');
 
 /**
  * Persistent storage for three kinds of weekly snapshots:
@@ -11,9 +11,9 @@ const PLAYER_COMBAT_FILE = path.join(SHARED_DATA_DIR, 'player_combat_history.jso
  * 1. `snapshots`      — TOP500 clan ranking (rank + score for every clan)
  * 2. `guildSnapshots` — Detailed data for the 4 PS clans (rank, totalRelicCores,
  *                        totalPower) captured straight from the garrytools analysis.
- * 3. player_combat_history.json (shared_data/) — Per-player RC+TC and attack
- *                        history, keyed by lowercase player name, readable by
- *                        Stalker bot for /player-status and /player-compare charts.
+ * 3. shared_data/lme_weekly/week_YYYY_WW.json — Per-player RC+TC and attack
+ *                        snapshot per week, keyed by lowercase player name,
+ *                        readable by Stalker bot for /player-status and /player-compare charts.
  *
  * Both arrays grow indefinitely (no trimming) so history is never lost.
  * Data survives bot restarts via Gary/data/clan_history.json.
@@ -250,63 +250,36 @@ class ClanHistoryService {
         const year = now.getFullYear();
 
         try {
-            // Load existing data or start fresh
-            let data = { players: {}, lastUpdated: '' };
-            if (fs.existsSync(PLAYER_COMBAT_FILE)) {
-                try {
-                    data = JSON.parse(fs.readFileSync(PLAYER_COMBAT_FILE, 'utf8'));
-                    if (!data.players) data.players = {};
-                } catch (_) {
-                    data = { players: {} };
-                }
-            }
-
+            // Zbierz dane wszystkich graczy z bieżącego tygodnia
+            const players = {};
             let saved = 0;
+
             for (const guild of guilds) {
                 if (!guild.members) continue;
                 for (const member of guild.members) {
                     if (!member.name) continue;
                     const key = member.name.toLowerCase();
-
-                    if (!data.players[key]) {
-                        data.players[key] = { originalName: member.name, weeks: [] };
-                    }
-
-                    // Update originalName to latest known casing
-                    data.players[key].originalName = member.name;
-
-                    const weeks = data.players[key].weeks;
-
-                    // Upsert: replace existing entry for the same week
-                    const existingIdx = weeks.findIndex(
-                        w => w.weekNumber === weekNumber && w.year === year
-                    );
-                    const entry = {
-                        weekNumber,
-                        year,
-                        attack: member.attack || 0,
-                        relicCores: member.relicCores || 0
+                    players[key] = {
+                        originalName: member.name,
+                        attack:       member.attack      || 0,
+                        relicCores:   member.relicCores  || 0
                     };
-                    if (existingIdx >= 0) {
-                        weeks[existingIdx] = entry;
-                    } else {
-                        weeks.push(entry);
-                        // Keep sorted chronologically; no trimming
-                        weeks.sort((a, b) =>
-                            a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
-                        );
-                    }
                     saved++;
                 }
             }
 
-            data.lastUpdated = now.toISOString();
+            // Zapisz do dedykowanego pliku tygodnia: week_YYYY_WW.json
+            const weekStr = String(weekNumber).padStart(2, '0');
+            const fileName = `week_${year}_${weekStr}.json`;
+            const weekFile = path.join(WEEKLY_DIR, fileName);
 
-            if (!fs.existsSync(SHARED_DATA_DIR)) {
-                fs.mkdirSync(SHARED_DATA_DIR, { recursive: true });
+            const weekData = { weekNumber, year, savedAt: now.toISOString(), players };
+
+            if (!fs.existsSync(WEEKLY_DIR)) {
+                fs.mkdirSync(WEEKLY_DIR, { recursive: true });
             }
-            fs.writeFileSync(PLAYER_COMBAT_FILE, JSON.stringify(data, null, 2), 'utf8');
-            this.logger.info(`📊 Player combat snapshot: zapisano ${saved} wpisów (tydz. ${weekNumber}/${year})`);
+            fs.writeFileSync(weekFile, JSON.stringify(weekData, null, 2), 'utf8');
+            this.logger.info(`📊 Player combat snapshot: zapisano ${saved} wpisów → ${fileName}`);
         } catch (err) {
             this.logger.error('ClanHistory: błąd zapisu player combat snapshot:', err.message);
         }
