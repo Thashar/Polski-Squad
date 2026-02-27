@@ -10423,6 +10423,36 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
 
         const resultsText = resultsLines.join('\n');
 
+        // Wczytaj najnowszy snapshot klanów z shared_data/lme_guilds/
+        let guildSnapshotField = null;
+        try {
+            const path = require('path');
+            const guildsDir = path.join(__dirname, '../../shared_data/lme_guilds');
+            const dirEntries = await fs.readdir(guildsDir).catch(() => []);
+            const weekFiles = dirEntries.filter(f => f.startsWith('week_') && f.endsWith('.json')).sort();
+            if (weekFiles.length > 0) {
+                const latestFile = path.join(guildsDir, weekFiles[weekFiles.length - 1]);
+                const raw = await fs.readFile(latestFile, 'utf8');
+                const snapshot = JSON.parse(raw);
+                const weekLabel = `T${String(snapshot.weekNumber).padStart(2, '0')}/${snapshot.year}`;
+                const sortedGuilds = [...(snapshot.guilds || [])].sort((a, b) => (a.rank || 999) - (b.rank || 999));
+                const fmtPower = (v) => {
+                    if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+                    if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+                    if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+                    return String(v);
+                };
+                const lines = sortedGuilds.map(g => {
+                    const rank = g.rank ? `#${g.rank}` : 'N/A';
+                    const score = g.score != null ? `Score: ${g.score.toLocaleString('pl-PL')}` : '';
+                    const rc = `RC: ${g.totalRelicCores || 0}`;
+                    const power = `Power: ${fmtPower(g.totalPower || 0)}`;
+                    return `**${rank}** ${g.name} — ${[score, rc, power].filter(Boolean).join(' | ')}`;
+                }).join('\n');
+                guildSnapshotField = { name: `📸 Snapshot Gary (${weekLabel})`, value: lines || 'Brak danych', inline: false };
+            }
+        } catch (_) { /* pole opcjonalne — ignoruj błąd */ }
+
         const embed = new EmbedBuilder()
             .setTitle(`📊 Progres TOP30 - ${clanName}`)
             .setDescription(
@@ -10432,6 +10462,8 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
             .setColor('#00FF00')
             .setFooter({ text: `Klan: ${clanName} | Wyświetlono ${last54Weeks.length} tygodni (${clanProgressData.length} z danymi)` })
             .setTimestamp();
+
+        if (guildSnapshotField) embed.addFields(guildSnapshotField);
 
         // Wyślij publiczne wyniki
         const reply = await interaction.followUp({
