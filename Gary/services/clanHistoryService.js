@@ -3,7 +3,8 @@ const path = require('path');
 
 // Shared data directory (accessible by all bots in the project)
 const SHARED_DATA_DIR = path.join(__dirname, '../../shared_data');
-const WEEKLY_DIR = path.join(SHARED_DATA_DIR, 'lme_weekly');
+const WEEKLY_DIR  = path.join(SHARED_DATA_DIR, 'lme_weekly');
+const TOP500_DIR  = path.join(SHARED_DATA_DIR, 'lme_top500');
 
 /**
  * Persistent storage for three kinds of weekly snapshots:
@@ -110,6 +111,17 @@ class ClanHistoryService {
         );
 
         this._save();
+
+        // Dodatkowo zapisz do osobnego pliku tygodniowego (shared_data/lme_top500/week_YYYY_WW.json)
+        try {
+            if (!fs.existsSync(TOP500_DIR)) fs.mkdirSync(TOP500_DIR, { recursive: true });
+            const weekStr = String(weekNumber).padStart(2, '0');
+            const fileName = `week_${year}_${weekStr}.json`;
+            fs.writeFileSync(path.join(TOP500_DIR, fileName), JSON.stringify(snapshot, null, 2), 'utf8');
+            this.logger.info(`📊 TOP500 snapshot: zapisano plik → ${fileName}`);
+        } catch (err) {
+            this.logger.error('ClanHistory: błąd zapisu pliku tygodniowego TOP500:', err.message);
+        }
     }
 
     /**
@@ -149,7 +161,7 @@ class ClanHistoryService {
      * @param {Array} guilds - guild objects from garrytoolsService.fetchGroupDetails()
      *   Each guild: { guildId, title, rank, totalRelicCores, totalPower, ... }
      */
-    saveGuildSnapshot(guilds) {
+    saveGuildSnapshot(guilds, scoreMap = null) {
         const now = new Date();
         const weekNumber = this._getWeekNumber(now);
         const year = now.getFullYear();
@@ -174,7 +186,8 @@ class ClanHistoryService {
                 name: g.title,
                 rank: parseRank(g.rank),
                 totalRelicCores: g.totalRelicCores || 0,
-                totalPower: g.totalPower || 0
+                totalPower: g.totalPower || 0,
+                ...(scoreMap && { score: scoreMap.get(g.guildId) || 0 })
             }))
         };
 

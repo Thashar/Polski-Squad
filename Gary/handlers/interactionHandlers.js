@@ -738,7 +738,21 @@ class InteractionHandler {
             if (this.clanHistoryService) {
                 try {
                     this.logger.info('📅 Step 6: Saving guild & player snapshots and generating history charts...');
-                    this.clanHistoryService.saveGuildSnapshot(sortedClans);
+
+                    // Pobierz score z TOP500 dla 4 klanów PS
+                    let scoreMap = null;
+                    if (this.clanService) {
+                        try {
+                            await this.clanService.fetchClanData();
+                            const top500 = this.clanService.getClanData();
+                            scoreMap = new Map(top500.map(c => [c.id, c.score]));
+                            this.logger.info(`📅 Step 6: Pobrano score TOP500 (${top500.length} klanów)`);
+                        } catch (err) {
+                            this.logger.warn(`📅 Step 6: Nie udało się pobrać score TOP500: ${err.message}`);
+                        }
+                    }
+
+                    this.clanHistoryService.saveGuildSnapshot(sortedClans, scoreMap);
                     this.clanHistoryService.savePlayerSnapshot(sortedClans);
 
                     const guildIds = sortedClans.map(g => g.guildId);
