@@ -6,6 +6,7 @@ const ClanService = require('./services/clanAjaxService');
 const PlayerService = require('./services/playerService');
 const EndersEchoService = require('./services/endersEchoService');
 const LogService = require('./services/logService');
+const ClanHistoryService = require('./services/clanHistoryService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -19,7 +20,7 @@ const client = new Client({
     ]
 });
 
-let garrytoolsService, clanService, playerService, endersEchoService, logService, interactionHandler;
+let garrytoolsService, clanService, playerService, endersEchoService, logService, clanHistoryService, interactionHandler;
 
 /**
  * Initialize the Gary bot
@@ -93,6 +94,26 @@ if (config.lunarMineSettings?.autoRefresh) {
 // Set up pagination cleanup
 cron.schedule('*/10 * * * *', () => {
     interactionHandler.cleanup();
+});
+
+// Weekly clan history snapshot - every Wednesday at 18:46 (1 min after Lunar Mine)
+// Fetches fresh TOP500 clan data and saves a persistent weekly snapshot
+cron.schedule('46 18 * * 3', async () => {
+    try {
+        logger.info('📸 Saving weekly clan history snapshot...');
+        await clanService.fetchClanData();
+        const clans = clanService.getClanData();
+        if (clans.length > 0) {
+            clanHistoryService.saveSnapshot(clans);
+            logger.info(`📸 ✅ Clan history snapshot saved: ${clans.length} clans`);
+            await logService.logInfo(`📸 Weekly clan history snapshot saved (${clans.length} clans, ${clanHistoryService.getSnapshotCount()} total)`);
+        } else {
+            logger.warn('📸 ⚠️ Clan data empty — snapshot not saved');
+        }
+    } catch (error) {
+        logger.error('📸 ❌ Error saving clan history snapshot:', error.message);
+        await logService.logError(error, 'clan history snapshot cron');
+    }
 });
 
 // Weekly Lunar Mine analysis - every Wednesday at 18:45
@@ -285,7 +306,15 @@ async function startBot() {
         }
         
         try {
-            interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, logger);
+            clanHistoryService = new ClanHistoryService(logger);
+            logger.info('✅ ClanHistoryService initialized');
+        } catch (error) {
+            logger.error('❌ ClanHistoryService failed to initialize:', error.message);
+            throw error;
+        }
+
+        try {
+            interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, clanHistoryService, logger);
             logger.info('✅ InteractionHandler initialized');
         } catch (error) {
             logger.error('❌ InteractionHandler failed to initialize:', error.message);
