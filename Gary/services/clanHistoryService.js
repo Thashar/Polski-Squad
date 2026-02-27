@@ -188,6 +188,7 @@ class ClanHistoryService {
                 rank: parseRank(g.rank),
                 totalRelicCores: g.totalRelicCores || 0,
                 totalPower: g.totalPower || 0,
+                gradeScore: g.gradeScore || '0%',
                 ...(scoreMap && { score: scoreMap.get(g.guildId) || 0 })
             }))
         };

@@ -83,6 +83,14 @@ module.exports = {
         '2': '💥PolskiSquad²💥',
         'main': '🔥Polski Squad🔥'
     },
+
+    // Gary guildIds dla mapowania klanów PS → dane ze snapshota Gary (opcjonalne)
+    garyGuildIds: {
+        '0':    process.env.STALKER_LME_GARY_GUILD_ID_0    ? parseInt(process.env.STALKER_LME_GARY_GUILD_ID_0)    : null,
+        '1':    process.env.STALKER_LME_GARY_GUILD_ID_1    ? parseInt(process.env.STALKER_LME_GARY_GUILD_ID_1)    : null,
+        '2':    process.env.STALKER_LME_GARY_GUILD_ID_2    ? parseInt(process.env.STALKER_LME_GARY_GUILD_ID_2)    : null,
+        'main': process.env.STALKER_LME_GARY_GUILD_ID_MAIN ? parseInt(process.env.STALKER_LME_GARY_GUILD_ID_MAIN) : null,
+    },
     
     // Kanały ostrzeżeń dla poszczególnych ról
     warningChannels: {
