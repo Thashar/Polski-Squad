@@ -734,6 +734,64 @@ class InteractionHandler {
                 await new Promise(resolve => setTimeout(resolve, this.config.botSettings?.delayBetweenClans || 1500));
             }
 
+            // Step 6: Save guild snapshot and send 3 history charts to the thread
+            if (this.clanHistoryService) {
+                try {
+                    this.logger.info('📅 Step 6: Saving guild snapshot and generating history charts...');
+                    this.clanHistoryService.saveGuildSnapshot(sortedClans);
+
+                    const guildIds = sortedClans.map(g => g.guildId);
+                    const allHistory = this.clanHistoryService.getAllGuildsHistory(guildIds);
+
+                    if (allHistory.length >= 2 || (allHistory.length === 1 && allHistory[0].history.length >= 2)) {
+                        // Format helpers
+                        const fmtPower = (v) => {
+                            if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+                            if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+                            if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+                            return String(v);
+                        };
+
+                        const charts = [
+                            {
+                                buffer: await this.generateGuildMetricChart(
+                                    allHistory, 'rank', 'Pozycja rankingowa klanów',
+                                    { invertY: true, formatLabel: v => `#${v}`, formatDot: v => `#${v}` }
+                                ),
+                                filename: 'clans_rank.png'
+                            },
+                            {
+                                buffer: await this.generateGuildMetricChart(
+                                    allHistory, 'totalRelicCores', 'Total RC klanów',
+                                    { formatLabel: v => String(v), formatDot: v => String(v) }
+                                ),
+                                filename: 'clans_rc.png'
+                            },
+                            {
+                                buffer: await this.generateGuildMetricChart(
+                                    allHistory, 'totalPower', 'Siła ataku klanów',
+                                    { formatLabel: fmtPower, formatDot: fmtPower }
+                                ),
+                                filename: 'clans_power.png'
+                            }
+                        ];
+
+                        for (const { buffer, filename } of charts) {
+                            if (buffer) {
+                                const attachment = new AttachmentBuilder(buffer, { name: filename });
+                                await channel.send({ files: [attachment] });
+                                await new Promise(resolve => setTimeout(resolve, 800));
+                            }
+                        }
+                        this.logger.info('📅 ✅ Guild history charts sent');
+                    } else {
+                        this.logger.info('📅 ℹ️ Not enough guild history for charts yet (need ≥2 weeks)');
+                    }
+                } catch (chartErr) {
+                    this.logger.warn('📅 ⚠️ Could not generate guild history charts:', chartErr.message);
+                }
+            }
+
             this.logger.info('📅 ✅ Scheduled Lunar Mine analysis completed successfully!');
 
         } catch (error) {
@@ -1984,6 +2042,151 @@ class InteractionHandler {
         const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
   <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Historia punktów klanów</text>
+  ${legendSvg}
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${clansSvg}
+  ${xLabels}
+</svg>`;
+
+        return sharp(Buffer.from(svg)).png().toBuffer();
+    }
+    /**
+     * Generic metric chart for up to 4 PS clans over time.
+     *
+     * @param {Array<{name, history}>} clansData  - each history entry has weekNumber, year + the metric field
+     * @param {string} metricKey                  - field name in history entries ('rank'|'totalRelicCores'|'totalPower')
+     * @param {string} title                      - chart title
+     * @param {Object} opts
+     *   @param {boolean}  opts.invertY           - true for rank (lower = better = top of chart)
+     *   @param {Function} opts.formatLabel       - value → Y-axis label string
+     *   @param {Function} opts.formatDot         - value → dot label string (defaults to formatLabel)
+     * @returns {Buffer|null}
+     */
+    async generateGuildMetricChart(clansData, metricKey, title, opts = {}) {
+        const sharp = require('sharp');
+        const { invertY = false, formatLabel = v => String(v), formatDot } = opts;
+        const fmtDot = formatDot || formatLabel;
+
+        const validClans = clansData.filter(c => c.history && c.history.length >= 2);
+        if (validClans.length === 0) return null;
+
+        // Unified X axis — last 20 weeks across all clans
+        const weekSet = new Map();
+        for (const clan of validClans) {
+            for (const d of clan.history) {
+                const key = `${d.year}-${String(d.weekNumber).padStart(2, '0')}`;
+                if (!weekSet.has(key)) weekSet.set(key, { weekNumber: d.weekNumber, year: d.year, key });
+            }
+        }
+        const allWeeks = [...weekSet.values()]
+            .sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber)
+            .slice(-20);
+
+        if (allWeeks.length < 2) return null;
+
+        const W = 800, H = 290;
+        const M = { top: 54, right: 28, bottom: 44, left: 68 };
+        const cW = W - M.left - M.right;
+        const cH = H - M.top - M.bottom;
+
+        const allValues = validClans
+            .flatMap(c => c.history.map(d => d[metricKey]))
+            .filter(v => typeof v === 'number' && !isNaN(v) && v !== null);
+
+        if (allValues.length === 0) return null;
+
+        const minVal = Math.min(...allValues);
+        const maxVal = Math.max(...allValues);
+        const range = maxVal - minVal || 1;
+
+        // For rank: rank 1 (best) should appear at the top of the chart,
+        // so we invert: smaller value → higher Y position (lower SVG y).
+        const yLo = invertY ? minVal - range * 0.1 : Math.max(0, minVal - range * 0.1);
+        const yHi = maxVal + range * 0.25;
+
+        const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
+        const toY = (v) => invertY
+            ? M.top + ((v - yLo) / (yHi - yLo)) * cH          // smaller v → top
+            : M.top + cH - ((v - yLo) / (yHi - yLo)) * cH;    // larger v → top
+
+        const colors = ['#FFD700', '#5865F2', '#43B581', '#EB459E'];
+
+        function buildCatmullRom(points) {
+            if (points.length < 2) return '';
+            let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+            for (let i = 0; i < points.length - 1; i++) {
+                const p0 = i > 0 ? points[i - 1] : points[i];
+                const p1 = points[i], p2 = points[i + 1];
+                const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+                d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+            }
+            return d;
+        }
+
+        // Grid lines (5 horizontal)
+        const gridLines = Array.from({ length: 5 }, (_, i) => {
+            const frac = invertY ? i / 4 : 1 - i / 4;
+            const v = yLo + (yHi - yLo) * frac;
+            const y = toY(v);
+            return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">${formatLabel(Math.round(v))}</text>`;
+        }).join('\n    ');
+
+        const xLabels = allWeeks.map((w, i) =>
+            `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
+        ).join('\n    ');
+
+        // Each clan: line + dots + last-point label
+        const clansSvg = validClans.map((clan, ci) => {
+            const color = colors[ci % colors.length];
+            const pts = allWeeks.map((w, wi) => {
+                const entry = clan.history.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
+                if (!entry || entry[metricKey] == null) return null;
+                return { x: toX(wi), y: toY(entry[metricKey]), v: entry[metricKey] };
+            }).filter(Boolean);
+
+            if (pts.length < 2) return '';
+
+            // Collision-aware dot labels
+            const labelOffsets = pts.map(() => 8);
+            for (let i = 1; i < pts.length; i++) {
+                const prevLY = pts[i - 1].y - labelOffsets[i - 1];
+                const wantLY = pts[i].y - 8;
+                if (Math.abs(wantLY - prevLY) < 11) {
+                    const newLY = Math.max(M.top - 10, Math.min(prevLY - 11, wantLY));
+                    labelOffsets[i] = pts[i].y - newLY;
+                }
+            }
+
+            const linePath = buildCatmullRom(pts);
+            const dotsSvg = pts.map((p, pi) =>
+                `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - labelOffsets[pi]).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${color}" text-anchor="middle" opacity="0.85">${fmtDot(p.v)}</text>`
+            ).join('\n    ');
+
+            return `<path d="${linePath}" stroke="${color}" stroke-width="2.5" fill="none"/>
+    ${dotsSvg}`;
+        }).join('\n    ');
+
+        // Legend (clan names) — horizontal, top area
+        let legendX = M.left;
+        const legendY = 36;
+        const legendSvg = validClans.map((clan, ci) => {
+            const color = colors[ci % colors.length];
+            const safe = clan.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const circleSvg = `<circle cx="${legendX + 5}" cy="${legendY - 4}" r="5" fill="${color}"/>`;
+            const textSvg = `<text x="${legendX + 14}" y="${legendY}" font-family="Arial,sans-serif" font-size="11" fill="${color}" font-weight="bold">${safe}</text>`;
+            legendX += 14 + safe.length * 6.2 + 18;
+            return circleSvg + '\n  ' + textSvg;
+        }).join('\n  ');
+
+        const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${safeTitle}</text>
   ${legendSvg}
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>

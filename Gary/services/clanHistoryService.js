@@ -1,14 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 
-// Service for storing weekly snapshots of TOP500 clan rankings.
-// Data is persisted in Gary/data/clan_history.json and survives bot restarts.
+/**
+ * Persistent storage for two kinds of weekly snapshots:
+ *
+ * 1. `snapshots`      — TOP500 clan ranking (rank + score for every clan)
+ * 2. `guildSnapshots` — Detailed data for the 4 PS clans (rank, totalRelicCores,
+ *                        totalPower) captured straight from the garrytools analysis.
+ *
+ * Both arrays grow indefinitely (no trimming) so history is never lost.
+ * Data survives bot restarts via Gary/data/clan_history.json.
+ */
 class ClanHistoryService {
     constructor(logger) {
         this.logger = logger;
         this.dataFile = path.join(__dirname, '../data/clan_history.json');
-        this.MAX_SNAPSHOTS = 25; // Keep ~25 weeks of history (max 20 displayed)
-        this.history = { snapshots: [] };
+        this.history = { snapshots: [], guildSnapshots: [] };
         this._load();
     }
 
@@ -16,12 +23,19 @@ class ClanHistoryService {
         try {
             if (fs.existsSync(this.dataFile)) {
                 const raw = fs.readFileSync(this.dataFile, 'utf8');
-                this.history = JSON.parse(raw);
-                this.logger.info(`📊 ClanHistory: załadowano ${this.history.snapshots.length} snapshotów`);
+                const parsed = JSON.parse(raw);
+                this.history = {
+                    snapshots: parsed.snapshots || [],
+                    guildSnapshots: parsed.guildSnapshots || []
+                };
+                this.logger.info(
+                    `📊 ClanHistory: załadowano ${this.history.snapshots.length} snapshots TOP500, ` +
+                    `${this.history.guildSnapshots.length} snapshots gildii`
+                );
             }
         } catch (err) {
             this.logger.error('ClanHistory: błąd wczytywania:', err.message);
-            this.history = { snapshots: [] };
+            this.history = { snapshots: [], guildSnapshots: [] };
         }
     }
 
@@ -44,16 +58,19 @@ class ClanHistoryService {
         return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // TOP500 clan snapshots
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
-     * Save a snapshot of TOP500 clans.
-     * @param {Array} clans - array of clan objects from clanAjaxService
+     * Save a snapshot of TOP500 clans from the ranking API.
+     * @param {Array} clans - clan objects from clanAjaxService
      */
     saveSnapshot(clans) {
         const now = new Date();
         const weekNumber = this._getWeekNumber(now);
         const year = now.getFullYear();
 
-        // Replace existing snapshot for the same week (idempotent)
         const existingIdx = this.history.snapshots.findIndex(
             s => s.weekNumber === weekNumber && s.year === year
         );
@@ -74,26 +91,23 @@ class ClanHistoryService {
 
         if (existingIdx >= 0) {
             this.history.snapshots[existingIdx] = snapshot;
-            this.logger.info(`📊 ClanHistory: zaktualizowano snapshot tydz. ${weekNumber}/${year} (${clans.length} klanów)`);
+            this.logger.info(`📊 TOP500 snapshot: zaktualizowano tydz. ${weekNumber}/${year} (${clans.length} klanów)`);
         } else {
             this.history.snapshots.push(snapshot);
-            this.logger.info(`📊 ClanHistory: zapisano snapshot tydz. ${weekNumber}/${year} (${clans.length} klanów)`);
+            this.logger.info(`📊 TOP500 snapshot: zapisano tydz. ${weekNumber}/${year} (${clans.length} klanów)`);
         }
 
-        // Sort chronologically and trim to MAX_SNAPSHOTS
+        // Keep sorted chronologically; no trimming — history grows indefinitely
         this.history.snapshots.sort((a, b) =>
             a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
         );
-        if (this.history.snapshots.length > this.MAX_SNAPSHOTS) {
-            this.history.snapshots = this.history.snapshots.slice(-this.MAX_SNAPSHOTS);
-        }
 
         this._save();
     }
 
     /**
-     * Return weekly history for a clan by its numeric ID.
-     * Returns at most 20 entries (last 20 weeks).
+     * Return weekly score history for a clan (by numeric ID).
+     * Returns at most 20 entries (last 20 weeks) for chart display.
      * @param {number} clanId
      * @returns {Array<{weekNumber, year, score, rank, level, grade, name}>}
      */
@@ -117,12 +131,101 @@ class ClanHistoryService {
         return result.slice(-20);
     }
 
-    /** Number of stored snapshots */
-    getSnapshotCount() {
-        return this.history.snapshots.length;
+    // ─────────────────────────────────────────────────────────────────────────
+    // Detailed guild snapshots (4 PS clans — rank, RC, total power)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Save detailed weekly data for the 4 PS clans captured during the
+     * scheduled Lunar Mine analysis.
+     *
+     * @param {Array} guilds - guild objects from garrytoolsService.fetchGroupDetails()
+     *   Each guild: { guildId, title, rank, totalRelicCores, totalPower, ... }
+     */
+    saveGuildSnapshot(guilds) {
+        const now = new Date();
+        const weekNumber = this._getWeekNumber(now);
+        const year = now.getFullYear();
+
+        // Parse rank — comes as "#5" or number
+        const parseRank = (r) => {
+            if (!r) return null;
+            const n = parseInt(r.toString().replace('#', ''));
+            return isNaN(n) ? null : n;
+        };
+
+        const existingIdx = this.history.guildSnapshots.findIndex(
+            s => s.weekNumber === weekNumber && s.year === year
+        );
+
+        const snapshot = {
+            weekNumber,
+            year,
+            timestamp: now.toISOString(),
+            guilds: guilds.map(g => ({
+                id: g.guildId,
+                name: g.title,
+                rank: parseRank(g.rank),
+                totalRelicCores: g.totalRelicCores || 0,
+                totalPower: g.totalPower || 0
+            }))
+        };
+
+        if (existingIdx >= 0) {
+            this.history.guildSnapshots[existingIdx] = snapshot;
+            this.logger.info(`📊 Guild snapshot: zaktualizowano tydz. ${weekNumber}/${year} (${guilds.length} gildii)`);
+        } else {
+            this.history.guildSnapshots.push(snapshot);
+            this.logger.info(`📊 Guild snapshot: zapisano tydz. ${weekNumber}/${year} (${guilds.length} gildii)`);
+        }
+
+        this.history.guildSnapshots.sort((a, b) =>
+            a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
+        );
+
+        this._save();
     }
 
-    /** Latest snapshot timestamp or null */
+    /**
+     * Return detailed weekly history for a specific guild (by numeric guildId).
+     * Returns at most 20 entries for chart display.
+     * @param {number} guildId
+     * @returns {Array<{weekNumber, year, rank, totalRelicCores, totalPower, name}>}
+     */
+    getGuildHistory(guildId) {
+        const result = [];
+        for (const snapshot of this.history.guildSnapshots) {
+            const guild = snapshot.guilds.find(g => g.id === guildId);
+            if (guild) {
+                result.push({
+                    weekNumber: snapshot.weekNumber,
+                    year: snapshot.year,
+                    timestamp: snapshot.timestamp,
+                    rank: guild.rank,
+                    totalRelicCores: guild.totalRelicCores,
+                    totalPower: guild.totalPower,
+                    name: guild.name
+                });
+            }
+        }
+        return result.slice(-20);
+    }
+
+    /**
+     * Return history for all 4 guilds in format suitable for multi-clan charts.
+     * @param {number[]} guildIds
+     * @returns {Array<{id, name, history}>}
+     */
+    getAllGuildsHistory(guildIds) {
+        return guildIds.map(id => {
+            const history = this.getGuildHistory(id);
+            const name = history.length > 0 ? history[history.length - 1].name : `Guild ${id}`;
+            return { id, name, history };
+        }).filter(g => g.history.length >= 2);
+    }
+
+    getSnapshotCount() { return this.history.snapshots.length; }
+    getGuildSnapshotCount() { return this.history.guildSnapshots.length; }
     getLatestTimestamp() {
         if (this.history.snapshots.length === 0) return null;
         return this.history.snapshots[this.history.snapshots.length - 1].timestamp;
