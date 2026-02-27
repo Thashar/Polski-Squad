@@ -8674,14 +8674,9 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_ranking.png'));
             }
 
-            // Wykresy RC+TC i Atak z historii Gary (shared_data)
-            // Pobieramy allNicks obu graczy z player_index, żeby dopasować
-            // wszystkie historyczne nazwy do kluczy w player_combat_history.json
-            const _cmpIdx = await databaseService.loadPlayerIndex(interaction.guild.id);
-            const _nicks1 = [name1, ...(_cmpIdx[userInfo1.userId]?.allNicks || [])];
-            const _nicks2 = [name2, ...(_cmpIdx[userInfo2.userId]?.allNicks || [])];
-            const ch1 = loadCombatHistory(_nicks1);
-            const ch2 = loadCombatHistory(_nicks2);
+            // Wykresy RC+TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
+            const ch1 = loadCombatHistory(userInfo1.userId);
+            const ch2 = loadCombatHistory(userInfo2.userId);
             if (ch1.length >= 2 || ch2.length >= 2) {
                 const [rcCmpBuf, atkCmpBuf] = await Promise.all([
                     generateCompareCombatChart(ch1, ch2, name1, name2, 'relicCores', 'RC+TC', v => String(v)),
@@ -9662,12 +9657,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://ranking.png'));
             }
 
-            // Wykresy RC+TC i Atak z historii Gary (shared_data)
-            // Używamy wszystkich znanych nicków gracza z bazy Stalkera dla
-            // pewniejszego dopasowania do nazw z garrytools (player_index.allNicks)
-            const _pIdx = await databaseService.loadPlayerIndex(interaction.guild.id);
-            const _allNicks = [latestNick, ...(_pIdx[userId]?.allNicks || [])];
-            const combatHistory = loadCombatHistory(_allNicks);
+            // Wykresy RC+TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
+            const combatHistory = loadCombatHistory(userId);
             if (combatHistory.length >= 2) {
                 const [rcBuf, atkBuf] = await Promise.all([
                     generateCombatChart(combatHistory, latestNick, 'relicCores', 'RC+TC', '#43B581', v => String(v)),
@@ -12565,29 +12556,26 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GARY → STALKER: Player combat history (RC+TC, Attack) — shared_data
+// GARY → STALKER: Player combat history (RC+TC, Attack) — lokalna baza Stalkera
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Read player_combat_history.json from shared_data and return weekly entries
- * for a given player. Tries all provided nicks (lowercase), returns the first
- * match. Returns [] if no data found or file doesn't exist.
+ * Czyta tygodniową historię walk gracza z lokalnej bazy Stalkera
+ * (Stalker/data/player_combat_discord.json), zaindeksowanej po Discord userId.
+ * Dane są wstępnie przetworzone przez GaryCombatIngestionService (co środę 18:55).
  *
- * @param {string[]} nicks - player nicks to try (latestNick first, then allNicks)
+ * @param {string} userId - Discord user ID gracza
  * @returns {Array<{weekNumber, year, attack, relicCores}>}
  */
-function loadCombatHistory(nicks) {
+function loadCombatHistory(userId) {
     const fs = require('fs');
     const path = require('path');
     try {
-        const filePath = path.join(__dirname, '../../shared_data/player_combat_history.json');
+        const filePath = path.join(__dirname, '../data/player_combat_discord.json');
         if (!fs.existsSync(filePath)) return [];
         const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        if (!data?.players) return [];
-        for (const nick of nicks) {
-            const entry = data.players[nick.toLowerCase()];
-            if (entry?.weeks?.length) return entry.weeks.slice(-20);
-        }
+        const entry = data?.players?.[userId];
+        if (entry?.weeks?.length) return entry.weeks.slice(-20);
         return [];
     } catch (_) {
         return [];

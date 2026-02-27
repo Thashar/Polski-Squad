@@ -101,6 +101,8 @@ const aiChatService = new AIChatService(
 );
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
+const GaryCombatIngestionService = require('./services/garyCombatIngestionService');
+const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger);
 
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
 ocrService.setServices(reminderService, punishmentService, phaseService);
@@ -130,7 +132,8 @@ const sharedState = {
     raportCleanupService,
     broadcastMessageService,
     aiChatService,
-    phaseService
+    phaseService,
+    garyCombatIngestionService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -183,6 +186,27 @@ client.once(Events.ClientReady, async () => {
     } else {
         logger.info(`✅ Deadline jeszcze nie minął (${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}) - przyciski pozostają aktywne`);
     }
+
+    // Ingestion danych graczy z Gary bota przy starcie (próba nadrobienia zaległości)
+    setTimeout(async () => {
+        try {
+            await garyCombatIngestionService.ingest();
+        } catch (err) {
+            logger.error('GaryCombatIngestion: błąd przy starcie:', err.message);
+        }
+    }, 15000); // 15s opóźnienia, żeby cache ról Discord się załadował
+
+    // Cron: co środę o 18:55 — 9 minut po snapshocie Gary (18:46)
+    cron.schedule('55 18 * * 3', async () => {
+        logger.info('⏰ GaryCombatIngestion: uruchamiam ingestion danych z Gary...');
+        try {
+            await garyCombatIngestionService.ingest();
+        } catch (err) {
+            logger.error('GaryCombatIngestion: błąd cron:', err.message);
+        }
+    }, {
+        timezone: config.timezone
+    });
 
     // Uruchomienie zadania cron dla czyszczenia punktów (poniedziałek o północy)
     cron.schedule('0 0 * * 1', async () => {
