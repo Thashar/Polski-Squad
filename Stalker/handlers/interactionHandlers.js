@@ -8554,10 +8554,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (lastCombat) {
                 const _rc = (lastCombat.relicCores ?? 0).toLocaleString('pl-PL');
                 const _atk = fmtAttack(lastCombat.attack ?? 0);
-                f += `**<:II_RC:1385139885924421653> RC+TC:** ${_rc}\n`;
+                f += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** ${_rc}\n`;
                 f += `**⚔️ Atak:** ${_atk}\n`;
             } else {
-                f += `**<:II_RC:1385139885924421653> RC+TC:** Brak danych. Aktualizacja niebawem...\n`;
+                f += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** Brak danych. Aktualizacja niebawem...\n`;
                 f += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
             }
             f += `\n`;
@@ -8618,18 +8618,23 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         // Kary (mniej = lepiej)
         addResult(lifePts2, lifePts1); // odwrócone: mniej kar = lepiej
 
+        // Wczytaj ostatnie dane bojowe z Gary dla obu graczy (do wyświetlenia w polach i porównania)
+        const _cmpCombat1 = loadCombatHistory(userInfo1.userId);
+        const _cmpCombat2 = loadCombatHistory(userInfo2.userId);
+        const _cmpLast1 = _cmpCombat1.length > 0 ? _cmpCombat1[_cmpCombat1.length - 1] : null;
+        const _cmpLast2 = _cmpCombat2.length > 0 ? _cmpCombat2[_cmpCombat2.length - 1] : null;
+
+        // RC+<:II_TransmuteCore:1458440558602092647>TC z Gary (więcej = lepiej)
+        if (_cmpLast1?.relicCores != null && _cmpLast2?.relicCores != null) addResult(_cmpLast1.relicCores, _cmpLast2.relicCores);
+        // Atak z Gary (więcej = lepiej)
+        if (_cmpLast1?.attack != null && _cmpLast2?.attack != null) addResult(_cmpLast1.attack, _cmpLast2.attack);
+
         // Wynik — wyświetlaj jako liczby całkowite lub z .5
         const fmt = (n) => Number.isInteger(n) ? n.toString() : n.toFixed(1);
         let winnerField = '';
         if (wins1 > wins2) winnerField = `🥇 **${name1}** wygrywa **${fmt(wins1)} - ${fmt(wins2)}**`;
         else if (wins2 > wins1) winnerField = `🥇 **${name2}** wygrywa **${fmt(wins2)} - ${fmt(wins1)}**`;
         else winnerField = `⚖️ **Remis ${fmt(wins1)} - ${fmt(wins2)}**`;
-
-        // Wczytaj ostatnie dane bojowe z Gary dla obu graczy (do wyświetlenia w polach)
-        const _cmpCombat1 = loadCombatHistory(userInfo1.userId);
-        const _cmpCombat2 = loadCombatHistory(userInfo2.userId);
-        const _cmpLast1 = _cmpCombat1.length > 0 ? _cmpCombat1[_cmpCombat1.length - 1] : null;
-        const _cmpLast2 = _cmpCombat2.length > 0 ? _cmpCombat2[_cmpCombat2.length - 1] : null;
 
         const embed = new EmbedBuilder()
             .setTitle(`⚔️ PORÓWNANIE  —  ${name1}  vs  ${name2}`)
@@ -8696,7 +8701,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_ranking.png'));
             }
 
-            // Wykresy RC+TC i Atak z historii Gary (używamy już załadowanych danych _cmpCombat1/_cmpCombat2)
+            // Wykresy RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z historii Gary (używamy już załadowanych danych _cmpCombat1/_cmpCombat2)
             const ch1 = _cmpCombat1;
             const ch2 = _cmpCombat2;
             if (ch1.length >= 2 || ch2.length >= 2) {
@@ -9467,7 +9472,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
         description += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n\n`;
 
-        // Wczytaj dane bojowe z Gary (RC+TC, Atak) - potrzebne do sekcji STATYSTYKI
+        // Wczytaj dane bojowe z Gary (RC+<:II_TransmuteCore:1458440558602092647>TC, Atak) - potrzebne do sekcji STATYSTYKI
         const _statCombatHistory = loadCombatHistory(userId);
         const _statLastCombat = _statCombatHistory.length > 0
             ? _statCombatHistory[_statCombatHistory.length - 1]
@@ -9535,14 +9540,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 description += `**↘️ Największy regres:** brak\n`;
             }
 
-            // RC+TC i Atak z Gary (historia tygodniowa)
+            // RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z Gary (historia tygodniowa)
             if (_statLastCombat) {
                 const _rcFmt = (_statLastCombat.relicCores ?? 0).toLocaleString('pl-PL');
                 const _atkFmt = fmtAttack(_statLastCombat.attack ?? 0);
-                description += `**<:II_RC:1385139885924421653> RC+TC:** ${_rcFmt}\n`;
+                description += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** ${_rcFmt}\n`;
                 description += `**⚔️ Atak:** ${_atkFmt}\n`;
             } else {
-                description += `**<:II_RC:1385139885924421653> RC+TC:** Brak danych. Aktualizacja niebawem...\n`;
+                description += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** Brak danych. Aktualizacja niebawem...\n`;
                 description += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
             }
             description += `\n`;
@@ -9697,7 +9702,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://ranking.png'));
             }
 
-            // Wykresy RC+TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
+            // Wykresy RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
             const combatHistory = loadCombatHistory(userId);
             if (combatHistory.length >= 2) {
                 const [rcBuf, atkBuf] = await Promise.all([
@@ -11038,7 +11043,7 @@ async function handleLmeSnapshotCommand(interaction, sharedState) {
             embeds: [new EmbedBuilder()
                 .setTitle('✅ LME Snapshot — Ingestion zakończona')
                 .setColor(0x43B581)
-                .setDescription('Dane RC+TC i Atak z Gary zostały zaktualizowane w bazie Stalkera.')
+                .setDescription('Dane RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z Gary zostały zaktualizowane w bazie Stalkera.')
                 .addFields([
                     { name: '✅ Dopasowanych graczy', value: String(result.matched), inline: true },
                     { name: '📊 Łącznie w Gary', value: String(result.total), inline: true },
@@ -12631,7 +12636,7 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GARY → STALKER: Player combat history (RC+TC, Attack) — lokalna baza Stalkera
+// GARY → STALKER: Player combat history (RC+<:II_TransmuteCore:1458440558602092647>TC, Attack) — lokalna baza Stalkera
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -12670,7 +12675,7 @@ function fmtAttack(v) {
 }
 
 /**
- * Single-player RC+TC or Attack history chart (data from Gary weekly snapshot).
+ * Single-player RC+<:II_TransmuteCore:1458440558602092647>TC or Attack history chart (data from Gary weekly snapshot).
  * Mirrors generateProgressChart style: Catmull-Rom spline, collision-aware labels.
  *
  * @param {Array<{weekNumber, year, attack, relicCores}>} historyData
@@ -12765,7 +12770,7 @@ async function generateCombatChart(historyData, playerNick, metricKey, title, li
 }
 
 /**
- * Two-player comparison chart for RC+TC or Attack.
+ * Two-player comparison chart for RC+<:II_TransmuteCore:1458440558602092647>TC or Attack.
  * Mirrors generateCompareProgressChart style.
  *
  * @param {Array} h1 / h2  - weekly history arrays from loadCombatHistory()
