@@ -24,6 +24,11 @@ class GaryCombatIngestionService {
         this.logger = logger;
     }
 
+    /** Usuwa prefiks klanowy z nicku z gry (np. "PLㅣPuddi" → "Puddi", "PL|Pushok" → "Pushok") */
+    _stripClanPrefix(name) {
+        return name.replace(/^[A-Za-z]{1,5}[ㅣ|]\s*/u, '');
+    }
+
     /** Normalizacja nazwy: lowercase, tylko znaki alfanumeryczne + polskie */
     _normalize(name) {
         return name.toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]/g, '');
@@ -104,10 +109,13 @@ class GaryCombatIngestionService {
         let closestScore = 0;
         let closestDiscordName = null;
 
+        // Usuń prefiks klanowy przed matching (np. "PLㅣPuddi" → "Puddi")
+        const nameForMatching = this._stripClanPrefix(inGameName);
+
         for (const [userId, { displayName }] of clanMembers) {
             const knownNicks = [displayName, ...(playerIndex[userId]?.allNicks || [])];
             for (let i = 0; i < knownNicks.length; i++) {
-                const score = this._calcSimilarity(inGameName, knownNicks[i]);
+                const score = this._calcSimilarity(nameForMatching, knownNicks[i]);
                 const fromDisplayName = (i === 0);
                 // Wygrywa wyższy score; przy remisie displayName bije stary nick z allNicks
                 if (score > bestScore || (score === bestScore && fromDisplayName && !bestFromDisplayName)) {
@@ -313,7 +321,7 @@ class GaryCombatIngestionService {
                     let closestGaryScore = 0;
                     let closestGaryKey = null;
                     for (const inGameName of playerNames) {
-                        const score = this._calcSimilarity(displayName, inGameName);
+                        const score = this._calcSimilarity(displayName, this._stripClanPrefix(inGameName));
                         if (score > closestGaryScore) {
                             closestGaryScore = score;
                             closestGaryName  = garyData.players[inGameName].originalName || inGameName;
