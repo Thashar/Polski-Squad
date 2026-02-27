@@ -10434,7 +10434,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
                 const latestFile = path.join(guildsDir, weekFiles[weekFiles.length - 1]);
                 const raw = await fs.readFile(latestFile, 'utf8');
                 const snapshot = JSON.parse(raw);
-                const weekLabel = `T${String(snapshot.weekNumber).padStart(2, '0')}/${snapshot.year}`;
+                const weekLabel = `${String(snapshot.weekNumber).padStart(2, '0')}/${snapshot.year}`;
 
                 // Szukaj klanu pasującego do selectedClan przez garyGuildId (env var)
                 const garyGuildId = config.garyGuildIds?.[selectedClan];
@@ -10452,7 +10452,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
                     const lines = [
                         `🏆 **Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}`,
                         `🔥 **Grade Score:** ${guild.gradeScore || 'N/A'}`,
-                        `<:II_RC:1385139885924421653> **RC+TC:** ${guild.totalRelicCores || 0}`,
+                        `<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> **RC+TC:** ${guild.totalRelicCores || 0}`,
                         `⚔️ **Siła ataku:** ${fmtPower(guild.totalPower || 0)}`,
                     ].join('\n');
                     guildSnapshotField = { name: `📸 Snapshot Gary (${weekLabel})`, value: lines, inline: false };
