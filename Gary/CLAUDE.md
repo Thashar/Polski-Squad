@@ -6,8 +6,9 @@
 3. **Cache** - `dataService.js`: Persistent JSON (clans, rank, members), refresh 24h/manual/start
 4. **Proxy** - `proxyService.js`: Webshare API, round-robin/random, health monitoring, failover
 5. **Paginacja** - 20/strona, 1h timeout, publiczna nawigacja
-6. **Cron** - Środa 18:45 `/lunarmine` auto-exec; 18:46 snapshot historii klanów
+6. **Cron** - Środa 18:45 `/lunarmine` auto-exec; 18:46 snapshot historii klanów + snapshot graczy LME
 7. **Historia klanów** - `clanHistoryService.js`: tygodniowe snapshoty TOP500, `data/clan_history.json`, max 25 tygodni; wykres SVG+sharp dla `/analyse`, `/lunarmine` (multi-klan), `/search` (top match); wymagane ≥2 tygodnie danych
+7b. **Snapshot graczy LME** - `clanHistoryService.savePlayerSnapshot()`: RC+TC i atak per gracz zapisywane do `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień, klucz = lowercase nick gry); odczytywane przez Stalker bot
 8. **Wątki** - Obsługa `parentId`, whitelist check
 9. **Emoji** - Server emoji w embedach
 

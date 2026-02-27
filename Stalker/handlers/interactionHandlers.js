@@ -12745,10 +12745,7 @@ function loadCombatHistory(userId) {
  * @returns {string}
  */
 function fmtAttack(v) {
-    if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-    if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
-    if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
-    return String(v);
+    return Number(v || 0).toLocaleString('pl-PL');
 }
 
 /**
