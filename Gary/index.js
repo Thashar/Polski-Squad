@@ -96,9 +96,9 @@ cron.schedule('*/10 * * * *', () => {
     interactionHandler.cleanup();
 });
 
-// Weekly clan history snapshot - every Wednesday at 18:46 (1 min after Lunar Mine)
+// Weekly clan history snapshot - every Wednesday at 18:50 (5 min after Lunar Mine)
 // Fetches fresh TOP500 clan data and saves a persistent weekly snapshot
-cron.schedule('46 18 * * 3', async () => {
+cron.schedule('50 18 * * 3', async () => {
     try {
         logger.info('📸 Saving weekly clan history snapshot...');
         await clanService.fetchClanData();

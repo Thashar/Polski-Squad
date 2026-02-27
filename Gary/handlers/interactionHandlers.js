@@ -56,8 +56,8 @@ class InteractionHandler {
                 .setDescription('Refresh proxy list from Webshare API (Admin only)'),
 
             new SlashCommandBuilder()
-                .setName('test')
-                .setDescription('Test weekly Lunar Mine automation (Admin only)')
+                .setName('lme-snapshot')
+                .setDescription('Pobierz aktualny snapshot Lunar Mine i zapisz historię (tylko Admin)')
         ];
     }
 
@@ -103,7 +103,7 @@ class InteractionHandler {
         const { commandName } = interaction;
         
         // Check permissions for admin-only commands
-        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'test'];
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'lme-snapshot'];
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
@@ -152,8 +152,8 @@ class InteractionHandler {
                     await this.handleProxyRefreshCommand(interaction);
                     break;
 
-                case 'test':
-                    await this.handleTestCommand(interaction);
+                case 'lme-snapshot':
+                    await this.handleLmeSnapshotCommand(interaction);
                     break;
             }
         } catch (error) {
@@ -1128,7 +1128,7 @@ class InteractionHandler {
         }
     }
 
-    async handleTestCommand(interaction) {
+    async handleLmeSnapshotCommand(interaction) {
         // Check if user is administrator
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             await interaction.reply({
@@ -1141,18 +1141,18 @@ class InteractionHandler {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            this.logger.info('🧪 TEST: Starting weekly Lunar Mine automation test...');
+            this.logger.info('📸 LME: Starting weekly Lunar Mine automation test...');
 
             const threadId = '1441152540581564508';
             const guildIds = [42578, 202226, 125634, 11616];
 
-            this.logger.info(`🧪 TEST: Attempting to fetch thread ${threadId}...`);
+            this.logger.info(`📸 LME: Attempting to fetch thread ${threadId}...`);
 
             // Fetch the thread
             const thread = await interaction.client.channels.fetch(threadId);
 
             if (!thread) {
-                this.logger.error(`🧪 TEST: ❌ Could not find thread ${threadId}`);
+                this.logger.error(`📸 LME: ❌ Could not find thread ${threadId}`);
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('❌ Test Failed')
@@ -1167,26 +1167,26 @@ class InteractionHandler {
                 return;
             }
 
-            this.logger.info(`🧪 TEST: ✅ Thread found: ${thread.name}`);
+            this.logger.info(`📸 LME: ✅ Thread found: ${thread.name}`);
 
             // Try to join the thread if not already a member
             try {
                 if (thread.joinable) {
-                    this.logger.info('🧪 TEST: Attempting to join thread...');
+                    this.logger.info('📸 LME: Attempting to join thread...');
                     await thread.join();
-                    this.logger.info('🧪 TEST: ✅ Successfully joined thread');
+                    this.logger.info('📸 LME: ✅ Successfully joined thread');
                 }
             } catch (joinError) {
-                this.logger.warn(`🧪 TEST: Could not join thread: ${joinError.message}`);
+                this.logger.warn(`📸 LME: Could not join thread: ${joinError.message}`);
             }
 
             // Check bot permissions
             const permissions = thread.permissionsFor(interaction.client.user);
-            this.logger.info(`🧪 TEST: Checking permissions...`);
-            this.logger.info(`🧪 TEST: Permissions object: ${permissions ? 'exists' : 'null'}`);
+            this.logger.info(`📸 LME: Checking permissions...`);
+            this.logger.info(`📸 LME: Permissions object: ${permissions ? 'exists' : 'null'}`);
 
             if (!permissions) {
-                this.logger.error('🧪 TEST: ❌ Could not get permissions for bot in thread');
+                this.logger.error('📸 LME: ❌ Could not get permissions for bot in thread');
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('⚠️ Test Warning')
@@ -1199,22 +1199,22 @@ class InteractionHandler {
                 const hasManage = permissions.has('ManageMessages');
                 const hasRead = permissions.has('ReadMessageHistory');
 
-                this.logger.info(`🧪 TEST: - Send Messages: ${hasSend}`);
-                this.logger.info(`🧪 TEST: - Manage Messages: ${hasManage}`);
-                this.logger.info(`🧪 TEST: - Read Message History: ${hasRead}`);
-                this.logger.info(`🧪 TEST: - All permissions bitfield: ${permissions.bitfield}`);
+                this.logger.info(`📸 LME: - Send Messages: ${hasSend}`);
+                this.logger.info(`📸 LME: - Manage Messages: ${hasManage}`);
+                this.logger.info(`📸 LME: - Read Message History: ${hasRead}`);
+                this.logger.info(`📸 LME: - All permissions bitfield: ${permissions.bitfield}`);
 
                 // Try to test actual permissions by attempting operations
                 if (!hasSend || !hasManage || !hasRead) {
-                    this.logger.warn('🧪 TEST: ⚠️ Permission check failed, but attempting test message...');
+                    this.logger.warn('📸 LME: ⚠️ Permission check failed, but attempting test message...');
 
                     try {
                         // Try sending a test message
                         const testMsg = await thread.send('🧪 Testing permissions...');
                         await testMsg.delete();
-                        this.logger.info('🧪 TEST: ✅ Successfully sent and deleted test message - permissions are OK!');
+                        this.logger.info('📸 LME: ✅ Successfully sent and deleted test message - permissions are OK!');
                     } catch (testError) {
-                        this.logger.error(`🧪 TEST: ❌ Failed to send test message: ${testError.message}`);
+                        this.logger.error(`📸 LME: ❌ Failed to send test message: ${testError.message}`);
 
                         const missingPerms = [];
                         if (!hasSend) missingPerms.push('Send Messages');
@@ -1241,7 +1241,7 @@ class InteractionHandler {
             await interaction.editReply('⏳ Step 1/3: Permissions verified. Clearing thread messages...');
 
             // Delete all messages in the thread (bulk delete)
-            this.logger.info('🧪 TEST: 🗑️ Clearing thread messages...');
+            this.logger.info('📸 LME: 🗑️ Clearing thread messages...');
             let deletedTotal = 0;
             let skippedSystem = 0;
             let deleted;
@@ -1262,7 +1262,7 @@ class InteractionHandler {
                 if (deletable.size > 0) {
                     deleted = await thread.bulkDelete(deletable, true);
                     deletedTotal += deleted.size;
-                    this.logger.info(`🧪 TEST: 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal}, skipped ${skippedSystem} system messages)`);
+                    this.logger.info(`📸 LME: 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal}, skipped ${skippedSystem} system messages)`);
                 } else {
                     // For older messages, delete one by one (skip system messages)
                     for (const [, msg] of messages) {
@@ -1274,44 +1274,55 @@ class InteractionHandler {
                             await msg.delete();
                             deletedTotal++;
                         } catch (e) {
-                            this.logger.warn(`🧪 TEST: Could not delete old message: ${e.message}`);
+                            this.logger.warn(`📸 LME: Could not delete old message: ${e.message}`);
                         }
                     }
                     break;
                 }
             } while (deleted && deleted.size >= 2);
 
-            this.logger.info(`🧪 TEST: ✅ Thread cleared, deleted ${deletedTotal} messages`);
+            this.logger.info(`📸 LME: ✅ Thread cleared, deleted ${deletedTotal} messages`);
 
             await interaction.editReply(`✅ Step 2/3: Cleared ${deletedTotal} messages. Running Lunar Mine analysis...`);
 
-            // Run the scheduled Lunar Mine analysis
-            this.logger.info('🧪 TEST: Running Lunar Mine analysis...');
+            // Run the scheduled Lunar Mine analysis (fetches data, saves guild/player snapshots, posts charts)
+            this.logger.info('📸 LME-SNAPSHOT: Running Lunar Mine analysis...');
             await this.runScheduledLunarMine(thread, guildIds);
 
-            this.logger.info('🧪 TEST: ✅ Weekly Lunar Mine automation test completed successfully!');
+            // Also save TOP500 clan history snapshot (normally done by separate 18:46 cron)
+            await interaction.editReply(`✅ Step 3/3: Analysis done. Saving TOP500 clan history snapshot...`);
+            await this.clanService.fetchClanData();
+            const snapshotClans = this.clanService.getClanData();
+            let snapshotCount = 0;
+            if (snapshotClans.length > 0) {
+                this.clanHistoryService.saveSnapshot(snapshotClans);
+                snapshotCount = snapshotClans.length;
+                this.logger.info(`📸 LME-SNAPSHOT: ✅ TOP500 snapshot saved: ${snapshotCount} clans`);
+            }
+
+            this.logger.info('📸 LME-SNAPSHOT: ✅ Completed successfully!');
 
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setTitle('✅ Test Completed Successfully')
+                    .setTitle('✅ LME Snapshot Completed')
                     .setColor(0x00ff00)
-                    .setDescription('Weekly Lunar Mine automation test executed successfully')
+                    .setDescription('Snapshot Lunar Mine wykonany. Stalker może teraz zaktualizować historię walk przez `/lme-snapshot`.')
                     .addFields([
                         { name: '🗑️ Messages Deleted', value: deletedTotal.toString(), inline: true },
                         { name: '⏭️ System Messages Skipped', value: skippedSystem.toString(), inline: true },
                         { name: '🎯 Guilds Analyzed', value: guildIds.length.toString(), inline: true },
-                        { name: '📍 Thread', value: `${thread.name}`, inline: false },
-                        { name: '🆔 Guild IDs', value: guildIds.join(', '), inline: false }
+                        { name: '📸 TOP500 Clans Saved', value: snapshotCount.toString(), inline: true },
+                        { name: '📍 Thread', value: `${thread.name}`, inline: false }
                     ])
                     .setTimestamp()]
             });
 
-            await this.logService.logInfo('🧪 TEST: Weekly Lunar Mine automation test completed');
+            await this.logService.logInfo('📸 LME-SNAPSHOT: Completed successfully');
 
         } catch (error) {
-            this.logger.error('🧪 TEST: ❌ Error during test:', error);
-            this.logger.error('🧪 TEST: Error stack:', error.stack);
-            this.logger.error('🧪 TEST: Error message:', error.message);
+            this.logger.error('📸 LME: ❌ Error during test:', error);
+            this.logger.error('📸 LME: Error stack:', error.stack);
+            this.logger.error('📸 LME: Error message:', error.message);
 
             await this.logService.logError(error, 'weekly Lunar Mine test');
 
