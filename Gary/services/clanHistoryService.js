@@ -5,6 +5,7 @@ const path = require('path');
 const SHARED_DATA_DIR = path.join(__dirname, '../../shared_data');
 const WEEKLY_DIR  = path.join(SHARED_DATA_DIR, 'lme_weekly');
 const TOP500_DIR  = path.join(SHARED_DATA_DIR, 'lme_top500');
+const GUILDS_DIR  = path.join(SHARED_DATA_DIR, 'lme_guilds');
 
 /**
  * Persistent storage for three kinds of weekly snapshots:
@@ -204,6 +205,17 @@ class ClanHistoryService {
         );
 
         this._save();
+
+        // Dodatkowo zapisz do shared_data/lme_guilds/week_YYYY_WW.json (dostępne dla innych botów)
+        try {
+            if (!fs.existsSync(GUILDS_DIR)) fs.mkdirSync(GUILDS_DIR, { recursive: true });
+            const weekStr = String(weekNumber).padStart(2, '0');
+            const fileName = `week_${year}_${weekStr}.json`;
+            fs.writeFileSync(path.join(GUILDS_DIR, fileName), JSON.stringify(snapshot, null, 2), 'utf8');
+            this.logger.info(`📊 Guild snapshot: zapisano plik → ${fileName}`);
+        } catch (err) {
+            this.logger.error('ClanHistory: błąd zapisu pliku guild snapshot:', err.message);
+        }
     }
 
     /**
