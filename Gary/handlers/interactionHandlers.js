@@ -737,8 +737,9 @@ class InteractionHandler {
             // Step 6: Save guild snapshot and send 3 history charts to the thread
             if (this.clanHistoryService) {
                 try {
-                    this.logger.info('📅 Step 6: Saving guild snapshot and generating history charts...');
+                    this.logger.info('📅 Step 6: Saving guild & player snapshots and generating history charts...');
                     this.clanHistoryService.saveGuildSnapshot(sortedClans);
+                    this.clanHistoryService.savePlayerSnapshot(sortedClans);
 
                     const guildIds = sortedClans.map(g => g.guildId);
                     const allHistory = this.clanHistoryService.getAllGuildsHistory(guildIds);
