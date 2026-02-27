@@ -341,7 +341,7 @@ class InteractionHandler {
                 const guildSummary =
                     `**👥 Members:** ${guild.members.length}\n` +
                     `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                    `**<:II_RC:1385139885924421653> RC+TC:** ${guild.totalRelicCores}+\n` +
+                    `**<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> RC+TC:** ${guild.totalRelicCores}+\n` +
                     `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                     `**⭐ Level:** ${guild.level || 'N/A'}\n` +
                     `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
@@ -413,7 +413,7 @@ class InteractionHandler {
             const guildSummary =
                 `**👥 Members:** ${guild.members.length}\n` +
                 `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                `**<:II_RC:1385139885924421653> RC+TC:** ${guild.totalRelicCores}+\n` +
+                `**<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> RC+TC:** ${guild.totalRelicCores}+\n` +
                 `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                 `**⭐ Level:** ${guild.level || 'N/A'}\n` +
                 `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
@@ -670,7 +670,7 @@ class InteractionHandler {
                 const guildSummary =
                     `**👥 Members:** ${guild.members.length}\n` +
                     `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                    `**<:II_RC:1385139885924421653> RC+TC:** ${guild.totalRelicCores}+\n` +
+                    `**<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> RC+TC:** ${guild.totalRelicCores}+\n` +
                     `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
                     `**⭐ Level:** ${guild.level || 'N/A'}\n` +
                     `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
@@ -1452,7 +1452,7 @@ class InteractionHandler {
                 
                 const fieldName = `${index + 1}. ${player.name} (#${player.rank}) ${matchIcon} Match: ${matchPercent}%`;
                 const fieldValue = `🆔 ${player.id} 📊 Level ${player.level} 🏰 ${player.guildName || 'No Guild'}\n` +
-                                 `⚔️  ${player.attack} ❤️  ${player.health} <:II_RC:1385139885924421653> ${player.relicCores} (AVG)`;
+                                 `⚔️  ${player.attack} ❤️  ${player.health} <:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> ${player.relicCores} (AVG)`;
                 
                 embed.addFields({
                     name: fieldName,
