@@ -29,8 +29,8 @@
 - **PRZYKŁAD POPRAWNY**: Zmieniłeś system kolejkowania w Stalker → zaktualizuj `Stalker/CLAUDE.md` punkt "Kolejkowanie OCR"
 - **PRZYKŁAD BŁĘDNY**: Dodałeś opis zmian do głównego CLAUDE.md zamiast do `Stalker/CLAUDE.md`
 
-**INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU:**
-- Po dodaniu NOWEJ komendy lub aktualizacji istniejącej komendy w KTÓRYMKOLWIEK bocie ZAWSZE aktualizuj `Muteusz/config/all_commands.json`
+**⚠️ INSTRUKCJA AKTUALIZACJI LISTY KOMEND W MUTEUSZU (KRYTYCZNE!):**
+- **Po dodaniu NOWEJ komendy slash lub modyfikacji istniejącej w KTÓRYMKOLWIEK bocie → NATYCHMIAST aktualizuj `Muteusz/config/all_commands.json`**
 - Ten plik jest używany przez komendę `/komendy` w Muteuszu do wyświetlania wszystkich dostępnych komend ze wszystkich botów
 - Dodaj/zaktualizuj wpis w odpowiedniej sekcji bota z: name, description, usage, requiredPermission
 - Zachowaj alfabetyczną kolejność komend w ramach danego bota

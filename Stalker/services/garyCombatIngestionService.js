@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 
 const SHARED_COMBAT_FILE = path.join(__dirname, '../../shared_data/player_combat_history.json');
 const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.json');
@@ -140,6 +141,9 @@ class GaryCombatIngestionService {
             let totalMatched = 0;
 
             for (const guild of this.client.guilds.cache.values()) {
+                // Pobierz wszystkich członków serwera — bez tego role.members zawiera tylko cache
+                await safeFetchMembers(guild, this.logger);
+
                 const clanMembers = await this._getAllClanMembers(guild);
                 if (clanMembers.size === 0) continue;
 
