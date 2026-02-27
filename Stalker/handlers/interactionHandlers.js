@@ -8554,9 +8554,11 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (lastCombat) {
                 const _rc = (lastCombat.relicCores ?? 0).toLocaleString('pl-PL');
                 const _atk = fmtAttack(lastCombat.attack ?? 0);
-                f += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** ${_rc} / ${_atk}\n`;
+                f += `**<:II_RC:1385139885924421653> RC+TC:** ${_rc}\n`;
+                f += `**⚔️ Atak:** ${_atk}\n`;
             } else {
-                f += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
+                f += `**<:II_RC:1385139885924421653> RC+TC:** Brak danych. Aktualizacja niebawem...\n`;
+                f += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
             }
             f += `\n`;
             f += `📈 **Trend:** ${m.trendIcon || ''} ${m.trendDescription || '-'}\n`;
@@ -9537,9 +9539,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (_statLastCombat) {
                 const _rcFmt = (_statLastCombat.relicCores ?? 0).toLocaleString('pl-PL');
                 const _atkFmt = fmtAttack(_statLastCombat.attack ?? 0);
-                description += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** ${_rcFmt} / ${_atkFmt}\n`;
+                description += `**<:II_RC:1385139885924421653> RC+TC:** ${_rcFmt}\n`;
+                description += `**⚔️ Atak:** ${_atkFmt}\n`;
             } else {
-                description += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
+                description += `**<:II_RC:1385139885924421653> RC+TC:** Brak danych. Aktualizacja niebawem...\n`;
+                description += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
             }
             description += `\n`;
         }
