@@ -98,6 +98,10 @@ class GaryCombatIngestionService {
         let bestUserId = null;
         let bestScore  = THRESHOLD;
 
+        // Dla raportu: absolutne najlepsze dopasowanie (nawet poniżej progu)
+        let closestScore = 0;
+        let closestDiscordName = null;
+
         for (const [userId, { displayName }] of clanMembers) {
             const knownNicks = [displayName, ...(playerIndex[userId]?.allNicks || [])];
             for (const nick of knownNicks) {
@@ -106,25 +110,30 @@ class GaryCombatIngestionService {
                     bestScore  = score;
                     bestUserId = userId;
                 }
+                if (score > closestScore) {
+                    closestScore       = score;
+                    closestDiscordName = displayName;
+                }
             }
         }
 
-        return { userId: bestUserId, score: bestScore };
+        return { userId: bestUserId, score: bestScore, closestScore, closestDiscordName };
     }
 
     /**
      * Główna metoda ingestion — czyta dane z Gary, mapuje nicki na userId Discord,
      * upsertuje tygodniowe wpisy do lokalnego player_combat_discord.json.
+     * Zwraca rozszerzony raport: nieprzypisane wpisy Gary + klanowcy bez danych.
      */
     async ingest() {
         try {
             if (!fs.existsSync(SHARED_COMBAT_FILE)) {
                 this.logger.info('📊 GaryCombatIngestion: brak danych Gary (shared_data/player_combat_history.json)');
-                return { matched: 0, total: 0 };
+                return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
             }
 
             const garyData = JSON.parse(fs.readFileSync(SHARED_COMBAT_FILE, 'utf8'));
-            if (!garyData?.players) return { matched: 0, total: 0 };
+            if (!garyData?.players) return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
 
             // Wczytaj istniejące dane lokalne lub zacznij od zera
             let localData = { players: {}, lastUpdated: '' };
@@ -139,6 +148,12 @@ class GaryCombatIngestionService {
 
             const playerNames = Object.keys(garyData.players);
             let totalMatched = 0;
+            const matchedPlayerNames = new Set();   // Nicki Gary które zostały dopasowane
+            const matchedUserIds     = new Set();   // Discord userId które otrzymały dane
+            const allClanMembers     = new Map();   // Agregat: userId → { displayName } ze wszystkich gildii
+
+            // Wpisy Gary bez dopasowania: inGameName → { reason, closestDiscordName, closestScore }
+            const garyUnmatched = new Map();
 
             for (const guild of this.client.guilds.cache.values()) {
                 // Pobierz wszystkich członków serwera — bez tego role.members zawiera tylko cache
@@ -147,14 +162,38 @@ class GaryCombatIngestionService {
                 const clanMembers = await this._getAllClanMembers(guild);
                 if (clanMembers.size === 0) continue;
 
+                // Akumuluj wszystkich klanowców ze wszystkich gildii
+                for (const [uid, data] of clanMembers) {
+                    if (!allClanMembers.has(uid)) allClanMembers.set(uid, data);
+                }
+
                 const playerIndex = await this.databaseService.loadPlayerIndex(guild.id);
 
                 for (const inGameName of playerNames) {
-                    const { userId } = this._findBestMatch(inGameName, clanMembers, playerIndex);
-                    if (!userId) continue;
+                    if (matchedPlayerNames.has(inGameName)) continue; // już dopasowany
 
+                    const { userId, closestScore, closestDiscordName } =
+                        this._findBestMatch(inGameName, clanMembers, playerIndex);
                     const garyWeeks = garyData.players[inGameName].weeks || [];
-                    if (garyWeeks.length === 0) continue;
+
+                    if (!userId || garyWeeks.length === 0) {
+                        const reason = garyWeeks.length === 0
+                            ? 'brak_danych_tygodniowych'
+                            : 'zbyt_niskie_podobienstwo';
+                        if (!garyUnmatched.has(inGameName)) {
+                            garyUnmatched.set(inGameName, {
+                                reason,
+                                closestDiscordName: closestDiscordName || null,
+                                closestScore: closestScore > 0 ? Math.round(closestScore * 100) : null
+                            });
+                        }
+                        continue;
+                    }
+
+                    // Dopasowanie znalezione — upsert danych tygodniowych
+                    matchedPlayerNames.add(inGameName);
+                    matchedUserIds.add(userId);
+                    garyUnmatched.delete(inGameName); // usuń z nieprzypisanych jeśli był tam wcześniej
 
                     if (!localData.players[userId]) {
                         localData.players[userId] = {
@@ -188,20 +227,61 @@ class GaryCombatIngestionService {
                 }
             }
 
+            // Wpisy Gary które nie były przetworzone przez żadną gildię (brak ról klanowych)
+            for (const inGameName of playerNames) {
+                if (!matchedPlayerNames.has(inGameName) && !garyUnmatched.has(inGameName)) {
+                    const garyWeeks = garyData.players[inGameName].weeks || [];
+                    garyUnmatched.set(inGameName, {
+                        reason: garyWeeks.length === 0 ? 'brak_danych_tygodniowych' : 'brak_rol_klanowych',
+                        closestDiscordName: null,
+                        closestScore: null
+                    });
+                }
+            }
+
             localData.lastUpdated = new Date().toISOString();
 
             const dir = path.dirname(LOCAL_COMBAT_FILE);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(LOCAL_COMBAT_FILE, JSON.stringify(localData, null, 2), 'utf8');
 
+            // Klanowcy którzy NIE otrzymali danych w tej ingestion
+            const clanMembersWithoutData = [];
+            for (const [userId, { displayName }] of allClanMembers) {
+                if (!matchedUserIds.has(userId)) {
+                    // Odwrotne wyszukiwanie: znajdź najbliższy wpis Gary dla tego klanowca
+                    let closestGaryName = null;
+                    let closestGaryScore = 0;
+                    for (const inGameName of playerNames) {
+                        const score = this._calcSimilarity(displayName, inGameName);
+                        if (score > closestGaryScore) {
+                            closestGaryScore = score;
+                            closestGaryName  = garyData.players[inGameName].originalName || inGameName;
+                        }
+                    }
+                    clanMembersWithoutData.push({
+                        userId,
+                        discordName: displayName,
+                        closestGaryName:  closestGaryScore > 0 ? closestGaryName : null,
+                        closestGaryScore: closestGaryScore > 0 ? Math.round(closestGaryScore * 100) : null
+                    });
+                }
+            }
+
             this.logger.info(
                 `📊 GaryCombatIngestion: dopasowano ${totalMatched}/${playerNames.length} graczy ` +
                 `do kont Discord`
             );
-            return { matched: totalMatched, total: playerNames.length };
+
+            return {
+                matched:               totalMatched,
+                total:                 playerNames.length,
+                unmatchedGary:         [...garyUnmatched.entries()].map(([name, info]) => ({ inGameName: name, ...info })),
+                clanMembersWithoutData
+            };
         } catch (err) {
             this.logger.error('GaryCombatIngestion: błąd ingestion:', err.message);
-            return { matched: 0, total: 0 };
+            return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
         }
     }
 }

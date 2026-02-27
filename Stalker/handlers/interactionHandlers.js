@@ -11039,18 +11039,95 @@ async function handleLmeSnapshotCommand(interaction, sharedState) {
         logger.info('📸 /lme-snapshot: Uruchamiam ręczną ingestion danych Gary...');
         const result = await garyCombatIngestionService.ingest();
 
-        await interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('✅ LME Snapshot — Ingestion zakończona')
-                .setColor(0x43B581)
-                .setDescription('Dane RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z Gary zostały zaktualizowane w bazie Stalkera.')
-                .addFields([
-                    { name: '✅ Dopasowanych graczy', value: String(result.matched), inline: true },
-                    { name: '📊 Łącznie w Gary', value: String(result.total), inline: true },
-                    { name: '💡 Wskazówka', value: 'Uruchom `/lme-snapshot` w Gary najpierw, jeśli chcesz pobrać aktualne dane z garrytools.', inline: false }
-                ])
-                .setTimestamp()]
+        const { matched, total, unmatchedGary = [], clanMembersWithoutData = [] } = result;
+
+        // Grupowanie nieprzypisanych wpisów Gary według przyczyny
+        const lowScore = unmatchedGary.filter(e => e.reason === 'zbyt_niskie_podobienstwo');
+        const noWeeks  = unmatchedGary.filter(e => e.reason === 'brak_danych_tygodniowych');
+        const noRoles  = unmatchedGary.filter(e => e.reason === 'brak_rol_klanowych');
+
+        // Buduje tekst listy z obcięciem do limitu pola embed (1024 znaków)
+        function buildList(items, formatter) {
+            if (!items.length) return '*(brak)*';
+            let text = '';
+            let shown = 0;
+            for (const item of items) {
+                const line = formatter(item) + '\n';
+                if (text.length + line.length > 900) {
+                    text += `*(+${items.length - shown} więcej)*`;
+                    break;
+                }
+                text += line;
+                shown++;
+            }
+            return text.trim() || '*(brak)*';
+        }
+
+        const hasIssues = unmatchedGary.length > 0 || clanMembersWithoutData.length > 0;
+        const embedColor = total === 0 ? 0x99AAB5 : (hasIssues ? 0xE67E22 : 0x43B581);
+
+        const embed = new EmbedBuilder()
+            .setTitle('📸 LME Snapshot — Raport Ingestion')
+            .setColor(embedColor)
+            .setDescription(
+                total === 0
+                    ? '⚠️ Brak danych Gary (`shared_data/player_combat_history.json` nie istnieje).\nUruchom najpierw `/lme-snapshot` w Gary Bocie.'
+                    : 'Dane RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z Gary zostały przetworzone.'
+            )
+            .addFields(
+                { name: '✅ Dopasowanych', value: String(matched), inline: true },
+                { name: '📊 Łącznie w Gary', value: String(total), inline: true },
+                { name: '⚠️ Nieprzypisane (Gary)', value: String(unmatchedGary.length), inline: true }
+            );
+
+        // Wpisy Gary: zbyt niskie podobieństwo
+        if (lowScore.length > 0) {
+            embed.addFields({
+                name: `🔍 Zbyt niskie podobieństwo nicku (${lowScore.length})`,
+                value: buildList(lowScore, e =>
+                    `\`${e.inGameName}\` → ${e.closestDiscordName
+                        ? `\`${e.closestDiscordName}\` (${e.closestScore}%)`
+                        : '*brak kandydatów*'}`
+                )
+            });
+        }
+
+        // Wpisy Gary: brak danych tygodniowych
+        if (noWeeks.length > 0) {
+            embed.addFields({
+                name: `📭 Brak danych tygodniowych (${noWeeks.length})`,
+                value: buildList(noWeeks, e => `\`${e.inGameName}\``)
+            });
+        }
+
+        // Wpisy Gary: brak ról klanowych w gildii
+        if (noRoles.length > 0) {
+            embed.addFields({
+                name: `🚫 Brak ról klanowych w gildii (${noRoles.length})`,
+                value: buildList(noRoles, e => `\`${e.inGameName}\``)
+            });
+        }
+
+        // Klanowcy bez przypisanych danych
+        if (clanMembersWithoutData.length > 0) {
+            embed.addFields({
+                name: `👥 Klanowcy bez przypisanych danych (${clanMembersWithoutData.length})`,
+                value: buildList(clanMembersWithoutData, e =>
+                    `<@${e.userId}>${e.closestGaryName
+                        ? ` → w Gary: \`${e.closestGaryName}\` (${e.closestGaryScore}%)`
+                        : ' → brak kandydatów w Gary'}`
+                )
+            });
+        }
+
+        embed.addFields({
+            name: '💡 Wskazówka',
+            value: 'Uruchom `/lme-snapshot` w Gary najpierw, jeśli chcesz pobrać aktualne dane z garrytools.',
+            inline: false
         });
+        embed.setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
     } catch (err) {
         logger.error('/lme-snapshot: błąd:', err.message);
         await interaction.editReply(`❌ Błąd ingestion: ${err.message}`);
