@@ -160,6 +160,9 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'player-raport':
             await handlePlayerRaportCommand(interaction, sharedState);
             break;
+        case 'lme-snapshot':
+            await handleLmeSnapshotCommand(interaction, sharedState);
+            break;
         case 'msg':
             await handleMsgCommand(interaction, config, sharedState.broadcastMessageService, sharedState.client);
             break;
@@ -2413,6 +2416,10 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('player-raport')
             .setDescription('Wyświetla raport problematycznych graczy w klanie (tylko dla adminów/moderatorów)'),
+
+        new SlashCommandBuilder()
+            .setName('lme-snapshot')
+            .setDescription('Uruchamia ingestion danych RC+TC/atak z Gary do Stalkera (tylko dla adminów)'),
 
         new SlashCommandBuilder()
             .setName('msg')
@@ -8532,7 +8539,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         // Formatuj pole statystyk gracza (pełne inline field)
-        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos) {
+        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat) {
             const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
             let f = '';
             f += `🏰 **${clanDisplay}**\n`;
@@ -8544,6 +8551,13 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
             f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
+            if (lastCombat) {
+                const _rc = (lastCombat.relicCores ?? 0).toLocaleString('pl-PL');
+                const _atk = fmtAttack(lastCombat.attack ?? 0);
+                f += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** ${_rc} / ${_atk}\n`;
+            } else {
+                f += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
+            }
             f += `\n`;
             f += `📈 **Trend:** ${m.trendIcon || ''} ${m.trendDescription || '-'}\n`;
             f += `\n`;
@@ -8609,14 +8623,20 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         else if (wins2 > wins1) winnerField = `🥇 **${name2}** wygrywa **${fmt(wins2)} - ${fmt(wins1)}**`;
         else winnerField = `⚖️ **Remis ${fmt(wins1)} - ${fmt(wins2)}**`;
 
+        // Wczytaj ostatnie dane bojowe z Gary dla obu graczy (do wyświetlenia w polach)
+        const _cmpCombat1 = loadCombatHistory(userInfo1.userId);
+        const _cmpCombat2 = loadCombatHistory(userInfo2.userId);
+        const _cmpLast1 = _cmpCombat1.length > 0 ? _cmpCombat1[_cmpCombat1.length - 1] : null;
+        const _cmpLast2 = _cmpCombat2.length > 0 ? _cmpCombat2[_cmpCombat2.length - 1] : null;
+
         const embed = new EmbedBuilder()
             .setTitle(`⚔️ PORÓWNANIE  —  ${name1}  vs  ${name2}`)
             .setColor('#9B59B6')
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2), inline: true },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
 
@@ -8674,9 +8694,9 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_ranking.png'));
             }
 
-            // Wykresy RC+TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
-            const ch1 = loadCombatHistory(userInfo1.userId);
-            const ch2 = loadCombatHistory(userInfo2.userId);
+            // Wykresy RC+TC i Atak z historii Gary (używamy już załadowanych danych _cmpCombat1/_cmpCombat2)
+            const ch1 = _cmpCombat1;
+            const ch2 = _cmpCombat2;
             if (ch1.length >= 2 || ch2.length >= 2) {
                 const [rcCmpBuf, atkCmpBuf] = await Promise.all([
                     generateCompareCombatChart(ch1, ch2, name1, name2, 'relicCores', 'RC+TC', v => String(v)),
@@ -9445,8 +9465,14 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
         description += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n\n`;
 
-        // Sekcja 2: Statystyki (tylko jeśli są dane)
-        if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
+        // Wczytaj dane bojowe z Gary (RC+TC, Atak) - potrzebne do sekcji STATYSTYKI
+        const _statCombatHistory = loadCombatHistory(userId);
+        const _statLastCombat = _statCombatHistory.length > 0
+            ? _statCombatHistory[_statCombatHistory.length - 1]
+            : null;
+
+        // Sekcja 2: Statystyki (jeśli są dane z gry lub dane Gary)
+        if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null || _statLastCombat !== null) {
             description += `### 📊 STATYSTYKI\n`;
 
             if (monthlyProgress !== null) {
@@ -9495,17 +9521,27 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (biggestProgress !== null && biggestProgress > 0) {
                 const absProgress = Math.abs(biggestProgress).toLocaleString('pl-PL');
                 description += `**↗️ Największy progres:** ${absProgress} (tydzień ${biggestProgressWeek})\n`;
-            } else {
+            } else if (biggestProgress !== null || monthlyProgress !== null || quarterlyProgress !== null) {
                 description += `**↗️ Największy progres:** brak\n`;
             }
 
             // Największy regres
             if (biggestRegress !== null && biggestRegress < 0) {
                 const absRegress = Math.abs(biggestRegress).toLocaleString('pl-PL');
-                description += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})\n\n`;
-            } else {
-                description += `**↘️ Największy regres:** brak\n\n`;
+                description += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})\n`;
+            } else if (biggestRegress !== null || monthlyProgress !== null || quarterlyProgress !== null) {
+                description += `**↘️ Największy regres:** brak\n`;
             }
+
+            // RC+TC i Atak z Gary (historia tygodniowa)
+            if (_statLastCombat) {
+                const _rcFmt = (_statLastCombat.relicCores ?? 0).toLocaleString('pl-PL');
+                const _atkFmt = fmtAttack(_statLastCombat.attack ?? 0);
+                description += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** ${_rcFmt} / ${_atkFmt}\n`;
+            } else {
+                description += `**<:II_RC:1385139885924421653> RC+TC / ⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
+            }
+            description += `\n`;
         }
 
         // Sekcja MVP - tygodnie w TOP3 progresu (tylko jeśli są wyniki)
@@ -10974,6 +11010,41 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         } catch (replyError) {
             logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
+    }
+}
+
+// Funkcja obsługująca komendę /lme-snapshot - ręczne uruchomienie ingestion danych Gary
+async function handleLmeSnapshotCommand(interaction, sharedState) {
+    if (!interaction.member.permissions.has('Administrator')) {
+        return interaction.reply({ content: '❌ Ta komenda wymaga uprawnień administratora.', flags: MessageFlags.Ephemeral });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        const { garyCombatIngestionService, client } = sharedState;
+        if (!garyCombatIngestionService) {
+            return interaction.editReply('❌ GaryCombatIngestionService nie jest dostępny.');
+        }
+
+        logger.info('📸 /lme-snapshot: Uruchamiam ręczną ingestion danych Gary...');
+        const result = await garyCombatIngestionService.ingest();
+
+        await interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setTitle('✅ LME Snapshot — Ingestion zakończona')
+                .setColor(0x43B581)
+                .setDescription('Dane RC+TC i Atak z Gary zostały zaktualizowane w bazie Stalkera.')
+                .addFields([
+                    { name: '✅ Dopasowanych graczy', value: String(result.matched), inline: true },
+                    { name: '📊 Łącznie w Gary', value: String(result.total), inline: true },
+                    { name: '💡 Wskazówka', value: 'Uruchom `/lme-snapshot` w Gary najpierw, jeśli chcesz pobrać aktualne dane z garrytools.', inline: false }
+                ])
+                .setTimestamp()]
+        });
+    } catch (err) {
+        logger.error('/lme-snapshot: błąd:', err.message);
+        await interaction.editReply(`❌ Błąd ingestion: ${err.message}`);
     }
 }
 

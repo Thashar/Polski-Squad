@@ -11,7 +11,7 @@
 8. **Wątki** - Obsługa `parentId`, whitelist check
 9. **Emoji** - Server emoji w embedach
 
-**Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`
+**Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`, `/lme-snapshot` (admin — ręczny snapshot + zapis historii, podmieniona `/test`)
 **Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_LIST, WEBSHARE_URL
 
 ---
