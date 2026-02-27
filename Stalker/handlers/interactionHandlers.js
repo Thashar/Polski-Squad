@@ -8675,8 +8675,13 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             }
 
             // Wykresy RC+TC i Atak z historii Gary (shared_data)
-            const ch1 = loadCombatHistory([name1]);
-            const ch2 = loadCombatHistory([name2]);
+            // Pobieramy allNicks obu graczy z player_index, żeby dopasować
+            // wszystkie historyczne nazwy do kluczy w player_combat_history.json
+            const _cmpIdx = await databaseService.loadPlayerIndex(interaction.guild.id);
+            const _nicks1 = [name1, ...(_cmpIdx[userInfo1.userId]?.allNicks || [])];
+            const _nicks2 = [name2, ...(_cmpIdx[userInfo2.userId]?.allNicks || [])];
+            const ch1 = loadCombatHistory(_nicks1);
+            const ch2 = loadCombatHistory(_nicks2);
             if (ch1.length >= 2 || ch2.length >= 2) {
                 const [rcCmpBuf, atkCmpBuf] = await Promise.all([
                     generateCompareCombatChart(ch1, ch2, name1, name2, 'relicCores', 'RC+TC', v => String(v)),
@@ -9658,7 +9663,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             // Wykresy RC+TC i Atak z historii Gary (shared_data)
-            const combatHistory = loadCombatHistory([latestNick]);
+            // Używamy wszystkich znanych nicków gracza z bazy Stalkera dla
+            // pewniejszego dopasowania do nazw z garrytools (player_index.allNicks)
+            const _pIdx = await databaseService.loadPlayerIndex(interaction.guild.id);
+            const _allNicks = [latestNick, ...(_pIdx[userId]?.allNicks || [])];
+            const combatHistory = loadCombatHistory(_allNicks);
             if (combatHistory.length >= 2) {
                 const [rcBuf, atkBuf] = await Promise.all([
                     generateCombatChart(combatHistory, latestNick, 'relicCores', 'RC+TC', '#43B581', v => String(v)),
