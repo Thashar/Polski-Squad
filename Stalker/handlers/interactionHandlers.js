@@ -8673,6 +8673,25 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 files.push(new AttachmentBuilder(rankBuf, { name: 'compare_ranking.png' }));
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_ranking.png'));
             }
+
+            // Wykresy RC+TC i Atak z historii Gary (shared_data)
+            const ch1 = loadCombatHistory([name1]);
+            const ch2 = loadCombatHistory([name2]);
+            if (ch1.length >= 2 || ch2.length >= 2) {
+                const [rcCmpBuf, atkCmpBuf] = await Promise.all([
+                    generateCompareCombatChart(ch1, ch2, name1, name2, 'relicCores', 'RC+TC', v => String(v)),
+                    generateCompareCombatChart(ch1, ch2, name1, name2, 'attack', 'Atak', fmtAttack)
+                ]);
+                if (rcCmpBuf) {
+                    files.push(new AttachmentBuilder(rcCmpBuf, { name: 'compare_rc.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#43B581').setImage('attachment://compare_rc.png'));
+                }
+                if (atkCmpBuf) {
+                    files.push(new AttachmentBuilder(atkCmpBuf, { name: 'compare_atk.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#F04747').setImage('attachment://compare_atk.png'));
+                }
+            }
+
             if (files.length > 0) replyPayload.files = files;
         } catch (e) {
             logger.warn('[player-compare] Nie udało się wygenerować wykresów:', e.message);
@@ -9637,6 +9656,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 chartFiles.push(new AttachmentBuilder(rankBuf, { name: 'ranking.png' }));
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://ranking.png'));
             }
+
+            // Wykresy RC+TC i Atak z historii Gary (shared_data)
+            const combatHistory = loadCombatHistory([latestNick]);
+            if (combatHistory.length >= 2) {
+                const [rcBuf, atkBuf] = await Promise.all([
+                    generateCombatChart(combatHistory, latestNick, 'relicCores', 'RC+TC', '#43B581', v => String(v)),
+                    generateCombatChart(combatHistory, latestNick, 'attack', 'Atak', '#F04747', fmtAttack)
+                ]);
+                if (rcBuf) {
+                    chartFiles.push(new AttachmentBuilder(rcBuf, { name: 'combat_rc.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#43B581').setImage('attachment://combat_rc.png'));
+                }
+                if (atkBuf) {
+                    chartFiles.push(new AttachmentBuilder(atkBuf, { name: 'combat_atk.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#F04747').setImage('attachment://combat_atk.png'));
+                }
+            }
+
             if (chartFiles.length > 0) replyPayload.files = chartFiles;
         } catch (e) {
             logger.warn('[player-status] Nie udało się wygenerować wykresów:', e.message);
@@ -12513,6 +12550,274 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
   ${linePath2 ? `<path d="${linePath2}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#glow2)"/>` : ''}
   ${buildDots(pts1, color1, lastRankOff1)}
   ${buildDots(pts2, color2, lastRankOff2)}
+  ${xLabels}
+</svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GARY → STALKER: Player combat history (RC+TC, Attack) — shared_data
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Read player_combat_history.json from shared_data and return weekly entries
+ * for a given player. Tries all provided nicks (lowercase), returns the first
+ * match. Returns [] if no data found or file doesn't exist.
+ *
+ * @param {string[]} nicks - player nicks to try (latestNick first, then allNicks)
+ * @returns {Array<{weekNumber, year, attack, relicCores}>}
+ */
+function loadCombatHistory(nicks) {
+    const fs = require('fs');
+    const path = require('path');
+    try {
+        const filePath = path.join(__dirname, '../../shared_data/player_combat_history.json');
+        if (!fs.existsSync(filePath)) return [];
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (!data?.players) return [];
+        for (const nick of nicks) {
+            const entry = data.players[nick.toLowerCase()];
+            if (entry?.weeks?.length) return entry.weeks.slice(-20);
+        }
+        return [];
+    } catch (_) {
+        return [];
+    }
+}
+
+/**
+ * Format attack number for chart labels.
+ * @param {number} v
+ * @returns {string}
+ */
+function fmtAttack(v) {
+    if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+    if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+    if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
+    return String(v);
+}
+
+/**
+ * Single-player RC+TC or Attack history chart (data from Gary weekly snapshot).
+ * Mirrors generateProgressChart style: Catmull-Rom spline, collision-aware labels.
+ *
+ * @param {Array<{weekNumber, year, attack, relicCores}>} historyData
+ * @param {string} playerNick
+ * @param {string} metricKey   'relicCores' | 'attack'
+ * @param {string} title       chart title
+ * @param {string} lineColor   hex colour
+ * @param {Function} fmtLabel  value → label string for Y-axis and dots
+ * @returns {Buffer|null}
+ */
+async function generateCombatChart(historyData, playerNick, metricKey, title, lineColor, fmtLabel) {
+    const sharp = require('sharp');
+    const filtered = historyData.filter(d => d[metricKey] > 0);
+    if (filtered.length < 2) return null;
+
+    const W = 800, H = 260;
+    const M = { top: 42, right: 28, bottom: 44, left: 72 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const values = filtered.map(d => d[metricKey]);
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const range = maxVal - minVal || 1;
+    const yMin = Math.max(0, minVal - range * 0.15);
+    const yMax = maxVal + range * 0.28;
+
+    const toX = (i) => M.left + (i / (filtered.length - 1)) * cW;
+    const toY = (v) => M.top + cH - ((v - yMin) / (yMax - yMin)) * cH;
+
+    const pts = filtered.map((d, i) => ({
+        x: toX(i), y: toY(d[metricKey]), v: d[metricKey],
+        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    }));
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i], p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath = buildCatmullRom(pts);
+
+    const gridLines = Array.from({ length: 5 }, (_, i) => {
+        const v = yMin + (yMax - yMin) * (i / 4);
+        const y = toY(v);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">${fmtLabel(Math.round(v))}</text>`;
+    }).join('\n    ');
+
+    const xLabels = pts.map(p =>
+        `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`
+    ).join('\n    ');
+
+    // Collision-aware label offsets
+    const labelOffsets = pts.map(() => 8);
+    for (let i = 1; i < pts.length; i++) {
+        const prevLY = pts[i - 1].y - labelOffsets[i - 1];
+        const wantLY = pts[i].y - 8;
+        if (Math.abs(wantLY - prevLY) < 11) {
+            const newLY = Math.max(M.top - 10, Math.min(prevLY - 11, wantLY));
+            labelOffsets[i] = pts[i].y - newLY;
+        }
+    }
+
+    const dotsSvg = pts.map((p, idx) =>
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - labelOffsets[idx]).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${fmtLabel(p.v)}</text>`
+    ).join('\n    ');
+
+    const safeName = playerNick.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${safeName}</text>
+  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${safeTitle}</text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none"/>
+  ${dotsSvg}
+  ${xLabels}
+</svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/**
+ * Two-player comparison chart for RC+TC or Attack.
+ * Mirrors generateCompareProgressChart style.
+ *
+ * @param {Array} h1 / h2  - weekly history arrays from loadCombatHistory()
+ * @param {string} name1 / name2
+ * @param {string} metricKey   'relicCores' | 'attack'
+ * @param {string} title
+ * @param {Function} fmtLabel
+ * @returns {Buffer|null}
+ */
+async function generateCompareCombatChart(h1, h2, name1, name2, metricKey, title, fmtLabel) {
+    const sharp = require('sharp');
+    const color1 = '#5865F2', color2 = '#EB459E';
+
+    // Build unified X axis (last 20 weeks)
+    const weekSet = new Map();
+    for (const d of [...h1, ...h2]) {
+        const key = `${d.year}-${String(d.weekNumber).padStart(2, '0')}`;
+        if (!weekSet.has(key)) weekSet.set(key, { weekNumber: d.weekNumber, year: d.year });
+    }
+    const allWeeks = [...weekSet.values()]
+        .sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber)
+        .slice(-20);
+
+    if (allWeeks.length < 2) return null;
+
+    const W = 800, H = 270;
+    const M = { top: 54, right: 28, bottom: 44, left: 72 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const allVals = [...h1, ...h2].map(d => d[metricKey]).filter(v => v > 0);
+    if (allVals.length < 2) return null;
+
+    const minVal = Math.min(...allVals);
+    const maxVal = Math.max(...allVals);
+    const range = maxVal - minVal || 1;
+    const yMin = Math.max(0, minVal - range * 0.1);
+    const yMax = maxVal + range * 0.25;
+
+    const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
+    const toY = (v) => M.top + cH - ((v - yMin) / (yMax - yMin)) * cH;
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i], p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    function buildPts(history) {
+        return allWeeks.map((w, wi) => {
+            const d = history.find(e => e.weekNumber === w.weekNumber && e.year === w.year);
+            if (!d || !d[metricKey]) return null;
+            return { x: toX(wi), y: toY(d[metricKey]), v: d[metricKey] };
+        }).filter(Boolean);
+    }
+
+    const pts1 = buildPts(h1);
+    const pts2 = buildPts(h2);
+
+    const gridLines = Array.from({ length: 5 }, (_, i) => {
+        const v = yMin + (yMax - yMin) * (i / 4);
+        const y = toY(v);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">${fmtLabel(Math.round(v))}</text>`;
+    }).join('\n    ');
+
+    const xLabels = allWeeks.map((w, i) =>
+        `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
+    ).join('\n    ');
+
+    function buildDots(pts, color) {
+        // Collision-aware offsets
+        const offsets = pts.map(() => 8);
+        for (let i = 1; i < pts.length; i++) {
+            const prevLY = pts[i - 1].y - offsets[i - 1];
+            const wantLY = pts[i].y - 8;
+            if (Math.abs(wantLY - prevLY) < 11) {
+                const newLY = Math.max(M.top - 10, Math.min(prevLY - 11, wantLY));
+                offsets[i] = pts[i].y - newLY;
+            }
+        }
+        return pts.map((p, pi) =>
+            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - offsets[pi]).toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${color}" text-anchor="middle" opacity="0.9">${fmtLabel(p.v)}</text>`
+        ).join('\n    ');
+    }
+
+    // Legend
+    const safe1 = name1.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const safe2 = name2.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const leg2CX = M.left + safe1.length * 6.5 + 30;
+
+    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="gc1" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="gc2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${safeTitle}</text>
+  <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
+  <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${safe1}</text>
+  <circle cx="${leg2CX}" cy="33" r="5" fill="${color2}"/>
+  <text x="${leg2CX + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${safe2}</text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  ${pts1.length >= 2 ? `<path d="${buildCatmullRom(pts1)}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#gc1)"/>` : ''}
+  ${pts2.length >= 2 ? `<path d="${buildCatmullRom(pts2)}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#gc2)"/>` : ''}
+  ${buildDots(pts1, color1)}
+  ${buildDots(pts2, color2)}
   ${xLabels}
 </svg>`;
     return sharp(Buffer.from(svg)).png().toBuffer();
