@@ -41,9 +41,9 @@ class GaryCombatIngestionService {
         if (!s1 || !s2) return 0;
         if (s1 === s2) return 1.0;
 
-        // Jeden zawiera drugi (min 3 znaki)
+        // Jeden zawiera drugi (min 3 znaki) — 0.99 a nie 1.0, żeby exact match zawsze wygrał
         if (s1.length >= 3 && s2.length >= 3) {
-            if (s1.includes(s2) || s2.includes(s1)) return 1.0;
+            if (s1.includes(s2) || s2.includes(s1)) return 0.99;
         }
 
         // Fuzzy match dla nicków 5+ znaków (tolerancja 1-2 błędy OCR)
