@@ -10423,7 +10423,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
 
         const resultsText = resultsLines.join('\n');
 
-        // Wczytaj najnowszy snapshot klanów z shared_data/lme_guilds/
+        // Wczytaj najnowszy snapshot klanu z shared_data/lme_guilds/
         let guildSnapshotField = null;
         try {
             const path = require('path');
@@ -10435,21 +10435,28 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
                 const raw = await fs.readFile(latestFile, 'utf8');
                 const snapshot = JSON.parse(raw);
                 const weekLabel = `T${String(snapshot.weekNumber).padStart(2, '0')}/${snapshot.year}`;
-                const sortedGuilds = [...(snapshot.guilds || [])].sort((a, b) => (a.rank || 999) - (b.rank || 999));
-                const fmtPower = (v) => {
-                    if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-                    if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-                    if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
-                    return String(v);
-                };
-                const lines = sortedGuilds.map(g => {
-                    const rank = g.rank ? `#${g.rank}` : 'N/A';
-                    const score = g.score != null ? `Score: ${g.score.toLocaleString('pl-PL')}` : '';
-                    const rc = `RC: ${g.totalRelicCores || 0}`;
-                    const power = `Power: ${fmtPower(g.totalPower || 0)}`;
-                    return `**${rank}** ${g.name} — ${[score, rc, power].filter(Boolean).join(' | ')}`;
-                }).join('\n');
-                guildSnapshotField = { name: `📸 Snapshot Gary (${weekLabel})`, value: lines || 'Brak danych', inline: false };
+
+                // Szukaj klanu pasującego do selectedClan przez garyGuildId (env var)
+                const garyGuildId = config.garyGuildIds?.[selectedClan];
+                const guild = garyGuildId != null
+                    ? (snapshot.guilds || []).find(g => g.id === garyGuildId)
+                    : null;
+
+                if (guild) {
+                    const fmtPower = (v) => {
+                        if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+                        if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+                        if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+                        return String(v);
+                    };
+                    const lines = [
+                        `🏆 **Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}`,
+                        `🔥 **Grade Score:** ${guild.gradeScore || 'N/A'}`,
+                        `<:II_RC:1385139885924421653> **RC+TC:** ${guild.totalRelicCores || 0}`,
+                        `⚔️ **Siła ataku:** ${fmtPower(guild.totalPower || 0)}`,
+                    ].join('\n');
+                    guildSnapshotField = { name: `📸 Snapshot Gary (${weekLabel})`, value: lines, inline: false };
+                }
             }
         } catch (_) { /* pole opcjonalne — ignoruj błąd */ }
 
