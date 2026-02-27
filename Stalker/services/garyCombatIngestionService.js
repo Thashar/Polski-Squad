@@ -97,6 +97,8 @@ class GaryCombatIngestionService {
         const THRESHOLD = 0.82;
         let bestUserId = null;
         let bestScore  = THRESHOLD;
+        // Tie-break: dopasowanie przez aktualny displayName bije stary nick z playerIndex
+        let bestFromDisplayName = false;
 
         // Dla raportu: absolutne najlepsze dopasowanie (nawet poniżej progu)
         let closestScore = 0;
@@ -104,11 +106,14 @@ class GaryCombatIngestionService {
 
         for (const [userId, { displayName }] of clanMembers) {
             const knownNicks = [displayName, ...(playerIndex[userId]?.allNicks || [])];
-            for (const nick of knownNicks) {
-                const score = this._calcSimilarity(inGameName, nick);
-                if (score > bestScore) {
-                    bestScore  = score;
-                    bestUserId = userId;
+            for (let i = 0; i < knownNicks.length; i++) {
+                const score = this._calcSimilarity(inGameName, knownNicks[i]);
+                const fromDisplayName = (i === 0);
+                // Wygrywa wyższy score; przy remisie displayName bije stary nick z allNicks
+                if (score > bestScore || (score === bestScore && fromDisplayName && !bestFromDisplayName)) {
+                    bestScore           = score;
+                    bestUserId          = userId;
+                    bestFromDisplayName = fromDisplayName;
                 }
                 if (score > closestScore) {
                     closestScore       = score;
@@ -199,6 +204,8 @@ class GaryCombatIngestionService {
             const matchedPlayerNames = new Set();   // Nicki Gary które zostały dopasowane
             const matchedUserIds     = new Set();   // Discord userId które otrzymały dane
             const allClanMembers     = new Map();   // Agregat: userId → { displayName } ze wszystkich gildii
+            // inGameName → { userId, discordName } — kto dostał każdy wpis Gary (do raportu)
+            const garyAssignments    = new Map();
 
             // Wpisy Gary bez dopasowania: inGameName → { reason, closestDiscordName, closestScore }
             const garyUnmatched = new Map();
@@ -241,6 +248,10 @@ class GaryCombatIngestionService {
                     // Dopasowanie znalezione — upsert danych tygodniowych
                     matchedPlayerNames.add(inGameName);
                     matchedUserIds.add(userId);
+                    garyAssignments.set(inGameName, {
+                        userId,
+                        discordName: clanMembers.get(userId)?.displayName || inGameName
+                    });
                     garyUnmatched.delete(inGameName); // usuń z nieprzypisanych jeśli był tam wcześniej
 
                     if (!localData.players[userId]) {
@@ -300,18 +311,24 @@ class GaryCombatIngestionService {
                     // Odwrotne wyszukiwanie: znajdź najbliższy wpis Gary dla tego klanowca
                     let closestGaryName = null;
                     let closestGaryScore = 0;
+                    let closestGaryKey = null;
                     for (const inGameName of playerNames) {
                         const score = this._calcSimilarity(displayName, inGameName);
                         if (score > closestGaryScore) {
                             closestGaryScore = score;
                             closestGaryName  = garyData.players[inGameName].originalName || inGameName;
+                            closestGaryKey   = inGameName;
                         }
                     }
+                    // Kto dostał ten wpis Gary zamiast tego klanowca?
+                    const stolen = closestGaryKey ? garyAssignments.get(closestGaryKey) : null;
                     clanMembersWithoutData.push({
                         userId,
                         discordName: displayName,
                         closestGaryName:  closestGaryScore > 0 ? closestGaryName : null,
-                        closestGaryScore: closestGaryScore > 0 ? Math.round(closestGaryScore * 100) : null
+                        closestGaryScore: closestGaryScore > 0 ? Math.round(closestGaryScore * 100) : null,
+                        stolenByUserId:   stolen?.userId   || null,
+                        stolenByName:     stolen?.discordName || null
                     });
                 }
             }

@@ -11112,11 +11112,16 @@ async function handleLmeSnapshotCommand(interaction, sharedState) {
         if (clanMembersWithoutData.length > 0) {
             embed.addFields({
                 name: `👥 Klanowcy bez przypisanych danych (${clanMembersWithoutData.length})`,
-                value: buildList(clanMembersWithoutData, e =>
-                    `<@${e.userId}>${e.closestGaryName
-                        ? ` → w Gary: \`${e.closestGaryName}\` (${e.closestGaryScore}%)`
-                        : ' → brak kandydatów w Gary'}`
-                )
+                value: buildList(clanMembersWithoutData, e => {
+                    if (!e.closestGaryName) return `<@${e.userId}> → brak kandydatów w Gary`;
+                    let line = `<@${e.userId}> → w Gary: \`${e.closestGaryName}\` (${e.closestGaryScore}%)`;
+                    if (e.stolenByUserId) {
+                        line += ` → **przypisano do <@${e.stolenByUserId}>**`;
+                    } else {
+                        line += ` → ⚠️ nieprzypisane (za niskie podobieństwo lub brak roli)`;
+                    }
+                    return line;
+                })
             });
         }
 
