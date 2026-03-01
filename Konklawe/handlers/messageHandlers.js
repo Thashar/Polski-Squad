@@ -14,6 +14,40 @@ class MessageHandler {
     }
 
     /**
+     * Wykrywa herezję "Full HP najlepsze" i próby obejścia cenzury
+     * @param {string} text - Treść wiadomości
+     * @returns {boolean} true jeśli wykryto herezję
+     */
+    detectFullHpHeresy(text) {
+        // Normalizacja: małe litery + podmiana leet speak
+        let normalized = text.toLowerCase()
+            .replace(/0/g, 'o')
+            .replace(/1/g, 'i')
+            .replace(/3/g, 'e')
+            .replace(/4/g, 'a')
+            .replace(/5/g, 's')
+            .replace(/7/g, 't')
+            .replace(/\$/g, 's')
+            .replace(/@/g, 'a');
+
+        // Usuń wszystkie separatory (spacje, kropki, myślniki, podkreślenia itp.)
+        // żeby wykryć "f.u.l.l h.p", "f u l l h p", "f-u-l-l-h-p" itp.
+        const noSeparators = normalized.replace(/[\s.\-_*|,!?'"`~^+=&#%@]/g, '');
+
+        if (noSeparators.includes('fullhp') && noSeparators.includes('najlepsz')) {
+            return true;
+        }
+
+        // Sprawdź też wersję z normalnymi spacjami (full hp najlepsze)
+        const spacedNorm = normalized.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        if (spacedNorm.includes('full hp') && spacedNorm.includes('najlepsz')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Obsługuje wiadomości
      * @param {Message} message - Wiadomość Discord
      */
@@ -24,6 +58,16 @@ class MessageHandler {
             // Sprawdź efekty klątw jeśli mamy dostęp do interactionHandler
             if (interactionHandler && interactionHandler.handleCurseEffects) {
                 await interactionHandler.handleCurseEffects(message);
+            }
+
+            // === HEREZJA FULL HP - Automatyczna cicha klątwa za "Full HP najlepsze" ===
+            if (interactionHandler && message.member && this.detectFullHpHeresy(message.content)) {
+                try {
+                    await interactionHandler.applyRandomCurseToUser(message.member, 'FullHpHeresy');
+                    logger.info(`🔱 Herezja Full HP wykryta od ${message.author.tag} - nałożono cichą klątwę`);
+                } catch (error) {
+                    logger.error(`❌ Błąd nakładania klątwy za herezję Full HP: ${error.message}`);
+                }
             }
 
             // === ULTRA POTĘŻNY DEBUFF (Gabriel/Admin) - 10% szansa na klątwę po fazie początkowej ===
