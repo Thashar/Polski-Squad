@@ -34,13 +34,13 @@ class MessageHandler {
         // żeby wykryć "f.u.l.l h.p", "f u l l h p", "f-u-l-l-h-p" itp.
         const noSeparators = normalized.replace(/[\s.\-_*|,!?'"`~^+=&#%@]/g, '');
 
-        if (noSeparators.includes('fullhp') && noSeparators.includes('najlepsz')) {
+        if (noSeparators.includes('fullhp') && noSeparators.includes('lepsz')) {
             return true;
         }
 
-        // Sprawdź też wersję z normalnymi spacjami (full hp najlepsze)
+        // Sprawdź też wersję z normalnymi spacjami (full hp lepsze/najlepsze)
         const spacedNorm = normalized.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-        if (spacedNorm.includes('full hp') && spacedNorm.includes('najlepsz')) {
+        if (spacedNorm.includes('full hp') && spacedNorm.includes('lepsz')) {
             return true;
         }
 
