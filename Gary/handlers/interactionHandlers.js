@@ -2437,7 +2437,7 @@ class InteractionHandler {
 
             // Use the same logic as /analyse - fetch group details
             const fixedGuilds = [42576, 42566, 42575, 42560];
-            const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, fixedGuilds);
+            const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, fixedGuilds).slice(0, 4);
             const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds);
             const details = await this.garrytoolsService.fetchGroupDetails(groupId);
 
@@ -2467,10 +2467,37 @@ class InteractionHandler {
                 .setDescription(guildSummary)
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed], ephemeral: true });
+            await interaction.editReply({ embeds: [embed] });
 
-            // Send member list as followUp
-            await this.sendGuildMembersList(interaction, guild);
+            // Send member list as followUp (ephemeral)
+            if (guild.members && guild.members.length > 0) {
+                const sortedMembers = guild.members.sort((a, b) => b.attack - a.attack);
+                const maxMembersPerField = 10;
+                const chunks = [];
+                for (let i = 0; i < sortedMembers.length; i += maxMembersPerField) {
+                    chunks.push(sortedMembers.slice(i, i + maxMembersPerField));
+                }
+
+                const memberEmbed = new EmbedBuilder()
+                    .setColor(0x3498DB)
+                    .setDescription(`# ${guild.title}\nTotal members: ${sortedMembers.length} • Sorted by attack power`)
+                    .setFooter({ text: `Guild ID: ${guild.guildId}` })
+                    .setTimestamp();
+
+                chunks.forEach((chunk) => {
+                    const memberText = chunk.map(member =>
+                        `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
+                    ).join('\n');
+
+                    memberEmbed.addFields({
+                        name: '\u200b',
+                        value: memberText || 'No data',
+                        inline: false
+                    });
+                });
+
+                await interaction.followUp({ embeds: [memberEmbed], ephemeral: true });
+            }
 
             this.logger.info(`✅ Detailed analysis of ${guildId} sent to ${interaction.user.tag}`);
 
