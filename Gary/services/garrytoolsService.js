@@ -209,20 +209,34 @@ class GarrytoolsService {
             const $ = cheerio.load(response.data);
             const tables = $('table');
             const clansData = [];
-            
+
+            this.logger.info(`📊 getBaseData: Found ${tables.length} tables in response`);
+
             if (tables.length === 0) {
+                this.logger.warn('⚠️ No tables found - logging first 500 chars of HTML');
+                this.logger.info(response.data.substring(0, 500));
                 return [];
             }
-            
+
             const mainTable = $(tables[0]);
+            const allRows = mainTable.find('tr');
+            this.logger.info(`📊 Main table has ${allRows.length} rows`);
+
             const clanOverview = [];
-            
+            let skippedRows = 0;
+
             mainTable.find('tr').each((index, row) => {
                 if (index === 0) return;
-                
+
                 const cells = $(row).find('td');
-                if (cells.length < 8) return;
-                
+                if (cells.length < 8) {
+                    skippedRows++;
+                    if (index <= 3) { // Log first few skipped rows
+                        this.logger.warn(`⚠️ Row ${index} skipped: only ${cells.length} cells (need 8)`);
+                    }
+                    return;
+                }
+
                 const clanInfo = {
                     rank: $(cells[0]).text().trim(),
                     guildId: parseInt($(cells[1]).text().trim()) || 0,
@@ -233,23 +247,25 @@ class GarrytoolsService {
                     totalRelicCores: this.parseRelicCores($(cells[6]).text().trim()),
                     totalAttack: this.parseAttackValue($(cells[7]).text().trim())
                 };
-                
+
                 clanOverview.push(clanInfo);
             });
             
             for (let i = 1; i < tables.length; i++) {
                 const table = $(tables[i]);
                 const members = [];
-                
+                const tableRows = table.find('tr');
+                this.logger.info(`📊 Processing member table ${i}/${tables.length - 1} with ${tableRows.length} rows`);
+
                 table.find('tr').each((rowIndex, row) => {
                     if (rowIndex === 0) return;
-                    
+
                     const cells = $(row).find('td');
                     if (cells.length >= 3) {
                         const rank = $(cells[0]).text().trim();
                         const name = $(cells[1]).text().trim();
                         const attack = this.parseAttackValue($(cells[2]).text().trim());
-                        
+
                         members.push({
                             rank: rank,
                             name: name,
@@ -258,7 +274,9 @@ class GarrytoolsService {
                         });
                     }
                 });
-                
+
+                this.logger.info(`📊 Table ${i} parsed ${members.length} members`);
+
                 if (members.length > 0) {
                     const clanInfo = clanOverview[i-1] || {};
                     
@@ -278,7 +296,17 @@ class GarrytoolsService {
                     });
                 }
             }
-            
+
+            this.logger.info(`📊 Parsed ${clanOverview.length} clans from overview table`);
+            this.logger.info(`📊 Parsed ${clansData.length} clans with member data`);
+            if (skippedRows > 0) {
+                this.logger.warn(`⚠️ Skipped ${skippedRows} rows due to insufficient cells`);
+            }
+            if (clansData.length === 0 && clanOverview.length > 0) {
+                this.logger.error('❌ CRITICAL: Overview table parsed but no member tables found!');
+                this.logger.info(`Expected ${tables.length - 1} member tables for ${clanOverview.length} clans`);
+            }
+
             return clansData;
         } catch (error) {
             this.logger.error('Error fetching base data:', error.message);
