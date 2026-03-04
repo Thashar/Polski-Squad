@@ -2458,7 +2458,7 @@ class InteractionHandler {
     }
 
     async handleRivalsDetailButton(interaction, guildId) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ ephemeral: false });
 
         try {
             this.logger.info(`🔍 Fetching detailed data for Guild ID: ${guildId}`);
@@ -2471,8 +2471,7 @@ class InteractionHandler {
             const guild = details.guilds.find(g => g.guildId === guildId);
             if (!guild) {
                 await interaction.editReply({
-                    content: `❌ Guild with ID ${guildId} not found in results.`,
-                    ephemeral: true
+                    content: `❌ Guild with ID ${guildId} not found in results.`
                 });
                 return;
             }
@@ -2523,7 +2522,7 @@ class InteractionHandler {
                     });
                 });
 
-                await interaction.followUp({ embeds: [memberEmbed], ephemeral: true });
+                await interaction.followUp({ embeds: [memberEmbed] });
             }
 
             this.logger.info(`✅ Detailed analysis of ${guildId} sent to ${interaction.user.tag}`);
