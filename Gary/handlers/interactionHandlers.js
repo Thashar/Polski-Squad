@@ -2408,37 +2408,70 @@ class InteractionHandler {
                 });
             }
 
-            // Create buttons for detailed analysis (max 10 clans = 2 rows)
-            const buttons = [];
-            const allRivalsForButtons = [...rivalsData.likelyMatches, ...rivalsData.unlikelyMatches]
+            // Create buttons for likely matches
+            const likelyButtons = [];
+            const likelyRivalsForButtons = rivalsData.likelyMatches
                 .filter(r => !r.isUserGuild) // Skip user's own guild
                 .slice(0, 10); // Max 10 buttons
 
-            for (const rival of allRivalsForButtons) {
+            for (const rival of likelyRivalsForButtons) {
                 const button = new ButtonBuilder()
                     .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
                     .setLabel(`${rival.name.substring(0, 20)}`) // Max 80 chars, truncate to 20
                     .setStyle(ButtonStyle.Secondary)
                     .setEmoji('🔍');
-                buttons.push(button);
+                likelyButtons.push(button);
             }
 
-            // Split buttons into rows (max 5 per row)
-            const rows = [];
-            if (buttons.length > 0) {
-                const row1 = new ActionRowBuilder().addComponents(buttons.slice(0, 5));
-                rows.push(row1);
+            // Split likely buttons into rows (max 5 per row)
+            const likelyRows = [];
+            if (likelyButtons.length > 0) {
+                const row1 = new ActionRowBuilder().addComponents(likelyButtons.slice(0, 5));
+                likelyRows.push(row1);
 
-                if (buttons.length > 5) {
-                    const row2 = new ActionRowBuilder().addComponents(buttons.slice(5, 10));
-                    rows.push(row2);
+                if (likelyButtons.length > 5) {
+                    const row2 = new ActionRowBuilder().addComponents(likelyButtons.slice(5, 10));
+                    likelyRows.push(row2);
                 }
             }
 
-            // Send both embeds with buttons
+            // Send likely embed with its buttons
             await interaction.editReply({
-                embeds: [likelyEmbed, unlikelyEmbed],
-                components: rows
+                embeds: [likelyEmbed],
+                components: likelyRows
+            });
+
+            // Create buttons for unlikely matches
+            const unlikelyButtons = [];
+            const unlikelyRivalsForButtons = rivalsData.unlikelyMatches
+                .filter(r => !r.isUserGuild) // Skip user's own guild
+                .slice(0, 10); // Max 10 buttons
+
+            for (const rival of unlikelyRivalsForButtons) {
+                const button = new ButtonBuilder()
+                    .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
+                    .setLabel(`${rival.name.substring(0, 20)}`) // Max 80 chars, truncate to 20
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔍');
+                unlikelyButtons.push(button);
+            }
+
+            // Split unlikely buttons into rows (max 5 per row)
+            const unlikelyRows = [];
+            if (unlikelyButtons.length > 0) {
+                const row1 = new ActionRowBuilder().addComponents(unlikelyButtons.slice(0, 5));
+                unlikelyRows.push(row1);
+
+                if (unlikelyButtons.length > 5) {
+                    const row2 = new ActionRowBuilder().addComponents(unlikelyButtons.slice(5, 10));
+                    unlikelyRows.push(row2);
+                }
+            }
+
+            // Send unlikely embed with its buttons
+            await interaction.followUp({
+                embeds: [unlikelyEmbed],
+                components: unlikelyRows
             });
 
             this.logger.info(`✅ Rivals data for Clan ID ${clanId} sent to ${interaction.user.tag}`);
