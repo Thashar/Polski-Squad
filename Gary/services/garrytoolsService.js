@@ -534,22 +534,118 @@ class GarrytoolsService {
 
     async analyzeSingleGuild(userGuildId) {
         this.logger.info(`🔍 Analyzing Guild ID: ${userGuildId} with substitution logic`);
-        
+
         try {
             const fixedGuilds = [42576, 42566, 42575, 42560];
             const modifiedGuilds = this.modifyGuildIds(userGuildId, fixedGuilds);
-            
+
             const groupId = await this.getGroupId(modifiedGuilds);
-            
+
             const result = await this.fetchGroupDetails(groupId);
             this.logger.info(`📊 Found ${result.guilds.length} guilds`);
-            
+
             return result;
         } catch (error) {
             this.logger.error(`❌ Error during Guild ID ${userGuildId} analysis:`, error.message);
             throw new Error(`Guild ID ${userGuildId} analysis failed: ${error.message}`);
         }
     }
+
+    async getRivalsData(clanId) {
+        this.logger.info(`🎯 Fetching rivals data for Clan ID: ${clanId}`);
+
+        try {
+            // Step 1: Fetch the rivals form page
+            const rivalsUrl = 'https://garrytools.com/lunar/rivals';
+            const mainPageResponse = await this.makeRequest(rivalsUrl);
+            const $ = cheerio.load(mainPageResponse.data);
+
+            // Step 2: Parse form and prepare POST data
+            const formData = new URLSearchParams();
+            formData.append('clanId', clanId.toString());
+
+            // Add hidden fields if any
+            $('input[type="hidden"]').each((i, element) => {
+                const name = $(element).attr('name');
+                const value = $(element).attr('value');
+                if (name && value) {
+                    formData.append(name, value);
+                }
+            });
+
+            // Add CSRF token if present
+            const csrfToken = $('meta[name="csrf-token"]').attr('content');
+            if (csrfToken) {
+                formData.append('_token', csrfToken);
+            }
+
+            // Step 3: Submit form via POST
+            const response = await this.makePostRequest(rivalsUrl, formData, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Referer': rivalsUrl,
+                    'Origin': 'https://garrytools.com'
+                },
+                maxRedirects: 10,
+                validateStatus: (status) => status < 500
+            });
+
+            // Step 4: Parse the results page
+            const resultsHtml = cheerio.load(response.data);
+            const tables = resultsHtml('table.table');
+
+            if (tables.length < 2) {
+                throw new Error('Expected 2 tables on rivals page, found ' + tables.length);
+            }
+
+            // Step 5: Parse first table (most likely matches)
+            const likelyMatches = this.parseRivalsTable(resultsHtml, tables[0]);
+
+            // Step 6: Parse second table (unlikely matches)
+            const unlikelyMatches = this.parseRivalsTable(resultsHtml, tables[1]);
+
+            this.logger.info(`✅ Parsed rivals data: ${likelyMatches.length} likely, ${unlikelyMatches.length} unlikely`);
+
+            return {
+                likelyMatches,
+                unlikelyMatches
+            };
+
+        } catch (error) {
+            this.logger.error(`❌ Error fetching rivals data for Clan ID ${clanId}:`, error.message);
+            throw new Error(`Rivals data fetch failed: ${error.message}`);
+        }
+    }
+
+    parseRivalsTable($, table) {
+        const rivals = [];
+        const tbody = $(table).find('tbody');
+
+        tbody.find('tr').each((index, row) => {
+            const cells = $(row).find('td');
+            if (cells.length < 7) return;
+
+            const isUserGuild = $(row).hasClass('text-success') ||
+                              $(cells[0]).hasClass('text-success');
+
+            const rival = {
+                rank: $(cells[0]).text().trim(),
+                guildId: $(cells[1]).text().trim(),
+                name: $(cells[2]).text().trim(),
+                members: $(cells[3]).text().trim(),
+                leader: $(cells[4]).text().trim(),
+                grade: $(cells[5]).text().trim(),
+                score: $(cells[6]).text().trim(),
+                isUserGuild: isUserGuild
+            };
+
+            rivals.push(rival);
+        });
+
+        return rivals;
+    }
 }
+
+module.exports = GarrytoolsService;
 
 module.exports = GarrytoolsService;

@@ -185,6 +185,12 @@
           "requiredPermission": "administrator"
         },
         {
+          "name": "/rivals",
+          "description": "Wyświetla potencjalnych rywali klanu na podstawie Guild ID (likely i unlikely matches)",
+          "usage": "/rivals → podaj Guild ID w formularzu",
+          "requiredPermission": "public"
+        },
+        {
           "name": "/search",
           "description": "Wyszukuje gildie po nazwie (przeszukuje top gildie)",
           "usage": "/search → wpisz nazwę gildii w formularzu",

@@ -1,6 +1,6 @@
 ### 🎮 Gary Bot
 
-**9 Systemów:**
+**10 Systemów:**
 1. **Lunar Mine** - `apiService.js`: Fetch garrytools.com/lunar, cheerio parse, 4 gildie, członkowie sorted by attack
 2. **Wyszukiwanie** - `guildSearchService.js`: Fuzzy matching (exact/startsWith/contains/levenshtein), tryby TOP500/GLOBAL
 3. **Cache** - `dataService.js`: Persistent JSON (clans, rank, members), refresh 24h/manual/start
@@ -11,8 +11,9 @@
 7b. **Snapshot graczy LME** - `clanHistoryService.savePlayerSnapshot()`: RC+TC i atak per gracz zapisywane do `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień, klucz = lowercase nick gry); odczytywane przez Stalker bot
 8. **Wątki** - Obsługa `parentId`, whitelist check
 9. **Emoji** - Server emoji w embedach
+10. **Rivals** - `garrytoolsService.getRivalsData()`: Fetch garrytools.com/lunar/rivals z Guild ID, POST formularz, parse 2 tabele (likely/unlikely matches), zwraca rank, Guild ID, name, members, leader, grade, score; wyświetlane w 2 embedach Discord
 
-**Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`, `/lme-snapshot` (admin — ręczny snapshot + zapis historii, podmieniona `/test`)
+**Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`, `/lme-snapshot` (admin — ręczny snapshot + zapis historii, podmieniona `/test`), `/rivals` (wyszukiwanie rywali na podstawie Guild ID)
 **Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_LIST, WEBSHARE_URL
 
 ---

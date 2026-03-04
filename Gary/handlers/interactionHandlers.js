@@ -57,7 +57,11 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('lme-snapshot')
-                .setDescription('Pobierz aktualny snapshot Lunar Mine i zapisz historię (tylko Admin)')
+                .setDescription('Pobierz aktualny snapshot Lunar Mine i zapisz historię (tylko Admin)'),
+
+            new SlashCommandBuilder()
+                .setName('rivals')
+                .setDescription('Display potential rival clans for the upcoming week based on your Guild ID')
         ];
     }
 
@@ -154,6 +158,10 @@ class InteractionHandler {
 
                 case 'lme-snapshot':
                     await this.handleLmeSnapshotCommand(interaction);
+                    break;
+
+                case 'rivals':
+                    await this.handleRivalsCommand(interaction);
                     break;
             }
         } catch (error) {
@@ -534,6 +542,16 @@ class InteractionHandler {
             else if (modalId === 'ee_modal') {
                 const playerName = interaction.fields.getTextInputValue('name');
                 await this.processEeCommand(interaction, playerName);
+            }
+            else if (modalId === 'rivals_modal') {
+                const clanId = parseInt(interaction.fields.getTextInputValue('clanid'));
+
+                if (isNaN(clanId) || clanId < 1 || clanId > 999999) {
+                    await interaction.reply({ content: '❌ Clan ID must be a valid number between 1 and 999999!', ephemeral: true });
+                    return;
+                }
+
+                await this.processRivalsCommand(interaction, clanId);
             }
         } catch (error) {
             this.logger.error('❌ Error handling modal submit:', error);
@@ -2222,6 +2240,107 @@ class InteractionHandler {
 </svg>`;
 
         return sharp(Buffer.from(svg)).png().toBuffer();
+    }
+
+    async handleRivalsCommand(interaction) {
+        // Show modal form for clan ID input
+        const modal = new ModalBuilder()
+            .setCustomId('rivals_modal')
+            .setTitle('🎯 Find Rival Clans');
+
+        const clanIdInput = new TextInputBuilder()
+            .setCustomId('clanid')
+            .setLabel('Your Guild ID')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter your Guild ID (1-999999)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(6);
+
+        const row = new ActionRowBuilder().addComponents(clanIdInput);
+        modal.addComponents(row);
+
+        await interaction.showModal(modal);
+    }
+
+    async processRivalsCommand(interaction, clanId) {
+        await interaction.deferReply();
+
+        try {
+            this.logger.info(`🎯 Processing rivals data for Clan ID: ${clanId}`);
+
+            // Fetch rivals data from garrytools
+            const rivalsData = await this.garrytoolsService.getRivalsData(clanId);
+
+            // Create embed for likely matches
+            const likelyEmbed = new EmbedBuilder()
+                .setTitle('⚔️ Most Likely Rival Matches This Week')
+                .setColor(0x00ff00)
+                .setDescription('These clans are most likely to match with you this week:')
+                .setTimestamp();
+
+            if (rivalsData.likelyMatches.length === 0) {
+                likelyEmbed.addFields({ name: 'No Data', value: 'No likely matches found.', inline: false });
+            } else {
+                rivalsData.likelyMatches.forEach(rival => {
+                    const emoji = rival.isUserGuild ? '👑 ' : '';
+                    const fieldValue =
+                        `**Guild ID:** ${rival.guildId}\n` +
+                        `**Members:** ${rival.members}\n` +
+                        `**Leader:** ${rival.leader}\n` +
+                        `**Grade:** ${rival.grade} (${rival.score})`;
+
+                    likelyEmbed.addFields({
+                        name: `${emoji}#${rival.rank} - ${rival.name}`,
+                        value: fieldValue,
+                        inline: true
+                    });
+                });
+            }
+
+            // Create embed for unlikely matches
+            const unlikelyEmbed = new EmbedBuilder()
+                .setTitle('🎲 Unlikely Rival Matches')
+                .setColor(0xff9900)
+                .setDescription('These clans are unlikely to match with you this week:')
+                .setTimestamp();
+
+            if (rivalsData.unlikelyMatches.length === 0) {
+                unlikelyEmbed.addFields({ name: 'No Data', value: 'No unlikely matches found.', inline: false });
+            } else {
+                rivalsData.unlikelyMatches.forEach(rival => {
+                    const emoji = rival.isUserGuild ? '👑 ' : '';
+                    const fieldValue =
+                        `**Guild ID:** ${rival.guildId}\n` +
+                        `**Members:** ${rival.members}\n` +
+                        `**Leader:** ${rival.leader}\n` +
+                        `**Grade:** ${rival.grade} (${rival.score})`;
+
+                    unlikelyEmbed.addFields({
+                        name: `${emoji}#${rival.rank} - ${rival.name}`,
+                        value: fieldValue,
+                        inline: true
+                    });
+                });
+            }
+
+            // Send both embeds
+            await interaction.editReply({ embeds: [likelyEmbed, unlikelyEmbed] });
+
+            this.logger.info(`✅ Rivals data for Clan ID ${clanId} sent to ${interaction.user.tag}`);
+
+        } catch (error) {
+            this.logger.error(`❌ Error processing rivals for Clan ID ${clanId}:`, error);
+
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('❌ Rivals Lookup Error')
+                .setDescription(`Failed to fetch rivals data for Clan ID: ${clanId}`)
+                .addFields({ name: 'Error Details', value: error.message })
+                .setColor(0xff0000)
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
     }
 }
 
