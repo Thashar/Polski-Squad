@@ -204,19 +204,39 @@ class InteractionHandler {
     }
 
     async handleButtonInteraction(interaction) {
+        const buttonId = interaction.customId;
+
+        // Handle rivals detail buttons
+        if (buttonId.startsWith('rivals_detail_')) {
+            const parts = buttonId.split('_');
+            const guildId = parseInt(parts[2]);
+            const authorizedUserId = parts[3];
+
+            // Check if the user clicking is the one who invoked the command
+            if (interaction.user.id !== authorizedUserId) {
+                await interaction.reply({
+                    content: '❌ Only the person who used the command can view details!',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            await this.handleRivalsDetailButton(interaction, guildId);
+            return;
+        }
+
         if (!hasPermission(interaction, this.config.authorizedRoles)) {
-            await interaction.reply({ 
-                content: '❌ You do not have permission to use buttons!', 
-                ephemeral: true 
+            await interaction.reply({
+                content: '❌ You do not have permission to use buttons!',
+                ephemeral: true
             });
             return;
         }
-        
-        const buttonId = interaction.customId;
+
         if (!buttonId.includes('::')) {
-            await interaction.reply({ 
-                content: '❌ Unknown button!', 
-                ephemeral: true 
+            await interaction.reply({
+                content: '❌ Unknown button!',
+                ephemeral: true
             });
             return;
         }
@@ -2276,6 +2296,15 @@ class InteractionHandler {
             const userGuild = [...rivalsData.likelyMatches, ...rivalsData.unlikelyMatches].find(r => r.isUserGuild);
             const userScore = userGuild ? parseInt(userGuild.score) : 0;
 
+            // Fetch level data from cache for all rivals
+            const allRivals = [...rivalsData.likelyMatches, ...rivalsData.unlikelyMatches];
+            for (const rival of allRivals) {
+                const cachedClan = this.clanService.findGuildById(parseInt(rival.guildId));
+                if (cachedClan) {
+                    rival.level = cachedClan.level;
+                }
+            }
+
             // Helper function to format rival data with conditional emojis
             const formatRivalField = (rival) => {
                 // Parse member count (e.g., "40/40" -> 40)
@@ -2294,10 +2323,15 @@ class InteractionHandler {
                     scoreEmoji = ' <a:PepeAlarmMan:1341086085089857619>';
                 }
 
-                return `🆔 **Guild ID:** ${rival.guildId}\n` +
-                       `👥 **Members:** ${rival.members}${membersEmoji}\n` +
-                       `👤 **Leader:** ${rival.leader}\n` +
-                       `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
+                let result = `🆔 **Guild ID:** ${rival.guildId}\n`;
+                if (rival.level) {
+                    result += `📊 **Level:** ${rival.level}\n`;
+                }
+                result += `👥 **Members:** ${rival.members}${membersEmoji}\n` +
+                         `👤 **Leader:** ${rival.leader}\n` +
+                         `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
+
+                return result;
             };
 
             // Create embed for likely matches
@@ -2346,8 +2380,38 @@ class InteractionHandler {
                 });
             }
 
-            // Send both embeds
-            await interaction.editReply({ embeds: [likelyEmbed, unlikelyEmbed] });
+            // Create buttons for detailed analysis (max 10 clans = 2 rows)
+            const buttons = [];
+            const allRivalsForButtons = [...rivalsData.likelyMatches, ...rivalsData.unlikelyMatches]
+                .filter(r => !r.isUserGuild) // Skip user's own guild
+                .slice(0, 10); // Max 10 buttons
+
+            for (const rival of allRivalsForButtons) {
+                const button = new ButtonBuilder()
+                    .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
+                    .setLabel(`${rival.name.substring(0, 20)}`) // Max 80 chars, truncate to 20
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔍');
+                buttons.push(button);
+            }
+
+            // Split buttons into rows (max 5 per row)
+            const rows = [];
+            if (buttons.length > 0) {
+                const row1 = new ActionRowBuilder().addComponents(buttons.slice(0, 5));
+                rows.push(row1);
+
+                if (buttons.length > 5) {
+                    const row2 = new ActionRowBuilder().addComponents(buttons.slice(5, 10));
+                    rows.push(row2);
+                }
+            }
+
+            // Send both embeds with buttons
+            await interaction.editReply({
+                embeds: [likelyEmbed, unlikelyEmbed],
+                components: rows
+            });
 
             this.logger.info(`✅ Rivals data for Clan ID ${clanId} sent to ${interaction.user.tag}`);
 
@@ -2362,6 +2426,65 @@ class InteractionHandler {
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
+
+    async handleRivalsDetailButton(interaction, guildId) {
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            this.logger.info(`🔍 Fetching detailed data for Guild ID: ${guildId}`);
+
+            // Use the same logic as /analyse - fetch group details
+            const fixedGuilds = [42576, 42566, 42575, 42560];
+            const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, fixedGuilds);
+            const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds);
+            const details = await this.garrytoolsService.fetchGroupDetails(groupId);
+
+            const guild = details.guilds.find(g => g.guildId === guildId);
+            if (!guild) {
+                await interaction.editReply({
+                    content: `❌ Guild with ID ${guildId} not found in results.`,
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create detailed embed (similar to /analyse)
+            const guildSummary =
+                `**👥 Members:** ${guild.members.length}\n` +
+                `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
+                `**<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> RC+TC:** ${guild.totalRelicCores}+\n` +
+                `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
+                `**⭐ Level:** ${guild.level || 'N/A'}\n` +
+                `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
+                `**💥 Grade:** ${guild.grade || 'N/A'}\n` +
+                `**🆔 Guild ID:** ${guild.guildId || 'N/A'}`;
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🏰 ${guild.title}`)
+                .setColor(0x8B4513)
+                .setDescription(guildSummary)
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed], ephemeral: true });
+
+            // Send member list as followUp
+            await this.sendGuildMembersList(interaction, guild);
+
+            this.logger.info(`✅ Detailed analysis of ${guildId} sent to ${interaction.user.tag}`);
+
+        } catch (error) {
+            this.logger.error(`❌ Error fetching details for Guild ID ${guildId}:`, error);
+
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('❌ Details Fetch Error')
+                .setDescription(`Failed to fetch details for Guild ID: ${guildId}`)
+                .addFields({ name: 'Error Details', value: error.message })
+                .setColor(0xff0000)
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [errorEmbed], ephemeral: true });
         }
     }
 }
