@@ -327,13 +327,24 @@ class ProxyService {
             return null;
         }
 
-        const availableProxies = this.proxyList.filter(proxy => !this.usedProxies.has(proxy));
+        // Filtruj zarówno przez usedProxies JAK I przez isProxyDisabled
+        const availableProxies = this.proxyList.filter(proxy =>
+            !this.usedProxies.has(proxy) && !this.isProxyDisabled(proxy)
+        );
 
         if (availableProxies.length === 0) {
-            // Jeśli wszystkie proxy zostały użyte, resetuj listę i użyj losowego
+            // Jeśli wszystkie dostępne proxy zostały użyte, resetuj listę i użyj losowego
+            // ALE nadal pomijaj zablokowane proxy
             this.usedProxies.clear();
+            const nonBlockedProxies = this.proxyList.filter(proxy => !this.isProxyDisabled(proxy));
+
+            if (nonBlockedProxies.length === 0) {
+                this.logger.warn('⚠️ Wszystkie proxy są zablokowane!');
+                return null;
+            }
+
             // Dodaj shuffle dla większej losowości
-            const shuffledProxies = [...this.proxyList].sort(() => Math.random() - 0.5);
+            const shuffledProxies = [...nonBlockedProxies].sort(() => Math.random() - 0.5);
             const selectedProxy = shuffledProxies[0];
             this.usedProxies.add(selectedProxy);
             this.logger.info(`🔄 Proxy pool exhausted, reshuffled and selected: ${this.maskProxy(selectedProxy)}`);
@@ -344,7 +355,7 @@ class ProxyService {
         const shuffledAvailable = [...availableProxies].sort(() => Math.random() - 0.5);
         const selectedProxy = shuffledAvailable[0];
         this.usedProxies.add(selectedProxy);
-        this.logger.info(`🎲 Random selection from ${availableProxies.length} available proxies`);
+        this.logger.info(`🎲 Random selection from ${availableProxies.length} available proxies (excluding blocked)`);
         return selectedProxy;
     }
 
