@@ -2282,18 +2282,19 @@ class InteractionHandler {
             if (rivalsData.likelyMatches.length === 0) {
                 likelyEmbed.addFields({ name: 'No Data', value: 'No likely matches found.', inline: false });
             } else {
-                rivalsData.likelyMatches.forEach(rival => {
-                    const emoji = rival.isUserGuild ? '👑 ' : '';
+                const clanEmojis = ['🏰', '⚔️', '🛡️', '🗡️', '🏴', '🎯', '🔥', '⚡', '🌟', '🦅'];
+                rivalsData.likelyMatches.forEach((rival, index) => {
+                    const clanEmoji = rival.isUserGuild ? '👑' : clanEmojis[index % clanEmojis.length];
                     const fieldValue =
-                        `**Guild ID:** ${rival.guildId}\n` +
-                        `**Members:** ${rival.members}\n` +
-                        `**Leader:** ${rival.leader}\n` +
-                        `**Grade:** ${rival.grade} (${rival.score})`;
+                        `🆔 **Guild ID:** ${rival.guildId}\n` +
+                        `👥 **Members:** ${rival.members}\n` +
+                        `👤 **Leader:** ${rival.leader}\n` +
+                        `⭐ **Grade:** ${rival.grade} (${rival.score})`;
 
                     likelyEmbed.addFields({
-                        name: `${emoji}#${rival.rank} - ${rival.name}`,
+                        name: `${clanEmoji} #${rival.rank} — ${rival.name}`,
                         value: fieldValue,
-                        inline: true
+                        inline: false
                     });
                 });
             }
@@ -2308,18 +2309,19 @@ class InteractionHandler {
             if (rivalsData.unlikelyMatches.length === 0) {
                 unlikelyEmbed.addFields({ name: 'No Data', value: 'No unlikely matches found.', inline: false });
             } else {
-                rivalsData.unlikelyMatches.forEach(rival => {
-                    const emoji = rival.isUserGuild ? '👑 ' : '';
+                const clanEmojis = ['🏰', '⚔️', '🛡️', '🗡️', '🏴', '🎯', '🔥', '⚡', '🌟', '🦅'];
+                rivalsData.unlikelyMatches.forEach((rival, index) => {
+                    const clanEmoji = rival.isUserGuild ? '👑' : clanEmojis[index % clanEmojis.length];
                     const fieldValue =
-                        `**Guild ID:** ${rival.guildId}\n` +
-                        `**Members:** ${rival.members}\n` +
-                        `**Leader:** ${rival.leader}\n` +
-                        `**Grade:** ${rival.grade} (${rival.score})`;
+                        `🆔 **Guild ID:** ${rival.guildId}\n` +
+                        `👥 **Members:** ${rival.members}\n` +
+                        `👤 **Leader:** ${rival.leader}\n` +
+                        `⭐ **Grade:** ${rival.grade} (${rival.score})`;
 
                     unlikelyEmbed.addFields({
-                        name: `${emoji}#${rival.rank} - ${rival.name}`,
+                        name: `${clanEmoji} #${rival.rank} — ${rival.name}`,
                         value: fieldValue,
-                        inline: true
+                        inline: false
                     });
                 });
             }
