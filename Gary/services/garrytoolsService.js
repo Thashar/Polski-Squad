@@ -598,11 +598,22 @@ class GarrytoolsService {
                 throw new Error('Expected 2 tables on rivals page, found ' + tables.length);
             }
 
-            // Step 5: Parse first table (most likely matches)
-            const likelyMatches = this.parseRivalsTable(resultsHtml, tables[0]);
+            // Step 5: Identify tables by footer text
+            let likelyMatches = [];
+            let unlikelyMatches = [];
 
-            // Step 6: Parse second table (unlikely matches)
-            const unlikelyMatches = this.parseRivalsTable(resultsHtml, tables[1]);
+            tables.each((index, table) => {
+                const footerText = resultsHtml(table).find('tfoot').text().toLowerCase();
+                const matches = this.parseRivalsTable(resultsHtml, table);
+
+                if (footerText.includes('most likely')) {
+                    likelyMatches = matches;
+                    this.logger.info(`📊 Table ${index}: Likely matches (${matches.length} clans)`);
+                } else if (footerText.includes('unlikely')) {
+                    unlikelyMatches = matches;
+                    this.logger.info(`📊 Table ${index}: Unlikely matches (${matches.length} clans)`);
+                }
+            });
 
             this.logger.info(`✅ Parsed rivals data: ${likelyMatches.length} likely, ${unlikelyMatches.length} unlikely`);
 
