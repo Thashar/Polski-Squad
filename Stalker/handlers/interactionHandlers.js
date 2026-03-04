@@ -10251,7 +10251,9 @@ async function handleClanProgresCommand(interaction, sharedState) {
 // Funkcja pomocnicza wyświetlająca progres TOP30 dla klanu
 async function showClanProgress(interaction, selectedClan, sharedState) {
     const { config, databaseService } = sharedState;
-    const clanName = config.roleDisplayNames[selectedClan];
+    // Usuń emoji z nazwy klanu dla wykresów (SVG nie renderuje emoji poprawnie)
+    const clanNameFull = config.roleDisplayNames[selectedClan];
+    const clanName = (clanNameFull || '').replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]/gu, '').trim();
 
     try {
         // Pobierz wszystkie dostępne tygodnie
@@ -10499,8 +10501,11 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
                     replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://clan_rank.png'));
                 }
 
-                // Funkcja formatowania ataku
-                const fmtAttack = (v) => Number(v || 0).toLocaleString('pl-PL');
+                // Funkcja formatowania ataku - w milionach z max 2 miejscami po przecinku
+                const fmtAttack = (v) => {
+                    const millions = (v || 0) / 1e6;
+                    return `${millions.toFixed(2)}M`;
+                };
 
                 // Wykresy RC+TC i Atak
                 const [rcBuf, atkBuf] = await Promise.all([
