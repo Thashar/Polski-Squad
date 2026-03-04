@@ -107,7 +107,7 @@ class InteractionHandler {
         const { commandName } = interaction;
         
         // Check permissions for admin-only commands
-        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'lme-snapshot'];
+        const adminOnlyCommands = ['lunarmine', 'refresh', 'proxy-stats', 'proxy-test', 'analyse', 'proxy-refresh', 'lme-snapshot', 'rivals'];
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
