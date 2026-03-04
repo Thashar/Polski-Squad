@@ -2305,31 +2305,27 @@ class InteractionHandler {
                 }
             }
 
-            // Fetch detailed data (RC+TC, Total Power) for all rivals
-            this.logger.info(`🔄 Fetching detailed data for ${allRivals.length} clans... (this may take a while)`);
-            let processed = 0;
-            for (const rival of allRivals) {
-                try {
-                    processed++;
-                    this.logger.info(`📊 [${processed}/${allRivals.length}] Fetching details for Guild ID: ${rival.guildId}`);
+            // Fetch RC+TC and Total Power from latest guild snapshot (from /lme-snapshot)
+            if (this.clanHistoryService && this.clanHistoryService.history.guildSnapshots.length > 0) {
+                // Get latest snapshot
+                const latestSnapshot = this.clanHistoryService.history.guildSnapshots[this.clanHistoryService.history.guildSnapshots.length - 1];
+                this.logger.info(`📊 Using guild snapshot from week ${latestSnapshot.weekNumber}/${latestSnapshot.year} (${latestSnapshot.guilds.length} guilds)`);
 
-                    const modifiedGuilds = this.garrytoolsService.modifyGuildIds(parseInt(rival.guildId), this.FIXED_GUILDS);
-                    const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds);
-                    const details = await this.garrytoolsService.fetchGroupDetails(groupId);
+                for (const rival of allRivals) {
+                    const guildId = parseInt(rival.guildId);
+                    const snapshotGuild = latestSnapshot.guilds.find(g => g.id === guildId);
 
-                    const guildDetails = details.guilds.find(g => g.guildId === parseInt(rival.guildId));
-                    if (guildDetails) {
-                        rival.totalPower = guildDetails.totalPower;
-                        rival.totalRelicCores = guildDetails.totalRelicCores;
-                        this.logger.info(`✅ [${processed}/${allRivals.length}] Guild ${rival.guildId}: ${formatNumber(guildDetails.totalPower, 2)} power, ${guildDetails.totalRelicCores}+ RC+TC`);
+                    if (snapshotGuild) {
+                        rival.totalPower = snapshotGuild.totalPower;
+                        rival.totalRelicCores = snapshotGuild.totalRelicCores;
+                        this.logger.info(`✅ Guild ${guildId} found in snapshot: ${formatNumber(snapshotGuild.totalPower, 2)} power, ${snapshotGuild.totalRelicCores}+ RC+TC`);
                     } else {
-                        this.logger.warn(`⚠️ [${processed}/${allRivals.length}] Guild ${rival.guildId} not found in fetchGroupDetails results`);
+                        this.logger.info(`ℹ️ Guild ${guildId} not found in snapshot (not captured by /lme-snapshot)`);
                     }
-                } catch (error) {
-                    this.logger.error(`❌ [${processed}/${allRivals.length}] Failed to fetch details for Guild ${rival.guildId}:`, error.message);
                 }
+            } else {
+                this.logger.warn('⚠️ No guild snapshots available - run /lme-snapshot first to see RC+TC data');
             }
-            this.logger.info(`✅ Finished fetching detailed data for all rivals`);
 
             // Helper function to format rival data with conditional emojis
             const formatRivalField = (rival) => {
