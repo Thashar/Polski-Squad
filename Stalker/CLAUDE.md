@@ -59,17 +59,21 @@
 **Progres Klanu** - `/clan-progres` (członkowie klanu i administratorzy):
 - Wybór klanu przez select menu (Main, Clan 2, Clan 1, Clan 0)
 - Wyświetla progres TOP30 klanu (suma wyników 30 najlepszych graczy) przez ostatnie 54 tygodnie
-- **Wykres:** Wizualizacja progresu TOP30 (podobny do wykresu w `/player-status`, ale dla klanu)
-  - Zielona linia (Catmull-Rom spline) pokazująca zmiany sumy TOP30
-  - Automatyczne ukrywanie co drugiej etykiety gdy >20 tygodni
-  - Generowana przez `generateClanProgressChart()` w `interactionHandlers.js`
-- **Skumulowany progres/regres:**
+- **4 Wykresy (podobne do `/player-status`, ale dla klanu):**
+  1. **TOP30 Progres (Faza 1):** Zielona linia pokazująca sumy TOP30 przez tygodnie - `generateClanProgressChart()`
+  2. **Ranking Klanu:** Złota linia pokazująca pozycję klanu w globalnym rankingu (oś Y odwrócona) - `generateClanRankChart()`
+  3. **RC+TC:** Zielona linia pokazująca łączne Relic Cores + Transmute Cores - `generateCombatChart()`
+  4. **Atak:** Czerwona linia pokazująca łączną siłę ataku klanu - `generateCombatChart()`
+  - Wszystkie wykresy: Catmull-Rom spline, automatyczne ukrywanie co drugiej etykiety gdy >20 tygodni
+  - Każdy wykres w osobnym embedzie (4 embedy razem)
+- **Historia Gary:** Wczytywana przez `loadClanGuildHistory()` z `shared_data/lme_guilds/week_YYYY_WW.json`
+  - Mapowanie klanu przez `config.garyGuildIds[clanKey]`
+  - Ostatnie 20 tygodni snapshots
+- **Skumulowany progres/regres (tylko TOP30 Faza 1):**
   - 🔹 Miesiąc (4 tyg) / 🔷 Kwartał (13 tyg) / 🔶 Pół roku (26 tyg)
   - Format: ▲ wzrost, ▼ spadek z separatorem polskim
-- **Progress bary:** Historia wyników z superskryptami pokazującymi zmiany tydzień-do-tygodnia
-- **Snapshot Gary:** Opcjonalne pole z danymi klanu (rank, grade score, RC+TC, siła ataku)
-  - Wczytywane z `shared_data/lme_guilds/week_YYYY_WW.json`
-  - Mapowanie przez `config.garyGuildIds[clanKey]`
+- **Progress bary:** Historia wyników TOP30 z superskryptami pokazującymi zmiany tydzień-do-tygodnia
+- **Snapshot Gary:** Opcjonalne pole z danymi klanu (rank, grade score, RC+TC, siła ataku) - najnowszy tydzień
 - **Auto-usuwanie:** Embed usuwany po 5 minutach przez `raportCleanupService`
 - Dostępna na kanałach WARNING + kanał specjalny + administratorzy/moderatorzy
 

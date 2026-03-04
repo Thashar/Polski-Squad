@@ -10472,23 +10472,60 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
 
         if (guildSnapshotField) embed.addFields(guildSnapshotField);
 
-        // Generuj wykres progresu TOP30 klanu
+        // Generuj wykresy dla klanu
+        const replyPayload = { embeds: [embed] };
         const chartFiles = [];
+
         try {
+            // Wykres TOP30 Progres (Faza 1)
             const progressChartBuffer = await generateClanProgressChart(clanProgressData, clanName);
             if (progressChartBuffer) {
                 chartFiles.push(new AttachmentBuilder(progressChartBuffer, { name: 'clan_progress.png' }));
                 embed.setImage('attachment://clan_progress.png');
             }
         } catch (chartError) {
-            logger.warn(`[CLAN-PROGRES] ⚠️ Nie udało się wygenerować wykresu dla ${clanName}:`, chartError.message);
+            logger.warn(`[CLAN-PROGRES] ⚠️ Nie udało się wygenerować wykresu TOP30 dla ${clanName}:`, chartError.message);
         }
 
+        // Wczytaj historię klanu z Gary snapshots (rank, RC+TC, atak)
+        const clanGuildHistory = loadClanGuildHistory(selectedClan, config);
+
+        if (clanGuildHistory.length >= 2) {
+            try {
+                // Wykres Rankingu
+                const rankChartBuffer = await generateClanRankChart(clanGuildHistory, clanName);
+                if (rankChartBuffer) {
+                    chartFiles.push(new AttachmentBuilder(rankChartBuffer, { name: 'clan_rank.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://clan_rank.png'));
+                }
+
+                // Funkcja formatowania ataku
+                const fmtAttack = (v) => Number(v || 0).toLocaleString('pl-PL');
+
+                // Wykresy RC+TC i Atak
+                const [rcBuf, atkBuf] = await Promise.all([
+                    generateCombatChart(clanGuildHistory, clanName, 'relicCores', 'RC+TC', '#43B581', v => String(v)),
+                    generateCombatChart(clanGuildHistory, clanName, 'attack', 'Atak', '#F04747', fmtAttack)
+                ]);
+
+                if (rcBuf) {
+                    chartFiles.push(new AttachmentBuilder(rcBuf, { name: 'clan_rc.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#43B581').setImage('attachment://clan_rc.png'));
+                }
+
+                if (atkBuf) {
+                    chartFiles.push(new AttachmentBuilder(atkBuf, { name: 'clan_atk.png' }));
+                    replyPayload.embeds.push(new EmbedBuilder().setColor('#F04747').setImage('attachment://clan_atk.png'));
+                }
+            } catch (chartError) {
+                logger.warn(`[CLAN-PROGRES] ⚠️ Nie udało się wygenerować wykresów Gary dla ${clanName}:`, chartError.message);
+            }
+        }
+
+        if (chartFiles.length > 0) replyPayload.files = chartFiles;
+
         // Wyślij publiczne wyniki
-        const reply = await interaction.followUp({
-            embeds: [embed],
-            files: chartFiles
-        });
+        const reply = await interaction.followUp(replyPayload);
 
         // Zaplanuj auto-usunięcie embeda po 5 minutach
         await sharedState.raportCleanupService.scheduleRaportDeletion(
@@ -12797,6 +12834,58 @@ function loadCombatHistory(userId) {
 }
 
 /**
+ * Wczytuje historię klanu z Gary snapshots (rank, RC+TC, atak)
+ * @param {string} clanKey - Klucz klanu ('main', '0', '1', '2')
+ * @param {Object} config - Konfiguracja z garyGuildIds
+ * @returns {Array<{weekNumber, year, rank, relicCores, attack}>}
+ */
+function loadClanGuildHistory(clanKey, config) {
+    const fs = require('fs');
+    const path = require('path');
+    try {
+        const guildsDir = path.join(__dirname, '../../shared_data/lme_guilds');
+        if (!fs.existsSync(guildsDir)) return [];
+
+        const garyGuildId = config.garyGuildIds?.[clanKey];
+        if (garyGuildId == null) return [];
+
+        const dirEntries = fs.readdirSync(guildsDir);
+        const weekFiles = dirEntries
+            .filter(f => f.startsWith('week_') && f.endsWith('.json'))
+            .sort();
+
+        const history = [];
+        for (const file of weekFiles) {
+            try {
+                const filePath = path.join(guildsDir, file);
+                const snapshot = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                const guild = (snapshot.guilds || []).find(g => g.id === garyGuildId);
+
+                if (guild) {
+                    history.push({
+                        weekNumber: snapshot.weekNumber,
+                        year: snapshot.year,
+                        rank: guild.rank || null,
+                        relicCores: guild.totalRelicCores || 0,
+                        attack: guild.totalPower || 0
+                    });
+                }
+            } catch (_) {
+                // Pomiń uszkodzone pliki
+                continue;
+            }
+        }
+
+        // Sortuj chronologicznie i zwróć ostatnie 20 tygodni
+        return history
+            .sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber)
+            .slice(-20);
+    } catch (_) {
+        return [];
+    }
+}
+
+/**
  * Format attack number for chart labels.
  * @param {number} v
  * @returns {string}
@@ -13028,6 +13117,95 @@ async function generateCompareCombatChart(h1, h2, name1, name2, metricKey, title
   ${buildDots(pts2, color2)}
   ${xLabels}
 </svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/**
+ * Wykres rankingu klanu w globalnym rankingu (oś Y odwrócona — miejsce 1 na górze)
+ * @param {Array<{weekNumber, year, rank}>} historyData
+ * @param {string} clanName
+ */
+async function generateClanRankChart(historyData, clanName) {
+    const sharp = require('sharp');
+    const filtered = historyData.filter(d => d.rank != null && d.rank > 0);
+    if (filtered.length < 2) return null;
+
+    const W = 800, H = 260;
+    const M = { top: 42, right: 28, bottom: 44, left: 52 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const ranks = filtered.map(d => d.rank);
+    const maxRank = Math.max(...ranks);
+    const minRank = 1;
+
+    // Y odwrócona: rank 1 = góra wykresu
+    const toX = (i) => M.left + (i / (filtered.length - 1)) * cW;
+    const allSameSingleRank = ranks.every(r => r === ranks[0]);
+    const toY = (rank) => allSameSingleRank ? M.top + cH / 2 : M.top + ((rank - minRank) / Math.max(maxRank - minRank, 1)) * cH;
+
+    const pts = filtered.map((d, i) => ({
+        x: toX(i),
+        y: toY(d.rank),
+        rank: d.rank,
+        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    }));
+
+    const lineColor = '#FFD700'; // Złoty dla rankingu
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath = buildCatmullRom(pts);
+
+    // Linie siatki Y (ranki)
+    const gridLines = Array.from({ length: 5 }, (_, i) => {
+        const rank = Math.round(minRank + (maxRank - minRank) * (i / 4));
+        const y = toY(rank);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#72767D" text-anchor="end">#${rank}</text>`;
+    }).join('\n    ');
+
+    // Etykiety X — co drugi tydzień jeśli jest więcej niż 20 tygodni
+    const showEveryNth = pts.length > 20 ? 2 : 1;
+    const xLabels = pts.map((p, idx) => {
+        if (idx % showEveryNth !== 0 && idx !== pts.length - 1) return '';
+        return `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`;
+    }).join('\n    ');
+
+    // Punkty z rankami
+    const dotsSvg = pts.map((p, idx) => {
+        const labelY = p.y < M.top + 16 ? p.y + 18 : p.y - 9;
+        const showLabel = (idx % showEveryNth === 0 || idx === pts.length - 1);
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
+    ${showLabel ? `<text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${lineColor}" text-anchor="middle" font-weight="bold">#${p.rank}</text>` : ''}`;
+    }).join('\n    ');
+
+    // Escape HTML entities
+    const safeClanName = clanName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${safeClanName}</text>
+  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Ranking Klanu</text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none"/>
+  ${dotsSvg}
+  ${xLabels}
+</svg>`;
+
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 

@@ -188,7 +188,7 @@
           "name": "/rivals",
           "description": "Wyświetla potencjalnych rywali klanu na podstawie Guild ID (likely i unlikely matches)",
           "usage": "/rivals → podaj Guild ID w formularzu",
-          "requiredPermission": "public"
+          "requiredPermission": "moderator"
         },
         {
           "name": "/search",
@@ -348,8 +348,8 @@
         },
         {
           "name": "/clan-progres",
-          "description": "Wyświetla progres TOP30 dla wybranego klanu przez ostatnie tygodnie z wykresem wizualizującym zmiany (tylko członkowie klanu)",
-          "usage": "/clan-progres → wybierz klan z menu → wykres + skumulowany progres + historia wyników",
+          "description": "Wyświetla progres TOP30 dla wybranego klanu przez ostatnie tygodnie z 4 wykresami (TOP30, Rank, RC+TC, Atak)",
+          "usage": "/clan-progres → wybierz klan z menu → 4 wykresy + skumulowany progres + historia wyników",
           "requiredPermission": "clan_member"
         },
         {
