@@ -10472,9 +10472,22 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
 
         if (guildSnapshotField) embed.addFields(guildSnapshotField);
 
+        // Generuj wykres progresu TOP30 klanu
+        const chartFiles = [];
+        try {
+            const progressChartBuffer = await generateClanProgressChart(clanProgressData, clanName);
+            if (progressChartBuffer) {
+                chartFiles.push(new AttachmentBuilder(progressChartBuffer, { name: 'clan_progress.png' }));
+                embed.setImage('attachment://clan_progress.png');
+            }
+        } catch (chartError) {
+            logger.warn(`[CLAN-PROGRES] ⚠️ Nie udało się wygenerować wykresu dla ${clanName}:`, chartError.message);
+        }
+
         // Wyślij publiczne wyniki
         const reply = await interaction.followUp({
-            embeds: [embed]
+            embeds: [embed],
+            files: chartFiles
         });
 
         // Zaplanuj auto-usunięcie embeda po 5 minutach
@@ -13015,6 +13028,105 @@ async function generateCompareCombatChart(h1, h2, name1, name2, metricKey, title
   ${buildDots(pts2, color2)}
   ${xLabels}
 </svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/**
+ * Wykres progresu TOP30 klanu (podobny do generateProgressChart, ale dla klanu)
+ * @param {Array} clanProgressData - Tablica z danymi TOP30 klanu (weekNumber, year, top30Sum)
+ * @param {string} clanName - Nazwa klanu
+ */
+async function generateClanProgressChart(clanProgressData, clanName) {
+    const sharp = require('sharp');
+    const rawData = [...clanProgressData].reverse().filter(d => d.top30Sum > 0);
+    if (rawData.length < 2) return null;
+
+    const W = 800, H = 260;
+    const M = { top: 42, right: 28, bottom: 44, left: 68 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    const scores = rawData.map(d => d.top30Sum);
+    const minScore = Math.min(...scores);
+    const maxScore = Math.max(...scores);
+    const scoreRange = maxScore - minScore || 1;
+    const yMin = Math.max(0, minScore - scoreRange * 0.15);
+    const yMax = maxScore + scoreRange * 0.28; // większy bufor na etykiety
+
+    const toX = (i) => M.left + (i / (rawData.length - 1)) * cW;
+    const toY = (s) => M.top + cH - ((s - yMin) / (yMax - yMin)) * cH;
+
+    const pts = rawData.map((d, i) => ({
+        x: toX(i), y: toY(d.top30Sum), score: d.top30Sum,
+        lbl: `${String(d.weekNumber).padStart(2, '0')}/${String(d.year).slice(-2)}`
+    }));
+
+    const lineColor = '#43B581'; // Zielony dla klanu
+
+    function buildCatmullRom(points) {
+        if (points.length < 2) return '';
+        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = i > 0 ? points[i - 1] : points[i];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+        }
+        return d;
+    }
+
+    const linePath = buildCatmullRom(pts);
+
+    const gridLines = Array.from({ length: 5 }, (_, i) => {
+        const s = yMin + (yMax - yMin) * (i / 4);
+        const y = toY(s);
+        const lbl = s >= 1000 ? `${(s / 1000).toFixed(1)}k` : Math.round(s).toString();
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#72767D" text-anchor="end">${lbl}</text>`;
+    }).join('\n    ');
+
+    // Etykiety X — co drugi tydzień jeśli jest więcej niż 20 tygodni
+    const showEveryNth = pts.length > 20 ? 2 : 1;
+    const xLabels = pts.map((p, idx) => {
+        if (idx % showEveryNth !== 0 && idx !== pts.length - 1) return '';
+        return `<text x="${p.x.toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${p.lbl}</text>`;
+    }).join('\n    ');
+
+    // Oblicz offsety etykiet — unikaj pionowego nachodzenia na siebie
+    const labelOffsets = pts.map(() => 8);
+    for (let i = 1; i < pts.length; i++) {
+        const prevLabelY = pts[i - 1].y - labelOffsets[i - 1];
+        const desiredLabelY = pts[i].y - 8;
+        if (Math.abs(desiredLabelY - prevLabelY) < 11) {
+            const newLabelY = Math.max(M.top - 10, Math.min(prevLabelY - 11, desiredLabelY));
+            labelOffsets[i] = pts[i].y - newLabelY;
+        }
+    }
+
+    // Punkty z wartościami nad każdym - co drugi punkt jeśli jest więcej niż 20 tygodni
+    const dotsSvg = pts.map((p, idx) => {
+        const scoreLbl = p.score.toLocaleString('pl-PL');
+        const showLabel = (idx % showEveryNth === 0 || idx === pts.length - 1) ? scoreLbl : '';
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${lineColor}" stroke-width="1.5"/>
+    ${showLabel ? `<text x="${p.x.toFixed(1)}" y="${(p.y - labelOffsets[idx]).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${showLabel}</text>` : ''}`;
+    }).join('\n    ');
+
+    // Escape HTML entities w nazwie klanu
+    const safeClanName = clanName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
+  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${safeClanName}</text>
+  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">TOP30 Progres</text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
+  <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none"/>
+  ${dotsSvg}
+  ${xLabels}
+</svg>`;
+
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 

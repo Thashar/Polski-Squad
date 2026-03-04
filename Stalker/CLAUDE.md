@@ -13,7 +13,7 @@
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend
-6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/img` (dodaj zdjęcie tabeli do Fazy 2)
+6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2)
 7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 9. **Kalkulator** - Auto-odpowiedź na słowo "kalkulator" w wiadomości → link do sio-tools.vercel.app, cooldown 1h per kanał (persistencja w `data/calculator_cooldowns.json`)
@@ -56,7 +56,24 @@
 - Embed z polami: każdy gracz osobno, posortowani według liczby problemów
 - Ephemeral (tylko dla wywołującego), max 25 graczy w raporcie
 
-**Obliczanie Progresu** - Logika dla `/progres`, `/player-status`, `/player-raport`:
+**Progres Klanu** - `/clan-progres` (członkowie klanu i administratorzy):
+- Wybór klanu przez select menu (Main, Clan 2, Clan 1, Clan 0)
+- Wyświetla progres TOP30 klanu (suma wyników 30 najlepszych graczy) przez ostatnie 54 tygodnie
+- **Wykres:** Wizualizacja progresu TOP30 (podobny do wykresu w `/player-status`, ale dla klanu)
+  - Zielona linia (Catmull-Rom spline) pokazująca zmiany sumy TOP30
+  - Automatyczne ukrywanie co drugiej etykiety gdy >20 tygodni
+  - Generowana przez `generateClanProgressChart()` w `interactionHandlers.js`
+- **Skumulowany progres/regres:**
+  - 🔹 Miesiąc (4 tyg) / 🔷 Kwartał (13 tyg) / 🔶 Pół roku (26 tyg)
+  - Format: ▲ wzrost, ▼ spadek z separatorem polskim
+- **Progress bary:** Historia wyników z superskryptami pokazującymi zmiany tydzień-do-tygodnia
+- **Snapshot Gary:** Opcjonalne pole z danymi klanu (rank, grade score, RC+TC, siła ataku)
+  - Wczytywane z `shared_data/lme_guilds/week_YYYY_WW.json`
+  - Mapowanie przez `config.garyGuildIds[clanKey]`
+- **Auto-usuwanie:** Embed usuwany po 5 minutach przez `raportCleanupService`
+- Dostępna na kanałach WARNING + kanał specjalny + administratorzy/moderatorzy
+
+**Obliczanie Progresu** - Logika dla `/progres`, `/player-status`, `/player-raport`, `/clan-progres`:
 - **Progres miesięczny:** Najwyższy wynik z ostatnich 4 tygodni vs tydzień 5 (min 5 tygodni)
 - **Progres kwartalny:** Najwyższy wynik z ostatnich 12 tygodni vs tydzień 13 (min 13 tygodni)
 - **Dostępne dane:** Najwyższy ze wszystkich vs najstarszy wynik > 0
