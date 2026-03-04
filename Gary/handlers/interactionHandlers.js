@@ -2305,6 +2305,32 @@ class InteractionHandler {
                 }
             }
 
+            // Fetch detailed data (RC+TC, Total Power) for all rivals
+            this.logger.info(`🔄 Fetching detailed data for ${allRivals.length} clans... (this may take a while)`);
+            let processed = 0;
+            for (const rival of allRivals) {
+                try {
+                    processed++;
+                    this.logger.info(`📊 [${processed}/${allRivals.length}] Fetching details for Guild ID: ${rival.guildId}`);
+
+                    const modifiedGuilds = this.garrytoolsService.modifyGuildIds(parseInt(rival.guildId), this.FIXED_GUILDS);
+                    const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds);
+                    const details = await this.garrytoolsService.fetchGroupDetails(groupId);
+
+                    const guildDetails = details.guilds.find(g => g.guildId === parseInt(rival.guildId));
+                    if (guildDetails) {
+                        rival.totalPower = guildDetails.totalPower;
+                        rival.totalRelicCores = guildDetails.totalRelicCores;
+                        this.logger.info(`✅ [${processed}/${allRivals.length}] Guild ${rival.guildId}: ${formatNumber(guildDetails.totalPower, 2)} power, ${guildDetails.totalRelicCores}+ RC+TC`);
+                    } else {
+                        this.logger.warn(`⚠️ [${processed}/${allRivals.length}] Guild ${rival.guildId} not found in fetchGroupDetails results`);
+                    }
+                } catch (error) {
+                    this.logger.error(`❌ [${processed}/${allRivals.length}] Failed to fetch details for Guild ${rival.guildId}:`, error.message);
+                }
+            }
+            this.logger.info(`✅ Finished fetching detailed data for all rivals`);
+
             // Helper function to format rival data with conditional emojis
             const formatRivalField = (rival) => {
                 // Parse member count (e.g., "40/40" -> 40)
@@ -2326,6 +2352,12 @@ class InteractionHandler {
                 let result = `🆔 **Guild ID:** ${rival.guildId}\n`;
                 if (rival.level) {
                     result += `📊 **Level:** ${rival.level}\n`;
+                }
+                if (rival.totalPower !== undefined) {
+                    result += `⚔️ **Total Power:** ${formatNumber(rival.totalPower, 2)}\n`;
+                }
+                if (rival.totalRelicCores !== undefined) {
+                    result += `<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> **RC+TC:** ${rival.totalRelicCores}+\n`;
                 }
                 result += `👥 **Members:** ${rival.members}${membersEmoji}\n` +
                          `👤 **Leader:** ${rival.leader}\n` +
@@ -2436,8 +2468,7 @@ class InteractionHandler {
             this.logger.info(`🔍 Fetching detailed data for Guild ID: ${guildId}`);
 
             // Use the same logic as /analyse - fetch group details
-            const fixedGuilds = [42576, 42566, 42575, 42560];
-            const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, fixedGuilds).slice(0, 4);
+            const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, this.FIXED_GUILDS);
             const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds);
             const details = await this.garrytoolsService.fetchGroupDetails(groupId);
 
