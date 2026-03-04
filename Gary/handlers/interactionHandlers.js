@@ -2327,8 +2327,8 @@ class InteractionHandler {
                 this.logger.warn('⚠️ No guild snapshots available - run /lme-snapshot first to see RC+TC data');
             }
 
-            // Helper function to format rival data with conditional emojis
-            const formatRivalField = (rival) => {
+            // Helper function to create embed for a single clan
+            const createClanEmbed = (rival, isLikely) => {
                 // Parse member count (e.g., "40/40" -> 40)
                 const memberCount = parseInt(rival.members.split('/')[0]);
                 let membersEmoji = '';
@@ -2345,101 +2345,101 @@ class InteractionHandler {
                     scoreEmoji = ' <a:PepeAlarmMan:1341086085089857619>';
                 }
 
-                let result = `🆔 **Guild ID:** ${rival.guildId}\n`;
+                let description = `🆔 **Guild ID:** ${rival.guildId}\n`;
                 if (rival.level) {
-                    result += `📊 **Level:** ${rival.level}\n`;
+                    description += `📊 **Level:** ${rival.level}\n`;
                 }
                 if (rival.totalPower !== undefined) {
-                    result += `⚔️ **Total Power:** ${formatNumber(rival.totalPower, 2)}\n`;
+                    description += `⚔️ **Total Power:** ${formatNumber(rival.totalPower, 2)}\n`;
                 }
                 if (rival.totalRelicCores !== undefined) {
-                    result += `<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> **RC+TC:** ${rival.totalRelicCores}+\n`;
+                    description += `<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> **RC+TC:** ${rival.totalRelicCores}+\n`;
                 }
-                result += `👥 **Members:** ${rival.members}${membersEmoji}\n` +
-                         `👤 **Leader:** ${rival.leader}\n` +
-                         `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
+                description += `👥 **Members:** ${rival.members}${membersEmoji}\n` +
+                              `👤 **Leader:** ${rival.leader}\n` +
+                              `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
 
-                return result;
+                const clanEmoji = rival.isUserGuild ? '👑' : (isLikely ? '⚔️' : '🎲');
+                const color = isLikely ? 0x00ff00 : 0xff9900;
+
+                return new EmbedBuilder()
+                    .setTitle(`${clanEmoji} #${rival.rank} — ${rival.name}`)
+                    .setColor(color)
+                    .setDescription(description)
+                    .setTimestamp();
             };
 
-            // Create embed for likely matches
-            const likelyEmbed = new EmbedBuilder()
+            // Helper function to create button for a clan
+            const createClanButton = (rival) => {
+                if (rival.isUserGuild) {
+                    return null; // No button for user's own guild
+                }
+                return new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
+                        .setLabel('View Details')
+                        .setStyle(ButtonStyle.Primary)
+                        .setEmoji('🔍')
+                );
+            };
+
+            // Send header for likely matches
+            const likelyHeader = new EmbedBuilder()
                 .setTitle('⚔️ Most Likely Rival Matches This Week')
                 .setColor(0x00ff00)
                 .setDescription('These clans are most likely to match with you this week:')
                 .setTimestamp();
 
-            if (rivalsData.likelyMatches.length === 0) {
-                likelyEmbed.addFields({ name: 'No Data', value: 'No likely matches found.', inline: false });
-            } else {
-                const clanEmojis = ['🏰', '⚔️', '🛡️', '🗡️', '🏴', '🎯', '🔥', '⚡', '🌟', '🦅'];
-                rivalsData.likelyMatches.forEach((rival, index) => {
-                    const clanEmoji = rival.isUserGuild ? '👑' : clanEmojis[index % clanEmojis.length];
-                    const fieldValue = formatRivalField(rival);
+            await interaction.editReply({ embeds: [likelyHeader] });
 
-                    likelyEmbed.addFields({
-                        name: `${clanEmoji} #${rival.rank} — ${rival.name}`,
-                        value: fieldValue,
-                        inline: false
-                    });
+            // Send each likely match as separate message
+            if (rivalsData.likelyMatches.length > 0) {
+                for (const rival of rivalsData.likelyMatches) {
+                    const embed = createClanEmbed(rival, true);
+                    const button = createClanButton(rival);
+                    const messageData = { embeds: [embed] };
+                    if (button) {
+                        messageData.components = [button];
+                    }
+                    await interaction.followUp(messageData);
+                }
+            } else {
+                await interaction.followUp({
+                    embeds: [new EmbedBuilder()
+                        .setColor(0x00ff00)
+                        .setDescription('No likely matches found.')
+                    ]
                 });
             }
 
-            // Create embed for unlikely matches
-            const unlikelyEmbed = new EmbedBuilder()
+            // Send header for unlikely matches
+            const unlikelyHeader = new EmbedBuilder()
                 .setTitle('🎲 Unlikely Rival Matches')
                 .setColor(0xff9900)
                 .setDescription('These clans are unlikely to match with you this week:')
                 .setTimestamp();
 
-            if (rivalsData.unlikelyMatches.length === 0) {
-                unlikelyEmbed.addFields({ name: 'No Data', value: 'No unlikely matches found.', inline: false });
-            } else {
-                const clanEmojis = ['🏰', '⚔️', '🛡️', '🗡️', '🏴', '🎯', '🔥', '⚡', '🌟', '🦅'];
-                rivalsData.unlikelyMatches.forEach((rival, index) => {
-                    const clanEmoji = rival.isUserGuild ? '👑' : clanEmojis[index % clanEmojis.length];
-                    const fieldValue = formatRivalField(rival);
+            await interaction.followUp({ embeds: [unlikelyHeader] });
 
-                    unlikelyEmbed.addFields({
-                        name: `${clanEmoji} #${rival.rank} — ${rival.name}`,
-                        value: fieldValue,
-                        inline: false
-                    });
+            // Send each unlikely match as separate message
+            if (rivalsData.unlikelyMatches.length > 0) {
+                for (const rival of rivalsData.unlikelyMatches) {
+                    const embed = createClanEmbed(rival, false);
+                    const button = createClanButton(rival);
+                    const messageData = { embeds: [embed] };
+                    if (button) {
+                        messageData.components = [button];
+                    }
+                    await interaction.followUp(messageData);
+                }
+            } else {
+                await interaction.followUp({
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xff9900)
+                        .setDescription('No unlikely matches found.')
+                    ]
                 });
             }
-
-            // Create buttons for detailed analysis (max 10 clans = 2 rows)
-            const buttons = [];
-            const allRivalsForButtons = [...rivalsData.likelyMatches, ...rivalsData.unlikelyMatches]
-                .filter(r => !r.isUserGuild) // Skip user's own guild
-                .slice(0, 10); // Max 10 buttons
-
-            for (const rival of allRivalsForButtons) {
-                const button = new ButtonBuilder()
-                    .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
-                    .setLabel(`${rival.name.substring(0, 20)}`) // Max 80 chars, truncate to 20
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🔍');
-                buttons.push(button);
-            }
-
-            // Split buttons into rows (max 5 per row)
-            const rows = [];
-            if (buttons.length > 0) {
-                const row1 = new ActionRowBuilder().addComponents(buttons.slice(0, 5));
-                rows.push(row1);
-
-                if (buttons.length > 5) {
-                    const row2 = new ActionRowBuilder().addComponents(buttons.slice(5, 10));
-                    rows.push(row2);
-                }
-            }
-
-            // Send both embeds with buttons
-            await interaction.editReply({
-                embeds: [likelyEmbed, unlikelyEmbed],
-                components: rows
-            });
 
             this.logger.info(`✅ Rivals data for Clan ID ${clanId} sent to ${interaction.user.tag}`);
 
