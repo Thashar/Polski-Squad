@@ -2272,6 +2272,34 @@ class InteractionHandler {
             // Fetch rivals data from garrytools
             const rivalsData = await this.garrytoolsService.getRivalsData(clanId);
 
+            // Find user's guild to get their score
+            const userGuild = [...rivalsData.likelyMatches, ...rivalsData.unlikelyMatches].find(r => r.isUserGuild);
+            const userScore = userGuild ? parseInt(userGuild.score) : 0;
+
+            // Helper function to format rival data with conditional emojis
+            const formatRivalField = (rival) => {
+                // Parse member count (e.g., "40/40" -> 40)
+                const memberCount = parseInt(rival.members.split('/')[0]);
+                let membersEmoji = '';
+                if (memberCount >= 1 && memberCount <= 29) {
+                    membersEmoji = ' <a:PepeBro:1341084788634681384>';
+                } else if (memberCount >= 30 && memberCount <= 36) {
+                    membersEmoji = ' <a:PepeEvil:1280067725355384905>';
+                }
+
+                // Parse rival score and compare with user's score
+                const rivalScore = parseInt(rival.score);
+                let scoreEmoji = '';
+                if (rivalScore > userScore && !rival.isUserGuild) {
+                    scoreEmoji = ' <a:PepeAlarmMan:1341086085089857619>';
+                }
+
+                return `🆔 **Guild ID:** ${rival.guildId}\n` +
+                       `👥 **Members:** ${rival.members}${membersEmoji}\n` +
+                       `👤 **Leader:** ${rival.leader}\n` +
+                       `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
+            };
+
             // Create embed for likely matches
             const likelyEmbed = new EmbedBuilder()
                 .setTitle('⚔️ Most Likely Rival Matches This Week')
@@ -2285,11 +2313,7 @@ class InteractionHandler {
                 const clanEmojis = ['🏰', '⚔️', '🛡️', '🗡️', '🏴', '🎯', '🔥', '⚡', '🌟', '🦅'];
                 rivalsData.likelyMatches.forEach((rival, index) => {
                     const clanEmoji = rival.isUserGuild ? '👑' : clanEmojis[index % clanEmojis.length];
-                    const fieldValue =
-                        `🆔 **Guild ID:** ${rival.guildId}\n` +
-                        `👥 **Members:** ${rival.members}\n` +
-                        `👤 **Leader:** ${rival.leader}\n` +
-                        `⭐ **Grade:** ${rival.grade} (${rival.score})`;
+                    const fieldValue = formatRivalField(rival);
 
                     likelyEmbed.addFields({
                         name: `${clanEmoji} #${rival.rank} — ${rival.name}`,
@@ -2312,11 +2336,7 @@ class InteractionHandler {
                 const clanEmojis = ['🏰', '⚔️', '🛡️', '🗡️', '🏴', '🎯', '🔥', '⚡', '🌟', '🦅'];
                 rivalsData.unlikelyMatches.forEach((rival, index) => {
                     const clanEmoji = rival.isUserGuild ? '👑' : clanEmojis[index % clanEmojis.length];
-                    const fieldValue =
-                        `🆔 **Guild ID:** ${rival.guildId}\n` +
-                        `👥 **Members:** ${rival.members}\n` +
-                        `👤 **Leader:** ${rival.leader}\n` +
-                        `⭐ **Grade:** ${rival.grade} (${rival.score})`;
+                    const fieldValue = formatRivalField(rival);
 
                     unlikelyEmbed.addFields({
                         name: `${clanEmoji} #${rival.rank} — ${rival.name}`,
