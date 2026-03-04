@@ -88,15 +88,19 @@ if (config.lunarMineSettings?.autoRefresh) {
         logger.info('🔄 Automatic data refresh...');
         await clanService.fetchClanData();
         await logService.logInfo('📊 Clan data automatically refreshed');
+    }, {
+        timezone: "Europe/Warsaw"
     });
 }
 
 // Set up pagination cleanup
 cron.schedule('*/10 * * * *', () => {
     interactionHandler.cleanup();
+}, {
+    timezone: "Europe/Warsaw"
 });
 
-// Weekly clan history snapshot - every Wednesday at 18:50 (5 min after Lunar Mine)
+// Weekly clan history snapshot - every Wednesday at 18:50 Poland time (5 min after Lunar Mine)
 // Fetches fresh TOP500 clan data and saves a persistent weekly snapshot
 cron.schedule('50 18 * * 3', async () => {
     try {
@@ -114,13 +118,14 @@ cron.schedule('50 18 * * 3', async () => {
         logger.error('📸 ❌ Error saving clan history snapshot:', error.message);
         await logService.logError(error, 'clan history snapshot cron');
     }
+}, {
+    timezone: "Europe/Warsaw"
 });
 
-// Weekly Lunar Mine analysis - TEMPORARY: every 15 minutes for testing
-// ORIGINAL: every Wednesday at 18:45 ('45 18 * * 3')
+// Weekly Lunar Mine analysis - every Wednesday at 18:45 Poland time
 // Thread ID: 1441152540581564508
 // Guild IDs: 42578, 202226, 125634, 11616
-cron.schedule('*/15 * * * *', async () => {
+cron.schedule('45 18 * * 3', async () => {
     try {
         logger.info('📅 ========================================');
         logger.info('📅 Starting weekly Lunar Mine analysis...');
@@ -251,6 +256,8 @@ cron.schedule('*/15 * * * *', async () => {
         logger.error('📅 ========================================');
         await logService.logError(error, 'weekly Lunar Mine cron job');
     }
+}, {
+    timezone: "Europe/Warsaw"
 });
 
 /**
