@@ -405,6 +405,8 @@ class InteractionHandler {
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'report_modal_submit') {
                 await this.handleReportModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('report_mute_modal_')) {
+                await this.handleReportMuteDurationModalSubmit(interaction);
             }
         }
     }
@@ -3226,6 +3228,102 @@ class InteractionHandler {
     }
 
     /**
+     * Parsuje czas wyciszenia z formatu 1m/1h/1d na milisekundy.
+     * Zwraca { ms, label } lub null jeśli format nieprawidłowy.
+     */
+    parseMuteDuration(input) {
+        const match = input.trim().match(/^(\d+)\s*([mhd])$/i);
+        if (!match) return null;
+
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+
+        if (value <= 0) return null;
+
+        const multipliers = { m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
+        const ms = value * multipliers[unit];
+        const unitNames = { m: value === 1 ? 'minutę' : value < 5 ? 'minuty' : 'minut',
+                            h: value === 1 ? 'godzinę' : value < 5 ? 'godziny' : 'godzin',
+                            d: value === 1 ? 'dzień' : value < 5 ? 'dni' : 'dni' };
+        const label = `${value} ${unitNames[unit]}`;
+
+        // Discord timeout max: 28 dni
+        const maxMs = 28 * 24 * 60 * 60 * 1000;
+        if (ms > maxMs) return null;
+
+        return { ms, label };
+    }
+
+    /**
+     * Obsługuje submit modalu czasu wyciszenia
+     */
+    async handleReportMuteDurationModalSubmit(interaction) {
+        // customId: report_mute_modal_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        // parts: ['report', 'mute', 'modal', channelId, messageId, userId]
+        const channelId = parts[3];
+        const messageId = parts[4];
+        const userId = parts[5];
+
+        const durationRaw = interaction.fields.getTextInputValue('mute_duration');
+        const parsed = this.parseMuteDuration(durationRaw);
+
+        if (!parsed) {
+            await interaction.reply({
+                content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        try {
+            const guild = interaction.guild;
+            const member = await guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                return;
+            }
+
+            await member.timeout(parsed.ms, `Zgłoszenie przez ${interaction.user.tag}`);
+
+            // Zaktualizuj oryginalny embed (wiadomość z raportem)
+            try {
+                const reportChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
+                // Szukamy oryginalnej wiadomości raportu po messageId w kanale raportów
+                // (messageId w customId to ID oryginalnej wiadomości, nie raportu)
+                // Zamiast tego zaktualizuj wiadomość z interakcją - interaction.message
+                if (interaction.message) {
+                    const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                        .setColor(0xFF8C00)
+                        .setTitle(`🔇 Zgłoszenie - Wyciszono użytkownika na ${parsed.label}`)
+                        .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
+
+                    await interaction.message.edit({ embeds: [embed], components: [] });
+                }
+            } catch (editErr) {
+                logger.warn('⚠️ Nie można zaktualizować embeda raportu:', editErr.message);
+            }
+
+            await interaction.reply({
+                content: `✅ Użytkownik <@${userId}> został wyciszony na **${parsed.label}**.`,
+                ephemeral: true
+            });
+
+            await this.logService.logMessage('info',
+                `Wyciszono użytkownika ${userId} na ${parsed.label} przez ${interaction.user.tag} (zgłoszenie)`,
+                interaction
+            );
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyciszania użytkownika:', error);
+            await interaction.reply({
+                content: `❌ Nie udało się wyciszyć użytkownika: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
      * Parsuje link do wiadomości Discord i zwraca { guildId, channelId, messageId }
      */
     parseMessageLink(input) {
@@ -3351,7 +3449,7 @@ class InteractionHandler {
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId(`report_mute_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Wycisz (10 min)')
+                    .setLabel('Wycisz')
                     .setEmoji('🔇')
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
@@ -3460,26 +3558,20 @@ class InteractionHandler {
             }
 
             if (action === 'mute') {
-                const guild = interaction.guild;
-                const member = await guild.members.fetch(userId).catch(() => null);
-                if (!member) {
-                    await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
-                    return;
-                }
+                // Pokaż modal do wpisania czasu wyciszenia
+                const muteModal = new ModalBuilder()
+                    .setCustomId(`report_mute_modal_${channelId}_${messageId}_${userId}`)
+                    .setTitle('Czas wyciszenia');
 
-                await member.timeout(10 * 60 * 1000, `Zgłoszenie przez ${interaction.user.tag}`);
+                const durationInput = new TextInputBuilder()
+                    .setCustomId('mute_duration')
+                    .setLabel('Czas wyciszenia (np. 10m, 2h, 1d)')
+                    .setPlaceholder('Przykłady: 10m, 30m, 2h, 12h, 1d, 7d')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
 
-                const embed = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setColor(0xFF8C00)
-                    .setTitle('🔇 Zgłoszenie - Wyciszono użytkownika')
-                    .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
-
-                await interaction.update({ embeds: [embed], components: [] });
-
-                await interaction.followUp({
-                    content: `✅ Użytkownik <@${userId}> został wyciszony na 10 minut.`,
-                    ephemeral: true
-                });
+                muteModal.addComponents(new ActionRowBuilder().addComponents(durationInput));
+                await interaction.showModal(muteModal);
                 return;
             }
 
