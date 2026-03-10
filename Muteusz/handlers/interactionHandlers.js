@@ -3627,11 +3627,9 @@ class InteractionHandler {
                     return;
                 }
 
-                const { channelId, messageId } = parsed;
-
                 try {
-                    targetChannel = await interaction.client.channels.fetch(channelId);
-                    targetMessage = await targetChannel.messages.fetch(messageId);
+                    targetChannel = await interaction.client.channels.fetch(parsed.channelId);
+                    targetMessage = await targetChannel.messages.fetch(parsed.messageId);
                 } catch {
                     await interaction.editReply({
                         content: '❌ Nie znaleziono wiadomości. Upewnij się, że link jest prawidłowy i wiadomość nadal istnieje.'
@@ -3639,6 +3637,8 @@ class InteractionHandler {
                     return;
                 }
             }
+
+            const { channelId, messageId } = parsed;
 
             const reportedUser = targetMessage.author;
             const reporter = interaction.user;
