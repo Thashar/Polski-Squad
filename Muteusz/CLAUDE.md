@@ -21,6 +21,11 @@
 
     **Context menu użytkownika** (moderator-only): Prawy klik → Aplikacje → "Wycisz użytkownika" (modal z czasem + powodem) lub "Ostrzeż użytkownika" (modal z powodem).
 
+    **Statystyki zgłoszeń** - `reportStatsService.js` + `data/report_stats.json`: Każdy użytkownik ma liczniki: `totalReports`, `effectiveReports` (warn/mute/delete), `nothingReports`. Zasady:
+    - 3x "nie rób nic" w ciągu 7 dni → blokada zgłoszeń na tydzień (DM do użytkownika + komunikat przy próbie zgłoszenia)
+    - 1 skuteczne zgłoszenie (warn/mute/delete) → zeruje licznik "nie rób nic" w tygodniu
+    - Blokada automatycznie wygasa po tygodniu przy następnej próbie zgłoszenia
+
 **Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 

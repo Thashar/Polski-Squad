@@ -2,6 +2,7 @@ const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, 
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
+const ReportStatsService = require('../services/reportStatsService');
 
 const logger = createBotLogger('Muteusz');
 
@@ -14,6 +15,8 @@ class InteractionHandler {
         this.roleKickingService = roleKickingService;
         this.chaosService = chaosService;
         this.warningService = new WarningService(config, logger);
+        this.reportStatsService = new ReportStatsService();
+        this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
     }
 
     /**
@@ -3584,6 +3587,12 @@ class InteractionHandler {
                 components: [this.buildFollowupActionRow(channelId, messageId, userId)]
             });
 
+            // Zarejestruj skuteczne zgłoszenie (zeruje licznik "nie rób nic")
+            if (interaction.message) {
+                const reporterId = this.extractReporterIdFromEmbed(interaction.message.embeds[0]);
+                await this.reportStatsService.recordEffective(reporterId);
+            }
+
         } catch (error) {
             logger.error('❌ Błąd podczas dodawania ostrzeżenia przez zgłoszenie:', error);
             await interaction.reply({ content: '❌ Wystąpił błąd podczas dodawania ostrzeżenia.', ephemeral: true });
@@ -3759,6 +3768,9 @@ class InteractionHandler {
                 interaction
             );
 
+            // Zarejestruj skuteczne zgłoszenie (zeruje licznik "nie rób nic")
+            await this.reportStatsService.recordEffective(reporterId);
+
         } catch (error) {
             logger.error('❌ Błąd podczas wyciszania użytkownika:', error);
             await interaction.reply({
@@ -3875,6 +3887,20 @@ class InteractionHandler {
 
             const reportedUser = targetMessage.author;
             const reporter = interaction.user;
+
+            // Sprawdź blokadę zgłoszeń
+            const banStatus = this.reportStatsService.checkBan(reporter.id);
+            if (banStatus.banned) {
+                const bannedUntilDate = new Date(banStatus.bannedUntil);
+                const bannedUntilStr = bannedUntilDate.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+                await interaction.editReply({
+                    content: `🚫 Masz blokadę zgłoszeń do **${bannedUntilStr}** z powodu zbyt wielu nieuzasadnionych zgłoszeń.`
+                });
+                return;
+            }
+
+            // Zarejestruj zgłoszenie w statystykach
+            await this.reportStatsService.recordReport(reporter.id);
 
             // Sprawdź czy zgłoszony użytkownik jest moderatorem
             const reportedMember = await interaction.guild.members.fetch(reportedUser.id).catch(() => null);
@@ -3997,7 +4023,6 @@ class InteractionHandler {
             if (action === 'nothing') {
                 const reportEmbed = interaction.message.embeds[0];
                 const reporterId = this.extractReporterIdFromEmbed(reportEmbed);
-                const reportedUserId = this.extractReportedUserIdFromEmbed(reportEmbed);
 
                 const embed = EmbedBuilder.from(reportEmbed)
                     .setColor(0x808080)
@@ -4006,12 +4031,26 @@ class InteractionHandler {
 
                 await interaction.update({ embeds: [embed], components: [] });
 
-                // DM do reportera
+                // Zarejestruj "nie rób nic" w statystykach reportera
                 if (reporterId) {
-                    try {
-                        const reporterUser = await interaction.client.users.fetch(reporterId);
-                        await reporterUser.send(`✅ Twoje zgłoszenie zostało rozpatrzone.\n> **Akcja:** Moderacja nie podjęła dodatkowych działań.`);
-                    } catch {}
+                    const nothingResult = await this.reportStatsService.recordNothing(reporterId);
+                    if (nothingResult.banned) {
+                        // Powiadom reportera o blokadzie
+                        try {
+                            const reporterUser = await interaction.client.users.fetch(reporterId);
+                            const bannedUntilStr = new Date(nothingResult.bannedUntil).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+                            await reporterUser.send(
+                                `🚫 Twoje zgłoszenia były 3 razy z rzędu nieuzasadnione w ciągu tygodnia.\n` +
+                                `> Komenda zgłaszania została zablokowana do **${bannedUntilStr}**.`
+                            );
+                        } catch {}
+                    } else {
+                        // Zwykłe DM o braku akcji
+                        try {
+                            const reporterUser = await interaction.client.users.fetch(reporterId);
+                            await reporterUser.send(`✅ Twoje zgłoszenie zostało rozpatrzone.\n> **Akcja:** Moderacja nie podjęła dodatkowych działań.`);
+                        } catch {}
+                    }
                 }
                 return;
             }
@@ -4075,6 +4114,9 @@ class InteractionHandler {
                 await interaction.followUp({
                     content: `🗑️ <@${interaction.user.id}> usunął zgłoszoną wiadomość.`
                 });
+
+                // Zarejestruj skuteczne zgłoszenie (zeruje licznik "nie rób nic")
+                await this.reportStatsService.recordEffective(reporterIdDelete);
 
                 // DM do reportera
                 if (reporterIdDelete) {
