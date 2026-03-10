@@ -9579,7 +9579,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 description += `**↘️ Największy regres:** brak\n`;
             }
 
-            // RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z Gary (historia tygodniowa)
+            // RC+TC i Atak z Gary (historia tygodniowa)
             if (_statLastCombat) {
                 const _rcFmt = (_statLastCombat.relicCores ?? 0).toLocaleString('pl-PL');
                 const _atkFmt = fmtAttack(_statLastCombat.attack ?? 0);
@@ -9588,6 +9588,9 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             } else {
                 description += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** Brak danych. Aktualizacja niebawem...\n`;
                 description += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
+            }
+            if (endersEchoRank !== null) {
+                description += `🏹 **Enders Echo:** #${endersEchoRank} / ${endersEchoTotal} — rekord: **${endersEchoScore}**\n`;
             }
             description += `\n`;
         }
@@ -9677,13 +9680,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
         description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
-
-        // Sekcja 5b: Enders Echo ranking
-        if (endersEchoRank !== null) {
-            description += `\n### 🏹 ENDERS ECHO\n`;
-            description += `🏅 **Pozycja w rankingu:** #${endersEchoRank} / ${endersEchoTotal}\n`;
-            description += `⚡ **Rekord:** ${endersEchoScore}\n`;
-        }
 
         // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
         if (trendIcon !== null && trendDescription !== null) {
