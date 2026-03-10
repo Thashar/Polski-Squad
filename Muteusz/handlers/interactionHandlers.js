@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
@@ -295,7 +295,21 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('komendy')
-                .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów')
+                .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów'),
+
+            new SlashCommandBuilder()
+                .setName('zgłoś')
+                .setDescription('Zgłoś wiadomość naruszającą zasady serwera')
+                .addStringOption(option =>
+                    option.setName('link')
+                        .setDescription('Link do wiadomości (Prawy klik → Kopiuj link do wiadomości)')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('powod')
+                        .setDescription('Powód zgłoszenia (opcjonalny)')
+                        .setRequired(false)
+                )
         ];
         
         try {
@@ -382,9 +396,18 @@ class InteractionHandler {
                 case 'komendy':
                     await this.handleKomendyCommand(interaction);
                     break;
+                case 'zgłoś':
+                    await this.handleZglosCommand(interaction);
+                    break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
+        } else if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'report_modal_submit') {
+                await this.handleReportModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('report_mute_modal_')) {
+                await this.handleReportMuteDurationModalSubmit(interaction);
+            }
         }
     }
 
@@ -397,6 +420,13 @@ class InteractionHandler {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
             await this.handleViolationsButtonInteraction(interaction);
+        } else if (interaction.customId === 'report_start_button') {
+            await this.handleReportStartButton(interaction);
+        } else if (interaction.customId.startsWith('report_warn_') ||
+                   interaction.customId.startsWith('report_mute_') ||
+                   interaction.customId.startsWith('report_delete_') ||
+                   interaction.customId.startsWith('report_nothing_')) {
+            await this.handleReportActionButton(interaction);
         }
     }
 
@@ -3194,6 +3224,386 @@ class InteractionHandler {
                 `Błąd manualnego backupu przez ${interaction.user.tag}: ${error.message}`,
                 interaction
             );
+        }
+    }
+
+    /**
+     * Parsuje czas wyciszenia z formatu 1m/1h/1d na milisekundy.
+     * Zwraca { ms, label } lub null jeśli format nieprawidłowy.
+     */
+    parseMuteDuration(input) {
+        const match = input.trim().match(/^(\d+)\s*([mhd])$/i);
+        if (!match) return null;
+
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+
+        if (value <= 0) return null;
+
+        const multipliers = { m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
+        const ms = value * multipliers[unit];
+        const unitNames = { m: value === 1 ? 'minutę' : value < 5 ? 'minuty' : 'minut',
+                            h: value === 1 ? 'godzinę' : value < 5 ? 'godziny' : 'godzin',
+                            d: value === 1 ? 'dzień' : value < 5 ? 'dni' : 'dni' };
+        const label = `${value} ${unitNames[unit]}`;
+
+        // Discord timeout max: 28 dni
+        const maxMs = 28 * 24 * 60 * 60 * 1000;
+        if (ms > maxMs) return null;
+
+        return { ms, label };
+    }
+
+    /**
+     * Obsługuje submit modalu czasu wyciszenia
+     */
+    async handleReportMuteDurationModalSubmit(interaction) {
+        // customId: report_mute_modal_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        // parts: ['report', 'mute', 'modal', channelId, messageId, userId]
+        const channelId = parts[3];
+        const messageId = parts[4];
+        const userId = parts[5];
+
+        const durationRaw = interaction.fields.getTextInputValue('mute_duration');
+        const parsed = this.parseMuteDuration(durationRaw);
+
+        if (!parsed) {
+            await interaction.reply({
+                content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        try {
+            const guild = interaction.guild;
+            const member = await guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                return;
+            }
+
+            await member.timeout(parsed.ms, `Zgłoszenie przez ${interaction.user.tag}`);
+
+            // Zaktualizuj oryginalny embed (wiadomość z raportem)
+            try {
+                const reportChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
+                // Szukamy oryginalnej wiadomości raportu po messageId w kanale raportów
+                // (messageId w customId to ID oryginalnej wiadomości, nie raportu)
+                // Zamiast tego zaktualizuj wiadomość z interakcją - interaction.message
+                if (interaction.message) {
+                    const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                        .setColor(0xFF8C00)
+                        .setTitle(`🔇 Zgłoszenie - Wyciszono użytkownika na ${parsed.label}`)
+                        .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
+
+                    await interaction.message.edit({ embeds: [embed], components: [] });
+                }
+            } catch (editErr) {
+                logger.warn('⚠️ Nie można zaktualizować embeda raportu:', editErr.message);
+            }
+
+            await interaction.reply({
+                content: `✅ Użytkownik <@${userId}> został wyciszony na **${parsed.label}**.`,
+                ephemeral: true
+            });
+
+            await this.logService.logMessage('info',
+                `Wyciszono użytkownika ${userId} na ${parsed.label} przez ${interaction.user.tag} (zgłoszenie)`,
+                interaction
+            );
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyciszania użytkownika:', error);
+            await interaction.reply({
+                content: `❌ Nie udało się wyciszyć użytkownika: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Parsuje link do wiadomości Discord i zwraca { guildId, channelId, messageId }
+     */
+    parseMessageLink(input) {
+        // Link format: https://discord.com/channels/GUILD/CHANNEL/MESSAGE
+        const linkMatch = input.match(/discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
+        if (linkMatch) {
+            return { guildId: linkMatch[1], channelId: linkMatch[2], messageId: linkMatch[3] };
+        }
+        return null;
+    }
+
+    /**
+     * Obsługuje komendę /zgłoś
+     */
+    async handleZglosCommand(interaction) {
+        const link = interaction.options.getString('link');
+        const powod = interaction.options.getString('powod') || 'Brak podanego powodu';
+        await this.processReport(interaction, link, powod, false);
+    }
+
+    /**
+     * Obsługuje kliknięcie przycisku "Zgłoś" na kanale zgłoszeń
+     */
+    async handleReportStartButton(interaction) {
+        const modal = new ModalBuilder()
+            .setCustomId('report_modal_submit')
+            .setTitle('Zgłoś wiadomość');
+
+        const linkInput = new TextInputBuilder()
+            .setCustomId('report_message_link')
+            .setLabel('Link do wiadomości')
+            .setPlaceholder('https://discord.com/channels/...')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+        const powodInput = new TextInputBuilder()
+            .setCustomId('report_reason')
+            .setLabel('Powód zgłoszenia (opcjonalny)')
+            .setPlaceholder('Opisz krótko dlaczego zgłaszasz tę wiadomość...')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(false);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(linkInput),
+            new ActionRowBuilder().addComponents(powodInput)
+        );
+
+        await interaction.showModal(modal);
+    }
+
+    /**
+     * Obsługuje submit modalu zgłoszenia
+     */
+    async handleReportModalSubmit(interaction) {
+        const link = interaction.fields.getTextInputValue('report_message_link');
+        const powod = interaction.fields.getTextInputValue('report_reason') || 'Brak podanego powodu';
+        await this.processReport(interaction, link, powod, true);
+    }
+
+    /**
+     * Przetwarza zgłoszenie wiadomości (wspólna logika dla komendy i modalu)
+     */
+    async processReport(interaction, messageLink, powod, isModal) {
+        try {
+            if (!isModal) {
+                await interaction.deferReply({ ephemeral: true });
+            } else {
+                await interaction.deferReply({ ephemeral: true });
+            }
+
+            const parsed = this.parseMessageLink(messageLink);
+            if (!parsed) {
+                await interaction.editReply({
+                    content: '❌ Nieprawidłowy link do wiadomości. Użyj opcji **Prawy klik → Kopiuj link do wiadomości** w Discordzie.'
+                });
+                return;
+            }
+
+            const { channelId, messageId } = parsed;
+
+            // Pobierz kanał i wiadomość
+            let targetChannel;
+            let targetMessage;
+            try {
+                targetChannel = await interaction.client.channels.fetch(channelId);
+                targetMessage = await targetChannel.messages.fetch(messageId);
+            } catch {
+                await interaction.editReply({
+                    content: '❌ Nie znaleziono wiadomości. Upewnij się, że link jest prawidłowy i wiadomość nadal istnieje.'
+                });
+                return;
+            }
+
+            const reportedUser = targetMessage.author;
+            const reporter = interaction.user;
+
+            // Zbuduj embed raportu
+            const embed = new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle('🚨 Nowe zgłoszenie wiadomości')
+                .addFields(
+                    { name: '👤 Zgłaszający', value: `${reporter} (${reporter.tag})`, inline: true },
+                    { name: '🎯 Zgłoszony użytkownik', value: `${reportedUser} (${reportedUser.tag})`, inline: true },
+                    { name: '📢 Kanał', value: `${targetChannel}`, inline: true },
+                    { name: '💬 Treść wiadomości', value: targetMessage.content || '*[brak treści tekstowej]*', inline: false },
+                    { name: '📝 Powód zgłoszenia', value: powod, inline: false },
+                    { name: '🔗 Link', value: `[Przejdź do wiadomości](https://discord.com/channels/${parsed.guildId}/${channelId}/${messageId})`, inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: `ID wiadomości: ${messageId}` });
+
+            if (targetMessage.attachments.size > 0) {
+                const firstImage = targetMessage.attachments.find(a => a.contentType?.startsWith('image/'));
+                if (firstImage) embed.setImage(firstImage.url);
+            }
+
+            // Przyciski dla moderatorów
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`report_warn_${channelId}_${messageId}_${reportedUser.id}`)
+                    .setLabel('Ostrzeż użytkownika')
+                    .setEmoji('🔨')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`report_mute_${channelId}_${messageId}_${reportedUser.id}`)
+                    .setLabel('Wycisz')
+                    .setEmoji('🔇')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`report_delete_${channelId}_${messageId}_${reportedUser.id}`)
+                    .setLabel('Usuń wiadomość')
+                    .setEmoji('🗑️')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`report_nothing_${channelId}_${messageId}`)
+                    .setLabel('Nie rób nic')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            // Wyślij na kanał zgłoszeń
+            const reportChannelId = this.config.reports?.reportChannelId;
+            if (reportChannelId) {
+                try {
+                    const reportChannel = await interaction.client.channels.fetch(reportChannelId);
+                    await reportChannel.send({ embeds: [embed], components: [row] });
+                } catch (err) {
+                    logger.error('❌ Nie można wysłać zgłoszenia na kanał raportów:', err.message);
+                }
+            }
+
+            await this.logService.logMessage('info',
+                `Zgłoszenie od ${reporter.tag} - zgłoszona wiadomość: ${messageId} (user: ${reportedUser.tag})`,
+                interaction
+            );
+
+            await interaction.editReply({
+                content: '✅ Twoje zgłoszenie zostało przesłane do moderatorów. Dziękujemy!'
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas przetwarzania zgłoszenia:', error);
+            try {
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania zgłoszenia.'
+                });
+            } catch {}
+        }
+    }
+
+    /**
+     * Obsługuje przyciski akcji moderatora na zgłoszeniu
+     */
+    async handleReportActionButton(interaction) {
+        if (!this.isAdminOrModerator(interaction.member)) {
+            await interaction.reply({
+                content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        const parts = interaction.customId.split('_');
+        // Format: report_{action}_{channelId}_{messageId}[_{userId}]
+        const action = parts[1];
+        const channelId = parts[2];
+        const messageId = parts[3];
+        const userId = parts[4];
+
+        try {
+            if (action === 'nothing') {
+                // Zaktualizuj embed - oznacz jako zamknięte
+                const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor(0x808080)
+                    .setTitle('✅ Zgłoszenie zamknięte (bez akcji)')
+                    .setFooter({ text: `Zamknięte przez ${interaction.user.tag} • ID: ${messageId}` });
+
+                await interaction.update({ embeds: [embed], components: [] });
+                return;
+            }
+
+            if (action === 'warn') {
+                const guild = interaction.guild;
+                const member = await guild.members.fetch(userId).catch(() => null);
+                if (!member) {
+                    await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                    return;
+                }
+
+                // Dodaj ostrzeżenie przez warningService
+                const warning = await this.warningService.addWarning(
+                    userId,
+                    guild.id,
+                    interaction.user.id,
+                    'Naruszenie zasad serwera (zgłoszenie)'
+                );
+
+                const allWarnings = await this.warningService.getUserWarnings(userId, guild.id);
+
+                const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor(0xFF8C00)
+                    .setTitle('⚠️ Zgłoszenie - Ostrzegano użytkownika')
+                    .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
+
+                await interaction.update({ embeds: [embed], components: [] });
+
+                await interaction.followUp({
+                    content: `✅ Użytkownik <@${userId}> otrzymał ostrzeżenie. Łącznie ostrzeżeń: **${allWarnings.length}**`,
+                    ephemeral: true
+                });
+                return;
+            }
+
+            if (action === 'mute') {
+                // Pokaż modal do wpisania czasu wyciszenia
+                const muteModal = new ModalBuilder()
+                    .setCustomId(`report_mute_modal_${channelId}_${messageId}_${userId}`)
+                    .setTitle('Czas wyciszenia');
+
+                const durationInput = new TextInputBuilder()
+                    .setCustomId('mute_duration')
+                    .setLabel('Czas wyciszenia (np. 10m, 2h, 1d)')
+                    .setPlaceholder('Przykłady: 10m, 30m, 2h, 12h, 1d, 7d')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                muteModal.addComponents(new ActionRowBuilder().addComponents(durationInput));
+                await interaction.showModal(muteModal);
+                return;
+            }
+
+            if (action === 'delete') {
+                try {
+                    const targetChannel = await interaction.client.channels.fetch(channelId);
+                    const targetMessage = await targetChannel.messages.fetch(messageId);
+                    await targetMessage.delete();
+                } catch {
+                    await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', ephemeral: true });
+                    return;
+                }
+
+                const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor(0xFF8C00)
+                    .setTitle('🗑️ Zgłoszenie - Usunięto wiadomość')
+                    .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
+
+                await interaction.update({ embeds: [embed], components: [] });
+
+                await interaction.followUp({
+                    content: `✅ Wiadomość została usunięta.`,
+                    ephemeral: true
+                });
+                return;
+            }
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wykonywania akcji na zgłoszeniu:', error);
+            try {
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
+            } catch {}
         }
     }
 }
