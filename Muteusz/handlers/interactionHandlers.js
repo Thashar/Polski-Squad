@@ -433,6 +433,8 @@ class InteractionHandler {
                 await this.handleReportMuteDurationModalSubmit(interaction);
             } else if (interaction.customId.startsWith('report_warn_modal_')) {
                 await this.handleReportWarnModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('report_fu_mute_modal_')) {
+                await this.handleReportFollowupMuteModalSubmit(interaction);
             } else if (interaction.customId.startsWith('context_report_modal_')) {
                 await this.handleContextReportModalSubmit(interaction);
             } else if (interaction.customId.startsWith('context_mute_modal_')) {
@@ -454,6 +456,10 @@ class InteractionHandler {
             await this.handleViolationsButtonInteraction(interaction);
         } else if (interaction.customId === 'report_start_button') {
             await this.handleReportStartButton(interaction);
+        } else if (interaction.customId.startsWith('report_fu_mute_')) {
+            await this.handleReportFollowupMuteButton(interaction);
+        } else if (interaction.customId.startsWith('report_fu_delete_')) {
+            await this.handleReportFollowupDeleteButton(interaction);
         } else if (interaction.customId.startsWith('report_warn_') ||
                    interaction.customId.startsWith('report_mute_') ||
                    interaction.customId.startsWith('report_delete_') ||
@@ -3482,6 +3488,34 @@ class InteractionHandler {
     }
 
     /**
+     * Wyciąga ID zgłoszonego użytkownika z embeda zgłoszenia (pole "🎯 Zgłoszony użytkownik")
+     */
+    extractReportedUserIdFromEmbed(embed) {
+        const field = embed?.fields?.find(f => f.name === '🎯 Zgłoszony użytkownik');
+        if (!field) return null;
+        const match = field.value.match(/<@(\d+)>/);
+        return match ? match[1] : null;
+    }
+
+    /**
+     * Buduje wiersz przycisków follow-up (Wycisz + Usuń wiadomość)
+     */
+    buildFollowupActionRow(channelId, messageId, userId) {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`report_fu_mute_${channelId}_${messageId}_${userId}`)
+                .setLabel('Wycisz')
+                .setEmoji('🔇')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId(`report_fu_delete_${channelId}_${messageId}`)
+                .setLabel('Usuń wiadomość')
+                .setEmoji('🗑️')
+                .setStyle(ButtonStyle.Secondary)
+        );
+    }
+
+    /**
      * Obsługuje submit modala ostrzeżenia z poziomu zgłoszenia
      */
     async handleReportWarnModalSubmit(interaction) {
@@ -3541,13 +3575,120 @@ class InteractionHandler {
             } catch {}
 
             await interaction.reply({
-                content: `⚠️ <@${interaction.user.id}> ostrzegł użytkownika <@${userId}> za: „${reason}". Łącznie ostrzeżeń: **${allWarnings.length}**.`
+                content: `⚠️ <@${interaction.user.id}> ostrzegł użytkownika <@${userId}> za: „${reason}". Łącznie ostrzeżeń: **${allWarnings.length}**.`,
+                components: [this.buildFollowupActionRow(channelId, messageId, userId)]
             });
 
         } catch (error) {
             logger.error('❌ Błąd podczas dodawania ostrzeżenia przez zgłoszenie:', error);
             await interaction.reply({ content: '❌ Wystąpił błąd podczas dodawania ostrzeżenia.', ephemeral: true });
         }
+    }
+
+    /**
+     * Obsługuje przycisk "Wycisz" z follow-up wiadomości po akcji na zgłoszeniu
+     */
+    async handleReportFollowupMuteButton(interaction) {
+        if (!this.isAdminOrModerator(interaction.member)) {
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.', ephemeral: true });
+            return;
+        }
+
+        // customId: report_fu_mute_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        const channelId = parts[3];
+        const messageId = parts[4];
+        const userId = parts[5];
+
+        const muteModal = new ModalBuilder()
+            .setCustomId(`report_fu_mute_modal_${channelId}_${messageId}_${userId}`)
+            .setTitle('Czas wyciszenia');
+
+        const durationInput = new TextInputBuilder()
+            .setCustomId('mute_duration')
+            .setLabel('Czas wyciszenia (np. 10m, 2h, 1d)')
+            .setPlaceholder('Przykłady: 10m, 30m, 2h, 12h, 1d, 7d')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+        muteModal.addComponents(new ActionRowBuilder().addComponents(durationInput));
+        await interaction.showModal(muteModal);
+    }
+
+    /**
+     * Obsługuje submit modala wyciszenia z follow-up wiadomości
+     */
+    async handleReportFollowupMuteModalSubmit(interaction) {
+        // customId: report_fu_mute_modal_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        const channelId = parts[4];
+        const messageId = parts[5];
+        const userId = parts[6];
+
+        const durationRaw = interaction.fields.getTextInputValue('mute_duration');
+        const parsed = this.parseMuteDuration(durationRaw);
+
+        if (!parsed) {
+            await interaction.reply({ content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.', ephemeral: true });
+            return;
+        }
+
+        try {
+            const guild = interaction.guild;
+            const member = await guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                return;
+            }
+
+            await member.timeout(parsed.ms, `Zgłoszenie przez ${interaction.user.tag}`);
+
+            // Usuń przyciski z follow-up wiadomości
+            try {
+                if (interaction.message) {
+                    await interaction.message.edit({ components: [] });
+                }
+            } catch {}
+
+            await interaction.reply({
+                content: `🔇 <@${interaction.user.id}> wyciszył użytkownika <@${userId}> na **${parsed.label}**.`
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyciszania użytkownika (follow-up):', error);
+            await interaction.reply({ content: `❌ Nie udało się wyciszyć użytkownika: ${error.message}`, ephemeral: true });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk "Usuń wiadomość" z follow-up wiadomości po akcji na zgłoszeniu
+     */
+    async handleReportFollowupDeleteButton(interaction) {
+        if (!this.isAdminOrModerator(interaction.member)) {
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.', ephemeral: true });
+            return;
+        }
+
+        // customId: report_fu_delete_{channelId}_{messageId}
+        const parts = interaction.customId.split('_');
+        const channelId = parts[3];
+        const messageId = parts[4];
+
+        try {
+            const targetChannel = await interaction.client.channels.fetch(channelId);
+            const targetMessage = await targetChannel.messages.fetch(messageId);
+            await targetMessage.delete();
+        } catch {
+            await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', ephemeral: true });
+            return;
+        }
+
+        // Usuń przyciski z follow-up wiadomości
+        await interaction.update({ components: [] });
+
+        await interaction.followUp({
+            content: `🗑️ <@${interaction.user.id}> usunął zgłoszoną wiadomość.`
+        });
     }
 
     async handleReportMuteDurationModalSubmit(interaction) {
@@ -3844,17 +3985,24 @@ class InteractionHandler {
 
         try {
             if (action === 'nothing') {
-                const reporterId = this.extractReporterIdFromEmbed(interaction.message.embeds[0]);
+                const reportEmbed = interaction.message.embeds[0];
+                const reporterId = this.extractReporterIdFromEmbed(reportEmbed);
+                const reportedUserId = this.extractReportedUserIdFromEmbed(reportEmbed);
 
-                const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                const embed = EmbedBuilder.from(reportEmbed)
                     .setColor(0x808080)
                     .setTitle('✅ Zgłoszenie zamknięte (bez akcji)')
                     .setFooter({ text: `Zamknięte przez ${interaction.user.tag} • ID: ${messageId}` });
 
                 await interaction.update({ embeds: [embed], components: [] });
 
+                const followupComponents = reportedUserId
+                    ? [this.buildFollowupActionRow(channelId, messageId, reportedUserId)]
+                    : [];
+
                 await interaction.followUp({
-                    content: `✅ <@${interaction.user.id}> zamknął zgłoszenie bez podjęcia akcji.`
+                    content: `✅ <@${interaction.user.id}> zamknął zgłoszenie bez podjęcia akcji.`,
+                    components: followupComponents
                 });
 
                 // DM do reportera
