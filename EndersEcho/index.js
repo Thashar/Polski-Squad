@@ -31,12 +31,20 @@ const interactionHandler = new InteractionHandler(config, ocrService, aiOcrServi
 async function initializeBot() {
     try {
         logger.success('✅ EndersEcho gotowy - ranking z OCR, TOP role');
-        
+
         // Inicjalizuj OCR service
         await ocrService.initialize();
-        
+
         // Rejestracja slash commands
         await interactionHandler.registerSlashCommands(client);
+
+        // Eksportuj aktualny ranking do shared_data przy starcie
+        try {
+            const ranking = await rankingService.loadRanking();
+            await rankingService.saveSharedRanking(ranking);
+        } catch (e) {
+            logger.warn('Nie można wyeksportować rankingu do shared_data przy starcie:', e.message);
+        }
         
     } catch (error) {
         logger.error('Błąd podczas inicjalizacji bota EndersEcho:', error);

@@ -34,11 +34,49 @@ class RankingService {
             const path = require('path');
             const dir = path.dirname(this.config.ranking.file);
             await fs.mkdir(dir, { recursive: true });
-            
+
             await fs.writeFile(this.config.ranking.file, JSON.stringify(ranking, null, 2), 'utf8');
+
+            // Eksportuj posortowany ranking do shared_data
+            await this.saveSharedRanking(ranking);
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Eksportuje posortowany ranking do shared_data/endersecho_ranking.json
+     * Używany przez inne boty (np. Stalker /player-status)
+     */
+    async saveSharedRanking(ranking) {
+        try {
+            const path = require('path');
+            const sharedDir = path.join(__dirname, '../../../shared_data');
+            await fs.mkdir(sharedDir, { recursive: true });
+
+            const sorted = Object.values(ranking)
+                .sort((a, b) => b.scoreValue - a.scoreValue)
+                .map((player, index) => ({
+                    rank: index + 1,
+                    userId: player.userId,
+                    username: player.username,
+                    score: player.score,
+                    scoreValue: player.scoreValue,
+                    bossName: player.bossName || null,
+                    timestamp: player.timestamp
+                }));
+
+            const sharedData = {
+                updatedAt: new Date().toISOString(),
+                players: sorted
+            };
+
+            const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
+            await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
+        } catch (error) {
+            logger.error('Błąd eksportu rankingu do shared_data:', error);
+            // Nie rzucamy błędu — to operacja pomocnicza
         }
     }
 

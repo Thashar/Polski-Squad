@@ -119,6 +119,13 @@
 - **Kary i status:** `🏆 **Wykonuje CX:** Tak ✅` lub `Nie` na końcu sekcji
 - **Źródło danych:** Kontroler Bot zapisuje wyniki przy udanym OCR na kanale CX do `shared_data/cx_history.json` (userId jako klucz, historia do 20 wyników)
 
+**Integracja Enders Echo w `/player-status` i `/player-compare`** - Dane z EndersEcho Bot (shared_data/endersecho_ranking.json):
+- **Wczytywanie:** Po wczytaniu CX, bot odczytuje `shared_data/endersecho_ranking.json` szukając `userId` gracza
+- **Wyświetlanie w `/player-status`:** Osobna sekcja `### 🏹 ENDERS ECHO` z polami `🏅 Pozycja w rankingu: #X / Y` i `⚡ Rekord: score`
+- **Wyświetlanie w `/player-compare`:** Linia `🏹 **EE:** #X/Y — score` w polu gracza (`fmtPlayerField`)
+- **Brak danych:** Sekcja/linia jest pomijana gdy gracz nie ma wpisu w rankingu EE
+- **Źródło danych:** EndersEcho Bot eksportuje po każdym `/update` i przy starcie do `shared_data/endersecho_ranking.json` (posortowana lista z rank, userId, username, score, scoreValue)
+
 **Graficzny Trend w `/player-status`** - Osobna sekcja poniżej współczynników:
 - **Nagłówek:** `### 💨 TREND` z opisem słownym i ikoną (`**Rosnący** ↗️`)
 - **Sparkline:** 12 znaków Unicode blokowych (`▁▂▃▄▅▆▇█`) od najstarszego (lewo) do najnowszego (prawo)
