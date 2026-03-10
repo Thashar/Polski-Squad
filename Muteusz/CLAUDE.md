@@ -10,9 +10,16 @@
 7. **Losowe Odpowiedzi** - Virtutti Papajlari: 1/250 szansa, emoji PepeSoldier
 8. **Guard Checky** - `index.js`: Flaga `isFullyInitialized` blokuje eventy podczas startu, zapobiega błędami "Klient Discord nie jest dostępny"
 9. **Reaction Roles na wiadomościach** - `reactionRoleService.js`: Nadawanie/usuwanie ról za reakcje na konkretnych wiadomościach (np. ✅ na wiadomości → rola). Konfiguracja w `messageReactionRoles` w serwisie.
-10. **System Zgłoszeń** - `interactionHandlers.js`: Dwa tryby - komenda `/zgłoś` (link + opcjonalny powód) i przycisk `<a:PepeAlarmMan>` na kanale `1170349018900074637` (otwiera modal). Zgłoszenie trafia jako embed na kanał raportów (`MUTEUSZ_REPORT_CHANNEL_ID` lub fallback `MUTEUSZ_LOG_CHANNEL_ID`) z przyciskami akcji dla moderatorów: 🔨 Ostrzeż, 🔇 Wycisz (10 min), 🗑️ Usuń wiadomość, ✅ Nie rób nic. Po akcji embed zmienia kolor i usuwa przyciski. Przy starcie bota automatycznie wysyłana jest wiadomość z przyciskiem (jeśli jeszcze nie istnieje).
+10. **System Zgłoszeń** - `interactionHandlers.js`: Trzy tryby zgłaszania:
+    - Komenda `/zgłoś` (link + opcjonalny powód)
+    - Przycisk `<a:PepeAlarmMan>` na kanale `1170349018900074637` (otwiera modal)
+    - **Context menu wiadomości**: Prawy klik → Aplikacje → "Zgłoś wiadomość" (modal z powodem)
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/zgłoś`
+    Zgłoszenie trafia jako embed na kanał raportów (`MUTEUSZ_REPORT_CHANNEL_ID` lub fallback `MUTEUSZ_LOG_CHANNEL_ID`) z przyciskami akcji dla moderatorów: 🔨 Ostrzeż, 🔇 Wycisz (otwiera modal z czasem w formacie 10m/2h/1d), 🗑️ Usuń wiadomość, ✅ Nie rób nic. Po akcji embed zmienia kolor i usuwa przyciski. Przy starcie bota automatycznie wysyłana jest wiadomość z przyciskiem (jeśli jeszcze nie istnieje).
+
+    **Context menu użytkownika** (moderator-only): Prawy klik → Aplikacje → "Wycisz użytkownika" (modal z czasem + powodem) lub "Ostrzeż użytkownika" (modal z powodem).
+
+**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---
