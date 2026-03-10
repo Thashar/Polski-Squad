@@ -17,7 +17,7 @@
 
     Zgłoszenie trafia jako embed na kanał raportów (`MUTEUSZ_REPORT_CHANNEL_ID` lub fallback `MUTEUSZ_LOG_CHANNEL_ID`) z przyciskami akcji dla moderatorów: 🔨 Ostrzeż, 🔇 Wycisz (otwiera modal z czasem w formacie 10m/2h/1d), 🗑️ Usuń wiadomość, ✅ Nie rób nic. Po akcji embed zmienia kolor i usuwa przyciski. Przy starcie bota automatycznie wysyłana jest wiadomość z przyciskiem (jeśli jeszcze nie istnieje).
 
-    **Zgłoszenia moderatorów**: Jeśli zgłoszony użytkownik ma uprawnienia moderatora (`ModerateMembers` lub `Administrator`), embed ma pomarańczowy kolor i inny tytuł, a przyciski akcji (ostrzeż/wycisz/usuń) są ukryte — dostępny jest tylko "Nie rób nic". Wiadomość zawiera ping tekstowy `⚠️ Zgłoszenie dotyczy moderatora — wymagana akcja administratora.`
+    **Zgłoszenia moderatorów**: Jeśli zgłoszony użytkownik ma uprawnienia moderatora (`ModerateMembers` lub `Administrator`), embed ma pomarańczowy kolor i inny tytuł. Dostępne przyciski: 🗑️ Usuń wiadomość, ✅ Nie rób nic. Wiadomość zawiera ping tekstowy `⚠️ Zgłoszenie dotyczy moderatora — wymagana akcja administratora.`
 
     **Context menu użytkownika** (moderator-only): Prawy klik → Aplikacje → "Wycisz użytkownika" (modal z czasem + powodem) lub "Ostrzeż użytkownika" (modal z powodem).
 
