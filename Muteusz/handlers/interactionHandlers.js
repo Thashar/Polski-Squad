@@ -3541,8 +3541,7 @@ class InteractionHandler {
             } catch {}
 
             await interaction.reply({
-                content: `✅ Użytkownik <@${userId}> otrzymał ostrzeżenie. Łącznie ostrzeżeń: **${allWarnings.length}**`,
-                ephemeral: true
+                content: `⚠️ <@${interaction.user.id}> ostrzegł użytkownika <@${userId}> za: „${reason}". Łącznie ostrzeżeń: **${allWarnings.length}**.`
             });
 
         } catch (error) {
@@ -3598,8 +3597,7 @@ class InteractionHandler {
             }
 
             await interaction.reply({
-                content: `✅ Użytkownik <@${userId}> został wyciszony na **${parsed.label}**.`,
-                ephemeral: true
+                content: `🔇 <@${interaction.user.id}> wyciszył użytkownika <@${userId}> na **${parsed.label}**.`
             });
 
             // DM do reportera
@@ -3855,6 +3853,10 @@ class InteractionHandler {
 
                 await interaction.update({ embeds: [embed], components: [] });
 
+                await interaction.followUp({
+                    content: `✅ <@${interaction.user.id}> zamknął zgłoszenie bez podjęcia akcji.`
+                });
+
                 // DM do reportera
                 if (reporterId) {
                     try {
@@ -3922,8 +3924,7 @@ class InteractionHandler {
                 await interaction.update({ embeds: [embed], components: [] });
 
                 await interaction.followUp({
-                    content: `✅ Wiadomość została usunięta.`,
-                    ephemeral: true
+                    content: `🗑️ <@${interaction.user.id}> usunął zgłoszoną wiadomość.`
                 });
 
                 // DM do reportera
