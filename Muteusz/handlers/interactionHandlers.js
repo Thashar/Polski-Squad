@@ -441,6 +441,8 @@ class InteractionHandler {
                 await this.handleContextMuteModalSubmit(interaction);
             } else if (interaction.customId.startsWith('context_warn_modal_')) {
                 await this.handleContextWarnModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('automod_warn_modal_')) {
+                await this.handleAutoModWarnModalSubmit(interaction);
             }
         }
     }
@@ -465,6 +467,9 @@ class InteractionHandler {
                    interaction.customId.startsWith('report_delete_') ||
                    interaction.customId.startsWith('report_nothing_')) {
             await this.handleReportActionButton(interaction);
+        } else if (interaction.customId.startsWith('automod_delete_') ||
+                   interaction.customId.startsWith('automod_warn_')) {
+            await this.handleAutoModButton(interaction);
         }
     }
 
@@ -4087,6 +4092,108 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error('❌ Błąd podczas wykonywania akcji na zgłoszeniu:', error);
+            try {
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
+            } catch {}
+        }
+    }
+
+    /**
+     * Obsługuje przyciski auto-moderacji (usuń wiadomość / upomnij)
+     * @param {ButtonInteraction} interaction
+     */
+    async handleAutoModButton(interaction) {
+        if (!this.isAdminOrModerator(interaction.member)) {
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać te akcje.', ephemeral: true });
+            return;
+        }
+
+        // Format: automod_delete_{channelId}_{messageId}
+        //         automod_warn_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        const action = parts[1]; // 'delete' lub 'warn'
+        const channelId = parts[2];
+        const messageId = parts[3];
+        const userId = parts[4]; // tylko dla 'warn'
+
+        try {
+            if (action === 'delete') {
+                try {
+                    const targetChannel = await interaction.client.channels.fetch(channelId);
+                    const targetMessage = await targetChannel.messages.fetch(messageId);
+                    await targetMessage.delete();
+                } catch {
+                    await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', ephemeral: true });
+                    return;
+                }
+
+                const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor(0xFF0000)
+                    .setFooter({ text: `Wiadomość usunięta przez ${interaction.user.tag}` });
+
+                await interaction.update({ embeds: [embed], components: [] });
+                await interaction.followUp({ content: `🗑️ <@${interaction.user.id}> usunął wiadomość.`, ephemeral: false });
+                return;
+            }
+
+            if (action === 'warn') {
+                const warnModal = new ModalBuilder()
+                    .setCustomId(`automod_warn_modal_${channelId}_${messageId}_${userId}`)
+                    .setTitle('Powód upomnienia');
+
+                const reasonInput = new TextInputBuilder()
+                    .setCustomId('warn_reason')
+                    .setLabel('Powód upomnienia')
+                    .setPlaceholder('Opisz powód upomnienia...')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(512);
+
+                warnModal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                await interaction.showModal(warnModal);
+            }
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi przycisku auto-moderacji:', error);
+            try {
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
+            } catch {}
+        }
+    }
+
+    /**
+     * Obsługuje modal upomnienia z auto-moderacji
+     * @param {ModalSubmitInteraction} interaction
+     */
+    async handleAutoModWarnModalSubmit(interaction) {
+        // Format: automod_warn_modal_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        const userId = parts[5];
+        const reason = interaction.fields.getTextInputValue('warn_reason');
+
+        try {
+            const member = await interaction.guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika.', ephemeral: true });
+                return;
+            }
+
+            const warningService = this.messageHandler?.warningService;
+            if (warningService) {
+                warningService.addWarning(userId, interaction.user.id, interaction.user.tag, reason, interaction.guild.id);
+            }
+
+            try {
+                await member.send(`⚠️ Zostałeś upomniany przez moderację.\n**Powód:** ${reason}`);
+            } catch {}
+
+            const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                .setColor(0xFFA500)
+                .setFooter({ text: `Upomniany przez ${interaction.user.tag}` });
+
+            await interaction.update({ embeds: [embed], components: [] });
+            await interaction.followUp({ content: `⚠️ <@${interaction.user.id}> upomniał <@${userId}>.\n**Powód:** ${reason}`, ephemeral: false });
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi modala upomnienia auto-mod:', error);
             try {
                 await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
             } catch {}
