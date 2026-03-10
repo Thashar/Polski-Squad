@@ -8451,6 +8451,22 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             }
         } catch (e) { /* brak pliku - ok */ }
 
+        // Wczytaj dane EndersEcho dla obu graczy
+        let eeRank1 = null, eeScore1 = null, eeTotal = 0;
+        let eeRank2 = null, eeScore2 = null;
+        try {
+            const eePath = require('path').join(__dirname, '../../shared_data/endersecho_ranking.json');
+            const eeRaw = await fs.readFile(eePath, 'utf8');
+            const eeData = JSON.parse(eeRaw);
+            if (eeData && Array.isArray(eeData.players)) {
+                eeTotal = eeData.players.length;
+                const e1 = eeData.players.find(p => p.userId === userInfo1.userId);
+                const e2 = eeData.players.find(p => p.userId === userInfo2.userId);
+                if (e1) { eeRank1 = e1.rank; eeScore1 = e1.score; }
+                if (e2) { eeRank2 = e2.rank; eeScore2 = e2.score; }
+            }
+        } catch (e) { /* brak pliku - ok */ }
+
         const m1 = calcMetrics(data1);
         const m2 = calcMetrics(data2);
 
@@ -8539,7 +8555,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         // Formatuj pole statystyk gracza (pełne inline field)
-        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat) {
+        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat, eeRank, eeScore, eeTotal) {
             const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
             let f = '';
             f += `🏰 **${clanDisplay}**\n`;
@@ -8570,6 +8586,9 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `\n`;
             f += `⭐ **MVP:** ${fmtMvp(mvp)}\n`;
             f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
+            if (eeRank !== null) {
+                f += `🏹 **EE:** #${eeRank}/${eeTotal} — ${eeScore}\n`;
+            }
             f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
             return f;
         }
@@ -8642,8 +8661,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal), inline: true },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
 
@@ -8876,6 +8895,26 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const recentScores = userData.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
                 hasCxRecent = recentScores.length > 0;
                 hasCxElite = recentScores.some(s => s.score >= 2700);
+            }
+        } catch (e) {
+            // Plik nie istnieje jeszcze lub brak danych - ok
+        }
+
+        // Wczytaj dane EndersEcho gracza ze shared_data (eksportowane przez EndersEcho bot)
+        let endersEchoRank = null;    // pozycja w rankingu (#1, #2, ...)
+        let endersEchoTotal = 0;      // łączna liczba graczy w rankingu
+        let endersEchoScore = null;   // rekord (np. "1.5Q")
+        try {
+            const endersEchoPath = require('path').join(__dirname, '../../shared_data/endersecho_ranking.json');
+            const endersEchoRaw = await fs.readFile(endersEchoPath, 'utf8');
+            const endersEchoData = JSON.parse(endersEchoRaw);
+            if (endersEchoData && Array.isArray(endersEchoData.players)) {
+                endersEchoTotal = endersEchoData.players.length;
+                const playerEntry = endersEchoData.players.find(p => p.userId === userId);
+                if (playerEntry) {
+                    endersEchoRank = playerEntry.rank;
+                    endersEchoScore = playerEntry.score;
+                }
             }
         } catch (e) {
             // Plik nie istnieje jeszcze lub brak danych - ok
@@ -9638,6 +9677,13 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
         description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
+
+        // Sekcja 5b: Enders Echo ranking
+        if (endersEchoRank !== null) {
+            description += `\n### 🏹 ENDERS ECHO\n`;
+            description += `🏅 **Pozycja w rankingu:** #${endersEchoRank} / ${endersEchoTotal}\n`;
+            description += `⚡ **Rekord:** ${endersEchoScore}\n`;
+        }
 
         // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
         if (trendIcon !== null && trendDescription !== null) {

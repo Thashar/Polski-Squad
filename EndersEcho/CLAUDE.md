@@ -12,7 +12,7 @@
        - **KROK 3 (trzeci request):** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta (usunięcie dodatkowej cyfry przed jednostką, np. "18540Q" → "1854Q")
      - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, fallback na tradycyjny OCR
-2. **Rankingi** - `rankingService.js`: Persistent JSON (userId_bossName), funkcje: add/update, getTop, remove
+2. **Rankingi** - `rankingService.js`: Persistent JSON (userId_bossName), funkcje: add/update, getTop, remove. Po każdym zapisie eksportuje posortowany ranking do `shared_data/endersecho_ranking.json` (format: `{updatedAt, players: [{rank, userId, username, score, scoreValue, bossName, timestamp}]}`). Eksport również przy starcie bota (`initializeBot`). Używane przez Stalker `/player-status` i `/player-compare`.
 3. **Role TOP** - `roleManagementService.js`: 5 poziomów (top1, top2, top3-nieużywane, top4-10, top11-30), auto-update
 4. **Paginacja** - `interactionHandlers.js`: 10/strona, przyciski nawigacji, 1h timeout
 
