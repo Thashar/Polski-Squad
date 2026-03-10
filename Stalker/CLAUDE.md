@@ -121,7 +121,7 @@
 
 **Integracja Enders Echo w `/player-status` i `/player-compare`** - Dane z EndersEcho Bot (shared_data/endersecho_ranking.json):
 - **Wczytywanie:** Po wczytaniu CX, bot odczytuje `shared_data/endersecho_ranking.json` szukając `userId` gracza
-- **Wyświetlanie w `/player-status`:** Osobna sekcja `### 🏹 ENDERS ECHO` z polami `🏅 Pozycja w rankingu: #X / Y` i `⚡ Rekord: score`
+- **Wyświetlanie w `/player-status`:** Linia `🏹 **Enders Echo:** #X / Y — rekord: **score**` w sekcji STATYSTYKI, tuż pod linią `⚔️ Atak`
 - **Wyświetlanie w `/player-compare`:** Linia `🏹 **EE:** #X/Y — score` w polu gracza (`fmtPlayerField`)
 - **Brak danych:** Sekcja/linia jest pomijana gdy gracz nie ma wpisu w rankingu EE
 - **Źródło danych:** EndersEcho Bot eksportuje po każdym `/update` i przy starcie do `shared_data/endersecho_ranking.json` (posortowana lista z rank, userId, username, score, scoreValue)

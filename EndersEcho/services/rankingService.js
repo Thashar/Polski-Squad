@@ -52,7 +52,7 @@ class RankingService {
     async saveSharedRanking(ranking) {
         try {
             const path = require('path');
-            const sharedDir = path.join(__dirname, '../../../shared_data');
+            const sharedDir = path.join(__dirname, '../../shared_data');
             await fs.mkdir(sharedDir, { recursive: true });
 
             const sorted = Object.values(ranking)
