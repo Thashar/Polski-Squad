@@ -3,6 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const AutoModerationService = require('../services/autoModerationService');
 const WarningService = require('../services/warningService');
 const SpamDetectionService = require('../services/spamDetectionService');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const logger = createBotLogger('Muteusz');
 
@@ -380,32 +381,53 @@ class MessageHandler {
                 return;
             }
 
-            const badWordsText = result.badWords ? 
-                result.badWords.map(word => `\`${word.original}\``).join(', ') : 
+            const badWordsText = result.badWords ?
+                result.badWords.map(word => `\`${word.original}\``).join(', ') :
                 'Brak';
 
             let reason = '';
+            let embedColor = 0xFFA500;
             switch (action) {
                 case 'violation':
                     reason = `Naruszenie ${result.violationCount}/${this.config.autoModeration.violationsBeforeWarn}`;
+                    embedColor = 0xFFFF00;
                     break;
                 case 'warn':
                     reason = result.warnResult && result.warnResult.warning ? result.warnResult.warning.reason : 'Auto-moderacja: używanie wyzwisk';
+                    embedColor = 0xFF8C00;
                     break;
                 case 'mute':
                     reason = result.reason;
+                    embedColor = 0xFF0000;
                     break;
             }
 
-            const logMessage = formatMessage(this.config.messages.autoModerationLog, {
-                user: `${message.author.tag} (${message.author.id})`,
-                channel: `#${message.channel.name}`,
-                action: action.toUpperCase(),
-                reason: reason,
-                words: badWordsText
-            });
+            const embed = new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(`🤖 Auto-Moderacja — ${action.toUpperCase()}`)
+                .addFields(
+                    { name: 'Użytkownik', value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
+                    { name: 'Kanał', value: `<#${message.channel.id}>`, inline: true },
+                    { name: 'Powód', value: reason },
+                    { name: 'Wykryte słowa', value: badWordsText }
+                )
+                .setTimestamp();
 
-            await logChannel.send(logMessage);
+            const deleteButton = new ButtonBuilder()
+                .setCustomId(`automod_delete_${message.channel.id}_${message.id}`)
+                .setLabel('Usuń wiadomość')
+                .setEmoji('🗑️')
+                .setStyle(ButtonStyle.Danger);
+
+            const warnButton = new ButtonBuilder()
+                .setCustomId(`automod_warn_${message.channel.id}_${message.id}_${message.author.id}`)
+                .setLabel('Upomnij')
+                .setEmoji('⚠️')
+                .setStyle(ButtonStyle.Secondary);
+
+            const row = new ActionRowBuilder().addComponents(deleteButton, warnButton);
+
+            await logChannel.send({ embeds: [embed], components: [row] });
         } catch (error) {
             await this.logService.logMessage('error', `Błąd podczas logowania auto-moderacji: ${error.message}`, message);
         }
