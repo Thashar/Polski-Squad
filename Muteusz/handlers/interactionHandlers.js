@@ -431,6 +431,8 @@ class InteractionHandler {
                 await this.handleReportModalSubmit(interaction);
             } else if (interaction.customId.startsWith('report_mute_modal_')) {
                 await this.handleReportMuteDurationModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('report_warn_modal_')) {
+                await this.handleReportWarnModalSubmit(interaction);
             } else if (interaction.customId.startsWith('context_report_modal_')) {
                 await this.handleContextReportModalSubmit(interaction);
             } else if (interaction.customId.startsWith('context_mute_modal_')) {
@@ -3421,7 +3423,7 @@ class InteractionHandler {
                 return;
             }
 
-            const warning = await this.warningService.addWarning(userId, interaction.guildId, interaction.user.id, reason);
+            const warning = await this.warningService.addWarning(userId, interaction.user.id, interaction.user.tag, reason, interaction.guildId);
             const allWarnings = await this.warningService.getUserWarnings(userId, interaction.guildId);
 
             await interaction.reply({
@@ -3469,6 +3471,86 @@ class InteractionHandler {
     /**
      * Obsługuje submit modalu czasu wyciszenia
      */
+    /**
+     * Wyciąga ID reportera z embeda zgłoszenia (pole "👤 Zgłaszający")
+     */
+    extractReporterIdFromEmbed(embed) {
+        const field = embed?.fields?.find(f => f.name === '👤 Zgłaszający');
+        if (!field) return null;
+        const match = field.value.match(/<@(\d+)>/);
+        return match ? match[1] : null;
+    }
+
+    /**
+     * Obsługuje submit modala ostrzeżenia z poziomu zgłoszenia
+     */
+    async handleReportWarnModalSubmit(interaction) {
+        // customId: report_warn_modal_{channelId}_{messageId}_{userId}
+        const parts = interaction.customId.split('_');
+        // parts: ['report', 'warn', 'modal', channelId, messageId, userId]
+        const channelId = parts[3];
+        const messageId = parts[4];
+        const userId = parts[5];
+
+        const reason = interaction.fields.getTextInputValue('warn_reason');
+
+        try {
+            const guild = interaction.guild;
+            const member = await guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                return;
+            }
+
+            const warningResult = this.warningService.addWarning(
+                userId,
+                interaction.user.id,
+                interaction.user.tag,
+                reason,
+                guild.id
+            );
+            const allWarnings = this.warningService.getUserWarnings(userId, guild.id);
+
+            // Zaktualizuj embed zgłoszenia
+            if (interaction.message) {
+                const reporterId = this.extractReporterIdFromEmbed(interaction.message.embeds[0]);
+
+                const embed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor(0xFF8C00)
+                    .setTitle('⚠️ Zgłoszenie - Ostrzegano użytkownika')
+                    .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
+
+                await interaction.message.edit({ embeds: [embed], components: [] });
+
+                // DM do reportera
+                if (reporterId) {
+                    try {
+                        const reporterUser = await interaction.client.users.fetch(reporterId);
+                        await reporterUser.send(`✅ Twoje zgłoszenie zostało rozpatrzone.\n> **Akcja:** Moderator ostrzegł zgłoszonego użytkownika.`);
+                    } catch {}
+                }
+            }
+
+            // DM do ostrzeżonego użytkownika
+            try {
+                await member.send(
+                    `⚠️ Otrzymałeś ostrzeżenie na serwerze **${guild.name}**.\n` +
+                    `> **Powód:** ${reason}\n` +
+                    `> **Łączna liczba ostrzeżeń:** ${allWarnings.length}`
+                );
+            } catch {}
+
+            await interaction.reply({
+                content: `✅ Użytkownik <@${userId}> otrzymał ostrzeżenie. Łącznie ostrzeżeń: **${allWarnings.length}**`,
+                ephemeral: true
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas dodawania ostrzeżenia przez zgłoszenie:', error);
+            await interaction.reply({ content: '❌ Wystąpił błąd podczas dodawania ostrzeżenia.', ephemeral: true });
+        }
+    }
+
     async handleReportMuteDurationModalSubmit(interaction) {
         // customId: report_mute_modal_{channelId}_{messageId}_{userId}
         const parts = interaction.customId.split('_');
@@ -3499,12 +3581,11 @@ class InteractionHandler {
             await member.timeout(parsed.ms, `Zgłoszenie przez ${interaction.user.tag}`);
 
             // Zaktualizuj oryginalny embed (wiadomość z raportem)
+            let reporterId = null;
             try {
-                const reportChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
-                // Szukamy oryginalnej wiadomości raportu po messageId w kanale raportów
-                // (messageId w customId to ID oryginalnej wiadomości, nie raportu)
-                // Zamiast tego zaktualizuj wiadomość z interakcją - interaction.message
                 if (interaction.message) {
+                    reporterId = this.extractReporterIdFromEmbed(interaction.message.embeds[0]);
+
                     const embed = EmbedBuilder.from(interaction.message.embeds[0])
                         .setColor(0xFF8C00)
                         .setTitle(`🔇 Zgłoszenie - Wyciszono użytkownika na ${parsed.label}`)
@@ -3520,6 +3601,14 @@ class InteractionHandler {
                 content: `✅ Użytkownik <@${userId}> został wyciszony na **${parsed.label}**.`,
                 ephemeral: true
             });
+
+            // DM do reportera
+            if (reporterId) {
+                try {
+                    const reporterUser = await interaction.client.users.fetch(reporterId);
+                    await reporterUser.send(`✅ Twoje zgłoszenie zostało rozpatrzone.\n> **Akcja:** Moderator wyciszył zgłoszonego użytkownika na **${parsed.label}**.`);
+                } catch {}
+            }
 
             await this.logService.logMessage('info',
                 `Wyciszono użytkownika ${userId} na ${parsed.label} przez ${interaction.user.tag} (zgłoszenie)`,
@@ -3757,45 +3846,41 @@ class InteractionHandler {
 
         try {
             if (action === 'nothing') {
-                // Zaktualizuj embed - oznacz jako zamknięte
+                const reporterId = this.extractReporterIdFromEmbed(interaction.message.embeds[0]);
+
                 const embed = EmbedBuilder.from(interaction.message.embeds[0])
                     .setColor(0x808080)
                     .setTitle('✅ Zgłoszenie zamknięte (bez akcji)')
                     .setFooter({ text: `Zamknięte przez ${interaction.user.tag} • ID: ${messageId}` });
 
                 await interaction.update({ embeds: [embed], components: [] });
+
+                // DM do reportera
+                if (reporterId) {
+                    try {
+                        const reporterUser = await interaction.client.users.fetch(reporterId);
+                        await reporterUser.send(`✅ Twoje zgłoszenie zostało rozpatrzone.\n> **Akcja:** Moderacja nie podjęła dodatkowych działań.`);
+                    } catch {}
+                }
                 return;
             }
 
             if (action === 'warn') {
-                const guild = interaction.guild;
-                const member = await guild.members.fetch(userId).catch(() => null);
-                if (!member) {
-                    await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
-                    return;
-                }
+                // Pokaż modal do wpisania powodu ostrzeżenia
+                const warnModal = new ModalBuilder()
+                    .setCustomId(`report_warn_modal_${channelId}_${messageId}_${userId}`)
+                    .setTitle('Powód ostrzeżenia');
 
-                // Dodaj ostrzeżenie przez warningService
-                const warning = await this.warningService.addWarning(
-                    userId,
-                    guild.id,
-                    interaction.user.id,
-                    'Naruszenie zasad serwera (zgłoszenie)'
-                );
+                const reasonInput = new TextInputBuilder()
+                    .setCustomId('warn_reason')
+                    .setLabel('Powód ostrzeżenia')
+                    .setPlaceholder('Opisz powód ostrzeżenia...')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(512);
 
-                const allWarnings = await this.warningService.getUserWarnings(userId, guild.id);
-
-                const embed = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setColor(0xFF8C00)
-                    .setTitle('⚠️ Zgłoszenie - Ostrzegano użytkownika')
-                    .setFooter({ text: `Akcja: ${interaction.user.tag} • ID: ${messageId}` });
-
-                await interaction.update({ embeds: [embed], components: [] });
-
-                await interaction.followUp({
-                    content: `✅ Użytkownik <@${userId}> otrzymał ostrzeżenie. Łącznie ostrzeżeń: **${allWarnings.length}**`,
-                    ephemeral: true
-                });
+                warnModal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                await interaction.showModal(warnModal);
                 return;
             }
 
@@ -3818,6 +3903,8 @@ class InteractionHandler {
             }
 
             if (action === 'delete') {
+                const reporterIdDelete = this.extractReporterIdFromEmbed(interaction.message.embeds[0]);
+
                 try {
                     const targetChannel = await interaction.client.channels.fetch(channelId);
                     const targetMessage = await targetChannel.messages.fetch(messageId);
@@ -3838,6 +3925,14 @@ class InteractionHandler {
                     content: `✅ Wiadomość została usunięta.`,
                     ephemeral: true
                 });
+
+                // DM do reportera
+                if (reporterIdDelete) {
+                    try {
+                        const reporterUser = await interaction.client.users.fetch(reporterIdDelete);
+                        await reporterUser.send(`✅ Twoje zgłoszenie zostało rozpatrzone.\n> **Akcja:** Moderator usunął zgłoszoną wiadomość.`);
+                    } catch {}
+                }
                 return;
             }
 
