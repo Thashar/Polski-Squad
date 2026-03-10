@@ -3643,10 +3643,14 @@ class InteractionHandler {
             const reportedUser = targetMessage.author;
             const reporter = interaction.user;
 
+            // Sprawdź czy zgłoszony użytkownik jest moderatorem
+            const reportedMember = await interaction.guild.members.fetch(reportedUser.id).catch(() => null);
+            const reportedIsMod = reportedMember ? this.isAdminOrModerator(reportedMember) : false;
+
             // Zbuduj embed raportu
             const embed = new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle('🚨 Nowe zgłoszenie wiadomości')
+                .setColor(reportedIsMod ? 0xFF6600 : 0xFF0000)
+                .setTitle(reportedIsMod ? '🚨 Zgłoszenie moderatora — tylko administratorzy mogą podjąć akcję' : '🚨 Nowe zgłoszenie wiadomości')
                 .addFields(
                     { name: '👤 Zgłaszający', value: `${reporter} (${reporter.tag})`, inline: true },
                     { name: '🎯 Zgłoszony użytkownik', value: `${reportedUser} (${reportedUser.tag})`, inline: true },
@@ -3663,48 +3667,63 @@ class InteractionHandler {
                 if (firstImage) embed.setImage(firstImage.url);
             }
 
-            // Przyciski dla moderatorów
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`report_warn_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Ostrzeż użytkownika')
-                    .setEmoji('🔨')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId(`report_mute_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Wycisz')
-                    .setEmoji('🔇')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId(`report_delete_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Usuń wiadomość')
-                    .setEmoji('🗑️')
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId(`report_nothing_${channelId}_${messageId}`)
-                    .setLabel('Nie rób nic')
-                    .setEmoji('✅')
-                    .setStyle(ButtonStyle.Secondary)
-            );
+            // Przyciski: jeśli zgłoszony to moderator — tylko "Nie rób nic"
+            let row;
+            if (reportedIsMod) {
+                row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`report_nothing_${channelId}_${messageId}`)
+                        .setLabel('Nie rób nic')
+                        .setEmoji('✅')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            } else {
+                row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`report_warn_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Ostrzeż użytkownika')
+                        .setEmoji('🔨')
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId(`report_mute_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Wycisz')
+                        .setEmoji('🔇')
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId(`report_delete_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Usuń wiadomość')
+                        .setEmoji('🗑️')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`report_nothing_${channelId}_${messageId}`)
+                        .setLabel('Nie rób nic')
+                        .setEmoji('✅')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
 
             // Wyślij na kanał zgłoszeń
             const reportChannelId = this.config.reports?.reportChannelId;
             if (reportChannelId) {
                 try {
                     const reportChannel = await interaction.client.channels.fetch(reportChannelId);
-                    await reportChannel.send({ embeds: [embed], components: [row] });
+                    // Dla zgłoszeń moderatorów — ping adminów w treści wiadomości
+                    const content = reportedIsMod ? '⚠️ **Zgłoszenie dotyczy moderatora — wymagana akcja administratora.**' : undefined;
+                    await reportChannel.send({ content, embeds: [embed], components: [row] });
                 } catch (err) {
                     logger.error('❌ Nie można wysłać zgłoszenia na kanał raportów:', err.message);
                 }
             }
 
             await this.logService.logMessage('info',
-                `Zgłoszenie od ${reporter.tag} - zgłoszona wiadomość: ${messageId} (user: ${reportedUser.tag})`,
+                `Zgłoszenie od ${reporter.tag} - zgłoszona wiadomość: ${messageId} (user: ${reportedUser.tag}${reportedIsMod ? ' [MODERATOR]' : ''})`,
                 interaction
             );
 
             await interaction.editReply({
-                content: '✅ Twoje zgłoszenie zostało przesłane do moderatorów. Dziękujemy!'
+                content: reportedIsMod
+                    ? '✅ Twoje zgłoszenie moderatora zostało przesłane do administratorów. Dziękujemy!'
+                    : '✅ Twoje zgłoszenie zostało przesłane do moderatorów. Dziękujemy!'
             });
 
         } catch (error) {
