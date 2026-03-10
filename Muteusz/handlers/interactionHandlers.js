@@ -3900,10 +3900,15 @@ class InteractionHandler {
                 if (firstImage) embed.setImage(firstImage.url);
             }
 
-            // Przyciski: jeśli zgłoszony to moderator — tylko "Nie rób nic"
+            // Przyciski: jeśli zgłoszony to moderator — "Usuń wiadomość" i "Nie rób nic"
             let row;
             if (reportedIsMod) {
                 row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`report_delete_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Usuń wiadomość')
+                        .setEmoji('🗑️')
+                        .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                         .setCustomId(`report_nothing_${channelId}_${messageId}`)
                         .setLabel('Nie rób nic')
