@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const config = require('./config/config');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -122,7 +122,10 @@ client.once(Events.ClientReady, async () => {
     // Oznacz bota jako w pełni zainicjalizowanego
     isFullyInitialized = true;
 
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode');
+    // Wyślij/odśwież wiadomość z przyciskiem do zgłaszania
+    await setupReportButtonMessage(client, config);
+
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -360,6 +363,46 @@ process.on('SIGTERM', async () => {
         process.exit(1);
     }
 });
+
+/**
+ * Wysyła lub aktualizuje wiadomość z przyciskiem do zgłaszania naruszeń na dedykowanym kanale.
+ * Przy starcie bota sprawdza czy wiadomość już istnieje - jeśli tak, pomija.
+ */
+async function setupReportButtonMessage(client, config) {
+    const channelId = config.reports?.buttonChannelId;
+    if (!channelId) return;
+
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel) return;
+
+        // Sprawdź czy wiadomość z przyciskiem już istnieje (szukaj wśród ostatnich 50 wiadomości bota)
+        const messages = await channel.messages.fetch({ limit: 50 });
+        const existing = messages.find(msg =>
+            msg.author.id === client.user.id &&
+            msg.components?.length > 0 &&
+            msg.components[0]?.components?.[0]?.customId === 'report_start_button'
+        );
+
+        if (existing) {
+            logger.info('ℹ️ Wiadomość z przyciskiem zgłoszenia już istnieje na kanale, pomijam.');
+            return;
+        }
+
+        const button = new ButtonBuilder()
+            .setCustomId('report_start_button')
+            .setLabel('Zgłoś wypowiedź naruszającą zasady na serwerze')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji({ id: '1341086085089857619', name: 'PepeAlarmMan', animated: true });
+
+        const row = new ActionRowBuilder().addComponents(button);
+
+        await channel.send({ components: [row] });
+        logger.success('✅ Wysłano wiadomość z przyciskiem zgłoszenia na kanale');
+    } catch (error) {
+        logger.error('❌ Nie można wysłać wiadomości z przyciskiem zgłoszenia:', error.message);
+    }
+}
 
 /**
  * Uruchamia bota

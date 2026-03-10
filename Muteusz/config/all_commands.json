@@ -117,6 +117,12 @@
           "description": "Tworzy manualną archiwizację wszystkich danych botów do Google Drive (niezależną, nie usuwana automatycznie)",
           "usage": "/data-archive",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/zgłoś",
+          "description": "Zgłoś wiadomość naruszającą zasady serwera - wyślij link do wiadomości i opcjonalny powód. Zgłoszenie trafia do moderatorów.",
+          "usage": "/zgłoś link:[link do wiadomości] [powod:opcjonalny powód]",
+          "requiredPermission": "public"
         }
       ]
     },

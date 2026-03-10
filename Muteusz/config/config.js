@@ -130,6 +130,12 @@ module.exports = {
         pepeSoldierEmoji: '<:PepeSolidierVirtittiPapajlari:1401322467397472459>'
     },
     
+    // Konfiguracja systemu zgłoszeń
+    reports: {
+        buttonChannelId: '1170349018900074637',
+        reportChannelId: process.env.MUTEUSZ_REPORT_CHANNEL_ID || process.env.MUTEUSZ_LOG_CHANNEL_ID
+    },
+
     // Konfiguracja detekcji spamu z linkami
     spamDetection: {
         enabled: true,
