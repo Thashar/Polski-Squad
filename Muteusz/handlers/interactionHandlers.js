@@ -4001,15 +4001,6 @@ class InteractionHandler {
 
                 await interaction.update({ embeds: [embed], components: [] });
 
-                const followupComponents = reportedUserId
-                    ? [this.buildFollowupActionRow(channelId, messageId, reportedUserId)]
-                    : [];
-
-                await interaction.followUp({
-                    content: `✅ <@${interaction.user.id}> zamknął zgłoszenie bez podjęcia akcji.`,
-                    components: followupComponents
-                });
-
                 // DM do reportera
                 if (reporterId) {
                     try {
