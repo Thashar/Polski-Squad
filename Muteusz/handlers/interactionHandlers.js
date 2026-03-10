@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
@@ -309,7 +309,21 @@ class InteractionHandler {
                     option.setName('powod')
                         .setDescription('Powód zgłoszenia (opcjonalny)')
                         .setRequired(false)
-                )
+                ),
+
+            // Context menu: prawy klik na wiadomość → Aplikacje
+            new ContextMenuCommandBuilder()
+                .setName('Zgłoś wiadomość')
+                .setType(ApplicationCommandType.Message),
+
+            // Context menu: prawy klik na użytkownika → Aplikacje (moderator-only)
+            new ContextMenuCommandBuilder()
+                .setName('Wycisz użytkownika')
+                .setType(ApplicationCommandType.User),
+
+            new ContextMenuCommandBuilder()
+                .setName('Ostrzeż użytkownika')
+                .setType(ApplicationCommandType.User),
         ];
         
         try {
@@ -400,6 +414,16 @@ class InteractionHandler {
                     await this.handleZglosCommand(interaction);
                     break;
             }
+        } else if (interaction.isMessageContextMenuCommand()) {
+            if (interaction.commandName === 'Zgłoś wiadomość') {
+                await this.handleReportMessageContextMenu(interaction);
+            }
+        } else if (interaction.isUserContextMenuCommand()) {
+            if (interaction.commandName === 'Wycisz użytkownika') {
+                await this.handleMuteUserContextMenu(interaction);
+            } else if (interaction.commandName === 'Ostrzeż użytkownika') {
+                await this.handleWarnUserContextMenu(interaction);
+            }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
         } else if (interaction.isModalSubmit()) {
@@ -407,6 +431,12 @@ class InteractionHandler {
                 await this.handleReportModalSubmit(interaction);
             } else if (interaction.customId.startsWith('report_mute_modal_')) {
                 await this.handleReportMuteDurationModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('context_report_modal_')) {
+                await this.handleContextReportModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('context_mute_modal_')) {
+                await this.handleContextMuteModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('context_warn_modal_')) {
+                await this.handleContextWarnModalSubmit(interaction);
             }
         }
     }
@@ -3228,6 +3258,188 @@ class InteractionHandler {
     }
 
     /**
+     * Context menu: prawy klik na wiadomość → "Zgłoś wiadomość"
+     * Otwiera modal z polem powodu, następnie tworzy raport dla moderatorów.
+     */
+    async handleReportMessageContextMenu(interaction) {
+        const targetMessage = interaction.targetMessage;
+        const modal = new ModalBuilder()
+            .setCustomId(`context_report_modal_${targetMessage.channelId}_${targetMessage.id}`)
+            .setTitle('Zgłoś wiadomość');
+
+        const powodInput = new TextInputBuilder()
+            .setCustomId('report_reason')
+            .setLabel('Powód zgłoszenia (opcjonalny)')
+            .setPlaceholder('Opisz krótko dlaczego zgłaszasz tę wiadomość...')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(false);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(powodInput));
+        await interaction.showModal(modal);
+    }
+
+    /**
+     * Obsługuje submit modalu po "Zgłoś wiadomość" z context menu
+     */
+    async handleContextReportModalSubmit(interaction) {
+        // customId: context_report_modal_{channelId}_{messageId}
+        const parts = interaction.customId.split('_');
+        // parts: ['context', 'report', 'modal', channelId, messageId]
+        const channelId = parts[3];
+        const messageId = parts[4];
+        const powod = interaction.fields.getTextInputValue('report_reason') || 'Brak podanego powodu';
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const targetChannel = await interaction.client.channels.fetch(channelId);
+            const targetMessage = await targetChannel.messages.fetch(messageId);
+            const guildId = interaction.guildId;
+            const link = `https://discord.com/channels/${guildId}/${channelId}/${messageId}`;
+
+            await this.processReport(interaction, link, powod, true, targetMessage);
+        } catch {
+            await interaction.editReply({ content: '❌ Nie znaleziono wiadomości. Mogła zostać usunięta.' });
+        }
+    }
+
+    /**
+     * Context menu: prawy klik na użytkownika → "Wycisz użytkownika" (moderator-only)
+     * Otwiera modal z czasem wyciszenia.
+     */
+    async handleMuteUserContextMenu(interaction) {
+        if (!this.isAdminOrModerator(interaction.member)) {
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wyciszać użytkowników.', ephemeral: true });
+            return;
+        }
+
+        const targetUser = interaction.targetUser;
+        const muteModal = new ModalBuilder()
+            .setCustomId(`context_mute_modal_${targetUser.id}`)
+            .setTitle(`Wycisz: ${targetUser.username}`);
+
+        const durationInput = new TextInputBuilder()
+            .setCustomId('mute_duration')
+            .setLabel('Czas wyciszenia (np. 10m, 2h, 1d)')
+            .setPlaceholder('Przykłady: 10m, 30m, 2h, 12h, 1d, 7d')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+        const reasonInput = new TextInputBuilder()
+            .setCustomId('mute_reason')
+            .setLabel('Powód (opcjonalny)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+        muteModal.addComponents(
+            new ActionRowBuilder().addComponents(durationInput),
+            new ActionRowBuilder().addComponents(reasonInput)
+        );
+        await interaction.showModal(muteModal);
+    }
+
+    /**
+     * Obsługuje submit modalu po "Wycisz użytkownika" z context menu
+     */
+    async handleContextMuteModalSubmit(interaction) {
+        // customId: context_mute_modal_{userId}
+        const userId = interaction.customId.split('_')[3];
+        const durationRaw = interaction.fields.getTextInputValue('mute_duration');
+        const reason = interaction.fields.getTextInputValue('mute_reason') || `Wyciszony przez ${interaction.user.tag}`;
+
+        const parsed = this.parseMuteDuration(durationRaw);
+        if (!parsed) {
+            await interaction.reply({
+                content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        try {
+            const member = await interaction.guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                return;
+            }
+
+            await member.timeout(parsed.ms, reason);
+
+            await interaction.reply({
+                content: `✅ Użytkownik <@${userId}> został wyciszony na **${parsed.label}**.\n> Powód: ${reason}`,
+                ephemeral: true
+            });
+
+            await this.logService.logMessage('info',
+                `Wyciszono ${member.user.tag} na ${parsed.label} przez ${interaction.user.tag} (context menu). Powód: ${reason}`,
+                interaction
+            );
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyciszania użytkownika (context menu):', error);
+            await interaction.reply({ content: `❌ Nie udało się wyciszyć: ${error.message}`, ephemeral: true });
+        }
+    }
+
+    /**
+     * Context menu: prawy klik na użytkownika → "Ostrzeż użytkownika" (moderator-only)
+     * Otwiera modal z powodem, następnie nakłada ostrzeżenie.
+     */
+    async handleWarnUserContextMenu(interaction) {
+        if (!this.isAdminOrModerator(interaction.member)) {
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą ostrzegać użytkowników.', ephemeral: true });
+            return;
+        }
+
+        const targetUser = interaction.targetUser;
+        const warnModal = new ModalBuilder()
+            .setCustomId(`context_warn_modal_${targetUser.id}`)
+            .setTitle(`Ostrzeż: ${targetUser.username}`);
+
+        const reasonInput = new TextInputBuilder()
+            .setCustomId('warn_reason')
+            .setLabel('Powód ostrzeżenia')
+            .setPlaceholder('Opisz powód ostrzeżenia...')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true);
+
+        warnModal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+        await interaction.showModal(warnModal);
+    }
+
+    /**
+     * Obsługuje submit modalu po "Ostrzeż użytkownika" z context menu
+     */
+    async handleContextWarnModalSubmit(interaction) {
+        // customId: context_warn_modal_{userId}
+        const userId = interaction.customId.split('_')[3];
+        const reason = interaction.fields.getTextInputValue('warn_reason');
+
+        try {
+            const member = await interaction.guild.members.fetch(userId).catch(() => null);
+            if (!member) {
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                return;
+            }
+
+            const warning = await this.warningService.addWarning(userId, interaction.guildId, interaction.user.id, reason);
+            const allWarnings = await this.warningService.getUserWarnings(userId, interaction.guildId);
+
+            await interaction.reply({
+                content: `✅ Użytkownik <@${userId}> otrzymał ostrzeżenie.\n> Powód: ${reason}\nŁącznie ostrzeżeń: **${allWarnings.length}**`,
+                ephemeral: true
+            });
+
+            await this.logService.logMessage('info',
+                `Ostrzeżono ${member.user.tag} przez ${interaction.user.tag} (context menu). Powód: ${reason}`,
+                interaction
+            );
+        } catch (error) {
+            logger.error('❌ Błąd podczas ostrzegania użytkownika (context menu):', error);
+            await interaction.reply({ content: `❌ Nie udało się ostrzec użytkownika: ${error.message}`, ephemeral: true });
+        }
+    }
+
+    /**
      * Parsuje czas wyciszenia z formatu 1m/1h/1d na milisekundy.
      * Zwraca { ms, label } lub null jeśli format nieprawidłowy.
      */
@@ -3386,44 +3598,59 @@ class InteractionHandler {
     /**
      * Przetwarza zgłoszenie wiadomości (wspólna logika dla komendy i modalu)
      */
-    async processReport(interaction, messageLink, powod, isModal) {
+    async processReport(interaction, messageLink, powod, isModal, prefetchedMessage = null) {
         try {
-            if (!isModal) {
-                await interaction.deferReply({ ephemeral: true });
-            } else {
+            // Jeśli wywołano z context menu (po deferReply), nie robimy deferReply ponownie
+            if (!interaction.deferred && !interaction.replied) {
                 await interaction.deferReply({ ephemeral: true });
             }
 
-            const parsed = this.parseMessageLink(messageLink);
-            if (!parsed) {
-                await interaction.editReply({
-                    content: '❌ Nieprawidłowy link do wiadomości. Użyj opcji **Prawy klik → Kopiuj link do wiadomości** w Discordzie.'
-                });
-                return;
-            }
-
-            const { channelId, messageId } = parsed;
-
-            // Pobierz kanał i wiadomość
             let targetChannel;
             let targetMessage;
-            try {
-                targetChannel = await interaction.client.channels.fetch(channelId);
-                targetMessage = await targetChannel.messages.fetch(messageId);
-            } catch {
-                await interaction.editReply({
-                    content: '❌ Nie znaleziono wiadomości. Upewnij się, że link jest prawidłowy i wiadomość nadal istnieje.'
-                });
-                return;
+            let parsed;
+
+            if (prefetchedMessage) {
+                // Context menu - wiadomość już pobrana
+                targetMessage = prefetchedMessage;
+                targetChannel = prefetchedMessage.channel;
+                parsed = this.parseMessageLink(messageLink);
+                if (!parsed) {
+                    // fallback - zbuduj parsed ręcznie
+                    parsed = { guildId: interaction.guildId, channelId: targetChannel.id, messageId: targetMessage.id };
+                }
+            } else {
+                parsed = this.parseMessageLink(messageLink);
+                if (!parsed) {
+                    await interaction.editReply({
+                        content: '❌ Nieprawidłowy link do wiadomości. Użyj opcji **Prawy klik → Kopiuj link do wiadomości** w Discordzie.'
+                    });
+                    return;
+                }
+
+                const { channelId, messageId } = parsed;
+
+                try {
+                    targetChannel = await interaction.client.channels.fetch(channelId);
+                    targetMessage = await targetChannel.messages.fetch(messageId);
+                } catch {
+                    await interaction.editReply({
+                        content: '❌ Nie znaleziono wiadomości. Upewnij się, że link jest prawidłowy i wiadomość nadal istnieje.'
+                    });
+                    return;
+                }
             }
 
             const reportedUser = targetMessage.author;
             const reporter = interaction.user;
 
+            // Sprawdź czy zgłoszony użytkownik jest moderatorem
+            const reportedMember = await interaction.guild.members.fetch(reportedUser.id).catch(() => null);
+            const reportedIsMod = reportedMember ? this.isAdminOrModerator(reportedMember) : false;
+
             // Zbuduj embed raportu
             const embed = new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle('🚨 Nowe zgłoszenie wiadomości')
+                .setColor(reportedIsMod ? 0xFF6600 : 0xFF0000)
+                .setTitle(reportedIsMod ? '🚨 Zgłoszenie moderatora — tylko administratorzy mogą podjąć akcję' : '🚨 Nowe zgłoszenie wiadomości')
                 .addFields(
                     { name: '👤 Zgłaszający', value: `${reporter} (${reporter.tag})`, inline: true },
                     { name: '🎯 Zgłoszony użytkownik', value: `${reportedUser} (${reportedUser.tag})`, inline: true },
@@ -3440,48 +3667,63 @@ class InteractionHandler {
                 if (firstImage) embed.setImage(firstImage.url);
             }
 
-            // Przyciski dla moderatorów
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`report_warn_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Ostrzeż użytkownika')
-                    .setEmoji('🔨')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId(`report_mute_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Wycisz')
-                    .setEmoji('🔇')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId(`report_delete_${channelId}_${messageId}_${reportedUser.id}`)
-                    .setLabel('Usuń wiadomość')
-                    .setEmoji('🗑️')
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId(`report_nothing_${channelId}_${messageId}`)
-                    .setLabel('Nie rób nic')
-                    .setEmoji('✅')
-                    .setStyle(ButtonStyle.Secondary)
-            );
+            // Przyciski: jeśli zgłoszony to moderator — tylko "Nie rób nic"
+            let row;
+            if (reportedIsMod) {
+                row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`report_nothing_${channelId}_${messageId}`)
+                        .setLabel('Nie rób nic')
+                        .setEmoji('✅')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            } else {
+                row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`report_warn_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Ostrzeż użytkownika')
+                        .setEmoji('🔨')
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId(`report_mute_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Wycisz')
+                        .setEmoji('🔇')
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId(`report_delete_${channelId}_${messageId}_${reportedUser.id}`)
+                        .setLabel('Usuń wiadomość')
+                        .setEmoji('🗑️')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`report_nothing_${channelId}_${messageId}`)
+                        .setLabel('Nie rób nic')
+                        .setEmoji('✅')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
 
             // Wyślij na kanał zgłoszeń
             const reportChannelId = this.config.reports?.reportChannelId;
             if (reportChannelId) {
                 try {
                     const reportChannel = await interaction.client.channels.fetch(reportChannelId);
-                    await reportChannel.send({ embeds: [embed], components: [row] });
+                    // Dla zgłoszeń moderatorów — ping adminów w treści wiadomości
+                    const content = reportedIsMod ? '⚠️ **Zgłoszenie dotyczy moderatora — wymagana akcja administratora.**' : undefined;
+                    await reportChannel.send({ content, embeds: [embed], components: [row] });
                 } catch (err) {
                     logger.error('❌ Nie można wysłać zgłoszenia na kanał raportów:', err.message);
                 }
             }
 
             await this.logService.logMessage('info',
-                `Zgłoszenie od ${reporter.tag} - zgłoszona wiadomość: ${messageId} (user: ${reportedUser.tag})`,
+                `Zgłoszenie od ${reporter.tag} - zgłoszona wiadomość: ${messageId} (user: ${reportedUser.tag}${reportedIsMod ? ' [MODERATOR]' : ''})`,
                 interaction
             );
 
             await interaction.editReply({
-                content: '✅ Twoje zgłoszenie zostało przesłane do moderatorów. Dziękujemy!'
+                content: reportedIsMod
+                    ? '✅ Twoje zgłoszenie moderatora zostało przesłane do administratorów. Dziękujemy!'
+                    : '✅ Twoje zgłoszenie zostało przesłane do moderatorów. Dziękujemy!'
             });
 
         } catch (error) {
