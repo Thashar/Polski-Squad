@@ -247,10 +247,18 @@ class NicknameManagerService {
      */
     async validateEffectApplication(member, effectType) {
         const userId = member.user.id;
-        
+
+        // 0. Sprawdź czy bot może zarządzać tym użytkownikiem
+        if (!member.manageable) {
+            return {
+                canApply: false,
+                reason: `Brak uprawnień do zmiany nicku ${member.user.tag} (wyższa rola lub właściciel serwera)`
+            };
+        }
+
         // KRYTYCZNE: Przeładuj dane z pliku przed walidacją (synchronizacja między procesami)
         await this.loadActiveEffects();
-        
+
         // 1. Sprawdź czy to nie jest próba podwójnego efektu tego samego typu
         const currentNickname = member.displayName;
         const existingEffect = this.activeEffects.get(userId);
@@ -333,7 +341,14 @@ class NicknameManagerService {
         
         try {
             const member = await guild.members.fetch(userId);
-            
+
+            if (!member.manageable) {
+                logger.warn(`⚠️ Brak uprawnień do zmiany nicku ${member.user.tag} (wyższa rola lub właściciel) - pomijam przywracanie`);
+                this.activeEffects.delete(userId);
+                await this.persistActiveEffects();
+                return false;
+            }
+
             // Przywróć dokładnie to co było
             if (effectData.wasUsingMainNick) {
                 // Użytkownik miał nick główny - resetuj do null
@@ -344,12 +359,12 @@ class NicknameManagerService {
                 await member.setNickname(effectData.originalNickname);
                 logger.info(`🔄 Przywrócono nick serwerowy "${effectData.originalNickname}" dla ${member.user.tag}`);
             }
-            
+
             // Usuń z systemu
             this.activeEffects.delete(userId);
             await this.persistActiveEffects();
             return true;
-            
+
         } catch (error) {
             logger.error(`❌ Błąd przywracania nicku dla ${userId}:`, error);
             return false;
@@ -458,6 +473,12 @@ class NicknameManagerService {
                     const member = await guild.members.fetch(userId);
                     if (!member) {
                         logger.warn(`⚠️ Nie znaleziono członka ${userId} w guild ${effectData.guildId}`);
+                        errors++;
+                        continue;
+                    }
+
+                    if (!member.manageable) {
+                        logger.warn(`⚠️ Brak uprawnień do zmiany nicku ${member.user.tag} (wyższa rola lub właściciel) - pomijam przywracanie`);
                         errors++;
                         continue;
                     }
