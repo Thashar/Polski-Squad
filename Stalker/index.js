@@ -737,6 +737,15 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
+    // ============ REAKCJA NA "STALKER" ============
+    if (message.guild && message.content.toLowerCase().includes('stalker')) {
+        try {
+            await message.react('PepeEvil2:1280068960787632130');
+        } catch (error) {
+            logger.info(`[STALKER-REACT] ℹ️ Nie udało się dodać reakcji: ${error.message}`);
+        }
+    }
+
     // Automatyczne czyszczenie kanału kolejki - usuń wszystkie wiadomości od użytkowników
     const queueChannelId = '1437122516974829679';
     if (message.channelId === queueChannelId && !message.author.bot) {
