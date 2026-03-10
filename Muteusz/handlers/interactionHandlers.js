@@ -3421,7 +3421,7 @@ class InteractionHandler {
                 return;
             }
 
-            const warning = await this.warningService.addWarning(userId, interaction.guildId, interaction.user.id, reason);
+            const warning = await this.warningService.addWarning(userId, interaction.user.id, interaction.user.tag, reason, interaction.guildId);
             const allWarnings = await this.warningService.getUserWarnings(userId, interaction.guildId);
 
             await interaction.reply({
@@ -3778,9 +3778,10 @@ class InteractionHandler {
                 // Dodaj ostrzeżenie przez warningService
                 const warning = await this.warningService.addWarning(
                     userId,
-                    guild.id,
                     interaction.user.id,
-                    'Naruszenie zasad serwera (zgłoszenie)'
+                    interaction.user.tag,
+                    'Naruszenie zasad serwera (zgłoszenie)',
+                    guild.id
                 );
 
                 const allWarnings = await this.warningService.getUserWarnings(userId, guild.id);
