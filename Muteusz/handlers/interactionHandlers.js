@@ -4012,6 +4012,17 @@ class InteractionHandler {
             return;
         }
 
+        // Zgłoszenia moderatorów mogą obsługiwać tylko administratorzy
+        const embedTitle = interaction.message.embeds[0]?.title ?? '';
+        const isModReport = embedTitle.includes('moderatora');
+        if (isModReport && !interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Zgłoszenia moderatorów mogą obsługiwać tylko administratorzy.',
+                ephemeral: true
+            });
+            return;
+        }
+
         const parts = interaction.customId.split('_');
         // Format: report_{action}_{channelId}_{messageId}[_{userId}]
         const action = parts[1];
