@@ -1,6 +1,6 @@
 ### ⚔️ Stalker Bot
 
-**9 Systemów:**
+**10 Systemów:**
 1. **Kary OCR** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
    - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), analiza wyników graczy przez AI
@@ -19,6 +19,7 @@
 9. **Kalkulator** - Auto-odpowiedź na słowo "kalkulator" w wiadomości → link do sio-tools.vercel.app, cooldown 1h per kanał (persistencja w `data/calculator_cooldowns.json`)
 10. **Borixoning** - Auto-odpowiedź na reply "zbij bossa" na kanałach WARNING → komunikat "Wykryto zaawansowany Borixoning" z przyciskami Tak/Nie (ephemeral), cooldown raz dziennie per kanał (kasuje się o północy, persistencja w `data/boroxoning_cooldowns.json`)
 11. **Reakcja Stalker** - Gdy ktoś napisze słowo "stalker" (case-insensitive) w wiadomości na serwerze → bot dodaje reakcję `<a:PepeEvil2:1280068960787632130>` (bez cooldownu)
+12. **Cotygodniowe Przypomnienie o Bossie** - Cron co niedzielę o 10:00 (timezone: Europe/Warsaw) → wysyła wiadomość na kanał `1194299628905042040` z pingiem roli `1170331604846120980` i przypomnieniem o wejściu do walki z Bossem przed odbiorem nagród rankingowych
 11. **Historia Walk Gary** - `garyCombatIngestionService.js`: Co środę o 18:55 (9 min po snapshocie Gary) agreguje pliki z `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień), dopasowuje fuzzy nicki graczy do Discord userId (threshold 0.82, ALL 4 role klanowe), zapisuje do `data/player_combat_discord.json`. Przy starcie bota: automatyczna próba ingestion (po 15s). Komendy `/player-status` i `/player-compare` czytają historię RC+TC i ataku po userId (2 dodatkowe wykresy + dane tekstowe ostatniego tygodnia w sekcji STATYSTYKI i Best — atak wyświetlany jako dokładna liczba z separatorem polskim, nie K/M). Ręcznie: `/lme-snapshot` (admin) — uruchamia ingestion natychmiast i wyświetla **szczegółowy raport**:
     - ✅ Dopasowanych / 📊 Łącznie w Gary / ⚠️ Nieprzypisane (Gary)
     - 🔍 Wpisy Gary z za niskim podobieństwem nicku (< 0.82) → pokazuje najbliższy Discord nick z procentem

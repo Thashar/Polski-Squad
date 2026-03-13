@@ -240,6 +240,20 @@ client.once(Events.ClientReady, async () => {
         timezone: config.timezone
     });
 
+    // Cron: co niedzielę o 10:00 — przypomnienie o wejściu do walki z bossem
+    cron.schedule('0 10 * * 0', async () => {
+        logger.info('⏰ Wysyłam cotygodniowe przypomnienie o wejściu do walki z bossem...');
+        try {
+            const channel = await client.channels.fetch('1194299628905042040');
+            await channel.send('<@&1170331604846120980>\n# Pamiętaj o wejściu do walki z Bossem, żeby móc później odebrać nagrody rankingowe <a:X_Uwaga:1297531538186965003>');
+            logger.info('✅ Cotygodniowe przypomnienie o bossie wysłane pomyślnie');
+        } catch (error) {
+            logger.error(`❌ Błąd wysyłania cotygodniowego przypomnienia o bossie: ${error.message}`);
+        }
+    }, {
+        timezone: config.timezone
+    });
+
     // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
 
 });
