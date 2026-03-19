@@ -105,9 +105,20 @@ class ListaEventowMenedzer {
             });
 
             let description = '';
+            const now = Date.now();
+            const twentyFourHours = 24 * 60 * 60 * 1000; // 24h w milisekundach
+
             for (const event of sortedEvents) {
-                const timestamp = Math.floor(new Date(event.nextTrigger).getTime() / 1000);
-                description += `**${event.name}** - <t:${timestamp}:R> ⏳\n`;
+                const eventTime = new Date(event.nextTrigger).getTime();
+                const timeUntilEvent = eventTime - now;
+                const timestamp = Math.floor(eventTime / 1000);
+
+                // Jeśli event za mniej niż 24h → animowane emoji alarmu
+                const emoji = timeUntilEvent < twentyFourHours
+                    ? '<a:PepeAlarmMan:1341086085089857619>'
+                    : '⏳';
+
+                description += `**${event.name}** - <t:${timestamp}:R> ${emoji}\n`;
             }
 
             embed.setDescription(description);

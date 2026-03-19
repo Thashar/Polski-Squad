@@ -32,6 +32,7 @@
 **Funkcjonalność Eventów:**
 - **Lista Eventów:** Osobna lista eventów wyświetlana na wybranym kanale
 - **Auto-sortowanie:** Eventy sortowane po dacie (najwcześniejsze pierwsze)
+- **Wskaźniki czasu:** ⏳ (>24h) | <a:PepeAlarmMan:1341086085089857619> (<24h)
 - **Zarządzanie:** Dodawanie, edycja, usuwanie eventów przez panel kontrolny
 - **Subskrypcja:** Zielony przycisk 🔔 pod listą - toggle roli powiadomień o eventach (1297587256101699776)
 
