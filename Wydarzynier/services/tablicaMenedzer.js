@@ -428,7 +428,7 @@ class TablicaMenedzer {
         }
     }
 
-    // Zaktualizuj istniejący panel kontrolny (lekka funkcja - nie szuka/nie tworzy)
+    // Zaktualizuj istniejący panel kontrolny (lekka funkcja - NIGDY nie tworzy nowego)
     async updateControlPanel() {
         if (!this.boardChannel) {
             this.logger.error('Kanał tablicy nie zainicjalizowany');
@@ -436,26 +436,48 @@ class TablicaMenedzer {
         }
 
         try {
+            let panelMessage = null;
+
+            // Spróbuj użyć znanego ID wiadomości
             if (this.controlPanelMessageId) {
-                // Znamy ID wiadomości - po prostu zaktualizuj
-                const message = await this.boardChannel.messages.fetch(this.controlPanelMessageId);
+                try {
+                    panelMessage = await this.boardChannel.messages.fetch(this.controlPanelMessageId);
+                } catch (error) {
+                    if (error.code === 10008) {
+                        this.logger.warn('Cachowany panel kontrolny nie znaleziony, przeszukuję kanał');
+                        this.controlPanelMessageId = null;
+                    } else {
+                        throw error;
+                    }
+                }
+            }
+
+            // Jeśli nie mamy wiadomości, wyszukaj ją (ale nie twórz)
+            if (!panelMessage) {
+                const messages = await this.boardChannel.messages.fetch({ limit: 100 });
+                for (const [, message] of messages) {
+                    if (message.author.id === this.client.user.id &&
+                        message.embeds.length > 0 &&
+                        message.embeds[0].title === '📋 Panel Kontrolny Przypomnień i Eventów') {
+                        panelMessage = message;
+                        this.controlPanelMessageId = message.id;
+                        this.logger.info('Znaleziono panel kontrolny w kanale');
+                        break;
+                    }
+                }
+            }
+
+            // Jeśli znaleziono panel, zaktualizuj go
+            if (panelMessage) {
                 const controlPanel = await this.buildControlPanel();
-                await message.edit(controlPanel);
-                this.logger.info('Panel kontrolny zaktualizowany');
+                await panelMessage.edit(controlPanel);
+                this.logger.success('Panel kontrolny zaktualizowany');
             } else {
-                // Nie znamy ID wiadomości - wywołaj ensureControlPanel żeby znaleźć/utworzyć
-                this.logger.warn('ID wiadomości panelu kontrolnego nie ustawione, wywołuję ensureControlPanel');
-                await this.ensureControlPanel();
+                // Panel nie istnieje - nie twórz go, tylko zaloguj ostrzeżenie
+                this.logger.warn('Panel kontrolny nie znaleziony - pomijam aktualizację (zostanie utworzony przy następnym restarcie bota)');
             }
         } catch (error) {
-            // Jeśli wiadomość nie znaleziona (10008) lub inny błąd, spróbuj zapewnić że istnieje
-            if (error.code === 10008) {
-                this.logger.warn('Wiadomość panelu kontrolnego nie znaleziona, tworzę od nowa');
-                this.controlPanelMessageId = null;
-                await this.ensureControlPanel();
-            } else {
-                this.logger.error('Nie udało się zaktualizować panelu kontrolnego:', error);
-            }
+            this.logger.error('Nie udało się zaktualizować panelu kontrolnego:', error);
         }
     }
 
