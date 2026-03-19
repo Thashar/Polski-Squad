@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 
 class ListaEventowMenedzer {
     constructor(client, config, logger, eventMenedzer) {
@@ -129,11 +129,20 @@ class ListaEventowMenedzer {
             const messageId = this.eventMenedzer.getListMessageId();
             const embed = this.buildEventsList();
 
+            // Przycisk subskrypcji
+            const subscribeButton = new ButtonBuilder()
+                .setCustomId('event_notifications_subscribe')
+                .setLabel('Otrzymuj powiadomienia o Eventach w grze!')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🔔');
+
+            const row = new ActionRowBuilder().addComponents(subscribeButton);
+
             if (messageId) {
                 // Spróbuj zaktualizować istniejącą wiadomość
                 try {
                     const message = await this.listChannel.messages.fetch(messageId);
-                    await message.edit({ embeds: [embed] });
+                    await message.edit({ embeds: [embed], components: [row] });
                     this.logger.info('Zaktualizowano listę eventów');
                     return;
                 } catch (error) {
@@ -143,7 +152,7 @@ class ListaEventowMenedzer {
             }
 
             // Utwórz nową wiadomość
-            const message = await this.listChannel.send({ embeds: [embed] });
+            const message = await this.listChannel.send({ embeds: [embed], components: [row] });
             await this.eventMenedzer.setListMessageId(message.id);
             this.logger.success('Utworzono listę eventów');
 

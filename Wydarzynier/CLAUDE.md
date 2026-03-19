@@ -33,6 +33,7 @@
 - **Lista Eventów:** Osobna lista eventów wyświetlana na wybranym kanale
 - **Auto-sortowanie:** Eventy sortowane po dacie (najwcześniejsze pierwsze)
 - **Zarządzanie:** Dodawanie, edycja, usuwanie eventów przez panel kontrolny
+- **Subskrypcja:** Zielony przycisk 🔔 pod listą - toggle roli powiadomień o eventach (1297587256101699776)
 
 **Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`
 **Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL

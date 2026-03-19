@@ -279,7 +279,13 @@ class InteractionHandler {
      */
     async handleButtonInteraction(interaction, sharedState) {
         const { customId, user, message } = interaction;
-        
+
+        // Obsługa przycisku subskrypcji powiadomień o eventach
+        if (customId === 'event_notifications_subscribe') {
+            await this.handleEventNotificationsSubscribe(interaction, sharedState);
+            return;
+        }
+
         // Obsługa przycisku powiadomień o party (dostępny dla wszystkich)
         if (customId === 'toggle_party_notifications' || customId === 'party_access_notifications') {
             await this.handleToggleNotifications(interaction, sharedState);
@@ -873,6 +879,45 @@ class InteractionHandler {
             
         } catch (error) {
             logger.error('❌ Błąd podczas przełączania powiadomień:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk subskrypcji powiadomień o eventach
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleEventNotificationsSubscribe(interaction, sharedState) {
+        try {
+            const { user, guild } = interaction;
+            const member = await guild.members.fetch(user.id);
+            const eventNotificationRoleId = '1297587256101699776';
+
+            // Sprawdź czy użytkownik ma już rolę
+            const hasRole = member.roles.cache.has(eventNotificationRoleId);
+
+            if (hasRole) {
+                // Usuń rolę
+                await member.roles.remove(eventNotificationRoleId);
+                await interaction.reply({
+                    content: '🔕 Usunięto rolę powiadomień o eventach. Nie będziesz już otrzymywał powiadomień o eventach w grze.',
+                    ephemeral: true
+                });
+            } else {
+                // Dodaj rolę
+                await member.roles.add(eventNotificationRoleId);
+                await interaction.reply({
+                    content: '🔔 Dodano rolę powiadomień o eventach! Będziesz otrzymywał powiadomienia o nadchodzących eventach w grze.',
+                    ephemeral: true
+                });
+            }
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas przełączania powiadomień eventów:', error);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
                 ephemeral: true
