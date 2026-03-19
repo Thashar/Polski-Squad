@@ -28,19 +28,18 @@ function parseDateInTimezone(dateStr, timezone) {
 
         const [_, year, month, day, hour, minute] = match;
 
-        // Użytkownik podaje czas w timezone bota (np. Europe/Warsaw)
-        // Musimy przekonwertować na UTC
+        // PROSTY SPOSÓB: Traktuj input jako czas lokalny w timezone, zwróć UTC
+        // Discord timestampy są ZAWSZE UTC i automatycznie pokazują się w lokalnym czasie użytkownika
 
-        // Tworzymy arbitrary reference date w UTC
-        const referenceUTC = Date.UTC(
-            parseInt(year),
-            parseInt(month) - 1,
-            parseInt(day),
-            12, 0, 0  // Noon UTC jako punkt odniesienia
-        );
+        // Tworzymy date string który będzie sparsowany
+        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
 
-        // Formatujemy tę samą datę w target timezone i UTC
-        const formatter = new Intl.DateTimeFormat('en-US', {
+        // Sposób 1: Używamy toLocaleString do znalezienia offset
+        // Tworzymy arbitrary date w UTC
+        const testDate = new Date(dateString + 'Z'); // 'Z' = UTC
+
+        // Formatujemy tę datę w target timezone
+        const tzString = testDate.toLocaleString('en-US', {
             timeZone: timezone,
             year: 'numeric',
             month: '2-digit',
@@ -51,7 +50,13 @@ function parseDateInTimezone(dateStr, timezone) {
             hour12: false
         });
 
-        const formatterUTC = new Intl.DateTimeFormat('en-US', {
+        // Format: MM/DD/YYYY, HH:MM:SS → wyciągamy godzinę
+        const tzMatch = tzString.match(/(\d{2}):(\d{2}):(\d{2})/);
+        if (!tzMatch) return null;
+        const tzHourFromFormat = parseInt(tzMatch[1]);
+
+        // Także formatujemy w UTC
+        const utcString = testDate.toLocaleString('en-US', {
             timeZone: 'UTC',
             year: 'numeric',
             month: '2-digit',
@@ -62,23 +67,25 @@ function parseDateInTimezone(dateStr, timezone) {
             hour12: false
         });
 
-        // Parsujemy części daty
-        const tzParts = formatter.formatToParts(new Date(referenceUTC));
-        const utcParts = formatterUTC.formatToParts(new Date(referenceUTC));
+        const utcMatch = utcString.match(/(\d{2}):(\d{2}):(\d{2})/);
+        if (!utcMatch) return null;
+        const utcHourFromFormat = parseInt(utcMatch[1]);
 
-        // Wyciągamy godziny z obu formatów
-        const tzHour = parseInt(tzParts.find(p => p.type === 'hour').value);
-        const utcHour = parseInt(utcParts.find(p => p.type === 'hour').value);
+        // Oblicz offset
+        let offsetHours = tzHourFromFormat - utcHourFromFormat;
 
-        // Oblicz offset w godzinach (może być ujemny)
-        const offsetHours = tzHour - utcHour;
+        // Handle day boundary crossing
+        if (offsetHours > 12) offsetHours -= 24;
+        if (offsetHours < -12) offsetHours += 24;
 
-        // Stwórz finalną datę UTC odejmując offset od podanej godziny
+        // Teraz stwórz finalną datę UTC: odejmij offset od input hour
+        const utcHour = parseInt(hour) - offsetHours;
+
         const finalUTC = Date.UTC(
             parseInt(year),
             parseInt(month) - 1,
             parseInt(day),
-            parseInt(hour) - offsetHours,  // Odejmij offset żeby dostać UTC
+            utcHour,
             parseInt(minute),
             0
         );
