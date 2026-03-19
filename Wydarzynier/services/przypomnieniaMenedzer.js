@@ -23,6 +23,13 @@ class PrzypomnieniaMenedzer {
         try {
             const fileContent = await fs.readFile(this.dataPath, 'utf8');
             this.data = JSON.parse(fileContent);
+
+            // Migracja danych - dodaj messagesToDelete jeśli nie istnieje
+            if (!this.data.messagesToDelete) {
+                this.data.messagesToDelete = [];
+                await this.saveData();
+                this.logger.info('Migracja danych: dodano pole messagesToDelete');
+            }
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje, utwórz domyślną strukturę
