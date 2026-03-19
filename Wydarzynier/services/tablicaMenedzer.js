@@ -405,12 +405,19 @@ class TablicaMenedzer {
                     this.logger.success('Panel kontrolny znaleziony i zaktualizowany');
                     return;
                 } catch (error) {
-                    this.logger.warn('Nie udało się zaktualizować istniejącego panelu, tworzę nowy:', error.message);
+                    this.logger.warn('Nie udało się zaktualizować istniejącego panelu, usuwam i tworzę nowy:', error.message);
+                    // Usuń stary panel przed utworzeniem nowego
+                    try {
+                        await existingPanel.delete();
+                        this.logger.info('Usunięto stary panel kontrolny, który nie mógł być zaktualizowany');
+                    } catch (deleteError) {
+                        this.logger.warn('Nie udało się usunąć starego panelu kontrolnego:', deleteError.message);
+                    }
                     // Fall through to create new panel
                 }
             }
 
-            // Panel kontrolny nie istnieje - utwórz nowy na dole
+            // Panel kontrolny nie istnieje lub stary został usunięty - utwórz nowy na dole
             const controlPanel = await this.buildControlPanel();
             const message = await this.boardChannel.send(controlPanel);
             this.controlPanelMessageId = message.id;
