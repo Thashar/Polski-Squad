@@ -129,20 +129,28 @@ class PrzypomnieniaMenedzer {
     async createScheduled(creatorId, templateId, firstTrigger, interval, channelId, roles = []) {
         const id = this.generateId();
 
-        // Waliduj interwał
-        if (!this.validateInterval(interval)) {
-            throw new Error('Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), lub "ee"');
-        }
+        let intervalMs = null;
 
-        // Parsuj interwał na milisekundy
-        const intervalMs = this.parseInterval(interval);
-
-        // Sprawdź maksymalny interwał (pomiń dla wzorca "ee")
-        if (interval !== 'ee') {
-            const maxInterval = 28 * 24 * 60 * 60 * 1000; // 28 dni w ms
-            if (intervalMs > maxInterval) {
-                throw new Error('Interwał nie może przekraczać 28 dni');
+        // Jeśli podano interwał, waliduj go
+        if (interval && interval.trim() !== '') {
+            // Waliduj interwał
+            if (!this.validateInterval(interval)) {
+                throw new Error('Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), lub "ee". Zostaw puste dla jednorazowego przypomnienia.');
             }
+
+            // Parsuj interwał na milisekundy
+            intervalMs = this.parseInterval(interval);
+
+            // Sprawdź maksymalny interwał (pomiń dla wzorca "ee")
+            if (interval !== 'ee') {
+                const maxInterval = 28 * 24 * 60 * 60 * 1000; // 28 dni w ms
+                if (intervalMs > maxInterval) {
+                    throw new Error('Interwał nie może przekraczać 28 dni');
+                }
+            }
+        } else {
+            // Brak interwału - jednorazowe przypomnienie
+            interval = null;
         }
 
         const scheduled = {
@@ -151,25 +159,31 @@ class PrzypomnieniaMenedzer {
             creator: creatorId,
             createdAt: new Date().toISOString(),
             firstTrigger: new Date(firstTrigger).toISOString(),
-            interval,
-            intervalMs,
+            interval, // null dla jednorazowego
+            intervalMs, // null dla jednorazowego
             nextTrigger: new Date(firstTrigger).toISOString(),
             channelId,
             roles,
             status: 'active',
             boardMessageId: null,
-            triggerCount: 0 // Dla śledzenia wzorca "ee"
+            triggerCount: 0, // Dla śledzenia wzorca "ee"
+            isOneTime: interval === null // Flaga jednorazowego przypomnienia
         };
 
         this.data.scheduled.push(scheduled);
         await this.saveData();
 
-        this.logger.info(`Utworzono zaplanowane przypomnienie: ${scheduled.id} (szablon: ${templateId})`);
+        this.logger.info(`Utworzono zaplanowane przypomnienie: ${scheduled.id} (szablon: ${templateId}, ${interval ? 'cykliczne' : 'jednorazowe'})`);
         return scheduled;
     }
 
     // Waliduj format interwału (1s, 1m, 1h, 1d, lub "ee" dla specjalnego wzorca)
+    // Zwraca true jeśli interwał jest pusty (jednorazowe) lub prawidłowy
     validateInterval(interval) {
+        // Pusty interwał = jednorazowe przypomnienie
+        if (!interval || interval.trim() === '') {
+            return true;
+        }
         return /^\d+[smhd]$/.test(interval) || interval === 'ee';
     }
 
@@ -199,6 +213,11 @@ class PrzypomnieniaMenedzer {
 
     // Formatuj interwał do wyświetlenia
     formatInterval(interval) {
+        // Jednorazowe przypomnienie
+        if (!interval || interval === null) {
+            return 'Jednorazowe';
+        }
+
         // Specjalny wzorzec "ee"
         if (interval === 'ee') {
             return 'Wzorzec EE (3d x8, potem 4d, powtórz)';
@@ -287,6 +306,15 @@ class PrzypomnieniaMenedzer {
     async updateNextTrigger(id) {
         const scheduled = this.getScheduled(id);
         if (!scheduled) return false;
+
+        // Jeśli to jednorazowe przypomnienie, oznacz jako zakończone
+        if (!scheduled.interval || scheduled.interval === null || scheduled.isOneTime) {
+            this.logger.info(`Jednorazowe przypomnienie ${id} wykonane - oznaczam jako zakończone`);
+            return await this.updateScheduled(id, {
+                status: 'completed',
+                triggerCount: 1
+            });
+        }
 
         const lastTrigger = new Date(scheduled.nextTrigger);
         let nextIntervalMs;

@@ -64,20 +64,28 @@ class EventMenedzer {
     async createEvent(creatorId, name, firstTrigger, interval) {
         const id = this.generateId();
 
-        // Waliduj interwał
-        if (!this.validateInterval(interval)) {
-            throw new Error('Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), lub "ee"');
-        }
+        let intervalMs = null;
 
-        // Parsuj interwał na milisekundy
-        const intervalMs = this.parseInterval(interval);
-
-        // Sprawdź maksymalny interwał (pomiń dla wzorca "ee")
-        if (interval !== 'ee') {
-            const maxInterval = 28 * 24 * 60 * 60 * 1000; // 28 dni w ms
-            if (intervalMs > maxInterval) {
-                throw new Error('Interwał nie może przekraczać 28 dni');
+        // Jeśli podano interwał, waliduj go
+        if (interval && interval.trim() !== '') {
+            // Waliduj interwał
+            if (!this.validateInterval(interval)) {
+                throw new Error('Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), lub "ee". Zostaw puste dla jednorazowego eventu.');
             }
+
+            // Parsuj interwał na milisekundy
+            intervalMs = this.parseInterval(interval);
+
+            // Sprawdź maksymalny interwał (pomiń dla wzorca "ee")
+            if (interval !== 'ee') {
+                const maxInterval = 28 * 24 * 60 * 60 * 1000; // 28 dni w ms
+                if (intervalMs > maxInterval) {
+                    throw new Error('Interwał nie może przekraczać 28 dni');
+                }
+            }
+        } else {
+            // Brak interwału - jednorazowy event
+            interval = null;
         }
 
         const event = {
@@ -86,21 +94,27 @@ class EventMenedzer {
             creator: creatorId,
             createdAt: new Date().toISOString(),
             firstTrigger: new Date(firstTrigger).toISOString(),
-            interval,
-            intervalMs,
+            interval, // null dla jednorazowego
+            intervalMs, // null dla jednorazowego
             nextTrigger: new Date(firstTrigger).toISOString(),
-            triggerCount: 0 // Dla śledzenia wzorca "ee"
+            triggerCount: 0, // Dla śledzenia wzorca "ee"
+            isOneTime: interval === null // Flaga jednorazowego eventu
         };
 
         this.data.events.push(event);
         await this.saveData();
 
-        this.logger.info(`Utworzono event: ${event.id}`);
+        this.logger.info(`Utworzono event: ${event.id} (${interval ? 'cykliczny' : 'jednorazowy'})`);
         return event;
     }
 
     // Waliduj format interwału
+    // Zwraca true jeśli interwał jest pusty (jednorazowy) lub prawidłowy
     validateInterval(interval) {
+        // Pusty interwał = jednorazowy event
+        if (!interval || interval.trim() === '') {
+            return true;
+        }
         return /^\d+[smhd]$/.test(interval) || interval === 'ee';
     }
 
@@ -129,6 +143,11 @@ class EventMenedzer {
 
     // Formatuj interwał do wyświetlenia
     formatInterval(interval) {
+        // Jednorazowy event
+        if (!interval || interval === null) {
+            return 'Jednorazowy';
+        }
+
         if (interval === 'ee') {
             return 'Wzorzec EE (3d x8, potem 4d, powtórz)';
         }
@@ -191,6 +210,12 @@ class EventMenedzer {
     async updateNextTrigger(id) {
         const event = this.getEvent(id);
         if (!event) return false;
+
+        // Jeśli to jednorazowy event, usuń go
+        if (!event.interval || event.interval === null || event.isOneTime) {
+            this.logger.info(`Jednorazowy event ${id} wykonany - usuwam z listy`);
+            return await this.deleteEvent(id);
+        }
 
         const lastTrigger = new Date(event.nextTrigger);
         let nextIntervalMs;

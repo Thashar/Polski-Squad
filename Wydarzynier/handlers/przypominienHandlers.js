@@ -525,7 +525,7 @@ async function handleNewReminderTypeSelect(interaction, sharedState) {
             .setLabel('Nazwa szablonu')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('e.g. Boss Reminder')
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(100);
 
         const textInput = new TextInputBuilder()
@@ -533,7 +533,7 @@ async function handleNewReminderTypeSelect(interaction, sharedState) {
             .setLabel('Treść wiadomości')
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Reminder content...')
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(2000);
 
         modal.addComponents(
@@ -552,7 +552,7 @@ async function handleNewReminderTypeSelect(interaction, sharedState) {
             .setLabel('Nazwa szablonu')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('e.g. Boss Event')
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(100);
 
         const titleInput = new TextInputBuilder()
@@ -568,7 +568,7 @@ async function handleNewReminderTypeSelect(interaction, sharedState) {
             .setLabel('Opis embed')
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Description...')
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(4000);
 
         const iconInput = new TextInputBuilder()
@@ -626,14 +626,14 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
         .setLabel('First trigger (YYYY-MM-DD HH:MM)')
         .setStyle(TextInputStyle.Short)
         .setValue(currentTime)
-        .setRequired(true);
+        .setRequired(false);
 
     const intervalInput = new TextInputBuilder()
         .setCustomId('interval')
-        .setLabel('Repeat interval (1s, 1m, 1h, 1d, ee)')
+        .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('1d (max 28d) or "ee"')
-        .setRequired(true)
+        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 28d), ee')
+        .setRequired(false)
         .setMaxLength(10);
 
     modal.addComponents(
@@ -904,21 +904,24 @@ async function handleModalSubmit(interaction, sharedState) {
                 return;
             }
 
-            // Validate interval
+            // Validate interval (opcjonalne - puste = jednorazowe)
             if (!przypomnieniaMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 28d)'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
                 });
                 return;
             }
 
-            const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
-            const maxInterval = 28 * 24 * 60 * 60 * 1000;
-            if (intervalMs > maxInterval) {
-                await interaction.editReply({
-                    content: '❌ Interval cannot exceed 28 days.'
-                });
-                return;
+            // Jeśli podano interwał, sprawdź limit
+            if (interval && interval.trim() !== '') {
+                const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
+                const maxInterval = 28 * 24 * 60 * 60 * 1000;
+                if (intervalMs && intervalMs > maxInterval) {
+                    await interaction.editReply({
+                        content: '❌ Interwał nie może przekraczać 28 dni.'
+                    });
+                    return;
+                }
             }
 
             // Store in user state for channel/role selection
@@ -1025,21 +1028,24 @@ async function handleModalSubmit(interaction, sharedState) {
                 return;
             }
 
-            // Validate interval
+            // Validate interval (opcjonalne - puste = jednorazowe)
             if (!przypomnieniaMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 28d)'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
                 });
                 return;
             }
 
-            const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
-            const maxInterval = 28 * 24 * 60 * 60 * 1000;
-            if (intervalMs > maxInterval) {
-                await interaction.editReply({
-                    content: '❌ Interval cannot exceed 28 days.'
-                });
-                return;
+            // Jeśli podano interwał, sprawdź limit
+            if (interval && interval.trim() !== '') {
+                const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
+                const maxInterval = 28 * 24 * 60 * 60 * 1000;
+                if (intervalMs && intervalMs > maxInterval) {
+                    await interaction.editReply({
+                        content: '❌ Interwał nie może przekraczać 28 dni.'
+                    });
+                    return;
+                }
             }
 
             await przypomnieniaMenedzer.updateScheduled(scheduledId, {
@@ -1472,7 +1478,7 @@ async function handleTemplatePreviewEdit(interaction, sharedState) {
             .setLabel('Nazwa szablonu')
             .setStyle(TextInputStyle.Short)
             .setValue(userState.name)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(100);
 
         const textInput = new TextInputBuilder()
@@ -1480,7 +1486,7 @@ async function handleTemplatePreviewEdit(interaction, sharedState) {
             .setLabel('Treść wiadomości')
             .setStyle(TextInputStyle.Paragraph)
             .setValue(userState.text)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(2000);
 
         modal.addComponents(
@@ -1499,7 +1505,7 @@ async function handleTemplatePreviewEdit(interaction, sharedState) {
             .setLabel('Nazwa szablonu')
             .setStyle(TextInputStyle.Short)
             .setValue(userState.name)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(100);
 
         const titleInput = new TextInputBuilder()
@@ -1515,7 +1521,7 @@ async function handleTemplatePreviewEdit(interaction, sharedState) {
             .setLabel('Opis embed')
             .setStyle(TextInputStyle.Paragraph)
             .setValue(userState.embedDescription)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(4000);
 
         const iconInput = new TextInputBuilder()
@@ -1703,7 +1709,7 @@ async function handleEditTemplateEdit(interaction, sharedState) {
             .setLabel('Nazwa szablonu')
             .setStyle(TextInputStyle.Short)
             .setValue(template.name)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(100);
 
         const textInput = new TextInputBuilder()
@@ -1711,7 +1717,7 @@ async function handleEditTemplateEdit(interaction, sharedState) {
             .setLabel('Treść wiadomości')
             .setStyle(TextInputStyle.Paragraph)
             .setValue(template.text)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(2000);
 
         modal.addComponents(
@@ -1730,7 +1736,7 @@ async function handleEditTemplateEdit(interaction, sharedState) {
             .setLabel('Nazwa szablonu')
             .setStyle(TextInputStyle.Short)
             .setValue(template.name)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(100);
 
         const titleInput = new TextInputBuilder()
@@ -1746,7 +1752,7 @@ async function handleEditTemplateEdit(interaction, sharedState) {
             .setLabel('Opis embed')
             .setStyle(TextInputStyle.Paragraph)
             .setValue(template.embedDescription)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(4000);
 
         const iconInput = new TextInputBuilder()
@@ -1826,14 +1832,14 @@ async function handleEditScheduledEdit(interaction, sharedState) {
         .setLabel('First trigger (YYYY-MM-DD HH:MM)')
         .setStyle(TextInputStyle.Short)
         .setValue(formattedDate)
-        .setRequired(true);
+        .setRequired(false);
 
     const intervalInput = new TextInputBuilder()
         .setCustomId('interval')
-        .setLabel('Repeat interval (1s, 1m, 1h, 1d, ee)')
+        .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
         .setValue(scheduled.interval)
-        .setRequired(true)
+        .setRequired(false)
         .setMaxLength(10);
 
     modal.addComponents(
@@ -2051,14 +2057,14 @@ async function handleBoardScheduledEdit(interaction, sharedState) {
         .setLabel('First trigger (YYYY-MM-DD HH:MM)')
         .setStyle(TextInputStyle.Short)
         .setValue(formattedDate)
-        .setRequired(true);
+        .setRequired(false);
 
     const intervalInput = new TextInputBuilder()
         .setCustomId('interval')
-        .setLabel('Repeat interval (1s, 1m, 1h, 1d, ee)')
+        .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
         .setValue(scheduled.interval)
-        .setRequired(true)
+        .setRequired(false)
         .setMaxLength(10);
 
     modal.addComponents(
@@ -2153,7 +2159,7 @@ async function handleEditEventSelect(interaction, sharedState) {
         .setLabel('Event name/description')
         .setStyle(TextInputStyle.Short)
         .setValue(event.name)
-        .setRequired(true)
+        .setRequired(false)
         .setMaxLength(100);
 
     const firstTriggerInput = new TextInputBuilder()
@@ -2167,14 +2173,14 @@ async function handleEditEventSelect(interaction, sharedState) {
             hour: '2-digit',
             minute: '2-digit'
         }).replace(',', '').replace('T', ' '))
-        .setRequired(true);
+        .setRequired(false);
 
     const intervalInput = new TextInputBuilder()
         .setCustomId('interval')
-        .setLabel('Repeat interval (1s, 1m, 1h, 1d, ee)')
+        .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
         .setValue(event.interval)
-        .setRequired(true)
+        .setRequired(false)
         .setMaxLength(10);
 
     modal.addComponents(
@@ -2222,7 +2228,7 @@ async function handleAddEvent(interaction, sharedState) {
         .setLabel('Event name/description')
         .setStyle(TextInputStyle.Short)
         .setPlaceholder('e.g. Boss Spawn, Weekly Meeting')
-        .setRequired(true)
+        .setRequired(false)
         .setMaxLength(100);
 
     const firstTriggerInput = new TextInputBuilder()
@@ -2230,14 +2236,14 @@ async function handleAddEvent(interaction, sharedState) {
         .setLabel('First trigger (YYYY-MM-DD HH:MM)')
         .setStyle(TextInputStyle.Short)
         .setValue(currentTime)
-        .setRequired(true);
+        .setRequired(false);
 
     const intervalInput = new TextInputBuilder()
         .setCustomId('interval')
-        .setLabel('Repeat interval (1s, 1m, 1h, 1d, ee)')
+        .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('1d (max 28d) or "ee"')
-        .setRequired(true)
+        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 28d), ee')
+        .setRequired(false)
         .setMaxLength(10);
 
     modal.addComponents(
