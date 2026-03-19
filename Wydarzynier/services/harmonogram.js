@@ -35,6 +35,9 @@ class Harmonogram {
 
         // Sprawdź zaplanowane przypomnienia
         await this.checkScheduled(now);
+
+        // Sprawdź wiadomości do usunięcia (typ 1 - ustandaryzowane, 23h 50min)
+        await this.checkMessagesToDelete();
     }
 
     async checkScheduled(now) {
@@ -109,11 +112,43 @@ class Harmonogram {
                 embeds.push(embed);
             }
 
-            await channel.send({ content, embeds });
+            const message = await channel.send({ content, embeds });
 
             this.logger.success(`Powiadomienie wysłane na kanał ${scheduled.channelId} (zaplanowane: ${scheduled.id})`);
+
+            // Jeśli typ 1 (ustandaryzowane) - zaplanuj usunięcie po 23h 50min
+            if (scheduled.notificationType === 1) {
+                await this.przypomnieniaMenedzer.addMessageToDelete(message.id, scheduled.channelId);
+                this.logger.info(`Wiadomość ${message.id} zostanie usunięta za 23h 50min (typ: ustandaryzowane)`);
+            }
         } catch (error) {
             this.logger.error(`Nie udało się wyzwolić zaplanowanego ${scheduled.id}:`, error);
+        }
+    }
+
+    async checkMessagesToDelete() {
+        const messagesToDelete = this.przypomnieniaMenedzer.getMessagesToDeleteNow();
+
+        for (const msg of messagesToDelete) {
+            try {
+                const channel = await this.client.channels.fetch(msg.channelId);
+                if (!channel) {
+                    this.logger.warn(`Kanał nie znaleziony: ${msg.channelId} (wiadomość ${msg.messageId})`);
+                    await this.przypomnieniaMenedzer.removeMessageFromDeleteList(msg.messageId);
+                    continue;
+                }
+
+                await channel.messages.delete(msg.messageId);
+                this.logger.success(`Usunięto wiadomość ${msg.messageId} z kanału ${msg.channelId} (23h 50min upłynęło)`);
+                await this.przypomnieniaMenedzer.removeMessageFromDeleteList(msg.messageId);
+            } catch (error) {
+                if (error.code === 10008) { // Unknown Message
+                    this.logger.warn(`Wiadomość ${msg.messageId} już nie istnieje - usuwam z listy`);
+                    await this.przypomnieniaMenedzer.removeMessageFromDeleteList(msg.messageId);
+                } else {
+                    this.logger.error(`Nie udało się usunąć wiadomości ${msg.messageId}:`, error);
+                }
+            }
         }
     }
 }

@@ -29,6 +29,7 @@ class PrzypomnieniaMenedzer {
                 this.data = {
                     templates: [],
                     scheduled: [],
+                    messagesToDelete: [], // { messageId, channelId, deleteAt (timestamp) }
                     nextId: 1
                 };
                 await this.saveData();
@@ -126,7 +127,7 @@ class PrzypomnieniaMenedzer {
     // ==================== ZAPLANOWANE PRZYPOMNIENIA ====================
 
     // Utwórz zaplanowane przypomnienie
-    async createScheduled(creatorId, templateId, firstTrigger, interval, channelId, roles = []) {
+    async createScheduled(creatorId, templateId, firstTrigger, interval, channelId, roles = [], notificationType = 0) {
         const id = this.generateId();
 
         let intervalMs = null;
@@ -167,13 +168,14 @@ class PrzypomnieniaMenedzer {
             status: 'active',
             boardMessageId: null,
             triggerCount: 0, // Dla śledzenia wzorca "ee"
-            isOneTime: interval === null // Flaga jednorazowego przypomnienia
+            isOneTime: interval === null, // Flaga jednorazowego przypomnienia
+            notificationType: parseInt(notificationType) || 0 // 0 = dopasowane, 1 = ustandaryzowane (auto-usuwanie po 23h 50min)
         };
 
         this.data.scheduled.push(scheduled);
         await this.saveData();
 
-        this.logger.info(`Utworzono zaplanowane przypomnienie: ${scheduled.id} (szablon: ${templateId}, ${interval ? 'cykliczne' : 'jednorazowe'})`);
+        this.logger.info(`Utworzono zaplanowane przypomnienie: ${scheduled.id} (szablon: ${templateId}, ${interval ? 'cykliczne' : 'jednorazowe'}, typ: ${notificationType})`);
         return scheduled;
     }
 
@@ -379,6 +381,34 @@ class PrzypomnieniaMenedzer {
     // Pobierz całkowitą liczbę aktywnych zaplanowanych
     getTotalActiveCount() {
         return this.data.scheduled.filter(s => s.status === 'active').length;
+    }
+
+    // ==================== WIADOMOŚCI DO USUNIĘCIA (TYP 1 - USTANDARYZOWANE) ====================
+
+    // Dodaj wiadomość do usunięcia po 23h 50min
+    async addMessageToDelete(messageId, channelId) {
+        const deleteAt = Date.now() + (23 * 60 * 60 * 1000 + 50 * 60 * 1000); // 23h 50min
+
+        this.data.messagesToDelete.push({
+            messageId,
+            channelId,
+            deleteAt
+        });
+
+        await this.saveData();
+        this.logger.info(`Zaplanowano usunięcie wiadomości ${messageId} o ${new Date(deleteAt).toLocaleString()}`);
+    }
+
+    // Pobierz wiadomości do usunięcia (starsze niż deleteAt)
+    getMessagesToDeleteNow() {
+        const now = Date.now();
+        return this.data.messagesToDelete.filter(m => m.deleteAt <= now);
+    }
+
+    // Usuń wiadomość z listy do usunięcia
+    async removeMessageFromDeleteList(messageId) {
+        this.data.messagesToDelete = this.data.messagesToDelete.filter(m => m.messageId !== messageId);
+        await this.saveData();
     }
 }
 

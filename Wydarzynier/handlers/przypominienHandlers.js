@@ -985,6 +985,7 @@ async function handleModalSubmit(interaction, sharedState) {
                     firstTrigger: firstTrigger.toISOString(),
                     interval,
                     channelId: eventListChannelId,
+                    notificationType: 1,
                     step: 'select_roles'
                 });
 
@@ -1016,6 +1017,7 @@ async function handleModalSubmit(interaction, sharedState) {
                     templateId,
                     firstTrigger: firstTrigger.toISOString(),
                     interval,
+                    notificationType: 0,
                     step: 'select_channel'
                 });
 
@@ -1424,7 +1426,8 @@ async function createScheduledFromUserState(interaction, sharedState, userState)
             userState.firstTrigger,
             userState.interval,
             userState.channelId,
-            userState.roles || []
+            userState.roles || [],
+            userState.notificationType || 0
         );
 
         // Get scheduled with template for board embed

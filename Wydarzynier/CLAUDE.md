@@ -20,13 +20,13 @@
   - Interwałem powtarzania (1s, 1m, 1h, 1d do max 28d, lub "ee" dla specjalnego wzorca)
   - **Typem powiadomienia:**
     - **0 = Dopasowane** - Pełna personalizacja (wybór kanału + pingi)
-    - **1 = Ustandaryzowane** - Kanał automatycznie ustawiony na kanał z Listą Eventów, tylko wybór pingów (ról)
+    - **1 = Ustandaryzowane** - Kanał automatycznie ustawiony na kanał z Listą Eventów, tylko wybór pingów (ról), **automatyczne usuwanie po 23h 50min**
 - **Tablica:** Automatyczna tablica z embeddami wszystkich aktywnych przypomnień:
   - Live Discord timestamps (<t:timestamp:R>)
   - Przyciski: Wstrzymaj/Wznów, Edytuj, Usuń
   - Auto-update co minutę
   - Panel kontrolny na dole z przyciskami zarządzania
-- **Harmonogram:** Sprawdzanie co 30s i auto-wysyłanie przypomnień
+- **Harmonogram:** Sprawdzanie co 30s i auto-wysyłanie przypomnień + czyszczenie starych wiadomości typu 1 (po 23h 50min)
 - **Strefa Czasowa:** Globalna strefa czasowa dla bota (domyślnie Europe/Warsaw)
 
 **Funkcjonalność Eventów:**
@@ -55,7 +55,7 @@ WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL=channel_id  # Kanał z panelem kontrolny
 - **Repozytorium:** 5min interval repost
 
 **System Przypomnień:**
-- **Persistencja:** Wszystkie dane w JSON (przypomnienia.json, eventy.json, strefy_czasowe.json)
+- **Persistencja:** Wszystkie dane w JSON (przypomnienia.json z messagesToDelete[], eventy.json, strefy_czasowe.json)
 - **Harmonogram:** Sprawdzanie co 30s, wyzwalanie zaplanowanych przypomnień
 - **Tablica:** Auto-update co 1min, Discord timestamps, przyciski interaktywne
 - **Limity:** Max 50 przypomnień/użytkownik, max 200 aktywnych przypomnień całkowicie
