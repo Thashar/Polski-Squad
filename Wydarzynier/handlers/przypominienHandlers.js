@@ -28,64 +28,60 @@ function parseDateInTimezone(dateStr, timezone) {
 
         const [_, year, month, day, hour, minute] = match;
 
-        // PROSTY SPOSÓB: Traktuj input jako czas lokalny w timezone, zwróć UTC
-        // Discord timestampy są ZAWSZE UTC i automatycznie pokazują się w lokalnym czasie użytkownika
+        // LOGIKA:
+        // Użytkownik ustawia timezone (np. Asia/Bangkok = UTC+7)
+        // Wpisuje "17:00" - myśli że to jego lokalny czas
+        // Bot musi odjąć offset (7h) i zapisać "10:00 UTC"
+        // Discord timestamp pokaże każdemu użytkownikowi w jego lokalnym czasie
 
-        // Tworzymy date string który będzie sparsowany
-        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+        // Tworzymy arbitrary reference date na TĘ SAMĄ datę, noon UTC
+        const referenceUTC = Date.UTC(
+            parseInt(year),
+            parseInt(month) - 1,
+            parseInt(day),
+            12, 0, 0  // Noon jako punkt odniesienia
+        );
 
-        // Sposób 1: Używamy toLocaleString do znalezienia offset
-        // Tworzymy arbitrary date w UTC
-        const testDate = new Date(dateString + 'Z'); // 'Z' = UTC
+        const refDate = new Date(referenceUTC);
 
-        // Formatujemy tę datę w target timezone
-        const tzString = testDate.toLocaleString('en-US', {
+        // Formatujemy noon UTC w timezone użytkownika używając 'sv-SE' (format: YYYY-MM-DD HH:MM:SS)
+        const tzFormatted = refDate.toLocaleString('sv-SE', {
             timeZone: timezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
             hour12: false
         });
 
-        // Format: MM/DD/YYYY, HH:MM:SS → wyciągamy godzinę
-        const tzMatch = tzString.match(/(\d{2}):(\d{2}):(\d{2})/);
-        if (!tzMatch) return null;
-        const tzHourFromFormat = parseInt(tzMatch[1]);
-
-        // Także formatujemy w UTC
-        const utcString = testDate.toLocaleString('en-US', {
+        // Formatujemy noon UTC w UTC
+        const utcFormatted = refDate.toLocaleString('sv-SE', {
             timeZone: 'UTC',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
             hour12: false
         });
 
-        const utcMatch = utcString.match(/(\d{2}):(\d{2}):(\d{2})/);
-        if (!utcMatch) return null;
-        const utcHourFromFormat = parseInt(utcMatch[1]);
+        // Wyciągnij godziny z formatów (format: YYYY-MM-DD HH:MM:SS)
+        const tzHourMatch = tzFormatted.match(/\d{4}-\d{2}-\d{2} (\d{2}):/);
+        const utcHourMatch = utcFormatted.match(/\d{4}-\d{2}-\d{2} (\d{2}):/);
 
-        // Oblicz offset
-        let offsetHours = tzHourFromFormat - utcHourFromFormat;
+        if (!tzHourMatch || !utcHourMatch) return null;
 
-        // Handle day boundary crossing
+        const tzHour = parseInt(tzHourMatch[1]);
+        const utcHour = parseInt(utcHourMatch[1]);
+
+        // Oblicz offset timezone (np. Bangkok 19:00 - UTC 12:00 = +7)
+        let offsetHours = tzHour - utcHour;
+
+        // Handle day boundary (jeśli różnica > 12h, to przekroczyliśmy granicę dnia)
         if (offsetHours > 12) offsetHours -= 24;
         if (offsetHours < -12) offsetHours += 24;
 
-        // Teraz stwórz finalną datę UTC: odejmij offset od input hour
-        const utcHour = parseInt(hour) - offsetHours;
+        // TERAZ: Użytkownik wpisał godzinę w SWOIM timezone
+        // Musimy odjąć offset żeby dostać UTC
+        // Przykład: Bangkok (UTC+7), wpisał 17:00 → UTC = 17 - 7 = 10:00 ✅
+        const finalUTCHour = parseInt(hour) - offsetHours;
 
         const finalUTC = Date.UTC(
             parseInt(year),
             parseInt(month) - 1,
             parseInt(day),
-            utcHour,
+            finalUTCHour,
             parseInt(minute),
             0
         );
