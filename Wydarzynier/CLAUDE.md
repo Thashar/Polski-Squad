@@ -18,8 +18,9 @@
 - **Zaplanowane:** Ustawianie przypomień na podstawie szablonów z:
   - Pierwszym wyzwoleniem (data + czas)
   - Interwałem powtarzania (1s, 1m, 1h, 1d do max 28d, lub "ee" dla specjalnego wzorca)
-  - Kanałem docelowym
-  - Rolami do pingowania
+  - **Typem powiadomienia:**
+    - **0 = Dopasowane** - Pełna personalizacja (wybór kanału + pingi)
+    - **1 = Ustandaryzowane** - Kanał automatycznie ustawiony na kanał z Listą Eventów, tylko wybór pingów (ról)
 - **Tablica:** Automatyczna tablica z embeddami wszystkich aktywnych przypomnień:
   - Live Discord timestamps (<t:timestamp:R>)
   - Przyciski: Wstrzymaj/Wznów, Edytuj, Usuń

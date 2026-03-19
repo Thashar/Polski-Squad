@@ -648,9 +648,19 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
         .setRequired(false)
         .setMaxLength(10);
 
+    const typeInput = new TextInputBuilder()
+        .setCustomId('type')
+        .setLabel('Typ: 0 = dopasowane | 1 = ustandaryzowane')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('0 lub 1')
+        .setValue('0')
+        .setRequired(true)
+        .setMaxLength(1);
+
     modal.addComponents(
         new ActionRowBuilder().addComponents(firstTriggerInput),
-        new ActionRowBuilder().addComponents(intervalInput)
+        new ActionRowBuilder().addComponents(intervalInput),
+        new ActionRowBuilder().addComponents(typeInput)
     );
 
     await interaction.showModal(modal);
@@ -908,6 +918,15 @@ async function handleModalSubmit(interaction, sharedState) {
             const templateId = customId.replace('set_reminder_modal_', '');
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
             const interval = interaction.fields.getTextInputValue('interval');
+            const type = interaction.fields.getTextInputValue('type');
+
+            // Walidacja typu
+            if (type !== '0' && type !== '1') {
+                await interaction.editReply({
+                    content: '❌ Nieprawidłowy typ. Użyj: 0 (dopasowane) lub 1 (ustandaryzowane)'
+                });
+                return;
+            }
 
             // Parse firstTrigger
             const firstTrigger = new Date(firstTriggerStr);
@@ -945,28 +964,74 @@ async function handleModalSubmit(interaction, sharedState) {
                 }
             }
 
-            // Store in user state for channel/role selection
             const sessionId = Date.now().toString();
-            userStates.set(interaction.user.id, {
-                sessionId,
-                templateId,
-                firstTrigger: firstTrigger.toISOString(),
-                interval,
-                step: 'select_channel'
-            });
 
-            // Show channel select
-            const channelSelect = new ChannelSelectMenuBuilder()
-                .setCustomId(`set_reminder_channel_${sessionId}`)
-                .setPlaceholder('Select channel for reminders')
-                .setChannelTypes([ChannelType.GuildText]);
+            // TYP 1 = USTANDARYZOWANE (kanał z Listą Eventów, tylko pingi)
+            if (type === '1') {
+                const { eventMenedzer } = sharedState;
+                const eventListChannelId = eventMenedzer.getListChannelId();
 
-            const row = new ActionRowBuilder().addComponents(channelSelect);
+                if (!eventListChannelId) {
+                    await interaction.editReply({
+                        content: '❌ Kanał z Listą Eventów nie został ustawiony. Użyj typu 0 (dopasowane) lub ustaw kanał listy eventów.'
+                    });
+                    return;
+                }
 
-            await interaction.editReply({
-                content: '**Step 2/3:** Select the channel where notifications will be sent',
-                components: [row]
-            });
+                // Store in user state with channel already set
+                userStates.set(interaction.user.id, {
+                    sessionId,
+                    templateId,
+                    firstTrigger: firstTrigger.toISOString(),
+                    interval,
+                    channelId: eventListChannelId,
+                    step: 'select_roles'
+                });
+
+                // Pokaż role select od razu (bez wyboru kanału)
+                const roleSelect = new RoleSelectMenuBuilder()
+                    .setCustomId(`set_reminder_roles_${sessionId}`)
+                    .setPlaceholder('Select roles to ping (optional)')
+                    .setMinValues(0)
+                    .setMaxValues(10);
+
+                const skipButton = new ButtonBuilder()
+                    .setCustomId(`set_reminder_skip_roles_${sessionId}`)
+                    .setLabel('Skip - no pings')
+                    .setStyle(ButtonStyle.Secondary);
+
+                const row1 = new ActionRowBuilder().addComponents(roleSelect);
+                const row2 = new ActionRowBuilder().addComponents(skipButton);
+
+                await interaction.editReply({
+                    content: `**Step 2/2:** Select roles to ping (optional)\n📍 **Kanał:** <#${eventListChannelId}> (Lista Eventów)`,
+                    components: [row1, row2]
+                });
+            }
+            // TYP 0 = DOPASOWANE (wybór kanału + pingi)
+            else {
+                // Store in user state for channel/role selection
+                userStates.set(interaction.user.id, {
+                    sessionId,
+                    templateId,
+                    firstTrigger: firstTrigger.toISOString(),
+                    interval,
+                    step: 'select_channel'
+                });
+
+                // Show channel select
+                const channelSelect = new ChannelSelectMenuBuilder()
+                    .setCustomId(`set_reminder_channel_${sessionId}`)
+                    .setPlaceholder('Select channel for reminders')
+                    .setChannelTypes([ChannelType.GuildText]);
+
+                const row = new ActionRowBuilder().addComponents(channelSelect);
+
+                await interaction.editReply({
+                    content: '**Step 2/3:** Select the channel where notifications will be sent',
+                    components: [row]
+                });
+            }
         }
         // Edit template
         else if (customId.startsWith('edit_template_modal_')) {
