@@ -12,6 +12,43 @@ const {
     RoleSelectMenuBuilder
 } = require('discord.js');
 
+// ==================== HELPER FUNCTIONS ====================
+
+/**
+ * Parsuje datę w określonej strefie czasowej
+ * @param {string} dateStr - String daty w formacie YYYY-MM-DD HH:MM
+ * @param {string} timezone - Strefa czasowa (np. Europe/Warsaw)
+ * @returns {Date} Date object w UTC
+ */
+function parseDateInTimezone(dateStr, timezone) {
+    try {
+        // Parsuj składowe daty
+        const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+        if (!match) return null;
+
+        const [_, year, month, day, hour, minute] = match;
+
+        // Stwórz datę w formacie ISO z "T" zamiast spacji
+        const isoString = `${year}-${month}-${day}T${hour}:${minute}:00`;
+
+        // Użyj toLocaleString żeby przekonwertować na UTC z uwzględnieniem strefy czasowej
+        // Tworzymy datę zakładając że to UTC
+        const utcDate = new Date(isoString + 'Z');
+
+        // Pobierz offset dla tej daty w danej strefie czasowej
+        const dateInTimezone = new Date(utcDate.toLocaleString('en-US', { timeZone: timezone }));
+        const dateInUTC = new Date(utcDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+
+        // Offset w milisekundach
+        const offset = dateInTimezone.getTime() - dateInUTC.getTime();
+
+        // Zastosuj offset do oryginalnej daty UTC
+        return new Date(utcDate.getTime() - offset);
+    } catch (error) {
+        return null;
+    }
+}
+
 // ==================== MAIN HANDLER ====================
 
 async function handlePrzypominienInteraction(interaction, sharedState) {
@@ -1157,15 +1194,17 @@ async function handleModalSubmit(interaction, sharedState) {
         }
         // Add event
         else if (customId === 'add_event_modal') {
-            const { eventMenedzer, listaEventowMenedzer } = sharedState;
+            const { eventMenedzer, listaEventowMenedzer, strefaCzasowaManager } = sharedState;
 
             const name = interaction.fields.getTextInputValue('name');
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
             const interval = interaction.fields.getTextInputValue('interval');
 
-            // Parse firstTrigger
-            const firstTrigger = new Date(firstTriggerStr);
-            if (isNaN(firstTrigger.getTime())) {
+            // Parse firstTrigger w strefie czasowej bota
+            const timezone = strefaCzasowaManager.getGlobalTimezone();
+            const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
+
+            if (!firstTrigger || isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
                     content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM (e.g. 2026-03-20 10:00)'
                 });
