@@ -28,65 +28,81 @@ function parseDateInTimezone(dateStr, timezone) {
 
         const [_, year, month, day, hour, minute] = match;
 
-        // LOGIKA:
-        // Użytkownik ustawia timezone (np. Asia/Bangkok = UTC+7)
-        // Wpisuje "17:00" - myśli że to jego lokalny czas
-        // Bot musi odjąć offset (7h) i zapisać "10:00 UTC"
-        // Discord timestamp pokaże każdemu użytkownikowi w jego lokalnym czasie
+        // NOWE PODEJŚCIE:
+        // 1. Tworzymy datę UTC z wpisanych wartości (jakby to był UTC)
+        // 2. Sprawdzamy jak ta data wygląda w docelowej strefie
+        // 3. Obliczamy różnicę i korygujemy
 
-        // Tworzymy arbitrary reference date na TĘ SAMĄ datę, noon UTC
-        const referenceUTC = Date.UTC(
+        // Krok 1: Tworzymy tymczasową datę UTC
+        const tempUTC = Date.UTC(
             parseInt(year),
             parseInt(month) - 1,
             parseInt(day),
-            12, 0, 0  // Noon jako punkt odniesienia
+            parseInt(hour),
+            parseInt(minute),
+            0
         );
+        const tempDate = new Date(tempUTC);
 
-        const refDate = new Date(referenceUTC);
-
-        // Formatujemy noon UTC w timezone użytkownika używając 'sv-SE' (format: YYYY-MM-DD HH:MM:SS)
-        const tzFormatted = refDate.toLocaleString('sv-SE', {
+        // Krok 2: Sprawdzamy jak ta data wygląda w docelowej strefie
+        const tzFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone,
+            hour: '2-digit',
             hour12: false
         });
 
-        // Formatujemy noon UTC w UTC
-        const utcFormatted = refDate.toLocaleString('sv-SE', {
-            timeZone: 'UTC',
-            hour12: false
-        });
+        const tzParts = tzFormatter.formatToParts(tempDate);
+        const tzHourPart = tzParts.find(p => p.type === 'hour');
 
-        // Wyciągnij godziny z formatów (format: YYYY-MM-DD HH:MM:SS)
-        const tzHourMatch = tzFormatted.match(/\d{4}-\d{2}-\d{2} (\d{2}):/);
-        const utcHourMatch = utcFormatted.match(/\d{4}-\d{2}-\d{2} (\d{2}):/);
+        if (!tzHourPart) return null;
 
-        if (!tzHourMatch || !utcHourMatch) return null;
+        const tzHour = parseInt(tzHourPart.value);
+        const userHour = parseInt(hour);
 
-        const tzHour = parseInt(tzHourMatch[1]);
-        const utcHour = parseInt(utcHourMatch[1]);
+        // Krok 3: Obliczamy offset (różnica między tym co pokazuje a tym co użytkownik chciał)
+        let offsetHours = tzHour - userHour;
 
-        // Oblicz offset timezone (np. Bangkok 19:00 - UTC 12:00 = +7)
-        let offsetHours = tzHour - utcHour;
+        console.log(`[OFFSET DEBUG] User wanted: ${userHour}:00, TZ shows: ${tzHour}:00, Offset: ${offsetHours}`);
 
-        // Handle day boundary (jeśli różnica > 12h, to przekroczyliśmy granicę dnia)
+        // Handle day boundary
         if (offsetHours > 12) offsetHours -= 24;
         if (offsetHours < -12) offsetHours += 24;
 
-        // TERAZ: Użytkownik wpisał godzinę w SWOIM timezone
-        // Musimy odjąć offset żeby dostać UTC
-        // Przykład: Bangkok (UTC+7), wpisał 17:00 → UTC = 17 - 7 = 10:00 ✅
-        const finalUTCHour = parseInt(hour) - offsetHours;
+        console.log(`[OFFSET DEBUG] Final offset: ${offsetHours}`);
+
+        // Krok 4: Korygujemy - odejmujemy offset od godziny użytkownika
+        let correctedUTCHour = userHour - offsetHours;
+        let correctedDay = parseInt(day);
+        let correctedMonth = parseInt(month) - 1;
+        let correctedYear = parseInt(year);
+
+        // Handle hour overflow/underflow (może przekroczyć 0-23)
+        if (correctedUTCHour < 0) {
+            correctedUTCHour += 24;
+            correctedDay -= 1;
+            // TODO: Handle month/year boundary - na razie zakładamy że nie przekroczymy miesiąca
+        } else if (correctedUTCHour >= 24) {
+            correctedUTCHour -= 24;
+            correctedDay += 1;
+            // TODO: Handle month/year boundary
+        }
+
+        console.log(`[OFFSET DEBUG] Corrected UTC hour: ${correctedUTCHour}, day: ${correctedDay}`);
 
         const finalUTC = Date.UTC(
-            parseInt(year),
-            parseInt(month) - 1,
-            parseInt(day),
-            finalUTCHour,
+            correctedYear,
+            correctedMonth,
+            correctedDay,
+            correctedUTCHour,
             parseInt(minute),
             0
         );
 
-        return new Date(finalUTC);
+        const resultDate = new Date(finalUTC);
+        console.log(`[OFFSET DEBUG] Final timestamp: ${resultDate.toISOString()}`);
+        console.log(`[OFFSET DEBUG] Unix timestamp: ${Math.floor(finalUTC / 1000)}`);
+
+        return resultDate;
     } catch (error) {
         return null;
     }
