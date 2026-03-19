@@ -11,6 +11,12 @@ class TablicaMenedzer {
         this.boardChannel = null;
         this.updateInterval = null;
         this.controlPanelMessageId = null;
+
+        // Circuit breaker dla błędów DNS
+        this.circuitBreakerOpen = false;
+        this.circuitBreakerUntil = null;
+        this.consecutiveFailures = 0;
+        this.lastDnsErrorLog = 0; // Timestamp ostatniego logu błędu DNS
     }
 
     async initialize() {
@@ -144,11 +150,26 @@ class TablicaMenedzer {
 
             return true;
         } catch (error) {
-            this.logger.error(`Nie udało się zaktualizować embed dla ${scheduled.id}:`, error);
-            // Jeśli wiadomość nie znaleziona, utwórz nową
-            if (error.code === 10008) {
-                await this.createEmbed(scheduled);
+            // Deduplikacja logów błędów DNS - loguj tylko raz na 5 minut
+            const isDnsError = error.code === 'EAI_AGAIN' || error.syscall === 'getaddrinfo';
+            const now = Date.now();
+
+            if (isDnsError) {
+                // Loguj błąd DNS tylko raz na 5 minut
+                if (now - this.lastDnsErrorLog > 5 * 60 * 1000) {
+                    this.logger.error(`❌ DNS error - cannot reach Discord API (will retry): ${error.message}`);
+                    this.lastDnsErrorLog = now;
+                }
+            } else {
+                // Inne błędy - loguj normalnie
+                this.logger.error(`Nie udało się zaktualizować embed dla ${scheduled.id}:`, error);
+
+                // Jeśli wiadomość nie znaleziona, utwórz nową
+                if (error.code === 10008) {
+                    await this.createEmbed(scheduled);
+                }
             }
+
             return false;
         }
     }
@@ -294,11 +315,46 @@ class TablicaMenedzer {
 
     // Zaktualizuj wszystkie aktywne embedy
     async updateAllEmbeds() {
+        // Sprawdź circuit breaker
+        if (this.circuitBreakerOpen) {
+            const now = Date.now();
+            if (now < this.circuitBreakerUntil) {
+                // Circuit breaker nadal otwarty - pomiń aktualizacje
+                return;
+            } else {
+                // Czas minął - zamknij circuit breaker i spróbuj ponownie
+                this.logger.info('🔄 Circuit breaker closed - resuming board updates');
+                this.circuitBreakerOpen = false;
+                this.circuitBreakerUntil = null;
+                this.consecutiveFailures = 0;
+            }
+        }
+
         const activeScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
+        let failedCount = 0;
 
         for (const scheduled of activeScheduled) {
             if (scheduled.status === 'active') {
-                await this.updateEmbed(scheduled);
+                const success = await this.updateEmbed(scheduled);
+                if (!success) failedCount++;
+            }
+        }
+
+        // Jeśli wszystkie aktualizacje zawiodły, otwórz circuit breaker
+        if (activeScheduled.length > 0 && failedCount === activeScheduled.length) {
+            this.consecutiveFailures++;
+
+            if (this.consecutiveFailures >= 3) {
+                // Otwórz circuit breaker na 5 minut
+                this.circuitBreakerOpen = true;
+                this.circuitBreakerUntil = Date.now() + (5 * 60 * 1000);
+                this.logger.warn(`⚠️ Circuit breaker opened after ${this.consecutiveFailures} consecutive failures - pausing updates for 5 minutes`);
+            }
+        } else if (failedCount === 0) {
+            // Reset licznika przy sukcesie
+            if (this.consecutiveFailures > 0) {
+                this.logger.success('✅ Board updates recovered successfully');
+                this.consecutiveFailures = 0;
             }
         }
     }

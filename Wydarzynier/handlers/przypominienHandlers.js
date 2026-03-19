@@ -37,14 +37,26 @@ async function handlePrzypominienInteraction(interaction, sharedState) {
             await handleModalSubmit(interaction, sharedState);
         }
     } catch (error) {
+        // Unknown interaction - timeout (>3s od kliknięcia)
+        if (error.code === 10062) {
+            logger.error('⚠️ Unknown interaction - user clicked button but response took too long (>3s)');
+            // Nie próbuj odpowiadać - interakcja już wygasła
+            return;
+        }
+
         logger.error('Error handling interaction:', error);
 
         const errorMessage = '❌ Wystąpił błąd podczas przetwarzania akcji.';
 
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
-        } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
+        try {
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ content: errorMessage, ephemeral: true });
+            } else if (interaction.isRepliable()) {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        } catch (followUpError) {
+            // Interakcja mogła wygasnąć podczas obsługi błędu
+            logger.error('Could not send error message to user:', followUpError.message);
         }
     }
 }
