@@ -759,21 +759,29 @@ async function handleChannelSelectMenu(interaction, sharedState) {
         const selectedChannel = interaction.channels.first();
 
         try {
-            await listaEventowMenedzer.setListChannel(selectedChannel.id);
+            const result = await listaEventowMenedzer.setListChannel(selectedChannel.id);
 
-            // Update control panel to show new channel
+            // Zaktualizuj panel kontrolny aby pokazać nowy kanał
             await tablicaMenedzer.ensureControlPanel();
 
-            await interaction.update({
-                content: `✅ **Events list channel set!**\n📍 **Channel:** <#${selectedChannel.id}>\n\nThe events list will be displayed there.`,
-                components: []
-            });
+            // Różne komunikaty w zależności czy to ten sam kanał
+            if (result.sameChannel) {
+                await interaction.update({
+                    content: `ℹ️ **Lista eventów już jest na tym kanale!**\n📍 **Kanał:** <#${selectedChannel.id}>`,
+                    components: []
+                });
+            } else {
+                await interaction.update({
+                    content: `✅ **Kanał listy eventów ustawiony!**\n📍 **Kanał:** <#${selectedChannel.id}>\n\nLista eventów będzie wyświetlana tam.`,
+                    components: []
+                });
+            }
 
-            logger.success(`Events list channel set to: ${selectedChannel.name}`);
+            logger.success(`Kanał listy eventów ustawiony na: ${selectedChannel.name}`);
         } catch (error) {
-            logger.error('Failed to set events list channel:', error);
+            logger.error('Nie udało się ustawić kanału listy eventów:', error);
             await interaction.update({
-                content: '❌ Failed to set events list channel.',
+                content: '❌ Nie udało się ustawić kanału listy eventów.',
                 components: []
             });
         }

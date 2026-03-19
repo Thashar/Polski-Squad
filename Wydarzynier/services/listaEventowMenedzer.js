@@ -43,6 +43,16 @@ class ListaEventowMenedzer {
             const oldChannelId = this.eventMenedzer.getListChannelId();
             const oldMessageId = this.eventMenedzer.getListMessageId();
 
+            // Sprawdź czy to ten sam kanał
+            if (oldChannelId === channelId && oldMessageId) {
+                this.logger.info('Lista eventów już jest na tym kanale - brak akcji');
+                return {
+                    success: true,
+                    sameChannel: true,
+                    channelName: channel.name
+                };
+            }
+
             // Usuń stary embed z poprzedniego kanału jeśli istnieje
             if (oldChannelId && oldMessageId && oldChannelId !== channelId) {
                 try {
@@ -66,7 +76,11 @@ class ListaEventowMenedzer {
             await this.ensureEventsList();
 
             this.logger.success(`Kanał listy eventów ustawiony na: ${channel.name}`);
-            return true;
+            return {
+                success: true,
+                sameChannel: false,
+                channelName: channel.name
+            };
         } catch (error) {
             this.logger.error('Nie udało się ustawić kanału listy eventów:', error);
             throw error;
