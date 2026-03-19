@@ -72,6 +72,12 @@ class ClanRoleChangeService {
      * @param {GuildMember} newMember - Nowy stan członka
      */
     async handleRoleChange(oldMember, newMember) {
+        // Sprawdź czy serwis został zainicjalizowany
+        if (!this.client) {
+            logger.warn('[CLAN_ROLE] ⚠️ Serwis nie został jeszcze zainicjalizowany - pomijam zmianę ról');
+            return;
+        }
+
         try {
             const userId = newMember.user.id;
             const previousRoleIds = this.memberRolesCache.get(userId) || [];
