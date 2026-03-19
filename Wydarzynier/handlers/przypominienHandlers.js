@@ -775,20 +775,30 @@ async function handleScheduledSelectForEdit(interaction, sharedState) {
 }
 
 async function handleTimezoneSelect(interaction, sharedState) {
-    const { strefaCzasowaManager, tablicaMenedzer } = sharedState;
+    const { strefaCzasowaManager, tablicaMenedzer, logger } = sharedState;
 
-    const selectedTimezone = interaction.values[0];
-    await strefaCzasowaManager.setGlobalTimezone(selectedTimezone);
+    try {
+        const selectedTimezone = interaction.values[0];
+        logger.info(`Setting timezone to: ${selectedTimezone}`);
 
-    const currentTime = strefaCzasowaManager.getCurrentTime();
+        await strefaCzasowaManager.setGlobalTimezone(selectedTimezone);
 
-    // Update control panel to show new timezone
-    await tablicaMenedzer.ensureControlPanel();
+        const currentTime = strefaCzasowaManager.getCurrentTime();
 
-    await interaction.update({
-        content: `✅ **Bot timezone updated!**\n🕐 **New timezone:** ${selectedTimezone}\n⏰ **Current time:** ${currentTime}\n\n*All users will see times in this timezone.*`,
-        components: []
-    });
+        // Update control panel to show new timezone
+        await tablicaMenedzer.ensureControlPanel();
+
+        await interaction.update({
+            content: `✅ **Bot timezone updated!**\n🕐 **New timezone:** ${selectedTimezone}\n⏰ **Current time:** ${currentTime}\n\n*All users will see times in this timezone.*`,
+            components: []
+        });
+    } catch (error) {
+        logger.error('Error in handleTimezoneSelect:', error);
+        await interaction.reply({
+            content: `❌ Błąd podczas ustawiania strefy czasowej: ${error.message}`,
+            ephemeral: true
+        }).catch(() => {});
+    }
 }
 
 // ==================== CHANNEL SELECT MENU ====================
