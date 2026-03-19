@@ -761,9 +761,7 @@ async function handleChannelSelectMenu(interaction, sharedState) {
         try {
             const result = await listaEventowMenedzer.setListChannel(selectedChannel.id);
 
-            // Zaktualizuj panel kontrolny aby pokazać nowy kanał
-            await tablicaMenedzer.updateControlPanel();
-
+            // Odpowiedz NAJPIERW aby uniknąć timeout (<3s)
             // Różne komunikaty w zależności czy to ten sam kanał
             if (result.sameChannel) {
                 await interaction.update({
@@ -778,6 +776,9 @@ async function handleChannelSelectMenu(interaction, sharedState) {
             }
 
             logger.success(`Kanał listy eventów ustawiony na: ${selectedChannel.name}`);
+
+            // Zaktualizuj panel kontrolny PO odpowiedzi (może zająć >3s podczas wyszukiwania)
+            await tablicaMenedzer.updateControlPanel();
         } catch (error) {
             logger.error('Nie udało się ustawić kanału listy eventów:', error);
             await interaction.update({
