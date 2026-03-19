@@ -55,6 +55,7 @@ const sharedState = {
     eventMenedzer,
     client,
     config,
+    logger,
     userStates: new Map(), // Stan użytkowników dla interakcji z przypomnieniami
 };
 
