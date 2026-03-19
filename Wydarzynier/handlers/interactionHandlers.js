@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { isAllowedChannel, delay } = require('../utils/helpers');
+const { handlePrzypominienInteraction } = require('./przypominienHandlers');
 
 const logger = createBotLogger('Wydarzynier');
 
@@ -1379,8 +1380,40 @@ class InteractionHandler {
  * @param {Object} sharedState - Współdzielony stan aplikacji
  */
 async function handleInteraction(interaction, sharedState) {
-    const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService, sharedState.bazarService);
-    await handler.handleInteraction(interaction, sharedState);
+    // Sprawdź czy to interakcja z systemem przypomnień/eventów
+    const isPrzypominienInteraction = (
+        (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() ||
+         interaction.isRoleSelectMenu() || interaction.isModalSubmit()) &&
+        interaction.customId &&
+        (
+            interaction.customId.startsWith('board_') ||
+            interaction.customId.startsWith('template_') ||
+            interaction.customId.startsWith('scheduled_') ||
+            interaction.customId.startsWith('set_reminder_') ||
+            interaction.customId.startsWith('new_reminder_') ||
+            interaction.customId.startsWith('edit_template_') ||
+            interaction.customId.startsWith('edit_scheduled_') ||
+            interaction.customId.startsWith('timezone_') ||
+            interaction.customId.startsWith('event_') ||
+            interaction.customId.startsWith('add_event_') ||
+            interaction.customId.startsWith('delete_event_') ||
+            interaction.customId.startsWith('edit_event_') ||
+            interaction.customId.startsWith('confirm_delete_template_') ||
+            interaction.customId.startsWith('confirm_delete_scheduled_') ||
+            interaction.customId.startsWith('confirm_delete_event_') ||
+            interaction.customId.startsWith('cancel_delete_') ||
+            interaction.customId === 'event_list_channel_select' ||
+            interaction.customId === 'put_list'
+        )
+    );
+
+    // Przekieruj do odpowiedniego handlera
+    if (isPrzypominienInteraction) {
+        await handlePrzypominienInteraction(interaction, sharedState);
+    } else {
+        const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService, sharedState.bazarService);
+        await handler.handleInteraction(interaction, sharedState);
+    }
 }
 
 module.exports = {

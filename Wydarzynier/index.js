@@ -7,6 +7,12 @@ const { handleMessageUpdate, handleMessageCreate } = require('./handlers/message
 const LobbyService = require('./services/lobbyService');
 const TimerService = require('./services/timerService');
 const BazarService = require('./services/bazarService');
+const PrzypomnieniaMenedzer = require('./services/przypomnieniaMenedzer');
+const Harmonogram = require('./services/harmonogram');
+const TablicaMenedzer = require('./services/tablicaMenedzer');
+const EventMenedzer = require('./services/eventMenedzer');
+const ListaEventowMenedzer = require('./services/listaEventowMenedzer');
+const StrefaCzasowaManager = require('./services/strefaCzasowaManager');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -30,21 +36,71 @@ const lobbyService = new LobbyService(config);
 const timerService = new TimerService(config);
 const bazarService = new BazarService(config);
 
+// Serwisy systemu przypomnień i eventów
+const przypomnieniaMenedzer = new PrzypomnieniaMenedzer(config, logger);
+const strefaCzasowaManager = new StrefaCzasowaManager(logger);
+const eventMenedzer = new EventMenedzer(config, logger);
+
+// Te serwisy wymagają wcześniejszych serwisów, zainicjalizujemy je później
+let harmonogram = null;
+let tablicaMenedzer = null;
+let listaEventowMenedzer = null;
+
 const sharedState = {
     lobbyService,
     timerService,
     bazarService,
+    przypomnieniaMenedzer,
+    strefaCzasowaManager,
+    eventMenedzer,
     client,
-    config
+    config,
+    userStates: new Map(), // Stan użytkowników dla interakcji z przypomnieniami
 };
 
+// Funkcje pomocnicze do dodania serwisów po inicjalizacji
+function setHarmonogram(h) {
+    harmonogram = h;
+    sharedState.harmonogram = h;
+}
+
+function setTablicaMenedzer(t) {
+    tablicaMenedzer = t;
+    sharedState.tablicaMenedzer = t;
+}
+
+function setListaEventowMenedzer(l) {
+    listaEventowMenedzer = l;
+    sharedState.listaEventowMenedzer = l;
+}
+
 client.once(Events.ClientReady, async () => {
-    logger.success('✅ Wydarzynier gotowy - lobby partii, bazar');
-    
+    logger.success('✅ Wydarzynier gotowy - lobby partii, bazar, przypomnienia, eventy');
+
     // Wczytaj lobby i timery z plików
     await lobbyService.loadLobbies();
     await timerService.restoreTimers(sharedState);
     await bazarService.initialize(client);
+
+    // Inicjalizuj system przypomnień i eventów
+    await przypomnieniaMenedzer.initialize();
+    await strefaCzasowaManager.initialize();
+    await eventMenedzer.initialize();
+
+    // Utwórz serwisy zależne
+    tablicaMenedzer = new TablicaMenedzer(client, config, logger, przypomnieniaMenedzer, strefaCzasowaManager, eventMenedzer);
+    setTablicaMenedzer(tablicaMenedzer);
+
+    listaEventowMenedzer = new ListaEventowMenedzer(client, config, logger, eventMenedzer);
+    setListaEventowMenedzer(listaEventowMenedzer);
+
+    harmonogram = new Harmonogram(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer);
+    setHarmonogram(harmonogram);
+
+    // Inicjalizuj serwisy zależne
+    await tablicaMenedzer.initialize();
+    await listaEventowMenedzer.initialize();
+    harmonogram.initialize();
 
     const { InteractionHandler } = require('./handlers/interactionHandlers');
     const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
@@ -321,12 +377,51 @@ async function repositionLobbyAnnouncement(lobby, sharedState) {
     }
 }
 
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    logger.info('Otrzymano SIGINT - zamykanie Wydarzyniera...');
+
+    // Zatrzymaj harmonogram i periodic updates
+    if (harmonogram) harmonogram.stop();
+    if (tablicaMenedzer) tablicaMenedzer.stopPeriodicUpdates();
+
+    // Zapisz dane
+    await lobbyService.saveLobbies().catch(err => logger.error('Błąd podczas zapisywania lobbies:', err));
+    await timerService.saveTimersToFile().catch(err => logger.error('Błąd podczas zapisywania timerów:', err));
+
+    await client.destroy();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    logger.info('Otrzymano SIGTERM - zamykanie Wydarzyniera...');
+
+    // Zatrzymaj harmonogram i periodic updates
+    if (harmonogram) harmonogram.stop();
+    if (tablicaMenedzer) tablicaMenedzer.stopPeriodicUpdates();
+
+    // Zapisz dane
+    await lobbyService.saveLobbies().catch(err => logger.error('Błąd podczas zapisywania lobbies:', err));
+    await timerService.saveTimersToFile().catch(err => logger.error('Błąd podczas zapisywania timerów:', err));
+
+    await client.destroy();
+    process.exit(0);
+});
+
 module.exports = {
     client,
     start: () => {
         return client.login(config.token);
     },
-    stop: () => {
+    stop: async () => {
+        // Zatrzymaj harmonogram i periodic updates
+        if (harmonogram) harmonogram.stop();
+        if (tablicaMenedzer) tablicaMenedzer.stopPeriodicUpdates();
+
+        // Zapisz dane
+        await lobbyService.saveLobbies().catch(err => logger.error('Błąd podczas zapisywania lobbies:', err));
+        await timerService.saveTimersToFile().catch(err => logger.error('Błąd podczas zapisywania timerów:', err));
+
         return client.destroy();
     }
 };

@@ -155,7 +155,7 @@ To jest kolekcja botów Discord dla Polski Squad, zawierająca **9 oddzielnych b
 5. **EndersEcho Bot** - System rankingów bossów z OCR i automatycznymi rolami TOP
 6. **Kontroler Bot** - Dwukanałowa weryfikacja OCR + zaawansowana loteria z datami + system Oligopoly
 7. **Konklawe Bot** - Interaktywna gra słowna z osiągnięciami i systemem klątw
-8. **Wydarzynier Bot** - Zarządzanie lobby party z organizacją wątkową
+8. **Wydarzynier Bot** - Zarządzanie lobby party + System przypomnień i eventów (skopiowany z STAR bota)
 9. **Gary Bot** - Analiza Lunar Mine Expedition z API garrytools.com i proxy
 
 ---
@@ -782,6 +782,7 @@ KONKLAWE_GROK_MODEL=grok-3-mini
 
 # ===== WYDARZYNIER BOT =====
 WYDARZYNIER_TOKEN=bot_token_here
+WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL=channel_id
 
 # ===== GARY BOT =====
 GARY_TOKEN=bot_token_here

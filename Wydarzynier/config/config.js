@@ -5,7 +5,8 @@ const logger = createBotLogger('Wydarzynier');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const requiredEnvVars = [
-    'WYDARZYNIER_TOKEN'
+    'WYDARZYNIER_TOKEN',
+    'WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -19,11 +20,18 @@ if (missingVars.length > 0) {
 module.exports = {
     // Dane połączenia
     token: process.env.WYDARZYNIER_TOKEN,
-    
+
     // Kanały
     channels: {
         party: '1201206524165496994' // Kanał gdzie można używać /party
     },
+
+    // System Przypomnień i Eventów
+    notificationsBoardChannelId: process.env.WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL,
+    timezone: 'Europe/Warsaw',
+    boardUpdateInterval: 60000, // 1 minuta
+    maxNotificationsPerUser: 50,
+    maxTotalNotifications: 200,
     
     // Role
     roles: {
