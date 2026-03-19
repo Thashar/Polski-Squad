@@ -31,6 +31,12 @@ class TablicaMenedzer {
             this.boardChannel = channel;
             this.logger.success('TablicaMenedzer zainicjalizowany');
 
+            // Wczytaj ID wiadomości panelu kontrolnego z persistent storage
+            this.controlPanelMessageId = this.eventMenedzer.getControlPanelMessageId();
+            if (this.controlPanelMessageId) {
+                this.logger.info(`Wczytano ID wiadomości panelu kontrolnego: ${this.controlPanelMessageId}`);
+            }
+
             // Rozpocznij okresowe aktualizacje
             this.startPeriodicUpdates();
 
@@ -59,6 +65,12 @@ class TablicaMenedzer {
             this.updateInterval = null;
             this.logger.info('Zatrzymano okresowe aktualizacje tablicy');
         }
+    }
+
+    // Zapisz ID wiadomości panelu kontrolnego do persistent storage
+    async saveControlPanelMessageId(messageId) {
+        this.controlPanelMessageId = messageId;
+        await this.eventMenedzer.setControlPanelMessageId(messageId);
     }
 
     // Synchronizuj wszystkie powiadomienia na tablicy (przy starcie)
@@ -401,7 +413,7 @@ class TablicaMenedzer {
                 try {
                     const controlPanel = await this.buildControlPanel();
                     await existingPanel.edit(controlPanel);
-                    this.controlPanelMessageId = existingPanel.id;
+                    await this.saveControlPanelMessageId(existingPanel.id);
                     this.logger.success('Panel kontrolny znaleziony i zaktualizowany');
                     return;
                 } catch (error) {
@@ -420,7 +432,7 @@ class TablicaMenedzer {
             // Panel kontrolny nie istnieje lub stary został usunięty - utwórz nowy na dole
             const controlPanel = await this.buildControlPanel();
             const message = await this.boardChannel.send(controlPanel);
-            this.controlPanelMessageId = message.id;
+            await this.saveControlPanelMessageId(message.id);
             this.logger.success('Panel kontrolny utworzony na dole');
 
         } catch (error) {
@@ -445,7 +457,7 @@ class TablicaMenedzer {
                 } catch (error) {
                     if (error.code === 10008) {
                         this.logger.warn('Cachowany panel kontrolny nie znaleziony, przeszukuję kanał');
-                        this.controlPanelMessageId = null;
+                        await this.saveControlPanelMessageId(null);
                     } else {
                         throw error;
                     }
@@ -460,7 +472,7 @@ class TablicaMenedzer {
                         message.embeds.length > 0 &&
                         message.embeds[0].title === '📋 Panel Kontrolny Przypomnień i Eventów') {
                         panelMessage = message;
-                        this.controlPanelMessageId = message.id;
+                        await this.saveControlPanelMessageId(message.id);
                         this.logger.info('Znaleziono panel kontrolny w kanale');
                         break;
                     }
