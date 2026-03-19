@@ -28,22 +28,35 @@ function parseDateInTimezone(dateStr, timezone) {
 
         const [_, year, month, day, hour, minute] = match;
 
-        // Stwórz datę w formacie ISO z "T" zamiast spacji
-        const isoString = `${year}-${month}-${day}T${hour}:${minute}:00`;
+        // Użytkownik podaje czas w timezone bota (np. Europe/Warsaw)
+        // Musimy przekonwertować na UTC
 
-        // Użyj toLocaleString żeby przekonwertować na UTC z uwzględnieniem strefy czasowej
-        // Tworzymy datę zakładając że to UTC
-        const utcDate = new Date(isoString + 'Z');
+        // Stwórz datę UTC z podanych składowych
+        const utcMs = Date.UTC(
+            parseInt(year),
+            parseInt(month) - 1,  // Miesiące są 0-indexed
+            parseInt(day),
+            parseInt(hour),
+            parseInt(minute),
+            0
+        );
 
-        // Pobierz offset dla tej daty w danej strefie czasowej
-        const dateInTimezone = new Date(utcDate.toLocaleString('en-US', { timeZone: timezone }));
-        const dateInUTC = new Date(utcDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+        // Stwórz tymczasową datę żeby obliczyć offset timezone
+        const tempDate = new Date(utcMs);
 
-        // Offset w milisekundach
-        const offset = dateInTimezone.getTime() - dateInUTC.getTime();
+        // Pobierz string reprezentację w timezone i UTC
+        const tzString = tempDate.toLocaleString('sv-SE', { timeZone: timezone });
+        const utcString = tempDate.toLocaleString('sv-SE', { timeZone: 'UTC' });
 
-        // Zastosuj offset do oryginalnej daty UTC
-        return new Date(utcDate.getTime() - offset);
+        // Oblicz offset (różnica czasu)
+        const tzDate = new Date(tzString);
+        const utcDate = new Date(utcString);
+        const offsetMs = tzDate.getTime() - utcDate.getTime();
+
+        // Zwróć skorygowaną datę UTC
+        // Jeśli użytkownik wpisał "10:00" w Europe/Warsaw (UTC+1),
+        // to UTC powinno być "09:00"
+        return new Date(utcMs - offsetMs);
     } catch (error) {
         return null;
     }
