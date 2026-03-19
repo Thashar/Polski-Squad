@@ -31,32 +31,59 @@ function parseDateInTimezone(dateStr, timezone) {
         // Użytkownik podaje czas w timezone bota (np. Europe/Warsaw)
         // Musimy przekonwertować na UTC
 
-        // Stwórz datę UTC z podanych składowych
-        const utcMs = Date.UTC(
+        // Tworzymy arbitrary reference date w UTC
+        const referenceUTC = Date.UTC(
             parseInt(year),
-            parseInt(month) - 1,  // Miesiące są 0-indexed
+            parseInt(month) - 1,
             parseInt(day),
-            parseInt(hour),
+            12, 0, 0  // Noon UTC jako punkt odniesienia
+        );
+
+        // Formatujemy tę samą datę w target timezone i UTC
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+
+        const formatterUTC = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'UTC',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+
+        // Parsujemy części daty
+        const tzParts = formatter.formatToParts(new Date(referenceUTC));
+        const utcParts = formatterUTC.formatToParts(new Date(referenceUTC));
+
+        // Wyciągamy godziny z obu formatów
+        const tzHour = parseInt(tzParts.find(p => p.type === 'hour').value);
+        const utcHour = parseInt(utcParts.find(p => p.type === 'hour').value);
+
+        // Oblicz offset w godzinach (może być ujemny)
+        const offsetHours = tzHour - utcHour;
+
+        // Stwórz finalną datę UTC odejmując offset od podanej godziny
+        const finalUTC = Date.UTC(
+            parseInt(year),
+            parseInt(month) - 1,
+            parseInt(day),
+            parseInt(hour) - offsetHours,  // Odejmij offset żeby dostać UTC
             parseInt(minute),
             0
         );
 
-        // Stwórz tymczasową datę żeby obliczyć offset timezone
-        const tempDate = new Date(utcMs);
-
-        // Pobierz string reprezentację w timezone i UTC
-        const tzString = tempDate.toLocaleString('sv-SE', { timeZone: timezone });
-        const utcString = tempDate.toLocaleString('sv-SE', { timeZone: 'UTC' });
-
-        // Oblicz offset (różnica czasu)
-        const tzDate = new Date(tzString);
-        const utcDate = new Date(utcString);
-        const offsetMs = tzDate.getTime() - utcDate.getTime();
-
-        // Zwróć skorygowaną datę UTC
-        // Jeśli użytkownik wpisał "10:00" w Europe/Warsaw (UTC+1),
-        // to UTC powinno być "09:00"
-        return new Date(utcMs - offsetMs);
+        return new Date(finalUTC);
     } catch (error) {
         return null;
     }
