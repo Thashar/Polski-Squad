@@ -53,6 +53,9 @@ function parseDateInTimezone(dateStr, timezone) {
         // Oblicz offset (np. Warsaw: 1 - 0 = +1, Bangkok: 7 - 0 = +7)
         let offsetHours = tzHour - utcHour;
 
+        console.log(`[PARSE DEBUG] Input: "${dateStr}", Timezone: ${timezone}`);
+        console.log(`[PARSE DEBUG] Reference (północ): TZ=${tzHour}:00, UTC=${utcHour}:00, Offset=${offsetHours}`);
+
         // Handle day boundary crossing
         if (offsetHours > 12) offsetHours -= 24;
         if (offsetHours < -12) offsetHours += 24;
@@ -61,6 +64,8 @@ function parseDateInTimezone(dateStr, timezone) {
         // Przykład: Warsaw (UTC+1), wpisane 17:00 → 17 - 1 = 16:00 UTC
         // Discord pokaże: 16:00 UTC + 1h = 17:00 w Warsaw ✅
         const finalUTCHour = parseInt(hour) - offsetHours;
+
+        console.log(`[PARSE DEBUG] User hour: ${hour}, Offset: ${offsetHours}, Final UTC hour: ${finalUTCHour}`);
 
         const finalUTC = Date.UTC(
             parseInt(year),
@@ -71,7 +76,11 @@ function parseDateInTimezone(dateStr, timezone) {
             0
         );
 
-        return new Date(finalUTC);
+        const resultDate = new Date(finalUTC);
+        console.log(`[PARSE DEBUG] Result: ${resultDate.toISOString()}`);
+        console.log(`[PARSE DEBUG] Unix: ${Math.floor(finalUTC / 1000)}`);
+
+        return resultDate;
     } catch (error) {
         return null;
     }
