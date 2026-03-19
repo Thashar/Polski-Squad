@@ -28,13 +28,8 @@ function parseDateInTimezone(dateStr, timezone) {
 
         const [_, year, month, day, hour, minute] = match;
 
-        // NOWE PODEJŚCIE:
-        // 1. Tworzymy datę UTC z wpisanych wartości (jakby to był UTC)
-        // 2. Sprawdzamy jak ta data wygląda w docelowej strefie
-        // 3. Obliczamy różnicę i korygujemy
-
-        // Krok 1: Tworzymy tymczasową datę UTC
-        const tempUTC = Date.UTC(
+        // PROSTE PODEJŚCIE: Bierz dokładnie to co wpisane i twórz UTC timestamp
+        const finalUTC = Date.UTC(
             parseInt(year),
             parseInt(month) - 1,
             parseInt(day),
@@ -42,67 +37,8 @@ function parseDateInTimezone(dateStr, timezone) {
             parseInt(minute),
             0
         );
-        const tempDate = new Date(tempUTC);
 
-        // Krok 2: Sprawdzamy jak ta data wygląda w docelowej strefie
-        const tzFormatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
-            hour: '2-digit',
-            hour12: false
-        });
-
-        const tzParts = tzFormatter.formatToParts(tempDate);
-        const tzHourPart = tzParts.find(p => p.type === 'hour');
-
-        if (!tzHourPart) return null;
-
-        const tzHour = parseInt(tzHourPart.value);
-        const userHour = parseInt(hour);
-
-        // Krok 3: Obliczamy offset (różnica między tym co pokazuje a tym co użytkownik chciał)
-        let offsetHours = tzHour - userHour;
-
-        console.log(`[OFFSET DEBUG] User wanted: ${userHour}:00, TZ shows: ${tzHour}:00, Offset: ${offsetHours}`);
-
-        // Handle day boundary
-        if (offsetHours > 12) offsetHours -= 24;
-        if (offsetHours < -12) offsetHours += 24;
-
-        console.log(`[OFFSET DEBUG] Final offset: ${offsetHours}`);
-
-        // Krok 4: Korygujemy - odejmujemy offset od godziny użytkownika
-        let correctedUTCHour = userHour - offsetHours;
-        let correctedDay = parseInt(day);
-        let correctedMonth = parseInt(month) - 1;
-        let correctedYear = parseInt(year);
-
-        // Handle hour overflow/underflow (może przekroczyć 0-23)
-        if (correctedUTCHour < 0) {
-            correctedUTCHour += 24;
-            correctedDay -= 1;
-            // TODO: Handle month/year boundary - na razie zakładamy że nie przekroczymy miesiąca
-        } else if (correctedUTCHour >= 24) {
-            correctedUTCHour -= 24;
-            correctedDay += 1;
-            // TODO: Handle month/year boundary
-        }
-
-        console.log(`[OFFSET DEBUG] Corrected UTC hour: ${correctedUTCHour}, day: ${correctedDay}`);
-
-        const finalUTC = Date.UTC(
-            correctedYear,
-            correctedMonth,
-            correctedDay,
-            correctedUTCHour,
-            parseInt(minute),
-            0
-        );
-
-        const resultDate = new Date(finalUTC);
-        console.log(`[OFFSET DEBUG] Final timestamp: ${resultDate.toISOString()}`);
-        console.log(`[OFFSET DEBUG] Unix timestamp: ${Math.floor(finalUTC / 1000)}`);
-
-        return resultDate;
+        return new Date(finalUTC);
     } catch (error) {
         return null;
     }
