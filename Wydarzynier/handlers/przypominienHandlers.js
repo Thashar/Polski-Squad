@@ -1245,7 +1245,10 @@ async function handleModalSubmit(interaction, sharedState) {
 
             // Parse firstTrigger w strefie czasowej bota
             const timezone = strefaCzasowaManager.getGlobalTimezone();
+            logger.info(`[EVENT PARSE] Input: "${firstTriggerStr}", Timezone: ${timezone}`);
             const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
+            logger.info(`[EVENT PARSE] Result: ${firstTrigger ? firstTrigger.toISOString() : 'NULL'}`);
+            logger.info(`[EVENT PARSE] Unix timestamp: ${firstTrigger ? Math.floor(firstTrigger.getTime() / 1000) : 'NULL'}`);
 
             if (!firstTrigger || isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
