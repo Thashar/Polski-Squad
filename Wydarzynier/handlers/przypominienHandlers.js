@@ -762,7 +762,7 @@ async function handleChannelSelectMenu(interaction, sharedState) {
             const result = await listaEventowMenedzer.setListChannel(selectedChannel.id);
 
             // Zaktualizuj panel kontrolny aby pokazać nowy kanał
-            await tablicaMenedzer.ensureControlPanel();
+            await tablicaMenedzer.updateControlPanel();
 
             // Różne komunikaty w zależności czy to ten sam kanał
             if (result.sameChannel) {

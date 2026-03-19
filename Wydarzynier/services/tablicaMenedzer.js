@@ -428,6 +428,37 @@ class TablicaMenedzer {
         }
     }
 
+    // Zaktualizuj istniejący panel kontrolny (lekka funkcja - nie szuka/nie tworzy)
+    async updateControlPanel() {
+        if (!this.boardChannel) {
+            this.logger.error('Kanał tablicy nie zainicjalizowany');
+            return;
+        }
+
+        try {
+            if (this.controlPanelMessageId) {
+                // Znamy ID wiadomości - po prostu zaktualizuj
+                const message = await this.boardChannel.messages.fetch(this.controlPanelMessageId);
+                const controlPanel = await this.buildControlPanel();
+                await message.edit(controlPanel);
+                this.logger.info('Panel kontrolny zaktualizowany');
+            } else {
+                // Nie znamy ID wiadomości - wywołaj ensureControlPanel żeby znaleźć/utworzyć
+                this.logger.warn('ID wiadomości panelu kontrolnego nie ustawione, wywołuję ensureControlPanel');
+                await this.ensureControlPanel();
+            }
+        } catch (error) {
+            // Jeśli wiadomość nie znaleziona (10008) lub inny błąd, spróbuj zapewnić że istnieje
+            if (error.code === 10008) {
+                this.logger.warn('Wiadomość panelu kontrolnego nie znaleziona, tworzę od nowa');
+                this.controlPanelMessageId = null;
+                await this.ensureControlPanel();
+            } else {
+                this.logger.error('Nie udało się zaktualizować panelu kontrolnego:', error);
+            }
+        }
+    }
+
     // Zbuduj panel kontrolny z informacjami
     async buildControlPanel() {
         const currentTimezone = this.strefaCzasowaManager.getGlobalTimezone();
