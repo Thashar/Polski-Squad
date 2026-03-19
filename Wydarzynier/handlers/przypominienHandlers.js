@@ -644,7 +644,7 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 28d), ee')
+        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 90d), ee')
         .setRequired(false)
         .setMaxLength(10);
 
@@ -947,7 +947,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval (opcjonalne - puste = jednorazowe)
             if (!przypomnieniaMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
                 });
                 return;
             }
@@ -955,10 +955,10 @@ async function handleModalSubmit(interaction, sharedState) {
             // Jeśli podano interwał, sprawdź limit
             if (interval && interval.trim() !== '') {
                 const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
-                const maxInterval = 28 * 24 * 60 * 60 * 1000;
+                const maxInterval = 90 * 24 * 60 * 60 * 1000;
                 if (intervalMs && intervalMs > maxInterval) {
                     await interaction.editReply({
-                        content: '❌ Interwał nie może przekraczać 28 dni.'
+                        content: '❌ Interwał nie może przekraczać 90 dni.'
                     });
                     return;
                 }
@@ -1119,7 +1119,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval (opcjonalne - puste = jednorazowe)
             if (!przypomnieniaMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
                 });
                 return;
             }
@@ -1127,10 +1127,10 @@ async function handleModalSubmit(interaction, sharedState) {
             // Jeśli podano interwał, sprawdź limit
             if (interval && interval.trim() !== '') {
                 const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
-                const maxInterval = 28 * 24 * 60 * 60 * 1000;
+                const maxInterval = 90 * 24 * 60 * 60 * 1000;
                 if (intervalMs && intervalMs > maxInterval) {
                     await interaction.editReply({
-                        content: '❌ Interwał nie może przekraczać 28 dni.'
+                        content: '❌ Interwał nie może przekraczać 90 dni.'
                     });
                     return;
                 }
@@ -1182,7 +1182,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval
             if (!eventMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 28d) or "ee"'
+                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 90d) or "ee"'
                 });
                 return;
             }
@@ -1238,7 +1238,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval
             if (!eventMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 28d) or "ee"'
+                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 90d) or "ee"'
                 });
                 return;
             }
@@ -2331,7 +2331,7 @@ async function handleAddEvent(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 28d), ee')
+        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 90d), ee')
         .setRequired(false)
         .setMaxLength(10);
 

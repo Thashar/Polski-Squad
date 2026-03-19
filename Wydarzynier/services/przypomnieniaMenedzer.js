@@ -143,7 +143,7 @@ class PrzypomnieniaMenedzer {
         if (interval && interval.trim() !== '') {
             // Waliduj interwał
             if (!this.validateInterval(interval)) {
-                throw new Error('Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 28d), lub "ee". Zostaw puste dla jednorazowego przypomnienia.');
+                throw new Error('Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), lub "ee". Zostaw puste dla jednorazowego przypomnienia.');
             }
 
             // Parsuj interwał na milisekundy
@@ -151,9 +151,9 @@ class PrzypomnieniaMenedzer {
 
             // Sprawdź maksymalny interwał (pomiń dla wzorca "ee")
             if (interval !== 'ee') {
-                const maxInterval = 28 * 24 * 60 * 60 * 1000; // 28 dni w ms
+                const maxInterval = 90 * 24 * 60 * 60 * 1000; // 90 dni w ms
                 if (intervalMs > maxInterval) {
-                    throw new Error('Interwał nie może przekraczać 28 dni');
+                    throw new Error('Interwał nie może przekraczać 90 dni');
                 }
             }
         } else {

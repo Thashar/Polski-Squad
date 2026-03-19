@@ -17,7 +17,7 @@
 - **Szablony:** Tworzenie szablonów wiadomości (tekst lub embed) z nazwą, treścią, kolorem
 - **Zaplanowane:** Ustawianie przypomień na podstawie szablonów z:
   - Pierwszym wyzwoleniem (data + czas)
-  - Interwałem powtarzania (1s, 1m, 1h, 1d do max 28d, lub "ee" dla specjalnego wzorca)
+  - Interwałem powtarzania (1s, 1m, 1h, 1d do max 90d, lub "ee" dla specjalnego wzorca)
   - **Typem powiadomienia:**
     - **0 = Dopasowane** - Pełna personalizacja (wybór kanału + pingi)
     - **1 = Ustandaryzowane** - Kanał automatycznie ustawiony na kanał z Listą Eventów, tylko wybór pingów (ról), **automatyczne usuwanie po 23h 50min**
@@ -59,7 +59,7 @@ WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL=channel_id  # Kanał z panelem kontrolny
 - **Harmonogram:** Sprawdzanie co 30s, wyzwalanie zaplanowanych przypomnień
 - **Tablica:** Auto-update co 1min, Discord timestamps, przyciski interaktywne
 - **Limity:** Max 50 przypomnień/użytkownik, max 200 aktywnych przypomnień całkowicie
-- **Interwały:** 1s-28d lub "ee" (specjalny wzorzec: 3d x8, potem 4d, repeat)
+- **Interwały:** 1s-90d lub "ee" (specjalny wzorzec: 3d x8, potem 4d, repeat)
 
 ## Struktura Plików
 
