@@ -1430,6 +1430,7 @@ async function handleInteraction(interaction, sharedState) {
         (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() ||
          interaction.isRoleSelectMenu() || interaction.isModalSubmit()) &&
         interaction.customId &&
+        interaction.customId !== 'event_notifications_subscribe' && // Wyjątek dla przycisku subskrypcji
         (
             interaction.customId.startsWith('board_') ||
             interaction.customId.startsWith('template_') ||
