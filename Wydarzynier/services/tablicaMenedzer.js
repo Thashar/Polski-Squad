@@ -379,36 +379,53 @@ class TablicaMenedzer {
         }
 
         try {
-            // Pobierz wiadomości aby znaleźć istniejący panel kontrolny gdziekolwiek w kanale
-            const allMessages = await this.boardChannel.messages.fetch({ limit: 100 });
             let existingPanel = null;
-            let duplicatePanels = [];
 
-            // Znajdź wszystkie panele kontrolne
-            for (const [, message] of allMessages) {
-                if (message.author.id === this.client.user.id &&
-                    message.embeds.length > 0 &&
-                    message.embeds[0].title === '📋 Panel Kontrolny Przypomnień i Eventów') {
-
-                    if (!existingPanel) {
-                        existingPanel = message;
+            // KROK 1: Najpierw sprawdź cached message ID (szybka ścieżka)
+            if (this.controlPanelMessageId) {
+                try {
+                    existingPanel = await this.boardChannel.messages.fetch(this.controlPanelMessageId);
+                    this.logger.info('Znaleziono panel kontrolny używając cached ID');
+                } catch (error) {
+                    if (error.code === 10008) {
+                        this.logger.warn('Cachowany panel kontrolny nie znaleziony, przeszukuję kanał');
+                        await this.saveControlPanelMessageId(null);
                     } else {
-                        duplicatePanels.push(message);
+                        throw error;
                     }
                 }
             }
 
-            // Usuń duplikaty paneli (zachowaj pierwszy znaleziony)
-            for (const duplicate of duplicatePanels) {
-                try {
-                    await duplicate.delete();
-                    this.logger.info(`Usunięto duplikat panelu kontrolnego: ${duplicate.id}`);
-                } catch (error) {
-                    this.logger.warn(`Nie udało się usunąć duplikatu panelu kontrolnego:`, error.message);
+            // KROK 2: Jeśli nie ma cached panelu, szukaj w kanale (wolna ścieżka)
+            if (!existingPanel) {
+                const allMessages = await this.boardChannel.messages.fetch({ limit: 100 });
+                const allPanels = [];
+
+                for (const [, message] of allMessages) {
+                    if (message.author.id === this.client.user.id &&
+                        message.embeds.length > 0 &&
+                        message.embeds[0].title === '📋 Panel Kontrolny Przypomnień i Eventów') {
+                        allPanels.push(message);
+                    }
+                }
+
+                if (allPanels.length > 0) {
+                    existingPanel = allPanels[0]; // Zachowaj pierwszy
+                    this.logger.info(`Znaleziono ${allPanels.length} panel(e/i) kontrolny(ch) w kanale`);
+
+                    // Usuń WSZYSTKIE duplikaty (włącznie ze starym cached jeśli inny)
+                    for (let i = 1; i < allPanels.length; i++) {
+                        try {
+                            await allPanels[i].delete();
+                            this.logger.info(`Usunięto duplikat panelu kontrolnego: ${allPanels[i].id}`);
+                        } catch (error) {
+                            this.logger.warn(`Nie udało się usunąć duplikatu:`, error.message);
+                        }
+                    }
                 }
             }
 
-            // Jeśli panel kontrolny istnieje - zaktualizuj go
+            // KROK 3: Jeśli panel istnieje - zaktualizuj go
             if (existingPanel) {
                 try {
                     const controlPanel = await this.buildControlPanel();
@@ -418,18 +435,16 @@ class TablicaMenedzer {
                     return;
                 } catch (error) {
                     this.logger.warn('Nie udało się zaktualizować istniejącego panelu, usuwam i tworzę nowy:', error.message);
-                    // Usuń stary panel przed utworzeniem nowego
                     try {
                         await existingPanel.delete();
                         this.logger.info('Usunięto stary panel kontrolny, który nie mógł być zaktualizowany');
                     } catch (deleteError) {
                         this.logger.warn('Nie udało się usunąć starego panelu kontrolnego:', deleteError.message);
                     }
-                    // Fall through to create new panel
                 }
             }
 
-            // Panel kontrolny nie istnieje lub stary został usunięty - utwórz nowy na dole
+            // KROK 4: Panel nie istnieje - utwórz nowy
             const controlPanel = await this.buildControlPanel();
             const message = await this.boardChannel.send(controlPanel);
             await this.saveControlPanelMessageId(message.id);
