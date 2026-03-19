@@ -892,10 +892,16 @@ class InteractionHandler {
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleEventNotificationsSubscribe(interaction, sharedState) {
+        logger.info(`🔔 Obsługa przycisku subskrypcji eventów: ${interaction.user.tag}`);
+
         try {
+            await interaction.deferReply({ ephemeral: true });
+
             const { user, guild } = interaction;
             const member = await guild.members.fetch(user.id);
             const eventNotificationRoleId = '1297587256101699776';
+
+            logger.info(`Sprawdzam rolę ${eventNotificationRoleId} dla ${user.tag}`);
 
             // Sprawdź czy użytkownik ma już rolę
             const hasRole = member.roles.cache.has(eventNotificationRoleId);
@@ -903,25 +909,36 @@ class InteractionHandler {
             if (hasRole) {
                 // Usuń rolę
                 await member.roles.remove(eventNotificationRoleId);
-                await interaction.reply({
-                    content: '🔕 Usunięto rolę powiadomień o eventach. Nie będziesz już otrzymywał powiadomień o eventach w grze.',
-                    ephemeral: true
+                logger.success(`✅ Usunięto rolę powiadomień eventów dla ${user.tag}`);
+                await interaction.editReply({
+                    content: '🔕 Usunięto rolę powiadomień o eventach. Nie będziesz już otrzymywał powiadomień o eventach w grze.'
                 });
             } else {
                 // Dodaj rolę
                 await member.roles.add(eventNotificationRoleId);
-                await interaction.reply({
-                    content: '🔔 Dodano rolę powiadomień o eventach! Będziesz otrzymywał powiadomienia o nadchodzących eventach w grze.',
-                    ephemeral: true
+                logger.success(`✅ Dodano rolę powiadomień eventów dla ${user.tag}`);
+                await interaction.editReply({
+                    content: '🔔 Dodano rolę powiadomień o eventach! Będziesz otrzymywał powiadomienia o nadchodzących eventach w grze.'
                 });
             }
 
         } catch (error) {
             logger.error('❌ Błąd podczas przełączania powiadomień eventów:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
-                ephemeral: true
-            });
+
+            try {
+                if (interaction.deferred) {
+                    await interaction.editReply({
+                        content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.'
+                    });
+                } else {
+                    await interaction.reply({
+                        content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
+                        ephemeral: true
+                    });
+                }
+            } catch (replyError) {
+                logger.error('❌ Nie można odpowiedzieć na interakcję:', replyError);
+            }
         }
     }
 
