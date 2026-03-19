@@ -28,12 +28,45 @@ function parseDateInTimezone(dateStr, timezone) {
 
         const [_, year, month, day, hour, minute] = match;
 
-        // PROSTE PODEJŚCIE: Bierz dokładnie to co wpisane i twórz UTC timestamp
+        // OBLICZ OFFSET STREFY CZASOWEJ
+        // Używamy referencyjnej daty (północ UTC tej samej daty) do obliczenia offsetu
+        const refUTC = Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0);
+        const refDate = new Date(refUTC);
+
+        // Formatuj reference date w docelowej strefie czasowej
+        const tzParts = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            hour: '2-digit',
+            hour12: false
+        }).formatToParts(refDate);
+
+        // Formatuj reference date w UTC
+        const utcParts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'UTC',
+            hour: '2-digit',
+            hour12: false
+        }).formatToParts(refDate);
+
+        const tzHour = parseInt(tzParts.find(p => p.type === 'hour').value);
+        const utcHour = parseInt(utcParts.find(p => p.type === 'hour').value);
+
+        // Oblicz offset (np. Warsaw: 1 - 0 = +1, Bangkok: 7 - 0 = +7)
+        let offsetHours = tzHour - utcHour;
+
+        // Handle day boundary crossing
+        if (offsetHours > 12) offsetHours -= 24;
+        if (offsetHours < -12) offsetHours += 24;
+
+        // ODEJMIJ offset od wpisanej godziny, żeby dostać UTC
+        // Przykład: Warsaw (UTC+1), wpisane 17:00 → 17 - 1 = 16:00 UTC
+        // Discord pokaże: 16:00 UTC + 1h = 17:00 w Warsaw ✅
+        const finalUTCHour = parseInt(hour) - offsetHours;
+
         const finalUTC = Date.UTC(
             parseInt(year),
             parseInt(month) - 1,
             parseInt(day),
-            parseInt(hour),
+            finalUTCHour,
             parseInt(minute),
             0
         );
