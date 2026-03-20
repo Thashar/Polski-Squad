@@ -27,7 +27,7 @@
   - Auto-update co minutę
   - Panel kontrolny na dole z przyciskami zarządzania
 - **Harmonogram:** Sprawdzanie co 30s i auto-wysyłanie przypomnień + czyszczenie starych wiadomości typu 1 (po 23h 50min)
-- **Strefa Czasowa:** Globalna strefa czasowa dla bota (domyślnie Europe/Warsaw)
+- **Strefa Czasowa:** Hardcoded `Europe/Warsaw` (brak możliwości zmiany przez UI)
 
 **Funkcjonalność Eventów:**
 - **Lista Eventów:** Osobna lista eventów wyświetlana na wybranym kanale
