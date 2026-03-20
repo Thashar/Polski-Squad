@@ -292,74 +292,6 @@ async function handleEditReminderCommand(interaction, sharedState) {
     });
 }
 
-// ==================== /SET-TIME-ZONE ====================
-
-async function handleSetTimezoneCommand(interaction, sharedState) {
-    const { strefaCzasowaManager } = sharedState;
-
-    const currentTimezone = strefaCzasowaManager.getGlobalTimezone();
-    const currentTime = strefaCzasowaManager.getCurrentTime();
-
-    // Create buttons for timezone categories
-    const row = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('timezone_category_positive')
-                .setLabel('UTC+ Timezones')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🌍'),
-            new ButtonBuilder()
-                .setCustomId('timezone_category_negative')
-                .setLabel('UTC- Timezones')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🌎')
-        );
-
-    await interaction.reply({
-        content: `🕐 **Bot timezone:** ${currentTimezone}\n⏰ **Current time:** ${currentTime}\n\nSelect timezone category:`,
-        components: [row],
-        ephemeral: true
-    });
-}
-
-async function handleTimezoneCategorySelect(interaction, sharedState, category) {
-    const { strefaCzasowaManager } = sharedState;
-
-    await interaction.deferUpdate();
-
-    const currentTimezone = strefaCzasowaManager.getGlobalTimezone();
-    const timezones = category === 'positive'
-        ? strefaCzasowaManager.getPositiveTimezones()
-        : strefaCzasowaManager.getNegativeTimezones();
-
-    // Create select menu with timezones from selected category
-    const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('set_timezone_select')
-        .setPlaceholder(`Select timezone (${category === 'positive' ? 'UTC+' : 'UTC-'})`)
-        .addOptions(timezones.map(tz => ({
-            label: tz.label,
-            value: tz.value,
-            default: tz.value === currentTimezone
-        })));
-
-    const row = new ActionRowBuilder().addComponents(selectMenu);
-
-    // Add back button
-    const backButton = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('timezone_back')
-                .setLabel('Back')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('◀️')
-        );
-
-    await interaction.editReply({
-        content: `🌐 **${category === 'positive' ? 'UTC+' : 'UTC-'} Timezones**\nSelect timezone:`,
-        components: [row, backButton]
-    });
-}
-
 // ==================== BUTTON HANDLERS ====================
 
 async function handleButton(interaction, sharedState) {
@@ -384,11 +316,6 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
-    if (customId === 'board_set_timezone') {
-        await handleSetTimezoneCommand(interaction, sharedState);
-        return;
-    }
-
     // Event management buttons
     if (customId === 'board_add_event') {
         await handleAddEvent(interaction, sharedState);
@@ -407,22 +334,6 @@ async function handleButton(interaction, sharedState) {
 
     if (customId === 'board_put_list') {
         await handlePutList(interaction, sharedState);
-        return;
-    }
-
-    // Timezone category selection
-    if (customId === 'timezone_category_positive') {
-        await handleTimezoneCategorySelect(interaction, sharedState, 'positive');
-        return;
-    }
-
-    if (customId === 'timezone_category_negative') {
-        await handleTimezoneCategorySelect(interaction, sharedState, 'negative');
-        return;
-    }
-
-    if (customId === 'timezone_back') {
-        await handleSetTimezoneCommand(interaction, sharedState);
         return;
     }
 
@@ -576,12 +487,6 @@ async function handleSelectMenu(interaction, sharedState) {
     // Scheduled selection for /edit-reminder Scheduled
     if (customId.startsWith('scheduled_select_edit_')) {
         await handleScheduledSelectForEdit(interaction, sharedState);
-        return;
-    }
-
-    // Timezone selection for /set-time-zone
-    if (customId === 'set_timezone_select') {
-        await handleTimezoneSelect(interaction, sharedState);
         return;
     }
 
@@ -772,33 +677,6 @@ async function handleScheduledSelectForEdit(interaction, sharedState) {
     }
 
     await showScheduledEditPreview(interaction, scheduled, sharedState);
-}
-
-async function handleTimezoneSelect(interaction, sharedState) {
-    const { strefaCzasowaManager, tablicaMenedzer, logger } = sharedState;
-
-    try {
-        const selectedTimezone = interaction.values[0];
-        logger.info(`Setting timezone to: ${selectedTimezone}`);
-
-        await strefaCzasowaManager.setGlobalTimezone(selectedTimezone);
-
-        const currentTime = strefaCzasowaManager.getCurrentTime();
-
-        // Update control panel to show new timezone
-        await tablicaMenedzer.ensureControlPanel();
-
-        await interaction.update({
-            content: `✅ **Bot timezone updated!**\n🕐 **New timezone:** ${selectedTimezone}\n⏰ **Current time:** ${currentTime}\n\n*All users will see times in this timezone.*`,
-            components: []
-        });
-    } catch (error) {
-        logger.error('Error in handleTimezoneSelect:', error);
-        await interaction.reply({
-            content: `❌ Błąd podczas ustawiania strefy czasowej: ${error.message}`,
-            ephemeral: true
-        }).catch(() => {});
-    }
 }
 
 // ==================== CHANNEL SELECT MENU ====================
