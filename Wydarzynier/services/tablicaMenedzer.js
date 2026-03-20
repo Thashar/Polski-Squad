@@ -594,12 +594,7 @@ class TablicaMenedzer {
                     .setCustomId('board_edit_reminder')
                     .setLabel('Edytuj Przypomnienie')
                     .setStyle(ButtonStyle.Primary)
-                    .setEmoji('✏️'),
-                new ButtonBuilder()
-                    .setCustomId('board_set_timezone')
-                    .setLabel('Ustaw Strefę Czasową')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🕐')
+                    .setEmoji('✏️')
             );
 
         const row2 = new ActionRowBuilder()
