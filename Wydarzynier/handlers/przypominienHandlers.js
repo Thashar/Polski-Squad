@@ -890,8 +890,9 @@ async function handleModalSubmit(interaction, sharedState) {
                 return;
             }
 
-            // Parse firstTrigger
-            const firstTrigger = new Date(firstTriggerStr);
+            // Parse firstTrigger z konwersją strefy czasowej Warsaw → UTC
+            const timezone = sharedState.strefaCzasowaManager.getGlobalTimezone();
+            const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
             if (isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
                     content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM (e.g. 2026-03-20 10:00)'
@@ -1069,8 +1070,9 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
             const interval = interaction.fields.getTextInputValue('interval');
 
-            // Parse firstTrigger
-            const firstTrigger = new Date(firstTriggerStr);
+            // Parse firstTrigger z konwersją strefy czasowej Warsaw → UTC
+            const timezone = sharedState.strefaCzasowaManager.getGlobalTimezone();
+            const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
             if (isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
                     content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM'
@@ -1179,7 +1181,7 @@ async function handleModalSubmit(interaction, sharedState) {
         }
         // Edit event
         else if (customId.startsWith('edit_event_modal_')) {
-            const { eventMenedzer, listaEventowMenedzer } = sharedState;
+            const { eventMenedzer, listaEventowMenedzer, strefaCzasowaManager } = sharedState;
 
             const eventId = customId.replace('edit_event_modal_', '');
             const event = eventMenedzer.getEvent(eventId);
@@ -1193,8 +1195,9 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
             const interval = interaction.fields.getTextInputValue('interval');
 
-            // Parse firstTrigger
-            const firstTrigger = new Date(firstTriggerStr);
+            // Parse firstTrigger z konwersją strefy czasowej Warsaw → UTC
+            const timezone = strefaCzasowaManager.getGlobalTimezone();
+            const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
             if (isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
                     content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM'
@@ -1880,8 +1883,10 @@ async function handleEditScheduledEdit(interaction, sharedState) {
         .setCustomId(`edit_scheduled_modal_${scheduledId}`)
         .setTitle('Edit scheduled reminder');
 
-    const firstTriggerDate = new Date(scheduled.firstTrigger);
-    const formattedDate = `${firstTriggerDate.getFullYear()}-${String(firstTriggerDate.getMonth() + 1).padStart(2, '0')}-${String(firstTriggerDate.getDate()).padStart(2, '0')} ${String(firstTriggerDate.getHours()).padStart(2, '0')}:${String(firstTriggerDate.getMinutes()).padStart(2, '0')}`;
+    const formattedDate = new Date(scheduled.firstTrigger).toLocaleString('sv-SE', {
+        timeZone: 'Europe/Warsaw',
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+    }).replace(',', '');
 
     const firstTriggerInput = new TextInputBuilder()
         .setCustomId('firstTrigger')
@@ -2105,8 +2110,10 @@ async function handleBoardScheduledEdit(interaction, sharedState) {
         .setCustomId(`edit_scheduled_modal_${scheduledId}`)
         .setTitle('Edit scheduled reminder');
 
-    const firstTriggerDate = new Date(scheduled.firstTrigger);
-    const formattedDate = `${firstTriggerDate.getFullYear()}-${String(firstTriggerDate.getMonth() + 1).padStart(2, '0')}-${String(firstTriggerDate.getDate()).padStart(2, '0')} ${String(firstTriggerDate.getHours()).padStart(2, '0')}:${String(firstTriggerDate.getMinutes()).padStart(2, '0')}`;
+    const formattedDate = new Date(scheduled.firstTrigger).toLocaleString('sv-SE', {
+        timeZone: 'Europe/Warsaw',
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+    }).replace(',', '');
 
     const firstTriggerInput = new TextInputBuilder()
         .setCustomId('firstTrigger')
@@ -2223,6 +2230,7 @@ async function handleEditEventSelect(interaction, sharedState) {
         .setLabel('First trigger (YYYY-MM-DD HH:MM)')
         .setStyle(TextInputStyle.Short)
         .setValue(new Date(event.firstTrigger).toLocaleString('sv-SE', {
+            timeZone: 'Europe/Warsaw',
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
