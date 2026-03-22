@@ -502,9 +502,6 @@ class TablicaMenedzer {
 
     // Zbuduj panel kontrolny z informacjami
     async buildControlPanel() {
-        const currentTimezone = this.strefaCzasowaManager.getGlobalTimezone();
-        const currentTime = this.strefaCzasowaManager.getCurrentTime();
-
         // Pobierz kanał listy eventów
         const eventsChannelId = this.eventMenedzer.getListChannelId();
         let eventsChannelText = '';
@@ -514,8 +511,10 @@ class TablicaMenedzer {
             eventsChannelText = `📋 **Kanał Listy Eventów:** _Nie ustawiono (użyj przycisku "Ustaw Listę")_\n`;
         }
 
-        // Pobierz wszystkie szablony
+        // Pobierz statystyki
         const templates = this.przypomnieniaMenedzer.getAllTemplates();
+        const activeScheduled = this.przypomnieniaMenedzer.getActiveScheduled();
+        const events = this.eventMenedzer.getAllEvents();
         let templatesText = '';
 
         if (templates.length === 0) {
@@ -558,7 +557,7 @@ class TablicaMenedzer {
             .setColor(0x5865F2) // Blurple
             .setTitle('📋 Panel Kontrolny Przypomnień i Eventów')
             .setDescription(
-                `🕐 **Strefa czasowa:** ${currentTimezone} | ⏰ **Czas:** ${currentTime}\n` +
+                `📊 **Statystyki:** 📚 Szablony: ${templates.length} | 🔔 Aktywne powiadomienia: ${activeScheduled.length} | 📅 Eventy: ${events.length}\n` +
                 `${eventsChannelText}\n` +
                 `**📚 Dostępne Szablony (${templates.length}):**\n${templatesText}`
             )
