@@ -660,6 +660,15 @@ class TablicaMenedzer {
                 .setEmoji('🗑️')
         );
 
+        // Przycisk Pokaż
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`scheduled_preview_${scheduled.id}`)
+                .setLabel('Pokaż')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('👁️')
+        );
+
         return [row];
     }
 }
