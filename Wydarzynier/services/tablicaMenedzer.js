@@ -617,7 +617,6 @@ class TablicaMenedzer {
     buildActionButtons(scheduled) {
         const row1 = new ActionRowBuilder();
         const row2 = new ActionRowBuilder();
-
         // Rząd 1: Wstrzymaj/Wznów, Edytuj, Usuń
         if (scheduled.status === 'active') {
             row1.addComponents(
@@ -661,13 +660,22 @@ class TablicaMenedzer {
                 .setCustomId(`scheduled_preview_${scheduled.id}`)
                 .setLabel('Pokaż')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('👁️'),
-            new ButtonBuilder()
-                .setCustomId('goto_control_panel')
-                .setLabel('Panel')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬇️')
+                .setEmoji('👁️')
         );
+
+        // Przycisk Panel jako link (jeśli panel już istnieje)
+        if (this.controlPanelMessageId && this.boardChannel) {
+            const guildId = this.boardChannel.guild?.id;
+            const channelId = this.boardChannel.id;
+            const panelUrl = `https://discord.com/channels/${guildId}/${channelId}/${this.controlPanelMessageId}`;
+            row2.addComponents(
+                new ButtonBuilder()
+                    .setURL(panelUrl)
+                    .setLabel('Panel')
+                    .setStyle(ButtonStyle.Link)
+                    .setEmoji('⬇️')
+            );
+        }
 
         return [row1, row2];
     }
