@@ -16,7 +16,7 @@ class TablicaMenedzer {
         this.circuitBreakerOpen = false;
         this.circuitBreakerUntil = null;
         this.consecutiveFailures = 0;
-        this.lastDnsErrorLog = 0; // Timestamp ostatniego logu błędu DNS
+        this.lastNetworkErrorLog = 0; // Timestamp ostatniego logu błędu sieciowego (DNS, timeout)
     }
 
     async initialize() {
@@ -162,15 +162,20 @@ class TablicaMenedzer {
 
             return true;
         } catch (error) {
-            // Deduplikacja logów błędów DNS - loguj tylko raz na 5 minut
-            const isDnsError = error.code === 'EAI_AGAIN' || error.syscall === 'getaddrinfo';
+            // Deduplikacja logów błędów sieciowych - loguj tylko raz na 5 minut
+            const isTransientNetworkError =
+                error.code === 'EAI_AGAIN' ||
+                error.syscall === 'getaddrinfo' ||
+                error.name === 'ConnectTimeoutError' ||
+                error.name === 'SocketError' ||
+                error.name === 'RequestTimeoutError';
             const now = Date.now();
 
-            if (isDnsError) {
-                // Loguj błąd DNS tylko raz na 5 minut
-                if (now - this.lastDnsErrorLog > 5 * 60 * 1000) {
-                    this.logger.error(`❌ DNS error - cannot reach Discord API (will retry): ${error.message}`);
-                    this.lastDnsErrorLog = now;
+            if (isTransientNetworkError) {
+                // Loguj błąd sieciowy tylko raz na 5 minut
+                if (now - this.lastNetworkErrorLog > 5 * 60 * 1000) {
+                    this.logger.error(`❌ Network error - cannot reach Discord API (will retry): ${error.message}`);
+                    this.lastNetworkErrorLog = now;
                 }
             } else {
                 // Inne błędy - loguj normalnie
