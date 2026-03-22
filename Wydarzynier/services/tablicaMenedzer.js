@@ -557,10 +557,14 @@ class TablicaMenedzer {
             .setColor(0x5865F2) // Blurple
             .setTitle('📋 Panel Kontrolny Przypomnień i Eventów')
             .setDescription(
-                `📊 **Statystyki:** 📚 Szablony: ${templates.length} | 🔔 Aktywne powiadomienia: ${activeScheduled.length} | 📅 Eventy: ${events.length}\n` +
                 `${eventsChannelText}\n` +
                 `**📚 Dostępne Szablony (${templates.length}):**\n${templatesText}`
             )
+            .addFields({
+                name: '📊 Statystyki',
+                value: `📚 Szablony: **${templates.length}**\n🔔 Aktywne powiadomienia: **${activeScheduled.length}**\n📅 Eventy: **${events.length}**`,
+                inline: false
+            })
             .setFooter({ text: 'System Przypomnień' });
 
         const row1 = new ActionRowBuilder()
