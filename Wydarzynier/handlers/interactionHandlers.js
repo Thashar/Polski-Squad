@@ -309,7 +309,22 @@ class InteractionHandler {
             await this.handleCloseLobbyButton(interaction, sharedState);
             return;
         }
-        
+
+        // Obsługa przycisków tablicy przypomnień (muszą być przed sprawdzaniem lobby)
+        if (
+            customId === 'goto_control_panel' ||
+            customId.startsWith('scheduled_send_') ||
+            customId.startsWith('scheduled_preview_') ||
+            customId.startsWith('scheduled_pause_') ||
+            customId.startsWith('scheduled_resume_') ||
+            customId.startsWith('scheduled_edit_') ||
+            customId.startsWith('scheduled_delete_') ||
+            customId.startsWith('edit_scheduled_')
+        ) {
+            await handlePrzypominienInteraction(interaction, sharedState);
+            return;
+        }
+
         // Znajdź lobby na podstawie wiadomości
         const lobby = sharedState.lobbyService.getLobbyByThreadId(message.channel.id);
         if (!lobby) {
