@@ -1455,6 +1455,7 @@ async function handleInteraction(interaction, sharedState) {
             interaction.customId.startsWith('set_reminder_') ||
             interaction.customId.startsWith('new_reminder_') ||
             interaction.customId.startsWith('edit_template_') ||
+            interaction.customId.startsWith('edit_reminder_') ||
             interaction.customId.startsWith('edit_scheduled_') ||
             interaction.customId.startsWith('event_') ||
             interaction.customId.startsWith('add_event_') ||

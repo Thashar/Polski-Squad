@@ -408,6 +408,11 @@ async function handleButton(interaction, sharedState) {
     }
 
     // Board buttons for scheduled
+    if (customId.startsWith('scheduled_send_')) {
+        await handleBoardScheduledSend(interaction, sharedState);
+        return;
+    }
+
     if (customId.startsWith('scheduled_pause_')) {
         await handleBoardScheduledPause(interaction, sharedState);
         return;
@@ -2089,6 +2094,61 @@ async function handleBoardScheduledResume(interaction, sharedState) {
             content: '❌ Error resuming reminder.',
             ephemeral: true
         });
+    }
+}
+
+async function handleBoardScheduledSend(interaction, sharedState) {
+    const { przypomnieniaMenedzer, logger, client } = sharedState;
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const scheduledId = interaction.customId.replace('scheduled_send_', '');
+    const scheduled = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
+
+    if (!scheduled || !scheduled.template) {
+        await interaction.editReply({ content: '❌ Nie znaleziono przypomnienia lub szablonu.' });
+        return;
+    }
+
+    try {
+        const channel = await client.channels.fetch(scheduled.channelId);
+        if (!channel) {
+            await interaction.editReply({ content: '❌ Nie znaleziono kanału docelowego.' });
+            return;
+        }
+
+        let content = '';
+        const embeds = [];
+
+        if (scheduled.roles && scheduled.roles.length > 0) {
+            content += scheduled.roles.map(r => `<@&${r}>`).join(' ') + '\n\n';
+        }
+
+        const template = scheduled.template;
+        if (template.type === 'text') {
+            content += template.text;
+        } else if (template.type === 'embed') {
+            const colorHex = parseInt(template.embedColor || '5865F2', 16);
+            const embed = new EmbedBuilder()
+                .setDescription(template.embedDescription)
+                .setColor(colorHex)
+                .setTimestamp();
+
+            if (template.embedTitle) embed.setTitle(template.embedTitle);
+            if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+            embeds.push(embed);
+        }
+
+        await channel.send({ content, embeds });
+
+        await interaction.editReply({
+            content: `✅ Przypomnienie wysłane testowo na <#${scheduled.channelId}>.`
+        });
+
+        logger.info(`Testowe wysłanie przypomnienia ${scheduledId} przez ${interaction.user.tag}`);
+    } catch (error) {
+        logger.error('Error in handleBoardScheduledSend:', error);
+        await interaction.editReply({ content: '❌ Błąd podczas wysyłania przypomnienia.' });
     }
 }
 
