@@ -1023,13 +1023,8 @@ async function handleModalSubmit(interaction, sharedState) {
                 const text = interaction.fields.getTextInputValue('text');
 
                 await przypomnieniaMenedzer.updateTemplate(templateId, { name, text });
-                await interaction.editReply({
-                    content: `✅ Template **${name}** has been updated!`,
-                    components: []
-                });
-
-                // Update control panel to show updated template
                 await tablicaMenedzer.ensureControlPanel();
+                await interaction.deleteReply();
             } else {
                 const name = interaction.fields.getTextInputValue('name');
                 const embedTitle = interaction.fields.getTextInputValue('embedTitle');
@@ -1056,13 +1051,8 @@ async function handleModalSubmit(interaction, sharedState) {
                     embedIcon,
                     embedColor
                 });
-                await interaction.editReply({
-                    content: `✅ Template **${name}** has been updated!`,
-                    components: []
-                });
-
-                // Update control panel to show updated template
                 await tablicaMenedzer.ensureControlPanel();
+                await interaction.deleteReply();
             }
 
             logger.success(`Updated template ${templateId}`);
@@ -1121,12 +1111,7 @@ async function handleModalSubmit(interaction, sharedState) {
             const { tablicaMenedzer } = sharedState;
             const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
             await tablicaMenedzer.updateEmbed(updated);
-
-            await interaction.editReply({
-                content: `✅ Scheduled reminder **${scheduledId}** has been updated!`,
-                components: []
-            });
-
+            await interaction.deleteReply();
             logger.success(`Updated scheduled ${scheduledId}`);
         }
         // Add event
@@ -1176,11 +1161,7 @@ async function handleModalSubmit(interaction, sharedState) {
 
                 // Update events list
                 await listaEventowMenedzer.ensureEventsList();
-
-                await interaction.editReply({
-                    content: `✅ **Event created!**\n📅 **Name:** ${name}\n🆔 **ID:** ${event.id}\n⏰ **Next trigger:** <t:${Math.floor(new Date(event.nextTrigger).getTime() / 1000)}:F>`
-                });
-
+                await interaction.deleteReply();
                 logger.success(`Created event ${event.id}`);
             } catch (error) {
                 logger.error('Failed to create event:', error);
@@ -1235,12 +1216,7 @@ async function handleModalSubmit(interaction, sharedState) {
 
             // Update events list
             await listaEventowMenedzer.ensureEventsList();
-
-            await interaction.editReply({
-                content: `✅ Event **${name}** has been updated!`,
-                components: []
-            });
-
+            await interaction.deleteReply();
             logger.success(`Updated event ${eventId}`);
         }
 
@@ -1954,14 +1930,10 @@ async function handleConfirmDeleteTemplate(interaction, sharedState) {
     try {
         await przypomnieniaMenedzer.deleteTemplate(templateId);
 
-        await interaction.editReply({
-            content: `✅ Template **${templateId}** and all associated scheduled reminders have been deleted.`,
-            embeds: [],
-            components: []
-        });
-
         // Update control panel to remove deleted template
         await tablicaMenedzer.ensureControlPanel();
+
+        await interaction.deleteReply();
 
         logger.success(`Deleted template ${templateId}`);
     } catch (error) {
@@ -1989,12 +1961,7 @@ async function handleConfirmDeleteScheduled(interaction, sharedState) {
 
         await przypomnieniaMenedzer.deleteScheduled(scheduledId);
 
-        await interaction.editReply({
-            content: `✅ Scheduled reminder **${scheduledId}** has been deleted.`,
-            embeds: [],
-            components: []
-        });
-
+        await interaction.deleteReply();
         logger.success(`Deleted scheduled ${scheduledId}`);
     } catch (error) {
         logger.error('Error deleting scheduled:', error);
@@ -2019,12 +1986,7 @@ async function handleConfirmDeleteEvent(interaction, sharedState) {
         // Update events list
         await listaEventowMenedzer.ensureEventsList();
 
-        await interaction.editReply({
-            content: `✅ Event **${eventId}** has been deleted.`,
-            embeds: [],
-            components: []
-        });
-
+        await interaction.deleteReply();
         logger.success(`Deleted event ${eventId}`);
     } catch (error) {
         logger.error('Error deleting event:', error);
@@ -2059,11 +2021,6 @@ async function handleBoardScheduledPause(interaction, sharedState) {
         const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
         await tablicaMenedzer.updateEmbed(updated);
 
-        await interaction.followUp({
-            content: `⏸️ Scheduled reminder **${scheduledId}** has been paused.`,
-            ephemeral: true
-        });
-
         logger.success(`Paused scheduled ${scheduledId} from board`);
     } catch (error) {
         logger.error('Error pausing scheduled:', error);
@@ -2086,11 +2043,6 @@ async function handleBoardScheduledResume(interaction, sharedState) {
 
         const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
         await tablicaMenedzer.updateEmbed(updated);
-
-        await interaction.followUp({
-            content: `▶️ Scheduled reminder **${scheduledId}** has been resumed.`,
-            ephemeral: true
-        });
 
         logger.success(`Resumed scheduled ${scheduledId} from board`);
     } catch (error) {
@@ -2148,20 +2100,20 @@ async function handleBoardScheduledPreview(interaction, sharedState) {
 async function handleBoardScheduledSend(interaction, sharedState) {
     const { przypomnieniaMenedzer, logger, client } = sharedState;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferUpdate();
 
     const scheduledId = interaction.customId.replace('scheduled_send_', '');
     const scheduled = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
 
     if (!scheduled || !scheduled.template) {
-        await interaction.editReply({ content: '❌ Nie znaleziono przypomnienia lub szablonu.' });
+        await interaction.followUp({ content: '❌ Nie znaleziono przypomnienia lub szablonu.', ephemeral: true });
         return;
     }
 
     try {
         const channel = await client.channels.fetch(scheduled.channelId);
         if (!channel) {
-            await interaction.editReply({ content: '❌ Nie znaleziono kanału docelowego.' });
+            await interaction.followUp({ content: '❌ Nie znaleziono kanału docelowego.', ephemeral: true });
             return;
         }
 
@@ -2189,14 +2141,10 @@ async function handleBoardScheduledSend(interaction, sharedState) {
 
         await channel.send({ content, embeds });
 
-        await interaction.editReply({
-            content: `✅ Przypomnienie wysłane testowo na <#${scheduled.channelId}>.`
-        });
-
         logger.info(`Testowe wysłanie przypomnienia ${scheduledId} przez ${interaction.user.tag}`);
     } catch (error) {
         logger.error('Error in handleBoardScheduledSend:', error);
-        await interaction.editReply({ content: '❌ Błąd podczas wysyłania przypomnienia.' });
+        await interaction.followUp({ content: '❌ Błąd podczas wysyłania przypomnienia.', ephemeral: true });
     }
 }
 
