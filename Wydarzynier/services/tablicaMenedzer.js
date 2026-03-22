@@ -513,53 +513,55 @@ class TablicaMenedzer {
 
         // Pobierz statystyki
         const templates = this.przypomnieniaMenedzer.getAllTemplates();
-        const activeScheduled = this.przypomnieniaMenedzer.getActiveScheduled();
+        const allScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
         const events = this.eventMenedzer.getAllEvents();
-        let templatesText = '';
 
-        if (templates.length === 0) {
-            templatesText = '_Brak szablonów. Utwórz jeden przyciskiem "Nowe Przypomnienie"_';
-        } else {
-            // Pobierz nazwy twórców dla wszystkich szablonów
-            const templateLines = await Promise.all(templates.map(async (t) => {
-                const typeIcon = t.type === 'text' ? '📝' : '📋';
-                const createdDate = new Date(t.createdAt).toLocaleDateString('pl-PL', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                });
+        const guildId = this.boardChannel?.guild?.id;
+        const boardChannelId = this.boardChannel?.id;
 
-                // Pobierz nick twórcy z gildii
-                let creatorName = 'Nieznany';
-                if (this.boardChannel && this.boardChannel.guild) {
-                    try {
-                        // Spróbuj cache najpierw, potem fetch jeśli nie znaleziono
-                        let member = this.boardChannel.guild.members.cache.get(t.creator);
-                        if (!member) {
-                            member = await this.boardChannel.guild.members.fetch(t.creator);
-                        }
-                        if (member) {
-                            creatorName = member.displayName;
-                        }
-                    } catch (error) {
-                        // Użytkownik mógł opuścić serwer lub ID jest nieprawidłowe
-                        this.logger.warn(`Nie udało się pobrać członka ${t.creator}: ${error.message}`);
-                    }
-                }
+        const buildScheduledLines = (list) => {
+            if (list.length === 0) return '_Brak_';
+            return list.map(s => {
+                const name = s.template?.name ?? 'Nieznany szablon';
+                const channel = `<#${s.channelId}>`;
+                const link = s.boardMessageId && guildId && boardChannelId
+                    ? `[🔗 Szczegóły](https://discord.com/channels/${guildId}/${boardChannelId}/${s.boardMessageId})`
+                    : '';
+                return `**${name}**: ${channel}${link ? '\n' + link : ''}`;
+            }).join('\n\n');
+        };
 
-                return `${typeIcon} **${t.name}** - ${creatorName} - ${createdDate}`;
-            }));
+        const recurring = allScheduled.filter(s => s.status === 'active' && s.interval && !s.isOneTime);
+        const oneTime   = allScheduled.filter(s => s.status === 'active' && (!s.interval || s.isOneTime));
+        const paused    = allScheduled.filter(s => s.status === 'paused');
 
-            templatesText = templateLines.join('\n');
-        }
+        const activeScheduled = allScheduled.filter(s => s.status === 'active');
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2) // Blurple
             .setTitle('📋 Panel Kontrolny Przypomnień i Eventów')
-            .setDescription(
-                `📊 **Statystyki:** 📚 Szablony: ${templates.length} | 🔔 Aktywne powiadomienia: ${activeScheduled.length} | 📅 Eventy: ${events.length}\n` +
-                `${eventsChannelText}\n` +
-                `**📚 Dostępne Szablony (${templates.length}):**\n${templatesText}`
+            .setDescription(`${eventsChannelText}`)
+            .addFields(
+                {
+                    name: '📊 Statystyki',
+                    value: `📚 Szablony: **${templates.length}**\n🔔 Aktywne powiadomienia: **${activeScheduled.length}**\n📅 Eventy: **${events.length}**`,
+                    inline: false
+                },
+                {
+                    name: `🔄 Aktywne powiadomienia cykliczne (${recurring.length})`,
+                    value: buildScheduledLines(recurring),
+                    inline: false
+                },
+                {
+                    name: `⏰ Powiadomienia jednorazowe (${oneTime.length})`,
+                    value: buildScheduledLines(oneTime),
+                    inline: false
+                },
+                {
+                    name: `⏸️ Powiadomienia wstrzymane (${paused.length})`,
+                    value: buildScheduledLines(paused),
+                    inline: false
+                }
             )
             .setFooter({ text: 'System Przypomnień' });
 
