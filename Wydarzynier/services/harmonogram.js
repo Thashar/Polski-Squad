@@ -103,8 +103,7 @@ class Harmonogram {
                 const colorHex = parseInt(template.embedColor || '5865F2', 16);
                 const embed = new EmbedBuilder()
                     .setDescription(template.embedDescription)
-                    .setColor(colorHex)
-                    .setTimestamp();
+                    .setColor(colorHex);
 
                 if (template.embedTitle) {
                     embed.setTitle(template.embedTitle);
