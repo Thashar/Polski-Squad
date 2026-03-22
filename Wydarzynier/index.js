@@ -95,7 +95,7 @@ client.once(Events.ClientReady, async () => {
     listaEventowMenedzer = new ListaEventowMenedzer(client, config, logger, eventMenedzer);
     setListaEventowMenedzer(listaEventowMenedzer);
 
-    harmonogram = new Harmonogram(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer);
+    harmonogram = new Harmonogram(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer, eventMenedzer, listaEventowMenedzer);
     setHarmonogram(harmonogram);
 
     // Inicjalizuj serwisy zależne

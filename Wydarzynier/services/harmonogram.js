@@ -1,12 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
 
 class Harmonogram {
-    constructor(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer) {
+    constructor(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer, eventMenedzer, listaEventowMenedzer) {
         this.client = client;
         this.config = config;
         this.logger = logger;
         this.przypomnieniaMenedzer = przypomnieniaMenedzer;
         this.tablicaMenedzer = tablicaMenedzer;
+        this.eventMenedzer = eventMenedzer;
+        this.listaEventowMenedzer = listaEventowMenedzer;
         this.checkInterval = null;
     }
 
@@ -35,6 +37,9 @@ class Harmonogram {
 
         // Sprawdź zaplanowane przypomnienia
         await this.checkScheduled(now);
+
+        // Sprawdź eventy
+        await this.checkEvents(now);
 
         // Sprawdź wiadomości do usunięcia (typ 1 - ustandaryzowane, 23h 50min)
         await this.checkMessagesToDelete();
@@ -123,6 +128,37 @@ class Harmonogram {
             }
         } catch (error) {
             this.logger.error(`Nie udało się wyzwolić zaplanowanego ${scheduled.id}:`, error);
+        }
+    }
+
+    async checkEvents(now) {
+        if (!this.eventMenedzer || !this.listaEventowMenedzer) return;
+
+        const events = this.eventMenedzer.getAllEvents();
+        let anyTriggered = false;
+
+        for (const event of events) {
+            const nextTriggerTime = new Date(event.nextTrigger);
+            if (now >= nextTriggerTime) {
+                const isOneTime = !event.interval || event.isOneTime;
+
+                // Oblicz następne wyzwolenie (lub usuń jeśli jednorazowy)
+                await this.eventMenedzer.updateNextTrigger(event.id);
+                anyTriggered = true;
+
+                if (isOneTime) {
+                    this.logger.info(`Event jednorazowy ${event.id} (${event.name}) wygasł - usunięto`);
+                } else {
+                    const updated = this.eventMenedzer.getEvent(event.id);
+                    const nextTs = updated ? Math.floor(new Date(updated.nextTrigger).getTime() / 1000) : '?';
+                    this.logger.info(`Event cykliczny ${event.id} (${event.name}) - następny: <t:${nextTs}:F>`);
+                }
+            }
+        }
+
+        // Zaktualizuj listę eventów jeśli cokolwiek się zmieniło
+        if (anyTriggered) {
+            await this.listaEventowMenedzer.ensureEventsList();
         }
     }
 
