@@ -425,23 +425,15 @@ class TablicaMenedzer {
                 }
             }
 
-            // KROK 3: Jeśli panel istnieje - zaktualizuj go
+            // KROK 3: Jeśli panel istnieje - usuń go, żeby wysłać nowy na dole
             if (existingPanel) {
                 try {
-                    const controlPanel = await this.buildControlPanel();
-                    await existingPanel.edit(controlPanel);
-                    await this.saveControlPanelMessageId(existingPanel.id);
-                    this.logger.success('Panel kontrolny znaleziony i zaktualizowany');
-                    return;
+                    await existingPanel.delete();
+                    this.logger.info('Usunięto stary panel kontrolny - zostanie wysłany nowy na dole');
                 } catch (error) {
-                    this.logger.warn('Nie udało się zaktualizować istniejącego panelu, usuwam i tworzę nowy:', error.message);
-                    try {
-                        await existingPanel.delete();
-                        this.logger.info('Usunięto stary panel kontrolny, który nie mógł być zaktualizowany');
-                    } catch (deleteError) {
-                        this.logger.warn('Nie udało się usunąć starego panelu kontrolnego:', deleteError.message);
-                    }
+                    this.logger.warn('Nie udało się usunąć starego panelu kontrolnego:', error.message);
                 }
+                await this.saveControlPanelMessageId(null);
             }
 
             // KROK 4: Panel nie istnieje - utwórz nowy
@@ -566,15 +558,9 @@ class TablicaMenedzer {
             .setColor(0x5865F2) // Blurple
             .setTitle('📋 Panel Kontrolny Przypomnień i Eventów')
             .setDescription(
-                '**Jak używać:**\n' +
-                'Użyj przycisków poniżej aby zarządzać przypomnieniami i eventami.\n\n' +
-                '**Przypomnienia:** Utwórz szablony → Zaplanuj z interwałem → Auto-wysyłaj na kanały\n' +
-                '**Eventy:** Dodaj eventy → Pojawiają się na liście eventów\n\n' +
-                `🕐 **Aktualna strefa czasowa:** ${currentTimezone}\n` +
-                `⏰ **Aktualny czas:** ${currentTime}\n` +
+                `🕐 **Strefa czasowa:** ${currentTimezone} | ⏰ **Czas:** ${currentTime}\n` +
                 `${eventsChannelText}\n` +
-                `**📚 Dostępne Szablony (${templates.length}):**\n${templatesText}\n\n` +
-                'Wszystkie aktywne przypomnienia pojawią się powyżej tego panelu.'
+                `**📚 Dostępne Szablony (${templates.length}):**\n${templatesText}`
             )
             .setFooter({ text: 'System Przypomnień' });
 
@@ -627,6 +613,15 @@ class TablicaMenedzer {
     // Zbuduj przyciski akcji dla zaplanowanego przypomnienia
     buildActionButtons(scheduled) {
         const row = new ActionRowBuilder();
+
+        // Przycisk Wyślij (testowe wysłanie)
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`scheduled_send_${scheduled.id}`)
+                .setLabel('Wyślij')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('📨')
+        );
 
         // Przycisk Wstrzymaj/Wznów
         if (scheduled.status === 'active') {
