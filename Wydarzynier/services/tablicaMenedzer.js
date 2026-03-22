@@ -322,6 +322,18 @@ class TablicaMenedzer {
         }
         embed.setFooter({ text: `Utworzone przez ${creatorName}` });
 
+        // Link do panelu kontrolnego w stopce embeda
+        if (this.controlPanelMessageId && this.boardChannel) {
+            const guildId = this.boardChannel.guild?.id;
+            const channelId = this.boardChannel.id;
+            const panelUrl = `https://discord.com/channels/${guildId}/${channelId}/${this.controlPanelMessageId}`;
+            embed.addFields({
+                name: '\u200b',
+                value: `[➡️ Przejdź do Panelu](${panelUrl})`,
+                inline: false
+            });
+        }
+
         return embed;
     }
 
@@ -662,20 +674,6 @@ class TablicaMenedzer {
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('👁️')
         );
-
-        // Przycisk Panel jako link (jeśli panel już istnieje)
-        if (this.controlPanelMessageId && this.boardChannel) {
-            const guildId = this.boardChannel.guild?.id;
-            const channelId = this.boardChannel.id;
-            const panelUrl = `https://discord.com/channels/${guildId}/${channelId}/${this.controlPanelMessageId}`;
-            row2.addComponents(
-                new ButtonBuilder()
-                    .setURL(panelUrl)
-                    .setLabel('Panel')
-                    .setStyle(ButtonStyle.Link)
-                    .setEmoji('⬇️')
-            );
-        }
 
         return [row1, row2];
     }
