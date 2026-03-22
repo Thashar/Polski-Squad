@@ -184,7 +184,7 @@ async function handleSetReminderCommand(interaction, sharedState) {
 
     if (templates.length === 0) {
         await interaction.reply({
-            content: '❌ Nie znaleziono szablonów przypomnień. Use `/new-reminder` to create a template.',
+            content: '❌ Nie znaleziono szablonów przypomnień. Użyj `/new-reminder` aby utworzyć szablon.',
             ephemeral: true
         });
         return;
@@ -456,7 +456,7 @@ async function handleButton(interaction, sharedState) {
 
     if (customId === 'cancel_delete_event') {
         await interaction.update({
-            content: '❌ Event deletion cancelled.',
+            content: '❌ Usuwanie eventu anulowane.',
             components: []
         });
         return;
@@ -859,7 +859,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate hex color (6 characters, 0-9 A-F)
             if (!/^[0-9A-F]{6}$/.test(embedColor)) {
                 await interaction.reply({
-                    content: '❌ Invalid hex color format. Use 6 characters (e.g., 5865F2 or #5865F2)',
+                    content: '❌ Nieprawidłowy format koloru hex. Użyj 6 znaków (np. 5865F2 lub #5865F2)',
                     ephemeral: true
                 });
                 return;
@@ -905,14 +905,14 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
             if (isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
-                    content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM (e.g. 2026-03-20 10:00)'
+                    content: '❌ Nieprawidłowy format daty. Użyj: RRRR-MM-DD GG:MM (np. 2026-03-20 10:00)'
                 });
                 return;
             }
 
             if (firstTrigger < new Date()) {
                 await interaction.editReply({
-                    content: '❌ First trigger date cannot be in the past.'
+                    content: '❌ Data pierwszego wyzwolenia nie może być w przeszłości.'
                 });
                 return;
             }
@@ -1038,7 +1038,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 // Validate hex color (6 characters, 0-9 A-F)
                 if (!/^[0-9A-F]{6}$/.test(embedColor)) {
                     await interaction.editReply({
-                        content: '❌ Invalid hex color format. Use 6 characters (e.g., 5865F2 or #5865F2)',
+                        content: '❌ Nieprawidłowy format koloru hex. Użyj 6 znaków (np. 5865F2 lub #5865F2)',
                         components: []
                     });
                     return;
@@ -1075,7 +1075,7 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
             if (isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
-                    content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM'
+                    content: '❌ Nieprawidłowy format daty. Użyj: RRRR-MM-DD GG:MM'
                 });
                 return;
             }
@@ -1131,14 +1131,14 @@ async function handleModalSubmit(interaction, sharedState) {
 
             if (!firstTrigger || isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
-                    content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM (e.g. 2026-03-20 10:00)'
+                    content: '❌ Nieprawidłowy format daty. Użyj: RRRR-MM-DD GG:MM (np. 2026-03-20 10:00)'
                 });
                 return;
             }
 
             if (firstTrigger < new Date()) {
                 await interaction.editReply({
-                    content: '❌ First trigger date cannot be in the past.'
+                    content: '❌ Data pierwszego wyzwolenia nie może być w przeszłości.'
                 });
                 return;
             }
@@ -1146,7 +1146,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval
             if (!eventMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 90d) or "ee"'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d) lub "ee"'
                 });
                 return;
             }
@@ -1178,7 +1178,7 @@ async function handleModalSubmit(interaction, sharedState) {
             const event = eventMenedzer.getEvent(eventId);
 
             if (!event) {
-                await interaction.editReply({ content: '❌ Event not found.' });
+                await interaction.editReply({ content: '❌ Event nie znaleziony.' });
                 return;
             }
 
@@ -1191,7 +1191,7 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
             if (isNaN(firstTrigger.getTime())) {
                 await interaction.editReply({
-                    content: '❌ Invalid date format. Use: YYYY-MM-DD HH:MM'
+                    content: '❌ Nieprawidłowy format daty. Użyj: RRRR-MM-DD GG:MM'
                 });
                 return;
             }
@@ -1199,7 +1199,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval
             if (!eventMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Invalid interval format. Use: 1s, 1m, 1h, 1d (max 90d) or "ee"'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d) lub "ee"'
                 });
                 return;
             }
@@ -1222,7 +1222,7 @@ async function handleModalSubmit(interaction, sharedState) {
 
     } catch (error) {
         logger.error('Error handling modal submit:', error);
-        await interaction.editReply({ content: '❌ An error occurred during processing.' });
+        await interaction.editReply({ content: '❌ Wystąpił błąd podczas przetwarzania.' });
     }
 }
 
@@ -1398,13 +1398,13 @@ async function createScheduledFromUserState(interaction, sharedState, userState)
         const nextTriggerDate = new Date(scheduled.nextTrigger);
         const nextTriggerTimestamp = Math.floor(nextTriggerDate.getTime() / 1000);
 
-        let content = '✅ **Scheduled reminder created!**\n\n';
+        let content = '✅ **Zaplanowane przypomnienie utworzone!**\n\n';
         content += `⏰ **ID:** ${scheduled.id}\n`;
-        content += `📝 **Template:** ${template.name}\n`;
-        content += `📅 **First trigger:** <t:${nextTriggerTimestamp}:F>\n`;
-        content += `🔄 **Interval:** ${przypomnieniaMenedzer.formatInterval(scheduled.interval)}\n`;
+        content += `📝 **Szablon:** ${template.name}\n`;
+        content += `📅 **Pierwsze wyzwolenie:** <t:${nextTriggerTimestamp}:F>\n`;
+        content += `🔄 **Interwał:** ${przypomnieniaMenedzer.formatInterval(scheduled.interval)}\n`;
         content += `📍 **Kanał:** <#${userState.channelId}>\n`;
-        content += `👥 **Roles:** ${userState.roles && userState.roles.length > 0 ? userState.roles.map(r => `<@&${r}>`).join(', ') : 'None'}`;
+        content += `👥 **Role:** ${userState.roles && userState.roles.length > 0 ? userState.roles.map(r => `<@&${r}>`).join(', ') : 'Brak'}`;
 
         await interaction.editReply({
             content,
@@ -1415,7 +1415,7 @@ async function createScheduledFromUserState(interaction, sharedState, userState)
     } catch (error) {
         logger.error('Error creating scheduled reminder:', error);
         await interaction.editReply({
-            content: `❌ Error: ${error.message}`,
+            content: `❌ Błąd: ${error.message}`,
             components: []
         });
     }
@@ -1466,7 +1466,7 @@ async function handleTemplatePreviewApprove(interaction, sharedState) {
         userStates.delete(interaction.user.id);
 
         await interaction.editReply({
-            content: `✅ Template **${template.name}** has been created!\n🆔 ID: ${template.id}\n\nUse \`/set-reminder\` to schedule reminders.`,
+            content: `✅ Szablon **${template.name}** został utworzony!\n🆔 ID: ${template.id}\n\nUżyj \`/set-reminder\` aby zaplanować przypomnienia.`,
             embeds: [],
             components: []
         });
@@ -1478,7 +1478,7 @@ async function handleTemplatePreviewApprove(interaction, sharedState) {
     } catch (error) {
         logger.error('Error creating template:', error);
         await interaction.editReply({
-            content: '❌ Error creating template.',
+            content: '❌ Błąd podczas tworzenia szablonu.',
             embeds: [],
             components: []
         });
@@ -1492,7 +1492,7 @@ async function handleTemplatePreviewCancel(interaction, sharedState) {
     userStates.delete(interaction.user.id);
 
     await interaction.update({
-        content: '❌ Template creation cancelled.',
+        content: '❌ Tworzenie szablonu anulowane.',
         embeds: [],
         components: []
     });
@@ -1608,7 +1608,7 @@ async function handleScheduledPreviewApprove(interaction, sharedState) {
 async function handleScheduledPreviewCancel(interaction, sharedState) {
     // Placeholder - not used in current flow
     await interaction.update({
-        content: '❌ Cancelled',
+        content: '❌ Anulowano',
         components: []
     });
 }
@@ -1628,7 +1628,7 @@ async function handleEditTemplatesButton(interaction, sharedState) {
 
     if (templates.length === 0) {
         await interaction.update({
-            content: '❌ No templates found. Use `/new-reminder` to create a template.',
+            content: '❌ Brak szablonów. Użyj `/new-reminder` aby utworzyć szablon.',
             components: []
         });
         return;
@@ -1647,7 +1647,7 @@ async function handleEditScheduledButton(interaction, sharedState) {
 
     if (scheduled.length === 0) {
         await interaction.update({
-            content: '❌ No scheduled reminders found. Use `/set-reminder` to create one.',
+            content: '❌ Brak zaplanowanych przypomnień. Użyj `/set-reminder` aby utworzyć.',
             components: []
         });
         return;
@@ -1845,7 +1845,7 @@ async function handleEditTemplateDelete(interaction, sharedState) {
         );
 
     await interaction.update({
-        content: '⚠️ **Are you sure you want to delete this template?**\n\nWarning: All scheduled reminders using this template will also be deleted!',
+        content: '⚠️ **Czy na pewno chcesz usunąć ten szablon?**\n\nUwaga: Wszystkie zaplanowane przypomnienia używające tego szablonu zostaną również usunięte!',
         embeds: [],
         components: [row]
     });
@@ -1914,7 +1914,7 @@ async function handleEditScheduledDelete(interaction, sharedState) {
         );
 
     await interaction.update({
-        content: '⚠️ **Are you sure you want to delete this scheduled reminder?**',
+        content: '⚠️ **Czy na pewno chcesz usunąć to zaplanowane przypomnienie?**',
         embeds: [],
         components: [row]
     });
@@ -1939,7 +1939,7 @@ async function handleConfirmDeleteTemplate(interaction, sharedState) {
     } catch (error) {
         logger.error('Error deleting template:', error);
         await interaction.editReply({
-            content: '❌ Error deleting template.',
+            content: '❌ Błąd podczas usuwania szablonu.',
             embeds: [],
             components: []
         });
@@ -1966,7 +1966,7 @@ async function handleConfirmDeleteScheduled(interaction, sharedState) {
     } catch (error) {
         logger.error('Error deleting scheduled:', error);
         await interaction.editReply({
-            content: '❌ Error deleting scheduled reminder.',
+            content: '❌ Błąd podczas usuwania zaplanowanego przypomnienia.',
             embeds: [],
             components: []
         });
@@ -1991,7 +1991,7 @@ async function handleConfirmDeleteEvent(interaction, sharedState) {
     } catch (error) {
         logger.error('Error deleting event:', error);
         await interaction.editReply({
-            content: '❌ Error deleting event.',
+            content: '❌ Błąd podczas usuwania eventu.',
             embeds: [],
             components: []
         });
@@ -2000,7 +2000,7 @@ async function handleConfirmDeleteEvent(interaction, sharedState) {
 
 async function handleCancelDelete(interaction, sharedState) {
     await interaction.update({
-        content: '❌ Cancelled usuwanie.',
+        content: '❌ Usuwanie anulowane.',
         embeds: [],
         components: []
     });
@@ -2025,7 +2025,7 @@ async function handleBoardScheduledPause(interaction, sharedState) {
     } catch (error) {
         logger.error('Error pausing scheduled:', error);
         await interaction.followUp({
-            content: '❌ Error pausing reminder.',
+            content: '❌ Błąd podczas pauzowania przypomnienia.',
             ephemeral: true
         });
     }
@@ -2048,7 +2048,7 @@ async function handleBoardScheduledResume(interaction, sharedState) {
     } catch (error) {
         logger.error('Error resuming scheduled:', error);
         await interaction.followUp({
-            content: '❌ Error resuming reminder.',
+            content: '❌ Błąd podczas wznawiania przypomnienia.',
             ephemeral: true
         });
     }
@@ -2211,7 +2211,7 @@ async function handleBoardScheduledDelete(interaction, sharedState) {
         );
 
     await interaction.reply({
-        content: '⚠️ **Are you sure you want to delete this scheduled reminder?**',
+        content: '⚠️ **Czy na pewno chcesz usunąć to zaplanowane przypomnienie?**',
         components: [row],
         ephemeral: true
     });
@@ -2227,7 +2227,7 @@ async function handleDeleteEventSelect(interaction, sharedState) {
 
     if (!event) {
         await interaction.update({
-            content: '❌ Event not found.',
+            content: '❌ Event nie znaleziony.',
             components: []
         });
         return;
@@ -2249,7 +2249,7 @@ async function handleDeleteEventSelect(interaction, sharedState) {
         );
 
     await interaction.update({
-        content: `❌ **Are you sure you want to delete this event?**\n\n📅 **Name:** ${event.name}\n🆔 **ID:** ${event.id}\n⏰ **Next trigger:** <t:${Math.floor(new Date(event.nextTrigger).getTime() / 1000)}:F>`,
+        content: `⚠️ **Czy na pewno chcesz usunąć ten event?**\n\n📅 **Nazwa:** ${event.name}\n🆔 **ID:** ${event.id}\n⏰ **Następne wyzwolenie:** <t:${Math.floor(new Date(event.nextTrigger).getTime() / 1000)}:F>`,
         components: [row]
     });
 }
@@ -2262,7 +2262,7 @@ async function handleEditEventSelect(interaction, sharedState) {
 
     if (!event) {
         await interaction.update({
-            content: '❌ Event not found.',
+            content: '❌ Event nie znaleziony.',
             components: []
         });
         return;
@@ -2382,7 +2382,7 @@ async function handleDeleteEvent(interaction, sharedState) {
 
     if (events.length === 0) {
         await interaction.reply({
-            content: '❌ No events to delete.',
+            content: '❌ Brak eventów do usunięcia.',
             ephemeral: true
         });
         return;
@@ -2391,7 +2391,7 @@ async function handleDeleteEvent(interaction, sharedState) {
     // Show select menu with events
     const options = events.map(e => ({
         label: e.name.substring(0, 100),
-        description: `Next: ${new Date(e.nextTrigger).toLocaleDateString('en-US')}`,
+        description: `Następny: ${new Date(e.nextTrigger).toLocaleDateString('pl-PL')}`,
         value: e.id
     }));
 
@@ -2416,7 +2416,7 @@ async function handleEditEvent(interaction, sharedState) {
 
     if (events.length === 0) {
         await interaction.reply({
-            content: '❌ No events to edit.',
+            content: '❌ Brak eventów do edycji.',
             ephemeral: true
         });
         return;
@@ -2425,7 +2425,7 @@ async function handleEditEvent(interaction, sharedState) {
     // Show select menu with events
     const options = events.map(e => ({
         label: e.name.substring(0, 100),
-        description: `Next: ${new Date(e.nextTrigger).toLocaleDateString('en-US')}`,
+        description: `Następny: ${new Date(e.nextTrigger).toLocaleDateString('pl-PL')}`,
         value: e.id
     }));
 
