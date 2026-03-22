@@ -213,10 +213,14 @@ class TablicaMenedzer {
     async buildEmbed(scheduled) {
         const template = scheduled.template;
 
-        // Użyj koloru szablonu jeśli dostępny (dla typu embed), w przeciwnym razie domyślny
-        let color = 0x5865F2; // Domyślny Blurple
-        if (template.type === 'embed' && template.embedColor) {
-            color = parseInt(template.embedColor, 16);
+        // Kolor zależny od statusu i typu przypomnienia
+        let color;
+        if (scheduled.status === 'paused') {
+            color = 0xFEA500; // Pomarańczowy - wstrzymane
+        } else if (scheduled.isOneTime || !scheduled.interval) {
+            color = 0x5865F2; // Niebieski - jednorazowe
+        } else {
+            color = 0x57F287; // Zielony - cykliczne
         }
 
         const embed = new EmbedBuilder()
@@ -552,7 +556,7 @@ class TablicaMenedzer {
         const activeScheduled = allScheduled.filter(s => s.status === 'active');
 
         const embed = new EmbedBuilder()
-            .setColor(0x5865F2) // Blurple
+            .setColor(0xED4245) // Czerwony
             .setTitle('📋 Panel Kontrolny Przypomnień i Eventów')
             .setDescription(`${eventsChannelText}`)
             .addFields(
