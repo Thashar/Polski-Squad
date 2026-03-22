@@ -529,7 +529,7 @@ class TablicaMenedzer {
                 const timestamp = s.nextTrigger
                     ? `<t:${Math.floor(new Date(s.nextTrigger).getTime() / 1000)}:R>`
                     : '';
-                return `**${name}**: ${link}${timestamp ? ' ' + timestamp : ''}`;
+                return `**${name}**:${timestamp ? ' ' + timestamp : ''} ${link}`;
             }).join('\n');
         };
 
