@@ -663,35 +663,16 @@ class TablicaMenedzer {
                 .setEmoji('🗑️')
         );
 
-        // Przycisk Pokaż
+        // Przycisk przewijania do panelu kontrolnego
         row.addComponents(
             new ButtonBuilder()
-                .setCustomId(`scheduled_preview_${scheduled.id}`)
-                .setLabel('Pokaż')
+                .setCustomId('goto_control_panel')
+                .setLabel('Panel')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('👁️')
+                .setEmoji('⬇️')
         );
 
-        const rows = [row];
-
-        // Przycisk przewijania do panelu kontrolnego
-        if (this.controlPanelMessageId && this.boardChannel) {
-            const guildId = this.boardChannel.guild?.id;
-            const channelId = this.boardChannel.id;
-            if (guildId) {
-                const panelUrl = `https://discord.com/channels/${guildId}/${channelId}/${this.controlPanelMessageId}`;
-                const row2 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setLabel('Przewiń stronę w dół')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(panelUrl)
-                        .setEmoji('⬇️')
-                );
-                rows.push(row2);
-            }
-        }
-
-        return rows;
+        return [row];
     }
 }
 
