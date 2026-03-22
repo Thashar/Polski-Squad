@@ -2020,6 +2020,7 @@ async function handleBoardScheduledPause(interaction, sharedState) {
 
         const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
         await tablicaMenedzer.updateEmbed(updated);
+        await tablicaMenedzer.ensureControlPanel();
 
         logger.success(`Paused scheduled ${scheduledId} from board`);
     } catch (error) {
@@ -2043,6 +2044,7 @@ async function handleBoardScheduledResume(interaction, sharedState) {
 
         const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
         await tablicaMenedzer.updateEmbed(updated);
+        await tablicaMenedzer.ensureControlPanel();
 
         logger.success(`Resumed scheduled ${scheduledId} from board`);
     } catch (error) {

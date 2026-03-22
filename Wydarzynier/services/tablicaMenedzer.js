@@ -523,12 +523,14 @@ class TablicaMenedzer {
             if (list.length === 0) return '_Brak_';
             return list.map(s => {
                 const name = s.template?.name ?? 'Nieznany szablon';
-                const channel = `<#${s.channelId}>`;
                 const link = s.boardMessageId && guildId && boardChannelId
                     ? `[🔗 Szczegóły](https://discord.com/channels/${guildId}/${boardChannelId}/${s.boardMessageId})`
+                    : '🔗 Szczegóły';
+                const timestamp = s.nextTrigger
+                    ? `<t:${Math.floor(new Date(s.nextTrigger).getTime() / 1000)}:R>`
                     : '';
-                return `**${name}**: ${channel}${link ? '\n' + link : ''}`;
-            }).join('\n\n');
+                return `**${name}**: ${link}${timestamp ? ' ' + timestamp : ''}`;
+            }).join('\n');
         };
 
         const recurring = allScheduled.filter(s => s.status === 'active' && s.interval && !s.isOneTime);
