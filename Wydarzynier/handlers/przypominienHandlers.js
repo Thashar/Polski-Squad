@@ -1933,14 +1933,22 @@ async function handleConfirmDeleteTemplate(interaction, sharedState) {
     const templateId = interaction.customId.replace('confirm_delete_template_', '');
 
     try {
+        // Zbierz powiązane scheduledy PRZED usunięciem z JSON
+        const affectedScheduled = przypomnieniaMenedzer.getAllScheduled().filter(s => s.templateId === templateId);
+
+        // Usuń ich embedy z tablicy
+        for (const sch of affectedScheduled) {
+            await tablicaMenedzer.deleteEmbed(sch);
+        }
+
         await przypomnieniaMenedzer.deleteTemplate(templateId);
 
-        // Update control panel to remove deleted template
+        // Odśwież panel kontrolny
         await tablicaMenedzer.ensureControlPanel();
 
         await interaction.deleteReply();
 
-        logger.success(`Deleted template ${templateId}`);
+        logger.success(`Deleted template ${templateId} and ${affectedScheduled.length} associated scheduled reminder(s)`);
     } catch (error) {
         logger.error('Error deleting template:', error);
         await interaction.editReply({
@@ -1967,6 +1975,9 @@ async function handleConfirmDeleteScheduled(interaction, sharedState) {
         await przypomnieniaMenedzer.deleteScheduled(scheduledId);
 
         await interaction.deleteReply();
+
+        await tablicaMenedzer.ensureControlPanel();
+
         logger.success(`Deleted scheduled ${scheduledId}`);
     } catch (error) {
         logger.error('Error deleting scheduled:', error);

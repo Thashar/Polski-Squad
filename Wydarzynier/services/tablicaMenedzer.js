@@ -204,6 +204,10 @@ class TablicaMenedzer {
             this.logger.info(`Usunięto embed tablicy dla zaplanowanego: ${scheduled.id}`);
             return true;
         } catch (error) {
+            if (error.code === 10008) {
+                // Wiadomość już usunięta - traktuj jako sukces
+                return true;
+            }
             this.logger.error(`Nie udało się usunąć embed dla ${scheduled.id}:`, error);
             return false;
         }
