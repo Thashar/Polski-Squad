@@ -11558,7 +11558,9 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
             embed.setDescription(`Znaleziono **${problematicPlayers.length}** graczy wymagających uwagi:`);
 
             // Dodaj każdego gracza jako osobne pole (max 25 pól w embedzie)
-            const maxFields = Math.min(25, problematicPlayers.length);
+            // Jeśli graczy >25, zostaw miejsce na pole "Uwaga" (limit Discord: 25 pól)
+            const hasMoreThan25 = problematicPlayers.length > 25;
+            const maxFields = hasMoreThan25 ? 24 : problematicPlayers.length;
             for (let i = 0; i < maxFields; i++) {
                 const player = problematicPlayers[i];
                 embed.addFields({
@@ -11568,10 +11570,10 @@ async function handlePlayerRaportSelectClan(interaction, sharedState) {
                 });
             }
 
-            if (problematicPlayers.length > 25) {
+            if (hasMoreThan25) {
                 embed.addFields({
                     name: '⚠️ Uwaga',
-                    value: `Raport zawiera tylko 25 pierwszych graczy. Łącznie znaleziono ${problematicPlayers.length} graczy wymagających uwagi.`,
+                    value: `Raport zawiera tylko 24 pierwszych graczy. Łącznie znaleziono ${problematicPlayers.length} graczy wymagających uwagi.`,
                     inline: false
                 });
             }
