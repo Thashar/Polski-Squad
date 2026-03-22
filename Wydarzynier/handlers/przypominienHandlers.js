@@ -408,6 +408,11 @@ async function handleButton(interaction, sharedState) {
     }
 
     // Board buttons for scheduled
+    if (customId === 'goto_control_panel') {
+        await handleGotoControlPanel(interaction, sharedState);
+        return;
+    }
+
     if (customId.startsWith('scheduled_send_')) {
         await handleBoardScheduledSend(interaction, sharedState);
         return;
@@ -2054,6 +2059,23 @@ async function handleBoardScheduledResume(interaction, sharedState) {
             ephemeral: true
         });
     }
+}
+
+async function handleGotoControlPanel(interaction, sharedState) {
+    const { tablicaMenedzer } = sharedState;
+    const panelMessageId = tablicaMenedzer.controlPanelMessageId;
+    const boardChannel = tablicaMenedzer.boardChannel;
+
+    if (!panelMessageId || !boardChannel) {
+        await interaction.reply({ content: '❌ Panel kontrolny nie został jeszcze utworzony.', ephemeral: true });
+        return;
+    }
+
+    const guildId = boardChannel.guild?.id;
+    const channelId = boardChannel.id;
+    const url = `https://discord.com/channels/${guildId}/${channelId}/${panelMessageId}`;
+
+    await interaction.reply({ content: `[➡️ Przejdź do panelu kontrolnego](${url})`, ephemeral: true });
 }
 
 async function handleBoardScheduledPreview(interaction, sharedState) {
