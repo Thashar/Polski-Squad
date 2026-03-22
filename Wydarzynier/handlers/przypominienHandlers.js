@@ -413,6 +413,11 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    if (customId.startsWith('scheduled_preview_')) {
+        await handleBoardScheduledPreview(interaction, sharedState);
+        return;
+    }
+
     if (customId.startsWith('scheduled_pause_')) {
         await handleBoardScheduledPause(interaction, sharedState);
         return;
@@ -2094,6 +2099,49 @@ async function handleBoardScheduledResume(interaction, sharedState) {
             content: '❌ Error resuming reminder.',
             ephemeral: true
         });
+    }
+}
+
+async function handleBoardScheduledPreview(interaction, sharedState) {
+    const { przypomnieniaMenedzer, logger } = sharedState;
+
+    const scheduledId = interaction.customId.replace('scheduled_preview_', '');
+    const scheduled = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
+
+    if (!scheduled || !scheduled.template) {
+        await interaction.reply({ content: '❌ Nie znaleziono przypomnienia lub szablonu.', ephemeral: true });
+        return;
+    }
+
+    try {
+        const template = scheduled.template;
+        let content = '';
+        const embeds = [];
+
+        if (scheduled.roles && scheduled.roles.length > 0) {
+            content += scheduled.roles.map(r => `<@&${r}>`).join(' ') + '\n\n';
+        }
+
+        if (template.type === 'text') {
+            content += template.text;
+        } else if (template.type === 'embed') {
+            const colorHex = parseInt(template.embedColor || '5865F2', 16);
+            const embed = new EmbedBuilder()
+                .setDescription(template.embedDescription)
+                .setColor(colorHex)
+                .setTimestamp();
+
+            if (template.embedTitle) embed.setTitle(template.embedTitle);
+            if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+            embeds.push(embed);
+        }
+
+        await interaction.reply({ content: content || undefined, embeds, ephemeral: true });
+
+        logger.info(`Podgląd przypomnienia ${scheduledId} przez ${interaction.user.tag}`);
+    } catch (error) {
+        logger.error('Error in handleBoardScheduledPreview:', error);
+        await interaction.reply({ content: '❌ Błąd podczas generowania podglądu.', ephemeral: true });
     }
 }
 
