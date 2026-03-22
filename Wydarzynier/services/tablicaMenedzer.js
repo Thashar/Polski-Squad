@@ -615,20 +615,12 @@ class TablicaMenedzer {
 
     // Zbuduj przyciski akcji dla zaplanowanego przypomnienia
     buildActionButtons(scheduled) {
-        const row = new ActionRowBuilder();
+        const row1 = new ActionRowBuilder();
+        const row2 = new ActionRowBuilder();
 
-        // Przycisk Wyślij (testowe wysłanie)
-        row.addComponents(
-            new ButtonBuilder()
-                .setCustomId(`scheduled_send_${scheduled.id}`)
-                .setLabel('Wyślij')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('📨')
-        );
-
-        // Przycisk Wstrzymaj/Wznów
+        // Rząd 1: Wstrzymaj/Wznów, Edytuj, Usuń
         if (scheduled.status === 'active') {
-            row.addComponents(
+            row1.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`scheduled_pause_${scheduled.id}`)
                     .setLabel('Wstrzymaj')
@@ -636,7 +628,7 @@ class TablicaMenedzer {
                     .setEmoji('⏸️')
             );
         } else if (scheduled.status === 'paused') {
-            row.addComponents(
+            row1.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`scheduled_resume_${scheduled.id}`)
                     .setLabel('Wznów')
@@ -645,17 +637,12 @@ class TablicaMenedzer {
             );
         }
 
-        // Przycisk Edytuj
-        row.addComponents(
+        row1.addComponents(
             new ButtonBuilder()
                 .setCustomId(`scheduled_edit_${scheduled.id}`)
                 .setLabel('Edytuj')
                 .setStyle(ButtonStyle.Primary)
-                .setEmoji('✏️')
-        );
-
-        // Przycisk Usuń
-        row.addComponents(
+                .setEmoji('✏️'),
             new ButtonBuilder()
                 .setCustomId(`scheduled_delete_${scheduled.id}`)
                 .setLabel('Usuń')
@@ -663,8 +650,18 @@ class TablicaMenedzer {
                 .setEmoji('🗑️')
         );
 
-        // Przycisk przewijania do panelu kontrolnego
-        row.addComponents(
+        // Rząd 2: Wyślij, Pokaż, Panel
+        row2.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`scheduled_send_${scheduled.id}`)
+                .setLabel('Wyślij')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('📨'),
+            new ButtonBuilder()
+                .setCustomId(`scheduled_preview_${scheduled.id}`)
+                .setLabel('Pokaż')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('👁️'),
             new ButtonBuilder()
                 .setCustomId('goto_control_panel')
                 .setLabel('Panel')
@@ -672,7 +669,7 @@ class TablicaMenedzer {
                 .setEmoji('⬇️')
         );
 
-        return [row];
+        return [row1, row2];
     }
 }
 
