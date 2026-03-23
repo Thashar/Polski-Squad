@@ -2164,10 +2164,13 @@ async function handleBoardScheduledSend(interaction, sharedState) {
             content += template.text;
         } else if (template.type === 'embed') {
             const colorHex = parseInt(template.embedColor || '5865F2', 16);
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+
             const embed = new EmbedBuilder()
                 .setDescription(template.embedDescription)
                 .setColor(colorHex)
-                .setTimestamp();
+                .setFooter({ text: `Wysłał ${interaction.user.displayName} • ${timeStr}` });
 
             if (template.embedTitle) embed.setTitle(template.embedTitle);
             if (template.embedIcon) embed.setThumbnail(template.embedIcon);
