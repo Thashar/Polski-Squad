@@ -484,18 +484,15 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction
      */
     async handlePrimaAprilisButton(interaction) {
-        await interaction.deferReply({ ephemeral: true });
         try {
             const member = interaction.member;
-            if (this.primaAprilisService.isTrapped(member.id)) {
-                await interaction.editReply('🔒 Już jesteś uwięziony! Napisz `exit` żeby uciec.');
-                return;
+            if (!this.primaAprilisService.isTrapped(member.id)) {
+                await this.primaAprilisService.trapUser(member);
             }
-            await this.primaAprilisService.trapUser(member);
-            await interaction.editReply('🛑 Ups... Nie słuchałeś(-aś). Teraz jesteś uwięziony(-a)!\nNapisz `exit` gdziekolwiek, żeby odzyskać swoje role.');
+            await interaction.deferUpdate();
         } catch (error) {
             logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message);
-            await interaction.editReply('❌ Wystąpił błąd. Spróbuj ponownie.');
+            try { await interaction.deferUpdate(); } catch {}
         }
     }
 

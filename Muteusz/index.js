@@ -147,10 +147,7 @@ client.on(Events.MessageCreate, async (message) => {
         if (primaAprilisService.isTrapped(message.author.id)) {
             try {
                 const member = await message.guild.members.fetch(message.author.id);
-                const freed = await primaAprilisService.freeUser(member);
-                if (freed) {
-                    await message.reply('🔓 Udało ci się uciec! Twoje role zostały przywrócone.');
-                }
+                await primaAprilisService.freeUser(member);
             } catch (error) {
                 logger.error('❌ PrimaAprilis: błąd przy zwalnianiu użytkownika:', error.message);
             }
