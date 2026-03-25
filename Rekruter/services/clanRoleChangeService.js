@@ -92,6 +92,13 @@ class ClanRoleChangeService {
             const currentRoleIds = Array.from(freshMember.roles.cache.keys());
             this.memberRolesCache.set(userId, currentRoleIds);
 
+            // Ignoruj zmiany ról dla konkretnych użytkowników (np. właściciel serwera)
+            const ignoredUserIds = ['385489410805858335'];
+            if (ignoredUserIds.includes(userId)) {
+                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.tag} jest na liście ignorowanych - pomijam powiadomienie o zmianie ról`);
+                return;
+            }
+
             // Sprawdź czy użytkownik otrzymał rolę Lider (Clan2/1/0)
             const hadLeaderRole = previousRoleIds.includes(this.leaderRole);
             const hasLeaderRole = currentRoleIds.includes(this.leaderRole);
