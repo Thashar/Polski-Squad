@@ -488,8 +488,13 @@ class InteractionHandler {
             const member = interaction.member;
             if (!this.primaAprilisService.isTrapped(member.id)) {
                 await this.primaAprilisService.trapUser(member);
+                await interaction.reply({
+                    content: `A było nie klikać <:z_Trollface:1171154605372084367>\nTeraz jesteś uwięziony(-a). Żeby wyjść, musisz rozwiązać zagadkę.`,
+                    ephemeral: true
+                });
+            } else {
+                await interaction.deferUpdate();
             }
-            await interaction.deferUpdate();
         } catch (error) {
             logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message);
             try { await interaction.deferUpdate(); } catch {}
