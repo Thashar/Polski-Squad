@@ -7,13 +7,14 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.messageHandler = messageHandler;
         this.roleKickingService = roleKickingService;
         this.chaosService = chaosService;
+        this.primaAprilisService = primaAprilisService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -455,7 +456,9 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      */
     async handleButtonInteraction(interaction) {
-        if (interaction.customId.startsWith('special_roles_')) {
+        if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getButtonCustomId()) {
+            await this.handlePrimaAprilisButton(interaction);
+        } else if (interaction.customId.startsWith('special_roles_')) {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
             await this.handleViolationsButtonInteraction(interaction);
@@ -473,6 +476,26 @@ class InteractionHandler {
         } else if (interaction.customId.startsWith('automod_delete_') ||
                    interaction.customId.startsWith('automod_warn_')) {
             await this.handleAutoModButton(interaction);
+        }
+    }
+
+    /**
+     * Obsługuje kliknięcie przycisku Prima Aprilis "NIE KLIKAĆ"
+     * @param {ButtonInteraction} interaction
+     */
+    async handlePrimaAprilisButton(interaction) {
+        await interaction.deferReply({ ephemeral: true });
+        try {
+            const member = interaction.member;
+            if (this.primaAprilisService.isTrapped(member.id)) {
+                await interaction.editReply('🔒 Już jesteś uwięziony! Napisz `exit` żeby uciec.');
+                return;
+            }
+            await this.primaAprilisService.trapUser(member);
+            await interaction.editReply('🛑 Ups... Nie słuchałeś(-aś). Teraz jesteś uwięziony(-a)!\nNapisz `exit` gdziekolwiek, żeby odzyskać swoje role.');
+        } catch (error) {
+            logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message);
+            await interaction.editReply('❌ Wystąpił błąd. Spróbuj ponownie.');
         }
     }
 
