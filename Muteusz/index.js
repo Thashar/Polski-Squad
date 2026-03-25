@@ -15,6 +15,7 @@ const ReactionRoleService = require('./services/reactionRoleService');
 const RoleConflictService = require('./services/roleConflictService');
 const MemberCacheService = require('./services/memberCacheService');
 const ChaosService = require('./services/chaosService');
+const PrimaAprilisService = require('./services/primaAprilisService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -45,6 +46,7 @@ const roleKickingService = new RoleKickingService(config);
 const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
 const chaosService = new ChaosService(config, logService);
+const primaAprilisService = new PrimaAprilisService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -53,7 +55,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -116,6 +118,9 @@ client.once(Events.ClientReady, async () => {
     await chaosService.initialize();
     await chaosService.restoreTimeouts(client);
 
+    // Inicjalizuj Prima Aprilis
+    await primaAprilisService.initialize();
+
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
 
@@ -125,7 +130,10 @@ client.once(Events.ClientReady, async () => {
     // Wyślij/odśwież wiadomość z przyciskiem do zgłaszania
     await setupReportButtonMessage(client, config);
 
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń');
+    // Wyślij/odśwież wiadomość Prima Aprilis
+    await primaAprilisService.setupButtonMessage(client);
+
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń, Prima Aprilis');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -133,6 +141,23 @@ client.on(Events.MessageCreate, async (message) => {
     if (!isFullyInitialized) {
         return;
     }
+
+    // Prima Aprilis: obsługa komendy "exit" przez uwięzionych użytkowników
+    if (!message.author.bot && message.guild && message.content.trim().toLowerCase() === 'exit') {
+        if (primaAprilisService.isTrapped(message.author.id)) {
+            try {
+                const member = await message.guild.members.fetch(message.author.id);
+                const freed = await primaAprilisService.freeUser(member);
+                if (freed) {
+                    await message.reply('🔓 Udało ci się uciec! Twoje role zostały przywrócone.');
+                }
+            } catch (error) {
+                logger.error('❌ PrimaAprilis: błąd przy zwalnianiu użytkownika:', error.message);
+            }
+            return;
+        }
+    }
+
     await messageHandler.handleMessage(message, client);
 });
 

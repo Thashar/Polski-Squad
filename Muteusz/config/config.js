@@ -145,5 +145,11 @@ module.exports = {
         alertChannelId: '1173653205557719140' // Kanał do powiadomień
     },
     
+    // Konfiguracja modułu Prima Aprilis
+    primaAprilis: {
+        channelId: '1486500418358870074',
+        prisonRoleId: '1486506395057524887'
+    },
+
     messages
 };
