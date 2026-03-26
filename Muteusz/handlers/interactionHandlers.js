@@ -504,13 +504,13 @@ class InteractionHandler {
                 .setPlaceholder('np. 01:00:00');
             const clicksInput = new TextInputBuilder()
                 .setCustomId('required_clicks')
-                .setLabel('Ile kliknięć przycisku (zostaw puste = reakcje)')
+                .setLabel('Ile kliknięć? (puste jeśli tryb reakcji)')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(false)
                 .setPlaceholder('np. 5');
             const reactionsInput = new TextInputBuilder()
                 .setCustomId('required_reactions')
-                .setLabel('Ile reakcji 🛠️ (zostaw puste = kliknięcia)')
+                .setLabel('Ile reakcji 🛠️? (puste jeśli tryb kliknięć)')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(false)
                 .setPlaceholder('np. 10');
