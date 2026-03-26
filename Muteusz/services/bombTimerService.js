@@ -32,6 +32,8 @@ class BombTimerService {
         this.client = null;
         this.ticking = false;
         this.lastFileSave = 0; // timestamp ostatniego zapisu do pliku
+        this.cachedTimerChannel = null;
+        this.cachedTimerMessage = null;
     }
 
     async initialize(client) {
@@ -120,23 +122,35 @@ class BombTimerService {
     }
 
     async getTimerChannel() {
-        return await this.client.channels.fetch(this.config.bombTimer.timerChannelId);
+        if (!this.cachedTimerChannel) {
+            this.cachedTimerChannel = await this.client.channels.fetch(this.config.bombTimer.timerChannelId);
+        }
+        return this.cachedTimerChannel;
     }
 
     async getOrCreateTimerMessage() {
+        // Zwróć z cache jeśli dostępny
+        if (this.cachedTimerMessage) {
+            return this.cachedTimerMessage;
+        }
+
         const channel = await this.getTimerChannel();
 
         if (this.state.timerMessageId) {
             try {
-                return await channel.messages.fetch(this.state.timerMessageId);
+                const msg = await channel.messages.fetch(this.state.timerMessageId);
+                this.cachedTimerMessage = msg;
+                return msg;
             } catch {
                 this.state.timerMessageId = null;
+                this.cachedTimerMessage = null;
             }
         }
 
         const data = this.getTimerMessageData();
         const msg = await channel.send(data);
         this.state.timerMessageId = msg.id;
+        this.cachedTimerMessage = msg;
         await this.saveState();
         return msg;
     }
@@ -147,6 +161,8 @@ class BombTimerService {
             const data = this.getTimerMessageData();
             await msg.edit(data);
         } catch (error) {
+            // Wyczyść cache przy błędzie - wiadomość mogła zostać usunięta
+            this.cachedTimerMessage = null;
             if (!error.message?.includes('rate limit') && !error.message?.includes('Missing')) {
                 logger.error('❌ BombTimer: błąd aktualizacji wiadomości timera:', error.message);
             }
