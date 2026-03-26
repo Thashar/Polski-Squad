@@ -47,32 +47,26 @@ for (const group of RAW_GROUPS) {
 const PHASE2_DOUBLE_ALLOWED = new Set([16, 20, 28, 36, 40]);
 const NON_EMPTY_BUTTONS = new Set(Object.keys(BUTTON_LABELS).map(Number));
 
-// Buduje zbiór pozycji (1-based) uznanych za "poprawne" dla danego układu.
-// Zamienne przyciski liczą się jako poprawne tylko jeśli w obrębie grupy
-// są ułożone rosnąco wg pozycji (sekwencyjnie).
-function buildCorrectSet(order) {
-    const correct = new Set();
+// Czy przycisk ma ten sam symbol co oczekiwany na danej pozycji (dla zielonego)
+function isSymbolCorrect(pos, buttonNum) {
+    return BUTTON_LABELS[buttonNum] === BUTTON_LABELS[pos]; // undefined===undefined dla pustych
+}
 
-    // Dokładne trafienie zawsze poprawne
-    for (let i = 0; i < order.length; i++) {
-        if (order[i] === i + 1) correct.add(i + 1);
-    }
-
-    // Grupy zamienne: sprawdź rosnącą kolejność przycisków na rosnących pozycjach
-    for (const group of RAW_GROUPS) {
-        const groupSet = new Set(group);
-        const sortedPositions = [...group].sort((a, b) => a - b);
-        let prevBtn = -Infinity;
-        for (const pos of sortedPositions) {
-            const btn = order[pos - 1];
-            if (groupSet.has(btn) && btn > prevBtn) {
-                correct.add(pos);
-                prevBtn = btn;
+// Sprawdza czy przyciski rzędu zawierają kolejny ciąg ≥ minLen symboli
+// pasujący do dowolnego kolejnego okna w oczekiwanej sekwencji 1-40 (dla niebieskiego)
+function hasConsecutiveWindowMatch(rowNums, minLen) {
+    for (let ri = 0; ri <= rowNums.length - minLen; ri++) {
+        for (let ei = 0; ei <= TOTAL - minLen; ei++) {
+            let len = 0;
+            while (ri + len < rowNums.length &&
+                   ei + len < TOTAL &&
+                   BUTTON_LABELS[rowNums[ri + len]] === BUTTON_LABELS[ei + len + 1]) {
+                len++;
             }
+            if (len >= minLen) return true;
         }
     }
-
-    return correct;
+    return false;
 }
 
 class ButtonOrderService {
@@ -136,15 +130,17 @@ class ButtonOrderService {
                 rows.push(new ActionRowBuilder().addComponents(buttons));
             }
         } else {
-            const correctSet = buildCorrectSet(this.state.order);
             for (let r = 0; r < rowCount; r++) {
-                let correctCount = 0;
+                const rowNums = [];
+                let symbolCount = 0;
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
-                    if (correctSet.has(idx + 1)) correctCount++;
+                    const num = this.state.order[idx];
+                    rowNums.push(num);
+                    if (isSymbolCorrect(idx + 1, num)) symbolCount++;
                 }
-                const rowStyle = correctCount === 5 ? ButtonStyle.Success
-                               : correctCount >= 3  ? ButtonStyle.Primary
+                const rowStyle = symbolCount === 5                    ? ButtonStyle.Success   // zielony — wszystkie symbole na swoich miejscach
+                               : hasConsecutiveWindowMatch(rowNums, 3) ? ButtonStyle.Primary   // niebieski — ≥3 kolejnych tworzy ciąg z oczekiwanej sekwencji
                                : ButtonStyle.Secondary;
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
@@ -310,8 +306,8 @@ class ButtonOrderService {
         this.state.order.splice(idx, 1);
         this.state.order.unshift(num);
 
-        // Sprawdź czy wszystkie poprawnie ułożone → aktywuj fazę 2
-        if (buildCorrectSet(this.state.order).size === TOTAL) {
+        // Sprawdź czy wszystkie symbole na właściwych miejscach → aktywuj fazę 2
+        if (this.state.order.every((n, i) => isSymbolCorrect(i + 1, n))) {
             this.state.phase2Active = true;
             this.state.phase2Clicked = [];
             this.state.phase2LastPos = null;
@@ -333,8 +329,8 @@ class ButtonOrderService {
             return;
         }
 
-        // W fazie 2 pozycja przycisku = jego numer (kolejność jest idealna)
-        const pos = num;
+        // Znajdź faktyczną pozycję przycisku w aktualnym układzie
+        const pos = this.state.order.indexOf(num) + 1;
 
         // Sprawdź przyleganie do poprzednio klikniętego
         if (this.state.phase2LastPos !== null && !this._areAdjacent(this.state.phase2LastPos, pos)) {
