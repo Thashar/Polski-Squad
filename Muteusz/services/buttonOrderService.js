@@ -186,9 +186,8 @@ class ButtonOrderService {
     }
 
     buildMessage2Data() {
-        const won = this._checkWin();
         return {
-            content: won ? '## 🎉 Wygrałeś!' : '',
+            content: '',
             components: this.buildComponents(MSG1_COUNT, MSG2_ROWS)
         };
     }
@@ -389,6 +388,7 @@ class ButtonOrderService {
 
         if (this._checkWin()) {
             logger.success('🏆 ButtonOrder: Wygrałeś!');
+            await this.channel.send('## 🎉 Wygrałeś!');
         }
     }
 
