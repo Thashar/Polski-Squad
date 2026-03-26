@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
@@ -604,6 +604,9 @@ class InteractionHandler {
                 return;
             }
 
+            // Odpowiedz natychmiast żeby nie przekroczyć limitu 3 sekund Discord
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
             await this.primaAprilisService.trapUser(member);
 
             // Zlicz kliknięcie jako próbę rozbrojenia bomby (jeśli timer aktywny)
@@ -611,13 +614,18 @@ class InteractionHandler {
                 await this.bombTimerService.registerDefuseClick(member.id);
             }
 
-            await interaction.reply({
+            await interaction.editReply({
                 content: `A było nie klikać <:z_Trollface:1171154605372084367>\nTeraz jesteś uwięziony(-a). Żeby wyjść, musisz rozwiązać zagadkę.`,
-                ephemeral: true
             });
         } catch (error) {
             logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message);
-            try { await interaction.deferUpdate(); } catch {}
+            try {
+                if (interaction.deferred) {
+                    await interaction.editReply({ content: '❌ Wystąpił błąd.' });
+                } else {
+                    await interaction.deferUpdate();
+                }
+            } catch {}
         }
     }
 
