@@ -43,10 +43,36 @@ for (const group of RAW_GROUPS) {
     for (const n of group) NUM_TO_GROUP.set(n, groupSet);
 }
 
-function isCorrectPosition(pos1based, buttonNum) {
-    if (buttonNum === pos1based) return true;
-    const group = NUM_TO_GROUP.get(buttonNum);
-    return group ? group.has(pos1based) : false;
+// Faza 2 — specjalne stałe
+const PHASE2_DOUBLE_ALLOWED = new Set([16, 20, 28, 36, 40]);
+const NON_EMPTY_BUTTONS = new Set(Object.keys(BUTTON_LABELS).map(Number));
+
+// Buduje zbiór pozycji (1-based) uznanych za "poprawne" dla danego układu.
+// Zamienne przyciski liczą się jako poprawne tylko jeśli w obrębie grupy
+// są ułożone rosnąco wg pozycji (sekwencyjnie).
+function buildCorrectSet(order) {
+    const correct = new Set();
+
+    // Dokładne trafienie zawsze poprawne
+    for (let i = 0; i < order.length; i++) {
+        if (order[i] === i + 1) correct.add(i + 1);
+    }
+
+    // Grupy zamienne: sprawdź rosnącą kolejność przycisków na rosnących pozycjach
+    for (const group of RAW_GROUPS) {
+        const groupSet = new Set(group);
+        const sortedPositions = [...group].sort((a, b) => a - b);
+        let prevBtn = -Infinity;
+        for (const pos of sortedPositions) {
+            const btn = order[pos - 1];
+            if (groupSet.has(btn) && btn > prevBtn) {
+                correct.add(pos);
+                prevBtn = btn;
+            }
+        }
+    }
+
+    return correct;
 }
 
 class ButtonOrderService {
@@ -55,7 +81,10 @@ class ButtonOrderService {
         this.state = {
             order: Array.from({ length: TOTAL }, (_, i) => i + 1),
             message1Id: null,
-            message2Id: null
+            message2Id: null,
+            phase2Active: false,
+            phase2Clicked: [],   // numery przycisków zaznaczonych (czerwonych)
+            phase2LastPos: null, // pozycja (= numer) ostatnio klikniętego przycisku
         };
         this.channel = null;
         this.message1 = null;
@@ -85,30 +114,53 @@ class ButtonOrderService {
 
     buildComponents(startIdx, rowCount) {
         const rows = [];
-        for (let r = 0; r < rowCount; r++) {
-            // Zlicz ile przycisków w rzędzie jest na właściwej pozycji (z uwzględnieniem zamienności)
-            let correctCount = 0;
-            for (let c = 0; c < 5; c++) {
-                const idx = startIdx + r * 5 + c;
-                if (isCorrectPosition(idx + 1, this.state.order[idx])) correctCount++;
-            }
-            const rowStyle = correctCount === 5 ? ButtonStyle.Success
-                           : correctCount >= 3  ? ButtonStyle.Primary
-                           : ButtonStyle.Secondary;
 
-            const buttons = [];
-            for (let c = 0; c < 5; c++) {
-                const idx = startIdx + r * 5 + c;
-                const num = this.state.order[idx];
-                buttons.push(
-                    new ButtonBuilder()
-                        .setCustomId(`btn_order_${num}`)
-                        .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
-                        .setStyle(rowStyle)
-                );
+        if (this.state.phase2Active) {
+            const clickedSet = new Set(this.state.phase2Clicked);
+            for (let r = 0; r < rowCount; r++) {
+                const buttons = [];
+                for (let c = 0; c < 5; c++) {
+                    const idx = startIdx + r * 5 + c;
+                    const num = this.state.order[idx];
+                    let style;
+                    if (clickedSet.has(num))            style = ButtonStyle.Danger;   // czerwony — zaznaczony
+                    else if (NON_EMPTY_BUTTONS.has(num)) style = ButtonStyle.Success;  // zielony — do kliknięcia
+                    else                                 style = ButtonStyle.Secondary; // szary — pusty
+                    buttons.push(
+                        new ButtonBuilder()
+                            .setCustomId(`btn_order_${num}`)
+                            .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
+                            .setStyle(style)
+                    );
+                }
+                rows.push(new ActionRowBuilder().addComponents(buttons));
             }
-            rows.push(new ActionRowBuilder().addComponents(buttons));
+        } else {
+            const correctSet = buildCorrectSet(this.state.order);
+            for (let r = 0; r < rowCount; r++) {
+                let correctCount = 0;
+                for (let c = 0; c < 5; c++) {
+                    const idx = startIdx + r * 5 + c;
+                    if (correctSet.has(idx + 1)) correctCount++;
+                }
+                const rowStyle = correctCount === 5 ? ButtonStyle.Success
+                               : correctCount >= 3  ? ButtonStyle.Primary
+                               : ButtonStyle.Secondary;
+                const buttons = [];
+                for (let c = 0; c < 5; c++) {
+                    const idx = startIdx + r * 5 + c;
+                    const num = this.state.order[idx];
+                    buttons.push(
+                        new ButtonBuilder()
+                            .setCustomId(`btn_order_${num}`)
+                            .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
+                            .setStyle(rowStyle)
+                    );
+                }
+                rows.push(new ActionRowBuilder().addComponents(buttons));
+            }
         }
+
         return rows;
     }
 
@@ -117,7 +169,35 @@ class ButtonOrderService {
     }
 
     buildMessage2Data() {
-        return { content: '', components: this.buildComponents(MSG1_COUNT, MSG2_ROWS) };
+        const won = this._checkWin();
+        return {
+            content: won ? '## 🎉 Wygrałeś!' : '',
+            components: this.buildComponents(MSG1_COUNT, MSG2_ROWS)
+        };
+    }
+
+    _checkWin() {
+        if (!this.state.phase2Active) return false;
+        const clickedSet = new Set(this.state.phase2Clicked);
+        for (const n of NON_EMPTY_BUTTONS) {
+            if (!clickedSet.has(n)) return false;
+        }
+        return true;
+    }
+
+    _areAdjacent(pos1, pos2) {
+        const row1 = Math.floor((pos1 - 1) / 5);
+        const col1 = (pos1 - 1) % 5;
+        const row2 = Math.floor((pos2 - 1) / 5);
+        const col2 = (pos2 - 1) % 5;
+        return pos1 !== pos2 && Math.abs(row1 - row2) <= 1 && Math.abs(col1 - col2) <= 1;
+    }
+
+    async _updateBothMessages() {
+        await Promise.all([
+            this.message1.edit(this.buildMessage1Data()),
+            this.message2.edit(this.buildMessage2Data())
+        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości:', err.message));
     }
 
     // Szuka wiadomości bota z przyciskami btn_order_ na kanale
@@ -215,40 +295,99 @@ class ButtonOrderService {
         await interaction.deferUpdate();
 
         const num = parseInt(interaction.customId.replace('btn_order_', ''), 10);
+
+        if (this.state.phase2Active) {
+            await this._handlePhase2Click(num);
+        } else {
+            await this._handlePhase1Click(num);
+        }
+    }
+
+    async _handlePhase1Click(num) {
         const idx = this.state.order.indexOf(num);
         if (idx <= 0) return; // już na górze lub nie znaleziono
 
         this.state.order.splice(idx, 1);
         this.state.order.unshift(num);
-        this.saveState();
 
-        await Promise.all([
-            this.message1.edit(this.buildMessage1Data()),
-            this.message2.edit(this.buildMessage2Data())
-        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości:', err.message));
+        // Sprawdź czy wszystkie poprawnie ułożone → aktywuj fazę 2
+        if (buildCorrectSet(this.state.order).size === TOTAL) {
+            this.state.phase2Active = true;
+            this.state.phase2Clicked = [];
+            this.state.phase2LastPos = null;
+            logger.info('🎮 ButtonOrder: wszystkie ułożone — aktywuję fazę 2');
+        }
+
+        this.saveState();
+        await this._updateBothMessages();
+    }
+
+    async _handlePhase2Click(num) {
+        // Kliknięcie pustego przycisku → restart fazy 2
+        if (!NON_EMPTY_BUTTONS.has(num)) {
+            this.state.phase2Clicked = [];
+            this.state.phase2LastPos = null;
+            logger.info('🔄 ButtonOrder: kliknięto pusty przycisk — restart fazy 2');
+            this.saveState();
+            await this._updateBothMessages();
+            return;
+        }
+
+        // W fazie 2 pozycja przycisku = jego numer (kolejność jest idealna)
+        const pos = num;
+
+        // Sprawdź przyleganie do poprzednio klikniętego
+        if (this.state.phase2LastPos !== null && !this._areAdjacent(this.state.phase2LastPos, pos)) {
+            return; // ignoruj kliknięcie niesąsiadujące
+        }
+
+        const alreadyClicked = this.state.phase2Clicked.includes(num);
+
+        if (alreadyClicked && !PHASE2_DOUBLE_ALLOWED.has(num)) {
+            // Podwójne kliknięcie niedozwolone → restart fazy 2
+            this.state.phase2Clicked = [];
+            this.state.phase2LastPos = null;
+            logger.info('🔄 ButtonOrder: podwójne kliknięcie — restart fazy 2');
+        } else {
+            if (!alreadyClicked) this.state.phase2Clicked.push(num);
+            this.state.phase2LastPos = pos;
+        }
+
+        this.saveState();
+        await this._updateBothMessages();
+
+        if (this._checkWin()) {
+            logger.success('🏆 ButtonOrder: Wygrałeś!');
+        }
+    }
+
+    _resetPhase2() {
+        this.state.phase2Active = false;
+        this.state.phase2Clicked = [];
+        this.state.phase2LastPos = null;
     }
 
     async shuffle() {
+        this._resetPhase2();
         for (let i = this.state.order.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [this.state.order[i], this.state.order[j]] = [this.state.order[j], this.state.order[i]];
         }
         this.saveState();
-        await Promise.all([
-            this.message1.edit(this.buildMessage1Data()),
-            this.message2.edit(this.buildMessage2Data())
-        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji po shuffle:', err.message));
+        await this._updateBothMessages().catch(err =>
+            logger.error('❌ ButtonOrder: błąd aktualizacji po shuffle:', err.message));
         logger.info('🔀 ButtonOrder: przyciski pomieszane');
     }
 
     async resetOrder() {
         this.state.order = Array.from({ length: TOTAL }, (_, i) => i + 1);
+        this.state.phase2Active = true;
+        this.state.phase2Clicked = [];
+        this.state.phase2LastPos = null;
         this.saveState();
-        await Promise.all([
-            this.message1.edit(this.buildMessage1Data()),
-            this.message2.edit(this.buildMessage2Data())
-        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji po reset:', err.message));
-        logger.info('🔢 ButtonOrder: kolejność zresetowana do 1-40');
+        await this._updateBothMessages().catch(err =>
+            logger.error('❌ ButtonOrder: błąd aktualizacji po reset:', err.message));
+        logger.info('🔢 ButtonOrder: kolejność 1-40, aktywowano fazę 2');
     }
 }
 
