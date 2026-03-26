@@ -7,38 +7,110 @@ const logger = createBotLogger('Muteusz');
 
 const DATA_FILE = path.join(__dirname, '../data/prima_aprilis_roles.json');
 
-// Identyfikator przycisku - używany do wyszukiwania istniejącej wiadomości
 const BUTTON_CUSTOM_ID = 'prima_aprilis_nie_klikac_button';
 const BUTTON_LABEL = 'NIE KLIKAĆ POD ŻADNYM POZOREM';
+
+const PASSWORD_ROTATION_MS = 5 * 60 * 1000; // 5 minut
 
 class PrimaAprilisService {
     constructor(config) {
         this.config = config;
         this.data = {};
+        this.currentPassword = null;
+        this.passwordTimer = null;
     }
 
     async initialize() {
         try {
             const raw = await fs.readFile(DATA_FILE, 'utf8');
             this.data = JSON.parse(raw);
-            const trapped = Object.keys(this.data).length;
-            if (trapped > 0) {
-                logger.info(`🔒 PrimaAprilis: ${trapped} użytkownik(ów) nadal uwięzionych po restarcie`);
-            }
         } catch {
             this.data = {};
-            await this.saveData();
         }
+
+        // Wczytaj lub wybierz hasło startowe
+        await this._initPassword();
+
+        const trapped = Object.keys(this.data).filter(k => k !== '_passwordState').length;
+        if (trapped > 0) {
+            logger.info(`🔒 PrimaAprilis: ${trapped} użytkownik(ów) nadal uwięzionych po restarcie`);
+        }
+
+        this._startPasswordTimer();
         logger.info('✅ PrimaAprilisService zainicjalizowany');
+    }
+
+    async _initPassword() {
+        const state = this.data._passwordState;
+        if (state?.current && state?.changedAt) {
+            const elapsed = Date.now() - new Date(state.changedAt).getTime();
+            if (elapsed < PASSWORD_ROTATION_MS) {
+                // Hasło jest nadal aktualne - użyj go
+                this.currentPassword = state.current;
+                logger.info(`🔑 PrimaAprilis: wczytano hasło (zmiana za ${Math.round((PASSWORD_ROTATION_MS - elapsed) / 1000)}s)`);
+                return;
+            }
+        }
+        // Brak hasła lub wygasłe - wybierz nowe
+        await this._pickNewPassword();
+    }
+
+    _getPasswords() {
+        return this.config.primaAprilis.passwords.filter(p => p && p.trim() !== '');
+    }
+
+    async _pickNewPassword() {
+        const passwords = this._getPasswords();
+        if (passwords.length === 0) {
+            logger.warn('⚠️ PrimaAprilis: brak haseł w konfiguracji');
+            this.currentPassword = null;
+            return;
+        }
+        const available = passwords.filter(p => p !== this.currentPassword);
+        const pool = available.length > 0 ? available : passwords;
+        this.currentPassword = pool[Math.floor(Math.random() * pool.length)];
+        this.data._passwordState = {
+            current: this.currentPassword,
+            changedAt: new Date().toISOString()
+        };
+        await this.saveData();
+        logger.info('🔑 PrimaAprilis: hasło zmienione');
+    }
+
+    _startPasswordTimer() {
+        if (this.passwordTimer) clearInterval(this.passwordTimer);
+        this.passwordTimer = setInterval(async () => {
+            await this._pickNewPassword();
+        }, PASSWORD_ROTATION_MS);
+    }
+
+    async rotatePassword() {
+        await this._pickNewPassword();
+        // Zresetuj timer od zera po ręcznej rotacji
+        this._startPasswordTimer();
+    }
+
+    /**
+     * Sprawdza wpisane hasło przez uwięzionego użytkownika.
+     * Jeśli poprawne - zwalnia go i rotuje hasło.
+     * @param {GuildMember} member
+     * @param {string} input
+     * @returns {boolean} true jeśli hasło poprawne
+     */
+    async tryPassword(member, input) {
+        if (!this.isTrapped(member.id)) return false;
+        if (!this.currentPassword) return false;
+        if (input.trim() !== this.currentPassword) return false;
+
+        await this.freeUser(member);
+        await this.rotatePassword();
+        return true;
     }
 
     async saveData() {
         await fs.writeFile(DATA_FILE, JSON.stringify(this.data, null, 2), 'utf8');
     }
 
-    /**
-     * Buduje wiersz z przyciskiem "NIE KLIKAĆ"
-     */
     buildButtonRow() {
         const button = new ButtonBuilder()
             .setCustomId(BUTTON_CUSTOM_ID)
@@ -49,10 +121,6 @@ class PrimaAprilisService {
         return new ActionRowBuilder().addComponents(button);
     }
 
-    /**
-     * Sprawdza czy istniejąca wiadomość bota pasuje do oczekiwanej
-     * (czy ma przycisk z właściwym customId i label)
-     */
     isMessageCurrent(message) {
         if (!message.components || message.components.length === 0) return false;
         const row = message.components[0];
@@ -61,11 +129,6 @@ class PrimaAprilisService {
         return btn.customId === BUTTON_CUSTOM_ID && btn.label === BUTTON_LABEL;
     }
 
-    /**
-     * Wysyła lub aktualizuje wiadomość z przyciskiem na kanale prima aprilis.
-     * Przy starcie sprawdza czy wiadomość już istnieje - jeśli tak i jest aktualna, pomija.
-     * Jeśli istnieje ale się zmieniła, aktualizuje. Jeśli nie istnieje, tworzy nową.
-     */
     async setupButtonMessage(client) {
         const channelId = this.config.primaAprilis.channelId;
         if (!channelId) {
@@ -81,8 +144,6 @@ class PrimaAprilisService {
             }
 
             const row = this.buildButtonRow();
-
-            // Szukaj istniejącej wiadomości bota z przyciskiem prima aprilis
             const messages = await channel.messages.fetch({ limit: 50 });
             const existing = messages.find(msg =>
                 msg.author.id === client.user.id &&
@@ -95,13 +156,11 @@ class PrimaAprilisService {
                     logger.info('ℹ️ PrimaAprilis: wiadomość z przyciskiem już istnieje i jest aktualna, pomijam.');
                     return;
                 }
-                // Wiadomość istnieje ale treść się zmieniła - zaktualizuj
                 await existing.edit({ components: [row] });
                 logger.success('✅ PrimaAprilis: zaktualizowano istniejącą wiadomość z przyciskiem');
                 return;
             }
 
-            // Brak wiadomości - stwórz nową
             await channel.send({ components: [row] });
             logger.success('✅ PrimaAprilis: wysłano wiadomość z przyciskiem');
         } catch (error) {
@@ -109,27 +168,20 @@ class PrimaAprilisService {
         }
     }
 
-    /**
-     * Zapisuje role użytkownika, odbiera je i nadaje rolę więźnia.
-     * @param {GuildMember} member
-     */
     async trapUser(member) {
         const userId = member.id;
         const prisonRoleId = this.config.primaAprilis.prisonRoleId;
 
-        // Pobierz wszystkie role oprócz @everyone i roli więźnia
         const rolesToSave = member.roles.cache
             .filter(r => r.id !== member.guild.id && r.id !== prisonRoleId)
             .map(r => r.id);
 
-        // Zapisz role do pliku
         this.data[userId] = {
             roles: rolesToSave,
             savedAt: new Date().toISOString()
         };
         await this.saveData();
 
-        // Usuń wszystkie zapisane role
         for (const roleId of rolesToSave) {
             try {
                 await member.roles.remove(roleId);
@@ -138,7 +190,6 @@ class PrimaAprilisService {
             }
         }
 
-        // Nadaj rolę więźnia
         try {
             await member.roles.add(prisonRoleId);
         } catch (err) {
@@ -148,11 +199,6 @@ class PrimaAprilisService {
         logger.info(`🔒 PrimaAprilis: złapano ${member.user.tag} - zapisano ${rolesToSave.length} ról`);
     }
 
-    /**
-     * Przywraca zapisane role użytkownika i usuwa rolę więźnia.
-     * @param {GuildMember} member
-     * @returns {boolean} true jeśli użytkownik był uwięziony
-     */
     async freeUser(member) {
         const userId = member.id;
         const prisonRoleId = this.config.primaAprilis.prisonRoleId;
@@ -161,14 +207,12 @@ class PrimaAprilisService {
 
         const savedRoles = this.data[userId].roles;
 
-        // Usuń rolę więźnia
         try {
             await member.roles.remove(prisonRoleId);
         } catch (err) {
             logger.warn(`⚠️ Nie można usunąć roli więźnia od ${member.user.tag}: ${err.message}`);
         }
 
-        // Przywróć wszystkie zapisane role
         for (const roleId of savedRoles) {
             try {
                 await member.roles.add(roleId);
@@ -184,15 +228,19 @@ class PrimaAprilisService {
         return true;
     }
 
-    /**
-     * Sprawdza czy użytkownik jest aktualnie uwięziony
-     */
     isTrapped(userId) {
         return !!this.data[userId];
     }
 
     getButtonCustomId() {
         return BUTTON_CUSTOM_ID;
+    }
+
+    cleanup() {
+        if (this.passwordTimer) {
+            clearInterval(this.passwordTimer);
+            this.passwordTimer = null;
+        }
     }
 }
 
