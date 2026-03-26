@@ -515,18 +515,18 @@ class InteractionHandler {
             await interaction.showModal(modal);
 
         } else if (customId === BTN.STOP) {
-            await this.bombTimerService.pause();
             await interaction.deferUpdate();
+            await this.bombTimerService.pause();
 
         } else if (customId === BTN.RESUME) {
-            await this.bombTimerService.resume();
             await interaction.deferUpdate();
+            await this.bombTimerService.resume();
 
         } else if (customId === BTN.RESET_PASSWORD) {
+            await interaction.deferUpdate();
             if (this.primaAprilisService) {
                 await this.primaAprilisService.rotatePassword();
             }
-            await interaction.deferUpdate();
         }
     }
 

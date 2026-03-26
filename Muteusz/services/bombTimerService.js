@@ -191,8 +191,8 @@ class BombTimerService {
             if (elapsed > 2000) {
                 logger.warn(`⚠️ BombTimer: msg.edit() trwał ${elapsed}ms`);
             }
-            // Celuj w ~1 update na sekundę (odejmij czas edycji)
-            const waitTime = Math.max(50, 1000 - elapsed);
+            // Celuj w ~1 update na 2 sekundy (bezpieczny margines dla rate limitu Discord)
+            const waitTime = Math.max(200, 2000 - elapsed);
             if (this.displayRunning && this.displayGeneration === generation) {
                 await new Promise(r => setTimeout(r, waitTime));
             }
