@@ -99,7 +99,7 @@ class BombTimerService {
 
         if (this.state.defused) {
             return {
-                content: `# ⏱️ ${timeStr}\n\n💣 Bomba została rozbrojona przez serwer!`,
+                content: `# ⏱️ ${timeStr}\n\n⏱️ Czas na zegarze bomby został wstrzymany!`,
                 components: []
             };
         }
