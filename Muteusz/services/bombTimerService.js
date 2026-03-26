@@ -349,9 +349,10 @@ class BombTimerService {
             this.state.defused = true;
             this.state.running = false;
             await this.saveState();
+            await this.updateTimerMessage();
+            this._clearAllReactions().catch(() => {});
+            return;
         }
-
-        await this.updateTimerMessage();
     }
 
     async handleReactionRemove(reaction, user) {
@@ -395,6 +396,7 @@ class BombTimerService {
             this.state.defuseClicks = [];
             await this.saveState();
             await this.updateTimerMessage();
+            this._clearAllReactions().catch(() => {});
         }
     }
 
