@@ -263,12 +263,7 @@ class NicknameManagerService {
         const currentNickname = member.displayName;
         const existingEffect = this.activeEffects.get(userId);
         
-        if (existingEffect && existingEffect.effectType === effectType) {
-            return {
-                canApply: false,
-                reason: `Użytkownik ma już aktywny efekt tego typu: ${effectType}`
-            };
-        }
+        // Efekty tego samego typu mogą być odnawiane (nadpisanie istniejącego)
         
         // 2. Sprawdź specyficzne przypadki duplikacji
         if (effectType === NicknameManagerService.EFFECTS.CURSE && currentNickname.startsWith('Przeklęty ')) {
@@ -553,6 +548,49 @@ class NicknameManagerService {
         return stats;
     }
     
+    /**
+     * Aplikuje efekt do użytkownika - wyższy poziom nad saveOriginalNickname.
+     * Zmienia nick i opcjonalnie ustawia timer przywrócenia.
+     * @param {string} userId
+     * @param {string} effectType
+     * @param {number|null} durationMs - null = trwały
+     * @param {Object} metadata - { guildId, appliedBy, ... }
+     * @param {GuildMember} member
+     * @param {string|null} prefix - np. 'Upadły', 'Piekielny'
+     */
+    async applyEffect(userId, effectType, durationMs, metadata = {}, member, prefix = null) {
+        const effectPrefix = prefix || metadata.prefix || '';
+        const effectDurationMs = (durationMs === null || durationMs === undefined) ? Infinity : durationMs;
+
+        await this.saveOriginalNickname(userId, effectType, member, effectDurationMs);
+
+        const cleanNick = this.getCleanNickname(member.displayName);
+        const newNickname = effectPrefix
+            ? `${effectPrefix.trim()} ${cleanNick}`.substring(0, 32)
+            : cleanNick.substring(0, 32);
+
+        await member.setNickname(newNickname);
+        logger.info(`✅ Aplikowano efekt ${effectType} na nick ${member.user.tag}: "${newNickname}"`);
+
+        if (typeof durationMs === 'number' && durationMs > 0) {
+            setTimeout(async () => {
+                try {
+                    await this.restoreOriginalNickname(userId, member.guild);
+                    logger.info(`✅ Automatycznie przywrócono nick po efekcie ${effectType} dla ${member.user.tag}`);
+                } catch (error) {
+                    logger.error(`❌ Błąd automatycznego przywracania nicku po ${effectType}: ${error.message}`);
+                }
+            }, durationMs);
+        }
+    }
+
+    /**
+     * Usuwa wszystkie efekty użytkownika i przywraca oryginalny nick
+     */
+    async removeAllUserEffects(userId, guild) {
+        return await this.restoreOriginalNickname(userId, guild);
+    }
+
     /**
      * Wyłącza serwis - zapisuje dane
      */
