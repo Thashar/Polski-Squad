@@ -132,9 +132,9 @@ class HotPotatoService {
     _buildPotatoData() {
         return {
             content: [
-                `# 💣 ${formatTime(this.potatoTimeRemaining)}`,
+                `# <a:PepeAlarmMan:1341086085089857619> ${formatTime(this.potatoTimeRemaining)} <a:PepeAlarmMan:1341086085089857619>`,
                 ``,
-                `<@${this.currentHolderId}> trzymasz bombę!`,
+                `<@${this.currentHolderId}> trzymasz bombę! 💣`,
                 `Przekaż ją kolejnej osobie zanim wybuchnie!`
             ].join('\n'),
             components: [
