@@ -114,18 +114,13 @@ class ButtonOrderService {
             }
         } else {
             for (let r = 0; r < rowCount; r++) {
-                let symbolCount = 0; // taki sam symbol jak oczekiwany
-                let exactCount = 0;  // dokładna liczba na swoim miejscu
+                let symbolCount = 0;
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
-                    const pos = idx + 1;
-                    const num = this.state.order[idx];
-                    if (num === pos) exactCount++;
-                    else if (isSymbolCorrect(pos, num)) symbolCount++;
+                    if (isSymbolCorrect(idx + 1, this.state.order[idx])) symbolCount++;
                 }
-                const total = exactCount + symbolCount;
-                const rowStyle = exactCount === 5    ? ButtonStyle.Success  // zielony — wszystkie na swoich miejscach
-                               : total >= 3          ? ButtonStyle.Primary   // niebieski — co najmniej 3 dobre symbole
+                const rowStyle = symbolCount === 5 ? ButtonStyle.Success  // zielony — wszystkie symbole na miejscu
+                               : symbolCount >= 3  ? ButtonStyle.Primary   // niebieski — co najmniej 3 dobre symbole
                                : ButtonStyle.Secondary;
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
@@ -291,8 +286,8 @@ class ButtonOrderService {
         this.state.order.splice(idx, 1);
         this.state.order.unshift(num);
 
-        // Sprawdź czy wszystkie na dokładnych miejscach (num === pos) → aktywuj fazę 2
-        if (this.state.order.every((n, i) => n === i + 1)) {
+        // Sprawdź czy wszystkie symbole na właściwych miejscach → aktywuj fazę 2
+        if (this.state.order.every((n, i) => isSymbolCorrect(i + 1, n))) {
             this.state.phase2Active = true;
             this.state.phase2Clicked = [];
             this.state.phase2LastPos = null;
@@ -314,8 +309,8 @@ class ButtonOrderService {
             return;
         }
 
-        // W fazie 2 pozycja przycisku = jego numer (kolejność jest idealna)
-        const pos = num;
+        // Znajdź faktyczną pozycję przycisku w aktualnym układzie
+        const pos = this.state.order.indexOf(num) + 1;
 
         // Sprawdź przyleganie do poprzednio klikniętego
         if (this.state.phase2LastPos !== null && !this._areAdjacent(this.state.phase2LastPos, pos)) {
