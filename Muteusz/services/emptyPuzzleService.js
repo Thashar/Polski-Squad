@@ -74,8 +74,16 @@ class EmptyPuzzleService {
                 }
             }
         } else {
-            // Błędna wiadomość — po prostu usuń
+            // Błędna wiadomość — usuń i resetuj do bazowej formy
+            this.step = 0;
             await message.delete().catch(() => {});
+            try {
+                const channel = await this.client.channels.fetch(this.channelId);
+                const msg = await channel.messages.fetch(this.messageId);
+                await msg.edit(STATES[0]);
+            } catch (err) {
+                logger.error('❌ EmptyPuzzle: nie można zresetować wiadomości:', err.message);
+            }
         }
     }
 
