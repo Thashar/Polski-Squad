@@ -235,6 +235,7 @@ class BombTimerService {
                 this.saveState().catch(() => {});
                 this.stopDisplayLoop();
                 this.updateTimerMessage().catch(() => {});
+                this._clearAllReactions().catch(() => {});
                 return;
             }
 
@@ -321,13 +322,12 @@ class BombTimerService {
             const channel = await this.getTimerChannel();
             const msg = await channel.messages.fetch(this.state.timerMessageId);
             this.cachedTimerMessage = msg;
-            const reaction = msg.reactions.cache.get('🛠️');
-            if (!reaction) {
-                this.state.currentReactionCount = 0;
-                return;
+            let total = 0;
+            for (const r of msg.reactions.cache.values()) {
+                const users = await r.users.fetch();
+                total += users.filter(u => !u.bot).size;
             }
-            const users = await reaction.users.fetch();
-            this.state.currentReactionCount = users.filter(u => !u.bot).size;
+            this.state.currentReactionCount = total;
             logger.info(`🛠️ BombTimer: odczytano ${this.state.currentReactionCount} reakcji po restarcie`);
         } catch (error) {
             logger.warn('⚠️ BombTimer: nie można zsynchronizować licznika reakcji:', error.message);
@@ -339,7 +339,7 @@ class BombTimerService {
         if (!this.state.running || this.state.defused || this.state.exploded) return;
         if (this.state.requiredReactions === 0) return;
         if (reaction.message.id !== this.state.timerMessageId) return;
-        if (reaction.emoji.name !== '🛠️') return;
+        if (user.bot) return; // podwójne zabezpieczenie
 
         this.state.currentReactionCount++;
         await this.saveState();
@@ -359,7 +359,7 @@ class BombTimerService {
         if (!this.state.running || this.state.defused || this.state.exploded) return;
         if (this.state.requiredReactions === 0) return;
         if (reaction.message.id !== this.state.timerMessageId) return;
-        if (reaction.emoji.name !== '🛠️') return;
+        if (user.bot) return; // podwójne zabezpieczenie
 
         this.state.currentReactionCount = Math.max(0, this.state.currentReactionCount - 1);
         await this.saveState();
@@ -395,6 +395,15 @@ class BombTimerService {
             this.state.defuseClicks = [];
             await this.saveState();
             await this.updateTimerMessage();
+        }
+    }
+
+    async _clearAllReactions() {
+        try {
+            const msg = await this.getOrCreateTimerMessage();
+            await msg.reactions.removeAll();
+        } catch (error) {
+            logger.warn('⚠️ BombTimer: nie można usunąć reakcji po wybuchu:', error.message);
         }
     }
 
