@@ -544,6 +544,12 @@ class InteractionHandler {
             if (this.primaAprilisService) {
                 await this.primaAprilisService.rotatePassword();
             }
+        } else if (customId === BTN.SHUFFLE_ORDER) {
+            await interaction.deferUpdate();
+            if (this.buttonOrderService) await this.buttonOrderService.shuffle();
+        } else if (customId === BTN.RESET_ORDER) {
+            await interaction.deferUpdate();
+            if (this.buttonOrderService) await this.buttonOrderService.resetOrder();
         }
     }
 
