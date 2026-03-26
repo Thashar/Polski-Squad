@@ -89,7 +89,8 @@ class HotPotatoService {
             content: [
                 `# 💣 ${formatTime(this.potatoTimeRemaining)}`,
                 ``,
-                `<@${this.currentHolderId}> trzymasz bombę! Przekaż ją kolejnej osobie zanim wybuchnie!`
+                `<@${this.currentHolderId}> trzymasz bombę!`,
+                `Przekaż ją kolejnej osobie zanim wybuchnie!`
             ].join('\n'),
             components: [
                 new ActionRowBuilder().addComponents(
