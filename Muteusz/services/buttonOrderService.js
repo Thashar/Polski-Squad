@@ -47,32 +47,9 @@ for (const group of RAW_GROUPS) {
 const PHASE2_DOUBLE_ALLOWED = new Set([16, 20, 28, 36, 40]);
 const NON_EMPTY_BUTTONS = new Set(Object.keys(BUTTON_LABELS).map(Number));
 
-// Buduje zbiór pozycji (1-based) uznanych za "poprawne" dla danego układu.
-// Zamienne przyciski liczą się jako poprawne tylko jeśli w obrębie grupy
-// są ułożone rosnąco wg pozycji (sekwencyjnie).
-function buildCorrectSet(order) {
-    const correct = new Set();
-
-    // Dokładne trafienie zawsze poprawne
-    for (let i = 0; i < order.length; i++) {
-        if (order[i] === i + 1) correct.add(i + 1);
-    }
-
-    // Grupy zamienne: sprawdź rosnącą kolejność przycisków na rosnących pozycjach
-    for (const group of RAW_GROUPS) {
-        const groupSet = new Set(group);
-        const sortedPositions = [...group].sort((a, b) => a - b);
-        let prevBtn = -Infinity;
-        for (const pos of sortedPositions) {
-            const btn = order[pos - 1];
-            if (groupSet.has(btn) && btn > prevBtn) {
-                correct.add(pos);
-                prevBtn = btn;
-            }
-        }
-    }
-
-    return correct;
+// Czy przycisk ma ten sam symbol co oczekiwany na danej pozycji
+function isSymbolCorrect(pos, buttonNum) {
+    return BUTTON_LABELS[buttonNum] === BUTTON_LABELS[pos]; // undefined===undefined dla pustych
 }
 
 class ButtonOrderService {
@@ -136,15 +113,19 @@ class ButtonOrderService {
                 rows.push(new ActionRowBuilder().addComponents(buttons));
             }
         } else {
-            const correctSet = buildCorrectSet(this.state.order);
             for (let r = 0; r < rowCount; r++) {
-                let correctCount = 0;
+                let symbolCount = 0; // taki sam symbol jak oczekiwany
+                let exactCount = 0;  // dokładna liczba na swoim miejscu
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
-                    if (correctSet.has(idx + 1)) correctCount++;
+                    const pos = idx + 1;
+                    const num = this.state.order[idx];
+                    if (num === pos) exactCount++;
+                    else if (isSymbolCorrect(pos, num)) symbolCount++;
                 }
-                const rowStyle = correctCount === 5 ? ButtonStyle.Success
-                               : correctCount >= 3  ? ButtonStyle.Primary
+                const total = exactCount + symbolCount;
+                const rowStyle = exactCount === 5    ? ButtonStyle.Success  // zielony — wszystkie na swoich miejscach
+                               : total >= 3          ? ButtonStyle.Primary   // niebieski — co najmniej 3 dobre symbole
                                : ButtonStyle.Secondary;
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
@@ -310,8 +291,8 @@ class ButtonOrderService {
         this.state.order.splice(idx, 1);
         this.state.order.unshift(num);
 
-        // Sprawdź czy wszystkie poprawnie ułożone → aktywuj fazę 2
-        if (buildCorrectSet(this.state.order).size === TOTAL) {
+        // Sprawdź czy wszystkie na dokładnych miejscach (num === pos) → aktywuj fazę 2
+        if (this.state.order.every((n, i) => n === i + 1)) {
             this.state.phase2Active = true;
             this.state.phase2Clicked = [];
             this.state.phase2LastPos = null;
