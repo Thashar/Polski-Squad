@@ -131,7 +131,7 @@ class BombTimerService {
             const count = this.state.chatters.length;
             const required = this.state.requiredChatters;
             return {
-                content: `${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
+                content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
                 components: []
             };
         }
@@ -139,14 +139,14 @@ class BombTimerService {
         if (this.state.requiredReactions > 0) {
             const remaining = Math.max(0, this.state.requiredReactions - this.state.currentReactionCount);
             return {
-                content: `${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
+                content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
                 components: []
             };
         }
 
         const remaining = this.getRemainingClicks();
         return {
-            content: `${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
+            content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
             components: []
         };
     }
