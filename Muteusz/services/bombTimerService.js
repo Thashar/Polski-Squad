@@ -110,19 +110,18 @@ class BombTimerService {
     getTimerMessageData() {
         const timeStr = this.formatTime(this.state.timeRemaining);
         const isLow = this.state.timeRemaining < 60;
-        const timeEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '⏱️';
         const sideEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '<a:PepeAlarmMan:1341086085089857619>';
 
         if (this.state.defused) {
             return {
-                content: `# ${timeEmoji} ${timeStr}\n\nCzas na zegarze bomby został wstrzymany! <a:PepeSweat:1278017088153190502>`,
+                content: `# ⏱️ ${timeStr}\n\nCzas na zegarze bomby został wstrzymany! <a:PepeSweat:1278017088153190502>`,
                 components: []
             };
         }
 
         if (this.state.exploded) {
             return {
-                content: `# ${timeEmoji} ${timeStr}\n\n💥 Bomba wybuchła!`,
+                content: `# ⏱️ ${timeStr}\n\n💥 Bomba wybuchła!`,
                 components: []
             };
         }
@@ -131,7 +130,7 @@ class BombTimerService {
             const count = this.state.chatters.length;
             const required = this.state.requiredChatters;
             return {
-                content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
+                content: `## Bomba niedługo wybuchnie <a:X_Uwaga:1297531538186965003>\n# ${sideEmoji} ${timeStr} ${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
                 components: []
             };
         }
@@ -139,14 +138,14 @@ class BombTimerService {
         if (this.state.requiredReactions > 0) {
             const remaining = Math.max(0, this.state.requiredReactions - this.state.currentReactionCount);
             return {
-                content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
+                content: `## Bomba niedługo wybuchnie <a:X_Uwaga:1297531538186965003>\n# ${sideEmoji} ${timeStr} ${sideEmoji}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
                 components: []
             };
         }
 
         const remaining = this.getRemainingClicks();
         return {
-            content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
+            content: `## Bomba niedługo wybuchnie <a:X_Uwaga:1297531538186965003>\n# ${sideEmoji} ${timeStr} ${sideEmoji}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
             components: []
         };
     }
