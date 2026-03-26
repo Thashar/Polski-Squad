@@ -177,6 +177,29 @@ class ButtonOrderService {
             this.message2.edit(this.buildMessage2Data())
         ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości:', err.message));
     }
+
+    async shuffle() {
+        for (let i = this.state.order.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.state.order[i], this.state.order[j]] = [this.state.order[j], this.state.order[i]];
+        }
+        this.saveState();
+        await Promise.all([
+            this.message1.edit(this.buildMessage1Data()),
+            this.message2.edit(this.buildMessage2Data())
+        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji po shuffle:', err.message));
+        logger.info('🔀 ButtonOrder: przyciski pomieszane');
+    }
+
+    async resetOrder() {
+        this.state.order = Array.from({ length: TOTAL }, (_, i) => i + 1);
+        this.saveState();
+        await Promise.all([
+            this.message1.edit(this.buildMessage1Data()),
+            this.message2.edit(this.buildMessage2Data())
+        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji po reset:', err.message));
+        logger.info('🔢 ButtonOrder: kolejność zresetowana do 1-40');
+    }
 }
 
 module.exports = ButtonOrderService;
