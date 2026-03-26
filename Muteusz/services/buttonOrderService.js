@@ -155,8 +155,11 @@ class ButtonOrderService {
                     }
                 }
 
+                // Zielony tylko gdy cały rząd jest poprawny
+                const allGreen = rowNums.every((num, c) => isSymbolCorrect(startIdx + r * 5 + c + 1, num));
+
                 // Kolorowanie per-przycisk:
-                // zielony = symbol pasuje do oczekiwanego na tej pozycji (wyższy priorytet)
+                // zielony = cały rząd poprawny (wyższy priorytet)
                 // niebieski = część sekwencyjnego okna ≥3 ale nie zielony
                 // szary = nic nie pasuje
                 const buttons = [];
@@ -164,9 +167,9 @@ class ButtonOrderService {
                     const idx = startIdx + r * 5 + c;
                     const num = this.state.order[idx];
                     let style;
-                    if (isSymbolCorrect(idx + 1, num)) style = ButtonStyle.Success;
-                    else if (blueIndices.has(c))        style = ButtonStyle.Primary;
-                    else                                style = ButtonStyle.Secondary;
+                    if (allGreen)               style = ButtonStyle.Success;
+                    else if (blueIndices.has(c)) style = ButtonStyle.Primary;
+                    else                         style = ButtonStyle.Secondary;
                     buttons.push(
                         new ButtonBuilder()
                             .setCustomId(`btn_order_${num}`)
