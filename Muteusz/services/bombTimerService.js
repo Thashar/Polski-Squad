@@ -8,9 +8,9 @@ const DATA_FILE = path.join(__dirname, '../data/bomb_timer.json');
 
 const BTN = {
     ADD_TIME: 'bomb_add_time',
-    START: 'bomb_start',
     STOP: 'bomb_stop',
     RESUME: 'bomb_resume',
+    RESET_PASSWORD: 'bomb_reset_password',
 };
 
 const DEFAULT_STATE = {
@@ -82,10 +82,10 @@ class BombTimerService {
 
     buildControlRows() {
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(BTN.START).setLabel('Start').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
         return [row1];
     }
@@ -99,7 +99,7 @@ class BombTimerService {
 
         if (this.state.defused) {
             return {
-                content: `# ⏱️ ${timeStr}\n\n💣 Bomba została rozbrojona przez serwer!`,
+                content: `# ⏱️ ${timeStr}\n\n⏱️ Czas na zegarze bomby został wstrzymany!`,
                 components: []
             };
         }
@@ -204,13 +204,13 @@ class BombTimerService {
                 this.state.running = false;
                 this.state.exploded = true;
                 await this.saveState();
-                await this.updateTimerMessage();
+                this.updateTimerMessage().catch(() => {});
                 return;
             }
 
             this.state.timeRemaining--;
             await this.saveState();
-            await this.updateTimerMessage();
+            this.updateTimerMessage().catch(() => {});
         } finally {
             this.ticking = false;
         }
