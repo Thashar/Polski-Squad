@@ -30,6 +30,7 @@ class BombTimerService {
         this.state = { ...DEFAULT_STATE };
         this.timerInterval = null;   // odliczanie - czysty setInterval bez Discord API
         this.displayRunning = false; // flaga sterująca pętlą wyświetlania
+        this.displayGeneration = 0;  // numer generacji - stara pętla wykrywa że ma się zatrzymać
         this.client = null;
         this.lastFileSave = 0;
         this.cachedTimerChannel = null;
@@ -171,22 +172,29 @@ class BombTimerService {
     }
 
     // Pętla wyświetlania - awaits każdy edit przed następnym (brak równoległych requestów)
-    // 800ms przerwy po każdym edycie → ~1 update/s, poniżej limitu Discord
+    // Generacja zapobiega wyścigowi: stara pętla widzi nową generację i się zatrzymuje
     startDisplayLoop() {
-        if (this.displayRunning) return;
+        this.displayGeneration++;
         this.displayRunning = true;
-        this._displayLoop();
+        this._displayLoop(this.displayGeneration);
     }
 
     stopDisplayLoop() {
         this.displayRunning = false;
     }
 
-    async _displayLoop() {
-        while (this.displayRunning) {
+    async _displayLoop(generation) {
+        while (this.displayRunning && this.displayGeneration === generation) {
+            const start = Date.now();
             await this.updateTimerMessage();
-            if (this.displayRunning) {
-                await new Promise(r => setTimeout(r, 800));
+            const elapsed = Date.now() - start;
+            if (elapsed > 2000) {
+                logger.warn(`⚠️ BombTimer: msg.edit() trwał ${elapsed}ms`);
+            }
+            // Celuj w ~1 update na sekundę (odejmij czas edycji)
+            const waitTime = Math.max(50, 1000 - elapsed);
+            if (this.displayRunning && this.displayGeneration === generation) {
+                await new Promise(r => setTimeout(r, waitTime));
             }
         }
     }
