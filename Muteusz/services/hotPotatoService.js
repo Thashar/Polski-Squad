@@ -186,8 +186,37 @@ class HotPotatoService {
         this._potatoInterval = setInterval(async () => {
             if (!this.potatoRunning) return;
             this.potatoTimeRemaining = Math.max(0, this.potatoTimeRemaining - 10);
-            if (this.potatoTimeRemaining > 0) await this._updatePotatoMessage();
+            if (this.potatoTimeRemaining > 0) {
+                await this._updatePotatoMessage();
+            } else {
+                await this._onPotatoExplode();
+            }
         }, UPDATE_INTERVAL_MS);
+    }
+
+    async _onPotatoExplode() {
+        this._stopIntervals();
+        this.potatoRunning = false;
+        this.mainRunning   = false;
+        this.mainTimeRemaining = MAIN_START_SECONDS;
+        this.currentHolderId = null;
+
+        // Wiadomość o eksplozji w kanale bomby
+        try {
+            const potatoChannel = await this.client.channels.fetch(this.potatoChannelId);
+            if (this.potatoMessageId) {
+                const msg = await potatoChannel.messages.fetch(this.potatoMessageId).catch(() => null);
+                if (msg) await msg.edit({ content: `# 💣 00:00:00\n\nBomba wybuchła, nie udało się.`, components: [] });
+            }
+        } catch (err) {
+            logger.error('❌ HotPotato: błąd przy eksplozji bomby:', err.message);
+        }
+
+        // Zresetuj główny timer z powrotem do 1h (z przyciskiem startu)
+        await this._updateMainMessage();
+
+        this.potatoMessageId = null;
+        logger.info('💥 HotPotato: bomba wybuchła — timer zresetowany do 1h');
     }
 
     _stopIntervals() {
