@@ -19,6 +19,7 @@ const PrimaAprilisService = require('./services/primaAprilisService');
 const BombTimerService = require('./services/bombTimerService');
 const ButtonOrderService = require('./services/buttonOrderService');
 const ReactionPuzzleService = require('./services/reactionPuzzleService');
+const EmptyPuzzleService = require('./services/emptyPuzzleService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -53,6 +54,7 @@ const primaAprilisService = new PrimaAprilisService(config);
 const bombTimerService = new BombTimerService(config);
 const buttonOrderService = new ButtonOrderService(config);
 const reactionPuzzleService = new ReactionPuzzleService(config);
+const emptyPuzzleService = new EmptyPuzzleService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -61,7 +63,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService, emptyPuzzleService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -133,6 +135,7 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj Button Order
     await buttonOrderService.initialize(client);
     await reactionPuzzleService.initialize(client);
+    await emptyPuzzleService.initialize(client);
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
@@ -175,6 +178,9 @@ client.on(Events.MessageCreate, async (message) => {
         );
         reactionPuzzleService.handleMessageCreate(message).catch(err =>
             logger.error('❌ ReactionPuzzle: błąd handleMessageCreate:', err.message)
+        );
+        emptyPuzzleService.handleMessageCreate(message).catch(err =>
+            logger.error('❌ EmptyPuzzle: błąd handleMessageCreate:', err.message)
         );
     }
 
@@ -282,6 +288,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         await reactionRoleService.handleReactionAdd(reaction, user);
         await bombTimerService.handleReactionAdd(reaction, user);
         await reactionPuzzleService.handleReactionAdd(reaction, user);
+        await emptyPuzzleService.handleReactionAdd(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (add):', error);
     }

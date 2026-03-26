@@ -179,5 +179,10 @@ module.exports = {
         channelId: '1486582292964184206'
     },
 
+    // Konfiguracja zagadki EMPTY
+    emptyPuzzle: {
+        channelId: '1486582235816530113'
+    },
+
     messages
 };
