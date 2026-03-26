@@ -262,8 +262,8 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
             }
         }
 
-        // Usuń główne logowanie eventów reakcji - loguje tylko ReactionRoleService dla ważnych reakcji
         await reactionRoleService.handleReactionAdd(reaction, user);
+        await bombTimerService.handleReactionAdd(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (add):', error);
     }
@@ -286,8 +286,8 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
             }
         }
 
-        // Usuń główne logowanie eventów reakcji - loguje tylko ReactionRoleService dla ważnych reakcji
         await reactionRoleService.handleReactionRemove(reaction, user);
+        await bombTimerService.handleReactionRemove(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (remove):', error);
     }
