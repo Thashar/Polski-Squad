@@ -70,6 +70,30 @@ class ButtonOrderService {
         return { content: '', components: this.buildComponents(MSG1_COUNT, MSG2_ROWS) };
     }
 
+    // Szuka wiadomości bota z przyciskami btn_order_ na kanale
+    async _scanChannelForMessages() {
+        const found = [];
+        let before;
+        // Przeglądaj do 200 ostatnich wiadomości
+        for (let i = 0; i < 2; i++) {
+            const opts = { limit: 100 };
+            if (before) opts.before = before;
+            const batch = await this.channel.messages.fetch(opts);
+            if (batch.size === 0) break;
+            for (const msg of batch.values()) {
+                if (msg.author.id === this.channel.client.user.id && msg.components.length > 0) {
+                    const firstId = msg.components[0]?.components[0]?.customId || '';
+                    if (firstId.startsWith('btn_order_')) found.push(msg);
+                }
+            }
+            before = batch.last()?.id;
+            if (batch.size < 100) break;
+        }
+        // Sortuj od najstarszej do najnowszej
+        found.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+        return found;
+    }
+
     async initialize(client) {
         this.loadState();
 
@@ -80,7 +104,7 @@ class ButtonOrderService {
             return;
         }
 
-        // Próba pobrania istniejących wiadomości
+        // Próba pobrania wiadomości po zapisanych ID
         if (this.state.message1Id) {
             try {
                 this.message1 = await this.channel.messages.fetch(this.state.message1Id);
@@ -90,6 +114,22 @@ class ButtonOrderService {
             try {
                 this.message2 = await this.channel.messages.fetch(this.state.message2Id);
             } catch { this.message2 = null; }
+        }
+
+        // Jeśli brakuje wiadomości - szukaj istniejących na kanale zanim cokolwiek wyślesz
+        if (!this.message1 || !this.message2) {
+            const existing = await this._scanChannelForMessages();
+            if (!this.message1 && existing.length >= 1) {
+                this.message1 = existing[0];
+                this.state.message1Id = this.message1.id;
+                logger.info('✅ ButtonOrder: znaleziono wiadomość 1 na kanale');
+            }
+            if (!this.message2 && existing.length >= 2) {
+                this.message2 = existing[1];
+                this.state.message2Id = this.message2.id;
+                logger.info('✅ ButtonOrder: znaleziono wiadomość 2 na kanale');
+            }
+            if (existing.length > 0) this.saveState();
         }
 
         if (!this.message1) {
