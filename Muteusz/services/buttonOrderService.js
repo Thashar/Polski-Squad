@@ -139,18 +139,37 @@ class ButtonOrderService {
                     rowNums.push(num);
                     if (isSymbolCorrect(idx + 1, num)) symbolCount++;
                 }
-                const rowStyle = symbolCount === 5                    ? ButtonStyle.Success   // zielony — wszystkie symbole na swoich miejscach
-                               : hasConsecutiveWindowMatch(rowNums, 3) ? ButtonStyle.Primary   // niebieski — ≥3 kolejnych tworzy ciąg z oczekiwanej sekwencji
-                               : ButtonStyle.Secondary;
+
+                // Wyznacz które konkretne przyciski są częścią kolejnego dopasowania ≥3
+                const blueIndices = new Set();
+                for (let ri = 0; ri <= rowNums.length - 3; ri++) {
+                    for (let ei = 0; ei <= TOTAL - 3; ei++) {
+                        let len = 0;
+                        while (ri + len < rowNums.length &&
+                               ei + len < TOTAL &&
+                               BUTTON_LABELS[rowNums[ri + len]] === BUTTON_LABELS[ei + len + 1]) {
+                            len++;
+                        }
+                        if (len >= 3) {
+                            for (let k = 0; k < len; k++) blueIndices.add(ri + k);
+                        }
+                    }
+                }
+
+                const allGreen = symbolCount === 5;
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
                     const num = this.state.order[idx];
+                    let style;
+                    if (allGreen)                style = ButtonStyle.Success;
+                    else if (blueIndices.has(c)) style = ButtonStyle.Primary;
+                    else                         style = ButtonStyle.Secondary;
                     buttons.push(
                         new ButtonBuilder()
                             .setCustomId(`btn_order_${num}`)
                             .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
-                            .setStyle(rowStyle)
+                            .setStyle(style)
                     );
                 }
                 rows.push(new ActionRowBuilder().addComponents(buttons));
