@@ -130,11 +130,14 @@ class HotPotatoService {
     }
 
     _buildPotatoData() {
+        const sideEmoji = this.potatoTimeRemaining < 60
+            ? '<a:PepePoar:1280067288397250570>'
+            : '<a:PepeAlarmMan:1341086085089857619>';
         return {
             content: [
-                `# 💣 ${formatTime(this.potatoTimeRemaining)}`,
+                `# ${sideEmoji} ${formatTime(this.potatoTimeRemaining)} ${sideEmoji}`,
                 ``,
-                `<@${this.currentHolderId}> trzymasz bombę!`,
+                `<@${this.currentHolderId}> trzymasz bombę! 💣`,
                 `Przekaż ją kolejnej osobie zanim wybuchnie!`
             ].join('\n'),
             components: [
@@ -263,7 +266,7 @@ class HotPotatoService {
             const potatoChannel = await this.client.channels.fetch(this.potatoChannelId);
             if (this.potatoMessageId) {
                 const msg = await potatoChannel.messages.fetch(this.potatoMessageId).catch(() => null);
-                if (msg) await msg.edit({ content: `# 💣 00:00:00\n\nBomba wybuchła, nie udało się.`, components: [] });
+                if (msg) await msg.edit({ content: `# 💥 00:00:00 💥\n\nBomba wybuchła, nie udało się.`, components: [] });
             }
         } catch (err) {
             logger.error('❌ HotPotato: błąd przy eksplozji bomby:', err.message);
