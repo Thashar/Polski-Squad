@@ -99,21 +99,21 @@ class BombTimerService {
 
         if (this.state.defused) {
             return {
-                content: `# ${timeStr}\n\nBomba została rozbrojona przez serwer!`,
+                content: `# ⏱️ ${timeStr}\n\n💣 Bomba została rozbrojona przez serwer!`,
                 components: []
             };
         }
 
         if (this.state.exploded) {
             return {
-                content: `# ${timeStr}\n\nBomba wybuchła!`,
+                content: `# ⏱️ ${timeStr}\n\n💣 Bomba wybuchła!`,
                 components: []
             };
         }
 
         const remaining = this.getRemainingClicks();
         return {
-            content: `# ${timeStr}\n\n${remaining} osób musi nacisnąć przycisk, żeby rozbroić bombę.`,
+            content: `# ⏱️ ${timeStr}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
             components: []
         };
     }
@@ -268,6 +268,7 @@ class BombTimerService {
             this.stopInterval();
             this.state.defused = true;
             this.state.running = false;
+            this.state.defuseClicks = [];
             await this.saveState();
         }
 
