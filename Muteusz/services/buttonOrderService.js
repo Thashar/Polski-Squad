@@ -380,12 +380,14 @@ class ButtonOrderService {
     }
 
     async resetOrder() {
-        this._resetPhase2();
         this.state.order = Array.from({ length: TOTAL }, (_, i) => i + 1);
+        this.state.phase2Active = true;
+        this.state.phase2Clicked = [];
+        this.state.phase2LastPos = null;
         this.saveState();
         await this._updateBothMessages().catch(err =>
             logger.error('❌ ButtonOrder: błąd aktualizacji po reset:', err.message));
-        logger.info('🔢 ButtonOrder: kolejność zresetowana do 1-40');
+        logger.info('🔢 ButtonOrder: kolejność 1-40, aktywowano fazę 2');
     }
 }
 
