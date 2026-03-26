@@ -31,6 +31,7 @@ class BombTimerService {
         this.timerInterval = null;   // odliczanie - czysty setInterval bez Discord API
         this.displayRunning = false; // flaga sterująca pętlą wyświetlania
         this.displayGeneration = 0;  // numer generacji - stara pętla wykrywa że ma się zatrzymać
+        this.displayTargetMs = 1000; // aktualny cel interwału (adaptuje się do szybkości Discord)
         this.client = null;
         this.lastFileSave = 0;
         this.cachedTimerChannel = null;
@@ -184,19 +185,28 @@ class BombTimerService {
     }
 
     async _displayLoop(generation) {
+        const MIN_TARGET = 800;
+        const MAX_TARGET = 6000;
+
         while (this.displayRunning && this.displayGeneration === generation) {
             const start = Date.now();
             await this.updateTimerMessage();
             const elapsed = Date.now() - start;
 
-            if (elapsed > 1500 && this.displayRunning && this.displayGeneration === generation) {
-                // Rate limit - poprzedni edit miał nieaktualne dane, wyślij od razu z aktualnym czasem
-                logger.warn(`⚠️ BombTimer: opóźnienie ${elapsed}ms, aktualizacja z aktualnym czasem`);
-                await this.updateTimerMessage();
+            if (elapsed > 1500) {
+                // Rate limit - dane były nieaktualne, wyślij od razu z aktualnym czasem
+                const newTarget = Math.min(MAX_TARGET, elapsed + 500);
+                logger.warn(`⚠️ BombTimer: opóźnienie ${elapsed}ms (cel: ${this.displayTargetMs}ms → ${newTarget}ms), natychmiastowa aktualizacja`);
+                this.displayTargetMs = newTarget;
+                if (this.displayRunning && this.displayGeneration === generation) {
+                    await this.updateTimerMessage();
+                }
+            } else {
+                // Szybki edit - przyspieszaj cel w kierunku minimum
+                this.displayTargetMs = Math.max(MIN_TARGET, this.displayTargetMs - 100);
             }
 
-            // Adaptacyjne czekanie: szybki edit → poczekaj do 2s; wolny → prawie od razu
-            const waitTime = Math.max(200, 2000 - Math.min(elapsed, 2000));
+            const waitTime = Math.max(100, this.displayTargetMs - elapsed);
             if (this.displayRunning && this.displayGeneration === generation) {
                 await new Promise(r => setTimeout(r, waitTime));
             }
