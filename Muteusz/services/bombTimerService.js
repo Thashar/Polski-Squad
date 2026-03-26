@@ -206,13 +206,13 @@ class BombTimerService {
                 this.state.running = false;
                 this.state.exploded = true;
                 await this.saveState();
-                await this.updateTimerMessage();
+                this.updateTimerMessage().catch(() => {});
                 return;
             }
 
             this.state.timeRemaining--;
             await this.saveState();
-            await this.updateTimerMessage();
+            this.updateTimerMessage().catch(() => {});
         } finally {
             this.ticking = false;
         }
