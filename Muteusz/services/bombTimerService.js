@@ -188,11 +188,15 @@ class BombTimerService {
             const start = Date.now();
             await this.updateTimerMessage();
             const elapsed = Date.now() - start;
-            if (elapsed > 2000) {
-                logger.warn(`⚠️ BombTimer: msg.edit() trwał ${elapsed}ms`);
+
+            if (elapsed > 1500 && this.displayRunning && this.displayGeneration === generation) {
+                // Rate limit - poprzedni edit miał nieaktualne dane, wyślij od razu z aktualnym czasem
+                logger.warn(`⚠️ BombTimer: opóźnienie ${elapsed}ms, aktualizacja z aktualnym czasem`);
+                await this.updateTimerMessage();
             }
-            // Celuj w ~1 update na 2 sekundy (bezpieczny margines dla rate limitu Discord)
-            const waitTime = Math.max(200, 2000 - elapsed);
+
+            // Adaptacyjne czekanie: szybki edit → poczekaj do 2s; wolny → prawie od razu
+            const waitTime = Math.max(200, 2000 - Math.min(elapsed, 2000));
             if (this.displayRunning && this.displayGeneration === generation) {
                 await new Promise(r => setTimeout(r, waitTime));
             }
