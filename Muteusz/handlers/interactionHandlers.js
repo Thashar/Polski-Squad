@@ -7,7 +7,7 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null, emptyPuzzleService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
@@ -18,6 +18,7 @@ class InteractionHandler {
         this.bombTimerService = bombTimerService;
         this.buttonOrderService = buttonOrderService;
         this.reactionPuzzleService = reactionPuzzleService;
+        this.emptyPuzzleService = emptyPuzzleService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -554,6 +555,9 @@ class InteractionHandler {
         } else if (customId === BTN.RESET_REACTION_PUZZLE) {
             await interaction.deferUpdate();
             if (this.reactionPuzzleService) await this.reactionPuzzleService.reset();
+        } else if (customId === BTN.RESET_EMPTY_PUZZLE) {
+            await interaction.deferUpdate();
+            if (this.emptyPuzzleService) await this.emptyPuzzleService.reset();
         }
     }
 
