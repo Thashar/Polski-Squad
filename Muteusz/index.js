@@ -21,6 +21,7 @@ const ButtonOrderService = require('./services/buttonOrderService');
 const ReactionPuzzleService = require('./services/reactionPuzzleService');
 const EmptyPuzzleService = require('./services/emptyPuzzleService');
 const EchoPuzzleService = require('./services/echoPuzzleService');
+const HotPotatoService = require('./services/hotPotatoService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -57,6 +58,7 @@ const buttonOrderService = new ButtonOrderService(config);
 const reactionPuzzleService = new ReactionPuzzleService(config);
 const emptyPuzzleService = new EmptyPuzzleService(config);
 const echoPuzzleService = new EchoPuzzleService(config);
+const hotPotatoService = new HotPotatoService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -65,7 +67,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService, emptyPuzzleService, echoPuzzleService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService, emptyPuzzleService, echoPuzzleService, hotPotatoService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -139,6 +141,7 @@ client.once(Events.ClientReady, async () => {
     await reactionPuzzleService.initialize(client);
     await emptyPuzzleService.initialize(client);
     await echoPuzzleService.initialize(client);
+    await hotPotatoService.initialize(client);
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);

@@ -189,5 +189,12 @@ module.exports = {
         channelId: '1486506666831773877'
     },
 
+    // Konfiguracja gorącego kartofla
+    hotPotato: {
+        mainChannelId:   '1486582331278889040',
+        potatoChannelId: '1486848827997818900',
+        roleId:          '1486506395057524887'
+    },
+
     messages
 };
