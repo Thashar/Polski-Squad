@@ -5,8 +5,8 @@ const logger = createBotLogger('Muteusz');
 // Normalizacja: Discord usuwa variation selectory (U+FE0F) z reaction.emoji.name
 function norm(str) { return str.replace(/\uFE0F/g, ''); }
 
-const SEQUENCE = ['🧑‍🍳', '6️⃣', '❌', '🍽️'].map(norm);
-const MESSAGE_CONTENT = '# Gdzie kucharek sześć, tam nie ma co jeść! 🧑‍🍳';
+const SEQUENCE = ['👩🏻‍🍳', '6️⃣', '❌', '🍽️'].map(norm);
+const MESSAGE_CONTENT = '# Gdzie kucharek sześć, tam nie ma co jeść! 👩🏻‍🍳';
 
 class ReactionPuzzleService {
     constructor(config) {
