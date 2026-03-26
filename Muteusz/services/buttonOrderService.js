@@ -43,10 +43,32 @@ for (const group of RAW_GROUPS) {
     for (const n of group) NUM_TO_GROUP.set(n, groupSet);
 }
 
-function isCorrectPosition(pos1based, buttonNum) {
-    if (buttonNum === pos1based) return true;
-    const group = NUM_TO_GROUP.get(buttonNum);
-    return group ? group.has(pos1based) : false;
+// Buduje zbiór pozycji (1-based) uznanych za "poprawne" dla danego układu.
+// Zamienne przyciski liczą się jako poprawne tylko jeśli w obrębie grupy
+// są ułożone rosnąco wg pozycji (sekwencyjnie).
+function buildCorrectSet(order) {
+    const correct = new Set();
+
+    // Dokładne trafienie zawsze poprawne
+    for (let i = 0; i < order.length; i++) {
+        if (order[i] === i + 1) correct.add(i + 1);
+    }
+
+    // Grupy zamienne: sprawdź rosnącą kolejność przycisków na rosnących pozycjach
+    for (const group of RAW_GROUPS) {
+        const groupSet = new Set(group);
+        const sortedPositions = [...group].sort((a, b) => a - b);
+        let prevBtn = -Infinity;
+        for (const pos of sortedPositions) {
+            const btn = order[pos - 1];
+            if (groupSet.has(btn) && btn > prevBtn) {
+                correct.add(pos);
+                prevBtn = btn;
+            }
+        }
+    }
+
+    return correct;
 }
 
 class ButtonOrderService {
@@ -84,13 +106,14 @@ class ButtonOrderService {
     }
 
     buildComponents(startIdx, rowCount) {
+        const correctSet = buildCorrectSet(this.state.order);
         const rows = [];
         for (let r = 0; r < rowCount; r++) {
-            // Zlicz ile przycisków w rzędzie jest na właściwej pozycji (z uwzględnieniem zamienności)
+            // Zlicz ile przycisków w rzędzie jest na właściwej pozycji (sekwencyjnie)
             let correctCount = 0;
             for (let c = 0; c < 5; c++) {
                 const idx = startIdx + r * 5 + c;
-                if (isCorrectPosition(idx + 1, this.state.order[idx])) correctCount++;
+                if (correctSet.has(idx + 1)) correctCount++;
             }
             const rowStyle = correctCount === 5 ? ButtonStyle.Success
                            : correctCount >= 3  ? ButtonStyle.Primary
