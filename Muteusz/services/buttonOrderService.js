@@ -47,9 +47,26 @@ for (const group of RAW_GROUPS) {
 const PHASE2_DOUBLE_ALLOWED = new Set([16, 20, 28, 36, 40]);
 const NON_EMPTY_BUTTONS = new Set(Object.keys(BUTTON_LABELS).map(Number));
 
-// Czy przycisk ma ten sam symbol co oczekiwany na danej pozycji
+// Czy przycisk ma ten sam symbol co oczekiwany na danej pozycji (dla zielonego)
 function isSymbolCorrect(pos, buttonNum) {
     return BUTTON_LABELS[buttonNum] === BUTTON_LABELS[pos]; // undefined===undefined dla pustych
+}
+
+// Sprawdza czy przyciski rzędu zawierają kolejny ciąg ≥ minLen symboli
+// pasujący do dowolnego kolejnego okna w oczekiwanej sekwencji 1-40 (dla niebieskiego)
+function hasConsecutiveWindowMatch(rowNums, minLen) {
+    for (let ri = 0; ri <= rowNums.length - minLen; ri++) {
+        for (let ei = 0; ei <= TOTAL - minLen; ei++) {
+            let len = 0;
+            while (ri + len < rowNums.length &&
+                   ei + len < TOTAL &&
+                   BUTTON_LABELS[rowNums[ri + len]] === BUTTON_LABELS[ei + len + 1]) {
+                len++;
+            }
+            if (len >= minLen) return true;
+        }
+    }
+    return false;
 }
 
 class ButtonOrderService {
@@ -114,13 +131,16 @@ class ButtonOrderService {
             }
         } else {
             for (let r = 0; r < rowCount; r++) {
+                const rowNums = [];
                 let symbolCount = 0;
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
-                    if (isSymbolCorrect(idx + 1, this.state.order[idx])) symbolCount++;
+                    const num = this.state.order[idx];
+                    rowNums.push(num);
+                    if (isSymbolCorrect(idx + 1, num)) symbolCount++;
                 }
-                const rowStyle = symbolCount === 5 ? ButtonStyle.Success  // zielony — wszystkie symbole na miejscu
-                               : symbolCount >= 3  ? ButtonStyle.Primary   // niebieski — co najmniej 3 dobre symbole
+                const rowStyle = symbolCount === 5                    ? ButtonStyle.Success   // zielony — wszystkie symbole na swoich miejscach
+                               : hasConsecutiveWindowMatch(rowNums, 3) ? ButtonStyle.Primary   // niebieski — ≥3 kolejnych tworzy ciąg z oczekiwanej sekwencji
                                : ButtonStyle.Secondary;
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
