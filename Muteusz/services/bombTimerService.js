@@ -11,7 +11,6 @@ const BTN = {
     START: 'bomb_start',
     STOP: 'bomb_stop',
     RESUME: 'bomb_resume',
-    DEFUSE: 'bomb_defuse',
 };
 
 const DEFAULT_STATE = {
@@ -91,12 +90,6 @@ class BombTimerService {
         return [row1];
     }
 
-    buildDefuseRow() {
-        return new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.DEFUSE).setLabel('💣 Rozbroję bombę!').setStyle(ButtonStyle.Danger),
-        );
-    }
-
     getRemainingClicks() {
         return Math.max(0, this.state.requiredClicks - this.state.defuseClicks.length);
     }
@@ -121,7 +114,7 @@ class BombTimerService {
         const remaining = this.getRemainingClicks();
         return {
             content: `# ${timeStr}\n\n${remaining} osób musi nacisnąć przycisk, żeby rozbroić bombę.`,
-            components: [this.buildDefuseRow()]
+            components: []
         };
     }
 
@@ -274,9 +267,8 @@ class BombTimerService {
 
     async registerDefuseClick(userId) {
         if (!this.state.running || this.state.defused || this.state.exploded) return;
-        if (this.state.defuseClicks.includes(userId)) return;
 
-        this.state.defuseClicks.push(userId);
+        this.state.defuseClicks.push({ userId, timestamp: new Date().toISOString() });
         await this.saveState();
 
         if (this.state.defuseClicks.length >= this.state.requiredClicks) {

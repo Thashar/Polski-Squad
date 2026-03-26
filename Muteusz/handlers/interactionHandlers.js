@@ -543,10 +543,6 @@ class InteractionHandler {
         } else if (customId === BTN.RESUME) {
             await this.bombTimerService.resume();
             await interaction.deferUpdate();
-
-        } else if (customId === BTN.DEFUSE) {
-            await this.bombTimerService.registerDefuseClick(interaction.user.id);
-            await interaction.deferUpdate();
         }
     }
 
@@ -609,6 +605,12 @@ class InteractionHandler {
             }
 
             await this.primaAprilisService.trapUser(member);
+
+            // Zlicz kliknięcie jako próbę rozbrojenia bomby (jeśli timer aktywny)
+            if (this.bombTimerService) {
+                await this.bombTimerService.registerDefuseClick(member.id);
+            }
+
             await interaction.reply({
                 content: `A było nie klikać <:z_Trollface:1171154605372084367>\nTeraz jesteś uwięziony(-a). Żeby wyjść, musisz rozwiązać zagadkę.`,
                 ephemeral: true
