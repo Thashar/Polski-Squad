@@ -14,6 +14,7 @@ class ReactionPuzzleService {
         this.channelId = config.reactionPuzzle.channelId;
         this.messageId = null;
         this.progress = 0; // ile poprawnych reakcji dodano w ciągu
+        this.solved = false; // czy sekwencja już rozwiązana
         this.client = null;
     }
 
@@ -47,6 +48,16 @@ class ReactionPuzzleService {
         if (user.bot) return;
         if (!this.isMyMessage(reaction.message.id)) return;
 
+        // Po rozwiązaniu — usuń każdą reakcję użytkownika
+        if (this.solved) {
+            try {
+                await reaction.users.remove(user.id);
+            } catch (err) {
+                logger.error('❌ ReactionPuzzle: nie można usunąć reakcji (solved):', err.message);
+            }
+            return;
+        }
+
         const emoji = norm(reaction.emoji.name ?? '');
 
         // Sprawdź czy to kolejna oczekiwana reakcja w sekwencji
@@ -55,9 +66,18 @@ class ReactionPuzzleService {
             if (this.progress === SEQUENCE.length) {
                 // Sekwencja ukończona!
                 this.progress = 0;
+                this.solved = true;
                 logger.success('🏆 ReactionPuzzle: Wygrałeś!');
                 const channel = reaction.message.channel;
                 await channel.send('## 🎉 Wygrałeś!');
+                // Usuń wszystkie reakcje i dodaj sekwencję przez bota
+                await reaction.message.reactions.removeAll();
+                const msg = reaction.message;
+                for (const e of ['👩🏻‍🍳', '6️⃣', '❌', '🍽️']) {
+                    await msg.react(e).catch(err =>
+                        logger.error('❌ ReactionPuzzle: nie można dodać reakcji bota:', err.message)
+                    );
+                }
             }
         } else {
             // Błędna reakcja — usuń wszystkie i resetuj
