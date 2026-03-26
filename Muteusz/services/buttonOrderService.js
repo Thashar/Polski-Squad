@@ -24,6 +24,31 @@ const MSG1_ROWS = 3; // 3 rzędy × 5 = 15 przycisków
 const MSG2_ROWS = 5; // 5 rzędów × 5 = 25 przycisków
 const MSG1_COUNT = MSG1_ROWS * 5;
 
+// Grupy przycisków zamiennych — przycisk jest "na miejscu" jeśli
+// znajduje się na dowolnej pozycji ze swojej grupy
+const LABELED_NUMS = new Set(Object.keys(BUTTON_LABELS).map(Number));
+const EMPTY_NUMS = Array.from({ length: TOTAL }, (_, i) => i + 1).filter(n => !LABELED_NUMS.has(n));
+
+const RAW_GROUPS = [
+    [7, 11, 24, 32],
+    [9, 15, 22, 34],
+    [17, 18, 19, 37, 38, 39],
+    [21, 25, 26, 30, 31, 35],
+    EMPTY_NUMS,
+];
+
+const NUM_TO_GROUP = new Map();
+for (const group of RAW_GROUPS) {
+    const groupSet = new Set(group);
+    for (const n of group) NUM_TO_GROUP.set(n, groupSet);
+}
+
+function isCorrectPosition(pos1based, buttonNum) {
+    if (buttonNum === pos1based) return true;
+    const group = NUM_TO_GROUP.get(buttonNum);
+    return group ? group.has(pos1based) : false;
+}
+
 class ButtonOrderService {
     constructor(config) {
         this.config = config;
@@ -61,11 +86,11 @@ class ButtonOrderService {
     buildComponents(startIdx, rowCount) {
         const rows = [];
         for (let r = 0; r < rowCount; r++) {
-            // Zlicz ile przycisków w rzędzie jest na właściwej pozycji
+            // Zlicz ile przycisków w rzędzie jest na właściwej pozycji (z uwzględnieniem zamienności)
             let correctCount = 0;
             for (let c = 0; c < 5; c++) {
                 const idx = startIdx + r * 5 + c;
-                if (this.state.order[idx] === idx + 1) correctCount++;
+                if (isCorrectPosition(idx + 1, this.state.order[idx])) correctCount++;
             }
             const rowStyle = correctCount === 5 ? ButtonStyle.Success
                            : correctCount >= 3  ? ButtonStyle.Primary
