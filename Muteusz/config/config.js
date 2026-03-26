@@ -148,7 +148,19 @@ module.exports = {
     // Konfiguracja modułu Prima Aprilis
     primaAprilis: {
         channelId: '1486500418358870074',
-        prisonRoleId: '1486506395057524887'
+        prisonRoleId: '1486506395057524887',
+        passwords: [
+            process.env.PRIMA_HASLO1,
+            process.env.PRIMA_HASLO2,
+            process.env.PRIMA_HASLO3,
+            process.env.PRIMA_HASLO4,
+            process.env.PRIMA_HASLO5,
+            process.env.PRIMA_HASLO6,
+            process.env.PRIMA_HASLO7,
+            process.env.PRIMA_HASLO8,
+            process.env.PRIMA_HASLO9,
+            process.env.PRIMA_HASLO10,
+        ].filter(Boolean)
     },
 
     // Konfiguracja modułu Bomb Timer

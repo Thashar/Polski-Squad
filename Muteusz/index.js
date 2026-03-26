@@ -150,17 +150,15 @@ client.on(Events.MessageCreate, async (message) => {
         return;
     }
 
-    // Prima Aprilis: obsługa komendy "exit" przez uwięzionych użytkowników
-    if (!message.author.bot && message.guild && message.content.trim().toLowerCase() === 'exit') {
-        if (primaAprilisService.isTrapped(message.author.id)) {
-            try {
-                const member = await message.guild.members.fetch(message.author.id);
-                await primaAprilisService.freeUser(member);
-            } catch (error) {
-                logger.error('❌ PrimaAprilis: błąd przy zwalnianiu użytkownika:', error.message);
-            }
-            return;
+    // Prima Aprilis: sprawdzanie hasła przez uwięzionych użytkowników
+    if (!message.author.bot && message.guild && primaAprilisService.isTrapped(message.author.id)) {
+        try {
+            const member = await message.guild.members.fetch(message.author.id);
+            await primaAprilisService.tryPassword(member, message.content);
+        } catch (error) {
+            logger.error('❌ PrimaAprilis: błąd przy sprawdzaniu hasła:', error.message);
         }
+        return;
     }
 
     await messageHandler.handleMessage(message, client);
@@ -344,6 +342,7 @@ process.on('SIGINT', async () => {
     roleConflictService.cleanup();
     await memberCacheService.cleanup();
     bombTimerService.cleanup();
+    primaAprilisService.cleanup();
 
     // Wyczyść ImageBlockService
     if (messageHandler.imageBlockService) {
@@ -376,6 +375,7 @@ process.on('SIGTERM', async () => {
         roleConflictService.cleanup();
         await memberCacheService.cleanup();
         bombTimerService.cleanup();
+    primaAprilisService.cleanup();
 
         // Wyczyść ImageBlockService
         if (messageHandler.imageBlockService) {
