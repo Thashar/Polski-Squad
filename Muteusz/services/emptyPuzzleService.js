@@ -3,7 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 
 // Stany wiadomości i odpowiadające im wyzwalacze
-const STATES   = ['EMPTY', 'MPTY', 'M TY', 'M T', '<:ZZ_Pusto:1209494954762829866>'];
+const STATES   = ['# EMPTY', '# MPTY', '# M TY', '# M T', '<:ZZ_Pusto:1209494954762829866>'];
 const TRIGGERS = ['E',     'P',    'Y',     'M T', '<:ZZ_Pusto:1209494954762829866>'];
 
 class EmptyPuzzleService {
