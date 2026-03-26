@@ -174,5 +174,10 @@ module.exports = {
         channelId: '1486582161627680789'
     },
 
+    // Konfiguracja zagadki reakcji
+    reactionPuzzle: {
+        channelId: '1486582292964184206'
+    },
+
     messages
 };
