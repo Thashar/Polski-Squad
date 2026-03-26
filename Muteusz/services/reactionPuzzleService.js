@@ -2,7 +2,10 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
 
-const SEQUENCE = ['🧑‍🍳', '6️⃣', '❌', '🍽️'];
+// Normalizacja: Discord usuwa variation selectory (U+FE0F) z reaction.emoji.name
+function norm(str) { return str.replace(/\uFE0F/g, ''); }
+
+const SEQUENCE = ['🧑‍🍳', '6️⃣', '❌', '🍽️'].map(norm);
 const MESSAGE_CONTENT = '# Gdzie kucharek sześć, tam nie ma co jeść! 🧑‍🍳';
 
 class ReactionPuzzleService {
@@ -44,7 +47,7 @@ class ReactionPuzzleService {
         if (user.bot) return;
         if (!this.isMyMessage(reaction.message.id)) return;
 
-        const emoji = reaction.emoji.name;
+        const emoji = norm(reaction.emoji.name ?? '');
 
         // Sprawdź czy to kolejna oczekiwana reakcja w sekwencji
         if (emoji === SEQUENCE[this.progress]) {
