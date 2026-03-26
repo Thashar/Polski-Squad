@@ -205,13 +205,6 @@ class BombTimerService {
                 this.state.exploded = true;
                 await this.saveState();
                 await this.updateTimerMessage();
-
-                try {
-                    const channel = await this.getTimerChannel();
-                    await channel.send('💥 Bomba wybuchła!');
-                } catch (err) {
-                    logger.error('❌ BombTimer: błąd wysyłania wiadomości o wybuchu:', err.message);
-                }
                 return;
             }
 
