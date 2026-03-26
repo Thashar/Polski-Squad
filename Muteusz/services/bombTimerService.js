@@ -28,14 +28,12 @@ class BombTimerService {
     constructor(config) {
         this.config = config;
         this.state = { ...DEFAULT_STATE };
-        this.timerInterval = null;
+        this.timerInterval = null;   // odliczanie - czysty setInterval bez Discord API
+        this.displayRunning = false; // flaga sterująca pętlą wyświetlania
         this.client = null;
-        this.ticking = false;
-        this.lastFileSave = 0; // timestamp ostatniego zapisu do pliku
+        this.lastFileSave = 0;
         this.cachedTimerChannel = null;
         this.cachedTimerMessage = null;
-        this.isUpdating = false; // blokada - tylko jeden msg.edit() w locie naraz
-        this.lastUpdateSent = 0; // timestamp ostatniej wysłanej aktualizacji
     }
 
     async initialize(client) {
@@ -131,7 +129,6 @@ class BombTimerService {
     }
 
     async getOrCreateTimerMessage() {
-        // Zwróć z cache jeśli dostępny
         if (this.cachedTimerMessage) {
             return this.cachedTimerMessage;
         }
@@ -157,37 +154,76 @@ class BombTimerService {
         return msg;
     }
 
+    // Jedyne miejsce gdzie edytujemy wiadomość - używane zarówno przez pętlę jak i bezpośrednio
     async updateTimerMessage() {
-        if (this.isUpdating) return;
-        this.isUpdating = true;
-        this.lastUpdateSent = Date.now();
         try {
             const msg = await this.getOrCreateTimerMessage();
             const data = this.getTimerMessageData();
             await msg.edit(data);
         } catch (error) {
-            // Wyczyść cache tylko gdy wiadomość zniknęła (Unknown Message = 10008)
             if (error.code === 10008) {
                 this.cachedTimerMessage = null;
             }
-            if (!error.message?.includes('rate limit') && !error.message?.includes('Missing') && error.code !== 10008) {
+            if (error.code !== 10008 && !error.message?.includes('rate limit') && !error.message?.includes('Missing')) {
                 logger.error('❌ BombTimer: błąd aktualizacji wiadomości timera:', error.message);
             }
-        } finally {
-            this.isUpdating = false;
         }
     }
 
-    // Wymuszona aktualizacja dla ważnych zdarzeń (wybuch, rozbrój) - czeka aż isUpdating się zwolni
-    forceUpdateTimerMessage() {
-        const attempt = () => {
-            if (this.isUpdating) {
-                setTimeout(attempt, 100);
+    // Pętla wyświetlania - awaits każdy edit przed następnym (brak równoległych requestów)
+    // 800ms przerwy po każdym edycie → ~1 update/s, poniżej limitu Discord
+    startDisplayLoop() {
+        if (this.displayRunning) return;
+        this.displayRunning = true;
+        this._displayLoop();
+    }
+
+    stopDisplayLoop() {
+        this.displayRunning = false;
+    }
+
+    async _displayLoop() {
+        while (this.displayRunning) {
+            await this.updateTimerMessage();
+            if (this.displayRunning) {
+                await new Promise(r => setTimeout(r, 800));
+            }
+        }
+    }
+
+    // Odliczanie - czysty setInterval, zero Discord API w środku
+    startInterval() {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.timerInterval = setInterval(() => {
+            if (this.state.timeRemaining <= 0) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+                this.state.running = false;
+                this.state.exploded = true;
+                this.saveState().catch(() => {});
+                this.stopDisplayLoop();
+                this.updateTimerMessage().catch(() => {});
                 return;
             }
-            this.updateTimerMessage().catch(() => {});
-        };
-        attempt();
+
+            this.state.timeRemaining--;
+
+            const now = Date.now();
+            if (now - this.lastFileSave >= 5000) {
+                this.lastFileSave = now;
+                this.saveState().catch(() => {});
+            }
+        }, 1000);
+
+        this.startDisplayLoop();
+    }
+
+    stopInterval() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+        this.stopDisplayLoop();
     }
 
     async setupControlMessage(client) {
@@ -219,52 +255,6 @@ class BombTimerService {
         }
     }
 
-    startInterval() {
-        if (this.timerInterval) clearInterval(this.timerInterval);
-        this.timerInterval = setInterval(() => {
-            this.tick();
-        }, 1000);
-    }
-
-    stopInterval() {
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
-        }
-    }
-
-    tick() {
-        if (this.ticking) return;
-        this.ticking = true;
-        try {
-            if (this.state.timeRemaining <= 0) {
-                this.stopInterval();
-                this.state.running = false;
-                this.state.exploded = true;
-                this.saveState().catch(() => {}); // ważne zdarzenie - zapisz natychmiast
-                this.forceUpdateTimerMessage(); // wymuszona aktualizacja - czeka aż poprzednia się skończy
-                return;
-            }
-
-            this.state.timeRemaining--;
-
-            const now = Date.now();
-
-            // Zapis do pliku co 5 sekund zamiast co sekundę
-            if (now - this.lastFileSave >= 5000) {
-                this.lastFileSave = now;
-                this.saveState().catch(() => {});
-            }
-
-            // Aktualizacja wiadomości co 1200ms - omija limit Discord (5 edytów/5s)
-            if (now - this.lastUpdateSent >= 1200) {
-                this.updateTimerMessage().catch(() => {});
-            }
-        } finally {
-            this.ticking = false;
-        }
-    }
-
     async addTimeAndStart(seconds, requiredClicks) {
         this.stopInterval();
         this.state.timeRemaining = (this.state.timeRemaining || 0) + seconds;
@@ -274,21 +264,6 @@ class BombTimerService {
         this.state.defused = false;
         this.state.exploded = false;
         await this.saveState();
-        await this.updateTimerMessage();
-        this.startInterval();
-    }
-
-    async startFresh(totalSeconds, requiredClicks) {
-        this.stopInterval();
-        this.state.timeRemaining = totalSeconds;
-        this.state.requiredClicks = requiredClicks;
-        this.state.defuseClicks = [];
-        this.state.running = true;
-        this.state.paused = false;
-        this.state.defused = false;
-        this.state.exploded = false;
-        await this.saveState();
-        await this.updateTimerMessage();
         this.startInterval();
     }
 
@@ -319,9 +294,8 @@ class BombTimerService {
             this.state.running = false;
             this.state.defuseClicks = [];
             await this.saveState();
+            await this.updateTimerMessage();
         }
-
-        this.forceUpdateTimerMessage();
     }
 
     getButtonIds() {
