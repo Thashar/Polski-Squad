@@ -18,6 +18,7 @@ const ChaosService = require('./services/chaosService');
 const PrimaAprilisService = require('./services/primaAprilisService');
 const BombTimerService = require('./services/bombTimerService');
 const ButtonOrderService = require('./services/buttonOrderService');
+const ReactionPuzzleService = require('./services/reactionPuzzleService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -51,6 +52,7 @@ const chaosService = new ChaosService(config, logService);
 const primaAprilisService = new PrimaAprilisService(config);
 const bombTimerService = new BombTimerService(config);
 const buttonOrderService = new ButtonOrderService(config);
+const reactionPuzzleService = new ReactionPuzzleService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -130,6 +132,7 @@ client.once(Events.ClientReady, async () => {
 
     // Inicjalizuj Button Order
     await buttonOrderService.initialize(client);
+    await reactionPuzzleService.initialize(client);
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
@@ -275,6 +278,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
         await reactionRoleService.handleReactionAdd(reaction, user);
         await bombTimerService.handleReactionAdd(reaction, user);
+        await reactionPuzzleService.handleReactionAdd(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (add):', error);
     }
