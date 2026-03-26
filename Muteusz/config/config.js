@@ -184,5 +184,10 @@ module.exports = {
         channelId: '1486582235816530113'
     },
 
+    // Konfiguracja zagadki Echo
+    echoPuzzle: {
+        channelId: '1486506666831773877'
+    },
+
     messages
 };
