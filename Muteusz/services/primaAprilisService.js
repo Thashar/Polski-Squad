@@ -100,7 +100,7 @@ class PrimaAprilisService {
     async tryPassword(member, input) {
         if (!this.isTrapped(member.id)) return false;
         if (!this.currentPassword) return false;
-        if (input.trim() !== this.currentPassword) return false;
+        if (input.trim().toLowerCase() !== this.currentPassword.toLowerCase()) return false;
 
         await this.freeUser(member);
         await this.rotatePassword();
