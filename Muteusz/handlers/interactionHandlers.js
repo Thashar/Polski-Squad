@@ -504,13 +504,20 @@ class InteractionHandler {
                 .setPlaceholder('np. 01:00:00');
             const clicksInput = new TextInputBuilder()
                 .setCustomId('required_clicks')
-                .setLabel('Ile osób musi nacisnąć przycisk?')
+                .setLabel('Ile kliknięć przycisku (zostaw puste = reakcje)')
                 .setStyle(TextInputStyle.Short)
-                .setRequired(true)
+                .setRequired(false)
                 .setPlaceholder('np. 5');
+            const reactionsInput = new TextInputBuilder()
+                .setCustomId('required_reactions')
+                .setLabel('Ile reakcji 🛠️ (zostaw puste = kliknięcia)')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+                .setPlaceholder('np. 10');
             modal.addComponents(
                 new ActionRowBuilder().addComponents(timeInput),
-                new ActionRowBuilder().addComponents(clicksInput)
+                new ActionRowBuilder().addComponents(clicksInput),
+                new ActionRowBuilder().addComponents(reactionsInput)
             );
             await interaction.showModal(modal);
 
@@ -539,20 +546,38 @@ class InteractionHandler {
 
         if (customId === 'bomb_modal_add') {
             const timeStr = interaction.fields.getTextInputValue('add_time');
-            const requiredClicksStr = interaction.fields.getTextInputValue('required_clicks');
+            const clicksStr = interaction.fields.getTextInputValue('required_clicks').trim();
+            const reactionsStr = interaction.fields.getTextInputValue('required_reactions').trim();
             const seconds = this.bombTimerService.parseTimeInput(timeStr);
-            const requiredClicks = parseInt(requiredClicksStr);
 
             if (seconds === null || seconds <= 0) {
                 await interaction.reply({ content: '❌ Podaj prawidłowy czas w formacie HH:MM:SS.', ephemeral: true });
                 return;
             }
-            if (isNaN(requiredClicks) || requiredClicks < 1) {
-                await interaction.reply({ content: '❌ Podaj prawidłową liczbę osób (min. 1).', ephemeral: true });
+
+            const requiredReactions = reactionsStr ? parseInt(reactionsStr) : 0;
+            const requiredClicks = clicksStr ? parseInt(clicksStr) : 0;
+
+            if (requiredReactions > 0) {
+                // Tryb reakcji
+                if (isNaN(requiredReactions) || requiredReactions < 1) {
+                    await interaction.reply({ content: '❌ Podaj prawidłową liczbę reakcji (min. 1).', ephemeral: true });
+                    return;
+                }
+                await interaction.deferUpdate();
+                await this.bombTimerService.addTimeAndStart(seconds, 0, requiredReactions);
+            } else if (requiredClicks > 0) {
+                // Tryb kliknięć
+                if (isNaN(requiredClicks) || requiredClicks < 1) {
+                    await interaction.reply({ content: '❌ Podaj prawidłową liczbę kliknięć (min. 1).', ephemeral: true });
+                    return;
+                }
+                await interaction.deferUpdate();
+                await this.bombTimerService.addTimeAndStart(seconds, requiredClicks, 0);
+            } else {
+                await interaction.reply({ content: '❌ Wypełnij pole "Ile kliknięć" lub "Ile reakcji 🛠️".', ephemeral: true });
                 return;
             }
-            await interaction.deferUpdate();
-            await this.bombTimerService.addTimeAndStart(seconds, requiredClicks);
 
         }
     }

@@ -20,6 +20,8 @@ const DEFAULT_STATE = {
     timeRemaining: 0,
     requiredClicks: 0,
     defuseClicks: [],
+    requiredReactions: 0,      // 0 = tryb kliknięć, >0 = tryb reakcji
+    currentReactionCount: 0,   // aktualny licznik reakcji 🛠️ (bez bota)
     defused: false,
     exploded: false,
 };
@@ -48,6 +50,10 @@ class BombTimerService {
         }
 
         if (this.state.timerMessageId) {
+            // Przy restarcie w trybie reakcji - odczytaj aktualną liczbę reakcji z wiadomości
+            if (this.state.requiredReactions > 0 && this.state.running) {
+                await this._syncReactionCount();
+            }
             await this.updateTimerMessage();
         }
 
@@ -112,6 +118,14 @@ class BombTimerService {
         if (this.state.exploded) {
             return {
                 content: `# ⏱️ ${timeStr}\n\n💥 Bomba wybuchła!`,
+                components: []
+            };
+        }
+
+        if (this.state.requiredReactions > 0) {
+            const remaining = Math.max(0, this.state.requiredReactions - this.state.currentReactionCount);
+            return {
+                content: `# ⏱️ ${timeStr}\n\n🛠️ ${remaining} reakcji do zatrzymania licznika 💣`,
                 components: []
             };
         }
@@ -273,16 +287,83 @@ class BombTimerService {
         }
     }
 
-    async addTimeAndStart(seconds, requiredClicks) {
+    async addTimeAndStart(seconds, requiredClicks, requiredReactions = 0) {
         this.stopInterval();
         this.state.timeRemaining = (this.state.timeRemaining || 0) + seconds;
         this.state.requiredClicks = requiredClicks;
+        this.state.requiredReactions = requiredReactions;
+        this.state.currentReactionCount = 0;
+        this.state.defuseClicks = [];
         this.state.running = true;
         this.state.paused = false;
         this.state.defused = false;
         this.state.exploded = false;
         await this.saveState();
         this.startInterval();
+
+        if (requiredReactions > 0) {
+            this._addInitialReaction().catch(() => {});
+        }
+    }
+
+    async _addInitialReaction() {
+        try {
+            await new Promise(r => setTimeout(r, 600));
+            const msg = await this.getOrCreateTimerMessage();
+            await msg.react('🛠️');
+        } catch (error) {
+            logger.warn('⚠️ BombTimer: nie można dodać reakcji 🛠️:', error.message);
+        }
+    }
+
+    async _syncReactionCount() {
+        try {
+            const channel = await this.getTimerChannel();
+            const msg = await channel.messages.fetch(this.state.timerMessageId);
+            this.cachedTimerMessage = msg;
+            const reaction = msg.reactions.cache.get('🛠️');
+            if (!reaction) {
+                this.state.currentReactionCount = 0;
+                return;
+            }
+            const users = await reaction.users.fetch();
+            this.state.currentReactionCount = users.filter(u => !u.bot).size;
+            logger.info(`🛠️ BombTimer: odczytano ${this.state.currentReactionCount} reakcji po restarcie`);
+        } catch (error) {
+            logger.warn('⚠️ BombTimer: nie można zsynchronizować licznika reakcji:', error.message);
+        }
+    }
+
+    async handleReactionAdd(reaction, user) {
+        if (user.bot) return;
+        if (!this.state.running || this.state.defused || this.state.exploded) return;
+        if (this.state.requiredReactions === 0) return;
+        if (reaction.message.id !== this.state.timerMessageId) return;
+        if (reaction.emoji.name !== '🛠️') return;
+
+        this.state.currentReactionCount++;
+        await this.saveState();
+
+        if (this.state.currentReactionCount >= this.state.requiredReactions) {
+            this.stopInterval();
+            this.state.defused = true;
+            this.state.running = false;
+            await this.saveState();
+        }
+
+        await this.updateTimerMessage();
+    }
+
+    async handleReactionRemove(reaction, user) {
+        if (user.bot) return;
+        if (!this.state.running || this.state.defused || this.state.exploded) return;
+        if (this.state.requiredReactions === 0) return;
+        if (reaction.message.id !== this.state.timerMessageId) return;
+        if (reaction.emoji.name !== '🛠️') return;
+
+        this.state.currentReactionCount = Math.max(0, this.state.currentReactionCount - 1);
+        await this.saveState();
+        await this.updateTimerMessage();
     }
 
     async pause() {
@@ -302,6 +383,7 @@ class BombTimerService {
 
     async registerDefuseClick(userId) {
         if (!this.state.running || this.state.defused || this.state.exploded) return;
+        if (this.state.requiredReactions > 0) return; // w trybie reakcji kliknięcia nie liczą
 
         this.state.defuseClicks.push({ userId, timestamp: new Date().toISOString() });
         await this.saveState();
