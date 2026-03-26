@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
@@ -21,7 +21,9 @@ const DEFAULT_STATE = {
     requiredClicks: 0,
     defuseClicks: [],
     requiredReactions: 0,      // 0 = tryb kliknięć, >0 = tryb reakcji
-    currentReactionCount: 0,   // aktualny licznik reakcji 🛠️ (bez bota)
+    currentReactionCount: 0,   // aktualny licznik reakcji (bez bota)
+    requiredChatters: 0,       // 0 = tryb bez czatu, >0 = tryb czatu
+    chatters: [],              // lista unikalnych userID którzy napisali
     defused: false,
     exploded: false,
 };
@@ -107,17 +109,29 @@ class BombTimerService {
 
     getTimerMessageData() {
         const timeStr = this.formatTime(this.state.timeRemaining);
+        const isLow = this.state.timeRemaining < 60;
+        const timeEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '⏱️';
+        const sideEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '<a:PepeAlarmMan:1341086085089857619>';
 
         if (this.state.defused) {
             return {
-                content: `# ⏱️ ${timeStr}\n\n⏱️ Czas na zegarze bomby został wstrzymany!`,
+                content: `# ${timeEmoji} ${timeStr}\n\nCzas na zegarze bomby został wstrzymany! <a:PepeSweat:1278017088153190502>`,
                 components: []
             };
         }
 
         if (this.state.exploded) {
             return {
-                content: `# ⏱️ ${timeStr}\n\n💥 Bomba wybuchła!`,
+                content: `# ${timeEmoji} ${timeStr}\n\n💥 Bomba wybuchła!`,
+                components: []
+            };
+        }
+
+        if (this.state.requiredChatters > 0) {
+            const count = this.state.chatters.length;
+            const required = this.state.requiredChatters;
+            return {
+                content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
                 components: []
             };
         }
@@ -125,14 +139,14 @@ class BombTimerService {
         if (this.state.requiredReactions > 0) {
             const remaining = Math.max(0, this.state.requiredReactions - this.state.currentReactionCount);
             return {
-                content: `# ⏱️ ${timeStr}\n\n🛠️ ${remaining} reakcji do zatrzymania licznika 💣`,
+                content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
                 components: []
             };
         }
 
         const remaining = this.getRemainingClicks();
         return {
-            content: `# ⏱️ ${timeStr}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
+            content: `Bomba niedługo wybuchnie!\n${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
             components: []
         };
     }
@@ -236,6 +250,7 @@ class BombTimerService {
                 this.stopDisplayLoop();
                 this.updateTimerMessage().catch(() => {});
                 this._clearAllReactions().catch(() => {});
+                if (this.state.requiredChatters > 0) this._lockAndCleanChannel().catch(() => {});
                 return;
             }
 
@@ -288,12 +303,14 @@ class BombTimerService {
         }
     }
 
-    async addTimeAndStart(seconds, requiredClicks, requiredReactions = 0) {
+    async addTimeAndStart(seconds, requiredClicks, requiredReactions = 0, requiredChatters = 0) {
         this.stopInterval();
         this.state.timeRemaining = (this.state.timeRemaining || 0) + seconds;
         this.state.requiredClicks = requiredClicks;
         this.state.requiredReactions = requiredReactions;
         this.state.currentReactionCount = 0;
+        this.state.requiredChatters = requiredChatters;
+        this.state.chatters = [];
         this.state.defuseClicks = [];
         this.state.running = true;
         this.state.paused = false;
@@ -304,6 +321,75 @@ class BombTimerService {
 
         if (requiredReactions > 0) {
             this._addInitialReaction().catch(() => {});
+        }
+        if (requiredChatters > 0) {
+            this._unlockChannel().catch(() => {});
+        }
+    }
+
+    async _unlockChannel() {
+        try {
+            const channel = await this.getTimerChannel();
+            await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
+                SendMessages: true,
+            });
+            logger.info('🔓 BombTimer: odblokowano kanał do pisania');
+        } catch (error) {
+            logger.error('❌ BombTimer: błąd odblokowywania kanału:', error.message);
+        }
+    }
+
+    async _lockAndCleanChannel() {
+        try {
+            const channel = await this.getTimerChannel();
+
+            // Zablokuj kanał
+            await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
+                SendMessages: false,
+            });
+            logger.info('🔒 BombTimer: zablokowano kanał');
+
+            // Usuń wszystkie wiadomości oprócz licznika
+            let fetched;
+            do {
+                fetched = await channel.messages.fetch({ limit: 100 });
+                const toDelete = fetched.filter(m => m.id !== this.state.timerMessageId);
+                if (toDelete.size === 0) break;
+
+                // bulkDelete działa tylko dla wiadomości < 14 dni
+                const bulk = toDelete.filter(m => Date.now() - m.createdTimestamp < 12 * 24 * 60 * 60 * 1000);
+                const old = toDelete.filter(m => Date.now() - m.createdTimestamp >= 12 * 24 * 60 * 60 * 1000);
+
+                if (bulk.size > 1) await channel.bulkDelete(bulk);
+                else if (bulk.size === 1) await bulk.first().delete().catch(() => {});
+                for (const m of old.values()) await m.delete().catch(() => {});
+            } while (fetched.size >= 2);
+
+            logger.info('🧹 BombTimer: wyczyszczono kanał z wiadomości');
+        } catch (error) {
+            logger.error('❌ BombTimer: błąd blokowania/czyszczenia kanału:', error.message);
+        }
+    }
+
+    async handleMessageCreate(message) {
+        if (message.author.bot) return;
+        if (!this.state.running || this.state.paused || this.state.defused || this.state.exploded) return;
+        if (this.state.requiredChatters === 0) return;
+        if (message.channel.id !== this.config.bombTimer.timerChannelId) return;
+
+        if (this.state.chatters.includes(message.author.id)) return;
+
+        this.state.chatters.push(message.author.id);
+        await this.saveState();
+        await this.updateTimerMessage();
+
+        if (this.state.chatters.length >= this.state.requiredChatters) {
+            this.stopInterval();
+            this.state.defused = true;
+            this.state.running = false;
+            await this.saveState();
+            await this.updateTimerMessage();
+            this._lockAndCleanChannel().catch(() => {});
         }
     }
 
