@@ -109,7 +109,9 @@ class BombTimerService {
 
     getTimerMessageData() {
         const timeStr = this.formatTime(this.state.timeRemaining);
-        const timeEmoji = this.state.timeRemaining < 60 ? '<a:PepePoar:1280067288397250570>' : '⏱️';
+        const isLow = this.state.timeRemaining < 60;
+        const timeEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '⏱️';
+        const sideEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '<a:PepeAlarmMan:1341086085089857619>';
 
         if (this.state.defused) {
             return {
@@ -129,7 +131,7 @@ class BombTimerService {
             const count = this.state.chatters.length;
             const required = this.state.requiredChatters;
             return {
-                content: `# ${timeEmoji} ${timeStr}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
+                content: `${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
                 components: []
             };
         }
@@ -137,14 +139,14 @@ class BombTimerService {
         if (this.state.requiredReactions > 0) {
             const remaining = Math.max(0, this.state.requiredReactions - this.state.currentReactionCount);
             return {
-                content: `# ${timeEmoji} ${timeStr}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
+                content: `${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
                 components: []
             };
         }
 
         const remaining = this.getRemainingClicks();
         return {
-            content: `# ${timeEmoji} ${timeStr}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
+            content: `${sideEmoji}\n# ${timeEmoji} ${timeStr}\n${sideEmoji}\n\n👥 ${remaining} osób musi nacisnąć przycisk, żeby rozbroić 💣 bombę.`,
             components: []
         };
     }
