@@ -235,6 +235,7 @@ class BombTimerService {
                 this.saveState().catch(() => {});
                 this.stopDisplayLoop();
                 this.updateTimerMessage().catch(() => {});
+                this._clearAllReactions().catch(() => {});
                 return;
             }
 
@@ -394,6 +395,15 @@ class BombTimerService {
             this.state.defuseClicks = [];
             await this.saveState();
             await this.updateTimerMessage();
+        }
+    }
+
+    async _clearAllReactions() {
+        try {
+            const msg = await this.getOrCreateTimerMessage();
+            await msg.reactions.removeAll();
+        } catch (error) {
+            logger.warn('⚠️ BombTimer: nie można usunąć reakcji po wybuchu:', error.message);
         }
     }
 
