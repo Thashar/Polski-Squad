@@ -7,7 +7,7 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null, emptyPuzzleService = null, echoPuzzleService = null, hotPotatoService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null, emptyPuzzleService = null, echoPuzzleService = null, hotPotatoService = null, boosterSnapshotService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
@@ -21,6 +21,7 @@ class InteractionHandler {
         this.emptyPuzzleService = emptyPuzzleService;
         this.echoPuzzleService = echoPuzzleService;
         this.hotPotatoService = hotPotatoService;
+        this.boosterSnapshotService = boosterSnapshotService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -472,6 +473,8 @@ class InteractionHandler {
             await this.buttonOrderService.handleButtonClick(interaction);
         } else if (this.hotPotatoService && this.hotPotatoService.isMyButton(interaction.customId)) {
             await this.hotPotatoService.handleButtonClick(interaction);
+        } else if (this.boosterSnapshotService && this.boosterSnapshotService.isMyButton(interaction.customId)) {
+            await this.boosterSnapshotService.handleButtonClick(interaction);
         } else if (interaction.customId.startsWith('special_roles_')) {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
@@ -571,6 +574,10 @@ class InteractionHandler {
         } else if (customId === BTN.HOTPOTATO_MINUS5) {
             await interaction.deferUpdate();
             if (this.hotPotatoService) await this.hotPotatoService.minusFiveMinutes();
+        } else if (customId === BTN.SNAPSHOT_BOOSTER) {
+            if (this.boosterSnapshotService) await this.boosterSnapshotService.handleSnapshotButton(interaction);
+        } else if (customId === BTN.BOOSTER_BACK) {
+            if (this.boosterSnapshotService) await this.boosterSnapshotService.handleBoosterBack(interaction);
         }
     }
 

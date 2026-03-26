@@ -19,6 +19,8 @@ const BTN = {
     RESET_ECHO_PUZZLE: 'bomb_reset_echo_puzzle',
     RESET_HOTPOTATO: 'bomb_reset_hotpotato',
     HOTPOTATO_MINUS5: 'bomb_hotpotato_minus5',
+    SNAPSHOT_BOOSTER: 'bomb_snapshot_booster',
+    BOOSTER_BACK: 'bomb_booster_back',
 };
 
 const DEFAULT_STATE = {
@@ -105,6 +107,8 @@ class BombTimerService {
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
+            new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Snapshot booster').setStyle(ButtonStyle.Primary).setEmoji('📸'),
+            new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Booster back').setStyle(ButtonStyle.Success).setEmoji('🔓'),
         );
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
