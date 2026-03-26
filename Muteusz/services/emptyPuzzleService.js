@@ -1,6 +1,9 @@
+const fs = require('fs');
+const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
+const DATA_FILE = path.join(__dirname, '../data/empty_puzzle_state.json');
 
 // Stany wiadomości i odpowiadające im wyzwalacze
 const STATES   = ['# EMPTY', '# MPTY', '# M TY', '# M T', '<:ZZ_Pusto:1209494954762829866>'];
@@ -12,6 +15,27 @@ class EmptyPuzzleService {
         this.messageId = null;
         this.step = 0;      // 0-4: aktywny krok, 5: wygrana (blokada)
         this.client = null;
+        this._loadState();
+    }
+
+    _loadState() {
+        try {
+            if (fs.existsSync(DATA_FILE)) {
+                const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+                this.messageId = saved.messageId ?? null;
+                this.step      = saved.step      ?? 0;
+            }
+        } catch (err) {
+            logger.error('❌ EmptyPuzzle: błąd wczytywania stanu:', err.message);
+        }
+    }
+
+    _saveState() {
+        try {
+            fs.writeFileSync(DATA_FILE, JSON.stringify({ messageId: this.messageId, step: this.step }, null, 2));
+        } catch (err) {
+            logger.error('❌ EmptyPuzzle: błąd zapisu stanu:', err.message);
+        }
     }
 
     async initialize(client) {
@@ -22,21 +46,28 @@ class EmptyPuzzleService {
             return;
         }
 
-        // Szukaj istniejącej wiadomości bota z dowolnym stanem gry
-        const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-        const existing = messages?.find(m =>
-            m.author.id === client.user.id && STATES.includes(m.content)
-        );
+        // Szukaj wiadomości po zapisanym ID, potem po treści
+        let existing = null;
+        if (this.messageId) {
+            existing = await channel.messages.fetch(this.messageId).catch(() => null);
+        }
+        if (!existing) {
+            const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+            existing = messages?.find(m => m.author.id === client.user.id && STATES.includes(m.content));
+        }
 
         if (existing) {
             this.messageId = existing.id;
-            this.step = STATES.indexOf(existing.content);
-            if (this.step === -1) this.step = 0;
-            logger.info(`✅ EmptyPuzzle: znaleziono istniejącą wiadomość (krok ${this.step})`);
+            // Upewnij się że wiadomość pokazuje aktualny stan
+            if (this.step < STATES.length && existing.content !== STATES[this.step]) {
+                await existing.edit(STATES[this.step]).catch(() => {});
+            }
+            logger.info(`✅ EmptyPuzzle: znaleziono wiadomość (krok ${this.step})`);
         } else {
             const sent = await channel.send(STATES[0]);
             this.messageId = sent.id;
             this.step = 0;
+            this._saveState();
             logger.info(`✅ EmptyPuzzle: wysłano nową wiadomość`);
         }
     }
@@ -56,6 +87,7 @@ class EmptyPuzzleService {
         // Sprawdź czy wiadomość to oczekiwany wyzwalacz
         if (content === TRIGGERS[this.step]) {
             this.step++;
+            this._saveState();
 
             if (this.step === STATES.length) {
                 // Wygrana!
@@ -76,6 +108,7 @@ class EmptyPuzzleService {
         } else {
             // Błędna wiadomość — usuń i resetuj do bazowej formy
             this.step = 0;
+            this._saveState();
             await message.delete().catch(() => {});
             try {
                 const channel = await this.client.channels.fetch(this.channelId);
@@ -98,6 +131,7 @@ class EmptyPuzzleService {
 
     async reset() {
         this.step = 0;
+        this._saveState();
         if (this.messageId && this.client) {
             try {
                 const channel = await this.client.channels.fetch(this.channelId);

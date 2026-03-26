@@ -1,6 +1,9 @@
+const fs = require('fs');
+const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
+const DATA_FILE = path.join(__dirname, '../data/reaction_puzzle_state.json');
 
 // Normalizacja: Discord usuwa variation selectory (U+FE0F) z reaction.emoji.name
 function norm(str) { return str.replace(/\uFE0F/g, ''); }
@@ -13,9 +16,31 @@ class ReactionPuzzleService {
         this.config = config;
         this.channelId = config.reactionPuzzle.channelId;
         this.messageId = null;
-        this.progress = 0; // ile poprawnych reakcji dodano w ciągu
-        this.solved = false; // czy sekwencja już rozwiązana
+        this.progress = 0;
+        this.solved = false;
         this.client = null;
+        this._loadState();
+    }
+
+    _loadState() {
+        try {
+            if (fs.existsSync(DATA_FILE)) {
+                const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+                this.messageId = saved.messageId ?? null;
+                this.progress  = saved.progress  ?? 0;
+                this.solved    = saved.solved     ?? false;
+            }
+        } catch (err) {
+            logger.error('❌ ReactionPuzzle: błąd wczytywania stanu:', err.message);
+        }
+    }
+
+    _saveState() {
+        try {
+            fs.writeFileSync(DATA_FILE, JSON.stringify({ messageId: this.messageId, progress: this.progress, solved: this.solved }, null, 2));
+        } catch (err) {
+            logger.error('❌ ReactionPuzzle: błąd zapisu stanu:', err.message);
+        }
     }
 
     async initialize(client) {
@@ -32,10 +57,12 @@ class ReactionPuzzleService {
 
         if (existing) {
             this.messageId = existing.id;
+            this._saveState();
             logger.info(`✅ ReactionPuzzle: znaleziono istniejącą wiadomość ${existing.id}`);
         } else {
             const sent = await channel.send(MESSAGE_CONTENT);
             this.messageId = sent.id;
+            this._saveState();
             logger.info(`✅ ReactionPuzzle: wysłano nową wiadomość ${sent.id}`);
         }
     }
@@ -67,6 +94,7 @@ class ReactionPuzzleService {
                 // Sekwencja ukończona!
                 this.progress = 0;
                 this.solved = true;
+                this._saveState();
                 logger.success('🏆 ReactionPuzzle: Wygrałeś!');
                 const channel = reaction.message.channel;
                 await channel.send('## 🎉 Wygrałeś!');
@@ -82,6 +110,7 @@ class ReactionPuzzleService {
         } else {
             // Błędna reakcja — usuń wszystkie i resetuj
             this.progress = 0;
+            this._saveState();
             try {
                 await reaction.message.reactions.removeAll();
             } catch (err) {
@@ -102,6 +131,7 @@ class ReactionPuzzleService {
                 logger.error('❌ ReactionPuzzle: nie można usunąć reakcji przy resecie:', err.message);
             }
         }
+        this._saveState();
         logger.info('🔄 ReactionPuzzle: zagadka zresetowana');
     }
 

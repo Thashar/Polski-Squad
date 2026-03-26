@@ -1,6 +1,9 @@
+const fs = require('fs');
+const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
+const DATA_FILE = path.join(__dirname, '../data/echo_puzzle_state.json');
 
 const PUZZLE_MESSAGE = '# Spotkaliście kiedyś nimfę, która nie ma własnego głosu? Potrafi jedynie oddać wam to, co sami jej dacie. Ale żeby was usłyszała, musicie ją zawołać po imieniu... a ona na pewno wam odpowie.';
 const MESSAGES_BEFORE_REPEAT = 10;
@@ -10,9 +13,35 @@ class EchoPuzzleService {
     constructor(config) {
         this.channelId = config.echoPuzzle.channelId;
         this.solved = false;
-        this.messagesSincePrompt = 0; // liczba wiadomości od ostatniego pojawienia się zagadki
-        this.lastEntry = null;        // { authorId, content } ostatniej wiadomości
+        this.messagesSincePrompt = 0;
+        this.lastEntry = null;
         this.client = null;
+        this._loadState();
+    }
+
+    _loadState() {
+        try {
+            if (fs.existsSync(DATA_FILE)) {
+                const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+                this.solved              = saved.solved              ?? false;
+                this.messagesSincePrompt = saved.messagesSincePrompt ?? 0;
+                this.lastEntry           = saved.lastEntry           ?? null;
+            }
+        } catch (err) {
+            logger.error('❌ EchoPuzzle: błąd wczytywania stanu:', err.message);
+        }
+    }
+
+    _saveState() {
+        try {
+            fs.writeFileSync(DATA_FILE, JSON.stringify({
+                solved:              this.solved,
+                messagesSincePrompt: this.messagesSincePrompt,
+                lastEntry:           this.lastEntry,
+            }, null, 2));
+        } catch (err) {
+            logger.error('❌ EchoPuzzle: błąd zapisu stanu:', err.message);
+        }
     }
 
     async initialize(client) {
@@ -59,6 +88,7 @@ class EchoPuzzleService {
         ) {
             this.solved = true;
             this.lastEntry = null;
+            this._saveState();
             await message.channel.send('## 🎉 Wygrałeś!');
             logger.success('🏆 EchoPuzzle: Wygrałeś!');
             return;
@@ -75,6 +105,7 @@ class EchoPuzzleService {
                 logger.error('❌ EchoPuzzle: nie można wysłać powtórki:', err.message)
             );
         }
+        this._saveState();
     }
 
     async reset() {
@@ -89,6 +120,7 @@ class EchoPuzzleService {
                 logger.error('❌ EchoPuzzle: nie można wysłać wiadomości po resecie:', err.message);
             }
         }
+        this._saveState();
         logger.info('🔄 EchoPuzzle: zagadka zresetowana');
     }
 }

@@ -1,7 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
+const DATA_FILE = path.join(__dirname, '../data/hot_potato_state.json');
 
 const MAIN_START_SECONDS = 3600;   // 01:00:00
 const POTATO_START_SECONDS = 180;  // 00:03:00
@@ -36,6 +39,42 @@ class HotPotatoService {
         this.client = null;
         this._mainInterval   = null;
         this._potatoInterval = null;
+        this._loadState();
+    }
+
+    _loadState() {
+        try {
+            if (fs.existsSync(DATA_FILE)) {
+                const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+                this.mainMessageId       = saved.mainMessageId   ?? null;
+                this.potatoMessageId     = saved.potatoMessageId ?? null;
+                this.mainTimeRemaining   = saved.mainTimeRemaining   ?? MAIN_START_SECONDS;
+                this.potatoTimeRemaining = saved.potatoTimeRemaining ?? POTATO_START_SECONDS;
+                this.mainRunning         = saved.mainRunning   ?? false;
+                this.potatoRunning       = saved.potatoRunning ?? false;
+                this.currentHolderId     = saved.currentHolderId ?? null;
+                this.won                 = saved.won ?? false;
+            }
+        } catch (err) {
+            logger.error('❌ HotPotato: błąd wczytywania stanu:', err.message);
+        }
+    }
+
+    _saveState() {
+        try {
+            fs.writeFileSync(DATA_FILE, JSON.stringify({
+                mainMessageId:       this.mainMessageId,
+                potatoMessageId:     this.potatoMessageId,
+                mainTimeRemaining:   this.mainTimeRemaining,
+                potatoTimeRemaining: this.potatoTimeRemaining,
+                mainRunning:         this.mainRunning,
+                potatoRunning:       this.potatoRunning,
+                currentHolderId:     this.currentHolderId,
+                won:                 this.won,
+            }, null, 2));
+        } catch (err) {
+            logger.error('❌ HotPotato: błąd zapisu stanu:', err.message);
+        }
     }
 
     // ─── Inicjalizacja ──────────────────────────────────────────────────────
@@ -48,22 +87,28 @@ class HotPotatoService {
             return;
         }
 
+        // Szukaj istniejącej wiadomości timera
         const messages = await mainChannel.messages.fetch({ limit: 20 }).catch(() => null);
-        const existing  = messages?.find(m =>
+        const existing = messages?.find(m =>
             m.author.id === client.user.id && m.content?.startsWith('# ⏱️')
         );
 
         if (existing) {
             this.mainMessageId = existing.id;
-            // Po restarcie resetujemy stan — gracze muszą zacząć od nowa
-            this.mainTimeRemaining = MAIN_START_SECONDS;
-            await existing.edit(this._buildMainData()).catch(() => {});
-            logger.info('✅ HotPotato: znaleziono istniejącą wiadomość, stan zresetowany');
         } else {
             const msg = await mainChannel.send(this._buildMainData());
             this.mainMessageId = msg.id;
-            logger.info('✅ HotPotato: wysłano główną wiadomość timera');
         }
+
+        // Wznów interwały jeśli gra była aktywna
+        if (this.mainRunning || this.potatoRunning) {
+            this._startIntervals();
+            logger.info(`✅ HotPotato: wznowiono grę (main: ${formatTime(this.mainTimeRemaining)}, potato: ${formatTime(this.potatoTimeRemaining)})`);
+        } else {
+            logger.info('✅ HotPotato: zainicjalizowano');
+        }
+
+        await this._updateMainMessage().catch(() => {});
     }
 
     // ─── Budowanie wiadomości ───────────────────────────────────────────────
@@ -125,6 +170,7 @@ class HotPotatoService {
         }
         await interaction.deferUpdate();
         this.mainRunning = true;
+        this._saveState();
         await this._updateMainMessage();
         await this._startPotato();
         this._startIntervals();
@@ -154,6 +200,7 @@ class HotPotatoService {
         const channel = await this.client.channels.fetch(this.potatoChannelId);
         const newMsg = await channel.send(this._buildPotatoData());
         this.potatoMessageId = newMsg.id;
+        this._saveState();
     }
 
     // ─── Logika gry ─────────────────────────────────────────────────────────
@@ -166,6 +213,7 @@ class HotPotatoService {
         if (!channel) return;
         const msg = await channel.send(this._buildPotatoData());
         this.potatoMessageId = msg.id;
+        this._saveState();
     }
 
     async _pickNewHolder() {
@@ -186,6 +234,7 @@ class HotPotatoService {
         this._mainInterval = setInterval(async () => {
             if (!this.mainRunning) return;
             this.mainTimeRemaining = Math.max(0, this.mainTimeRemaining - 10);
+            this._saveState();
             await this._updateMainMessage();
             if (this.mainTimeRemaining <= 0) await this._onWin();
         }, UPDATE_INTERVAL_MS);
@@ -193,6 +242,7 @@ class HotPotatoService {
         this._potatoInterval = setInterval(async () => {
             if (!this.potatoRunning) return;
             this.potatoTimeRemaining = Math.max(0, this.potatoTimeRemaining - 10);
+            this._saveState();
             if (this.potatoTimeRemaining > 0) {
                 await this._updatePotatoMessage();
             } else {
@@ -223,6 +273,7 @@ class HotPotatoService {
         await this._updateMainMessage();
 
         this.potatoMessageId = null;
+        this._saveState();
         logger.info('💥 HotPotato: bomba wybuchła — timer zresetowany do 1h');
     }
 
@@ -244,6 +295,7 @@ class HotPotatoService {
         if (mainChannel) await mainChannel.send('## 🎉 Wygrałeś!');
 
         await this._stopPotatoMessage();
+        this._saveState();
         logger.success('🏆 HotPotato: Wygrałeś!');
     }
 
@@ -303,6 +355,7 @@ class HotPotatoService {
             } catch (_) {}
             this.potatoMessageId = null;
         }
+        this._saveState();
         logger.info('🔄 HotPotato: gra zresetowana');
     }
 
