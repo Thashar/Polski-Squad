@@ -151,5 +151,11 @@ module.exports = {
         prisonRoleId: '1486506395057524887'
     },
 
+    // Konfiguracja modułu Bomb Timer
+    bombTimer: {
+        controlChannelId: '1486510519119773818',
+        timerChannelId: '1486510420083740865'
+    },
+
     messages
 };

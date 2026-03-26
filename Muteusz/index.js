@@ -16,6 +16,7 @@ const RoleConflictService = require('./services/roleConflictService');
 const MemberCacheService = require('./services/memberCacheService');
 const ChaosService = require('./services/chaosService');
 const PrimaAprilisService = require('./services/primaAprilisService');
+const BombTimerService = require('./services/bombTimerService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -47,6 +48,7 @@ const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
 const chaosService = new ChaosService(config, logService);
 const primaAprilisService = new PrimaAprilisService(config);
+const bombTimerService = new BombTimerService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -55,7 +57,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -121,6 +123,9 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj Prima Aprilis
     await primaAprilisService.initialize();
 
+    // Inicjalizuj Bomb Timer
+    await bombTimerService.initialize(client);
+
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
 
@@ -133,7 +138,10 @@ client.once(Events.ClientReady, async () => {
     // Wyślij/odśwież wiadomość Prima Aprilis
     await primaAprilisService.setupButtonMessage(client);
 
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń, Prima Aprilis');
+    // Wyślij/odśwież panel kontrolny Bomb Timer
+    await bombTimerService.setupControlMessage(client);
+
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń, Prima Aprilis, Bomb Timer');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -335,7 +343,8 @@ process.on('SIGINT', async () => {
     reactionRoleService.cleanup();
     roleConflictService.cleanup();
     await memberCacheService.cleanup();
-    
+    bombTimerService.cleanup();
+
     // Wyczyść ImageBlockService
     if (messageHandler.imageBlockService) {
         await messageHandler.imageBlockService.shutdown();
@@ -366,17 +375,18 @@ process.on('SIGTERM', async () => {
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
         await memberCacheService.cleanup();
-        
+        bombTimerService.cleanup();
+
         // Wyczyść ImageBlockService
         if (messageHandler.imageBlockService) {
             await messageHandler.imageBlockService.shutdown();
         }
-        
+
         // Wyczyść WordBlockService
         if (messageHandler.wordBlockService) {
             await messageHandler.wordBlockService.shutdown();
         }
-        
+
         client.destroy();
         logger.info('Bot został pomyślnie zamknięty');
         process.exit(0);

@@ -7,7 +7,7 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
@@ -15,6 +15,7 @@ class InteractionHandler {
         this.roleKickingService = roleKickingService;
         this.chaosService = chaosService;
         this.primaAprilisService = primaAprilisService;
+        this.bombTimerService = bombTimerService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -447,6 +448,8 @@ class InteractionHandler {
                 await this.handleContextWarnModalSubmit(interaction);
             } else if (interaction.customId.startsWith('automod_warn_modal_')) {
                 await this.handleAutoModWarnModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('bomb_modal_')) {
+                await this.handleBombModalSubmit(interaction);
             }
         }
     }
@@ -458,6 +461,8 @@ class InteractionHandler {
     async handleButtonInteraction(interaction) {
         if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getButtonCustomId()) {
             await this.handlePrimaAprilisButton(interaction);
+        } else if (this.bombTimerService && this.bombTimerService.isMyButton(interaction.customId)) {
+            await this.handleBombTimerButton(interaction);
         } else if (interaction.customId.startsWith('special_roles_')) {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
@@ -476,6 +481,115 @@ class InteractionHandler {
         } else if (interaction.customId.startsWith('automod_delete_') ||
                    interaction.customId.startsWith('automod_warn_')) {
             await this.handleAutoModButton(interaction);
+        }
+    }
+
+    /**
+     * Obsługuje przyciski Bomb Timera
+     * @param {ButtonInteraction} interaction
+     */
+    async handleBombTimerButton(interaction) {
+        const BTN = this.bombTimerService.getButtonIds();
+        const { customId } = interaction;
+
+        if (customId === BTN.ADD_TIME) {
+            const modal = new ModalBuilder()
+                .setCustomId('bomb_modal_add')
+                .setTitle('Dodaj czas do timera');
+            const timeInput = new TextInputBuilder()
+                .setCustomId('add_time')
+                .setLabel('Czas do dodania (format HH:MM:SS)')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setPlaceholder('np. 01:00:00');
+            const clicksInput = new TextInputBuilder()
+                .setCustomId('required_clicks')
+                .setLabel('Ile osób musi nacisnąć przycisk?')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setPlaceholder('np. 5');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(timeInput),
+                new ActionRowBuilder().addComponents(clicksInput)
+            );
+            await interaction.showModal(modal);
+
+        } else if (customId === BTN.START) {
+            const modal = new ModalBuilder()
+                .setCustomId('bomb_modal_start')
+                .setTitle('Uruchom timer od nowa');
+            const timeInput = new TextInputBuilder()
+                .setCustomId('start_time')
+                .setLabel('Czas startowy (format HH:MM:SS)')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setPlaceholder('np. 01:30:00');
+            const clicksInput = new TextInputBuilder()
+                .setCustomId('required_clicks')
+                .setLabel('Ile osób musi nacisnąć przycisk?')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setPlaceholder('np. 5');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(timeInput),
+                new ActionRowBuilder().addComponents(clicksInput)
+            );
+            await interaction.showModal(modal);
+
+        } else if (customId === BTN.STOP) {
+            await this.bombTimerService.pause();
+            await interaction.deferUpdate();
+
+        } else if (customId === BTN.RESUME) {
+            await this.bombTimerService.resume();
+            await interaction.deferUpdate();
+
+        } else if (customId === BTN.DEFUSE) {
+            await this.bombTimerService.registerDefuseClick(interaction.user.id);
+            await interaction.deferUpdate();
+        }
+    }
+
+    /**
+     * Obsługuje submit modali Bomb Timera
+     * @param {ModalSubmitInteraction} interaction
+     */
+    async handleBombModalSubmit(interaction) {
+        const { customId } = interaction;
+
+        if (customId === 'bomb_modal_add') {
+            const timeStr = interaction.fields.getTextInputValue('add_time');
+            const requiredClicksStr = interaction.fields.getTextInputValue('required_clicks');
+            const seconds = this.bombTimerService.parseTimeInput(timeStr);
+            const requiredClicks = parseInt(requiredClicksStr);
+
+            if (seconds === null || seconds <= 0) {
+                await interaction.reply({ content: '❌ Podaj prawidłowy czas w formacie HH:MM:SS.', ephemeral: true });
+                return;
+            }
+            if (isNaN(requiredClicks) || requiredClicks < 1) {
+                await interaction.reply({ content: '❌ Podaj prawidłową liczbę osób (min. 1).', ephemeral: true });
+                return;
+            }
+            await interaction.deferUpdate();
+            await this.bombTimerService.addTimeAndStart(seconds, requiredClicks);
+
+        } else if (customId === 'bomb_modal_start') {
+            const timeStr = interaction.fields.getTextInputValue('start_time');
+            const requiredClicksStr = interaction.fields.getTextInputValue('required_clicks');
+            const totalSeconds = this.bombTimerService.parseTimeInput(timeStr);
+            const requiredClicks = parseInt(requiredClicksStr);
+
+            if (totalSeconds === null || totalSeconds <= 0) {
+                await interaction.reply({ content: '❌ Podaj prawidłowy czas w formacie HH:MM:SS.', ephemeral: true });
+                return;
+            }
+            if (isNaN(requiredClicks) || requiredClicks < 1) {
+                await interaction.reply({ content: '❌ Podaj prawidłową liczbę osób (min. 1).', ephemeral: true });
+                return;
+            }
+            await interaction.deferUpdate();
+            await this.bombTimerService.startFresh(totalSeconds, requiredClicks);
         }
     }
 
