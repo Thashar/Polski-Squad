@@ -161,6 +161,12 @@ client.on(Events.MessageCreate, async (message) => {
         return;
     }
 
+    if (!message.author.bot && message.guild) {
+        bombTimerService.handleMessageCreate(message).catch(err =>
+            logger.error('❌ BombTimer: błąd handleMessageCreate:', err.message)
+        );
+    }
+
     await messageHandler.handleMessage(message, client);
 });
 
