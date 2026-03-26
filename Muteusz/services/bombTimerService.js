@@ -185,25 +185,21 @@ class BombTimerService {
     }
 
     async _displayLoop(generation) {
-        const MIN_TARGET = 800;
-        const MAX_TARGET = 6000;
-
         while (this.displayRunning && this.displayGeneration === generation) {
             const start = Date.now();
             await this.updateTimerMessage();
             const elapsed = Date.now() - start;
 
-            if (elapsed > 1500) {
-                // Rate limit - dane były nieaktualne, wyślij od razu z aktualnym czasem
-                const newTarget = Math.min(MAX_TARGET, elapsed + 500);
-                logger.warn(`⚠️ BombTimer: opóźnienie ${elapsed}ms (cel: ${this.displayTargetMs}ms → ${newTarget}ms), natychmiastowa aktualizacja`);
-                this.displayTargetMs = newTarget;
-                if (this.displayRunning && this.displayGeneration === generation) {
-                    await this.updateTimerMessage();
-                }
-            } else {
-                // Szybki edit - przyspieszaj cel w kierunku minimum
-                this.displayTargetMs = Math.max(MIN_TARGET, this.displayTargetMs - 100);
+            const newTarget = elapsed + 200;
+            if (newTarget !== this.displayTargetMs) {
+                logger.info(`ℹ️ BombTimer: edit ${elapsed}ms → nowy cel ${newTarget}ms`);
+            }
+            this.displayTargetMs = newTarget;
+
+            if (elapsed > 1500 && this.displayRunning && this.displayGeneration === generation) {
+                // Opóźniony edit miał stare dane - wyślij od razu z aktualnym czasem
+                logger.warn(`⚠️ BombTimer: rate limit ${elapsed}ms, natychmiastowa aktualizacja aktualnego czasu`);
+                await this.updateTimerMessage();
             }
 
             const waitTime = Math.max(100, this.displayTargetMs - elapsed);
