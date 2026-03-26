@@ -106,7 +106,7 @@ class BombTimerService {
 
         if (this.state.exploded) {
             return {
-                content: `# ⏱️ ${timeStr}\n\n💣 Bomba wybuchła!`,
+                content: `# ⏱️ ${timeStr}\n\n💥 Bomba wybuchła!`,
                 components: []
             };
         }
