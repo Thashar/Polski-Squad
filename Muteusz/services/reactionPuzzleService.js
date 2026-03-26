@@ -90,6 +90,21 @@ class ReactionPuzzleService {
         }
     }
 
+    async reset() {
+        this.progress = 0;
+        this.solved = false;
+        if (this.messageId && this.client) {
+            try {
+                const channel = await this.client.channels.fetch(this.channelId);
+                const msg = await channel.messages.fetch(this.messageId);
+                await msg.reactions.removeAll();
+            } catch (err) {
+                logger.error('❌ ReactionPuzzle: nie można usunąć reakcji przy resecie:', err.message);
+            }
+        }
+        logger.info('🔄 ReactionPuzzle: zagadka zresetowana');
+    }
+
     async handleMessageCreate(message) {
         if (message.author.bot) return;
         if (message.channelId !== this.channelId) return;

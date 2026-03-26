@@ -13,6 +13,7 @@ const BTN = {
     RESET_PASSWORD: 'bomb_reset_password',
     SHUFFLE_ORDER: 'bomb_shuffle_order',
     RESET_ORDER: 'bomb_reset_order',
+    RESET_REACTION_PUZZLE: 'bomb_reset_reaction_puzzle',
 };
 
 const DEFAULT_STATE = {
@@ -106,7 +107,10 @@ class BombTimerService {
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
             new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
         );
-        return [row1, row2];
+        const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj zagadkę kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
+        );
+        return [row1, row2, row3];
     }
 
     getRemainingClicks() {
