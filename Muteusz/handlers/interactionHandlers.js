@@ -7,7 +7,7 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
@@ -16,6 +16,7 @@ class InteractionHandler {
         this.chaosService = chaosService;
         this.primaAprilisService = primaAprilisService;
         this.bombTimerService = bombTimerService;
+        this.buttonOrderService = buttonOrderService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -463,6 +464,8 @@ class InteractionHandler {
             await this.handlePrimaAprilisButton(interaction);
         } else if (this.bombTimerService && this.bombTimerService.isMyButton(interaction.customId)) {
             await this.handleBombTimerButton(interaction);
+        } else if (this.buttonOrderService && this.buttonOrderService.isMyButton(interaction.customId)) {
+            await this.buttonOrderService.handleButtonClick(interaction);
         } else if (interaction.customId.startsWith('special_roles_')) {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
