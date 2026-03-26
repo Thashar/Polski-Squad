@@ -125,7 +125,7 @@ class BombTimerService {
         if (this.state.requiredReactions > 0) {
             const remaining = Math.max(0, this.state.requiredReactions - this.state.currentReactionCount);
             return {
-                content: `# ⏱️ ${timeStr}\n\n🛠️ ${remaining} reakcji do zatrzymania licznika 💣`,
+                content: `# ⏱️ ${timeStr}\n\n${remaining} reakcji do zatrzymania licznika 💣`,
                 components: []
             };
         }
