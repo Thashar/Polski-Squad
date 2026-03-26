@@ -17,7 +17,7 @@ const BUTTON_LABELS = {
     40: '⏌',
     20: '⏋',
     17: '─',  18: '─',  19: '─',  37: '─',  38: '─',  39: '─',
-    21: '│',  25: '│',  30: '│',  31: '│',  35: '│',
+    21: '│',  25: '│',  26: '│',  30: '│',  31: '│',  35: '│',
 };
 const EMPTY_LABEL = '\u2800'; // Braille Pattern Blank — niewidoczny dla Discord, akceptowany jako label
 const MSG1_ROWS = 3; // 3 rzędy × 5 = 15 przycisków
