@@ -146,7 +146,14 @@ class HotPotatoService {
             POTATO_START_SECONDS
         );
         await this._pickNewHolder();
-        await this._updatePotatoMessage();
+
+        // Usuń starą wiadomość i wyślij nową z nowym pingiem
+        try {
+            await interaction.message.delete();
+        } catch (_) {}
+        const channel = await this.client.channels.fetch(this.potatoChannelId);
+        const newMsg = await channel.send(this._buildPotatoData());
+        this.potatoMessageId = newMsg.id;
     }
 
     // ─── Logika gry ─────────────────────────────────────────────────────────
