@@ -35,6 +35,7 @@ class BombTimerService {
         this.cachedTimerChannel = null;
         this.cachedTimerMessage = null;
         this.isUpdating = false; // blokada - tylko jeden msg.edit() w locie naraz
+        this.lastUpdateSent = 0; // timestamp ostatniej wysłanej aktualizacji
     }
 
     async initialize(client) {
@@ -159,6 +160,7 @@ class BombTimerService {
     async updateTimerMessage() {
         if (this.isUpdating) return;
         this.isUpdating = true;
+        this.lastUpdateSent = Date.now();
         try {
             const msg = await this.getOrCreateTimerMessage();
             const data = this.getTimerMessageData();
@@ -174,6 +176,18 @@ class BombTimerService {
         } finally {
             this.isUpdating = false;
         }
+    }
+
+    // Wymuszona aktualizacja dla ważnych zdarzeń (wybuch, rozbrój) - czeka aż isUpdating się zwolni
+    forceUpdateTimerMessage() {
+        const attempt = () => {
+            if (this.isUpdating) {
+                setTimeout(attempt, 100);
+                return;
+            }
+            this.updateTimerMessage().catch(() => {});
+        };
+        attempt();
     }
 
     async setupControlMessage(client) {
@@ -228,20 +242,24 @@ class BombTimerService {
                 this.state.running = false;
                 this.state.exploded = true;
                 this.saveState().catch(() => {}); // ważne zdarzenie - zapisz natychmiast
-                this.updateTimerMessage().catch(() => {});
+                this.forceUpdateTimerMessage(); // wymuszona aktualizacja - czeka aż poprzednia się skończy
                 return;
             }
 
             this.state.timeRemaining--;
 
-            // Zapis do pliku co 5 sekund zamiast co sekundę
             const now = Date.now();
+
+            // Zapis do pliku co 5 sekund zamiast co sekundę
             if (now - this.lastFileSave >= 5000) {
                 this.lastFileSave = now;
                 this.saveState().catch(() => {});
             }
 
-            this.updateTimerMessage().catch(() => {});
+            // Aktualizacja wiadomości co 1200ms - omija limit Discord (5 edytów/5s)
+            if (now - this.lastUpdateSent >= 1200) {
+                this.updateTimerMessage().catch(() => {});
+            }
         } finally {
             this.ticking = false;
         }
@@ -303,7 +321,7 @@ class BombTimerService {
             await this.saveState();
         }
 
-        await this.updateTimerMessage();
+        this.forceUpdateTimerMessage();
     }
 
     getButtonIds() {
