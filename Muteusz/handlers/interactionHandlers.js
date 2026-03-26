@@ -514,10 +514,17 @@ class InteractionHandler {
                 .setStyle(TextInputStyle.Short)
                 .setRequired(false)
                 .setPlaceholder('np. 10');
+            const chattersInput = new TextInputBuilder()
+                .setCustomId('required_chatters')
+                .setLabel('Ile osób musi napisać na czacie?')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+                .setPlaceholder('np. 15');
             modal.addComponents(
                 new ActionRowBuilder().addComponents(timeInput),
                 new ActionRowBuilder().addComponents(clicksInput),
-                new ActionRowBuilder().addComponents(reactionsInput)
+                new ActionRowBuilder().addComponents(reactionsInput),
+                new ActionRowBuilder().addComponents(chattersInput)
             );
             await interaction.showModal(modal);
 
@@ -548,6 +555,7 @@ class InteractionHandler {
             const timeStr = interaction.fields.getTextInputValue('add_time');
             const clicksStr = interaction.fields.getTextInputValue('required_clicks').trim();
             const reactionsStr = interaction.fields.getTextInputValue('required_reactions').trim();
+            const chattersStr = interaction.fields.getTextInputValue('required_chatters').trim();
             const seconds = this.bombTimerService.parseTimeInput(timeStr);
 
             if (seconds === null || seconds <= 0) {
@@ -555,17 +563,26 @@ class InteractionHandler {
                 return;
             }
 
+            const requiredChatters = chattersStr ? parseInt(chattersStr) : 0;
             const requiredReactions = reactionsStr ? parseInt(reactionsStr) : 0;
             const requiredClicks = clicksStr ? parseInt(clicksStr) : 0;
 
-            if (requiredReactions > 0) {
+            if (requiredChatters > 0) {
+                // Tryb czatu
+                if (isNaN(requiredChatters) || requiredChatters < 1) {
+                    await interaction.reply({ content: '❌ Podaj prawidłową liczbę osób do napisania (min. 1).', ephemeral: true });
+                    return;
+                }
+                await interaction.deferUpdate();
+                await this.bombTimerService.addTimeAndStart(seconds, 0, 0, requiredChatters);
+            } else if (requiredReactions > 0) {
                 // Tryb reakcji
                 if (isNaN(requiredReactions) || requiredReactions < 1) {
                     await interaction.reply({ content: '❌ Podaj prawidłową liczbę reakcji (min. 1).', ephemeral: true });
                     return;
                 }
                 await interaction.deferUpdate();
-                await this.bombTimerService.addTimeAndStart(seconds, 0, requiredReactions);
+                await this.bombTimerService.addTimeAndStart(seconds, 0, requiredReactions, 0);
             } else if (requiredClicks > 0) {
                 // Tryb kliknięć
                 if (isNaN(requiredClicks) || requiredClicks < 1) {
@@ -573,9 +590,9 @@ class InteractionHandler {
                     return;
                 }
                 await interaction.deferUpdate();
-                await this.bombTimerService.addTimeAndStart(seconds, requiredClicks, 0);
+                await this.bombTimerService.addTimeAndStart(seconds, requiredClicks, 0, 0);
             } else {
-                await interaction.reply({ content: '❌ Wypełnij pole "Ile kliknięć" lub "Ile reakcji 🛠️".', ephemeral: true });
+                await interaction.reply({ content: '❌ Wypełnij jedno z pól: kliknięcia, reakcje lub czat.', ephemeral: true });
                 return;
             }
 
