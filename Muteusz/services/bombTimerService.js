@@ -31,6 +31,7 @@ class BombTimerService {
         this.timerInterval = null;
         this.client = null;
         this.ticking = false;
+        this.lastFileSave = 0; // timestamp ostatniego zapisu do pliku
     }
 
     async initialize(client) {
@@ -183,8 +184,8 @@ class BombTimerService {
 
     startInterval() {
         if (this.timerInterval) clearInterval(this.timerInterval);
-        this.timerInterval = setInterval(async () => {
-            await this.tick();
+        this.timerInterval = setInterval(() => {
+            this.tick();
         }, 1000);
     }
 
@@ -195,7 +196,7 @@ class BombTimerService {
         }
     }
 
-    async tick() {
+    tick() {
         if (this.ticking) return;
         this.ticking = true;
         try {
@@ -203,13 +204,20 @@ class BombTimerService {
                 this.stopInterval();
                 this.state.running = false;
                 this.state.exploded = true;
-                await this.saveState();
+                this.saveState().catch(() => {}); // ważne zdarzenie - zapisz natychmiast
                 this.updateTimerMessage().catch(() => {});
                 return;
             }
 
             this.state.timeRemaining--;
-            await this.saveState();
+
+            // Zapis do pliku co 5 sekund zamiast co sekundę
+            const now = Date.now();
+            if (now - this.lastFileSave >= 5000) {
+                this.lastFileSave = now;
+                this.saveState().catch(() => {});
+            }
+
             this.updateTimerMessage().catch(() => {});
         } finally {
             this.ticking = false;
