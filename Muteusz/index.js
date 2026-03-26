@@ -17,6 +17,7 @@ const MemberCacheService = require('./services/memberCacheService');
 const ChaosService = require('./services/chaosService');
 const PrimaAprilisService = require('./services/primaAprilisService');
 const BombTimerService = require('./services/bombTimerService');
+const ButtonOrderService = require('./services/buttonOrderService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -49,6 +50,7 @@ const memberCacheService = new MemberCacheService(config);
 const chaosService = new ChaosService(config, logService);
 const primaAprilisService = new PrimaAprilisService(config);
 const bombTimerService = new BombTimerService(config);
+const buttonOrderService = new ButtonOrderService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -57,7 +59,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -125,6 +127,9 @@ client.once(Events.ClientReady, async () => {
 
     // Inicjalizuj Bomb Timer
     await bombTimerService.initialize(client);
+
+    // Inicjalizuj Button Order
+    await buttonOrderService.initialize(client);
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);

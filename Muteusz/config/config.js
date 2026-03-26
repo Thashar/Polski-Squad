@@ -169,5 +169,10 @@ module.exports = {
         timerChannelId: '1486510420083740865'
     },
 
+    // Konfiguracja modułu Button Order
+    buttonOrder: {
+        channelId: '1486582161627680789'
+    },
+
     messages
 };
