@@ -127,10 +127,9 @@ class BombTimerService {
         }
 
         if (this.state.requiredChatters > 0) {
-            const count = this.state.chatters.length;
-            const required = this.state.requiredChatters;
+            const remaining = Math.max(0, this.state.requiredChatters - this.state.chatters.length);
             return {
-                content: `## Bomba niedługo wybuchnie <a:X_Uwaga:1297531538186965003>\n# ${sideEmoji} ${timeStr} ${sideEmoji}\n\n${count}/${required} unikalnych osób napisało na czacie 💬`,
+                content: `## Bomba niedługo wybuchnie <a:X_Uwaga:1297531538186965003>\n# ${sideEmoji} ${timeStr} ${sideEmoji}\n\n${remaining} osób musi jeszcze napisać na tym czacie 💬`,
                 components: []
             };
         }
