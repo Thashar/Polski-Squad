@@ -17,7 +17,7 @@ const BUTTON_LABELS = {
     40: '⏌',
     20: '⏋',
     17: '─',  18: '─',  19: '─',  37: '─',  38: '─',  39: '─',
-    21: '│',  25: '│',  30: '│',  31: '│',  35: '│',
+    21: '│',  25: '│',  26: '│',  30: '│',  31: '│',  35: '│',
 };
 const EMPTY_LABEL = '\u2800'; // Braille Pattern Blank — niewidoczny dla Discord, akceptowany jako label
 const MSG1_ROWS = 3; // 3 rzędy × 5 = 15 przycisków
@@ -61,14 +61,25 @@ class ButtonOrderService {
     buildComponents(startIdx, rowCount) {
         const rows = [];
         for (let r = 0; r < rowCount; r++) {
+            // Zlicz ile przycisków w rzędzie jest na właściwej pozycji
+            let correctCount = 0;
+            for (let c = 0; c < 5; c++) {
+                const idx = startIdx + r * 5 + c;
+                if (this.state.order[idx] === idx + 1) correctCount++;
+            }
+            const rowStyle = correctCount === 5 ? ButtonStyle.Success
+                           : correctCount >= 3  ? ButtonStyle.Primary
+                           : ButtonStyle.Secondary;
+
             const buttons = [];
             for (let c = 0; c < 5; c++) {
-                const num = this.state.order[startIdx + r * 5 + c];
+                const idx = startIdx + r * 5 + c;
+                const num = this.state.order[idx];
                 buttons.push(
                     new ButtonBuilder()
                         .setCustomId(`btn_order_${num}`)
                         .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
-                        .setStyle(ButtonStyle.Secondary)
+                        .setStyle(rowStyle)
                 );
             }
             rows.push(new ActionRowBuilder().addComponents(buttons));
