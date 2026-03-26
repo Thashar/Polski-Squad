@@ -10,6 +10,7 @@ const BTN = {
     ADD_TIME: 'bomb_add_time',
     STOP: 'bomb_stop',
     RESUME: 'bomb_resume',
+    START_GAME: 'bomb_start_game',
     RESET_PASSWORD: 'bomb_reset_password',
     SHUFFLE_ORDER: 'bomb_shuffle_order',
     RESET_ORDER: 'bomb_reset_order',
@@ -98,6 +99,7 @@ class BombTimerService {
 
     buildControlRows() {
         const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
         const row2 = new ActionRowBuilder().addComponents(
