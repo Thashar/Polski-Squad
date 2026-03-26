@@ -17,6 +17,8 @@ const BTN = {
     RESET_REACTION_PUZZLE: 'bomb_reset_reaction_puzzle',
     RESET_EMPTY_PUZZLE: 'bomb_reset_empty_puzzle',
     RESET_ECHO_PUZZLE: 'bomb_reset_echo_puzzle',
+    RESET_HOTPOTATO: 'bomb_reset_hotpotato',
+    HOTPOTATO_MINUS5: 'bomb_hotpotato_minus5',
 };
 
 const DEFAULT_STATE = {
@@ -118,7 +120,11 @@ class BombTimerService {
             new ButtonBuilder().setCustomId(BTN.RESET_EMPTY_PUZZLE).setLabel('Resetuj EMPTY').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId(BTN.RESET_ECHO_PUZZLE).setLabel('Resetuj Echo').setStyle(ButtonStyle.Danger).setEmoji('🔊'),
         );
-        return [row1, row2, row3, row4];
+        const row5 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(BTN.RESET_HOTPOTATO).setLabel('Resetuj gorący kartofel').setStyle(ButtonStyle.Danger).setEmoji('🥔'),
+            new ButtonBuilder().setCustomId(BTN.HOTPOTATO_MINUS5).setLabel('Odejmij 5 min kartoflu').setStyle(ButtonStyle.Primary).setEmoji('⏬'),
+        );
+        return [row1, row2, row3, row4, row5];
     }
 
     getRemainingClicks() {
