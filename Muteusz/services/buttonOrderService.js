@@ -6,6 +6,20 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 const STATE_FILE = path.join(__dirname, '../data/button_order.json');
 const TOTAL = 40;
+
+const BUTTON_LABELS = {
+    3:  '︿',
+    7:  '╱',  11: '╱',  24: '╱',  32: '╱',
+    9:  '╲',  15: '╲',  22: '╲',  34: '╲',
+    28: '╳',
+    16: '⎾',
+    36: '⎿',
+    40: '⏌',
+    20: '⏋',
+    17: '─',  18: '─',  19: '─',  37: '─',  38: '─',  39: '─',
+    21: '│',  25: '│',  30: '│',  31: '│',  35: '│',
+};
+const EMPTY_LABEL = '\u00a0'; // non-breaking space — wygląda na pusty przycisk
 const MSG1_ROWS = 3; // 3 rzędy × 5 = 15 przycisków
 const MSG2_ROWS = 5; // 5 rzędów × 5 = 25 przycisków
 const MSG1_COUNT = MSG1_ROWS * 5;
@@ -53,7 +67,7 @@ class ButtonOrderService {
                 buttons.push(
                     new ButtonBuilder()
                         .setCustomId(`btn_order_${num}`)
-                        .setLabel(`${num}`)
+                        .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
                         .setStyle(ButtonStyle.Secondary)
                 );
             }
