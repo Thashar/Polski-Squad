@@ -132,15 +132,11 @@ class ButtonOrderService {
         } else {
             for (let r = 0; r < rowCount; r++) {
                 const rowNums = [];
-                let symbolCount = 0;
                 for (let c = 0; c < 5; c++) {
-                    const idx = startIdx + r * 5 + c;
-                    const num = this.state.order[idx];
-                    rowNums.push(num);
-                    if (isSymbolCorrect(idx + 1, num)) symbolCount++;
+                    rowNums.push(this.state.order[startIdx + r * 5 + c]);
                 }
 
-                // Wyznacz które konkretne przyciski są częścią kolejnego dopasowania ≥3
+                // Wyznacz które przyciski są częścią kolejnego dopasowania ≥3
                 const blueIndices = new Set();
                 for (let ri = 0; ri <= rowNums.length - 3; ri++) {
                     for (let ei = 0; ei <= TOTAL - 3; ei++) {
@@ -156,15 +152,18 @@ class ButtonOrderService {
                     }
                 }
 
-                const allGreen = symbolCount === 5;
+                // Kolorowanie per-przycisk:
+                // zielony = symbol pasuje do oczekiwanego na tej pozycji (wyższy priorytet)
+                // niebieski = część sekwencyjnego okna ≥3 ale nie zielony
+                // szary = nic nie pasuje
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
                     const num = this.state.order[idx];
                     let style;
-                    if (allGreen)                style = ButtonStyle.Success;
-                    else if (blueIndices.has(c)) style = ButtonStyle.Primary;
-                    else                         style = ButtonStyle.Secondary;
+                    if (isSymbolCorrect(idx + 1, num)) style = ButtonStyle.Success;
+                    else if (blueIndices.has(c))        style = ButtonStyle.Primary;
+                    else                                style = ButtonStyle.Secondary;
                     buttons.push(
                         new ButtonBuilder()
                             .setCustomId(`btn_order_${num}`)
