@@ -34,6 +34,7 @@ class BombTimerService {
         this.lastFileSave = 0; // timestamp ostatniego zapisu do pliku
         this.cachedTimerChannel = null;
         this.cachedTimerMessage = null;
+        this.isUpdating = false; // blokada - tylko jeden msg.edit() w locie naraz
     }
 
     async initialize(client) {
@@ -156,16 +157,22 @@ class BombTimerService {
     }
 
     async updateTimerMessage() {
+        if (this.isUpdating) return;
+        this.isUpdating = true;
         try {
             const msg = await this.getOrCreateTimerMessage();
             const data = this.getTimerMessageData();
             await msg.edit(data);
         } catch (error) {
-            // Wyczyść cache przy błędzie - wiadomość mogła zostać usunięta
-            this.cachedTimerMessage = null;
-            if (!error.message?.includes('rate limit') && !error.message?.includes('Missing')) {
+            // Wyczyść cache tylko gdy wiadomość zniknęła (Unknown Message = 10008)
+            if (error.code === 10008) {
+                this.cachedTimerMessage = null;
+            }
+            if (!error.message?.includes('rate limit') && !error.message?.includes('Missing') && error.code !== 10008) {
                 logger.error('❌ BombTimer: błąd aktualizacji wiadomości timera:', error.message);
             }
+        } finally {
+            this.isUpdating = false;
         }
     }
 
