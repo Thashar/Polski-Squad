@@ -10,6 +10,7 @@ const BTN = {
     ADD_TIME: 'bomb_add_time',
     STOP: 'bomb_stop',
     RESUME: 'bomb_resume',
+    START_GAME: 'bomb_start_game',
     RESET_PASSWORD: 'bomb_reset_password',
     SHUFFLE_ORDER: 'bomb_shuffle_order',
     RESET_ORDER: 'bomb_reset_order',
@@ -98,19 +99,22 @@ class BombTimerService {
 
     buildControlRows() {
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
         const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
+            new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏹️'),
+            new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary).setEmoji('▶️'),
+        );
+        const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
             new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
         );
-        const row3 = new ActionRowBuilder().addComponents(
+        const row4 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj zagadkę kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
         );
-        return [row1, row2, row3];
+        return [row1, row2, row3, row4];
     }
 
     getRemainingClicks() {
