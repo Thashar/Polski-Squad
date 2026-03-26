@@ -289,7 +289,7 @@ class BombTimerService {
             const existing = messages.find(msg =>
                 msg.author.id === client.user.id &&
                 msg.components?.length > 0 &&
-                msg.components[0]?.components?.[0]?.customId === BTN.ADD_TIME
+                msg.components[0]?.components?.some(c => c.customId?.startsWith('bomb_'))
             );
 
             if (existing) {
