@@ -69,6 +69,8 @@ function hasConsecutiveWindowMatch(rowNums, minLen) {
     return false;
 }
 
+const COOLDOWN_MS = 5000;
+
 class ButtonOrderService {
     constructor(config) {
         this.config = config;
@@ -83,6 +85,7 @@ class ButtonOrderService {
         this.channel = null;
         this.message1 = null;
         this.message2 = null;
+        this.cooldowns = new Map(); // userId → timestamp ostatniego kliknięcia
     }
 
     loadState() {
@@ -306,6 +309,20 @@ class ButtonOrderService {
     }
 
     async handleButtonClick(interaction) {
+        const userId = interaction.user.id;
+        const now = Date.now();
+        const lastClick = this.cooldowns.get(userId) ?? 0;
+        const remaining = COOLDOWN_MS - (now - lastClick);
+
+        if (remaining > 0) {
+            await interaction.reply({
+                content: `Poczekaj jeszcze ${(remaining / 1000).toFixed(1)}s przed kolejnym kliknięciem.`,
+                ephemeral: true
+            });
+            return;
+        }
+        this.cooldowns.set(userId, now);
+
         await interaction.deferUpdate();
 
         const num = parseInt(interaction.customId.replace('btn_order_', ''), 10);
