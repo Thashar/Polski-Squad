@@ -222,19 +222,7 @@ class BombTimerService {
             await this.updateTimerMessage();
             const elapsed = Date.now() - start;
 
-            const newTarget = elapsed + 200;
-            if (newTarget !== this.displayTargetMs) {
-                logger.info(`ℹ️ BombTimer: edit ${elapsed}ms → nowy cel ${newTarget}ms`);
-            }
-            this.displayTargetMs = newTarget;
-
-            if (elapsed > 1500 && this.displayRunning && this.displayGeneration === generation) {
-                // Opóźniony edit miał stare dane - wyślij od razu z aktualnym czasem
-                logger.warn(`⚠️ BombTimer: rate limit ${elapsed}ms, natychmiastowa aktualizacja aktualnego czasu`);
-                await this.updateTimerMessage();
-            }
-
-            const waitTime = Math.max(100, this.displayTargetMs - elapsed);
+            const waitTime = Math.max(5000, 5000 - elapsed);
             if (this.displayRunning && this.displayGeneration === generation) {
                 await new Promise(r => setTimeout(r, waitTime));
             }
