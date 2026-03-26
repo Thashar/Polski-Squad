@@ -173,6 +173,9 @@ client.on(Events.MessageCreate, async (message) => {
         bombTimerService.handleMessageCreate(message).catch(err =>
             logger.error('❌ BombTimer: błąd handleMessageCreate:', err.message)
         );
+        reactionPuzzleService.handleMessageCreate(message).catch(err =>
+            logger.error('❌ ReactionPuzzle: błąd handleMessageCreate:', err.message)
+        );
     }
 
     await messageHandler.handleMessage(message, client);

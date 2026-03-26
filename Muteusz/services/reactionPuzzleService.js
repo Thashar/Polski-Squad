@@ -3,7 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Muteusz');
 
 const SEQUENCE = ['🧑‍🍳', '6️⃣', '❌', '🍽️'];
-const MESSAGE_CONTENT = '# Gdzie kucharek sześć, tam nie ma co jeść!';
+const MESSAGE_CONTENT = '# Gdzie kucharek sześć, tam nie ma co jeść! 🧑‍🍳';
 
 class ReactionPuzzleService {
     constructor(config) {
@@ -64,6 +64,16 @@ class ReactionPuzzleService {
             } catch (err) {
                 logger.error('❌ ReactionPuzzle: nie można usunąć reakcji:', err.message);
             }
+        }
+    }
+
+    async handleMessageCreate(message) {
+        if (message.author.bot) return;
+        if (message.channelId !== this.channelId) return;
+        try {
+            await message.delete();
+        } catch (err) {
+            logger.error('❌ ReactionPuzzle: nie można usunąć wiadomości:', err.message);
         }
     }
 }
