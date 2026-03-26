@@ -928,17 +928,22 @@ class InteractionHandler {
                 // 2. Zmień nick na "Upadły" (1h)
                 const nicknameManager = this.nicknameManager;
                 if (nicknameManager) {
-                    await nicknameManager.applyEffect(
-                        userId,
-                        'FALLEN',
-                        60 * 60 * 1000, // 1h
-                        {
-                            guildId: interaction.guild.id,
-                            prefix: 'Upadły ',
-                            appliedBy: 'Revenge System'
+                    try {
+                        const gabrielMember = await interaction.guild.members.fetch(userId);
+                        if (gabrielMember) {
+                            await nicknameManager.applyEffect(
+                                userId,
+                                'FALLEN',
+                                60 * 60 * 1000, // 1h
+                                { guildId: interaction.guild.id, appliedBy: 'Revenge System' },
+                                gabrielMember,
+                                'Upadły'
+                            );
+                            logger.info(`⚔️ Gabriel ${interaction.user.tag} stał się Upadły przez revenge`);
                         }
-                    );
-                    logger.info(`⚔️ Gabriel ${interaction.user.tag} stał się Upadły przez revenge`);
+                    } catch (error) {
+                        logger.error(`❌ Błąd nakładania efektu Upadły: ${error.message}`);
+                    }
                 }
 
                 // 3. Usuń revenge_lucyfer z celu (zużyty)
