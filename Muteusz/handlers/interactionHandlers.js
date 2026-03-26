@@ -514,28 +514,6 @@ class InteractionHandler {
             );
             await interaction.showModal(modal);
 
-        } else if (customId === BTN.START) {
-            const modal = new ModalBuilder()
-                .setCustomId('bomb_modal_start')
-                .setTitle('Uruchom timer od nowa');
-            const timeInput = new TextInputBuilder()
-                .setCustomId('start_time')
-                .setLabel('Czas startowy (format HH:MM:SS)')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setPlaceholder('np. 01:30:00');
-            const clicksInput = new TextInputBuilder()
-                .setCustomId('required_clicks')
-                .setLabel('Ile osób musi nacisnąć przycisk?')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setPlaceholder('np. 5');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(timeInput),
-                new ActionRowBuilder().addComponents(clicksInput)
-            );
-            await interaction.showModal(modal);
-
         } else if (customId === BTN.STOP) {
             await this.bombTimerService.pause();
             await interaction.deferUpdate();
@@ -576,22 +554,6 @@ class InteractionHandler {
             await interaction.deferUpdate();
             await this.bombTimerService.addTimeAndStart(seconds, requiredClicks);
 
-        } else if (customId === 'bomb_modal_start') {
-            const timeStr = interaction.fields.getTextInputValue('start_time');
-            const requiredClicksStr = interaction.fields.getTextInputValue('required_clicks');
-            const totalSeconds = this.bombTimerService.parseTimeInput(timeStr);
-            const requiredClicks = parseInt(requiredClicksStr);
-
-            if (totalSeconds === null || totalSeconds <= 0) {
-                await interaction.reply({ content: '❌ Podaj prawidłowy czas w formacie HH:MM:SS.', ephemeral: true });
-                return;
-            }
-            if (isNaN(requiredClicks) || requiredClicks < 1) {
-                await interaction.reply({ content: '❌ Podaj prawidłową liczbę osób (min. 1).', ephemeral: true });
-                return;
-            }
-            await interaction.deferUpdate();
-            await this.bombTimerService.startFresh(totalSeconds, requiredClicks);
         }
     }
 
