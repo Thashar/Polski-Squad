@@ -16,6 +16,7 @@ const BTN = {
     RESET_ORDER: 'bomb_reset_order',
     RESET_REACTION_PUZZLE: 'bomb_reset_reaction_puzzle',
     RESET_EMPTY_PUZZLE: 'bomb_reset_empty_puzzle',
+    RESET_ECHO_PUZZLE: 'bomb_reset_echo_puzzle',
 };
 
 const DEFAULT_STATE = {
@@ -115,6 +116,7 @@ class BombTimerService {
         const row4 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj zagadkę kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
             new ButtonBuilder().setCustomId(BTN.RESET_EMPTY_PUZZLE).setLabel('Resetuj EMPTY').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId(BTN.RESET_ECHO_PUZZLE).setLabel('Resetuj Echo').setStyle(ButtonStyle.Danger).setEmoji('🔊'),
         );
         return [row1, row2, row3, row4];
     }
