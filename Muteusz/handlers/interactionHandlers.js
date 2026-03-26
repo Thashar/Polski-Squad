@@ -543,6 +543,12 @@ class InteractionHandler {
         } else if (customId === BTN.RESUME) {
             await this.bombTimerService.resume();
             await interaction.deferUpdate();
+
+        } else if (customId === BTN.RESET_PASSWORD) {
+            if (this.primaAprilisService) {
+                await this.primaAprilisService.rotatePassword();
+            }
+            await interaction.deferUpdate();
         }
     }
 

@@ -11,6 +11,7 @@ const BTN = {
     START: 'bomb_start',
     STOP: 'bomb_stop',
     RESUME: 'bomb_resume',
+    RESET_PASSWORD: 'bomb_reset_password',
 };
 
 const DEFAULT_STATE = {
@@ -86,6 +87,7 @@ class BombTimerService {
             new ButtonBuilder().setCustomId(BTN.START).setLabel('Start').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
         return [row1];
     }
