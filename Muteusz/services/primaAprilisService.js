@@ -100,7 +100,8 @@ class PrimaAprilisService {
     async tryPassword(member, input) {
         if (!this.isTrapped(member.id)) return false;
         if (!this.currentPassword) return false;
-        if (input.trim() !== this.currentPassword) return false;
+        const normalize = s => s.trim().toLowerCase().replace(/_/g, ' ');
+        if (normalize(input) !== normalize(this.currentPassword)) return false;
 
         await this.freeUser(member);
         await this.rotatePassword();
