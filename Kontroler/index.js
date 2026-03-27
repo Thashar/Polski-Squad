@@ -115,6 +115,17 @@ function setupEventHandlers() {
         // Inicjalizuj serwis głosowania z klientem Discord
         await votingService.initialize(client);
         await registerSlashCommands(client, config);
+
+        // Wyślij DM startowy do użytkowników robot, żeby otworzyć kanał DM
+        for (const userId of config.robot1Users) {
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send('System przekazywania wiadomości aktywny!');
+                logger.info(`[ROBOT1] Wysłano powiadomienie startowe do ${user.tag}`);
+            } catch (error) {
+                logger.error(`[ROBOT1] Błąd wysyłania DM startowego do ${userId}: ${error.message}`);
+            }
+        }
     });
     client.on('messageCreate', async (message) => {
         if (message.channel.type === ChannelType.DM && !message.author.bot) {
