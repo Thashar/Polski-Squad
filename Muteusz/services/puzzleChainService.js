@@ -37,8 +37,8 @@ class PuzzleChainService {
         for (const channelId of channelsToUnlock) {
             try {
                 const channel = await this.client.channels.fetch(channelId);
-                await channel.permissionOverwrites.delete(PLAYER_ROLE_ID, `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}`);
-                logger.success(`🔓 PuzzleChain: odblokowano kanał ${channelId} (usunięto overwrite roli)`);
+                await channel.permissionOverwrites.create(PLAYER_ROLE_ID, {}, { reason: `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}` });
+                logger.success(`🔓 PuzzleChain: dodano rolę do uprawnień kanału ${channelId} (wszystko na /)`);
             } catch (err) {
                 logger.error(`❌ PuzzleChain: błąd odblokowania kanału ${channelId}: ${err.message}`);
             }
