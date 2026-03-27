@@ -233,6 +233,23 @@ class PrimaAprilisService {
         return !!this.data[userId];
     }
 
+    /**
+     * Wywołaj gdy uwięziony użytkownik wraca na serwer — nadaje mu z powrotem rolę więźnia.
+     * @param {GuildMember} member
+     */
+    async handleMemberRejoin(member) {
+        const userId = member.id;
+        if (!this.data[userId]) return;
+
+        const prisonRoleId = this.config.primaAprilis.prisonRoleId;
+        try {
+            await member.roles.add(prisonRoleId);
+            logger.info(`🔒 PrimaAprilis: ${member.user.tag} wrócił na serwer - przywrócono rolę gracza`);
+        } catch (err) {
+            logger.error(`❌ PrimaAprilis: nie można nadać roli gracza po powrocie ${member.user.tag}: ${err.message}`);
+        }
+    }
+
     getButtonCustomId() {
         return BUTTON_CUSTOM_ID;
     }

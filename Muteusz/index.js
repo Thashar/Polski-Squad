@@ -215,6 +215,19 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
     await mediaService.handleEditedMessage(oldMessage, newMessage, client);
 });
 
+client.on(Events.GuildMemberAdd, async (member) => {
+    if (!isFullyInitialized) return;
+
+    // Prima Aprilis: jeśli uwięziony gracz wrócił na serwer, przywróć rolę gracza
+    if (primaAprilisService.isTrapped(member.id)) {
+        try {
+            await primaAprilisService.handleMemberRejoin(member);
+        } catch (error) {
+            logger.error('❌ PrimaAprilis: błąd przy powrocie gracza na serwer:', error.message);
+        }
+    }
+});
+
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
     if (!isFullyInitialized) {
