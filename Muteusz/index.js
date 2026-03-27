@@ -24,6 +24,7 @@ const EchoPuzzleService = require('./services/echoPuzzleService');
 const HotPotatoService = require('./services/hotPotatoService');
 const BoosterSnapshotService = require('./services/boosterSnapshotService');
 const GameCountdownService = require('./services/gameCountdownService');
+const PuzzleChainService = require('./services/puzzleChainService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -63,6 +64,7 @@ const echoPuzzleService = new EchoPuzzleService(config);
 const hotPotatoService = new HotPotatoService(config);
 const boosterSnapshotService = new BoosterSnapshotService();
 const gameCountdownService = new GameCountdownService();
+const puzzleChainService = new PuzzleChainService();
 
 let nicknameManager;
 let reactionRoleService;
@@ -148,6 +150,14 @@ client.once(Events.ClientReady, async () => {
     await hotPotatoService.initialize(client);
     boosterSnapshotService.initialize(client);
     gameCountdownService.initialize(client);
+    puzzleChainService.initialize(client);
+
+    // Powiąż łańcuch zagadek: wygrana → odblokowanie następnego kanału
+    echoPuzzleService.onWin    = () => puzzleChainService.onPuzzleSolved(0);
+    buttonOrderService.onWin   = () => puzzleChainService.onPuzzleSolved(1);
+    emptyPuzzleService.onWin   = () => puzzleChainService.onPuzzleSolved(2);
+    reactionPuzzleService.onWin = () => puzzleChainService.onPuzzleSolved(3);
+    hotPotatoService.onWin     = () => puzzleChainService.onPuzzleSolved(4);
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);

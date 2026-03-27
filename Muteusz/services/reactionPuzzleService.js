@@ -19,6 +19,7 @@ class ReactionPuzzleService {
         this.progress = 0;
         this.solved = false;
         this.client = null;
+        this.onWin = null; // callback wywoływany po wygraniu
         this._loadState();
     }
 
@@ -98,6 +99,7 @@ class ReactionPuzzleService {
                 logger.success('🏆 ReactionPuzzle: Wygrałeś!');
                 const channel = reaction.message.channel;
                 await channel.send('## 🎉 Wygrałeś!');
+                if (this.onWin) await this.onWin();
                 // Usuń wszystkie reakcje i dodaj sekwencję przez bota
                 await reaction.message.reactions.removeAll();
                 const msg = reaction.message;

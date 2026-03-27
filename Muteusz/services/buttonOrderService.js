@@ -86,6 +86,7 @@ class ButtonOrderService {
         this.message1 = null;
         this.message2 = null;
         this.cooldowns = new Map(); // userId → timestamp ostatniego kliknięcia
+        this.onWin = null; // callback wywoływany po wygraniu
     }
 
     loadState() {
@@ -392,6 +393,7 @@ class ButtonOrderService {
         if (this._checkWin()) {
             logger.success('🏆 ButtonOrder: Wygrałeś!');
             await this.channel.send('## 🎉 Wygrałeś!');
+            if (this.onWin) await this.onWin();
         }
     }
 

@@ -39,6 +39,7 @@ class HotPotatoService {
         this.client = null;
         this._mainInterval   = null;
         this._potatoInterval = null;
+        this.onWin = null; // callback wywoływany po wygraniu
         this._loadState();
     }
 
@@ -300,6 +301,7 @@ class HotPotatoService {
         await this._stopPotatoMessage();
         this._saveState();
         logger.success('🏆 HotPotato: Wygrałeś!');
+        if (this.onWin) await this.onWin();
     }
 
     // ─── Aktualizacje wiadomości ────────────────────────────────────────────

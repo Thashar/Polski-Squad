@@ -15,6 +15,7 @@ class EmptyPuzzleService {
         this.messageId = null;
         this.step = 0;      // 0-4: aktywny krok, 5: wygrana (blokada)
         this.client = null;
+        this.onWin = null; // callback wywoływany po wygraniu
         this._loadState();
     }
 
@@ -94,6 +95,7 @@ class EmptyPuzzleService {
                 await message.delete().catch(() => {});
                 await message.channel.send('## 🎉 Wygrałeś!');
                 logger.success('🏆 EmptyPuzzle: Wygrałeś!');
+                if (this.onWin) await this.onWin();
             } else {
                 // Zaktualizuj wiadomość do następnego stanu
                 await message.delete().catch(() => {});
