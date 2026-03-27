@@ -4,13 +4,14 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
 class MessageHandler {
-    constructor(config, gameService, rankingService, timerService, passwordEmbedService = null, scheduledHintsService = null) {
+    constructor(config, gameService, rankingService, timerService, passwordEmbedService = null, scheduledHintsService = null, bombChaosService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
         this.timerService = timerService;
         this.passwordEmbedService = passwordEmbedService;
         this.scheduledHintsService = scheduledHintsService;
+        this.bombChaosService = bombChaosService;
     }
 
     /**
@@ -54,6 +55,11 @@ class MessageHandler {
     async handleMessage(message, interactionHandler = null) {
         try {
             if (message.author.bot) return;
+
+            // Bomb chaos: ghost pingi dla graczy bez roli gracza
+            if (this.bombChaosService) {
+                await this.bombChaosService.handleMessage(message);
+            }
 
             // Sprawdź efekty klątw jeśli mamy dostęp do interactionHandler
             if (interactionHandler && interactionHandler.handleCurseEffects) {

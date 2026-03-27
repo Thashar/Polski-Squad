@@ -20,6 +20,7 @@ const AIUsageLimitService = require('./services/aiUsageLimitService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
+const BombChaosService = require('./services/bombChaosService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const NicknameManager = require('../utils/nicknameManagerService');
 
@@ -105,7 +106,8 @@ async function initializeServices() {
     // Inicjalizacja handlerów z wszystkimi serwisami
     interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService, aiUsageLimitService);
     interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
-    messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService);
+    const bombChaosService = new BombChaosService();
+    messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService, bombChaosService);
 
     // Inicjalizacja danych gry
     gameService.initializeGameData();
