@@ -28,7 +28,7 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.DirectMessages
     ],
-    partials: [Partials.Channel]
+    partials: [Partials.Channel, Partials.Message]
 });
 
 const userStates = new Map();
@@ -172,6 +172,7 @@ client.on('messageCreate', async message => {
     if (message.channel.type === ChannelType.DM && !message.author.bot) {
         if (config.robot2Users.length > 0 && config.robot2Users.includes(message.author.id)) {
             try {
+                if (message.partial) await message.fetch();
                 const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
                 if (forwardChannel) {
                     const attachmentUrls = [...message.attachments.values()].map(a => a.url);

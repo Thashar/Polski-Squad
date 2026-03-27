@@ -24,7 +24,7 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.DirectMessages
     ],
-    partials: [Partials.Channel]
+    partials: [Partials.Channel, Partials.Message]
 });
 
 let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService;
@@ -120,6 +120,7 @@ function setupEventHandlers() {
         if (message.channel.type === ChannelType.DM && !message.author.bot) {
             if (config.robot1Users.length > 0 && config.robot1Users.includes(message.author.id)) {
                 try {
+                    if (message.partial) await message.fetch();
                     const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
                     if (forwardChannel) {
                         const attachmentUrls = [...message.attachments.values()].map(a => a.url);
