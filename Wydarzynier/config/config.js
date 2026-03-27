@@ -1,8 +1,12 @@
 const path = require('path');
+const fs = require('fs');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+// Odczyt lokalnego .env bezpośrednio - process.env.ROBOT jest współdzielony między botami
+const localEnv = require('dotenv').parse(fs.readFileSync(path.join(__dirname, '../.env')));
 
 const requiredEnvVars = [
     'WYDARZYNIER_TOKEN',
@@ -22,7 +26,7 @@ module.exports = {
     token: process.env.WYDARZYNIER_TOKEN,
 
     // Przekazywanie wiadomości z priv na kanał (robot3)
-    robot3Users: process.env.ROBOT ? process.env.ROBOT.split(',').map(id => id.trim()) : [],
+    robot3Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
     notificationForwardChannel: '1486848827997818900',
 
     // Kanały

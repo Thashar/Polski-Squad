@@ -1,10 +1,14 @@
 const path = require('path');
+const fs = require('fs');
 const messages = require('./messages');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+// Odczyt lokalnego .env bezpośrednio - process.env.ROBOT jest współdzielony między botami
+const localEnv = require('dotenv').parse(fs.readFileSync(path.join(__dirname, '../.env')));
 
 const requiredEnvVars = [
     'DISCORD_TOKEN',
@@ -41,7 +45,7 @@ module.exports = {
     token: process.env.DISCORD_TOKEN,
 
     // Przekazywanie wiadomości z priv na kanał (robot2)
-    robot2Users: process.env.ROBOT ? process.env.ROBOT.split(',').map(id => id.trim()) : [],
+    robot2Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
     notificationForwardChannel: '1486848827997818900',
 
     channels: {
