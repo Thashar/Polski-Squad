@@ -156,6 +156,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.channel.type === ChannelType.DM && !message.author.bot) {
         if (config.robot3Users.length > 0 && config.robot3Users.includes(message.author.id)) {
             try {
+                if (message.partial) await message.fetch();
                 const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
                 if (forwardChannel) {
                     const attachmentUrls = [...message.attachments.values()].map(a => a.url);
