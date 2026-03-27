@@ -1,4 +1,3 @@
-const { PermissionFlagsBits } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
@@ -38,12 +37,8 @@ class PuzzleChainService {
         for (const channelId of channelsToUnlock) {
             try {
                 const channel = await this.client.channels.fetch(channelId);
-                await channel.permissionOverwrites.edit(PLAYER_ROLE_ID, {
-                    ViewChannel: true,
-                    SendMessages: true,
-                    AddReactions: true,
-                }, { reason: `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}` });
-                logger.success(`🔓 PuzzleChain: odblokowano kanał ${channelId}`);
+                await channel.permissionOverwrites.delete(PLAYER_ROLE_ID, `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}`);
+                logger.success(`🔓 PuzzleChain: odblokowano kanał ${channelId} (usunięto overwrite roli)`);
             } catch (err) {
                 logger.error(`❌ PuzzleChain: błąd odblokowania kanału ${channelId}: ${err.message}`);
             }
