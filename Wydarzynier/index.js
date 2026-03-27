@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const config = require('./config/config');
 const { handleInteraction } = require('./handlers/interactionHandlers');
@@ -110,20 +110,54 @@ client.once(Events.ClientReady, async () => {
 
     startRepositionSystem(sharedState);
 
-    // Wyślij DM startowy do użytkowników robot, żeby otworzyć kanał DM
-    for (const userId of config.robot3Users) {
+    // Wyślij wiadomość z przyciskami aktywacji systemu przekazywania
+    if (config.robot3Users.length > 0) {
         try {
-            const user = await client.users.fetch(userId);
-            await user.send('System przekazywania wiadomości aktywny!');
-            logger.info(`[ROBOT3] Wysłano powiadomienie startowe do ${user.tag}`);
+            const activationChannel = await client.channels.fetch('1486510519119773818');
+            const guild = activationChannel.guild;
+            const buttons = [];
+            for (const userId of config.robot3Users) {
+                try {
+                    const member = await guild.members.fetch(userId);
+                    buttons.push(
+                        new ButtonBuilder()
+                            .setCustomId(`robot_activate_wydarzynier_${userId}`)
+                            .setLabel(member.displayName)
+                            .setStyle(ButtonStyle.Success)
+                    );
+                } catch (err) {
+                    logger.error(`[ROBOT3] Nie można pobrać użytkownika ${userId}: ${err.message}`);
+                }
+            }
+            if (buttons.length > 0) {
+                const row = new ActionRowBuilder().addComponents(...buttons);
+                await activationChannel.send({
+                    content: '**Wydarzynier** — aktywacja systemu przekazywania wiadomości:',
+                    components: [row]
+                });
+                logger.info(`[ROBOT3] Wysłano wiadomość aktywacji`);
+            }
         } catch (error) {
-            logger.error(`[ROBOT3] Błąd wysyłania DM startowego do ${userId}: ${error.message}`);
+            logger.error(`[ROBOT3] Błąd wysyłania wiadomości aktywacji: ${error.message}`);
         }
     }
 
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isButton() && interaction.customId.startsWith('robot_activate_wydarzynier_')) {
+        const userId = interaction.customId.replace('robot_activate_wydarzynier_', '');
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send('System przekazywania wiadomości aktywny!');
+            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.tag}**`, ephemeral: true });
+            logger.info(`[ROBOT3] Aktywowano system dla ${user.tag}`);
+        } catch (error) {
+            await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, ephemeral: true });
+            logger.error(`[ROBOT3] Błąd aktywacji: ${error.message}`);
+        }
+        return;
+    }
     try {
         await handleInteraction(interaction, sharedState);
     } catch (error) {
