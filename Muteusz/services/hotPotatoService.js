@@ -373,6 +373,19 @@ class HotPotatoService {
         }
         logger.info(`⏬ HotPotato: odejmiono 5 minut (pozostało: ${formatTime(this.mainTimeRemaining)})`);
     }
+
+    async handleMessageCreate(message) {
+        if (message.channel.id !== this.mainChannelId) return;
+        if (message.author.bot) return;
+        await message.delete().catch(() => {});
+    }
+
+    async handleReactionAdd(reaction, user) {
+        if (reaction.message.channel.id !== this.mainChannelId) return;
+        if (user.bot) return;
+        if (reaction.partial) await reaction.fetch().catch(() => {});
+        await reaction.users.remove(user.id).catch(() => {});
+    }
 }
 
 module.exports = HotPotatoService;

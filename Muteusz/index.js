@@ -208,6 +208,12 @@ client.on(Events.MessageCreate, async (message) => {
         echoPuzzleService.handleMessageCreate(message).catch(err =>
             logger.error('❌ EchoPuzzle: błąd handleMessageCreate:', err.message)
         );
+        buttonOrderService.handleMessageCreate(message).catch(err =>
+            logger.error('❌ ButtonOrder: błąd handleMessageCreate:', err.message)
+        );
+        hotPotatoService.handleMessageCreate(message).catch(err =>
+            logger.error('❌ HotPotato: błąd handleMessageCreate:', err.message)
+        );
     }
 
     await messageHandler.handleMessage(message, client);
@@ -328,6 +334,8 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         await bombTimerService.handleReactionAdd(reaction, user);
         await reactionPuzzleService.handleReactionAdd(reaction, user);
         await emptyPuzzleService.handleReactionAdd(reaction, user);
+        await buttonOrderService.handleReactionAdd(reaction, user);
+        await hotPotatoService.handleReactionAdd(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (add):', error);
     }
