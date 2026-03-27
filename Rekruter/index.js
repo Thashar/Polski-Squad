@@ -53,6 +53,68 @@ const sharedState = {
     config
 };
 
+async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
+    if (robotUsers.length === 0) return;
+    try {
+        const activationChannel = await client.channels.fetch('1486510519119773818');
+        const guild = activationChannel.guild;
+
+        const buttons = [];
+        for (const userId of robotUsers) {
+            try {
+                const member = await guild.members.fetch(userId);
+                buttons.push(
+                    new ButtonBuilder()
+                        .setCustomId(`${customIdPrefix}${userId}`)
+                        .setLabel(member.displayName)
+                        .setStyle(ButtonStyle.Success)
+                );
+            } catch (err) {
+                logger.error(`[ROBOT2] Nie można pobrać użytkownika ${userId}: ${err.message}`);
+            }
+        }
+        if (buttons.length === 0) return;
+
+        const content = `**${botLabel}** — aktywacja systemu przekazywania wiadomości:`;
+        const row = new ActionRowBuilder().addComponents(...buttons);
+
+        let storedId = null;
+        try {
+            const data = JSON.parse(await fs.readFile(msgFile, 'utf8'));
+            storedId = data.messageId;
+        } catch {}
+
+        if (storedId) {
+            try {
+                const existing = await activationChannel.messages.fetch(storedId);
+                const existingButtons = existing.components[0]?.components ?? [];
+                const same = existing.content === content &&
+                    existingButtons.length === buttons.length &&
+                    existingButtons.every((b, i) =>
+                        b.customId === buttons[i].data.custom_id &&
+                        b.label === buttons[i].data.label
+                    );
+                if (same) {
+                    logger.info('[ROBOT2] Wiadomość aktywacji bez zmian - pomijam');
+                    return;
+                }
+                await existing.edit({ content, components: [row] });
+                logger.info('[ROBOT2] Zaktualizowano wiadomość aktywacji');
+                return;
+            } catch {
+                // Wiadomość usunięta - utwórz nową
+            }
+        }
+
+        const newMsg = await activationChannel.send({ content, components: [row] });
+        await fs.mkdir(path.dirname(msgFile), { recursive: true });
+        await fs.writeFile(msgFile, JSON.stringify({ messageId: newMsg.id }, null, 2));
+        logger.info('[ROBOT2] Wysłano nową wiadomość aktywacji');
+    } catch (error) {
+        logger.error(`[ROBOT2] Błąd aktualizacji wiadomości aktywacji: ${error.message}`);
+    }
+}
+
 client.once('ready', async () => {
     logger.success('✅ Rekruter gotowy - rekrutacja z OCR, boost tracking');
     
@@ -122,19 +184,26 @@ client.once('ready', async () => {
         logger.error(`[BOT] ❌ Nie znaleziono kanału rekrutacji`);
     }
 
-    // Wyślij DM startowy do użytkowników robot, żeby otworzyć kanał DM
-    for (const userId of config.robot2Users) {
-        try {
-            const user = await client.users.fetch(userId);
-            await user.send('System przekazywania wiadomości aktywny!');
-            logger.info(`[ROBOT2] Wysłano powiadomienie startowe do ${user.tag}`);
-        } catch (error) {
-            logger.error(`[ROBOT2] Błąd wysyłania DM startowego do ${userId}: ${error.message}`);
-        }
-    }
+    await updateActivationMessage(
+        client, config.robot2Users, 'Rekruter', 'robot_activate_rekruter_',
+        path.join(__dirname, 'data', 'robot_activation_msg.json')
+    );
 });
 
 client.on('interactionCreate', async interaction => {
+    if (interaction.isButton() && interaction.customId.startsWith('robot_activate_rekruter_')) {
+        const userId = interaction.customId.replace('robot_activate_rekruter_', '');
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send('System przekazywania wiadomości aktywny!');
+            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.tag}**`, ephemeral: true });
+            logger.info(`[ROBOT2] Aktywowano system dla ${user.tag}`);
+        } catch (error) {
+            await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, ephemeral: true });
+            logger.error(`[ROBOT2] Błąd aktywacji: ${error.message}`);
+        }
+        return;
+    }
     try {
         await handleInteraction(interaction, sharedState, config, client);
     } catch (error) {
