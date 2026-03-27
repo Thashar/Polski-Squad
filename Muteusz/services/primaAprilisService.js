@@ -287,7 +287,8 @@ class PrimaAprilisService {
 
     _buildPasswordContent() {
         const pwd = this.currentPassword ?? '(brak)';
-        const display = pwd.charAt(0).toUpperCase() + pwd.slice(1).toLowerCase();
+        const normalized = pwd.replace(/_/g, ' ');
+        const display = normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
         return display;
     }
 
