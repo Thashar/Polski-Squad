@@ -44,7 +44,6 @@ for (const group of RAW_GROUPS) {
 }
 
 // Faza 2 — specjalne stałe
-const PHASE2_DOUBLE_ALLOWED = new Set([16, 20, 28, 36, 40]);
 const NON_EMPTY_BUTTONS = new Set(Object.keys(BUTTON_LABELS).map(Number));
 
 // Czy przycisk ma ten sam symbol co oczekiwany na danej pozycji (dla zielonego)
@@ -79,7 +78,8 @@ class ButtonOrderService {
             message1Id: null,
             message2Id: null,
             phase2Active: false,
-            phase2Clicked: [],   // numery przycisków zaznaczonych (czerwonych)
+            phase2Selected: [], // numery przycisków po 1. kliknięciu (niebieskie)
+            phase2Clicked: [],  // numery przycisków po 2. kliknięciu (zielone, potwierdzone)
             phase2LastPos: null, // pozycja (= numer) ostatnio klikniętego przycisku
         };
         this.channel = null;
@@ -115,15 +115,16 @@ class ButtonOrderService {
 
         if (this.state.phase2Active) {
             const clickedSet = new Set(this.state.phase2Clicked);
+            const selectedSet = new Set(this.state.phase2Selected);
             for (let r = 0; r < rowCount; r++) {
                 const buttons = [];
                 for (let c = 0; c < 5; c++) {
                     const idx = startIdx + r * 5 + c;
                     const num = this.state.order[idx];
                     let style;
-                    if (clickedSet.has(num))            style = ButtonStyle.Danger;   // czerwony — zaznaczony
-                    else if (NON_EMPTY_BUTTONS.has(num)) style = ButtonStyle.Success;  // zielony — do kliknięcia
-                    else                                 style = ButtonStyle.Secondary; // szary — pusty
+                    if (clickedSet.has(num))      style = ButtonStyle.Success;   // zielony — potwierdzony (2. klik)
+                    else if (selectedSet.has(num)) style = ButtonStyle.Primary;   // niebieski — wstępnie zaznaczony (1. klik)
+                    else                           style = ButtonStyle.Secondary; // szary — niekliknięty
                     buttons.push(
                         new ButtonBuilder()
                             .setCustomId(`btn_order_${num}`)
@@ -198,6 +199,7 @@ class ButtonOrderService {
 
     _checkWin() {
         if (!this.state.phase2Active) return false;
+        // Wygrana gdy wszystkie przyciski z symbolami są potwierdzone (zielone, 2. klik)
         const clickedSet = new Set(this.state.phase2Clicked);
         for (const n of NON_EMPTY_BUTTONS) {
             if (!clickedSet.has(n)) return false;
@@ -347,6 +349,7 @@ class ButtonOrderService {
         // Sprawdź czy wszystkie symbole na właściwych miejscach → aktywuj fazę 2
         if (this.state.order.every((n, i) => isSymbolCorrect(i + 1, n))) {
             this.state.phase2Active = true;
+            this.state.phase2Selected = [];
             this.state.phase2Clicked = [];
             this.state.phase2LastPos = null;
             logger.info('🎮 ButtonOrder: wszystkie ułożone — aktywuję fazę 2');
@@ -360,6 +363,7 @@ class ButtonOrderService {
         // Kliknięcie pustego przycisku → restart fazy 2
         if (!NON_EMPTY_BUTTONS.has(num)) {
             this.state.phase2Clicked = [];
+            this.state.phase2Selected = [];
             this.state.phase2LastPos = null;
             logger.info('🔄 ButtonOrder: kliknięto pusty przycisk — restart fazy 2');
             this.saveState();
@@ -375,15 +379,23 @@ class ButtonOrderService {
             return; // ignoruj kliknięcie niesąsiadujące
         }
 
-        const alreadyClicked = this.state.phase2Clicked.includes(num);
+        const inClicked = this.state.phase2Clicked.includes(num);
+        const inSelected = this.state.phase2Selected.includes(num);
 
-        if (alreadyClicked && !PHASE2_DOUBLE_ALLOWED.has(num)) {
-            // Podwójne kliknięcie niedozwolone → restart fazy 2
+        if (inClicked) {
+            // Kliknięcie już potwierdzonego (zielonego) przycisku → restart fazy 2
             this.state.phase2Clicked = [];
+            this.state.phase2Selected = [];
             this.state.phase2LastPos = null;
-            logger.info('🔄 ButtonOrder: podwójne kliknięcie — restart fazy 2');
+            logger.info('🔄 ButtonOrder: kliknięto potwierdzony przycisk — restart fazy 2');
+        } else if (inSelected) {
+            // Drugie kliknięcie → potwierdź przycisk (zielony)
+            this.state.phase2Selected = this.state.phase2Selected.filter(n => n !== num);
+            this.state.phase2Clicked.push(num);
+            this.state.phase2LastPos = pos;
         } else {
-            if (!alreadyClicked) this.state.phase2Clicked.push(num);
+            // Pierwsze kliknięcie → zaznacz przycisk (niebieski)
+            this.state.phase2Selected.push(num);
             this.state.phase2LastPos = pos;
         }
 
@@ -399,6 +411,7 @@ class ButtonOrderService {
 
     _resetPhase2() {
         this.state.phase2Active = false;
+        this.state.phase2Selected = [];
         this.state.phase2Clicked = [];
         this.state.phase2LastPos = null;
     }
@@ -418,6 +431,7 @@ class ButtonOrderService {
     async resetOrder() {
         this.state.order = Array.from({ length: TOTAL }, (_, i) => i + 1);
         this.state.phase2Active = true;
+        this.state.phase2Selected = [];
         this.state.phase2Clicked = [];
         this.state.phase2LastPos = null;
         this.saveState();
