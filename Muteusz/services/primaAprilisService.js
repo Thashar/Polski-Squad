@@ -12,12 +12,15 @@ const BUTTON_LABEL = 'NIE KLIKAĆ POD ŻADNYM POZOREM';
 
 const PASSWORD_ROTATION_MS = 5 * 60 * 1000; // 5 minut
 
+const PASSWORD_CHANNEL_ID = '1486955310139707452';
+
 class PrimaAprilisService {
     constructor(config) {
         this.config = config;
         this.data = {};
         this.currentPassword = null;
         this.passwordTimer = null;
+        this.client = null;
         this._processingUsers = new Set(); // ochrona przed podwójnym kliknięciem
         this._saveQueue = Promise.resolve(); // kolejka zapisów - zapobiega wyścigowi na pliku
     }
@@ -77,6 +80,7 @@ class PrimaAprilisService {
         };
         await this.saveData();
         logger.info(`🔑 PrimaAprilis: hasło zmienione na "${this.currentPassword}"`);
+        await this._updatePasswordMessage();
     }
 
     _startPasswordTimer() {
@@ -249,6 +253,51 @@ class PrimaAprilisService {
             logger.info(`🔒 PrimaAprilis: ${member.user.tag} wrócił na serwer - przywrócono rolę gracza`);
         } catch (err) {
             logger.error(`❌ PrimaAprilis: nie można nadać roli gracza po powrocie ${member.user.tag}: ${err.message}`);
+        }
+    }
+
+    async setupPasswordMessage(client) {
+        this.client = client;
+
+        try {
+            const channel = await client.channels.fetch(PASSWORD_CHANNEL_ID);
+            const messages = await channel.messages.fetch({ limit: 50 });
+
+            // Szukaj istniejącej wiadomości bota z hasłem
+            const savedMsgId = this.data._passwordMessageId;
+            let existing = savedMsgId
+                ? messages.find(m => m.id === savedMsgId && m.author.id === client.user.id)
+                : messages.find(m => m.author.id === client.user.id && m.content.startsWith('🔑'));
+
+            if (existing) {
+                await existing.edit(this._buildPasswordContent());
+                this.data._passwordMessageId = existing.id;
+                logger.info('✅ PrimaAprilis: zaktualizowano istniejącą wiadomość z hasłem');
+            } else {
+                const msg = await channel.send(this._buildPasswordContent());
+                this.data._passwordMessageId = msg.id;
+                logger.info('✅ PrimaAprilis: wysłano wiadomość z hasłem');
+            }
+
+            await this.saveData();
+        } catch (err) {
+            logger.error('❌ PrimaAprilis: błąd setupu wiadomości z hasłem:', err.message);
+        }
+    }
+
+    _buildPasswordContent() {
+        const pwd = this.currentPassword ?? '(brak)';
+        return `🔑 Aktualne hasło wyjścia: **${pwd}**`;
+    }
+
+    async _updatePasswordMessage() {
+        if (!this.client || !this.data._passwordMessageId) return;
+        try {
+            const channel = await this.client.channels.fetch(PASSWORD_CHANNEL_ID);
+            const msg = await channel.messages.fetch(this.data._passwordMessageId);
+            await msg.edit(this._buildPasswordContent());
+        } catch (err) {
+            logger.warn('⚠️ PrimaAprilis: nie można zaktualizować wiadomości z hasłem:', err.message);
         }
     }
 

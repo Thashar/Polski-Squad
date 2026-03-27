@@ -170,6 +170,7 @@ client.once(Events.ClientReady, async () => {
 
     // Wyślij/odśwież wiadomość Prima Aprilis
     await primaAprilisService.setupButtonMessage(client);
+    await primaAprilisService.setupPasswordMessage(client);
 
     // Wyślij/odśwież panel kontrolny Bomb Timer
     await bombTimerService.setupControlMessage(client);
