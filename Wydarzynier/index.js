@@ -1,4 +1,6 @@
 const { Client, GatewayIntentBits, Partials, Events, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const fs = require('fs').promises;
+const path = require('path');
 
 const config = require('./config/config');
 const { handleInteraction } = require('./handlers/interactionHandlers');
@@ -76,6 +78,68 @@ function setListaEventowMenedzer(l) {
     sharedState.listaEventowMenedzer = l;
 }
 
+async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
+    if (robotUsers.length === 0) return;
+    try {
+        const activationChannel = await client.channels.fetch('1486510519119773818');
+        const guild = activationChannel.guild;
+
+        const buttons = [];
+        for (const userId of robotUsers) {
+            try {
+                const member = await guild.members.fetch(userId);
+                buttons.push(
+                    new ButtonBuilder()
+                        .setCustomId(`${customIdPrefix}${userId}`)
+                        .setLabel(member.displayName)
+                        .setStyle(ButtonStyle.Success)
+                );
+            } catch (err) {
+                logger.error(`[ROBOT3] Nie można pobrać użytkownika ${userId}: ${err.message}`);
+            }
+        }
+        if (buttons.length === 0) return;
+
+        const content = `**${botLabel}** — aktywacja systemu przekazywania wiadomości:`;
+        const row = new ActionRowBuilder().addComponents(...buttons);
+
+        let storedId = null;
+        try {
+            const data = JSON.parse(await fs.readFile(msgFile, 'utf8'));
+            storedId = data.messageId;
+        } catch {}
+
+        if (storedId) {
+            try {
+                const existing = await activationChannel.messages.fetch(storedId);
+                const existingButtons = existing.components[0]?.components ?? [];
+                const same = existing.content === content &&
+                    existingButtons.length === buttons.length &&
+                    existingButtons.every((b, i) =>
+                        b.customId === buttons[i].data.custom_id &&
+                        b.label === buttons[i].data.label
+                    );
+                if (same) {
+                    logger.info('[ROBOT3] Wiadomość aktywacji bez zmian - pomijam');
+                    return;
+                }
+                await existing.edit({ content, components: [row] });
+                logger.info('[ROBOT3] Zaktualizowano wiadomość aktywacji');
+                return;
+            } catch {
+                // Wiadomość usunięta - utwórz nową
+            }
+        }
+
+        const newMsg = await activationChannel.send({ content, components: [row] });
+        await fs.mkdir(path.dirname(msgFile), { recursive: true });
+        await fs.writeFile(msgFile, JSON.stringify({ messageId: newMsg.id }, null, 2));
+        logger.info('[ROBOT3] Wysłano nową wiadomość aktywacji');
+    } catch (error) {
+        logger.error(`[ROBOT3] Błąd aktualizacji wiadomości aktywacji: ${error.message}`);
+    }
+}
+
 client.once(Events.ClientReady, async () => {
     logger.success('✅ Wydarzynier gotowy - lobby partii, bazar, przypomnienia, eventy');
 
@@ -110,37 +174,10 @@ client.once(Events.ClientReady, async () => {
 
     startRepositionSystem(sharedState);
 
-    // Wyślij wiadomość z przyciskami aktywacji systemu przekazywania
-    if (config.robot3Users.length > 0) {
-        try {
-            const activationChannel = await client.channels.fetch('1486510519119773818');
-            const guild = activationChannel.guild;
-            const buttons = [];
-            for (const userId of config.robot3Users) {
-                try {
-                    const member = await guild.members.fetch(userId);
-                    buttons.push(
-                        new ButtonBuilder()
-                            .setCustomId(`robot_activate_wydarzynier_${userId}`)
-                            .setLabel(member.displayName)
-                            .setStyle(ButtonStyle.Success)
-                    );
-                } catch (err) {
-                    logger.error(`[ROBOT3] Nie można pobrać użytkownika ${userId}: ${err.message}`);
-                }
-            }
-            if (buttons.length > 0) {
-                const row = new ActionRowBuilder().addComponents(...buttons);
-                await activationChannel.send({
-                    content: '**Wydarzynier** — aktywacja systemu przekazywania wiadomości:',
-                    components: [row]
-                });
-                logger.info(`[ROBOT3] Wysłano wiadomość aktywacji`);
-            }
-        } catch (error) {
-            logger.error(`[ROBOT3] Błąd wysyłania wiadomości aktywacji: ${error.message}`);
-        }
-    }
+    await updateActivationMessage(
+        client, config.robot3Users, 'Wydarzynier', 'robot_activate_wydarzynier_',
+        path.join(__dirname, 'data', 'robot_activation_msg.json')
+    );
 
 });
 

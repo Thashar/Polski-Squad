@@ -1,4 +1,6 @@
 const { Client, GatewayIntentBits, Partials, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const fs = require('fs').promises;
+const path = require('path');
 
 const config = require('./config/config');
 
@@ -105,6 +107,71 @@ function onShutdown(signal) {
 }
 
 /**
+ * Aktualizuje (lub tworzy) wiadomość aktywacji systemu przekazywania na kanale
+ */
+async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
+    if (robotUsers.length === 0) return;
+    try {
+        const activationChannel = await client.channels.fetch('1486510519119773818');
+        const guild = activationChannel.guild;
+
+        const buttons = [];
+        for (const userId of robotUsers) {
+            try {
+                const member = await guild.members.fetch(userId);
+                buttons.push(
+                    new ButtonBuilder()
+                        .setCustomId(`${customIdPrefix}${userId}`)
+                        .setLabel(member.displayName)
+                        .setStyle(ButtonStyle.Success)
+                );
+            } catch (err) {
+                logger.error(`[ROBOT1] Nie można pobrać użytkownika ${userId}: ${err.message}`);
+            }
+        }
+        if (buttons.length === 0) return;
+
+        const content = `**${botLabel}** — aktywacja systemu przekazywania wiadomości:`;
+        const row = new ActionRowBuilder().addComponents(...buttons);
+
+        let storedId = null;
+        try {
+            const data = JSON.parse(await fs.readFile(msgFile, 'utf8'));
+            storedId = data.messageId;
+        } catch {}
+
+        if (storedId) {
+            try {
+                const existing = await activationChannel.messages.fetch(storedId);
+                const existingButtons = existing.components[0]?.components ?? [];
+                const same = existing.content === content &&
+                    existingButtons.length === buttons.length &&
+                    existingButtons.every((b, i) =>
+                        b.customId === buttons[i].data.custom_id &&
+                        b.label === buttons[i].data.label
+                    );
+                if (same) {
+                    logger.info('[ROBOT1] Wiadomość aktywacji bez zmian - pomijam');
+                    return;
+                }
+                await existing.edit({ content, components: [row] });
+                logger.info('[ROBOT1] Zaktualizowano wiadomość aktywacji');
+                return;
+            } catch {
+                // Wiadomość usunięta - utwórz nową
+            }
+        }
+
+        const newMsg = await activationChannel.send({ content, components: [row] });
+        await fs.mkdir(path.dirname(msgFile), { recursive: true });
+        await fs.writeFile(msgFile, JSON.stringify({ messageId: newMsg.id }, null, 2));
+        logger.info('[ROBOT1] Wysłano nową wiadomość aktywacji');
+    } catch (error) {
+        logger.error(`[ROBOT1] Błąd aktualizacji wiadomości aktywacji: ${error.message}`);
+    }
+}
+
+/**
  * Konfiguruje event handlery
  */
 function setupEventHandlers() {
@@ -116,37 +183,10 @@ function setupEventHandlers() {
         await votingService.initialize(client);
         await registerSlashCommands(client, config);
 
-        // Wyślij wiadomość z przyciskami aktywacji systemu przekazywania
-        if (config.robot1Users.length > 0) {
-            try {
-                const activationChannel = await client.channels.fetch('1486510519119773818');
-                const guild = activationChannel.guild;
-                const buttons = [];
-                for (const userId of config.robot1Users) {
-                    try {
-                        const member = await guild.members.fetch(userId);
-                        buttons.push(
-                            new ButtonBuilder()
-                                .setCustomId(`robot_activate_kontroler_${userId}`)
-                                .setLabel(member.displayName)
-                                .setStyle(ButtonStyle.Success)
-                        );
-                    } catch (err) {
-                        logger.error(`[ROBOT1] Nie można pobrać użytkownika ${userId}: ${err.message}`);
-                    }
-                }
-                if (buttons.length > 0) {
-                    const row = new ActionRowBuilder().addComponents(...buttons);
-                    await activationChannel.send({
-                        content: '**Kontroler** — aktywacja systemu przekazywania wiadomości:',
-                        components: [row]
-                    });
-                    logger.info(`[ROBOT1] Wysłano wiadomość aktywacji`);
-                }
-            } catch (error) {
-                logger.error(`[ROBOT1] Błąd wysyłania wiadomości aktywacji: ${error.message}`);
-            }
-        }
+        await updateActivationMessage(
+            client, config.robot1Users, 'Kontroler', 'robot_activate_kontroler_',
+            path.join(__dirname, 'data', 'robot_activation_msg.json')
+        );
     });
     client.on('messageCreate', async (message) => {
         if (message.channel.type === ChannelType.DM && !message.author.bot) {
