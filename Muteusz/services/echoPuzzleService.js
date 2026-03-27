@@ -14,6 +14,7 @@ class EchoPuzzleService {
         this.channelId = config.echoPuzzle.channelId;
         this.solved = false;
         this.messagesSincePrompt = 0;
+        this.onWin = null; // callback wywoływany po wygraniu
         this.lastEntry = null;
         this.client = null;
         this._loadState();
@@ -91,6 +92,7 @@ class EchoPuzzleService {
             this._saveState();
             await message.channel.send('## 🎉 Wygrałeś!');
             logger.success('🏆 EchoPuzzle: Wygrałeś!');
+            if (this.onWin) await this.onWin();
             return;
         }
 
