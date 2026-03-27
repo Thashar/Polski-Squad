@@ -18,6 +18,8 @@ class PrimaAprilisService {
         this.data = {};
         this.currentPassword = null;
         this.passwordTimer = null;
+        this._processingUsers = new Set(); // ochrona przed podwójnym kliknięciem
+        this._saveQueue = Promise.resolve(); // kolejka zapisów - zapobiega wyścigowi na pliku
     }
 
     async initialize() {
@@ -108,8 +110,11 @@ class PrimaAprilisService {
         return true;
     }
 
-    async saveData() {
-        await fs.writeFile(DATA_FILE, JSON.stringify(this.data, null, 2), 'utf8');
+    saveData() {
+        this._saveQueue = this._saveQueue.then(() =>
+            fs.writeFile(DATA_FILE, JSON.stringify(this.data, null, 2), 'utf8')
+        );
+        return this._saveQueue;
     }
 
     buildButtonRow() {
@@ -171,33 +176,43 @@ class PrimaAprilisService {
 
     async trapUser(member) {
         const userId = member.id;
-        const prisonRoleId = this.config.primaAprilis.prisonRoleId;
 
-        const rolesToSave = member.roles.cache
-            .filter(r => r.id !== member.guild.id && r.id !== prisonRoleId)
-            .map(r => r.id);
+        // Ochrona przed race condition: ten sam użytkownik klikający dwa razy zanim cache się zaktualizuje
+        if (this._processingUsers.has(userId)) return;
+        if (this.data[userId]) return; // już uwięziony
 
-        this.data[userId] = {
-            roles: rolesToSave,
-            savedAt: new Date().toISOString()
-        };
-        await this.saveData();
-
-        for (const roleId of rolesToSave) {
-            try {
-                await member.roles.remove(roleId);
-            } catch (err) {
-                logger.warn(`⚠️ Nie można usunąć roli ${roleId} od ${member.user.tag}: ${err.message}`);
-            }
-        }
-
+        this._processingUsers.add(userId);
         try {
-            await member.roles.add(prisonRoleId);
-        } catch (err) {
-            logger.error(`❌ Nie można nadać roli więźnia ${member.user.tag}: ${err.message}`);
-        }
+            const prisonRoleId = this.config.primaAprilis.prisonRoleId;
 
-        logger.info(`🔒 PrimaAprilis: złapano ${member.user.tag} - zapisano ${rolesToSave.length} ról`);
+            const rolesToSave = member.roles.cache
+                .filter(r => r.id !== member.guild.id && r.id !== prisonRoleId)
+                .map(r => r.id);
+
+            this.data[userId] = {
+                roles: rolesToSave,
+                savedAt: new Date().toISOString()
+            };
+            await this.saveData();
+
+            for (const roleId of rolesToSave) {
+                try {
+                    await member.roles.remove(roleId);
+                } catch (err) {
+                    logger.warn(`⚠️ Nie można usunąć roli ${roleId} od ${member.user.tag}: ${err.message}`);
+                }
+            }
+
+            try {
+                await member.roles.add(prisonRoleId);
+            } catch (err) {
+                logger.error(`❌ Nie można nadać roli więźnia ${member.user.tag}: ${err.message}`);
+            }
+
+            logger.info(`🔒 PrimaAprilis: złapano ${member.user.tag} - zapisano ${rolesToSave.length} ról`);
+        } finally {
+            this._processingUsers.delete(userId);
+        }
     }
 
     async freeUser(member) {
