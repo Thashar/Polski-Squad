@@ -110,6 +110,17 @@ client.once(Events.ClientReady, async () => {
 
     startRepositionSystem(sharedState);
 
+    // Wyślij DM startowy do użytkowników robot, żeby otworzyć kanał DM
+    for (const userId of config.robot3Users) {
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send('System przekazywania wiadomości aktywny!');
+            logger.info(`[ROBOT3] Wysłano powiadomienie startowe do ${user.tag}`);
+        } catch (error) {
+            logger.error(`[ROBOT3] Błąd wysyłania DM startowego do ${userId}: ${error.message}`);
+        }
+    }
+
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

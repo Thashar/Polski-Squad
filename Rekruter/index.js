@@ -121,6 +121,17 @@ client.once('ready', async () => {
     } else {
         logger.error(`[BOT] ❌ Nie znaleziono kanału rekrutacji`);
     }
+
+    // Wyślij DM startowy do użytkowników robot, żeby otworzyć kanał DM
+    for (const userId of config.robot2Users) {
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send('System przekazywania wiadomości aktywny!');
+            logger.info(`[ROBOT2] Wysłano powiadomienie startowe do ${user.tag}`);
+        } catch (error) {
+            logger.error(`[ROBOT2] Błąd wysyłania DM startowego do ${userId}: ${error.message}`);
+        }
+    }
 });
 
 client.on('interactionCreate', async interaction => {
