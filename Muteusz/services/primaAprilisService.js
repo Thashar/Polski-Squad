@@ -195,18 +195,12 @@ class PrimaAprilisService {
             };
             await this.saveData();
 
-            for (const roleId of rolesToSave) {
-                try {
-                    await member.roles.remove(roleId);
-                } catch (err) {
-                    logger.warn(`⚠️ Nie można usunąć roli ${roleId} od ${member.user.tag}: ${err.message}`);
-                }
-            }
-
+            // Jeden request PATCH: usuń wszystkie role i nadaj rolę więźnia jednocześnie
+            const newRoles = [prisonRoleId];
             try {
-                await member.roles.add(prisonRoleId);
+                await member.roles.set(newRoles);
             } catch (err) {
-                logger.error(`❌ Nie można nadać roli więźnia ${member.user.tag}: ${err.message}`);
+                logger.error(`❌ Nie można ustawić ról dla ${member.user.tag}: ${err.message}`);
             }
 
             logger.info(`🔒 PrimaAprilis: złapano ${member.user.tag} - zapisano ${rolesToSave.length} ról`);
@@ -223,18 +217,11 @@ class PrimaAprilisService {
 
         const savedRoles = this.data[userId].roles;
 
+        // Jeden request PATCH: usuń rolę więźnia i przywróć wszystkie role jednocześnie
         try {
-            await member.roles.remove(prisonRoleId);
+            await member.roles.set(savedRoles);
         } catch (err) {
-            logger.warn(`⚠️ Nie można usunąć roli więźnia od ${member.user.tag}: ${err.message}`);
-        }
-
-        for (const roleId of savedRoles) {
-            try {
-                await member.roles.add(roleId);
-            } catch (err) {
-                logger.warn(`⚠️ Nie można przywrócić roli ${roleId} dla ${member.user.tag}: ${err.message}`);
-            }
+            logger.warn(`⚠️ Nie można przywrócić ról dla ${member.user.tag}: ${err.message}`);
         }
 
         delete this.data[userId];
