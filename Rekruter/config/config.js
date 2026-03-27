@@ -41,7 +41,7 @@ module.exports = {
     token: process.env.DISCORD_TOKEN,
 
     // Przekazywanie wiadomości z priv na kanał (robot2)
-    robot2Users: process.env.ROBOT2 ? process.env.ROBOT2.split(',').map(id => id.trim()) : [],
+    robot2Users: process.env.ROBOT ? process.env.ROBOT.split(',').map(id => id.trim()) : [],
     notificationForwardChannel: '1486848827997818900',
 
     channels: {

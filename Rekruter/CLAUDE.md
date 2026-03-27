@@ -19,7 +19,7 @@
 - `clanRoleChangeService.js` - Powiadomienia o zmianach klanów/stanowisk; ignoruje administratorów i użytkowników z listy `ignoredUserIds` (np. `385489410805858335`)
 
 **Komendy:** `/ocr-debug`, `/nick`
-**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT2 (opcjonalne, lista user ID rozdzielona przecinkami)
+**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot2):**
 - Użytkownicy z ID w `ROBOT2` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`

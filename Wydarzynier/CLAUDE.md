@@ -37,7 +37,7 @@
 - **Subskrypcja:** Zielony przycisk 🔔 pod listą - toggle roli powiadomień o eventach (1297587256101699776)
 
 **Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`
-**Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL, ROBOT3 (opcjonalne, lista user ID rozdzielona przecinkami)
+**Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot3):**
 - Użytkownicy z ID w `ROBOT3` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`
