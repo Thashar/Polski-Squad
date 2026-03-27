@@ -267,7 +267,7 @@ class PrimaAprilisService {
             const savedMsgId = this.data._passwordMessageId;
             let existing = savedMsgId
                 ? messages.find(m => m.id === savedMsgId && m.author.id === client.user.id)
-                : messages.find(m => m.author.id === client.user.id && m.content.startsWith('🔑'));
+                : null;
 
             if (existing) {
                 await existing.edit(this._buildPasswordContent());
@@ -287,7 +287,8 @@ class PrimaAprilisService {
 
     _buildPasswordContent() {
         const pwd = this.currentPassword ?? '(brak)';
-        return `🔑 Aktualne hasło wyjścia: **${pwd}**`;
+        const display = pwd.charAt(0).toUpperCase() + pwd.slice(1).toLowerCase();
+        return display;
     }
 
     async _updatePasswordMessage() {
