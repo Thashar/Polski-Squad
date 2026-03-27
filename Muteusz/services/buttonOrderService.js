@@ -425,6 +425,19 @@ class ButtonOrderService {
             logger.error('❌ ButtonOrder: błąd aktualizacji po reset:', err.message));
         logger.info('🔢 ButtonOrder: kolejność 1-40, aktywowano fazę 2');
     }
+
+    async handleMessageCreate(message) {
+        if (message.channel.id !== this.config.buttonOrder.channelId) return;
+        if (message.author.bot) return;
+        await message.delete().catch(() => {});
+    }
+
+    async handleReactionAdd(reaction, user) {
+        if (reaction.message.channel.id !== this.config.buttonOrder.channelId) return;
+        if (user.bot) return;
+        if (reaction.partial) await reaction.fetch().catch(() => {});
+        await reaction.users.remove(user.id).catch(() => {});
+    }
 }
 
 module.exports = ButtonOrderService;
