@@ -23,6 +23,7 @@ const EmptyPuzzleService = require('./services/emptyPuzzleService');
 const EchoPuzzleService = require('./services/echoPuzzleService');
 const HotPotatoService = require('./services/hotPotatoService');
 const BoosterSnapshotService = require('./services/boosterSnapshotService');
+const GameCountdownService = require('./services/gameCountdownService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -61,6 +62,7 @@ const emptyPuzzleService = new EmptyPuzzleService(config);
 const echoPuzzleService = new EchoPuzzleService(config);
 const hotPotatoService = new HotPotatoService(config);
 const boosterSnapshotService = new BoosterSnapshotService();
+const gameCountdownService = new GameCountdownService();
 
 let nicknameManager;
 let reactionRoleService;
@@ -69,7 +71,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService, emptyPuzzleService, echoPuzzleService, hotPotatoService, boosterSnapshotService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService, emptyPuzzleService, echoPuzzleService, hotPotatoService, boosterSnapshotService, gameCountdownService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -145,6 +147,7 @@ client.once(Events.ClientReady, async () => {
     await echoPuzzleService.initialize(client);
     await hotPotatoService.initialize(client);
     boosterSnapshotService.initialize(client);
+    gameCountdownService.initialize(client);
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
