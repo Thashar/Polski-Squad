@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -267,6 +268,7 @@ class BombTimerService {
                 this.state.running = false;
                 this.state.exploded = true;
                 this.saveState().catch(() => {});
+                this._triggerBombChaos();
                 this.stopDisplayLoop();
                 this.updateTimerMessage().catch(() => {});
                 this._clearAllReactions().catch(() => {});
@@ -521,6 +523,20 @@ class BombTimerService {
 
     isMyButton(customId) {
         return Object.values(BTN).includes(customId);
+    }
+
+    _triggerBombChaos() {
+        try {
+            const chaosFile = path.join(__dirname, '../../shared_data/bomb_chaos_state.json');
+            const state = {
+                active: true,
+                expiresAt: Date.now() + 60 * 60 * 1000, // 1 godzina
+            };
+            fsSync.writeFileSync(chaosFile, JSON.stringify(state, null, 2), 'utf8');
+            logger.info('💥 BombTimer: zapisano stan chaosu bombowego dla Konklawe (1h)');
+        } catch (err) {
+            logger.error('❌ BombTimer: błąd zapisu stanu chaosu:', err.message);
+        }
     }
 
     cleanup() {
