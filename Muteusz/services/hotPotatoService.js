@@ -8,7 +8,7 @@ const DATA_FILE = path.join(__dirname, '../data/hot_potato_state.json');
 
 const MAIN_START_SECONDS = 3600;   // 01:00:00
 const POTATO_START_SECONDS = 180;  // 00:03:00
-const POTATO_PASS_BONUS = 10;      // sekund dodawanych przy przekazaniu
+const POTATO_PASS_BONUS = 60;      // sekund dodawanych przy przekazaniu
 const UPDATE_INTERVAL_MS = 10000;  // 10 sekund
 
 function formatTime(seconds) {
