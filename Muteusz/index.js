@@ -273,6 +273,20 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
         logger.info(`🔺 ${newMember.user.tag} otrzymał boost serwera`);
         await memberHandler.handleBoostGain(newMember);
     }
+
+    // Rola gracza: ping + GIF gdy ktoś dostanie rolę
+    const PLAYER_ROLE_ID = '1486506395057524887';
+    const PLAYER_WELCOME_CHANNEL_ID = '1486848827997818900';
+    const hadRole = oldMember.roles.cache.has(PLAYER_ROLE_ID);
+    const hasRole = newMember.roles.cache.has(PLAYER_ROLE_ID);
+    if (!hadRole && hasRole) {
+        try {
+            const channel = await client.channels.fetch(PLAYER_WELCOME_CHANNEL_ID);
+            await channel.send(`<@${newMember.id}> https://tenor.com/view/saw22-saw-jigsaw-look-gif-17204954302005508012`);
+        } catch (err) {
+            logger.error('❌ Błąd pinga nowego gracza:', err.message);
+        }
+    }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
