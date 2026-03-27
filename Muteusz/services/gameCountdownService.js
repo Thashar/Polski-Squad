@@ -72,7 +72,7 @@ class GameCountdownService {
         return [
             '@everyone',
             '## Serwer został przejęty przez boty, które dziś żyją własnym życiem <a:Pepe_ban:1368668861012119635>',
-            '## Te inteligentne istoty zdecydowały, że będą uprzykrzają je innym użytkownikom. <a:PepeEvil2:1280068960787632130>',
+            '## Te inteligentne istoty zdecydowały, że będą uprzykrzać życie innym użytkownikom. <a:PepeEvil2:1280068960787632130>',
             '',
             '## Musicie zdecydować czy zostaniecie Graczami i rozwiążecie wszystkie zagadki przygotowane przez boty, tym samym ratując serwer? <:PepeSolidierVirtittiPapajlari:1401322467397472459>...',
             '',
