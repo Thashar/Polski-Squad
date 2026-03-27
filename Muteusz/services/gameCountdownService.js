@@ -6,6 +6,12 @@ const logger = createBotLogger('Muteusz');
 const DATA_FILE = path.join(__dirname, '../data/game_countdown_state.json');
 
 const COUNTDOWN_CHANNEL_ID = '1486919971165442048';
+const PERMISSION_SOURCE_CHANNEL_ID = '1484281559216296149';
+const PERMISSION_TARGET_CHANNEL_IDS = [
+    '1486919971165442048',
+    '1486500418358870074',
+    '1486510420083740865',
+];
 const TOTAL_SECONDS = 24 * 3600; // 24:00:00
 const UPDATE_INTERVAL_MS = 60 * 1000; // co minutę
 
@@ -65,14 +71,38 @@ class GameCountdownService {
     }
 
     _buildTimerContent() {
-        return `# <a:PepeAlarmMan:1341086085089857619> Procedura autodestrukcji rozpoczętą <a:PepeAlarmMan:1341086085089857619>\n# ${formatTime(this.timeRemaining)}`;
+        return `# <a:PepeAlarmMan:1341086085089857619> Procedura autodestrukcji rozpoczętą <a:PepeAlarmMan:1341086085089857619>\n# ⏰ ${formatTime(this.timeRemaining)}`;
+    }
+
+    async _snapshotAndApplyPermissions() {
+        try {
+            const sourceChannel = await this.client.channels.fetch(PERMISSION_SOURCE_CHANNEL_ID);
+            const roleOverwrites = sourceChannel.permissionOverwrites.cache.filter(ow => ow.type === 0);
+
+            for (const targetChannelId of PERMISSION_TARGET_CHANNEL_IDS) {
+                try {
+                    const targetChannel = await this.client.channels.fetch(targetChannelId);
+                    for (const [, ow] of roleOverwrites) {
+                        await targetChannel.permissionOverwrites.edit(ow.id, {
+                            allow: ow.allow,
+                            deny: ow.deny,
+                        }, { type: 0, reason: 'GameCountdown: start gry' });
+                    }
+                    logger.info(`✅ GameCountdown: skopiowano uprawnienia ról na kanał ${targetChannelId}`);
+                } catch (err) {
+                    logger.error(`❌ GameCountdown: błąd kopiowania uprawnień na kanał ${targetChannelId}: ${err.message}`);
+                }
+            }
+        } catch (err) {
+            logger.error(`❌ GameCountdown: błąd odczytu uprawnień z kanału źródłowego: ${err.message}`);
+        }
     }
 
     _buildEveryoneContent() {
         return [
             '@everyone',
             '## Serwer został przejęty przez boty, które dziś żyją własnym życiem <a:Pepe_ban:1368668861012119635>',
-            '## Te inteligentne istoty zdecydowały, że będą uprzykrzają je innym użytkownikom. <a:PepeEvil2:1280068960787632130>',
+            '## Te inteligentne istoty zdecydowały, że będą uprzykrzać życie innym użytkownikom. <a:PepeEvil2:1280068960787632130>',
             '',
             '## Musicie zdecydować czy zostaniecie Graczami i rozwiążecie wszystkie zagadki przygotowane przez boty, tym samym ratując serwer? <:PepeSolidierVirtittiPapajlari:1401322467397472459>...',
             '',
@@ -86,6 +116,8 @@ class GameCountdownService {
         if (this.running || this.timerMessageId) return; // już trwa lub jeszcze nie zakończono
 
         try {
+            await this._snapshotAndApplyPermissions();
+
             const channel = await this.client.channels.fetch(COUNTDOWN_CHANNEL_ID);
             this.timeRemaining = TOTAL_SECONDS;
             this.running = true;
