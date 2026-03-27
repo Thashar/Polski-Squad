@@ -126,7 +126,7 @@ class BombTimerService {
             new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
         );
         const row4 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj zagadkę kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
+            new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
             new ButtonBuilder().setCustomId(BTN.RESET_EMPTY_PUZZLE).setLabel('Resetuj EMPTY').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId(BTN.RESET_ECHO_PUZZLE).setLabel('Resetuj Echo').setStyle(ButtonStyle.Danger).setEmoji('🔊'),
         );
