@@ -1,10 +1,14 @@
 const path = require('path');
+const fs = require('fs');
 const messages = require('./messages');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Kontroler');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+// Odczyt lokalnego .env bezpośrednio - process.env.ROBOT jest współdzielony między botami
+const localEnv = require('dotenv').parse(fs.readFileSync(path.join(__dirname, '../.env')));
 
 // Walidacja wymaganych zmiennych środowiskowych
 const requiredEnvVars = [
@@ -27,7 +31,7 @@ module.exports = {
     guildId: process.env.KONTROLER_GUILD_ID,
 
     // Przekazywanie wiadomości z priv na kanał (robot1)
-    robot1Users: process.env.ROBOT ? process.env.ROBOT.split(',').map(id => id.trim()) : [],
+    robot1Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
     notificationForwardChannel: '1486848827997818900',
 
     // Rola blokująca udział w loteriach
