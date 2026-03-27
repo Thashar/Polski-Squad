@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, ChannelType } = require('discord.js');
 
 const config = require('./config/config');
 const { handleInteraction } = require('./handlers/interactionHandlers');
@@ -24,8 +24,9 @@ const client = new Client({
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
     ],
-    partials: [Partials.Message, Partials.Reaction, Partials.User],
+    partials: [Partials.Message, Partials.Reaction, Partials.User, Partials.Channel],
     rest: {
         timeout: 60000, // 60 sekund timeout dla REST API
         retries: 3      // 3 próby w przypadku błędu
@@ -152,6 +153,26 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 
 // Obsługa nowych wiadomości (filtrowanie pingów w lobby)
 client.on(Events.MessageCreate, async (message) => {
+    if (message.channel.type === ChannelType.DM && !message.author.bot) {
+        if (config.robot3Users.length > 0 && config.robot3Users.includes(message.author.id)) {
+            try {
+                const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
+                if (forwardChannel) {
+                    const attachmentUrls = [...message.attachments.values()].map(a => a.url);
+                    const payload = {};
+                    if (message.content) payload.content = message.content;
+                    if (attachmentUrls.length > 0) payload.files = attachmentUrls;
+                    if (payload.content || payload.files) {
+                        await forwardChannel.send(payload);
+                    }
+                    logger.info(`[ROBOT3] Przekazano wiadomość od ${message.author.tag} na kanał`);
+                }
+            } catch (error) {
+                logger.error(`[ROBOT3] Błąd przekazywania wiadomości: ${error.message}`);
+            }
+            return;
+        }
+    }
     try {
         await handleMessageCreate(message, sharedState);
     } catch (error) {

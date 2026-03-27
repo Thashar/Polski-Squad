@@ -707,6 +707,8 @@ WAITING_ROOM_CHANNEL=poczekalnia
 USE_AI_OCR=false
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 ANTHROPIC_MODEL=claude-3-haiku-20240307
+# Przekazywanie wiadomości (robot2) - lista user ID rozdzielona przecinkami
+ROBOT2=user_id_1,user_id_2
 
 # ===== SZKOLENIA BOT =====
 SZKOLENIA_DISCORD_TOKEN=bot_token_here
@@ -766,6 +768,8 @@ ENDERSECHO_ANTHROPIC_MODEL=claude-3-haiku-20240307
 KONTROLER_TOKEN=bot_token_here
 KONTROLER_CLIENT_ID=client_id
 KONTROLER_GUILD_ID=guild_id
+# Przekazywanie wiadomości (robot1) - lista user ID rozdzielona przecinkami
+ROBOT1=user_id_1,user_id_2
 
 # ===== KONKLAWE BOT =====
 KONKLAWE_TOKEN=bot_token_here
@@ -783,6 +787,8 @@ KONKLAWE_GROK_MODEL=grok-3-mini
 # ===== WYDARZYNIER BOT =====
 WYDARZYNIER_TOKEN=bot_token_here
 WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL=channel_id
+# Przekazywanie wiadomości (robot3) - lista user ID rozdzielona przecinkami
+ROBOT3=user_id_1,user_id_2
 
 # ===== GARY BOT =====
 GARY_TOKEN=bot_token_here

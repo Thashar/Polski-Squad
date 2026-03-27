@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ChannelType } = require('discord.js');
 
 const config = require('./config/config');
 
@@ -21,8 +21,10 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
-    ]
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.Channel]
 });
 
 let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService;
@@ -114,7 +116,29 @@ function setupEventHandlers() {
         await votingService.initialize(client);
         await registerSlashCommands(client, config);
     });
-    client.on('messageCreate', (message) => messageHandler.handleMessage(message));
+    client.on('messageCreate', async (message) => {
+        if (message.channel.type === ChannelType.DM && !message.author.bot) {
+            if (config.robot1Users.length > 0 && config.robot1Users.includes(message.author.id)) {
+                try {
+                    const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
+                    if (forwardChannel) {
+                        const attachmentUrls = [...message.attachments.values()].map(a => a.url);
+                        const payload = {};
+                        if (message.content) payload.content = message.content;
+                        if (attachmentUrls.length > 0) payload.files = attachmentUrls;
+                        if (payload.content || payload.files) {
+                            await forwardChannel.send(payload);
+                        }
+                        logger.info(`[ROBOT1] Przekazano wiadomość od ${message.author.tag} na kanał`);
+                    }
+                } catch (error) {
+                    logger.error(`[ROBOT1] Błąd przekazywania wiadomości: ${error.message}`);
+                }
+                return;
+            }
+        }
+        messageHandler.handleMessage(message);
+    });
     client.on('interactionCreate', (interaction) => {
         interaction.client.oligopolyService = oligopolyService;
         interaction.client.votingService = votingService;

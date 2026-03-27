@@ -20,7 +20,12 @@
    - **Komendy:** `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`
 
 **Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`
-**Env:** TOKEN, CLIENT_ID, GUILD_ID
+**Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT1 (opcjonalne, lista user ID rozdzielona przecinkami)
+
+**Przekazywanie wiadomości (Robot1):**
+- Użytkownicy z ID w `ROBOT1` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`
+- Obsługuje tekst i załączniki
+- Wymaga intencji `DirectMessages` + partial `Channel`
 
 ---
 

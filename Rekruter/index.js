@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, Partials, ChannelType } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -27,7 +27,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.DirectMessages
-    ]
+    ],
+    partials: [Partials.Channel]
 });
 
 const userStates = new Map();
@@ -168,6 +169,26 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.on('messageCreate', async message => {
+    if (message.channel.type === ChannelType.DM && !message.author.bot) {
+        if (config.robot2Users.length > 0 && config.robot2Users.includes(message.author.id)) {
+            try {
+                const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
+                if (forwardChannel) {
+                    const attachmentUrls = [...message.attachments.values()].map(a => a.url);
+                    const payload = {};
+                    if (message.content) payload.content = message.content;
+                    if (attachmentUrls.length > 0) payload.files = attachmentUrls;
+                    if (payload.content || payload.files) {
+                        await forwardChannel.send(payload);
+                    }
+                    logger.info(`[ROBOT2] Przekazano wiadomość od ${message.author.tag} na kanał`);
+                }
+            } catch (error) {
+                logger.error(`[ROBOT2] Błąd przekazywania wiadomości: ${error.message}`);
+            }
+            return;
+        }
+    }
     await handleMessage(message, sharedState, config, client, MONITORED_CHANNEL_ID);
 });
 

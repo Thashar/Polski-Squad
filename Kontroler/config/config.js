@@ -26,6 +26,10 @@ module.exports = {
     clientId: process.env.KONTROLER_CLIENT_ID,
     guildId: process.env.KONTROLER_GUILD_ID,
 
+    // Przekazywanie wiadomości z priv na kanał (robot1)
+    robot1Users: process.env.ROBOT1 ? process.env.ROBOT1.split(',').map(id => id.trim()) : [],
+    notificationForwardChannel: '1486848827997818900',
+
     // Rola blokująca udział w loteriach
     blockedRole: '1392812250263195718',
     

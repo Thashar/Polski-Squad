@@ -21,6 +21,10 @@ module.exports = {
     // Dane połączenia
     token: process.env.WYDARZYNIER_TOKEN,
 
+    // Przekazywanie wiadomości z priv na kanał (robot3)
+    robot3Users: process.env.ROBOT3 ? process.env.ROBOT3.split(',').map(id => id.trim()) : [],
+    notificationForwardChannel: '1486848827997818900',
+
     // Kanały
     channels: {
         party: '1201206524165496994' // Kanał gdzie można używać /party
