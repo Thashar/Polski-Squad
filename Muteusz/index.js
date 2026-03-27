@@ -1,30 +1,12 @@
 const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 
 const config = require('./config/config');
 const { createBotLogger } = require('../utils/consoleLogger');
 const NicknameManager = require('../utils/nicknameManagerService');
 
 const PLAYER_WELCOME_GIF_PATH = path.join(__dirname, 'data', 'player_welcome.gif');
-
-async function ensurePlayerWelcomeGif() {
-    if (fs.existsSync(PLAYER_WELCOME_GIF_PATH)) return;
-    try {
-        // Tenor API v2 - demo key
-        const apiRes = await axios.get('https://tenor.googleapis.com/v2/posts', {
-            params: { ids: '17204954302005508012', key: 'LIVDSRZULELA', media_filter: 'gif' }
-        });
-        const gifUrl = apiRes.data?.results?.[0]?.media_formats?.gif?.url;
-        if (!gifUrl) throw new Error('Brak URL w odpowiedzi Tenor API');
-        const gifRes = await axios.get(gifUrl, { responseType: 'arraybuffer' });
-        fs.writeFileSync(PLAYER_WELCOME_GIF_PATH, Buffer.from(gifRes.data));
-        logger.info('✅ Pobrano GIF powitalny gracza');
-    } catch (err) {
-        logger.warn(`⚠️ Nie udało się pobrać GIF powitalnego: ${err.message}`);
-    }
-}
 
 const logger = createBotLogger('Muteusz');
 
@@ -115,7 +97,6 @@ const sharedState = {
 
 client.once(Events.ClientReady, async () => {
     await logService.logMessage('success', `Bot ${client.user.tag} jest online!`);
-    await ensurePlayerWelcomeGif();
     
     // Załaduj członków do cache
     try {
