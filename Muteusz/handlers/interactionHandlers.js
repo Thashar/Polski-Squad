@@ -7,7 +7,7 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null, emptyPuzzleService = null, echoPuzzleService = null, hotPotatoService = null, boosterSnapshotService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null, emptyPuzzleService = null, echoPuzzleService = null, hotPotatoService = null, boosterSnapshotService = null, gameCountdownService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
@@ -22,6 +22,7 @@ class InteractionHandler {
         this.echoPuzzleService = echoPuzzleService;
         this.hotPotatoService = hotPotatoService;
         this.boosterSnapshotService = boosterSnapshotService;
+        this.gameCountdownService = gameCountdownService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -578,6 +579,18 @@ class InteractionHandler {
             if (this.boosterSnapshotService) await this.boosterSnapshotService.handleSnapshotButton(interaction);
         } else if (customId === BTN.BOOSTER_BACK) {
             if (this.boosterSnapshotService) await this.boosterSnapshotService.handleBoosterBack(interaction);
+        } else if (customId === BTN.START_GAME) {
+            await interaction.deferUpdate();
+            if (this.gameCountdownService) await this.gameCountdownService.start();
+        } else if (customId === BTN.STOP_GAME) {
+            await interaction.deferUpdate();
+            if (this.gameCountdownService) await this.gameCountdownService.stop();
+        } else if (customId === BTN.RESUME_GAME) {
+            await interaction.deferUpdate();
+            if (this.gameCountdownService) await this.gameCountdownService.resume();
+        } else if (customId === BTN.END_GAME) {
+            await interaction.deferUpdate();
+            if (this.gameCountdownService) await this.gameCountdownService.end();
         }
     }
 

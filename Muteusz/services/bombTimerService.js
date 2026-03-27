@@ -11,6 +11,9 @@ const BTN = {
     STOP: 'bomb_stop',
     RESUME: 'bomb_resume',
     START_GAME: 'bomb_start_game',
+    STOP_GAME: 'bomb_stop_game',
+    RESUME_GAME: 'bomb_resume_game',
+    END_GAME: 'bomb_end_game',
     RESET_PASSWORD: 'bomb_reset_password',
     SHUFFLE_ORDER: 'bomb_shuffle_order',
     RESET_ORDER: 'bomb_reset_order',
@@ -106,14 +109,17 @@ class BombTimerService {
     buildControlRows() {
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
+            new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️'),
+            new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️'),
+            new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
-            new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Snapshot booster').setStyle(ButtonStyle.Primary).setEmoji('📸'),
-            new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Booster back').setStyle(ButtonStyle.Success).setEmoji('🔓'),
         );
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
             new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏹️'),
-            new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary).setEmoji('▶️'),
+            new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary).setEmoji('⏯️'),
+            new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Snapshot booster').setStyle(ButtonStyle.Primary).setEmoji('📸'),
+            new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Booster back').setStyle(ButtonStyle.Success).setEmoji('🔓'),
         );
         const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
