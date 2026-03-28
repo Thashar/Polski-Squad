@@ -180,7 +180,7 @@ class BombTimerService {
         const row5 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.RESET_HOTPOTATO).setLabel('Resetuj gorący kartofel').setStyle(ButtonStyle.Danger).setEmoji('🥔'),
             new ButtonBuilder().setCustomId(BTN.HOTPOTATO_MINUS5).setLabel('Odejmij 5 minut').setStyle(ButtonStyle.Primary).setEmoji('⏬'),
-            new ButtonBuilder().setCustomId(BTN.HOTPOTATO_ADD5).setLabel('Dodaj 5 minut').setStyle(ButtonStyle.Success).setEmoji('⏫'),
+            new ButtonBuilder().setCustomId(BTN.HOTPOTATO_ADD5).setLabel('Dodaj 5 minut').setStyle(ButtonStyle.Primary).setEmoji('⏫'),
         );
         return [row1, row2, row3, row4, row5];
     }
