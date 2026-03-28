@@ -20,13 +20,13 @@
 - `notificationPreferencesService.js` - Persistencja preferencji powiadomień per użytkownik (`data/notification_preferences.json`); `isOptedOut(userId)`, `optOut(userId)`, `optIn(userId)`
 
 **Komendy:** `/ocr-debug`, `/nick`, `/powiadomienia`
-**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami), REKRUTER_MENTION_ROLE_ID (opcjonalne, ID roli do pingowania przez "@")
+**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot2):**
 - Użytkownicy z ID w `ROBOT2` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`
 - Obsługuje tekst i załączniki
 - Wymaga partial `Channel`
-- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli `REKRUTER_MENTION_ROLE_ID` (konfiguracja w `.env`)
+- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli `1486506395057524887`
 
 ---
 
