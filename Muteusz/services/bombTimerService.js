@@ -25,6 +25,8 @@ const BTN = {
     HOTPOTATO_MINUS5: 'bomb_hotpotato_minus5',
     SNAPSHOT_BOOSTER: 'bomb_snapshot_booster',
     BOOSTER_BACK: 'bomb_booster_back',
+    BOMB_ADD5: 'bomb_add5min',
+    BOMB_RESET: 'bomb_reset',
 };
 
 const DEFAULT_STATE = {
@@ -156,9 +158,13 @@ class BombTimerService {
             bombStopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
         }
 
+        const bombActive = this.state.running && !this.state.paused && !this.state.defused && !this.state.exploded;
+
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Wystartuj bombę').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
             bombStopResumeBtn,
+            new ButtonBuilder().setCustomId(BTN.BOMB_ADD5).setLabel('+5 min').setStyle(ButtonStyle.Secondary).setEmoji('➕').setDisabled(!bombActive),
+            new ButtonBuilder().setCustomId(BTN.BOMB_RESET).setLabel('Resetuj bombę').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
             boosterBtn,
         );
         const row3 = new ActionRowBuilder().addComponents(
@@ -561,6 +567,38 @@ class BombTimerService {
             this.refreshControlPanel().catch(() => {});
             this._clearAllReactions().catch(() => {});
         }
+    }
+
+    async addFiveMinutes() {
+        if (!this.state.running || this.state.paused || this.state.defused || this.state.exploded) return;
+        this.state.timeRemaining += 5 * 60;
+        await this.saveState();
+        await this.updateTimerMessage();
+    }
+
+    async resetBomb() {
+        this.stopInterval();
+        this.stopDisplayLoop();
+        this.state.running = false;
+        this.state.paused = false;
+        this.state.defused = false;
+        this.state.exploded = false;
+        this.state.timeRemaining = 30 * 60;
+        this.state.requiredClicks = 0;
+        this.state.defuseClicks = [];
+        this.state.requiredReactions = 0;
+        this.state.currentReactionCount = 0;
+        this.state.requiredChatters = 0;
+        this.state.chatters = [];
+        await this.saveState();
+        // Aktualizuj wiadomość timera na stan "nikt nie uruchomił"
+        try {
+            const msg = await this.getOrCreateTimerMessage();
+            await msg.edit({ content: `# ⏱️ ${this.formatTime(this.state.timeRemaining)}\n\nTo wygląda jak bomba, której nikt nie uruchomił...`, components: [] });
+        } catch (err) {
+            logger.error('❌ BombTimer: błąd resetowania wiadomości timera:', err.message);
+        }
+        this.refreshControlPanel().catch(() => {});
     }
 
     async _clearAllReactions() {
