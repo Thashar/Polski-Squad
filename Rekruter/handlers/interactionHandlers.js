@@ -27,6 +27,9 @@ async function handleInteraction(interaction, state, config, client) {
       case 'nick':
         await handleNickCommand(interaction);
         return;
+      case 'powiadomienia':
+        await handlePowiadomieniaCommand(interaction, state);
+        return;
       default:
         await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
         return;
@@ -380,6 +383,32 @@ async function handleOcrDebugCommand(interaction, config) {
 }
 
 /**
+ * Obsługuje komendę /powiadomienia - włącza/wyłącza powiadomienia o zmianie ról
+ */
+async function handlePowiadomieniaCommand(interaction, state) {
+    const prefs = state.notificationPreferencesService;
+    if (!prefs) {
+        await interaction.reply({ content: '❌ Serwis preferencji niedostępny.', ephemeral: true });
+        return;
+    }
+
+    const userId = interaction.user.id;
+    if (prefs.isOptedOut(userId)) {
+        await prefs.optIn(userId);
+        await interaction.reply({
+            content: '🔔 Powiadomienia o zmianach ról zostały **włączone**. Będziesz informowany o dołączeniu do klanu, awansach i zmianach stanowisk.',
+            ephemeral: true
+        });
+    } else {
+        await prefs.optOut(userId);
+        await interaction.reply({
+            content: '🔕 Powiadomienia o zmianach ról zostały **wyłączone**. Możesz je włączyć ponownie komendą `/powiadomienia`.',
+            ephemeral: true
+        });
+    }
+}
+
+/**
  * Rejestruje komendy slash
  */
 async function registerSlashCommands(client, config) {
@@ -397,7 +426,10 @@ async function registerSlashCommands(client, config) {
                     .setRequired(false)),
         new SlashCommandBuilder()
             .setName('nick')
-            .setDescription('[ADMIN] Zmień nick użytkownika na serwerze')
+            .setDescription('[ADMIN] Zmień nick użytkownika na serwerze'),
+        new SlashCommandBuilder()
+            .setName('powiadomienia')
+            .setDescription('Włącz lub wyłącz powiadomienia o zmianach ról klanowych i awansach')
     ];
 
     const rest = new REST().setToken(config.token);

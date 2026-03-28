@@ -141,6 +141,12 @@
           "description": "Zmienia nick użytkownika na serwerze",
           "usage": "/nick użytkownik:@user nowy_nick:[tekst]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/powiadomienia",
+          "description": "Włącza lub wyłącza powiadomienia o zmianach ról klanowych i awansach (Lider/Vice Lider). Każde wywołanie przełącza stan.",
+          "usage": "/powiadomienia",
+          "requiredPermission": "public"
         }
       ]
     },
