@@ -46,6 +46,7 @@ module.exports = {
 
     // Przekazywanie wiadomości z priv na kanał (robot2)
     robot2Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
+    robotPingRole: localEnv.ROBOT_PING_ROLE || null,
     notificationForwardChannel: '1486848827997818900',
 
     channels: {

@@ -20,7 +20,7 @@
    - **Komendy:** `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`
 
 **Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`
-**Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
+**Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami), ROBOT_PING_ROLE (opcjonalne, ID roli więźnia/gracza do pinga)
 
 **Przekazywanie wiadomości (Robot1):**
 - Użytkownicy z ID w `ROBOT1` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`

@@ -282,7 +282,12 @@ client.on(Events.MessageCreate, async (message) => {
                 if (forwardChannel) {
                     const attachmentUrls = [...message.attachments.values()].map(a => a.url);
                     const payload = {};
-                    if (message.content) payload.content = message.content;
+                    let text = message.content || '';
+                    // Prefix "@" → dodaj ping do roli więźnia/gracza
+                    if (text.startsWith('@') && config.robotPingRole) {
+                        text = `<@&${config.robotPingRole}> ${text.slice(1).trimStart()}`;
+                    }
+                    if (text) payload.content = text;
                     if (attachmentUrls.length > 0) payload.files = attachmentUrls;
                     if (payload.content || payload.files) await forwardChannel.send(payload);
                     logger.info(`[ROBOT3] Przekazano wiadomość od ${message.author.tag} na kanał`);

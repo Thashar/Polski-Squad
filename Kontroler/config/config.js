@@ -32,6 +32,7 @@ module.exports = {
 
     // Przekazywanie wiadomości z priv na kanał (robot1)
     robot1Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
+    robotPingRole: localEnv.ROBOT_PING_ROLE || null,
     notificationForwardChannel: '1486848827997818900',
 
     // Rola blokująca udział w loteriach
