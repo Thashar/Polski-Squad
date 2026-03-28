@@ -78,6 +78,22 @@ function setListaEventowMenedzer(l) {
     sharedState.listaEventowMenedzer = l;
 }
 
+const RELAY_FILE_3 = path.join(__dirname, 'data', 'message_relay.json');
+const MAX_RELAY_ENTRIES_3 = 200;
+
+async function loadRelay3() {
+    try { return JSON.parse(await fs.readFile(RELAY_FILE_3, 'utf8')); } catch { return {}; }
+}
+
+async function saveRelay3(dmMessageId, channelId, messageId) {
+    const relay = await loadRelay3();
+    relay[dmMessageId] = { channelId, messageId };
+    const keys = Object.keys(relay);
+    if (keys.length > MAX_RELAY_ENTRIES_3) keys.slice(0, keys.length - MAX_RELAY_ENTRIES_3).forEach(k => delete relay[k]);
+    await fs.mkdir(path.dirname(RELAY_FILE_3), { recursive: true });
+    await fs.writeFile(RELAY_FILE_3, JSON.stringify(relay, null, 2));
+}
+
 async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
     if (robotUsers.length === 0) return;
     try {
@@ -237,17 +253,38 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 client.on(Events.MessageCreate, async (message) => {
     if (message.channel.type === ChannelType.DM && !message.author.bot) {
         if (config.robot3Users.length > 0 && config.robot3Users.includes(message.author.id)) {
+            if (message.partial) await message.fetch();
+
+            // Odpowiedź na przekazaną wiadomość → odpowiedz w oryginalnym kanale
+            if (message.reference?.messageId) {
+                const relay = await loadRelay3();
+                const original = relay[message.reference.messageId];
+                if (original) {
+                    try {
+                        const originalChannel = await client.channels.fetch(original.channelId);
+                        const originalMessage = await originalChannel.messages.fetch(original.messageId);
+                        const attachmentUrls = [...message.attachments.values()].map(a => a.url);
+                        const payload = {};
+                        if (message.content) payload.content = message.content;
+                        if (attachmentUrls.length > 0) payload.files = attachmentUrls;
+                        if (payload.content || payload.files) await originalMessage.reply(payload);
+                        logger.info(`[ROBOT3] Przekazano odpowiedź na kanał`);
+                    } catch (error) {
+                        logger.error(`[ROBOT3] Błąd przekazywania odpowiedzi: ${error.message}`);
+                    }
+                    return;
+                }
+            }
+
+            // Zwykły DM → przekaż na kanał
             try {
-                if (message.partial) await message.fetch();
                 const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
                 if (forwardChannel) {
                     const attachmentUrls = [...message.attachments.values()].map(a => a.url);
                     const payload = {};
                     if (message.content) payload.content = message.content;
                     if (attachmentUrls.length > 0) payload.files = attachmentUrls;
-                    if (payload.content || payload.files) {
-                        await forwardChannel.send(payload);
-                    }
+                    if (payload.content || payload.files) await forwardChannel.send(payload);
                     logger.info(`[ROBOT3] Przekazano wiadomość od ${message.author.tag} na kanał`);
                 }
             } catch (error) {
@@ -256,6 +293,26 @@ client.on(Events.MessageCreate, async (message) => {
             return;
         }
     }
+
+    // Ping bota w kanale → przekaż do DM robot userów
+    if (!message.author.bot && message.guild && config.robot3Users.length > 0 && message.mentions.has(client.user)) {
+        for (const userId of config.robot3Users) {
+            try {
+                const user = await client.users.fetch(userId);
+                const channelName = message.channel.name || message.channel.id;
+                const content = `📨 **${message.member?.displayName || message.author.username}** na #${channelName}:\n${message.content}`;
+                const attachmentUrls = [...message.attachments.values()].map(a => a.url);
+                const payload = { content };
+                if (attachmentUrls.length > 0) payload.files = attachmentUrls;
+                const dmMsg = await user.send(payload);
+                await saveRelay3(dmMsg.id, message.channelId, message.id);
+                logger.info(`[ROBOT3] Przekazano ping od ${message.author.tag} do ${user.tag}`);
+            } catch (err) {
+                logger.error(`[ROBOT3] Błąd przekazywania pinga do ${userId}: ${err.message}`);
+            }
+        }
+    }
+
     try {
         await handleMessageCreate(message, sharedState);
     } catch (error) {
