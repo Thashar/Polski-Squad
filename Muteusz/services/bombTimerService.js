@@ -192,6 +192,13 @@ class BombTimerService {
         const isLow = this.state.timeRemaining < 60;
         const sideEmoji = isLow ? '<a:PepePoar:1280067288397250570>' : '<a:PepeAlarmMan:1341086085089857619>';
 
+        if (!this.state.running && !this.state.defused && !this.state.exploded) {
+            return {
+                content: `# ⏱️ ${timeStr}\n\nTo wygląda jak bomba, której nikt nie uruchomił...`,
+                components: []
+            };
+        }
+
         if (this.state.defused) {
             return {
                 content: `# ⏱️ ${timeStr}\n\nCzas na zegarze bomby został wstrzymany! <a:PepeSweat:1278017088153190502>`,
