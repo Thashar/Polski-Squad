@@ -70,6 +70,8 @@ const boosterSnapshotService = new BoosterSnapshotService();
 const gameCountdownService = new GameCountdownService();
 const puzzleChainService = new PuzzleChainService();
 bombTimerService.gameCountdownService = gameCountdownService;
+bombTimerService.boosterSnapshotService = boosterSnapshotService;
+boosterSnapshotService.onSnapshotChange = () => bombTimerService.refreshControlPanel();
 
 let nicknameManager;
 let reactionRoleService;

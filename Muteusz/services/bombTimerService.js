@@ -54,8 +54,9 @@ class BombTimerService {
         this.lastFileSave = 0;
         this.cachedTimerChannel = null;
         this.cachedTimerMessage = null;
-        this.controlPanelMessage = null;   // referencja do wiadomości panelu kontrolnego
-        this.gameCountdownService = null;  // ustawiane z zewnątrz po inicjalizacji
+        this.controlPanelMessage = null;       // referencja do wiadomości panelu kontrolnego
+        this.gameCountdownService = null;      // ustawiane z zewnątrz po inicjalizacji
+        this.boosterSnapshotService = null;    // ustawiane z zewnątrz po inicjalizacji
     }
 
     async initialize(client) {
@@ -110,33 +111,38 @@ class BombTimerService {
     }
 
     buildControlRows() {
-        // Przycisk toggle Zatrzymaj/Wznów w zależności od stanu gry
+        // Rząd 1: przycisk toggle Start/Zatrzymaj/Wznów grę
         const gcRunning = this.gameCountdownService?.running ?? false;
         const gcStarted = !!(this.gameCountdownService?.timerMessageId);
-        let toggleBtn;
+        let gameToggleBtn;
         if (!gcStarted) {
-            // Gra nie uruchomiona → szary, nieaktywny
-            toggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Secondary).setEmoji('⏸️').setDisabled(true);
+            // Gra nie uruchomiona → zielony "Wystartuj grę"
+            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮');
         } else if (gcRunning) {
             // Gra trwa → czerwony "Zatrzymaj grę"
-            toggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
+            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
         } else {
             // Gra zatrzymana → niebieski "Wznów grę"
-            toggleBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️');
+            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️');
         }
 
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
-            toggleBtn,
+            gameToggleBtn,
             new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
+
+        // Rząd 2: toggle Usuń/Przywróć uprawnienia Boosterów
+        const snapshotExists = this.boosterSnapshotService?.hasSnapshot() ?? false;
+        const boosterBtn = snapshotExists
+            ? new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Przywróć uprawnienia Boosterów').setStyle(ButtonStyle.Success).setEmoji('🔓')
+            : new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Usuń uprawnienia Boosterów').setStyle(ButtonStyle.Danger).setEmoji('🔒');
+
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
             new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏹️'),
             new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary).setEmoji('⏯️'),
-            new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Snapshot booster').setStyle(ButtonStyle.Primary).setEmoji('📸'),
-            new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Booster back').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            boosterBtn,
         );
         const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),

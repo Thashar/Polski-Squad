@@ -11,6 +11,11 @@ class BoosterSnapshotService {
     constructor() {
         this.client = null;
         this._pendingSnapshot = null; // tymczasowy wynik skanu przed potwierdzeniem
+        this.onSnapshotChange = null; // callback wywoływany po zmianie stanu snapshotu
+    }
+
+    hasSnapshot() {
+        return fs.existsSync(DATA_FILE);
     }
 
     initialize(client) {
@@ -119,6 +124,7 @@ class BoosterSnapshotService {
             content: `✅ Zapisano ${snapshot.length} kanałów i usunięto uprawnienia z ${removed} kanałów.`,
             components: []
         });
+        if (this.onSnapshotChange) await this.onSnapshotChange();
     }
 
     // ─── Przycisk "Booster back" ─────────────────────────────────────────────
@@ -152,8 +158,12 @@ class BoosterSnapshotService {
             }
         }
 
+        // Usuń plik snapshotu po przywróceniu
+        try { fs.unlinkSync(DATA_FILE); } catch {}
+
         logger.info(`🔄 BoosterSnapshot: przywrócono uprawnienia na ${restored}/${snapshot.length} kanałach`);
         await interaction.editReply({ content: `✅ Przywrócono uprawnienia na ${restored}/${snapshot.length} kanałach.` });
+        if (this.onSnapshotChange) await this.onSnapshotChange();
     }
 }
 
