@@ -549,6 +549,14 @@ class InteractionHandler {
             await interaction.deferUpdate();
             await this.bombTimerService.resume();
 
+        } else if (customId === BTN.BOMB_ADD5) {
+            await interaction.deferUpdate();
+            await this.bombTimerService.addFiveMinutes();
+
+        } else if (customId === BTN.BOMB_RESET) {
+            await interaction.deferUpdate();
+            await this.bombTimerService.resetBomb();
+
         } else if (customId === BTN.RESET_PASSWORD) {
             await interaction.deferUpdate();
             if (this.primaAprilisService) {
