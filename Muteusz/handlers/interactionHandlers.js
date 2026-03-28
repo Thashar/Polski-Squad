@@ -582,15 +582,19 @@ class InteractionHandler {
         } else if (customId === BTN.START_GAME) {
             await interaction.deferUpdate();
             if (this.gameCountdownService) await this.gameCountdownService.start();
+            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
         } else if (customId === BTN.STOP_GAME) {
             await interaction.deferUpdate();
             if (this.gameCountdownService) await this.gameCountdownService.stop();
+            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
         } else if (customId === BTN.RESUME_GAME) {
             await interaction.deferUpdate();
             if (this.gameCountdownService) await this.gameCountdownService.resume();
+            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
         } else if (customId === BTN.END_GAME) {
             await interaction.deferUpdate();
             if (this.gameCountdownService) await this.gameCountdownService.end();
+            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
         }
     }
 

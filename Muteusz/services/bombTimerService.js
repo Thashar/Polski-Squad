@@ -54,6 +54,9 @@ class BombTimerService {
         this.lastFileSave = 0;
         this.cachedTimerChannel = null;
         this.cachedTimerMessage = null;
+        this.controlPanelMessage = null;       // referencja do wiadomości panelu kontrolnego
+        this.gameCountdownService = null;      // ustawiane z zewnątrz po inicjalizacji
+        this.boosterSnapshotService = null;    // ustawiane z zewnątrz po inicjalizacji
     }
 
     async initialize(client) {
@@ -108,19 +111,38 @@ class BombTimerService {
     }
 
     buildControlRows() {
+        // Rząd 1: przycisk toggle Start/Zatrzymaj/Wznów grę
+        const gcRunning = this.gameCountdownService?.running ?? false;
+        const gcStarted = !!(this.gameCountdownService?.timerMessageId);
+        let gameToggleBtn;
+        if (!gcStarted) {
+            // Gra nie uruchomiona → zielony "Wystartuj grę"
+            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮');
+        } else if (gcRunning) {
+            // Gra trwa → czerwony "Zatrzymaj grę"
+            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
+        } else {
+            // Gra zatrzymana → niebieski "Wznów grę"
+            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️');
+        }
+
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
-            new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️'),
-            new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️'),
+            gameToggleBtn,
             new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
+
+        // Rząd 2: toggle Usuń/Przywróć uprawnienia Boosterów
+        const snapshotExists = this.boosterSnapshotService?.hasSnapshot() ?? false;
+        const boosterBtn = snapshotExists
+            ? new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Przywróć uprawnienia Boosterów').setStyle(ButtonStyle.Success).setEmoji('🔓')
+            : new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Usuń uprawnienia Boosterów').setStyle(ButtonStyle.Danger).setEmoji('🔒');
+
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
             new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏹️'),
             new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary).setEmoji('⏯️'),
-            new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Snapshot booster').setStyle(ButtonStyle.Primary).setEmoji('📸'),
-            new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Booster back').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            boosterBtn,
         );
         const row3 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
@@ -314,14 +336,24 @@ class BombTimerService {
 
             if (existing) {
                 await existing.edit({ components });
+                this.controlPanelMessage = existing;
                 logger.info('ℹ️ BombTimer: zaktualizowano panel kontrolny');
                 return;
             }
 
-            await channel.send({ components });
+            this.controlPanelMessage = await channel.send({ components });
             logger.success('✅ BombTimer: wysłano panel kontrolny');
         } catch (error) {
             logger.error('❌ BombTimer: błąd setupu panelu kontrolnego:', error.message);
+        }
+    }
+
+    async refreshControlPanel() {
+        if (!this.controlPanelMessage) return;
+        try {
+            await this.controlPanelMessage.edit({ components: this.buildControlRows() });
+        } catch (err) {
+            logger.error('❌ BombTimer: błąd odświeżania panelu kontrolnego:', err.message);
         }
     }
 
