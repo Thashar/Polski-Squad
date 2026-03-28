@@ -114,9 +114,9 @@ class BombTimerService {
         const gcRunning = this.gameCountdownService?.running ?? false;
         const gcStarted = !!(this.gameCountdownService?.timerMessageId);
 
-        // Przycisk 1: "Wystartuj grę" gdy gra nie trwa, "Zakończ grę" gdy trwa lub jest zatrzymana
+        // Przycisk 1: "Wystartuj grę" gdy gra nie trwa, "Zakończ grę" (czerwony) gdy trwa lub jest zatrzymana
         const startEndBtn = gcStarted
-            ? new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁')
+            ? new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Danger).setEmoji('🏁')
             : new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮');
 
         // Przycisk 2: zawsze widoczny — szary gdy gra nie trwa, czerwony gdy trwa
@@ -128,8 +128,8 @@ class BombTimerService {
             // Gra trwa → czerwony "Zatrzymaj grę"
             stopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
         } else {
-            // Gra zatrzymana → szary "Wznów grę"
-            stopResumeBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Secondary).setEmoji('▶️');
+            // Gra zatrzymana → zielony "Wznów grę"
+            stopResumeBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Success).setEmoji('▶️');
         }
 
         const row1 = new ActionRowBuilder().addComponents(
