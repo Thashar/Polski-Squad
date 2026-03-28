@@ -111,24 +111,30 @@ class BombTimerService {
     }
 
     buildControlRows() {
-        // Rząd 1: przycisk toggle Start/Zatrzymaj/Wznów grę
         const gcRunning = this.gameCountdownService?.running ?? false;
         const gcStarted = !!(this.gameCountdownService?.timerMessageId);
-        let gameToggleBtn;
+
+        // Przycisk 1: "Wystartuj grę" gdy gra nie trwa, "Zakończ grę" gdy trwa lub jest zatrzymana
+        const startEndBtn = gcStarted
+            ? new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁')
+            : new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮');
+
+        // Przycisk 2: zawsze widoczny — szary gdy gra nie trwa, czerwony gdy trwa
+        let stopResumeBtn;
         if (!gcStarted) {
-            // Gra nie uruchomiona → zielony "Wystartuj grę"
-            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮');
+            // Gra nie uruchomiona → szary, nieaktywny
+            stopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Secondary).setEmoji('⏸️').setDisabled(true);
         } else if (gcRunning) {
             // Gra trwa → czerwony "Zatrzymaj grę"
-            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
+            stopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
         } else {
-            // Gra zatrzymana → niebieski "Wznów grę"
-            gameToggleBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️');
+            // Gra zatrzymana → szary "Wznów grę"
+            stopResumeBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Secondary).setEmoji('▶️');
         }
 
         const row1 = new ActionRowBuilder().addComponents(
-            gameToggleBtn,
-            new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁'),
+            startEndBtn,
+            stopResumeBtn,
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
 
