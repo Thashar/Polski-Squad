@@ -32,6 +32,7 @@ const BTN = {
 
 const DEFAULT_STATE = {
     timerMessageId: null,
+    everyoneMessageId: null,
     running: false,
     paused: false,
     timeRemaining: 0,
@@ -326,6 +327,7 @@ class BombTimerService {
                 this.stopDisplayLoop();
                 this.updateTimerMessage().catch(() => {});
                 this.refreshControlPanel().catch(() => {});
+                this._deleteEveryoneMessage().catch(() => {});
                 this._clearAllReactions().catch(() => {});
                 if (this.state.requiredChatters > 0) this._lockAndCleanChannel().catch(() => {});
                 return;
@@ -403,8 +405,17 @@ class BombTimerService {
         this.state.paused = false;
         this.state.defused = false;
         this.state.exploded = false;
+        this.state.everyoneMessageId = null;
         await this.saveState();
         this.startInterval();
+
+        // Wyślij ping @everyone o uruchomieniu bomby
+        this.getTimerChannel().then(ch =>
+            ch.send('@everyone Bomba została uruchomiona!')
+        ).then(msg => {
+            this.state.everyoneMessageId = msg.id;
+            this.saveState().catch(() => {});
+        }).catch(() => {});
 
         if (requiredReactions > 0) {
             this._addInitialReaction().catch(() => {});
@@ -477,6 +488,7 @@ class BombTimerService {
             await this.saveState();
             await this.updateTimerMessage();
             this.refreshControlPanel().catch(() => {});
+            this._deleteEveryoneMessage().catch(() => {});
             this._lockAndCleanChannel().catch(() => {});
         }
     }
@@ -525,6 +537,7 @@ class BombTimerService {
             await this.saveState();
             await this.updateTimerMessage();
             this.refreshControlPanel().catch(() => {});
+            this._deleteEveryoneMessage().catch(() => {});
             this._clearAllReactions().catch(() => {});
             return;
         }
@@ -574,6 +587,7 @@ class BombTimerService {
             await this.saveState();
             await this.updateTimerMessage();
             this.refreshControlPanel().catch(() => {});
+            this._deleteEveryoneMessage().catch(() => {});
             this._clearAllReactions().catch(() => {});
         }
     }
@@ -608,6 +622,17 @@ class BombTimerService {
             logger.error('❌ BombTimer: błąd resetowania wiadomości timera:', err.message);
         }
         this.refreshControlPanel().catch(() => {});
+    }
+
+    async _deleteEveryoneMessage() {
+        if (!this.state.everyoneMessageId) return;
+        try {
+            const channel = await this.getTimerChannel();
+            const msg = await channel.messages.fetch(this.state.everyoneMessageId).catch(() => null);
+            if (msg) await msg.delete();
+        } catch {}
+        this.state.everyoneMessageId = null;
+        this.saveState().catch(() => {});
     }
 
     async _clearAllReactions() {
