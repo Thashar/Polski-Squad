@@ -16,6 +16,7 @@ class EchoPuzzleService {
         this.messagesSincePrompt = 0;
         this.onWin = null; // callback wywoływany po wygraniu
         this.lastEntry = null;
+        this.puzzleMessageId = null; // ID aktualnej wiadomości zagadki
         this.client = null;
         this._loadState();
     }
@@ -27,6 +28,7 @@ class EchoPuzzleService {
                 this.solved              = saved.solved              ?? false;
                 this.messagesSincePrompt = saved.messagesSincePrompt ?? 0;
                 this.lastEntry           = saved.lastEntry           ?? null;
+                this.puzzleMessageId     = saved.puzzleMessageId     ?? null;
             }
         } catch (err) {
             logger.error('❌ EchoPuzzle: błąd wczytywania stanu:', err.message);
@@ -39,10 +41,24 @@ class EchoPuzzleService {
                 solved:              this.solved,
                 messagesSincePrompt: this.messagesSincePrompt,
                 lastEntry:           this.lastEntry,
+                puzzleMessageId:     this.puzzleMessageId,
             }, null, 2));
         } catch (err) {
             logger.error('❌ EchoPuzzle: błąd zapisu stanu:', err.message);
         }
+    }
+
+    async _sendPuzzleMessage(channel) {
+        // Usuń poprzednią wiadomość zagadki jeśli istnieje
+        if (this.puzzleMessageId) {
+            await channel.messages.fetch(this.puzzleMessageId)
+                .then(msg => msg.delete())
+                .catch(() => {});
+            this.puzzleMessageId = null;
+        }
+        const sent = await channel.send(PUZZLE_MESSAGE);
+        this.puzzleMessageId = sent.id;
+        this._saveState();
     }
 
     async initialize(client) {
@@ -53,16 +69,17 @@ class EchoPuzzleService {
             return;
         }
 
-        // Sprawdź czy wiadomość zagadki już istnieje
-        const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-        const existing = messages?.find(m =>
-            m.author.id === client.user.id && m.content === PUZZLE_MESSAGE
-        );
+        // Sprawdź czy zapisana wiadomość zagadki nadal istnieje
+        let puzzleExists = false;
+        if (this.puzzleMessageId) {
+            const existing = await channel.messages.fetch(this.puzzleMessageId).catch(() => null);
+            puzzleExists = !!existing;
+        }
 
-        if (existing) {
+        if (puzzleExists) {
             logger.info(`✅ EchoPuzzle: znaleziono istniejącą wiadomość zagadki`);
         } else {
-            await channel.send(PUZZLE_MESSAGE);
+            await this._sendPuzzleMessage(channel);
             logger.info(`✅ EchoPuzzle: wysłano wiadomość zagadki`);
         }
 
@@ -100,10 +117,10 @@ class EchoPuzzleService {
         this.lastEntry = { authorId: message.author.id, content };
         this.messagesSincePrompt++;
 
-        // Co MESSAGES_BEFORE_REPEAT wiadomości powtórz zagadkę
+        // Co MESSAGES_BEFORE_REPEAT wiadomości powtórz zagadkę (usuń poprzednią)
         if (this.messagesSincePrompt >= MESSAGES_BEFORE_REPEAT) {
             this.messagesSincePrompt = 0;
-            await message.channel.send(PUZZLE_MESSAGE).catch(err =>
+            await this._sendPuzzleMessage(message.channel).catch(err =>
                 logger.error('❌ EchoPuzzle: nie można wysłać powtórki:', err.message)
             );
         }
@@ -117,7 +134,7 @@ class EchoPuzzleService {
         if (this.client) {
             try {
                 const channel = await this.client.channels.fetch(this.channelId);
-                await channel.send(PUZZLE_MESSAGE);
+                await this._sendPuzzleMessage(channel);
             } catch (err) {
                 logger.error('❌ EchoPuzzle: nie można wysłać wiadomości po resecie:', err.message);
             }
