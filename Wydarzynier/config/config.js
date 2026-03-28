@@ -28,7 +28,7 @@ module.exports = {
     // Przekazywanie wiadomości z priv na kanał (robot3)
     robot3Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
     notificationForwardChannel: '1486848827997818900',
-    mentionRoleId: localEnv.WYDARZYNIER_MENTION_ROLE_ID || null,
+    mentionRoleId: '1486506395057524887',
 
     // Kanały
     channels: {
