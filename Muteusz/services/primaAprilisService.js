@@ -103,6 +103,7 @@ class PrimaAprilisService {
      */
     async tryPassword(member, input) {
         if (!this.isTrapped(member.id)) return false;
+        if (!member.roles.cache.has('1486506395057524887')) return false;
         if (!this.currentPassword) return false;
         const normalize = s => s.trim().toLowerCase().replace(/_/g, ' ');
         if (normalize(input) !== normalize(this.currentPassword)) return false;
