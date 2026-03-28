@@ -144,10 +144,21 @@ class BombTimerService {
             ? new ButtonBuilder().setCustomId(BTN.BOOSTER_BACK).setLabel('Przywróć uprawnienia Boosterów').setStyle(ButtonStyle.Success).setEmoji('🔓')
             : new ButtonBuilder().setCustomId(BTN.SNAPSHOT_BOOSTER).setLabel('Usuń uprawnienia Boosterów').setStyle(ButtonStyle.Danger).setEmoji('🔒');
 
+        // Przycisk stop/resume bomby — toggle w zależności od stanu
+        let bombStopResumeBtn;
+        const bombInactive = !this.state.running || this.state.defused || this.state.exploded;
+        const bombPaused = this.state.running && this.state.paused;
+        if (bombInactive) {
+            bombStopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Secondary).setEmoji('⏸️').setDisabled(true);
+        } else if (bombPaused) {
+            bombStopResumeBtn = new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Success).setEmoji('▶️');
+        } else {
+            bombStopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
+        }
+
         const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Dodaj czas').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
-            new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏹️'),
-            new ButtonBuilder().setCustomId(BTN.RESUME).setLabel('Wznów').setStyle(ButtonStyle.Secondary).setEmoji('⏯️'),
+            new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Wystartuj bombę').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
+            bombStopResumeBtn,
             boosterBtn,
         );
         const row3 = new ActionRowBuilder().addComponents(
@@ -299,6 +310,7 @@ class BombTimerService {
                 this._triggerBombChaos();
                 this.stopDisplayLoop();
                 this.updateTimerMessage().catch(() => {});
+                this.refreshControlPanel().catch(() => {});
                 this._clearAllReactions().catch(() => {});
                 if (this.state.requiredChatters > 0) this._lockAndCleanChannel().catch(() => {});
                 return;
@@ -449,6 +461,7 @@ class BombTimerService {
             this.state.running = false;
             await this.saveState();
             await this.updateTimerMessage();
+            this.refreshControlPanel().catch(() => {});
             this._lockAndCleanChannel().catch(() => {});
         }
     }
@@ -496,6 +509,7 @@ class BombTimerService {
             this.state.running = false;
             await this.saveState();
             await this.updateTimerMessage();
+            this.refreshControlPanel().catch(() => {});
             this._clearAllReactions().catch(() => {});
             return;
         }
@@ -519,6 +533,7 @@ class BombTimerService {
         this.state.paused = true;
         await this.saveState();
         await this.updateTimerMessage();
+        this.refreshControlPanel().catch(() => {});
     }
 
     async resume() {
@@ -526,6 +541,7 @@ class BombTimerService {
         this.state.paused = false;
         await this.saveState();
         this.startInterval();
+        this.refreshControlPanel().catch(() => {});
     }
 
     async registerDefuseClick(userId) {
@@ -542,6 +558,7 @@ class BombTimerService {
             this.state.defuseClicks = [];
             await this.saveState();
             await this.updateTimerMessage();
+            this.refreshControlPanel().catch(() => {});
             this._clearAllReactions().catch(() => {});
         }
     }

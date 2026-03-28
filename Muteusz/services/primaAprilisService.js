@@ -52,7 +52,6 @@ class PrimaAprilisService {
             if (elapsed < PASSWORD_ROTATION_MS) {
                 // Hasło jest nadal aktualne - użyj go
                 this.currentPassword = state.current;
-                logger.info(`🔑 PrimaAprilis: aktualne hasło: "${this.currentPassword}" (zmiana za ${Math.round((PASSWORD_ROTATION_MS - elapsed) / 1000)}s)`);
                 return;
             }
         }
@@ -79,7 +78,6 @@ class PrimaAprilisService {
             changedAt: new Date().toISOString()
         };
         await this.saveData();
-        logger.info(`🔑 PrimaAprilis: hasło zmienione na "${this.currentPassword}"`);
         await this._updatePasswordMessage();
     }
 

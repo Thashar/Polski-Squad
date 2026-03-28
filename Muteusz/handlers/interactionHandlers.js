@@ -629,6 +629,7 @@ class InteractionHandler {
                 }
                 await interaction.deferUpdate();
                 await this.bombTimerService.addTimeAndStart(seconds, 0, 0, requiredChatters);
+                await this.bombTimerService.refreshControlPanel();
             } else if (requiredReactions > 0) {
                 // Tryb reakcji
                 if (isNaN(requiredReactions) || requiredReactions < 1) {
@@ -637,6 +638,7 @@ class InteractionHandler {
                 }
                 await interaction.deferUpdate();
                 await this.bombTimerService.addTimeAndStart(seconds, 0, requiredReactions, 0);
+                await this.bombTimerService.refreshControlPanel();
             } else if (requiredClicks > 0) {
                 // Tryb kliknięć
                 if (isNaN(requiredClicks) || requiredClicks < 1) {
@@ -645,6 +647,7 @@ class InteractionHandler {
                 }
                 await interaction.deferUpdate();
                 await this.bombTimerService.addTimeAndStart(seconds, requiredClicks, 0, 0);
+                await this.bombTimerService.refreshControlPanel();
             } else {
                 await interaction.reply({ content: '❌ Wypełnij jedno z pól: kliknięcia, reakcje lub czat.', ephemeral: true });
                 return;
