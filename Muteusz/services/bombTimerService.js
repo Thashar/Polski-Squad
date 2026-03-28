@@ -54,6 +54,8 @@ class BombTimerService {
         this.lastFileSave = 0;
         this.cachedTimerChannel = null;
         this.cachedTimerMessage = null;
+        this.controlPanelMessage = null;   // referencja do wiadomości panelu kontrolnego
+        this.gameCountdownService = null;  // ustawiane z zewnątrz po inicjalizacji
     }
 
     async initialize(client) {
@@ -108,10 +110,24 @@ class BombTimerService {
     }
 
     buildControlRows() {
+        // Przycisk toggle Zatrzymaj/Wznów w zależności od stanu gry
+        const gcRunning = this.gameCountdownService?.running ?? false;
+        const gcStarted = !!(this.gameCountdownService?.timerMessageId);
+        let toggleBtn;
+        if (!gcStarted) {
+            // Gra nie uruchomiona → szary, nieaktywny
+            toggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Secondary).setEmoji('⏸️').setDisabled(true);
+        } else if (gcRunning) {
+            // Gra trwa → czerwony "Zatrzymaj grę"
+            toggleBtn = new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
+        } else {
+            // Gra zatrzymana → niebieski "Wznów grę"
+            toggleBtn = new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️');
+        }
+
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.START_GAME).setLabel('Wystartuj grę').setStyle(ButtonStyle.Success).setEmoji('🎮'),
-            new ButtonBuilder().setCustomId(BTN.STOP_GAME).setLabel('Zatrzymaj grę').setStyle(ButtonStyle.Danger).setEmoji('⏸️'),
-            new ButtonBuilder().setCustomId(BTN.RESUME_GAME).setLabel('Wznów grę').setStyle(ButtonStyle.Primary).setEmoji('▶️'),
+            toggleBtn,
             new ButtonBuilder().setCustomId(BTN.END_GAME).setLabel('Zakończ grę').setStyle(ButtonStyle.Secondary).setEmoji('🏁'),
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
@@ -314,14 +330,24 @@ class BombTimerService {
 
             if (existing) {
                 await existing.edit({ components });
+                this.controlPanelMessage = existing;
                 logger.info('ℹ️ BombTimer: zaktualizowano panel kontrolny');
                 return;
             }
 
-            await channel.send({ components });
+            this.controlPanelMessage = await channel.send({ components });
             logger.success('✅ BombTimer: wysłano panel kontrolny');
         } catch (error) {
             logger.error('❌ BombTimer: błąd setupu panelu kontrolnego:', error.message);
+        }
+    }
+
+    async refreshControlPanel() {
+        if (!this.controlPanelMessage) return;
+        try {
+            await this.controlPanelMessage.edit({ components: this.buildControlRows() });
+        } catch (err) {
+            logger.error('❌ BombTimer: błąd odświeżania panelu kontrolnego:', err.message);
         }
     }
 

@@ -69,6 +69,7 @@ const hotPotatoService = new HotPotatoService(config);
 const boosterSnapshotService = new BoosterSnapshotService();
 const gameCountdownService = new GameCountdownService();
 const puzzleChainService = new PuzzleChainService();
+bombTimerService.gameCountdownService = gameCountdownService;
 
 let nicknameManager;
 let reactionRoleService;
