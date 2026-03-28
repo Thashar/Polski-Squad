@@ -158,7 +158,7 @@ class BombTimerService {
             bombStopResumeBtn = new ButtonBuilder().setCustomId(BTN.STOP).setLabel('Zatrzymaj').setStyle(ButtonStyle.Danger).setEmoji('⏸️');
         }
 
-        const bombActive = this.state.running && !this.state.paused && !this.state.defused && !this.state.exploded;
+        const bombActive = this.state.running && !this.state.defused && !this.state.exploded;
 
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.ADD_TIME).setLabel('Wystartuj bombę').setStyle(ButtonStyle.Success).setEmoji('⏱️'),
@@ -570,7 +570,7 @@ class BombTimerService {
     }
 
     async addFiveMinutes() {
-        if (!this.state.running || this.state.paused || this.state.defused || this.state.exploded) return;
+        if (!this.state.running || this.state.defused || this.state.exploded) return;
         this.state.timeRemaining += 5 * 60;
         await this.saveState();
         await this.updateTimerMessage();
