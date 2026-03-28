@@ -300,7 +300,12 @@ client.on('messageCreate', async message => {
                 if (forwardChannel) {
                     const attachmentUrls = [...message.attachments.values()].map(a => a.url);
                     const payload = {};
-                    if (message.content) payload.content = message.content;
+                    let msgContent = message.content || '';
+                    // Jeśli wiadomość zaczyna się od "@" i skonfigurowano rolę → dodaj ping do roli
+                    if (msgContent.startsWith('@') && config.mentionRoleId) {
+                        msgContent = `<@&${config.mentionRoleId}> ${msgContent.slice(1).trimStart()}`;
+                    }
+                    if (msgContent) payload.content = msgContent;
                     if (attachmentUrls.length > 0) payload.files = attachmentUrls;
                     if (payload.content || payload.files) await forwardChannel.send(payload);
                     logger.info(`[ROBOT2] Przekazano wiadomość od ${message.author.tag} na kanał`);

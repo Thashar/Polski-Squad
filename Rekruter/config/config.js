@@ -47,6 +47,7 @@ module.exports = {
     // Przekazywanie wiadomości z priv na kanał (robot2)
     robot2Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
     notificationForwardChannel: '1486848827997818900',
+    mentionRoleId: localEnv.REKRUTER_MENTION_ROLE_ID || null,
 
     channels: {
         recruitment: process.env.RECRUITMENT_CHANNEL,
