@@ -170,7 +170,7 @@ class BombTimerService {
             boosterBtn,
         );
         const row4 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
+            new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski układanki').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
             new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
             new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
             new ButtonBuilder().setCustomId(BTN.RESET_EMPTY_PUZZLE).setLabel('Resetuj EMPTY').setStyle(ButtonStyle.Danger),
