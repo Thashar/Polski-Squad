@@ -23,6 +23,7 @@ const BTN = {
     RESET_ECHO_PUZZLE: 'bomb_reset_echo_puzzle',
     RESET_HOTPOTATO: 'bomb_reset_hotpotato',
     HOTPOTATO_MINUS5: 'bomb_hotpotato_minus5',
+    HOTPOTATO_ADD5: 'bomb_hotpotato_add5',
     SNAPSHOT_BOOSTER: 'bomb_snapshot_booster',
     BOOSTER_BACK: 'bomb_booster_back',
     BOMB_ADD5: 'bomb_add5min',
@@ -170,7 +171,7 @@ class BombTimerService {
             boosterBtn,
         );
         const row4 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
+            new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski układanki').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
             new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
             new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
             new ButtonBuilder().setCustomId(BTN.RESET_EMPTY_PUZZLE).setLabel('Resetuj EMPTY').setStyle(ButtonStyle.Danger),
@@ -178,7 +179,8 @@ class BombTimerService {
         );
         const row5 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.RESET_HOTPOTATO).setLabel('Resetuj gorący kartofel').setStyle(ButtonStyle.Danger).setEmoji('🥔'),
-            new ButtonBuilder().setCustomId(BTN.HOTPOTATO_MINUS5).setLabel('Odejmij 5 min kartoflu').setStyle(ButtonStyle.Primary).setEmoji('⏬'),
+            new ButtonBuilder().setCustomId(BTN.HOTPOTATO_MINUS5).setLabel('Odejmij 5 minut').setStyle(ButtonStyle.Primary).setEmoji('⏬'),
+            new ButtonBuilder().setCustomId(BTN.HOTPOTATO_ADD5).setLabel('Dodaj 5 minut').setStyle(ButtonStyle.Primary).setEmoji('⏫'),
         );
         return [row1, row2, row3, row4, row5];
     }

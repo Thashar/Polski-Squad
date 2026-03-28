@@ -374,6 +374,12 @@ class HotPotatoService {
         logger.info(`⏬ HotPotato: odejmiono 5 minut (pozostało: ${formatTime(this.mainTimeRemaining)})`);
     }
 
+    async addFiveMinutes() {
+        this.mainTimeRemaining += 300;
+        await this._updateMainMessage();
+        logger.info(`⏫ HotPotato: dodano 5 minut (pozostało: ${formatTime(this.mainTimeRemaining)})`);
+    }
+
     async handleMessageCreate(message) {
         if (message.channel.id !== this.mainChannelId) return;
         if (message.author.bot) return;

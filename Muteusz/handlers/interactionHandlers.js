@@ -583,6 +583,9 @@ class InteractionHandler {
         } else if (customId === BTN.HOTPOTATO_MINUS5) {
             await interaction.deferUpdate();
             if (this.hotPotatoService) await this.hotPotatoService.minusFiveMinutes();
+        } else if (customId === BTN.HOTPOTATO_ADD5) {
+            await interaction.deferUpdate();
+            if (this.hotPotatoService) await this.hotPotatoService.addFiveMinutes();
         } else if (customId === BTN.SNAPSHOT_BOOSTER) {
             if (this.boosterSnapshotService) await this.boosterSnapshotService.handleSnapshotButton(interaction);
         } else if (customId === BTN.BOOSTER_BACK) {
