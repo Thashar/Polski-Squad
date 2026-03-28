@@ -165,13 +165,13 @@ class BombTimerService {
             bombStopResumeBtn,
             new ButtonBuilder().setCustomId(BTN.BOMB_ADD5).setLabel('+5 min').setStyle(ButtonStyle.Secondary).setEmoji('➕').setDisabled(!bombActive),
             new ButtonBuilder().setCustomId(BTN.BOMB_RESET).setLabel('Resetuj bombę').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
-            boosterBtn,
         );
         const row3 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
-            new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
+            boosterBtn,
         );
         const row4 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
+            new ButtonBuilder().setCustomId(BTN.RESET_ORDER).setLabel('Ułóż od 1 do 40').setStyle(ButtonStyle.Secondary).setEmoji('🔢'),
             new ButtonBuilder().setCustomId(BTN.RESET_REACTION_PUZZLE).setLabel('Resetuj kucharza').setStyle(ButtonStyle.Danger).setEmoji('👩🏻‍🍳'),
             new ButtonBuilder().setCustomId(BTN.RESET_EMPTY_PUZZLE).setLabel('Resetuj EMPTY').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId(BTN.RESET_ECHO_PUZZLE).setLabel('Resetuj Echo').setStyle(ButtonStyle.Danger).setEmoji('🔊'),
