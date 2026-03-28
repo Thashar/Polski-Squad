@@ -10,6 +10,7 @@ const RoleMonitoringService = require('./services/roleMonitoringService');
 const MemberNotificationService = require('./services/memberNotificationService');
 const MemberCacheService = require('./services/memberCacheService');
 const ClanRoleChangeService = require('./services/clanRoleChangeService');
+const NotificationsService = require('./services/notificationsService');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -18,7 +19,8 @@ const logger = createBotLogger('Rekruter');
 const roleMonitoringService = new RoleMonitoringService(config);
 const memberNotificationService = new MemberNotificationService(config);
 const memberCacheService = new MemberCacheService(config);
-const clanRoleChangeService = new ClanRoleChangeService(config);
+const notificationsService = new NotificationsService();
+const clanRoleChangeService = new ClanRoleChangeService(config, notificationsService);
 
 const client = new Client({
     intents: [
@@ -48,6 +50,7 @@ const sharedState = {
     pendingQualifications,
     userImages,
     pendingOtherPurposeFinish,
+    notificationsService,
     client,
     config
 };
@@ -55,6 +58,9 @@ const sharedState = {
 client.once('ready', async () => {
     logger.success('✅ Rekruter gotowy - rekrutacja z OCR, boost tracking');
     
+    // Wczytanie serwisu powiadomień
+    await notificationsService.load();
+
     // Rejestracja komend slash
     await registerSlashCommands(client, config);
     

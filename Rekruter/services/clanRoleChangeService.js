@@ -5,8 +5,9 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('Rekruter');
 
 class ClanRoleChangeService {
-    constructor(config) {
+    constructor(config, notificationsService) {
         this.config = config;
+        this.notificationsService = notificationsService || null;
         this.client = null;
         this.notificationChannelId = config.channels.welcome;
 
@@ -92,10 +93,9 @@ class ClanRoleChangeService {
             const currentRoleIds = Array.from(freshMember.roles.cache.keys());
             this.memberRolesCache.set(userId, currentRoleIds);
 
-            // Ignoruj zmiany ról dla konkretnych użytkowników (np. właściciel serwera)
-            const ignoredUserIds = ['385489410805858335'];
-            if (ignoredUserIds.includes(userId)) {
-                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.tag} jest na liście ignorowanych - pomijam powiadomienie o zmianie ról`);
+            // Ignoruj zmiany ról dla użytkowników z wyłączonymi powiadomieniami
+            if (this.notificationsService && this.notificationsService.isDisabled(userId)) {
+                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.tag} ma wyłączone powiadomienia - pomijam zmianę ról`);
                 return;
             }
 

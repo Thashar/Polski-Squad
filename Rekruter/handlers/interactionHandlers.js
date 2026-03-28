@@ -27,6 +27,9 @@ async function handleInteraction(interaction, state, config, client) {
       case 'nick':
         await handleNickCommand(interaction);
         return;
+      case 'powiadomienia':
+        await handlePowiadomieniaCommand(interaction, state);
+        return;
       default:
         await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
         return;
@@ -339,6 +342,48 @@ async function handleNickChangeModal(interaction) {
 }
 
 /**
+ * Obsługuje komendę /powiadomienia
+ */
+async function handlePowiadomieniaCommand(interaction, state) {
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const { createBotLogger } = require('../../utils/consoleLogger');
+    const logger = createBotLogger('Rekruter');
+
+    const targetUser = interaction.options.getUser('użytkownik');
+    const enabled = interaction.options.getBoolean('włączone');
+    const notificationsService = state.notificationsService;
+
+    if (!notificationsService) {
+        await interaction.reply({ content: '❌ Serwis powiadomień nie jest dostępny.', ephemeral: true });
+        return;
+    }
+
+    if (enabled === null) {
+        const isDisabled = notificationsService.isDisabled(targetUser.id);
+        await interaction.reply({
+            content: `🔔 Powiadomienia dla <@${targetUser.id}>: ${isDisabled ? '❌ Wyłączone' : '✅ Włączone'}`,
+            ephemeral: true
+        });
+        return;
+    }
+
+    await notificationsService.setDisabled(targetUser.id, !enabled);
+    logger.info(`[NOTIFICATIONS] Powiadomienia dla ${targetUser.tag} (${targetUser.id}) ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+
+    await interaction.reply({
+        content: `${enabled ? '✅' : '🔕'} Powiadomienia dla <@${targetUser.id}> zostały ${enabled ? '**włączone**' : '**wyłączone**'}.`,
+        ephemeral: true
+    });
+}
+
+/**
  * Obsługuje komendę debug OCR
  */
 async function handleOcrDebugCommand(interaction, config) {
@@ -397,7 +442,18 @@ async function registerSlashCommands(client, config) {
                     .setRequired(false)),
         new SlashCommandBuilder()
             .setName('nick')
-            .setDescription('[ADMIN] Zmień nick użytkownika na serwerze')
+            .setDescription('[ADMIN] Zmień nick użytkownika na serwerze'),
+        new SlashCommandBuilder()
+            .setName('powiadomienia')
+            .setDescription('[ADMIN] Włącz lub wyłącz powiadomienia o zmianach ról dla użytkownika')
+            .addUserOption(option =>
+                option.setName('użytkownik')
+                    .setDescription('Użytkownik, dla którego zmieniasz ustawienie')
+                    .setRequired(true))
+            .addBooleanOption(option =>
+                option.setName('włączone')
+                    .setDescription('true = powiadomienia włączone, false = wyłączone (pomiń, aby sprawdzić stan)')
+                    .setRequired(false))
     ];
 
     const rest = new REST().setToken(config.token);
