@@ -138,7 +138,6 @@ class BombTimerService {
         const row1 = new ActionRowBuilder().addComponents(
             startEndBtn,
             stopResumeBtn,
-            new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
 
         // Rząd 2: toggle Usuń/Przywróć uprawnienia Boosterów
@@ -169,6 +168,7 @@ class BombTimerService {
         );
         const row3 = new ActionRowBuilder().addComponents(
             boosterBtn,
+            new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
         );
         const row4 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski układanki').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
