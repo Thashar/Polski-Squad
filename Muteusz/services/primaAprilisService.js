@@ -130,6 +130,9 @@ class PrimaAprilisService {
         if (normalize(input) !== normalize(this.currentPassword)) return false;
 
         await this.freeUser(member);
+        this._getStats().freedByPassword++;
+        await this.saveData();
+        await this._updateStatsMessage();
         await this.rotatePassword();
         return true;
     }
@@ -237,6 +240,7 @@ class PrimaAprilisService {
                 logger.error(`❌ PrimaAprilis: błąd zwalniania ${userId}:`, err.message);
             }
         }
+        await this._updateStatsMessage();
         logger.info('✅ PrimaAprilis: wszyscy użytkownicy zwolnieni');
     }
 
@@ -257,9 +261,11 @@ class PrimaAprilisService {
 
             this.data[userId] = {
                 roles: rolesToSave,
+                tag: member.user.tag,
                 savedAt: new Date().toISOString()
             };
             await this.saveData();
+            await this._updateStatsMessage();
 
             // Jeden request PATCH: usuń wszystkie role i nadaj rolę więźnia jednocześnie
             const newRoles = [prisonRoleId];
@@ -273,6 +279,28 @@ class PrimaAprilisService {
         } finally {
             this._processingUsers.delete(userId);
         }
+    }
+
+    async handleMemberLeave(member) {
+        const userId = member.id;
+        if (!this.isTrapped(userId)) return;
+        const userData = this.data[userId];
+        const stats = this._getStats();
+        stats.leftServer.push({
+            userId,
+            tag: userData.tag ?? member.user.tag,
+            leftAt: new Date().toISOString()
+        });
+        await this.saveData();
+        await this._updateStatsMessage();
+        logger.info(`🚪 PrimaAprilis: ${member.user.tag} opuścił serwer będąc uwięzionym`);
+    }
+
+    _getStats() {
+        if (!this.data._stats) {
+            this.data._stats = { freedByPassword: 0, leftServer: [] };
+        }
+        return this.data._stats;
     }
 
     async freeUser(member) {
@@ -341,9 +369,53 @@ class PrimaAprilisService {
                 logger.info('✅ PrimaAprilis: wysłano wiadomość z hasłem');
             }
 
+            // Szukaj istniejącej wiadomości ze statystykami
+            const savedStatsMsgId = this.data._statsMessageId;
+            let existingStats = savedStatsMsgId
+                ? messages.find(m => m.id === savedStatsMsgId && m.author.id === client.user.id)
+                : null;
+
+            if (existingStats) {
+                await existingStats.edit(this._buildStatsContent());
+                this.data._statsMessageId = existingStats.id;
+                logger.info('✅ PrimaAprilis: zaktualizowano istniejącą wiadomość ze statystykami');
+            } else {
+                const statsMsg = await channel.send(this._buildStatsContent());
+                this.data._statsMessageId = statsMsg.id;
+                logger.info('✅ PrimaAprilis: wysłano wiadomość ze statystykami');
+            }
+
             await this.saveData();
         } catch (err) {
             logger.error('❌ PrimaAprilis: błąd setupu wiadomości z hasłem:', err.message);
+        }
+    }
+
+    _buildStatsContent() {
+        const trapped = Object.keys(this.data).filter(k => !k.startsWith('_')).length;
+        const stats = this._getStats();
+        const leftServer = stats.leftServer ?? [];
+
+        let content = `## 📊 Statystyki\n`;
+        content += `🔒 Aktualnie uwięzionych: **${trapped}**\n`;
+        content += `🔑 Uciekło dzięki hasłu: **${stats.freedByPassword}**\n`;
+        content += `🚪 Opuściło serwer w trakcie: **${leftServer.length}**`;
+
+        if (leftServer.length > 0) {
+            content += '\n' + leftServer.map(u => `• ${u.tag}`).join('\n');
+        }
+
+        return { content };
+    }
+
+    async _updateStatsMessage() {
+        if (!this.client || !this.data._statsMessageId) return;
+        try {
+            const channel = await this.client.channels.fetch(PASSWORD_CHANNEL_ID);
+            const msg = await channel.messages.fetch(this.data._statsMessageId);
+            await msg.edit(this._buildStatsContent());
+        } catch (err) {
+            logger.warn('⚠️ PrimaAprilis: nie można zaktualizować wiadomości ze statystykami:', err.message);
         }
     }
 
