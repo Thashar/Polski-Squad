@@ -107,7 +107,7 @@ class EchoPuzzleService {
             this.solved = true;
             this.lastEntry = null;
             this._saveState();
-            await message.channel.send('## 🎉 Wygrałeś!');
+            await message.channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_1 ? `\n${process.env.PUZZLE_DESC_1}` : ''));
             logger.success('🏆 EchoPuzzle: Wygrałeś!');
             if (this.onWin) await this.onWin();
             return;

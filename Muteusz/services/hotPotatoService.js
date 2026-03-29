@@ -296,7 +296,7 @@ class HotPotatoService {
         await this._updateMainMessage();
 
         const mainChannel = await this.client.channels.fetch(this.mainChannelId).catch(() => null);
-        if (mainChannel) await mainChannel.send('## 🎉 Wygrałeś!');
+        if (mainChannel) await mainChannel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_5 ? `\n${process.env.PUZZLE_DESC_5}` : ''));
 
         await this._stopPotatoMessage();
         this._saveState();
