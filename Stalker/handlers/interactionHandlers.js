@@ -4067,15 +4067,16 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
     stopGhostPing(session);
 
     if (interaction.customId === 'phase2_cancel_save') {
-        // Anuluj zapis i zakończ sesję OCR (cleanupSession wywołuje endOCRSession)
-        await phaseService.cleanupSession(session.sessionId);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
-
+        // Najpierw zaktualizuj interakcję PRZED cleanupem (cleanup usuwa wiadomości z kanału kolejki)
         await interaction.update({
             content: '❌ Anulowano zapis danych.',
             embeds: [],
             components: []
         });
+
+        // Anuluj zapis i zakończ sesję OCR (cleanupSession wywołuje endOCRSession)
+        await phaseService.cleanupSession(session.sessionId);
+        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
         return;
     }
 
