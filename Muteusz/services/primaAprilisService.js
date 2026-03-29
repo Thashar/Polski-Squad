@@ -37,6 +37,9 @@ class PrimaAprilisService {
         // Wczytaj lub wybierz hasło startowe
         await this._initPassword();
 
+        const passwordCount = this._getPasswords().length;
+        logger.info(`🔑 PrimaAprilis: załadowano ${passwordCount} haseł`);
+
         const trapped = Object.keys(this.data).filter(k => k !== '_passwordState').length;
         if (trapped > 0) {
             logger.info(`🔒 PrimaAprilis: ${trapped} użytkownik(ów) nadal uwięzionych po restarcie`);
@@ -61,7 +64,7 @@ class PrimaAprilisService {
     }
 
     _getPasswords() {
-        return this.config.primaAprilis.passwords.filter(p => p && p.trim() !== '');
+        return Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean);
     }
 
     async _pickNewPassword() {
