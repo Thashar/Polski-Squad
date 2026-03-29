@@ -420,7 +420,7 @@ class ButtonOrderService {
 
         if (this._checkWin()) {
             logger.success('🏆 ButtonOrder: Wygrałeś!');
-            await this.channel.send('## 🎉 Wygrałeś!');
+            await this.channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_2 ? `\n${process.env.PUZZLE_DESC_2}` : ''));
             if (this.onWin) await this.onWin();
         }
     }

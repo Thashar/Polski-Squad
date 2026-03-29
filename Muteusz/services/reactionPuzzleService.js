@@ -103,7 +103,7 @@ class ReactionPuzzleService {
                 this._saveState();
                 logger.success('🏆 ReactionPuzzle: Wygrałeś!');
                 const channel = reaction.message.channel;
-                await channel.send('## 🎉 Wygrałeś!');
+                await channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_4 ? `\n${process.env.PUZZLE_DESC_4}` : ''));
                 if (this.onWin) await this.onWin();
                 // Usuń wszystkie reakcje i dodaj sekwencję przez bota
                 await reaction.message.reactions.removeAll();

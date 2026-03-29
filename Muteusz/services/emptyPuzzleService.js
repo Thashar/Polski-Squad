@@ -93,7 +93,7 @@ class EmptyPuzzleService {
             if (this.step === STATES.length) {
                 // Wygrana!
                 await message.delete().catch(() => {});
-                await message.channel.send('## 🎉 Wygrałeś!');
+                await message.channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_3 ? `\n${process.env.PUZZLE_DESC_3}` : ''));
                 logger.success('🏆 EmptyPuzzle: Wygrałeś!');
                 if (this.onWin) await this.onWin();
             } else {
