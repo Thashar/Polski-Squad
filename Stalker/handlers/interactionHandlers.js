@@ -299,7 +299,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
                 .setDescription(canSend.reason)
                 .setColor('#ff0000')
                 .setTimestamp()
-                .setFooter({ text: `Limit: 2 przypomnienia dziennie (per klan) | Boss deadline: 16:50` });
+                .setFooter({ text: `Limit: 2 przypomnienia dziennie (per klan) | Boss deadline: 17:50` });
 
             await interaction.editReply({
                 embeds: [errorEmbed]
@@ -1907,7 +1907,7 @@ async function handleButton(interaction, sharedState) {
                         )
                         .setImage(data.imageUrl)
                         .setTimestamp()
-                        .setFooter({ text: `Kary dodane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${formattedDate} ${formattedTime}` });
+                        .setFooter({ text: `Kary dodane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 17:50 • ${formattedDate} ${formattedTime}` });
                     
                     await interaction.followUp({
                         embeds: [punishEmbed],
@@ -1999,11 +1999,11 @@ async function handleButton(interaction, sharedState) {
                             { name: '📢 Wysłano przypomnienia dla', value: matchedUsers.length > 0 ? matchedUsers.join('\n') : 'Brak', inline: false },
                             { name: '🚨 Wysłano wiadomości', value: reminderResult.sentMessages.toString(), inline: true },
                             { name: '🔕 Na kanały', value: reminderResult.roleGroups.toString(), inline: true },
-                            { name: '⏰ Pozostały czas do 16:50', value: timeDisplay, inline: true }
+                            { name: '⏰ Pozostały czas do 17:50', value: timeDisplay, inline: true }
                         )
                         .setImage(data.imageUrls[0]) // Pierwsze zdjęcie
                         .setTimestamp()
-                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 16:50 • ${reminderFormattedDate} ${reminderFormattedTime}` });
+                        .setFooter({ text: `Przypomnienie wysłane przez ${interaction.user.displayName || interaction.user.tag} | Boss deadline: 17:50 • ${reminderFormattedDate} ${reminderFormattedTime}` });
                     
                     await interaction.followUp({
                         embeds: [reminderEmbed],
