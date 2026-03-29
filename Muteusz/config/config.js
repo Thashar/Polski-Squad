@@ -149,18 +149,7 @@ module.exports = {
     primaAprilis: {
         channelId: '1486500418358870074',
         prisonRoleId: '1486506395057524887',
-        passwords: [
-            process.env.HASLO1,
-            process.env.HASLO2,
-            process.env.HASLO3,
-            process.env.HASLO4,
-            process.env.HASLO5,
-            process.env.HASLO6,
-            process.env.HASLO7,
-            process.env.HASLO8,
-            process.env.HASLO9,
-            process.env.HASLO10,
-        ].filter(Boolean)
+        passwords: Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean)
     },
 
     // Konfiguracja modułu Bomb Timer
