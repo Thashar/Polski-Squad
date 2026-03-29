@@ -1,8 +1,14 @@
 const fs = require('fs');
 const path = require('path');
+const { PermissionFlagsBits } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Muteusz');
+
+const CLEANUP_CHANNEL_IDS = [
+    '1486919971165442048', // countdown
+    '1486500418358870074', // prima aprilis
+];
 const DATA_FILE = path.join(__dirname, '../data/game_countdown_state.json');
 
 const COUNTDOWN_CHANNEL_ID = '1486919971165442048';
@@ -74,6 +80,74 @@ class GameCountdownService {
         return `# <a:PepeAlarmMan:1341086085089857619> Procedura autodestrukcji rozpoczętą <a:PepeAlarmMan:1341086085089857619>\n# ⏰ ${formatTime(this.timeRemaining)}`;
     }
 
+    async _isAdmin(guild, userId) {
+        try {
+            const member = await guild.members.fetch(userId);
+            return member.permissions.has(PermissionFlagsBits.Administrator);
+        } catch {
+            return false; // użytkownik opuścił serwer — traktuj jak nie-admin
+        }
+    }
+
+    async _cleanupChannel(channelId) {
+        try {
+            const channel = await this.client.channels.fetch(channelId);
+            const guild = channel.guild;
+
+            // Zbierz wszystkie wiadomości
+            const allMessages = [];
+            let lastId;
+            while (true) {
+                const opts = { limit: 100 };
+                if (lastId) opts.before = lastId;
+                const batch = await channel.messages.fetch(opts);
+                if (batch.size === 0) break;
+                for (const [, msg] of batch) allMessages.push(msg);
+                lastId = batch.last()?.id;
+                if (batch.size < 100) break;
+            }
+
+            // Podziel na wiadomości adminów i reszty
+            const toDelete = [];
+            for (const msg of allMessages) {
+                if (msg.author.bot) continue;
+                const isAdmin = await this._isAdmin(guild, msg.author.id);
+                if (isAdmin) {
+                    // Admin — usuń tylko reakcje
+                    if (msg.reactions.cache.size > 0) {
+                        await msg.reactions.removeAll().catch(() => {});
+                    }
+                } else {
+                    toDelete.push(msg);
+                }
+            }
+
+            // Bulk delete wiadomości < 14 dni, starsze pojedynczo
+            const now = Date.now();
+            const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+            const recent = toDelete.filter(m => now - m.createdTimestamp < twoWeeks);
+            const old = toDelete.filter(m => now - m.createdTimestamp >= twoWeeks);
+
+            for (let i = 0; i < recent.length; i += 100) {
+                const batch = recent.slice(i, i + 100);
+                if (batch.length === 1) await batch[0].delete().catch(() => {});
+                else await channel.bulkDelete(batch).catch(() => {});
+            }
+            for (const msg of old) await msg.delete().catch(() => {});
+
+            // Usuń wątki nie-adminów
+            const activeThreads = await channel.threads.fetchActive().catch(() => ({ threads: new Map() }));
+            for (const [, thread] of activeThreads.threads) {
+                const isAdmin = await this._isAdmin(guild, thread.ownerId);
+                if (!isAdmin) await thread.delete().catch(() => {});
+            }
+
+            logger.info(`🧹 GameCountdown: wyczyszczono kanał ${channelId} (${toDelete.length} wiadomości, wątki nie-adminów)`);
+        } catch (err) {
+            logger.error(`❌ GameCountdown: błąd czyszczenia kanału ${channelId}: ${err.message}`);
+        }
+    }
+
     async _snapshotAndApplyPermissions() {
         try {
             const sourceChannel = await this.client.channels.fetch(PERMISSION_SOURCE_CHANNEL_ID);
@@ -117,6 +191,10 @@ class GameCountdownService {
 
         try {
             await this._snapshotAndApplyPermissions();
+
+            for (const id of CLEANUP_CHANNEL_IDS) {
+                await this._cleanupChannel(id);
+            }
 
             const channel = await this.client.channels.fetch(COUNTDOWN_CHANNEL_ID);
             this.timeRemaining = TOTAL_SECONDS;
