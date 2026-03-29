@@ -4,6 +4,15 @@ const logger = createBotLogger('Muteusz');
 
 const PLAYER_ROLE_ID = '1486506395057524887';
 
+const UNLOCK_PERMISSIONS = {
+    ViewChannel: true,
+    ReadMessageHistory: true,
+    SendMessages: true,
+    AddReactions: true,
+    UseExternalEmojis: true,
+    MentionEveryone: true,
+};
+
 // Kanały do odblokowania po rozwiązaniu zagadki o danym indeksie (0–4)
 const UNLOCK_ON_SOLVE = [
     ['1486582161627680789'],                           // 0: Nimfa → Przyciski
@@ -37,8 +46,8 @@ class PuzzleChainService {
         for (const channelId of channelsToUnlock) {
             try {
                 const channel = await this.client.channels.fetch(channelId);
-                await channel.permissionOverwrites.create(PLAYER_ROLE_ID, {}, { reason: `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}` });
-                logger.success(`🔓 PuzzleChain: dodano rolę do uprawnień kanału ${channelId} (wszystko na /)`);
+                await channel.permissionOverwrites.create(PLAYER_ROLE_ID, UNLOCK_PERMISSIONS, { reason: `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}` });
+                logger.success(`🔓 PuzzleChain: odblokowano kanał ${channelId} z konkretnymi uprawnieniami`);
             } catch (err) {
                 logger.error(`❌ PuzzleChain: błąd odblokowania kanału ${channelId}: ${err.message}`);
             }
