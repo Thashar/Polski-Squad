@@ -47,6 +47,7 @@ class PrimaAprilisService {
         }
 
         this._startPasswordTimer();
+        this._startStatsTimer();
         logger.info('✅ PrimaAprilisService zainicjalizowany');
     }
 
@@ -107,6 +108,13 @@ class PrimaAprilisService {
         this.passwordTimer = setInterval(async () => {
             await this._pickNewPassword();
         }, PASSWORD_ROTATION_MS);
+    }
+
+    _startStatsTimer() {
+        if (this._statsTimer) clearInterval(this._statsTimer);
+        this._statsTimer = setInterval(async () => {
+            await this._updateStatsMessage();
+        }, 60 * 1000);
     }
 
     async rotatePassword() {
@@ -456,6 +464,10 @@ class PrimaAprilisService {
         if (this.passwordTimer) {
             clearInterval(this.passwordTimer);
             this.passwordTimer = null;
+        }
+        if (this._statsTimer) {
+            clearInterval(this._statsTimer);
+            this._statsTimer = null;
         }
     }
 }
