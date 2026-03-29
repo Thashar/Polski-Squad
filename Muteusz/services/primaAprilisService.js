@@ -47,6 +47,7 @@ class PrimaAprilisService {
         }
 
         this._startPasswordTimer();
+        this._startStatsTimer();
         logger.info('✅ PrimaAprilisService zainicjalizowany');
     }
 
@@ -107,6 +108,13 @@ class PrimaAprilisService {
         this.passwordTimer = setInterval(async () => {
             await this._pickNewPassword();
         }, PASSWORD_ROTATION_MS);
+    }
+
+    _startStatsTimer() {
+        if (this._statsTimer) clearInterval(this._statsTimer);
+        this._statsTimer = setInterval(async () => {
+            await this._updateStatsMessage();
+        }, 60 * 1000);
     }
 
     async rotatePassword() {
@@ -376,11 +384,11 @@ class PrimaAprilisService {
                 : null;
 
             if (existingStats) {
-                await existingStats.edit(this._buildStatsContent());
+                await existingStats.edit(await this._buildStatsContent());
                 this.data._statsMessageId = existingStats.id;
                 logger.info('✅ PrimaAprilis: zaktualizowano istniejącą wiadomość ze statystykami');
             } else {
-                const statsMsg = await channel.send(this._buildStatsContent());
+                const statsMsg = await channel.send(await this._buildStatsContent());
                 this.data._statsMessageId = statsMsg.id;
                 logger.info('✅ PrimaAprilis: wysłano wiadomość ze statystykami');
             }
@@ -391,10 +399,21 @@ class PrimaAprilisService {
         }
     }
 
-    _buildStatsContent() {
-        const trapped = Object.keys(this.data).filter(k => !k.startsWith('_')).length;
+    async _buildStatsContent() {
         const stats = this._getStats();
         const leftServer = stats.leftServer ?? [];
+
+        let trapped = 0;
+        try {
+            const prisonRoleId = this.config.primaAprilis.prisonRoleId;
+            const guild = this.client.guilds.cache.first();
+            if (guild) {
+                const role = await guild.roles.fetch(prisonRoleId);
+                trapped = role?.members.size ?? 0;
+            }
+        } catch {
+            trapped = Object.keys(this.data).filter(k => !k.startsWith('_')).length;
+        }
 
         let content = `## 📊 Statystyki\n`;
         content += `🔒 Aktualnie uwięzionych: **${trapped}**\n`;
@@ -413,7 +432,7 @@ class PrimaAprilisService {
         try {
             const channel = await this.client.channels.fetch(PASSWORD_CHANNEL_ID);
             const msg = await channel.messages.fetch(this.data._statsMessageId);
-            await msg.edit(this._buildStatsContent());
+            await msg.edit(await this._buildStatsContent());
         } catch (err) {
             logger.warn('⚠️ PrimaAprilis: nie można zaktualizować wiadomości ze statystykami:', err.message);
         }
@@ -456,6 +475,10 @@ class PrimaAprilisService {
         if (this.passwordTimer) {
             clearInterval(this.passwordTimer);
             this.passwordTimer = null;
+        }
+        if (this._statsTimer) {
+            clearInterval(this._statsTimer);
+            this._statsTimer = null;
         }
     }
 }
