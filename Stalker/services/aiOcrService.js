@@ -150,8 +150,8 @@ class AIOCRService {
                 if (scoreMatch && playerName.length > 0) {
                     const score = parseInt(scoreMatch[0]);
 
-                    // Walidacja wyniku (rozsądne wartości dla Survivor.io)
-                    if (score >= 0 && score <= 10000) {
+                    // Walidacja wyniku (rozsądne wartości dla Survivor.io - do 999999)
+                    if (score >= 0 && score <= 999999) {
                         players.push({
                             playerName: playerName,
                             score: score
