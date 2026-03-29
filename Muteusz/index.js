@@ -274,6 +274,15 @@ client.on(Events.GuildMemberAdd, async (member) => {
     }
 });
 
+client.on(Events.GuildMemberRemove, async (member) => {
+    if (!isFullyInitialized) return;
+    try {
+        await primaAprilisService.handleMemberLeave(member);
+    } catch (error) {
+        logger.error('❌ PrimaAprilis: błąd przy opuszczeniu serwera przez gracza:', error.message);
+    }
+});
+
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
     if (!isFullyInitialized) {
