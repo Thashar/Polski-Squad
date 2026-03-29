@@ -125,7 +125,7 @@ class ButtonOrderService {
                     const num = this.state.order[idx];
                     let style;
                     if (selectedSet.has(num))                            style = ButtonStyle.Primary;   // niebieski — 1. klik (tylko double-allowed)
-                    else if (clickedSet.has(num) && PHASE2_DOUBLE_ALLOWED.has(num)) style = ButtonStyle.Success;  // zielony — 2. klik (double-allowed)
+                    else if (clickedSet.has(num) && PHASE2_DOUBLE_ALLOWED.has(num)) style = ButtonStyle.Danger;   // czerwony — 2. klik (double-allowed)
                     else if (clickedSet.has(num))                        style = ButtonStyle.Danger;    // czerwony — zaznaczony (zwykły)
                     else if (NON_EMPTY_BUTTONS.has(num))                 style = ButtonStyle.Success;   // zielony — do kliknięcia
                     else                                                  style = ButtonStyle.Secondary; // szary — pusty
