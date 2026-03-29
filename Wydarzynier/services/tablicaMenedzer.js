@@ -43,8 +43,8 @@ class TablicaMenedzer {
             // Początkowa synchronizacja
             await this.syncAllNotifications();
 
-            // Upewnij się, że panel kontrolny istnieje
-            await this.ensureControlPanel();
+            // Upewnij się, że panel kontrolny istnieje (tylko aktualizuj jeśli coś się zmieniło)
+            await this.initializeControlPanel();
         } catch (error) {
             this.logger.error('Nie udało się zainicjalizować TablicaMenedzer:', error);
         }
@@ -398,7 +398,78 @@ class TablicaMenedzer {
         }
     }
 
-    // Utwórz lub zaktualizuj panel kontrolny
+    // Przy starcie bota: aktualizuj panel tylko jeśli coś się zmieniło, nie przenoś na dół
+    async initializeControlPanel() {
+        if (!this.boardChannel) {
+            this.logger.error('Kanał tablicy nie zainicjalizowany');
+            return;
+        }
+
+        try {
+            let existingPanel = null;
+
+            // Szukaj po cached ID
+            if (this.controlPanelMessageId) {
+                try {
+                    existingPanel = await this.boardChannel.messages.fetch(this.controlPanelMessageId);
+                } catch (error) {
+                    if (error.code === 10008) {
+                        this.logger.warn('Cachowany panel kontrolny nie znaleziony, przeszukuję kanał');
+                        await this.saveControlPanelMessageId(null);
+                    } else {
+                        throw error;
+                    }
+                }
+            }
+
+            // Jeśli brak cached, szukaj w kanale
+            if (!existingPanel) {
+                const messages = await this.boardChannel.messages.fetch({ limit: 100 });
+                for (const [, message] of messages) {
+                    if (message.author.id === this.client.user.id &&
+                        message.embeds.length > 0 &&
+                        message.embeds[0].title === '📋 Panel Kontrolny Przypomnień i Eventów') {
+                        existingPanel = message;
+                        await this.saveControlPanelMessageId(message.id);
+                        this.logger.info('Znaleziono panel kontrolny w kanale');
+                        break;
+                    }
+                }
+            }
+
+            const newPanel = await this.buildControlPanel();
+
+            if (existingPanel) {
+                // Porównaj treść - aktualizuj tylko jeśli coś się zmieniło
+                const existingEmbed = existingPanel.embeds[0];
+                const newEmbedData = newPanel.embeds[0].data;
+                const existingContent = JSON.stringify({
+                    description: existingEmbed.description,
+                    fields: existingEmbed.fields
+                });
+                const newContent = JSON.stringify({
+                    description: newEmbedData.description,
+                    fields: newEmbedData.fields
+                });
+
+                if (existingContent !== newContent) {
+                    await existingPanel.edit(newPanel);
+                    this.logger.info('Panel kontrolny zaktualizowany przy starcie (wykryto zmiany)');
+                } else {
+                    this.logger.info('Panel kontrolny bez zmian - pominięto aktualizację');
+                }
+            } else {
+                // Panel nie istnieje - utwórz nowy
+                const message = await this.boardChannel.send(newPanel);
+                await this.saveControlPanelMessageId(message.id);
+                this.logger.success('Panel kontrolny utworzony przy starcie');
+            }
+        } catch (error) {
+            this.logger.error('Nie udało się zainicjalizować panelu kontrolnego:', error);
+        }
+    }
+
+    // Utwórz lub zaktualizuj panel kontrolny (używane w trakcie działania - przenosi na dół)
     async ensureControlPanel() {
         if (!this.boardChannel) {
             this.logger.error('Kanał tablicy nie zainicjalizowany');
