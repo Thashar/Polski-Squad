@@ -165,7 +165,6 @@ client.once(Events.ClientReady, async () => {
     emptyPuzzleService.onWin   = () => puzzleChainService.onPuzzleSolved(2);
     reactionPuzzleService.onWin = () => puzzleChainService.onPuzzleSolved(3);
     hotPotatoService.onWin = async () => {
-        await puzzleChainService.onPuzzleSolved(4);
         const guild = client.guilds.cache.first();
         // Zatrzymaj countdown gry
         await gameCountdownService.stop().catch(() => {});
