@@ -69,7 +69,7 @@ function hasConsecutiveWindowMatch(rowNums, minLen) {
     return false;
 }
 
-const COOLDOWN_MS = 5000;
+const COOLDOWN_MS = 3000;
 
 class ButtonOrderService {
     constructor(config) {
