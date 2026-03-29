@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -64,7 +65,18 @@ class PrimaAprilisService {
     }
 
     _getPasswords() {
-        return Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean);
+        try {
+            const envPath = path.join(__dirname, '../.env');
+            const content = fsSync.readFileSync(envPath, 'utf8');
+            const passwords = [];
+            for (const line of content.split(/\r?\n/)) {
+                const match = line.match(/^HASLO\d+=(.+)$/);
+                if (match) passwords.push(match[1].trim());
+            }
+            return passwords.filter(Boolean);
+        } catch {
+            return Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean);
+        }
     }
 
     async _pickNewPassword() {
