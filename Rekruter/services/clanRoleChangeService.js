@@ -46,7 +46,7 @@ class ClanRoleChangeService {
     async buildInitialCache() {
         try {
             for (const guild of this.client.guilds.cache.values()) {
-                const members = await guild.members.fetch({ limit: 1000 });
+                const members = await guild.members.fetch();
 
                 for (const member of members.values()) {
                     const roleIds = Array.from(member.roles.cache.keys());
@@ -81,6 +81,7 @@ class ClanRoleChangeService {
 
         try {
             const userId = newMember.user.id;
+            const isFirstSeen = !this.memberRolesCache.has(userId);
             const previousRoleIds = this.memberRolesCache.get(userId) || [];
 
             // Pobierz aktualne role
@@ -92,6 +93,12 @@ class ClanRoleChangeService {
             }
             const currentRoleIds = Array.from(freshMember.roles.cache.keys());
             this.memberRolesCache.set(userId, currentRoleIds);
+
+            // Jeśli użytkownik nie był w cache (np. dołączył po starcie bota),
+            // inicjalizujemy cache bez wysyłania powiadomienia
+            if (isFirstSeen) {
+                return;
+            }
 
             // Sprawdź czy użytkownik wyłączył powiadomienia
             if (this.notificationPreferencesService && this.notificationPreferencesService.isOptedOut(userId)) {
