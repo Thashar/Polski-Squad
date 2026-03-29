@@ -61,7 +61,7 @@ class PrimaAprilisService {
     }
 
     _getPasswords() {
-        return this.config.primaAprilis.passwords.filter(p => p && p.trim() !== '');
+        return Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean);
     }
 
     async _pickNewPassword() {
