@@ -86,7 +86,8 @@ class ButtonOrderService {
         this.channel = null;
         this.message1 = null;
         this.message2 = null;
-        this.cooldowns = new Map(); // userId → timestamp ostatniego kliknięcia
+        this._locked = false; // globalny cooldown po kliknięciu
+        this._cooldownTimer = null;
         this.onWin = null; // callback wywoływany po wygraniu
     }
 
@@ -111,7 +112,7 @@ class ButtonOrderService {
         }
     }
 
-    buildComponents(startIdx, rowCount) {
+    buildComponents(startIdx, rowCount, disabled = false) {
         const rows = [];
 
         if (this.state.phase2Active) {
@@ -133,6 +134,7 @@ class ButtonOrderService {
                             .setCustomId(`btn_order_${num}`)
                             .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
                             .setStyle(style)
+                            .setDisabled(disabled)
                     );
                 }
                 rows.push(new ActionRowBuilder().addComponents(buttons));
@@ -180,6 +182,7 @@ class ButtonOrderService {
                             .setCustomId(`btn_order_${num}`)
                             .setLabel(BUTTON_LABELS[num] ?? EMPTY_LABEL)
                             .setStyle(style)
+                            .setDisabled(disabled)
                     );
                 }
                 rows.push(new ActionRowBuilder().addComponents(buttons));
@@ -189,15 +192,12 @@ class ButtonOrderService {
         return rows;
     }
 
-    buildMessage1Data() {
-        return { content: '', components: this.buildComponents(0, MSG1_ROWS) };
+    buildMessage1Data(disabled = false) {
+        return { content: '', components: this.buildComponents(0, MSG1_ROWS, disabled) };
     }
 
-    buildMessage2Data() {
-        return {
-            content: '',
-            components: this.buildComponents(MSG1_COUNT, MSG2_ROWS)
-        };
+    buildMessage2Data(disabled = false) {
+        return { content: '', components: this.buildComponents(MSG1_COUNT, MSG2_ROWS, disabled) };
     }
 
     _checkWin() {
@@ -316,20 +316,12 @@ class ButtonOrderService {
     }
 
     async handleButtonClick(interaction) {
-        const userId = interaction.user.id;
-        const now = Date.now();
-        const lastClick = this.cooldowns.get(userId) ?? 0;
-        const remaining = COOLDOWN_MS - (now - lastClick);
-
-        if (remaining > 0) {
-            await interaction.reply({
-                content: `Poczekaj jeszcze ${(remaining / 1000).toFixed(1)}s przed kolejnym kliknięciem.`,
-                ephemeral: true
-            });
+        if (this._locked) {
+            await interaction.deferUpdate();
             return;
         }
-        this.cooldowns.set(userId, now);
 
+        this._locked = true;
         await interaction.deferUpdate();
 
         const num = parseInt(interaction.customId.replace('btn_order_', ''), 10);
@@ -339,6 +331,21 @@ class ButtonOrderService {
         } else {
             await this._handlePhase1Click(num);
         }
+
+        // Dezaktywuj przyciski na 5 sekund
+        await Promise.all([
+            this.message1.edit(this.buildMessage1Data(true)),
+            this.message2.edit(this.buildMessage2Data(true))
+        ]).catch(() => {});
+
+        if (this._cooldownTimer) clearTimeout(this._cooldownTimer);
+        this._cooldownTimer = setTimeout(async () => {
+            this._locked = false;
+            await Promise.all([
+                this.message1.edit(this.buildMessage1Data(false)),
+                this.message2.edit(this.buildMessage2Data(false))
+            ]).catch(() => {});
+        }, COOLDOWN_MS);
     }
 
     async _handlePhase1Click(num) {
