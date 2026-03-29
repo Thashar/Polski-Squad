@@ -329,7 +329,7 @@ class ButtonOrderService {
         if (this.state.phase2Active) {
             await this._handlePhase2Click(num);
 
-            // Faza 2: najpierw pokaż nowe kolory (enabled), potem zablokuj
+            // Faza 2: pokaż nowe kolory, blokada tylko logiczna przez 5s
             await this._updateBothMessages();
 
             const won = this._checkWin();
@@ -341,19 +341,9 @@ class ButtonOrderService {
                 return;
             }
 
-            // Dezaktywuj przyciski na 5 sekund
-            await Promise.all([
-                this.message1.edit(this.buildMessage1Data(true)),
-                this.message2.edit(this.buildMessage2Data(true))
-            ]).catch(() => {});
-
             if (this._cooldownTimer) clearTimeout(this._cooldownTimer);
-            this._cooldownTimer = setTimeout(async () => {
+            this._cooldownTimer = setTimeout(() => {
                 this._locked = false;
-                await Promise.all([
-                    this.message1.edit(this.buildMessage1Data(false)),
-                    this.message2.edit(this.buildMessage2Data(false))
-                ]).catch(() => {});
             }, COOLDOWN_MS);
         } else {
             await this._handlePhase1Click(num);
