@@ -328,24 +328,37 @@ class ButtonOrderService {
 
         if (this.state.phase2Active) {
             await this._handlePhase2Click(num);
+
+            // Faza 2: najpierw pokaż nowe kolory (enabled), potem zablokuj
+            await this._updateBothMessages();
+
+            const won = this._checkWin();
+            if (won) {
+                this._locked = false;
+                logger.success('🏆 ButtonOrder: Wygrałeś!');
+                await this.channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_2 ? `\n${process.env.PUZZLE_DESC_2}` : ''));
+                if (this.onWin) await this.onWin();
+                return;
+            }
+
+            // Dezaktywuj przyciski na 5 sekund
+            await Promise.all([
+                this.message1.edit(this.buildMessage1Data(true)),
+                this.message2.edit(this.buildMessage2Data(true))
+            ]).catch(() => {});
+
+            if (this._cooldownTimer) clearTimeout(this._cooldownTimer);
+            this._cooldownTimer = setTimeout(async () => {
+                this._locked = false;
+                await Promise.all([
+                    this.message1.edit(this.buildMessage1Data(false)),
+                    this.message2.edit(this.buildMessage2Data(false))
+                ]).catch(() => {});
+            }, COOLDOWN_MS);
         } else {
             await this._handlePhase1Click(num);
-        }
-
-        // Dezaktywuj przyciski na 5 sekund
-        await Promise.all([
-            this.message1.edit(this.buildMessage1Data(true)),
-            this.message2.edit(this.buildMessage2Data(true))
-        ]).catch(() => {});
-
-        if (this._cooldownTimer) clearTimeout(this._cooldownTimer);
-        this._cooldownTimer = setTimeout(async () => {
             this._locked = false;
-            await Promise.all([
-                this.message1.edit(this.buildMessage1Data(false)),
-                this.message2.edit(this.buildMessage2Data(false))
-            ]).catch(() => {});
-        }, COOLDOWN_MS);
+        }
     }
 
     async _handlePhase1Click(num) {
@@ -423,13 +436,6 @@ class ButtonOrderService {
         }
 
         this.saveState();
-        await this._updateBothMessages();
-
-        if (this._checkWin()) {
-            logger.success('🏆 ButtonOrder: Wygrałeś!');
-            await this.channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_2 ? `\n${process.env.PUZZLE_DESC_2}` : ''));
-            if (this.onWin) await this.onWin();
-        }
     }
 
     _resetPhase2() {
