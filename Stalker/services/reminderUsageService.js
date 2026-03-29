@@ -146,7 +146,7 @@ class ReminderUsageService {
         if (minutesToDeadline < 0) {
             return {
                 canSend: false,
-                reason: '❌ Nie można wysłać przypomnienia - deadline już minął (16:50)!',
+                reason: '❌ Nie można wysłać przypomnienia - deadline już minął (17:50)!',
                 minutesToDeadline
             };
         }
@@ -164,7 +164,7 @@ class ReminderUsageService {
 
             return {
                 canSend: false,
-                reason: `❌ Za wcześnie! Możesz użyć /remind dopiero w **ostatnich 6 godzinach** przed deadline.\n\nOkno na przypomnienia otwiera się o **10:50**.\nDo otwarcia okna zostało: **${timeStr}**`,
+                reason: `❌ Za wcześnie! Możesz użyć /remind dopiero w **ostatnich 6 godzinach** przed deadline.\n\nOkno na przypomnienia otwiera się o **11:50**.\nDo otwarcia okna zostało: **${timeStr}**`,
                 minutesToDeadline
             };
         }
@@ -184,7 +184,7 @@ class ReminderUsageService {
                 const senderMention = firstUsage.sentBy ? ` przez <@${firstUsage.sentBy}>` : '';
                 return {
                     canSend: false,
-                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **ostatniej godzinie** przed deadline (15:50-16:50).`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **ostatniej godzinie** przed deadline (16:50-17:50).`,
                     minutesToDeadline
                 };
             } else {
