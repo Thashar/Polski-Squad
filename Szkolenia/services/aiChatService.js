@@ -17,9 +17,8 @@ const logger = createBotLogger('Szkolenia');
  * Przełączanie przez SZKOLENIA_AI_PROVIDER w .env
  */
 class AIChatService {
-    constructor(config, knowledgeService) {
+    constructor(config) {
         this.config = config;
-        this.knowledgeService = knowledgeService;
 
         // Wybór providera AI: "anthropic", "grok" lub "perplexity"
         this.provider = (process.env.SZKOLENIA_AI_PROVIDER || 'anthropic').toLowerCase();
@@ -127,236 +126,20 @@ class AIChatService {
         this.saveData();
     }
 
-    // --- Narzędzie grep_knowledge ---
-
-    static GREP_TOOL = {
-        name: 'grep_knowledge',
-        description: 'Przeszukuje bazę wiedzy o grze Survivor.io. Zwraca fragmenty pasujące do wzorca (regex lub tekst). Możesz wywoływać wielokrotnie z różnymi frazami. Szukaj aż znajdziesz dokładną odpowiedź.',
-        input_schema: {
-            type: 'object',
-            properties: {
-                pattern: {
-                    type: 'string',
-                    description: 'Fraza lub regex do wyszukania w bazie wiedzy (case-insensitive). Np. "transmute", "ciastk", "pet.*awaken", "xeno.*core"'
-                }
-            },
-            required: ['pattern']
-        }
-    };
-
-    /**
-     * Prosty stemming polski - obcina typowe końcówki fleksyjne
-     */
-    stemPolish(word) {
-        word = word.toLowerCase();
-        if (word.length <= 3) return word;
-
-        // Końcówki czasowników (od najdłuższych)
-        const verbSuffixes = [
-            'ować', 'iwać', 'ywać', 'ącej', 'ącym', 'ącego',
-            'enie', 'anie', 'ienie', 'ości', 'ość',
-            'eście', 'ście', 'ałem', 'ałeś', 'ałam', 'ałaś',
-            'iesz', 'jesz', 'ował', 'iemy', 'jemy',
-            'uje', 'uje', 'ają', 'emy', 'esz', 'isz', 'ysz',
-            'ać', 'ić', 'yć', 'eć', 'uć',
-            'ał', 'ił', 'ył', 'ęł',
-            'am', 'em', 'asz', 'esz', 'asz',
-            'ię', 'ię',
-        ];
-
-        // Końcówki rzeczowników/przymiotników
-        const nounSuffixes = [
-            'owego', 'owej', 'owym', 'owych', 'owym',
-            'iego', 'iej', 'imi', 'ich',
-            'owi', 'ach', 'ami', 'ów',
-            'om', 'ie', 'ek', 'ka', 'ki', 'ku', 'ką', 'kiem',
-            'em', 'ą', 'ę', 'y', 'i', 'u', 'e', 'ó',
-        ];
-
-        for (const suffix of [...verbSuffixes, ...nounSuffixes]) {
-            if (word.length > suffix.length + 2 && word.endsWith(suffix)) {
-                return word.slice(0, -suffix.length);
-            }
-        }
-
-        return word;
-    }
-
-    /**
-     * Zaawansowane wyszukiwanie grep w bazie wiedzy
-     * Strategie: exact regex → słowa osobno → stemming → luźne dopasowanie
-     */
-    async executeGrepKnowledge(pattern) {
-        if (!pattern) return 'Podaj frazę do wyszukania.';
-
-        const MAX_RESULTS = 20;
-        const MAX_CHARS = 15000;
-
-        const knowledgeText = this.knowledgeService.getActiveEntriesText();
-        if (!knowledgeText) return 'Baza wiedzy jest pusta.';
-
-        const sections = knowledgeText.split(/\n\n+/).filter(s => s.trim().length > 0);
-        // Korekty najpierw
-        const corrections = sections.filter(s => s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
-        const regular = sections.filter(s => !s.startsWith('[KOREKTA UŻYTKOWNIKA]'));
-        const allSections = [...corrections, ...regular];
-
-        // Mapa: sekcja → najwyższy score
-        const scored = new Map();
-
-        // === Strategia 1: Exact regex (pełna fraza) → score 100 ===
-        try {
-            const exactRegex = new RegExp(pattern, 'gi');
-            for (const section of allSections) {
-                exactRegex.lastIndex = 0;
-                if (exactRegex.test(section)) {
-                    scored.set(section, (scored.get(section) || 0) + 100);
-                }
-            }
-        } catch { /* invalid regex - skip */ }
-
-        // === Strategia 2: Każde słowo osobno (case-insensitive) → score 10 per słowo ===
-        const words = pattern
-            .replace(/[.*+?^${}()|[\]\\]/g, ' ')
-            .split(/\s+/)
-            .filter(w => w.length >= 2);
-
-        if (words.length > 0) {
-            for (const section of allSections) {
-                const lower = section.toLowerCase();
-                let wordScore = 0;
-                for (const word of words) {
-                    if (lower.includes(word.toLowerCase())) {
-                        wordScore += 10;
-                    }
-                }
-                if (wordScore > 0) {
-                    scored.set(section, (scored.get(section) || 0) + wordScore);
-                }
-            }
-        }
-
-        // === Strategia 3: Stemming polski → score 5 per stem ===
-        if (words.length > 0) {
-            const stems = words.map(w => this.stemPolish(w)).filter(s => s.length >= 2);
-            const uniqueStems = [...new Set(stems)];
-
-            for (const section of allSections) {
-                const lower = section.toLowerCase();
-                let stemScore = 0;
-                for (const stem of uniqueStems) {
-                    if (lower.includes(stem)) {
-                        stemScore += 5;
-                    }
-                }
-                if (stemScore > 0 && !scored.has(section)) {
-                    scored.set(section, stemScore);
-                } else if (stemScore > 0) {
-                    scored.set(section, scored.get(section) + stemScore);
-                }
-            }
-        }
-
-        // Bonus: korekty mają +50
-        for (const [section, score] of scored) {
-            if (section.startsWith('[KOREKTA UŻYTKOWNIKA]')) {
-                scored.set(section, score + 50);
-            }
-        }
-
-        // Sortuj po score malejąco
-        const sorted = [...scored.entries()]
-            .sort((a, b) => b[1] - a[1]);
-
-        // Zbierz wyniki z limitem
-        const matches = [];
-        let totalChars = 0;
-
-        for (const [section] of sorted) {
-            if (matches.length >= MAX_RESULTS) break;
-            if (totalChars + section.length > MAX_CHARS) break;
-            matches.push(section);
-            totalChars += section.length;
-        }
-
-        if (matches.length === 0) {
-            return `Brak wyników dla "${pattern}". Spróbuj innej frazy lub krótszego wzorca.`;
-        }
-
-        const corrCount = matches.filter(m => m.startsWith('[KOREKTA UŻYTKOWNIKA]')).length;
-        return `Znaleziono ${matches.length} fragmentów (${corrCount} korekt):\n\n${matches.join('\n\n---\n\n')}`;
-    }
-
     buildSystemPrompt() {
-        return `Jesteś kompendium wiedzy o grze Survivor.io.
+        return `Jesteś asystentem wiedzy o grze Survivor.io na Discordzie.
 
-MASZ NARZĘDZIE: grep_knowledge
-- Używa ZAAWANSOWANEGO wyszukiwania: exact regex + dopasowanie per słowo + polski stemming
-- Wyniki sortowane po trafności (relevance scoring)
-- Korekty użytkowników mają najwyższy priorytet w wynikach
-- Możesz wywoływać WIELOKROTNIE z różnymi frazami
-- Używaj NATURALNYCH fraz z pytania: "kim jesteś", "jak transmutować"
-- Dla precyzji: krótsze frazy "transmut", "ciastk", "pet"
-- Regex też działa: "pet.*level", "ciastk.*60"
-
-KRYTYCZNE - WYSZUKIWANIE:
-- ZAWSZE szukaj DOKŁADNYMI słowami z pytania użytkownika - NIE parafrazuj, NIE zmieniaj osoby/formy!
-- Pytanie "kim jesteś?" → szukaj "kim jesteś" (NIE "kim jestem"!)
-- Pytanie "jak budować?" → szukaj "jak budować" (NIE "budowanie"!)
-- System sam obsługuje stemming i odmiany - Ty podaj ORYGINALNE słowa
-
-STRATEGIA WYSZUKIWANIA:
-1. PIERWSZA PRÓBA: użyj DOKŁADNYCH słów z pytania użytkownika (bez zmiany osoby/formy!)
-2. Jeśli brak wyników → spróbuj krótszych rdzeni słów: "budow" zamiast "budować"
-3. Jeśli nadal brak → spróbuj angielskich odpowiedników
-4. Jeśli pytanie o koszty/ilości → szukaj po nazwie przedmiotu
-5. NIE PODDAWAJ SIĘ po 1-2 wyszukiwaniach - szukaj z różnymi frazami
-6. Dopiero gdy wielokrotne wyszukiwania nic nie dają → odpowiedz że nie masz informacji
-
-KOREKTY UŻYTKOWNIKÓW:
-- Jeśli w wynikach są "KOREKTY UŻYTKOWNIKÓW" → to ZWERYFIKOWANE odpowiedzi od graczy
-- Mają NAJWYŻSZY priorytet nad innymi danymi z bazy wiedzy
-
-KRYTYCZNE ZASADY:
-- Odpowiadaj TYLKO na podstawie znalezionych informacji
-- ABSOLUTNY ZAKAZ wymyślania postaci, umiejętności, statystyk, mechanik
-- Jeśli po wielu wyszukiwaniach nie znalazłeś odpowiedzi → powiedz że nie masz informacji
-
-STYL ODPOWIEDZI:
-- Po polsku, krótko (max 3-4 zdania)
+ZASADY:
+- Odpowiadaj PO POLSKU, krótko i rzeczowo (max 3-4 zdania)
 - **Ważne informacje** pogrubione
 - Minimalne emoji: ⚔️ 🎯 💎 🏆 ⚡
 - BEZ wstępów typu "Dobrze, odpowiem..."
-
-EMOJI DISCORD I OBRAZKI (NAJWYŻSZY PRIORYTET!):
-- Baza wiedzy zawiera custom emoji Discorda w formacie <:nazwa:id> lub <a:nazwa:id>
-- MUSISZ kopiować je ZNAK PO ZNAKU, DOKŁADNIE tak jak są w bazie wiedzy
-- To jedyny sposób aby ikony wyświetliły się na Discordzie - Discord potrzebuje pełnego formatu z ID
-- ZAKAZANE jest jakiekolwiek przetwarzanie emoji - kopiuj literalnie cały ciąg znaków
-- Jeśli w bazie jest <:II_PetAW:1407383326830104658> → pisz <:II_PetAW:1407383326830104658>
-- NIGDY nie pisz: :nazwa:, (nazwa), nazwa, ani własnej interpretacji co emoji oznacza
-- Jeśli w bazie wiedzy są linki do obrazków (https://...png, https://...jpg, https://...webp) → wklej link w odpowiedź gdy wynika z kontekstu
-PRZYKŁAD:
-- Baza: "skupić na <:II_AW:123>, <:II_PetAW:456>"
-- ✅ POPRAWNIE: "Skup się na <:II_AW:123> i <:II_PetAW:456>"
-- ❌ ŹLE: "Skup się na :II_AW: i :II_PetAW:"
-- ❌ ŹLE: "Skup się na (II_AW) i (II_PetAW)"
-- ❌ ŹLE: "Skup się na awansowaniu postaci i petów"
-
-AKTUALNOŚĆ DANYCH (WAŻNE):
-- Każdy wpis ma datę: [YYYY-MM-DD | Autor]
-- ZAWSZE preferuj NOWSZE wpisy (2025-2026) nad starszymi (2024)
-
-ZAKOŃCZENIE:
-- Zakończ: "Oceń odpowiedź kciukiem 👍/👎!"
-
-PRZYKŁADY NIEPOPRAWNEGO ZACHOWANIA:
-❌ Wymyślanie statystyk, nazw, umiejętności
-❌ Odpowiadanie BEZ użycia grep_knowledge`;
+- Jeśli nie znasz odpowiedzi → powiedz że nie masz pewnych informacji
+- ABSOLUTNY ZAKAZ wymyślania statystyk, nazw, umiejętności`;
     }
 
     buildUserPrompt(context) {
-        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}\n\nUżyj narzędzia grep_knowledge aby przeszukać bazę wiedzy i odpowiedzieć na pytanie.`;
+        return `Użytkownik: ${context.asker.displayName}\nPytanie: ${context.question}`;
     }
 
     async savePromptToFile(prompt, askerName) {
@@ -576,80 +359,19 @@ ZAKOŃCZENIE:
             const systemPrompt = this.buildSystemPrompt();
             const userPrompt = this.buildUserPrompt(context);
 
-            await this.savePromptToFile(`SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`, context.asker.displayName);
-
-            // Pętla tool_use
-            const messages = [{ role: 'user', content: userPrompt }];
-            const allSearchResults = [];
-            const MAX_TOOL_CALLS = 15;
-
-            for (let i = 0; i < MAX_TOOL_CALLS; i++) {
-                const response = await this.client.messages.create({
-                    model: this.model,
-                    max_tokens: 1024,
-                    system: [{
-                        type: 'text',
-                        text: systemPrompt,
-                        cache_control: { type: 'ephemeral' }
-                    }],
-                    messages,
-                    tools: [AIChatService.GREP_TOOL],
-                    temperature: 0.3
-                });
-
-                const usage = response.usage || {};
-                const cacheInfo = usage.cache_read_input_tokens ? ` (cache: ${usage.cache_read_input_tokens}t)` : '';
-
-                if (response.stop_reason === 'end_turn') {
-                    const textBlock = response.content.find(b => b.type === 'text');
-                    const answer = textBlock ? textBlock.text.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim() : '⚠️ Brak odpowiedzi od AI.';
-                    const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
-
-                    logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${i} ${cacheInfo}`);
-                    return { content: answer, relevantKnowledge };
-                }
-
-                if (response.stop_reason === 'tool_use') {
-                    const toolUseBlock = response.content.find(b => b.type === 'tool_use');
-                    if (!toolUseBlock || toolUseBlock.name !== 'grep_knowledge') break;
-
-                    const pattern = toolUseBlock.input.pattern;
-                    logger.info(`AI Chat: grep_knowledge("${pattern}") [${i + 1}/${MAX_TOOL_CALLS}]`);
-
-                    const searchResult = await this.executeGrepKnowledge(pattern);
-                    allSearchResults.push(searchResult);
-
-                    messages.push({ role: 'assistant', content: response.content });
-                    messages.push({
-                        role: 'user',
-                        content: [{
-                            type: 'tool_result',
-                            tool_use_id: toolUseBlock.id,
-                            content: searchResult
-                        }]
-                    });
-
-                    continue;
-                }
-
-                break;
-            }
-
-            // Fallback
-            const finalResponse = await this.client.messages.create({
+            const response = await this.client.messages.create({
                 model: this.model,
                 max_tokens: 1024,
-                system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-                messages,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userPrompt }],
                 temperature: 0.3
             });
 
-            const textBlock = finalResponse.content.find(b => b.type === 'text');
-            const answer = textBlock ? textBlock.text.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim() : '⚠️ Brak odpowiedzi od AI.';
-            const relevantKnowledge = allSearchResults.length > 0 ? allSearchResults.join('\n\n') : null;
+            const textBlock = response.content.find(b => b.type === 'text');
+            const answer = textBlock ? textBlock.text.trim() : '⚠️ Brak odpowiedzi od AI.';
 
-            logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}" grep×${MAX_TOOL_CALLS} (fallback)`);
-            return { content: answer, relevantKnowledge };
+            logger.info(`AI Chat: ${context.asker.username} pytanie="${question.substring(0, 50)}"`);
+            return { content: answer, relevantKnowledge: null };
 
         } catch (error) {
             logger.error(`❌ Błąd AI Chat: ${error.status || ''} ${JSON.stringify(error.error || error.message)}`);
