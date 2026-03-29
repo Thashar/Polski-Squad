@@ -219,7 +219,7 @@ class ButtonOrderService {
 
     async _updateBothMessages() {
         await this.message1.edit(this.buildMessage1Data()).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości 1:', err.message));
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 1000));
         await this.message2.edit(this.buildMessage2Data()).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości 2:', err.message));
     }
 
