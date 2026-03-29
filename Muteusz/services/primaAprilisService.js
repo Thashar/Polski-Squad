@@ -37,6 +37,9 @@ class PrimaAprilisService {
         // Wczytaj lub wybierz hasło startowe
         await this._initPassword();
 
+        const passwordCount = this._getPasswords().length;
+        logger.info(`🔑 PrimaAprilis: załadowano ${passwordCount} haseł`);
+
         const trapped = Object.keys(this.data).filter(k => k !== '_passwordState').length;
         if (trapped > 0) {
             logger.info(`🔒 PrimaAprilis: ${trapped} użytkownik(ów) nadal uwięzionych po restarcie`);
