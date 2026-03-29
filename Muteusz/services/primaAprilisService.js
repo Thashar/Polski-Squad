@@ -361,6 +361,20 @@ class PrimaAprilisService {
                 logger.info('✅ PrimaAprilis: wysłano wiadomość z hasłem');
             }
 
+            // Szukaj istniejącej wiadomości z przyciskiem resetowania hasła
+            const savedRotateMsgId = this.data._rotateButtonMessageId;
+            let existingRotate = savedRotateMsgId
+                ? messages.find(m => m.id === savedRotateMsgId && m.author.id === client.user.id)
+                : null;
+
+            if (existingRotate) {
+                this.data._rotateButtonMessageId = existingRotate.id;
+            } else {
+                const rotateMsg = await channel.send(this._buildRotateButtonContent());
+                this.data._rotateButtonMessageId = rotateMsg.id;
+                logger.info('✅ PrimaAprilis: wysłano wiadomość z przyciskiem resetowania hasła');
+            }
+
             // Szukaj istniejącej wiadomości ze statystykami
             const savedStatsMsgId = this.data._statsMessageId;
             let existingStats = savedStatsMsgId
@@ -426,14 +440,15 @@ class PrimaAprilisService {
         const pwd = this.currentPassword ?? '(brak)';
         const normalized = pwd.replace(/_/g, ' ');
         const display = normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+        return { content: `\`${display}\`` };
+    }
+
+    _buildRotateButtonContent() {
         const rotateBtn = new ButtonBuilder()
             .setCustomId(PASSWORD_ROTATE_BTN_ID)
             .setLabel('Resetuj hasło')
             .setStyle(ButtonStyle.Danger);
-        return {
-            content: `\`${display}\``,
-            components: [new ActionRowBuilder().addComponents(rotateBtn)]
-        };
+        return { content: '', components: [new ActionRowBuilder().addComponents(rotateBtn)] };
     }
 
     getPasswordRotateBtnId() {
