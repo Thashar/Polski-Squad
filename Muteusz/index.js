@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -97,6 +97,21 @@ const sharedState = {
     messageHandler,
     memberHandler
 };
+
+// Kanały z auto-czyszczeniem wiadomości/reakcji/wątków nie-adminów
+const AUTO_CLEANUP_CHANNEL_IDS = new Set([
+    '1486919971165442048', // countdown
+    '1486500418358870074', // prima aprilis
+]);
+
+async function isAdminMember(guild, userId) {
+    try {
+        const member = await guild.members.fetch(userId);
+        return member.permissions.has(PermissionFlagsBits.Administrator);
+    } catch {
+        return false;
+    }
+}
 
 client.once(Events.ClientReady, async () => {
     await logService.logMessage('success', `Bot ${client.user.tag} jest online!`);
@@ -208,6 +223,15 @@ client.on(Events.MessageCreate, async (message) => {
     // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
     if (!isFullyInitialized) {
         return;
+    }
+
+    // Auto-czyszczenie: usuń wiadomości nie-adminów na wybranych kanałach
+    if (!message.author.bot && message.guild && AUTO_CLEANUP_CHANNEL_IDS.has(message.channelId)) {
+        const admin = await isAdminMember(message.guild, message.author.id);
+        if (!admin) {
+            await message.delete().catch(() => {});
+            return;
+        }
     }
 
     // Prima Aprilis: sprawdzanie hasła przez uwięzionych użytkowników
@@ -379,6 +403,15 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
                 await reaction.fetch();
             } catch (error) {
                 logger.error('❌ Nie można pobrać partial reaction:', error);
+                return;
+            }
+        }
+
+        // Auto-czyszczenie: usuń reakcje nie-adminów na wybranych kanałach
+        if (!user.bot && reaction.message.guild && AUTO_CLEANUP_CHANNEL_IDS.has(reaction.message.channelId)) {
+            const admin = await isAdminMember(reaction.message.guild, user.id);
+            if (!admin) {
+                await reaction.users.remove(user.id).catch(() => {});
                 return;
             }
         }
@@ -560,6 +593,19 @@ async function setupReportButtonMessage(client, config) {
         logger.error('❌ Nie można wysłać wiadomości z przyciskiem zgłoszenia:', error.message);
     }
 }
+
+client.on(Events.ThreadCreate, async (thread) => {
+    if (!isFullyInitialized) return;
+    const parentId = thread.parentId;
+    if (!AUTO_CLEANUP_CHANNEL_IDS.has(parentId)) return;
+    try {
+        const guild = thread.guild;
+        const admin = await isAdminMember(guild, thread.ownerId);
+        if (!admin) await thread.delete().catch(() => {});
+    } catch (err) {
+        logger.error('❌ AutoCleanup: błąd usuwania wątku:', err.message);
+    }
+});
 
 /**
  * Uruchamia bota
