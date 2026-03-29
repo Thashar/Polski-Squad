@@ -471,6 +471,44 @@ async function handleButton(interaction, sharedState) {
         await handleCancelDelete(interaction, sharedState);
         return;
     }
+
+    if (customId.startsWith('set_reminder_skip_roles_')) {
+        await interaction.deferUpdate();
+
+        const sessionId = customId.replace('set_reminder_skip_roles_', '');
+        const userState = userStates.get(interaction.user.id);
+
+        if (!userState || userState.sessionId !== sessionId) {
+            await interaction.editReply({
+                content: '❌ Sesja wygasła. Zacznij od nowa.',
+                components: []
+            });
+            return;
+        }
+
+        userState.roles = [];
+        await createScheduledFromUserState(interaction, sharedState, userState);
+        return;
+    }
+
+    if (customId.startsWith('set_reminder_everyone_')) {
+        await interaction.deferUpdate();
+
+        const sessionId = customId.replace('set_reminder_everyone_', '');
+        const userState = userStates.get(interaction.user.id);
+
+        if (!userState || userState.sessionId !== sessionId) {
+            await interaction.editReply({
+                content: '❌ Sesja wygasła. Zacznij od nowa.',
+                components: []
+            });
+            return;
+        }
+
+        userState.roles = ['everyone'];
+        await createScheduledFromUserState(interaction, sharedState, userState);
+        return;
+    }
 }
 
 // ==================== SELECT MENU HANDLERS ====================
@@ -728,11 +766,16 @@ async function handleChannelSelectMenu(interaction, sharedState) {
 
         const skipButton = new ButtonBuilder()
             .setCustomId(`set_reminder_skip_roles_${sessionId}`)
-            .setLabel('Pomiń - bez pingów')
+            .setLabel('Bez pingów')
             .setStyle(ButtonStyle.Secondary);
 
+        const everyoneButton = new ButtonBuilder()
+            .setCustomId(`set_reminder_everyone_${sessionId}`)
+            .setLabel('Pinguj @everyone')
+            .setStyle(ButtonStyle.Danger);
+
         const row1 = new ActionRowBuilder().addComponents(roleSelect);
-        const row2 = new ActionRowBuilder().addComponents(skipButton);
+        const row2 = new ActionRowBuilder().addComponents(skipButton, everyoneButton);
 
         await interaction.update({
             content: `**Krok 3/3:** Wybierz role do pingowania (opcjonalne)\n📍 **Kanał:** <#${selectedChannel.id}>`,
@@ -783,25 +826,6 @@ async function handleRoleSelectMenu(interaction, sharedState) {
     const customId = interaction.customId;
 
     logger.info(`Role Select: ${customId} by ${interaction.user.tag}`);
-
-    if (customId.startsWith('set_reminder_skip_roles_')) {
-        await interaction.deferUpdate();
-
-        const sessionId = customId.replace('set_reminder_skip_roles_', '');
-        const userState = userStates.get(interaction.user.id);
-
-        if (!userState || userState.sessionId !== sessionId) {
-            await interaction.editReply({
-                content: '❌ Sesja wygasła. Zacznij od nowa.',
-                components: []
-            });
-            return;
-        }
-
-        userState.roles = []; // No roles selected
-
-        await createScheduledFromUserState(interaction, sharedState, userState);
-    }
 
     if (customId.startsWith('set_reminder_roles_')) {
         await interaction.deferUpdate();
@@ -976,11 +1000,16 @@ async function handleModalSubmit(interaction, sharedState) {
 
                 const skipButton = new ButtonBuilder()
                     .setCustomId(`set_reminder_skip_roles_${sessionId}`)
-                    .setLabel('Pomiń - bez pingów')
+                    .setLabel('Bez pingów')
                     .setStyle(ButtonStyle.Secondary);
 
+                const everyoneButton = new ButtonBuilder()
+                    .setCustomId(`set_reminder_everyone_${sessionId}`)
+                    .setLabel('Pinguj @everyone')
+                    .setStyle(ButtonStyle.Danger);
+
                 const row1 = new ActionRowBuilder().addComponents(roleSelect);
-                const row2 = new ActionRowBuilder().addComponents(skipButton);
+                const row2 = new ActionRowBuilder().addComponents(skipButton, everyoneButton);
 
                 await interaction.editReply({
                     content: `**Krok 2/2:** Wybierz role do pingowania (opcjonalne)\n📍 **Kanał:** <#${eventListChannelId}> (Lista Eventów)`,
@@ -1409,7 +1438,10 @@ async function createScheduledFromUserState(interaction, sharedState, userState)
         content += `📅 **Pierwsze wyzwolenie:** <t:${nextTriggerTimestamp}:F>\n`;
         content += `🔄 **Interwał:** ${przypomnieniaMenedzer.formatInterval(scheduled.interval)}\n`;
         content += `📍 **Kanał:** <#${userState.channelId}>\n`;
-        content += `👥 **Role:** ${userState.roles && userState.roles.length > 0 ? userState.roles.map(r => `<@&${r}>`).join(', ') : 'Brak'}`;
+        const rolesDisplay = userState.roles && userState.roles.length > 0
+            ? (userState.roles[0] === 'everyone' ? '@everyone' : userState.roles.map(r => `<@&${r}>`).join(', '))
+            : 'Brak';
+        content += `👥 **Role:** ${rolesDisplay}`;
 
         await interaction.editReply({
             content,
