@@ -428,18 +428,12 @@
     },
     {
       "name": "Szkolenia",
-      "description": "Bot do automatycznego zarządzania wątkami treningowymi i AI Chat z bazą wiedzy",
+      "description": "Bot do automatycznego zarządzania wątkami treningowymi i AI Chat",
       "commands": [
         {
           "name": "@Szkolenia",
-          "description": "Zadaj pytanie AI o grze Survivor.io - przeszukuje bazę wiedzy i odpowiada",
+          "description": "Zadaj pytanie AI o grze Survivor.io",
           "usage": "@Szkolenia <pytanie>",
-          "requiredPermission": "public"
-        },
-        {
-          "name": "/ranking-pomocy",
-          "description": "Wyświetla ranking osób budujących bazę wiedzy (miesięczny, z nawigacją po miesiącach)",
-          "usage": "/ranking-pomocy",
           "requiredPermission": "public"
         }
       ]

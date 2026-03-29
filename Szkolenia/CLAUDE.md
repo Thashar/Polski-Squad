@@ -1,14 +1,13 @@
 ### Szkolenia Bot
 
-**Funkcjonalność:** Reakcja emoji N_SSS -> Prywatny wątek z instrukcjami treningowymi + AI Chat + Baza wiedzy
+**Funkcjonalność:** Reakcja emoji N_SSS -> Prywatny wątek z instrukcjami treningowymi + AI Chat
 **Lifecycle:** Utworzenie -> pytanie o zamknięcie po 7 dniach nieaktywności -> automatyczne zamknięcie po 14 dniach (7 dni po pytaniu bez odpowiedzi). Kliknięcie "nie zamykaj" resetuje cały cykl od nowa.
 **Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
 
 **Serwisy:**
 - `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach, sprawdzenie PRZED threadOwner (FIX zmiany nicku)
 - `reminderStorageService.js` - Persistent JSON z danymi przypomień
-- `knowledgeService.js` - Zarządzanie bazą wiedzy w JSON (dodawanie/usuwanie/aktywacja/deaktywacja wpisów, korekty, oceny)
-- `aiChatService.js` - AI Chat z trzema providerami: Anthropic (grep_knowledge, tool_use loop), Grok (web_search) i Perplexity (web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER`
+- `aiChatService.js` - AI Chat z trzema providerami: Anthropic (prosty prompt), Grok (web_search) i Perplexity (web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER`
 
 **Uprawnienia:**
 - Admin/moderator/specjalne role -> mogą otworzyć wątek każdemu (reakcja pod czyimkolwiek postem)
@@ -26,9 +25,8 @@
 
 ### Provider: Anthropic (domyślny)
 - **Model:** Anthropic Claude (configurable via `SZKOLENIA_AI_CHAT_MODEL`)
-- **Narzędzie:** `grep_knowledge` - zaawansowane wyszukiwanie (3 strategie: exact regex + dopasowanie per słowo + polski stemming, scoring trafności, priorytet korekt), max 20 wyników, max 15000 znaków
-- **Tool-use loop:** Max 15 wywołań grep_knowledge na pytanie
-- **Feedback:** 👍/👎 pod odpowiedziami AI. 👍 = pozytywna ocena wpisów. 👎 = modal z korektą + negatywna ocena + korekta trafia do bazy wiedzy i na kanał zatwierdzania
+- **Prompt:** Prosty system prompt - asystent wiedzy o Survivor.io, odpowiada z wiedzy modelu
+- **Brak narzędzi:** Nie używa grep_knowledge ani bazy lokalnej
 
 ### Provider: Grok (xAI)
 - **Model:** Grok (configurable via `SZKOLENIA_GROK_MODEL`, domyślnie `grok-4`)
@@ -42,39 +40,7 @@
 - **API:** `https://api.perplexity.ai/chat/completions` (Chat Completions z wbudowanym web search)
 - **Web Search:** Perplexity ma wbudowane przeszukiwanie internetu, filtr `search_recency_filter: 'month'`
 - **Prompt:** Identyczny jak Grok - kompendium wiedzy o Survivor.io z instrukcjami wyszukiwania
-- **Bez kompendium lokalnego** (brak grep_knowledge), ale **z dostępem do sieci** przez web_search
 - **Cooldown:** 5 minut per użytkownik (administratorzy bez limitu)
-
-### Komenda
-- `/ranking-pomocy` - ranking osób budujących bazę wiedzy, z nawigacją po miesiącach
-
-## Baza Wiedzy (Reakcje ✅)
-
-**Zbieranie wiedzy:**
-- Użytkownik z rolą `1470702781638901834` daje reakcję ✅ na wiadomość → dodaje do bazy wiedzy
-- Jeśli wiadomość jest odpowiedzią → zapisuje pytanie + odpowiedź
-- Usunięcie ✅ → usuwa z bazy wiedzy
-
-**Kanał zatwierdzania** (`1470703877924978772`):
-- Każdy nowy wpis wysyłany jako embed z informacją: autor wiadomości, kto dodał, link do źródła
-- ✅ na kanale zatwierdzania → deaktywuje wpis (ukrywa z wyszukiwania, ale nie usuwa)
-- Usunięcie ✅ z kanału zatwierdzania → reaktywuje wpis
-
-**Przechowywanie:**
-- Baza wiedzy: `data/knowledge_base.json` (JSON, klucz = message ID)
-- Korekty użytkowników: zapisywane jako wpisy w `knowledge_base.json` z flagą `isCorrection: true` i prefixem `[KOREKTA UŻYTKOWNIKA]` w wyszukiwaniu
-- Wpis: `{ content, author, date, reactedBy, approvalMsgId, active, rating, isCorrection? }`
-- Wpisy z `rating < -5` są ukrywane z wyszukiwania
-- Punkty pomocy: `data/knowledge_points.json` (miesięczne rankingi, `{ "YYYY-MM": { userId: { displayName, points } } }`)
-
-## System Punktów Pomocy
-
-- **+1 pkt** - dodanie wiedzy do bazy (reakcja ✅)
-- **-1 pkt** - usunięcie własnej reakcji ✅ (usunięcie wiedzy)
-- **-2 pkt** - odrzucenie wiedzy na kanale zatwierdzania (✅ na approval channel)
-- Można mieć ujemną liczbę punktów
-- Rankingi miesięczne - co miesiąc nowy ranking
-- `/ranking-pomocy` - wyświetla własne punkty + TOP 10, nawigacja ◀/▶ po miesiącach
 
 ---
 
@@ -115,5 +81,5 @@ SZKOLENIA_PERPLEXITY_MODEL=sonar-pro
 - **Logger:** Używaj createBotLogger('Szkolenia')
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
 - **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
-- **Persistencja:** Przypomnienia w JSON, baza wiedzy w JSON, cooldowny AI Chat w JSON
-- **AI Chat:** Trzy providery (Anthropic z grep_knowledge / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Anthropic: lokalna baza wiedzy + grep_knowledge, korekty mają priorytet. Grok/Perplexity: web search (przeszukiwanie internetu w czasie rzeczywistym), cooldown 60 min (admini bez limitu).
+- **Persistencja:** Przypomnienia w JSON, cooldowny AI Chat w JSON
+- **AI Chat:** Trzy providery (Anthropic prosty prompt / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Grok/Perplexity: web search, cooldown 60 min (admini bez limitu).
