@@ -1,5 +1,4 @@
 const fs = require('fs').promises;
-const fsSync = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -66,23 +65,8 @@ class PrimaAprilisService {
     }
 
     _getPasswords() {
-        try {
-            const envPath = path.join(__dirname, '../.env');
-            logger.info(`🔍 PrimaAprilis: czytam hasła z ${envPath}`);
-            const content = fsSync.readFileSync(envPath, 'utf8');
-            const lines = content.split(/\r?\n/);
-            logger.info(`🔍 PrimaAprilis: plik ma ${lines.length} linii`);
-            const passwords = [];
-            for (const line of lines) {
-                const match = line.match(/^HASLO\d+=(.+)$/);
-                if (match) passwords.push(match[1].trim());
-            }
-            logger.info(`🔍 PrimaAprilis: znaleziono ${passwords.length} haseł w pliku`);
-            return passwords.filter(Boolean);
-        } catch (err) {
-            logger.error(`❌ PrimaAprilis: błąd czytania pliku .env: ${err.message}`);
-            return Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean);
-        }
+        const hasla = process.env.HASLA ?? '';
+        return hasla.split(',').map(h => h.trim()).filter(Boolean);
     }
 
     async _pickNewPassword() {
