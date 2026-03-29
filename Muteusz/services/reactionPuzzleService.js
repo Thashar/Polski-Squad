@@ -8,7 +8,12 @@ const DATA_FILE = path.join(__dirname, '../data/reaction_puzzle_state.json');
 // Normalizacja: Discord usuwa variation selectory (U+FE0F) z reaction.emoji.name
 function norm(str) { return str.replace(/\uFE0F/g, ''); }
 
-const SEQUENCE = ['👩🏻‍🍳', '6️⃣', '❌', '🍽️'].map(norm);
+const SEQUENCE = [
+    process.env.ICON1,
+    process.env.ICON2,
+    process.env.ICON3,
+    process.env.ICON4,
+].map(s => norm(s ?? ''));
 const MESSAGE_CONTENT = '# Gdzie kucharek sześć, tam nie ma co jeść! 👩🏻‍🍳';
 
 class ReactionPuzzleService {
