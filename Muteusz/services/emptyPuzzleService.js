@@ -7,7 +7,7 @@ const DATA_FILE = path.join(__dirname, '../data/empty_puzzle_state.json');
 
 // Stany wiadomości i odpowiadające im wyzwalacze
 const STATES   = ['# EMPTY', '# MPTY', '# M TY', '# M T', '<:ZZ_Pusto:1209494954762829866>'];
-const TRIGGERS = ['E',     'P',    'Y',     'M T', '<:ZZ_Pusto:1209494954762829866>'];
+const TRIGGERS = Array.from({ length: 5 }, (_, i) => process.env[`EMPTY_TRIGGER${i + 1}`] ?? '');
 
 class EmptyPuzzleService {
     constructor(config) {
