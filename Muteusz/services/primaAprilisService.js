@@ -431,7 +431,7 @@ class PrimaAprilisService {
             .setLabel('Resetuj hasło')
             .setStyle(ButtonStyle.Danger);
         return {
-            content: `\`\`\`\n${display}\n\`\`\``,
+            content: `\`${display}\``,
             components: [new ActionRowBuilder().addComponents(rotateBtn)]
         };
     }
