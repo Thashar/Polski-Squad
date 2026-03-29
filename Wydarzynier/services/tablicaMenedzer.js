@@ -286,7 +286,9 @@ class TablicaMenedzer {
 
         // Role do pingowania
         if (scheduled.roles && scheduled.roles.length > 0) {
-            const rolesText = scheduled.roles.map(r => `<@&${r}>`).join(', ');
+            const rolesText = scheduled.roles[0] === 'everyone'
+                ? '@everyone'
+                : scheduled.roles.map(r => `<@&${r}>`).join(', ');
             embed.addFields({
                 name: '👥 Role do pingowania',
                 value: rolesText,

@@ -93,7 +93,11 @@ class Harmonogram {
 
             // Dodaj pingi ról
             if (scheduled.roles && scheduled.roles.length > 0) {
-                content += scheduled.roles.map(r => `<@&${r}>`).join(' ') + '\n\n';
+                if (scheduled.roles[0] === 'everyone') {
+                    content += '@everyone\n\n';
+                } else {
+                    content += scheduled.roles.map(r => `<@&${r}>`).join(' ') + '\n\n';
+                }
             }
 
             // Zbuduj wiadomość na podstawie typu szablonu
