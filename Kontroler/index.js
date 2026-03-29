@@ -253,8 +253,8 @@ function setupEventHandlers() {
             }
         }
 
-        // Ping bota w kanale → przekaż do DM robot userów
-        if (!message.author.bot && message.guild && config.robot1Users.length > 0 && message.mentions.has(client.user)) {
+        // Ping bota w kanale → przekaż do DM robot userów (tylko z kanału notificationForwardChannel, ignoruj @everyone/@here)
+        if (!message.author.bot && message.guild && config.robot1Users.length > 0 && message.channelId === config.notificationForwardChannel && message.mentions.has(client.user) && !message.mentions.everyone) {
             for (const userId of config.robot1Users) {
                 try {
                     const user = await client.users.fetch(userId);
