@@ -192,10 +192,6 @@ class GameCountdownService {
         try {
             await this._snapshotAndApplyPermissions();
 
-            for (const id of CLEANUP_CHANNEL_IDS) {
-                await this._cleanupChannel(id);
-            }
-
             const channel = await this.client.channels.fetch(COUNTDOWN_CHANNEL_ID);
             this.timeRemaining = TOTAL_SECONDS;
             this.running = true;
