@@ -599,6 +599,19 @@ class BombTimerService {
         await this.updateTimerMessage();
     }
 
+    async forceDefuse() {
+        if (!this.state.running || this.state.defused || this.state.exploded) return;
+        this.stopInterval();
+        this.stopDisplayLoop();
+        this.state.defused = true;
+        this.state.running = false;
+        await this.saveState();
+        await this.updateTimerMessage();
+        this._deleteEveryoneMessage().catch(() => {});
+        this._clearAllReactions().catch(() => {});
+        this.refreshControlPanel().catch(() => {});
+    }
+
     async resetBomb() {
         this.stopInterval();
         this.stopDisplayLoop();

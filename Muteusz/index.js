@@ -164,7 +164,27 @@ client.once(Events.ClientReady, async () => {
     buttonOrderService.onWin   = () => puzzleChainService.onPuzzleSolved(1);
     emptyPuzzleService.onWin   = () => puzzleChainService.onPuzzleSolved(2);
     reactionPuzzleService.onWin = () => puzzleChainService.onPuzzleSolved(3);
-    hotPotatoService.onWin     = () => puzzleChainService.onPuzzleSolved(4);
+    hotPotatoService.onWin = async () => {
+        await puzzleChainService.onPuzzleSolved(4);
+        const guild = client.guilds.cache.first();
+        // Zatrzymaj countdown gry
+        await gameCountdownService.stop().catch(() => {});
+        // Rozbrój bombę jeśli aktywna
+        await bombTimerService.forceDefuse().catch(() => {});
+        // Wyślij wiadomość zwycięstwa na kanał countdown
+        try {
+            const victoryChannel = await client.channels.fetch('1486919971165442048');
+            await victoryChannel.send('@everyone\n# Serwer został uratowany! Gratulacje! <a:PepeOklaski:1259556219312410760>');
+        } catch (err) {
+            logger.error('❌ Błąd wysyłania wiadomości zwycięstwa:', err.message);
+        }
+        // Dezaktywuj przycisk NIE KLIKAĆ
+        await primaAprilisService.disableTrapButton().catch(() => {});
+        // Zwolnij wszystkich uwięzionych graczy w kolejności
+        if (guild) await primaAprilisService.freeAllTrapped(guild).catch(() => {});
+        // Odśwież panel kontrolny
+        await bombTimerService.refreshControlPanel().catch(() => {});
+    };
 
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
