@@ -9,6 +9,7 @@ const DATA_FILE = path.join(__dirname, '../data/prima_aprilis_roles.json');
 
 const BUTTON_CUSTOM_ID = 'prima_aprilis_nie_klikac_button';
 const BUTTON_LABEL = 'NIE KLIKAĆ POD ŻADNYM POZOREM';
+const PASSWORD_ROTATE_BTN_ID = 'prima_password_rotate';
 
 const PASSWORD_ROTATION_MS = 5 * 60 * 1000; // 5 minut
 
@@ -330,7 +331,18 @@ class PrimaAprilisService {
         const pwd = this.currentPassword ?? '(brak)';
         const normalized = pwd.replace(/_/g, ' ');
         const display = normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
-        return display;
+        const rotateBtn = new ButtonBuilder()
+            .setCustomId(PASSWORD_ROTATE_BTN_ID)
+            .setLabel('Resetuj hasło')
+            .setStyle(ButtonStyle.Danger);
+        return {
+            content: display,
+            components: [new ActionRowBuilder().addComponents(rotateBtn)]
+        };
+    }
+
+    getPasswordRotateBtnId() {
+        return PASSWORD_ROTATE_BTN_ID;
     }
 
     async _updatePasswordMessage() {

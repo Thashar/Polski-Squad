@@ -466,7 +466,10 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      */
     async handleButtonInteraction(interaction) {
-        if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getButtonCustomId()) {
+        if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getPasswordRotateBtnId()) {
+            await interaction.deferUpdate();
+            await this.primaAprilisService.rotatePassword();
+        } else if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getButtonCustomId()) {
             await this.handlePrimaAprilisButton(interaction);
         } else if (this.bombTimerService && this.bombTimerService.isMyButton(interaction.customId)) {
             await this.handleBombTimerButton(interaction);
