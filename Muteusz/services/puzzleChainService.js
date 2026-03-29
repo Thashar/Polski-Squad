@@ -47,6 +47,7 @@ class PuzzleChainService {
             try {
                 const channel = await this.client.channels.fetch(channelId);
                 await channel.permissionOverwrites.create(PLAYER_ROLE_ID, UNLOCK_PERMISSIONS, { reason: `PuzzleChain: odblokowanie po rozwiązaniu zagadki ${PUZZLE_NAMES[puzzleIndex]}` });
+                await channel.send(`<@&${PLAYER_ROLE_ID}> Pokój z kolejną zagadką został otwarty!`);
                 logger.success(`🔓 PuzzleChain: odblokowano kanał ${channelId} z konkretnymi uprawnieniami`);
             } catch (err) {
                 logger.error(`❌ PuzzleChain: błąd odblokowania kanału ${channelId}: ${err.message}`);
