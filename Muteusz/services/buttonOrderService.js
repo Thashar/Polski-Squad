@@ -218,10 +218,9 @@ class ButtonOrderService {
     }
 
     async _updateBothMessages() {
-        await Promise.all([
-            this.message1.edit(this.buildMessage1Data()),
-            this.message2.edit(this.buildMessage2Data())
-        ]).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości:', err.message));
+        await this.message1.edit(this.buildMessage1Data()).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości 1:', err.message));
+        await new Promise(r => setTimeout(r, 500));
+        await this.message2.edit(this.buildMessage2Data()).catch(err => logger.error('❌ ButtonOrder: błąd aktualizacji wiadomości 2:', err.message));
     }
 
     // Szuka wiadomości bota z przyciskami btn_order_ na kanale
