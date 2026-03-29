@@ -161,6 +161,7 @@ class PrimaAprilisService {
             );
 
             if (existing) {
+                this._buttonMessage = existing;
                 if (this.isMessageCurrent(existing)) {
                     logger.info('ℹ️ PrimaAprilis: wiadomość z przyciskiem już istnieje i jest aktualna, pomijam.');
                     return;
@@ -170,11 +171,52 @@ class PrimaAprilisService {
                 return;
             }
 
-            await channel.send({ components: [row] });
+            this._buttonMessage = await channel.send({ components: [row] });
             logger.success('✅ PrimaAprilis: wysłano wiadomość z przyciskiem');
         } catch (error) {
             logger.error('❌ PrimaAprilis: błąd przy setupie wiadomości:', error.message);
         }
+    }
+
+    async disableTrapButton() {
+        if (!this._buttonMessage) return;
+        try {
+            const disabledBtn = new ButtonBuilder()
+                .setCustomId(BUTTON_CUSTOM_ID)
+                .setLabel(BUTTON_LABEL)
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🛑')
+                .setDisabled(true);
+            await this._buttonMessage.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] });
+            logger.info('🔒 PrimaAprilis: przycisk dezaktywowany');
+        } catch (err) {
+            logger.error('❌ PrimaAprilis: błąd dezaktywacji przycisku:', err.message);
+        }
+    }
+
+    async freeAllTrapped(guild) {
+        const entries = Object.entries(this.data)
+            .filter(([key]) => key !== '_passwordState')
+            .sort(([, a], [, b]) => new Date(a.savedAt) - new Date(b.savedAt));
+
+        if (entries.length === 0) return;
+        logger.info(`🔓 PrimaAprilis: zwalnianie wszystkich ${entries.length} uwięzionych użytkowników...`);
+
+        for (const [userId] of entries) {
+            try {
+                const member = await guild.members.fetch(userId).catch(() => null);
+                if (member) {
+                    await this.freeUser(member);
+                } else {
+                    // Użytkownik opuścił serwer — wyczyść dane
+                    delete this.data[userId];
+                    await this.saveData();
+                }
+            } catch (err) {
+                logger.error(`❌ PrimaAprilis: błąd zwalniania ${userId}:`, err.message);
+            }
+        }
+        logger.info('✅ PrimaAprilis: wszyscy użytkownicy zwolnieni');
     }
 
     async trapUser(member) {
