@@ -392,13 +392,13 @@ async function handlePowiadomieniaCommand(interaction, state) {
         return;
     }
 
-    // Sprawdź czy podano opcjonalnego użytkownika (tylko dla adminów)
+    const member = interaction.member;
+    const isAdmin = member.permissions.has('Administrator');
     const targetUser = interaction.options.getUser('uzytkownik');
 
     if (targetUser) {
-        // Tryb admina: zmień ustawienia dla wskazanego użytkownika
-        const member = interaction.member;
-        if (!member.permissions.has('Administrator')) {
+        // Toggle dla konkretnego użytkownika - wymaga admina
+        if (!isAdmin) {
             await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać powiadomienia dla innych użytkowników.', ephemeral: true });
             return;
         }
@@ -407,31 +407,34 @@ async function handlePowiadomieniaCommand(interaction, state) {
         if (prefs.isOptedOut(targetId)) {
             await prefs.optIn(targetId);
             await interaction.reply({
-                content: `🔔 Powiadomienia o zmianach ról dla ${targetUser} zostały **włączone**.`,
+                content: `🔔 Powiadomienia dla ${targetUser} zostały **włączone**.`,
                 ephemeral: true
             });
         } else {
             await prefs.optOut(targetId);
             await interaction.reply({
-                content: `🔕 Powiadomienia o zmianach ról dla ${targetUser} zostały **wyłączone**. Użytkownik nie będzie pingowany przy zmianie klanu.`,
+                content: `🔕 Powiadomienia dla ${targetUser} zostały **wyłączone**. Nie będzie pingowany przy zmianie klanu.`,
                 ephemeral: true
             });
         }
         return;
     }
 
-    // Tryb użytkownika: zmień własne ustawienia
-    const userId = interaction.user.id;
-    if (prefs.isOptedOut(userId)) {
-        await prefs.optIn(userId);
+    // Bez parametru: globalny toggle (wymaga admina)
+    if (!isAdmin) {
+        await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać globalne ustawienia powiadomień.', ephemeral: true });
+        return;
+    }
+
+    const nowEnabled = await prefs.toggleGlobal();
+    if (nowEnabled) {
         await interaction.reply({
-            content: '🔔 Twoje powiadomienia o zmianach Twoich ról klanowych zostały **włączone**. Będziesz pingowany na kanale powiadomień gdy Twój klan się zmieni.',
+            content: '🔔 Powiadomienia o zmianach klanów zostały **włączone** dla wszystkich.',
             ephemeral: true
         });
     } else {
-        await prefs.optOut(userId);
         await interaction.reply({
-            content: '🔕 Twoje powiadomienia o zmianach Twoich ról klanowych zostały **wyłączone**. Nie będziesz pingowany gdy Twój klan się zmieni. Możesz włączyć ponownie komendą `/powiadomienia`.',
+            content: '🔕 Powiadomienia o zmianach klanów zostały **wyłączone** dla wszystkich. Nikt nie będzie pingowany przy zmianie klanu.',
             ephemeral: true
         });
     }
@@ -458,10 +461,10 @@ async function registerSlashCommands(client, config) {
             .setDescription('[ADMIN] Zmień nick użytkownika na serwerze'),
         new SlashCommandBuilder()
             .setName('powiadomienia')
-            .setDescription('Włącz lub wyłącz powiadomienia o zmianach ról klanowych (Twoje lub dla wskazanego użytkownika)')
+            .setDescription('[ADMIN] Włącz lub wyłącz powiadomienia o zmianach klanów (globalnie lub dla konkretnej osoby)')
             .addUserOption(option =>
                 option.setName('uzytkownik')
-                    .setDescription('[ADMIN] Użytkownik dla którego zmienić ustawienia powiadomień')
+                    .setDescription('[ADMIN] Konkretny użytkownik - wyłącz/włącz tylko jego powiadomienia')
                     .setRequired(false))
     ];
 
