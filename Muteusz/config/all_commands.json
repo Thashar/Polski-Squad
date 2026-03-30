@@ -144,9 +144,9 @@
         },
         {
           "name": "/powiadomienia",
-          "description": "Włącza lub wyłącza powiadomienia o zmianach ról klanowych i awansach (Lider/Vice Lider). Każde wywołanie przełącza stan.",
-          "usage": "/powiadomienia",
-          "requiredPermission": "public"
+          "description": "Globalnie włącza/wyłącza powiadomienia o zmianach klanów dla wszystkich. Z @użytkownikiem: włącza/wyłącza dla konkretnej osoby.",
+          "usage": "/powiadomienia [uzytkownik]",
+          "requiredPermission": "administrator"
         }
       ]
     },

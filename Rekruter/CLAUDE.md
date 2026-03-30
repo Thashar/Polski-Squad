@@ -16,10 +16,12 @@
 - `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje, powiadomienia o odejściu (link do profilu + nick serwerowy)
 - `roleMonitoringService.js` - Cron 6h, ostrzeżenia po 24h bez ról
 - `roleConflictService.js` - Auto-usuwanie ról rekrutacyjnych gdy dostaje klanową
-- `clanRoleChangeService.js` - Powiadomienia o zmianach klanów/stanowisk; ignoruje administratorów i użytkowników którzy wyłączyli powiadomienia
-- `notificationPreferencesService.js` - Persistencja preferencji powiadomień per użytkownik (`data/notification_preferences.json`); `isOptedOut(userId)`, `optOut(userId)`, `optIn(userId)`
+- `clanRoleChangeService.js` - Powiadomienia o zmianach klanów/stanowisk; sprawdza globalny flag + per-user opt-out; ignoruje administratorów; `buildInitialCache()` pobiera wszystkich członków (bez limitu)
+- `notificationPreferencesService.js` - Persistencja preferencji w `data/notification_preferences.json`; globalny flag `globalEnabled` + per-user `optedOut[]`; metody: `isGlobalEnabled()`, `toggleGlobal()`, `isOptedOut(userId)`, `optOut(userId)`, `optIn(userId)`
 
-**Komendy:** `/ocr-debug`, `/nick`, `/powiadomienia`
+**Komendy:** `/ocr-debug`, `/nick`, `/powiadomienia [uzytkownik]`
+- `/powiadomienia` - tylko admin, globalny toggle (włącza/wyłącza dla WSZYSTKICH)
+- `/powiadomienia uzytkownik:@user` - tylko admin, toggle dla konkretnego użytkownika
 **Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot2):**

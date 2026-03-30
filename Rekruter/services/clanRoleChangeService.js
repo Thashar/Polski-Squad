@@ -100,7 +100,12 @@ class ClanRoleChangeService {
                 return;
             }
 
-            // Sprawdź czy użytkownik wyłączył powiadomienia
+            // Sprawdź czy powiadomienia są globalnie wyłączone
+            if (this.notificationPreferencesService && !this.notificationPreferencesService.isGlobalEnabled()) {
+                return;
+            }
+
+            // Sprawdź czy użytkownik wyłączył swoje powiadomienia
             if (this.notificationPreferencesService && this.notificationPreferencesService.isOptedOut(userId)) {
                 logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.tag} wyłączył powiadomienia - pomijam`);
                 return;
