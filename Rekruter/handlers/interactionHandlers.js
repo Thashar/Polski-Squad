@@ -392,17 +392,46 @@ async function handlePowiadomieniaCommand(interaction, state) {
         return;
     }
 
+    // Sprawdź czy podano opcjonalnego użytkownika (tylko dla adminów)
+    const targetUser = interaction.options.getUser('uzytkownik');
+
+    if (targetUser) {
+        // Tryb admina: zmień ustawienia dla wskazanego użytkownika
+        const member = interaction.member;
+        if (!member.permissions.has('Administrator')) {
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać powiadomienia dla innych użytkowników.', ephemeral: true });
+            return;
+        }
+
+        const targetId = targetUser.id;
+        if (prefs.isOptedOut(targetId)) {
+            await prefs.optIn(targetId);
+            await interaction.reply({
+                content: `🔔 Powiadomienia o zmianach ról dla ${targetUser} zostały **włączone**.`,
+                ephemeral: true
+            });
+        } else {
+            await prefs.optOut(targetId);
+            await interaction.reply({
+                content: `🔕 Powiadomienia o zmianach ról dla ${targetUser} zostały **wyłączone**. Użytkownik nie będzie pingowany przy zmianie klanu.`,
+                ephemeral: true
+            });
+        }
+        return;
+    }
+
+    // Tryb użytkownika: zmień własne ustawienia
     const userId = interaction.user.id;
     if (prefs.isOptedOut(userId)) {
         await prefs.optIn(userId);
         await interaction.reply({
-            content: '🔔 Powiadomienia o zmianach ról zostały **włączone**. Będziesz informowany o dołączeniu do klanu, awansach i zmianach stanowisk.',
+            content: '🔔 Twoje powiadomienia o zmianach Twoich ról klanowych zostały **włączone**. Będziesz pingowany na kanale powiadomień gdy Twój klan się zmieni.',
             ephemeral: true
         });
     } else {
         await prefs.optOut(userId);
         await interaction.reply({
-            content: '🔕 Powiadomienia o zmianach ról zostały **wyłączone**. Możesz je włączyć ponownie komendą `/powiadomienia`.',
+            content: '🔕 Twoje powiadomienia o zmianach Twoich ról klanowych zostały **wyłączone**. Nie będziesz pingowany gdy Twój klan się zmieni. Możesz włączyć ponownie komendą `/powiadomienia`.',
             ephemeral: true
         });
     }
@@ -429,7 +458,11 @@ async function registerSlashCommands(client, config) {
             .setDescription('[ADMIN] Zmień nick użytkownika na serwerze'),
         new SlashCommandBuilder()
             .setName('powiadomienia')
-            .setDescription('Włącz lub wyłącz powiadomienia o zmianach ról klanowych i awansach')
+            .setDescription('Włącz lub wyłącz powiadomienia o zmianach ról klanowych (Twoje lub dla wskazanego użytkownika)')
+            .addUserOption(option =>
+                option.setName('uzytkownik')
+                    .setDescription('[ADMIN] Użytkownik dla którego zmienić ustawienia powiadomień')
+                    .setRequired(false))
     ];
 
     const rest = new REST().setToken(config.token);

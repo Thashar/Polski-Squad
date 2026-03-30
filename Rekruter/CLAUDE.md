@@ -16,10 +16,12 @@
 - `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje, powiadomienia o odejściu (link do profilu + nick serwerowy)
 - `roleMonitoringService.js` - Cron 6h, ostrzeżenia po 24h bez ról
 - `roleConflictService.js` - Auto-usuwanie ról rekrutacyjnych gdy dostaje klanową
-- `clanRoleChangeService.js` - Powiadomienia o zmianach klanów/stanowisk; ignoruje administratorów i użytkowników którzy wyłączyli powiadomienia
+- `clanRoleChangeService.js` - Powiadomienia o zmianach klanów/stanowisk; ignoruje administratorów i użytkowników którzy wyłączyli powiadomienia; `buildInitialCache()` pobiera wszystkich członków (bez limitu)
 - `notificationPreferencesService.js` - Persistencja preferencji powiadomień per użytkownik (`data/notification_preferences.json`); `isOptedOut(userId)`, `optOut(userId)`, `optIn(userId)`
 
-**Komendy:** `/ocr-debug`, `/nick`, `/powiadomienia`
+**Komendy:** `/ocr-debug`, `/nick`, `/powiadomienia [uzytkownik]`
+- `/powiadomienia` - bez parametru: toggle własnych powiadomień
+- `/powiadomienia uzytkownik:@user` - tylko admin: toggle powiadomień dla wskazanego użytkownika
 **Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot2):**
