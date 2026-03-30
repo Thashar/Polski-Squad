@@ -444,7 +444,7 @@ async function handlePowiadomieniaCommand(interaction, state) {
  * Rejestruje komendy slash
  */
 async function registerSlashCommands(client, config) {
-    const { SlashCommandBuilder, REST, Routes } = require('discord.js');
+    const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits } = require('discord.js');
     const { createBotLogger } = require('../../utils/consoleLogger');
     const logger = createBotLogger('Rekruter');
     
@@ -466,6 +466,7 @@ async function registerSlashCommands(client, config) {
                 option.setName('uzytkownik')
                     .setDescription('[ADMIN] Konkretny użytkownik - wyłącz/włącz tylko jego powiadomienia')
                     .setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ];
 
     const rest = new REST().setToken(config.token);
