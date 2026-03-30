@@ -121,7 +121,7 @@
         {
           "name": "/msg",
           "description": "Wysyła wiadomość botem na wybrany kanał z opcjonalnymi pingami ról lub @everyone/@here",
-          "usage": "/msg kanał:[#kanał] wiadomość:[treść] [ping:ID_roli lub everyone/here]",
+          "usage": "/msg kanał:[ID lub #kanał] wiadomość:[treść] [ping:ID_roli lub everyone/here]",
           "requiredPermission": "administrator"
         },
         {

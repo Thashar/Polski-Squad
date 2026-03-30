@@ -308,9 +308,9 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('msg')
                 .setDescription('Wysyła wiadomość botem na wybrany kanał (tylko administrator)')
-                .addChannelOption(option =>
+                .addStringOption(option =>
                     option.setName('kanał')
-                        .setDescription('Kanał, na który ma być wysłana wiadomość')
+                        .setDescription('ID kanału lub wzmianaka (#kanał)')
                         .setRequired(true)
                 )
                 .addStringOption(option =>
@@ -3543,9 +3543,39 @@ class InteractionHandler {
             return;
         }
 
-        const targetChannel = interaction.options.getChannel('kanał');
+        const channelInput = interaction.options.getString('kanał');
         const messageContent = interaction.options.getString('wiadomość');
         const pingInput = interaction.options.getString('ping');
+
+        // Wyciągnij ID kanału z wzmianki <#ID> lub przyjmij jako czysty ID
+        const channelIdMatch = channelInput.match(/^<#(\d+)>$/) || channelInput.match(/^(\d+)$/);
+        if (!channelIdMatch) {
+            await interaction.reply({
+                content: '❌ Nieprawidłowy kanał. Podaj ID kanału lub wzmianką (#kanał).',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+        const channelId = channelIdMatch[1];
+
+        let targetChannel;
+        try {
+            targetChannel = await interaction.guild.channels.fetch(channelId);
+        } catch {
+            await interaction.reply({
+                content: '❌ Nie znaleziono kanału o podanym ID.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        if (!targetChannel || !targetChannel.isTextBased()) {
+            await interaction.reply({
+                content: '❌ Podany kanał nie istnieje lub nie jest kanałem tekstowym.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
 
         // Zbuduj prefiks z pingami
         let pingPrefix = '';
@@ -3562,20 +3592,11 @@ class InteractionHandler {
             pingPrefix = pingParts.join(' ') + '\n';
         }
 
-        // Sprawdź czy kanał jest kanałem tekstowym
-        if (!targetChannel.isTextBased()) {
-            await interaction.reply({
-                content: '❌ Wybrany kanał nie jest kanałem tekstowym.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
         try {
             await targetChannel.send(pingPrefix + messageContent);
 
             await interaction.reply({
-                content: `✅ Wiadomość została wysłana na kanał ${targetChannel}.`,
+                content: `✅ Wiadomość została wysłana na kanał <#${channelId}>.`,
                 flags: MessageFlags.Ephemeral
             });
 
