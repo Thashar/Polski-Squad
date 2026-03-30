@@ -306,6 +306,25 @@ class InteractionHandler {
                 .setDescription('Tworzy manualną archiwizację wszystkich danych botów do Google Drive (niezależną)'),
 
             new SlashCommandBuilder()
+                .setName('msg')
+                .setDescription('Wysyła wiadomość botem na wybrany kanał (tylko administrator)')
+                .addStringOption(option =>
+                    option.setName('kanał')
+                        .setDescription('ID kanału lub wzmianaka (#kanał)')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('wiadomość')
+                        .setDescription('Treść wiadomości do wysłania')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('ping')
+                        .setDescription('Pingi: ID ról oddzielone przecinkami, "everyone" lub "here" (opcjonalne)')
+                        .setRequired(false)
+                ),
+
+            new SlashCommandBuilder()
                 .setName('komendy')
                 .setDescription('Wyświetla listę wszystkich dostępnych komend ze wszystkich botów'),
 
@@ -418,6 +437,9 @@ class InteractionHandler {
                     break;
                 case 'data-archive':
                     await this.handleDataArchiveCommand(interaction);
+                    break;
+                case 'msg':
+                    await this.handleMsgCommand(interaction);
                     break;
                 case 'komendy':
                     await this.handleKomendyCommand(interaction);
@@ -3504,6 +3526,90 @@ class InteractionHandler {
                 `Błąd manualnego backupu przez ${interaction.user.tag}: ${error.message}`,
                 interaction
             );
+        }
+    }
+
+    /**
+     * Obsługuje komendę /msg - wysyła wiadomość botem na wybrany kanał
+     * @param {ChatInputCommandInteraction} interaction - Interakcja Discord
+     */
+    async handleMsgCommand(interaction) {
+        // Sprawdź uprawnienia administratora
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do użycia tej komendy. Wymaga uprawnień Administratora.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const channelInput = interaction.options.getString('kanał');
+        const messageContent = interaction.options.getString('wiadomość');
+        const pingInput = interaction.options.getString('ping');
+
+        // Wyciągnij ID kanału z wzmianki <#ID> lub przyjmij jako czysty ID
+        const channelIdMatch = channelInput.match(/^<#(\d+)>$/) || channelInput.match(/^(\d+)$/);
+        if (!channelIdMatch) {
+            await interaction.reply({
+                content: '❌ Nieprawidłowy kanał. Podaj ID kanału lub wzmianką (#kanał).',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+        const channelId = channelIdMatch[1];
+
+        let targetChannel;
+        try {
+            targetChannel = await interaction.guild.channels.fetch(channelId);
+        } catch {
+            await interaction.reply({
+                content: '❌ Nie znaleziono kanału o podanym ID.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        if (!targetChannel || !targetChannel.isTextBased()) {
+            await interaction.reply({
+                content: '❌ Podany kanał nie istnieje lub nie jest kanałem tekstowym.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Zbuduj prefiks z pingami
+        let pingPrefix = '';
+        if (pingInput) {
+            const parts = pingInput.split(',').map(p => p.trim()).filter(p => p.length > 0);
+            const pingParts = parts.map(part => {
+                if (part.toLowerCase() === 'everyone') return '@everyone';
+                if (part.toLowerCase() === 'here') return '@here';
+                // Usuń znaki < > @ & jeśli użytkownik wkleił mention
+                const cleaned = part.replace(/[<>@&]/g, '');
+                if (/^\d+$/.test(cleaned)) return `<@&${cleaned}>`;
+                return part;
+            });
+            pingPrefix = pingParts.join(' ') + '\n';
+        }
+
+        try {
+            await targetChannel.send(pingPrefix + messageContent);
+
+            await interaction.reply({
+                content: `✅ Wiadomość została wysłana na kanał <#${channelId}>.`,
+                flags: MessageFlags.Ephemeral
+            });
+
+            await this.logService.logMessage('info',
+                `Administrator ${interaction.user.tag} wysłał wiadomość przez /msg na kanał #${targetChannel.name}`,
+                interaction
+            );
+        } catch (error) {
+            logger.error('❌ Błąd podczas wysyłania wiadomości przez /msg:', error);
+            await interaction.reply({
+                content: `❌ Nie udało się wysłać wiadomości. Sprawdź czy bot ma dostęp do kanału.\n\`\`\`${error.message}\`\`\``,
+                flags: MessageFlags.Ephemeral
+            });
         }
     }
 
