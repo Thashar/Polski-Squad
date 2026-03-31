@@ -329,6 +329,7 @@ class BombTimerService {
                 this.refreshControlPanel().catch(() => {});
                 this._deleteEveryoneMessage().catch(() => {});
                 this._clearAllReactions().catch(() => {});
+                this._lockAndCleanChannel().catch(() => {});
                 if (this.state.requiredChatters > 0) this._lockAndCleanChannel().catch(() => {});
                 return;
             }
@@ -471,9 +472,15 @@ class BombTimerService {
 
     async handleMessageCreate(message) {
         if (message.author.bot) return;
-        if (!this.state.running || this.state.paused || this.state.defused || this.state.exploded) return;
-        if (this.state.requiredChatters === 0) return;
         if (message.channel.id !== this.config.bombTimer.timerChannelId) return;
+
+        // Usuń wiadomość jeśli tryb czatu nie jest aktywny
+        if (this.state.requiredChatters === 0) {
+            await message.delete().catch(() => {});
+            return;
+        }
+
+        if (!this.state.running || this.state.paused || this.state.defused || this.state.exploded) return;
 
         if (this.state.chatters.includes(message.author.id)) return;
 
@@ -539,6 +546,7 @@ class BombTimerService {
             this.refreshControlPanel().catch(() => {});
             this._deleteEveryoneMessage().catch(() => {});
             this._clearAllReactions().catch(() => {});
+            this._lockAndCleanChannel().catch(() => {});
             return;
         }
     }
@@ -589,6 +597,7 @@ class BombTimerService {
             this.refreshControlPanel().catch(() => {});
             this._deleteEveryoneMessage().catch(() => {});
             this._clearAllReactions().catch(() => {});
+            this._lockAndCleanChannel().catch(() => {});
         }
     }
 
@@ -609,6 +618,7 @@ class BombTimerService {
         await this.updateTimerMessage();
         this._deleteEveryoneMessage().catch(() => {});
         this._clearAllReactions().catch(() => {});
+        this._lockAndCleanChannel().catch(() => {});
         this.refreshControlPanel().catch(() => {});
     }
 
