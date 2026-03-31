@@ -192,8 +192,6 @@ client.once(Events.ClientReady, async () => {
         } catch (err) {
             logger.error('❌ Błąd wysyłania wiadomości zwycięstwa:', err.message);
         }
-        // Dezaktywuj przycisk NIE KLIKAĆ
-        await primaAprilisService.disableTrapButton().catch(() => {});
         // Zwolnij wszystkich uwięzionych graczy w kolejności
         if (guild) await primaAprilisService.freeAllTrapped(guild).catch(() => {});
         // Odśwież panel kontrolny

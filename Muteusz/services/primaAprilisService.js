@@ -194,22 +194,6 @@ class PrimaAprilisService {
         }
     }
 
-    async disableTrapButton() {
-        if (!this._buttonMessage) return;
-        try {
-            const disabledBtn = new ButtonBuilder()
-                .setCustomId(BUTTON_CUSTOM_ID)
-                .setLabel(BUTTON_LABEL)
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🛑')
-                .setDisabled(true);
-            await this._buttonMessage.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] });
-            logger.info('🔒 PrimaAprilis: przycisk dezaktywowany');
-        } catch (err) {
-            logger.error('❌ PrimaAprilis: błąd dezaktywacji przycisku:', err.message);
-        }
-    }
-
     async freeAllTrapped(guild) {
         const entries = Object.entries(this.data)
             .filter(([key]) => key !== '_passwordState')
