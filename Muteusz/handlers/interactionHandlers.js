@@ -26,6 +26,7 @@ class InteractionHandler {
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
+        this._trapCooldowns = new Map(); // userId → timestamp ostatniej próby
     }
 
     /**
@@ -684,6 +685,15 @@ class InteractionHandler {
                 await interaction.deferUpdate();
                 return;
             }
+
+            // Cooldown 15s per-user — blokuj spam-klikanie
+            const now = Date.now();
+            const lastAttempt = this._trapCooldowns.get(member.id) ?? 0;
+            if (now - lastAttempt < 15000) {
+                await interaction.deferUpdate();
+                return;
+            }
+            this._trapCooldowns.set(member.id, now);
 
             // Napraw zawieszony stan: dane zapisane, ale rola nie została nadana (np. błąd API)
             if (this.primaAprilisService.isTrapped(member.id)) {
