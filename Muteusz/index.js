@@ -234,17 +234,6 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
-    // Prima Aprilis: sprawdzanie hasła przez uwięzionych użytkowników
-    if (!message.author.bot && message.guild && primaAprilisService.isTrapped(message.author.id)) {
-        try {
-            const member = await message.guild.members.fetch(message.author.id);
-            await primaAprilisService.tryPassword(member, message.content);
-        } catch (error) {
-            logger.error('❌ PrimaAprilis: błąd przy sprawdzaniu hasła:', error.message);
-        }
-        return;
-    }
-
     if (!message.author.bot && message.guild) {
         bombTimerService.handleMessageCreate(message).catch(err =>
             logger.error('❌ BombTimer: błąd handleMessageCreate:', err.message)
@@ -264,6 +253,17 @@ client.on(Events.MessageCreate, async (message) => {
         hotPotatoService.handleMessageCreate(message).catch(err =>
             logger.error('❌ HotPotato: błąd handleMessageCreate:', err.message)
         );
+    }
+
+    // Prima Aprilis: sprawdzanie hasła przez uwięzionych użytkowników
+    if (!message.author.bot && message.guild && primaAprilisService.isTrapped(message.author.id)) {
+        try {
+            const member = await message.guild.members.fetch(message.author.id);
+            await primaAprilisService.tryPassword(member, message.content);
+        } catch (error) {
+            logger.error('❌ PrimaAprilis: błąd przy sprawdzaniu hasła:', error.message);
+        }
+        return;
     }
 
     await messageHandler.handleMessage(message, client);

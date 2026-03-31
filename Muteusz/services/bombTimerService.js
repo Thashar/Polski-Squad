@@ -530,8 +530,11 @@ class BombTimerService {
     async handleReactionAdd(reaction, user) {
         if (user.bot) return;
         if (!this.state.running || this.state.defused || this.state.exploded) return;
-        if (this.state.requiredReactions === 0) return;
         if (reaction.message.id !== this.state.timerMessageId) return;
+        if (this.state.requiredReactions === 0) {
+            reaction.users.remove(user.id).catch(() => {});
+            return;
+        }
         if (user.bot) return; // podwójne zabezpieczenie
 
         this.state.currentReactionCount++;
