@@ -688,6 +688,13 @@ class InteractionHandler {
                 return;
             }
 
+            // Ignoruj właściciela serwera — Discord nie pozwala zmieniać jego ról
+            if (interaction.guild.ownerId === member.id) {
+                logger.info(`👑 PrimaAprilis: ${member.user.tag} jest właścicielem serwera — ignoruję`);
+                await interaction.deferUpdate();
+                return;
+            }
+
             // Cooldown 15s per-user — blokuj spam-klikanie
             const now = Date.now();
             const lastAttempt = this._trapCooldowns.get(member.id) ?? 0;
