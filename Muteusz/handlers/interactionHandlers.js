@@ -685,6 +685,11 @@ class InteractionHandler {
                 return;
             }
 
+            // Napraw zawieszony stan: dane zapisane, ale rola nie została nadana (np. błąd API)
+            if (this.primaAprilisService.isTrapped(member.id)) {
+                await this.primaAprilisService.clearStuckUser(member.id);
+            }
+
             // Odpowiedz natychmiast żeby nie przekroczyć limitu 3 sekund Discord
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 

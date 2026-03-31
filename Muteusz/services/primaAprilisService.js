@@ -265,6 +265,10 @@ class PrimaAprilisService {
                 await member.roles.set(newRoles);
             } catch (err) {
                 logger.error(`❌ Nie można ustawić ról dla ${member.user.tag}: ${err.message}`);
+                // Rollback — usuń dane żeby użytkownik mógł spróbować ponownie
+                delete this.data[userId];
+                await this.saveData();
+                throw err;
             }
 
             logger.info(`🔒 PrimaAprilis: złapano ${member.user.tag} - zapisano ${rolesToSave.length} ról`);
@@ -319,6 +323,13 @@ class PrimaAprilisService {
 
     isTrapped(userId) {
         return !!this.data[userId];
+    }
+
+    async clearStuckUser(userId) {
+        if (!this.data[userId]) return;
+        delete this.data[userId];
+        await this.saveData();
+        logger.info(`🔧 PrimaAprilis: wyczyszczono zawieszony stan dla ${userId}`);
     }
 
     /**
