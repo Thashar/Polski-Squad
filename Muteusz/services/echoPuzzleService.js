@@ -82,8 +82,6 @@ class EchoPuzzleService {
             await this._sendPuzzleMessage(channel);
             logger.info(`✅ EchoPuzzle: wysłano wiadomość zagadki`);
         }
-
-        this.messagesSincePrompt = 0;
     }
 
     async handleMessageCreate(message) {
