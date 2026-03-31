@@ -729,7 +729,7 @@ class InteractionHandler {
             logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message);
             try {
                 if (interaction.deferred) {
-                    await interaction.editReply({ content: '❌ Wystąpił błąd.' });
+                    await interaction.deleteReply();
                 } else {
                     await interaction.deferUpdate();
                 }
