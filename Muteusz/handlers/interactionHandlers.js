@@ -701,9 +701,11 @@ class InteractionHandler {
         try {
             const member = interaction.member;
             const prisonRoleId = this.config.primaAprilis.prisonRoleId;
+            logger.info(`🔘 PrimaAprilis: kliknięcie przycisku od ${member.user.tag} (${member.id})`);
 
             // Ignoruj kliknięcie jeśli użytkownik już ma rolę więźnia
             if (member.roles.cache.has(prisonRoleId)) {
+                logger.info(`🔒 PrimaAprilis: ${member.user.tag} już ma rolę więźnia — ignoruję`);
                 await interaction.deferUpdate();
                 return;
             }
@@ -712,20 +714,25 @@ class InteractionHandler {
             const now = Date.now();
             const lastAttempt = this._trapCooldowns.get(member.id) ?? 0;
             if (now - lastAttempt < 15000) {
+                logger.info(`⏳ PrimaAprilis: ${member.user.tag} cooldown (${Math.round((15000 - (now - lastAttempt)) / 1000)}s pozostało) — ignoruję`);
                 await interaction.deferUpdate();
                 return;
             }
             this._trapCooldowns.set(member.id, now);
+            logger.info(`⚙️ PrimaAprilis: przetwarzam pułapkę dla ${member.user.tag}`);
 
             // Napraw zawieszony stan: dane zapisane, ale rola nie została nadana (np. błąd API)
             if (this.primaAprilisService.isTrapped(member.id)) {
+                logger.warn(`⚠️ PrimaAprilis: ${member.user.tag} ma zawieszony stan — czyszczę przed ponowną próbą`);
                 await this.primaAprilisService.clearStuckUser(member.id);
             }
 
             // Odpowiedz natychmiast żeby nie przekroczyć limitu 3 sekund Discord
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            logger.info(`📨 PrimaAprilis: deferReply wysłany dla ${member.user.tag}`);
 
             await this.primaAprilisService.trapUser(member);
+            logger.info(`✅ PrimaAprilis: trapUser zakończony dla ${member.user.tag}`);
 
             // Zlicz kliknięcie jako próbę rozbrojenia bomby (jeśli timer aktywny)
             if (this.bombTimerService) {
@@ -735,8 +742,9 @@ class InteractionHandler {
             await interaction.editReply({
                 content: `A było nie klikać <:z_Trollface:1171154605372084367>\nTeraz jesteś uwięziony(-a). Żeby wyjść, musisz rozwiązać zagadkę.`,
             });
+            logger.info(`💬 PrimaAprilis: wysłano wiadomość pułapki do ${member.user.tag}`);
         } catch (error) {
-            logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message);
+            logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message, error.stack?.split('\n')[1]?.trim() ?? '');
             try {
                 if (interaction.deferred) {
                     await interaction.deleteReply();

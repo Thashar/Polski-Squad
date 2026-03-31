@@ -151,7 +151,7 @@ class PrimaAprilisService {
         const row = message.components[0];
         if (!row.components || row.components.length === 0) return false;
         const btn = row.components[0];
-        return btn.customId === BUTTON_CUSTOM_ID && btn.label === BUTTON_LABEL;
+        return btn.customId === BUTTON_CUSTOM_ID && btn.label === BUTTON_LABEL && !btn.disabled;
     }
 
     async setupButtonMessage(client) {
