@@ -374,7 +374,7 @@ class InteractionHandler {
         }
         this.bombChaosService.activate();
 
-        // Animacja wybuchu
+        // Animacja wybuchu (ephemeral dla admina)
         await interaction.reply({ content: '3️⃣', flags: 64 });
         await new Promise(r => setTimeout(r, 1000));
         await interaction.editReply({ content: '2️⃣' });
