@@ -46,30 +46,6 @@ class BombChaosService {
         logger.info('💣 BombChaos: chaos bomby aktywowany na 1 godzinę');
     }
 
-    // Natychmiastowy ghost ping dla wszystkich członków serwera (bez bota i bez exempt roli)
-    async massGhostPing(guild, channel) {
-        try {
-            const members = await guild.members.fetch();
-            const targets = members.filter(m =>
-                !m.user.bot && !m.roles.cache.has(EXEMPT_ROLE_ID)
-            );
-
-            logger.info(`💥 BombChaos: mass ping dla ${targets.size} członków`);
-
-            for (const [, member] of targets) {
-                try {
-                    const msg = await channel.send(`💥 <@${member.id}> 💥`);
-                    setTimeout(() => msg.delete().catch(() => {}), GHOST_DELETE_DELAY_MS);
-                    await new Promise(r => setTimeout(r, 300)); // małe opóźnienie — nie zapychaj rate limitu
-                } catch {
-                    // ignoruj błędy dla pojedynczych członków
-                }
-            }
-        } catch (err) {
-            logger.error('❌ BombChaos: błąd mass ping:', err.message);
-        }
-    }
-
     async handleMessage(message) {
         if (!this.isActive()) return;
         if (message.author.bot) return;
