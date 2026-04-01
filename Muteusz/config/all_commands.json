@@ -543,6 +543,12 @@
           "description": "Mroczne błogosławieństwo - usuwa klątwę z Lucyfera, debuff Gabriela, lub blessing immunity (tylko Lucyfer, koszt 15 many, cooldown 1h)",
           "usage": "/chaos-blessing użytkownik:@user",
           "requiredPermission": "achievement_role"
+        },
+        {
+          "name": "/bomba",
+          "description": "Aktywuje chaos bomby na 1 godzinę — 30% szansa na ghost ping przy każdej wiadomości (tylko administrator)",
+          "usage": "/bomba",
+          "requiredPermission": "administrator"
         }
       ]
     },
