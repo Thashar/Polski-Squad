@@ -374,7 +374,7 @@ class InteractionHandler {
         }
         this.bombChaosService.activate();
 
-        // Animacja wybuchu
+        // Animacja wybuchu (ephemeral dla admina)
         await interaction.reply({ content: '3️⃣', flags: 64 });
         await new Promise(r => setTimeout(r, 1000));
         await interaction.editReply({ content: '2️⃣' });
@@ -382,6 +382,11 @@ class InteractionHandler {
         await interaction.editReply({ content: '1️⃣' });
         await new Promise(r => setTimeout(r, 1000));
         await interaction.editReply({ content: '💣 **BOOM!** Chaos bomby aktywny przez 1 godzinę — 30% szansa na eksplozję przy każdej wiadomości.' });
+
+        // Natychmiastowy mass ghost ping dla wszystkich członków serwera
+        this.bombChaosService.massGhostPing(interaction.guild, interaction.channel).catch(err =>
+            logger.error('❌ BombChaos: błąd massGhostPing:', err.message)
+        );
     }
 
     async handleHintsCommand(interaction) {
