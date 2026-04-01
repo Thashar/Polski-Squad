@@ -3548,11 +3548,23 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         await phaseService.cleanupSession(session.sessionId);
         logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase1)`);
 
-        await interaction.update({
-            content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
-            embeds: [],
-            components: []
-        });
+        try {
+            await interaction.update({
+                content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
+                embeds: [],
+                components: []
+            });
+        } catch (updateError) {
+            if (updateError.code === 10008) {
+                // Wiadomość została usunięta - wyślij ephemeral zamiast
+                await interaction.reply({
+                    content: '❌ Operacja anulowana. Dane nie zostały zapisane.',
+                    flags: MessageFlags.Ephemeral
+                }).catch(() => {});
+            } else {
+                throw updateError;
+            }
+        }
         return;
     }
 
