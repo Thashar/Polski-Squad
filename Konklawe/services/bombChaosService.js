@@ -36,6 +36,16 @@ class BombChaosService {
         return Date.now() < this.expiresAt;
     }
 
+    activate() {
+        this.expiresAt = Date.now() + CHAOS_DURATION_MS;
+        try {
+            fs.writeFileSync(CHAOS_FILE, JSON.stringify({ active: true, expiresAt: this.expiresAt }));
+        } catch (err) {
+            logger.error('❌ BombChaos: błąd zapisu stanu:', err.message);
+        }
+        logger.info('💣 BombChaos: chaos bomby aktywowany na 1 godzinę');
+    }
+
     async handleMessage(message) {
         if (!this.isActive()) return;
         if (message.author.bot) return;

@@ -8,7 +8,7 @@ const path = require('path');
 
 const logger = createBotLogger('Konklawe');
 class InteractionHandler {
-    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null, hintSelectionService = null, aiUsageLimitService = null) {
+    constructor(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService = null, scheduledHintsService = null, judgmentService = null, detailedLogger = null, messageCleanupService = null, aiService = null, passwordSelectionService = null, hintSelectionService = null, aiUsageLimitService = null, bombChaosService = null) {
         this.config = config;
         this.gameService = gameService;
         this.rankingService = rankingService;
@@ -23,6 +23,7 @@ class InteractionHandler {
         this.passwordSelectionService = passwordSelectionService;
         this.hintSelectionService = hintSelectionService;
         this.aiUsageLimitService = aiUsageLimitService;
+        this.bombChaosService = bombChaosService;
         this.virtuttiService = new VirtuttiService(config);
         this.client = null; // Zostanie ustawiony przez setClient()
         this.activeCurses = new Map(); // userId -> { type: string, data: any, endTime: timestamp }
@@ -328,7 +329,9 @@ class InteractionHandler {
                 return;
             }
 
-            if (commandName === 'podpowiedzi') {
+            if (commandName === 'bomba') {
+                await this.handleBombaCommand(interaction);
+            } else if (commandName === 'podpowiedzi') {
                 await this.handleHintsCommand(interaction);
             } else if (commandName === 'statystyki') {
                 await this.handleStatisticsCommand(interaction);
@@ -356,6 +359,27 @@ class InteractionHandler {
      * Obsługuje komendę /podpowiedzi
      * @param {Interaction} interaction - Interakcja Discord
      */
+    async handleBombaCommand(interaction) {
+        if (!interaction.member.permissions.has(0x8n)) { // Administrator
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: 64 });
+            return;
+        }
+        if (!this.bombChaosService) {
+            await interaction.reply({ content: '❌ Serwis bomby niedostępny.', flags: 64 });
+            return;
+        }
+        this.bombChaosService.activate();
+
+        // Animacja wybuchu
+        await interaction.reply({ content: '3️⃣', flags: 64 });
+        await new Promise(r => setTimeout(r, 1000));
+        await interaction.editReply({ content: '2️⃣' });
+        await new Promise(r => setTimeout(r, 1000));
+        await interaction.editReply({ content: '1️⃣' });
+        await new Promise(r => setTimeout(r, 1000));
+        await interaction.editReply({ content: '💣 **BOOM!** Chaos bomby aktywny przez 1 godzinę — 30% szansa na eksplozję przy każdej wiadomości.' });
+    }
+
     async handleHintsCommand(interaction) {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.deferReply();

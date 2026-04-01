@@ -59,7 +59,10 @@ class CommandService {
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik na którego użyć mrocznego błogosławieństwa')
-                        .setRequired(true))
+                        .setRequired(true)),
+            new SlashCommandBuilder()
+                .setName('bomba')
+                .setDescription('Aktywuje chaos bomby na 1 godzinę — 30% szansa na ghost ping przy każdej wiadomości (tylko admin)')
         ];
     }
 

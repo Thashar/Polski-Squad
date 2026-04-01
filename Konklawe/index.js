@@ -103,10 +103,11 @@ async function initializeServices() {
     hintSelectionService = new HintSelectionService(config, gameService, dataService);
     hintSelectionService.loadState();
 
-    // Inicjalizacja handlerów z wszystkimi serwisami
-    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService, aiUsageLimitService);
-    interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     const bombChaosService = new BombChaosService();
+
+    // Inicjalizacja handlerów z wszystkimi serwisami
+    interactionHandler = new InteractionHandler(config, gameService, rankingService, timerService, nicknameManager, passwordEmbedService, scheduledHintsService, judgmentService, detailedLogger, messageCleanupService, aiService, passwordSelectionService, hintSelectionService, aiUsageLimitService, bombChaosService);
+    interactionHandler.setClient(client); // Ustaw klienta dla cleanup funkcji
     messageHandler = new MessageHandler(config, gameService, rankingService, timerService, passwordEmbedService, scheduledHintsService, bombChaosService);
 
     // Inicjalizacja danych gry
