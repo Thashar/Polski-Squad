@@ -186,7 +186,8 @@ class HotPotatoService {
             await interaction.reply({ content: 'Gra nie jest aktywna.', ephemeral: true });
             return;
         }
-        if (interaction.user.id !== this.currentHolderId) {
+        const isAdmin = interaction.member?.permissions?.has(0x8n) ?? false;
+        if (interaction.user.id !== this.currentHolderId && !isAdmin) {
             await interaction.reply({ content: 'Nie trzymasz bomby!', ephemeral: true });
             return;
         }
