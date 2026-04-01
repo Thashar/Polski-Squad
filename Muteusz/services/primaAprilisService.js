@@ -231,8 +231,14 @@ class PrimaAprilisService {
         try {
             const prisonRoleId = this.config.primaAprilis.prisonRoleId;
 
+            // Zapisz tylko role niezarządzane (managed=false) — ról integracji nie można usuwać
             const rolesToSave = member.roles.cache
-                .filter(r => r.id !== member.guild.id && r.id !== prisonRoleId)
+                .filter(r => r.id !== member.guild.id && r.id !== prisonRoleId && !r.managed)
+                .map(r => r.id);
+
+            // Zachowaj role zarządzane (Nitro Booster, role z integracji) — Discord nie pozwala ich usuwać
+            const managedRoleIds = member.roles.cache
+                .filter(r => r.managed)
                 .map(r => r.id);
 
             this.data[userId] = {
@@ -243,8 +249,8 @@ class PrimaAprilisService {
             await this.saveData();
             await this._updateStatsMessage();
 
-            // Jeden request PATCH: usuń wszystkie role i nadaj rolę więźnia jednocześnie
-            const newRoles = [prisonRoleId];
+            // Usuń tylko role niezarządzane, zachowaj managed, nadaj rolę więźnia
+            const newRoles = [...managedRoleIds, prisonRoleId];
             try {
                 await member.roles.set(newRoles);
             } catch (err) {
@@ -291,9 +297,15 @@ class PrimaAprilisService {
 
         const savedRoles = this.data[userId].roles;
 
-        // Jeden request PATCH: usuń rolę więźnia i przywróć wszystkie role jednocześnie
+        // Zachowaj aktualnie managed role (mogły zostać nadane w trakcie uwięzienia)
+        const managedRoleIds = member.roles.cache
+            .filter(r => r.managed)
+            .map(r => r.id);
+
+        // Przywróć zapisane role + zachowaj managed, usuń rolę więźnia
+        const newRoles = [...new Set([...savedRoles, ...managedRoleIds])];
         try {
-            await member.roles.set(savedRoles);
+            await member.roles.set(newRoles);
         } catch (err) {
             logger.warn(`⚠️ Nie można przywrócić ról dla ${member.user.tag}: ${err.message}`);
         }
