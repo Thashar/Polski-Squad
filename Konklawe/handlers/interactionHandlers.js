@@ -317,7 +317,13 @@ class InteractionHandler {
                 await this.handleVirtuttiPapajlariCommand(interaction);
                 return;
             }
-            
+
+            // Komenda admina — działa globalnie na każdym kanale
+            if (commandName === 'bomba') {
+                await this.handleBombaCommand(interaction);
+                return;
+            }
+
             // Pozostałe komendy tylko na odpowiednim kanale
             if (interaction.channel.id !== this.config.channels.command) {
                 if (!interaction.replied && !interaction.deferred) {
@@ -329,9 +335,7 @@ class InteractionHandler {
                 return;
             }
 
-            if (commandName === 'bomba') {
-                await this.handleBombaCommand(interaction);
-            } else if (commandName === 'podpowiedzi') {
+            if (commandName === 'podpowiedzi') {
                 await this.handleHintsCommand(interaction);
             } else if (commandName === 'statystyki') {
                 await this.handleStatisticsCommand(interaction);

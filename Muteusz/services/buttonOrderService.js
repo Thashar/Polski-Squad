@@ -334,7 +334,11 @@ class ButtonOrderService {
 
             const won = this._checkWin();
             if (won) {
-                this._locked = false;
+                // Wyłącz wszystkie przyciski (wszystkie czerwone — nieaktywne)
+                await Promise.all([
+                    this.message1.edit(this.buildMessage1Data(true)).catch(() => {}),
+                    this.message2.edit(this.buildMessage2Data(true)).catch(() => {})
+                ]);
                 logger.success('🏆 ButtonOrder: Wygrałeś!');
                 await this.channel.send('## 🎉 Wygrałeś!' + (process.env.PUZZLE_DESC_2 ? `\n${process.env.PUZZLE_DESC_2}` : ''));
                 if (this.onWin) await this.onWin();
