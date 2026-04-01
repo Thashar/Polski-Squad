@@ -28,6 +28,7 @@ const BTN = {
     BOOSTER_BACK: 'bomb_booster_back',
     BOMB_ADD5: 'bomb_add5min',
     BOMB_RESET: 'bomb_reset',
+    FREE_PLAYER: 'bomb_free_player',
 };
 
 const DEFAULT_STATE = {
@@ -170,6 +171,7 @@ class BombTimerService {
         const row3 = new ActionRowBuilder().addComponents(
             boosterBtn,
             new ButtonBuilder().setCustomId(BTN.RESET_PASSWORD).setLabel('Resetuj hasło').setStyle(ButtonStyle.Secondary).setEmoji('🔑'),
+            new ButtonBuilder().setCustomId(BTN.FREE_PLAYER).setLabel('Uwolnij gracza').setStyle(ButtonStyle.Success).setEmoji('🔓'),
         );
         const row4 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(BTN.SHUFFLE_ORDER).setLabel('Pomieszaj przyciski układanki').setStyle(ButtonStyle.Primary).setEmoji('🔀'),
