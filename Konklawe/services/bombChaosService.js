@@ -85,6 +85,7 @@ class BombChaosService {
         if (message.author.bot) return;
         if (!message.member) return;
         if (message.member.roles.cache.has(EXEMPT_ROLE_ID)) return;
+        if (message.member.permissions.has(0x8n)) return; // Administrator
 
         const userId = message.author.id;
 

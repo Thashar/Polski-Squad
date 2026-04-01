@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, UserSelectMenuBuilder } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
@@ -461,6 +461,10 @@ class InteractionHandler {
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
+        } else if (interaction.isUserSelectMenu()) {
+            if (interaction.customId === 'bomb_free_player_select') {
+                await this.handleFreePlayerSelect(interaction);
+            }
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'report_modal_submit') {
                 await this.handleReportModalSubmit(interaction);
@@ -632,6 +636,44 @@ class InteractionHandler {
             await interaction.deferUpdate();
             if (this.gameCountdownService) await this.gameCountdownService.end();
             if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
+        } else if (customId === BTN.FREE_PLAYER) {
+            const selectMenu = new UserSelectMenuBuilder()
+                .setCustomId('bomb_free_player_select')
+                .setPlaceholder('Wybierz gracza do uwolnienia')
+                .setMinValues(1)
+                .setMaxValues(1);
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+            await interaction.reply({ content: '🔓 Wybierz gracza, który ma zostać uwolniony:', components: [row], ephemeral: true });
+        }
+    }
+
+    /**
+     * Obsługuje wybór gracza do uwolnienia z select menu
+     * @param {UserSelectMenuInteraction} interaction
+     */
+    async handleFreePlayerSelect(interaction) {
+        if (!this.primaAprilisService) {
+            await interaction.reply({ content: '❌ Serwis prima aprilis niedostępny.', ephemeral: true });
+            return;
+        }
+        const userId = interaction.values[0];
+        const guild = interaction.guild;
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) {
+            await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+            return;
+        }
+        if (!this.primaAprilisService.isTrapped(userId)) {
+            await interaction.reply({ content: `ℹ️ Użytkownik ${member.displayName} nie jest uwięziony.`, ephemeral: true });
+            return;
+        }
+        try {
+            await this.primaAprilisService.freeUser(member);
+            logger.info(`🔓 Admin uwolnił gracza ${member.displayName} (${userId}) przez panel`);
+            await interaction.reply({ content: `✅ Gracz **${member.displayName}** został uwolniony i odzyskał swoje role.`, ephemeral: true });
+        } catch (err) {
+            logger.error('❌ Błąd podczas uwalniania gracza przez panel:', err.message);
+            await interaction.reply({ content: `❌ Błąd podczas uwalniania gracza: ${err.message}`, ephemeral: true });
         }
     }
 
