@@ -99,29 +99,25 @@ class ListaEventowMenedzer {
         if (events.length === 0) {
             embed.setDescription('_Brak zaplanowanych eventów. Użyj panelu kontrolnego aby dodać eventy._');
         } else {
-            // Sortuj eventy po następnym wyzwoleniu (najwcześniejsze pierwsze)
-            const sortedEvents = [...events].sort((a, b) => {
-                return new Date(a.nextTrigger) - new Date(b.nextTrigger);
-            });
+            const sortedEvents = [...events].sort((a, b) => new Date(a.nextTrigger) - new Date(b.nextTrigger));
 
-            let description = '';
             const now = Date.now();
-            const twentyFourHours = 24 * 60 * 60 * 1000; // 24h w milisekundach
+            const h24 = 24 * 60 * 60 * 1000;
+            const d7  = 7  * 24 * 60 * 60 * 1000;
 
-            for (const event of sortedEvents) {
-                const eventTime = new Date(event.nextTrigger).getTime();
-                const timeUntilEvent = eventTime - now;
-                const timestamp = Math.floor(eventTime / 1000);
+            const soon    = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) <  h24);
+            const week    = sortedEvents.filter(e => { const t = new Date(e.nextTrigger).getTime() - now; return t >= h24 && t < d7; });
+            const later   = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) >= d7);
 
-                // Jeśli event za mniej niż 24h → animowane emoji alarmu
-                const emoji = timeUntilEvent < twentyFourHours
-                    ? '<a:PepeAlarmMan:1341086085089857619>'
-                    : '⏳';
+            const buildLines = (list, emoji) =>
+                list.map(e => `**${e.name}** - <t:${Math.floor(new Date(e.nextTrigger).getTime() / 1000)}:R> ${emoji}`).join('\n');
 
-                description += `**${event.name}** - <t:${timestamp}:R> ${emoji}\n`;
-            }
+            const fields = [];
+            if (soon.length > 0)  fields.push({ name: '🚨 Najbliższe 24h', value: buildLines(soon, '<a:PepeAlarmMan:1341086085089857619>'), inline: false });
+            if (week.length > 0)  fields.push({ name: '📆 Najbliższe 7 dni', value: buildLines(week, '<a:pepe_madge_time:1489206238645587969>'), inline: false });
+            if (later.length > 0) fields.push({ name: '🗓️ Późniejsze', value: buildLines(later, '<a:pepe_time:1489206219183882352>'), inline: false });
 
-            embed.setDescription(description);
+            if (fields.length > 0) embed.addFields(...fields);
         }
 
         embed.setFooter({ text: `Łączna liczba eventów: ${events.length}` });
