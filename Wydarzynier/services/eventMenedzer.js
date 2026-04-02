@@ -31,6 +31,7 @@ class EventMenedzer {
                     listChannelId: null,
                     listMessageId: null,
                     controlPanelMessageId: null,
+                    manualPanelMessageId: null,
                     nextId: 1
                 };
                 await this.saveData();
@@ -277,6 +278,15 @@ class EventMenedzer {
     // Pobierz ID wiadomości panelu kontrolnego
     getControlPanelMessageId() {
         return this.data.controlPanelMessageId;
+    }
+
+    async setManualPanelMessageId(messageId) {
+        this.data.manualPanelMessageId = messageId;
+        await this.saveData();
+    }
+
+    getManualPanelMessageId() {
+        return this.data.manualPanelMessageId;
     }
 }
 
