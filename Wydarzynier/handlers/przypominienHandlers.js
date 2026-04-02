@@ -20,7 +20,11 @@ async function showChannelPage(interaction, sharedState, sessionId, page, isUpda
     const guild = interaction.guild;
     const channels = guild.channels.cache
         .filter(c => c.type === ChannelType.GuildText)
-        .sort((a, b) => a.position - b.position)
+        .sort((a, b) => {
+            const aOrder = (a.parent?.position ?? -1) * 1000 + a.position;
+            const bOrder = (b.parent?.position ?? -1) * 1000 + b.position;
+            return aOrder - bOrder;
+        })
         .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || null }));
 
     const totalPages = Math.ceil(channels.length / CHANNELS_PER_PAGE);
