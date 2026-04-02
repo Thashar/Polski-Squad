@@ -14,7 +14,7 @@
 7. **Panel Kontrolny** - `tablicaMenedzer.js`: Interaktywna tablica z embeddami przypomnień, auto-update co 1min, przyciski zarządzania
 
 **Funkcjonalność Przypomnień:**
-- **Szablony:** Tworzenie szablonów wiadomości (tekst lub embed) z nazwą, treścią, kolorem
+- **Szablony:** Tworzenie szablonów wiadomości (tekst lub embed) z nazwą, treścią, ikoną i obrazem
 - **Zaplanowane:** Ustawianie przypomień na podstawie szablonów z:
   - Pierwszym wyzwoleniem (data + czas)
   - Interwałem powtarzania (1s, 1m, 1h, 1d do max 90d, lub "ee" dla specjalnego wzorca)
