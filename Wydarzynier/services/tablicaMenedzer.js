@@ -650,11 +650,12 @@ class TablicaMenedzer {
 
         const sortByNextTrigger = (a, b) => new Date(a.nextTrigger || 0) - new Date(b.nextTrigger || 0);
 
-        const recurring = allScheduled.filter(s => s.status === 'active' && s.interval && !s.isOneTime).sort(sortByNextTrigger);
-        const oneTime   = allScheduled.filter(s => s.status === 'active' && (!s.interval || s.isOneTime)).sort(sortByNextTrigger);
-        const paused    = allScheduled.filter(s => s.status === 'paused').sort(sortByNextTrigger);
+        const recurring = allScheduled.filter(s => s.status === 'active' && !s.isManual && s.interval && !s.isOneTime).sort(sortByNextTrigger);
+        const oneTime   = allScheduled.filter(s => s.status === 'active' && !s.isManual && (!s.interval || s.isOneTime)).sort(sortByNextTrigger);
+        const paused    = allScheduled.filter(s => s.status === 'paused' && !s.isManual).sort(sortByNextTrigger);
+        const manual    = allScheduled.filter(s => s.isManual);
 
-        const activeScheduled = allScheduled.filter(s => s.status === 'active');
+        const activeScheduled = allScheduled.filter(s => s.status === 'active' && !s.isManual);
 
         const embed = new EmbedBuilder()
             .setColor(0xED4245) // Czerwony
@@ -668,7 +669,8 @@ class TablicaMenedzer {
                 },
                 ...buildScheduledFields(recurring, `🔄 Aktywne powiadomienia cykliczne (${recurring.length})`),
                 ...buildScheduledFields(oneTime, `⏰ Powiadomienia jednorazowe (${oneTime.length})`),
-                ...buildScheduledFields(paused, `⏸️ Powiadomienia wstrzymane (${paused.length})`)
+                ...buildScheduledFields(paused, `⏸️ Powiadomienia wstrzymane (${paused.length})`),
+                ...buildScheduledFields(manual, `🖐️ Powiadomienia manualne (${manual.length})`)
             )
             .setFooter({ text: 'System Przypomnień' });
 

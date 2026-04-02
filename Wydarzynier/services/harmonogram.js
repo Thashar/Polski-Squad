@@ -49,6 +49,7 @@ class Harmonogram {
         const scheduled = this.przypomnieniaMenedzer.getActiveScheduled();
 
         for (const sch of scheduled) {
+            if (sch.isManual) continue;
             const nextTriggerTime = new Date(sch.nextTrigger);
 
             if (now >= nextTriggerTime) {
