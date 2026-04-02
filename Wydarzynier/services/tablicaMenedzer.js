@@ -619,7 +619,7 @@ class TablicaMenedzer {
 
         const buildScheduledLines = (list) => {
             if (list.length === 0) return '_Brak_';
-            return list.map(s => {
+            const lines = list.map(s => {
                 const name = s.template?.name ?? 'Nieznany szablon';
                 const link = s.boardMessageId && guildId && boardChannelId
                     ? `[🔗 Szczegóły](https://discord.com/channels/${guildId}/${boardChannelId}/${s.boardMessageId})`
@@ -628,7 +628,17 @@ class TablicaMenedzer {
                     ? `<t:${Math.floor(new Date(s.nextTrigger).getTime() / 1000)}:R>`
                     : '';
                 return `**${name}**:${timestamp ? ' ' + timestamp : ''} ${link}`;
-            }).join('\n');
+            });
+            let result = '';
+            for (const line of lines) {
+                const next = result ? result + '\n' + line : line;
+                if (next.length > 1020) {
+                    result += `\n_...i więcej_`;
+                    break;
+                }
+                result = next;
+            }
+            return result;
         };
 
         const sortByNextTrigger = (a, b) => new Date(a.nextTrigger || 0) - new Date(b.nextTrigger || 0);
