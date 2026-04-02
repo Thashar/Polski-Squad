@@ -734,6 +734,8 @@ class TablicaMenedzer {
 
     buildManualPanel() {
         const allScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
+        this.logger.info(`[ManualPanel] Wszystkich scheduled: ${allScheduled.length}, z isManual: ${allScheduled.filter(s => s.isManual).length}`);
+        allScheduled.forEach(s => this.logger.info(`[ManualPanel] id=${s.id} isManual=${s.isManual} status=${s.status} template=${s.template?.name}`));
         const manual = allScheduled.filter(s => s.isManual);
         if (manual.length === 0) return null;
 
