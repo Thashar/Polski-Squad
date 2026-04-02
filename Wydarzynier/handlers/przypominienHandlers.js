@@ -14,6 +14,59 @@ const {
 
 // ==================== HELPER FUNCTIONS ====================
 
+const CHANNELS_PER_PAGE = 20;
+
+async function showChannelPage(interaction, sharedState, sessionId, page, isUpdate = false) {
+    const guild = interaction.guild;
+    const channels = guild.channels.cache
+        .filter(c => c.type === ChannelType.GuildText)
+        .sort((a, b) => a.position - b.position)
+        .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || null }));
+
+    const totalPages = Math.ceil(channels.length / CHANNELS_PER_PAGE);
+    const page_ = Math.max(0, Math.min(page, totalPages - 1));
+    const slice = channels.slice(page_ * CHANNELS_PER_PAGE, (page_ + 1) * CHANNELS_PER_PAGE);
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(`channel_string_select_${sessionId}`)
+        .setPlaceholder('Wybierz kanał...')
+        .addOptions(slice.map(c => ({
+            label: c.name.slice(0, 100),
+            description: c.parent ? c.parent.slice(0, 100) : undefined,
+            value: c.id
+        })));
+
+    const prev = new ButtonBuilder()
+        .setCustomId(`channel_page_prev_${sessionId}`)
+        .setLabel('◀ Poprzednia')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page_ === 0);
+
+    const next = new ButtonBuilder()
+        .setCustomId(`channel_page_next_${sessionId}`)
+        .setLabel('Następna ▶')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page_ >= totalPages - 1);
+
+    const rowSelect = new ActionRowBuilder().addComponents(select);
+    const rowNav = new ActionRowBuilder().addComponents(prev, next);
+
+    const content = `**Krok 2/3:** Wybierz kanał (strona ${page_ + 1}/${totalPages})`;
+    const payload = { content, components: [rowSelect, rowNav] };
+
+    if (isUpdate) {
+        await interaction.update(payload);
+    } else {
+        await interaction.editReply(payload);
+    }
+
+    const userState = sharedState.userStates.get(interaction.user.id);
+    if (userState) {
+        userState.channelPage = page_;
+        sharedState.userStates.set(interaction.user.id, userState);
+    }
+}
+
 /**
  * Parsuje datę w określonej strefie czasowej
  * @param {string} dateStr - String daty w formacie YYYY-MM-DD HH:MM
@@ -467,6 +520,19 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    if (customId.startsWith('channel_page_prev_') || customId.startsWith('channel_page_next_')) {
+        const isPrev = customId.startsWith('channel_page_prev_');
+        const sessionId = customId.replace('channel_page_prev_', '').replace('channel_page_next_', '');
+        const userState = userStates.get(interaction.user.id);
+        if (!userState || userState.sessionId !== sessionId) {
+            await interaction.update({ content: '❌ Sesja wygasła.', components: [] });
+            return;
+        }
+        const newPage = (userState.channelPage || 0) + (isPrev ? -1 : 1);
+        await showChannelPage(interaction, sharedState, sessionId, newPage, true);
+        return;
+    }
+
     if (customId.startsWith('cancel_delete_')) {
         await handleCancelDelete(interaction, sharedState);
         return;
@@ -528,6 +594,45 @@ async function handleSelectMenu(interaction, sharedState) {
     // Template selection for /set-reminder
     if (customId.startsWith('template_select_set_')) {
         await handleTemplateSelectForSet(interaction, sharedState);
+        return;
+    }
+
+    // Channel string select (paginated)
+    if (customId.startsWith('channel_string_select_')) {
+        const sessionId = customId.replace('channel_string_select_', '');
+        const userState = sharedState.userStates.get(interaction.user.id);
+        if (!userState || userState.sessionId !== sessionId) {
+            await interaction.update({ content: '❌ Sesja wygasła.', components: [] });
+            return;
+        }
+        const selectedChannelId = interaction.values[0];
+        userState.channelId = selectedChannelId;
+        userState.step = 'select_roles';
+        sharedState.userStates.set(interaction.user.id, userState);
+
+        const roleSelect = new RoleSelectMenuBuilder()
+            .setCustomId(`set_reminder_roles_${sessionId}`)
+            .setPlaceholder('Wybierz role do pingowania (opcjonalne)')
+            .setMinValues(0)
+            .setMaxValues(10);
+
+        const skipButton = new ButtonBuilder()
+            .setCustomId(`set_reminder_skip_roles_${sessionId}`)
+            .setLabel('Bez pingów')
+            .setStyle(ButtonStyle.Secondary);
+
+        const everyoneButton = new ButtonBuilder()
+            .setCustomId(`set_reminder_everyone_${sessionId}`)
+            .setLabel('Pinguj @everyone')
+            .setStyle(ButtonStyle.Danger);
+
+        const row1 = new ActionRowBuilder().addComponents(roleSelect);
+        const row2 = new ActionRowBuilder().addComponents(skipButton, everyoneButton);
+
+        await interaction.update({
+            content: `**Krok 3/3:** Wybierz role do pingowania\n📍 **Kanał:** <#${selectedChannelId}>`,
+            components: [row1, row2]
+        });
         return;
     }
 
@@ -1022,18 +1127,7 @@ async function handleModalSubmit(interaction, sharedState) {
                     step: 'select_channel'
                 });
 
-                // Show channel select
-                const channelSelect = new ChannelSelectMenuBuilder()
-                    .setCustomId(`set_reminder_channel_${sessionId}`)
-                    .setPlaceholder('Wybierz kanał dla przypomnień')
-                    .setChannelTypes([ChannelType.GuildText]);
-
-                const row = new ActionRowBuilder().addComponents(channelSelect);
-
-                await interaction.editReply({
-                    content: '**Krok 2/3:** Wybierz kanał, na który będą wysyłane powiadomienia',
-                    components: [row]
-                });
+                await showChannelPage(interaction, sharedState, sessionId, 0, false);
             }
         }
         // Edit template
