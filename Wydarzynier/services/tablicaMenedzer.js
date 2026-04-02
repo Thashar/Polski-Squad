@@ -507,13 +507,10 @@ class TablicaMenedzer {
             if (list.length === 0) return [{ name: title, value: '_Brak_', inline: false }];
             const lines = list.map(s => {
                 const name = s.template?.name ?? 'Nieznany szablon';
-                const link = s.boardMessageId && guildId && boardChannelId
-                    ? `[🔗 Szczegóły](https://discord.com/channels/${guildId}/${boardChannelId}/${s.boardMessageId})`
-                    : '🔗 Szczegóły';
                 const info = showChannel
                     ? (s.channelId ? `<#${s.channelId}>` : '')
                     : (s.nextTrigger ? `<t:${Math.floor(new Date(s.nextTrigger).getTime() / 1000)}:R>` : '');
-                return `**${name}**:${info ? ' ' + info : ''} ${link}`;
+                return `**${name}**:${info ? ' ' + info : ''}`;
             });
             const fields = [];
             let current = '';
