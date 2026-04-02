@@ -680,7 +680,7 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
 
     const typeInput = new TextInputBuilder()
         .setCustomId('type')
-        .setLabel('Ustandaryzowane? (TAK = tak, puste = dostosowane)')
+        .setLabel('Ustandaryzowane? (TAK / puste = dostosowane)')
         .setStyle(TextInputStyle.Short)
         .setPlaceholder('Wpisz TAK lub zostaw puste')
         .setRequired(false)
