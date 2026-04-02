@@ -1230,12 +1230,12 @@ async function handleModalSubmit(interaction, sharedState) {
                 return;
             }
 
-            const intervalMs = eventMenedzer.parseInterval(interval);
+            const intervalMs = (interval && interval.trim() !== '') ? eventMenedzer.parseInterval(interval) : null;
 
             await eventMenedzer.updateEvent(eventId, {
                 name,
                 firstTrigger: firstTrigger.toISOString(),
-                interval,
+                interval: interval && interval.trim() !== '' ? interval : null,
                 intervalMs,
                 nextTrigger: firstTrigger.toISOString()
             });
