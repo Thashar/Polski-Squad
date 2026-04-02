@@ -57,15 +57,16 @@ class Harmonogram {
                 // Sprawdź czy to jednorazowe przypomnienie
                 const isOneTime = !sch.interval || sch.interval === null || sch.isOneTime;
 
-                // Zaktualizuj następne wyzwolenie (dla jednorazowych ustawi status 'completed')
-                await this.przypomnieniaMenedzer.updateNextTrigger(sch.id);
-
                 if (isOneTime) {
-                    // Jednorazowe - usuń embed z tablicy
+                    // Jednorazowe - usuń embed z tablicy, usuń scheduled i szablon, odśwież panel
                     await this.tablicaMenedzer.deleteEmbed(sch);
-                    this.logger.info(`Wyzwolono jednorazowe przypomnienie: ${sch.id} - usunięto z tablicy`);
+                    await this.przypomnieniaMenedzer.deleteScheduled(sch.id);
+                    await this.przypomnieniaMenedzer.deleteTemplate(sch.templateId);
+                    await this.tablicaMenedzer.ensureControlPanel();
+                    this.logger.info(`Wyzwolono jednorazowe przypomnienie: ${sch.id} - usunięto scheduled, szablon i embed`);
                 } else {
-                    // Cykliczne - zaktualizuj embed tablicy
+                    // Cykliczne - zaktualizuj następne wyzwolenie i embed tablicy
+                    await this.przypomnieniaMenedzer.updateNextTrigger(sch.id);
                     const updatedScheduled = this.przypomnieniaMenedzer.getScheduledWithTemplate(sch.id);
                     await this.tablicaMenedzer.updateEmbed(updatedScheduled);
                     this.logger.info(`Wyzwolono cykliczne przypomnienie: ${sch.id}`);
@@ -156,6 +157,7 @@ class Harmonogram {
                 anyTriggered = true;
 
                 if (isOneTime) {
+                    await this.listaEventowMenedzer.ensureEventsList();
                     this.logger.info(`Event jednorazowy ${event.id} (${event.name}) wygasł - usunięto`);
                 } else {
                     const updated = this.eventMenedzer.getEvent(event.id);

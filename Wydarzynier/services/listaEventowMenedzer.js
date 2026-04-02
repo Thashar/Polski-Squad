@@ -110,12 +110,16 @@ class ListaEventowMenedzer {
             const later   = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) >= d7);
 
             const buildLines = (list, emoji) =>
-                list.map(e => `**${e.name}** - <t:${Math.floor(new Date(e.nextTrigger).getTime() / 1000)}:R> ${emoji}`).join('\n');
+                list.map(e => {
+                    const isOneTime = !e.interval || e.isOneTime;
+                    const prefix = isOneTime ? '<a:X_Uwaga:1297531538186965003> ' : '';
+                    return `${prefix}**${e.name}** - <t:${Math.floor(new Date(e.nextTrigger).getTime() / 1000)}:R>${emoji ? ' ' + emoji : ''}`;
+                }).join('\n');
 
             const fields = [];
             if (soon.length > 0)  fields.push({ name: '🚨 Najbliższe 24h', value: buildLines(soon, '<a:PepeAlarmMan:1341086085089857619>'), inline: false });
-            if (week.length > 0)  fields.push({ name: '📆 Najbliższe 7 dni', value: buildLines(week, '<a:pepe_madge_time:1489206238645587969>'), inline: false });
-            if (later.length > 0) fields.push({ name: '🗓️ Późniejsze', value: buildLines(later, '<a:pepe_time:1489206219183882352>'), inline: false });
+            if (week.length > 0)  fields.push({ name: '📆 Najbliższe 7 dni', value: buildLines(week, null), inline: false });
+            if (later.length > 0) fields.push({ name: '🗓️ Późniejsze', value: buildLines(later, null), inline: false });
 
             if (fields.length > 0) embed.addFields(...fields);
         }
