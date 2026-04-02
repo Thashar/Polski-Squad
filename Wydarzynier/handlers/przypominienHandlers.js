@@ -1045,6 +1045,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 await przypomnieniaMenedzer.updateTemplate(templateId, { name, text });
                 await tablicaMenedzer.ensureControlPanel();
                 await interaction.deleteReply();
+                await interaction.followUp({ content: `✅ Szablon **${name}** zaktualizowany!\n\n${text}`, ephemeral: true });
             } else {
                 const name = interaction.fields.getTextInputValue('name');
                 const embedTitle = interaction.fields.getTextInputValue('embedTitle');
@@ -1060,7 +1061,14 @@ async function handleModalSubmit(interaction, sharedState) {
                     embedImage
                 });
                 await tablicaMenedzer.ensureControlPanel();
+
+                const embed = new EmbedBuilder().setDescription(embedDescription);
+                if (embedTitle) embed.setTitle(embedTitle);
+                if (embedIcon) embed.setThumbnail(embedIcon);
+                if (embedImage) embed.setImage(embedImage);
+
                 await interaction.deleteReply();
+                await interaction.followUp({ content: `✅ Szablon **${name}** zaktualizowany!`, embeds: [embed], ephemeral: true });
             }
 
             logger.success(`Updated template ${templateId}`);
