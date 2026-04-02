@@ -11,6 +11,7 @@ class TablicaMenedzer {
         this.boardChannel = null;
         this.updateInterval = null;
         this.controlPanelMessageId = null;
+        this.manualPanelMessageId = null;
 
         // Circuit breaker dla błędów DNS
         this.circuitBreakerOpen = false;
@@ -35,6 +36,10 @@ class TablicaMenedzer {
             this.controlPanelMessageId = this.eventMenedzer.getControlPanelMessageId();
             if (this.controlPanelMessageId) {
                 this.logger.info(`Wczytano ID wiadomości panelu kontrolnego: ${this.controlPanelMessageId}`);
+            }
+            this.manualPanelMessageId = this.eventMenedzer.getManualPanelMessageId();
+            if (this.manualPanelMessageId) {
+                this.logger.info(`Wczytano ID wiadomości panelu manualnego: ${this.manualPanelMessageId}`);
             }
 
             // Rozpocznij okresowe aktualizacje
@@ -71,6 +76,11 @@ class TablicaMenedzer {
     async saveControlPanelMessageId(messageId) {
         this.controlPanelMessageId = messageId;
         await this.eventMenedzer.setControlPanelMessageId(messageId);
+    }
+
+    async saveManualPanelMessageId(messageId) {
+        this.manualPanelMessageId = messageId;
+        await this.eventMenedzer.setManualPanelMessageId(messageId);
     }
 
     // Synchronizuj wszystkie powiadomienia na tablicy (przy starcie)
@@ -543,6 +553,8 @@ class TablicaMenedzer {
         } catch (error) {
             this.logger.error('Nie udało się zapewnić panelu kontrolnego:', error);
         }
+
+        await this.ensureManualPanel();
     }
 
     // Zaktualizuj istniejący panel kontrolny (lekka funkcja - NIGDY nie tworzy nowego)
@@ -718,6 +730,80 @@ class TablicaMenedzer {
             );
 
         return { embeds: [embed], components: [row1, row2] };
+    }
+
+    buildManualPanel() {
+        const allScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
+        const manual = allScheduled.filter(s => s.isManual);
+        if (manual.length === 0) return null;
+
+        const rows = [];
+        let currentRow = [];
+        for (const s of manual) {
+            if (currentRow.length === 5) {
+                rows.push(new ActionRowBuilder().addComponents(currentRow));
+                currentRow = [];
+            }
+            if (rows.length === 5) break; // max 5 rzędów Discord
+
+            const templateName = (s.template?.name ?? 'Nieznany').slice(0, 30);
+            const channel = s.channelId ? this.client.channels.cache.get(s.channelId) : null;
+            const channelLabel = channel ? `#${channel.name}` : `#${s.channelId}`;
+            const label = `${templateName} → ${channelLabel}`.slice(0, 80);
+
+            currentRow.push(
+                new ButtonBuilder()
+                    .setCustomId(`scheduled_send_${s.id}`)
+                    .setLabel(label)
+                    .setStyle(ButtonStyle.Primary)
+            );
+        }
+        if (currentRow.length > 0) rows.push(new ActionRowBuilder().addComponents(currentRow));
+
+        return { content: '🖐️ **Powiadomienia manualne** — kliknij aby wysłać:', components: rows };
+    }
+
+    async ensureManualPanel() {
+        if (!this.boardChannel) return;
+
+        try {
+            const panelData = this.buildManualPanel();
+
+            // Znajdź istniejącą wiadomość
+            let existingMsg = null;
+            if (this.manualPanelMessageId) {
+                try {
+                    existingMsg = await this.boardChannel.messages.fetch(this.manualPanelMessageId);
+                } catch (error) {
+                    if (error.code === 10008) {
+                        await this.saveManualPanelMessageId(null);
+                    } else throw error;
+                }
+            }
+
+            // Brak manualnych → usuń wiadomość jeśli istnieje
+            if (!panelData) {
+                if (existingMsg) {
+                    await existingMsg.delete().catch(() => {});
+                    await this.saveManualPanelMessageId(null);
+                    this.logger.info('Usunięto panel manualny - brak powiadomień manualnych');
+                }
+                return;
+            }
+
+            // Usuń stary panel żeby wysłać nowy na dole
+            if (existingMsg) {
+                await existingMsg.delete().catch(() => {});
+                await this.saveManualPanelMessageId(null);
+            }
+
+            const message = await this.boardChannel.send(panelData);
+            await this.saveManualPanelMessageId(message.id);
+            this.logger.info('Panel manualny wysłany na dole');
+
+        } catch (error) {
+            this.logger.error('Błąd przy aktualizacji panelu manualnego:', error);
+        }
     }
 
     // Zbuduj przyciski akcji dla zaplanowanego przypomnienia
