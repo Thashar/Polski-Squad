@@ -105,9 +105,9 @@ class ListaEventowMenedzer {
             const h24 = 24 * 60 * 60 * 1000;
             const d7  = 7  * 24 * 60 * 60 * 1000;
 
-            const soon    = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) <  h24);
-            const week    = sortedEvents.filter(e => { const t = new Date(e.nextTrigger).getTime() - now; return t >= h24 && t < d7; });
-            const later   = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) >= d7);
+            const soon  = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) < h24);
+            const week  = sortedEvents.filter(e => { const t = new Date(e.nextTrigger).getTime() - now; return t >= h24 && t < d7; });
+            const later = sortedEvents.filter(e => (new Date(e.nextTrigger).getTime() - now) >= d7);
 
             const buildLines = (list, emoji) =>
                 list.map(e => {
@@ -116,12 +116,12 @@ class ListaEventowMenedzer {
                     return `${prefix}**${e.name}** - <t:${Math.floor(new Date(e.nextTrigger).getTime() / 1000)}:R>${emoji ? ' ' + emoji : ''}`;
                 }).join('\n');
 
-            const fields = [];
-            if (soon.length > 0)  fields.push({ name: '🚨 Najbliższe 24h', value: buildLines(soon, '<a:PepeAlarmMan:1341086085089857619>'), inline: false });
-            if (week.length > 0)  fields.push({ name: '📆 Najbliższe 7 dni', value: buildLines(week, null), inline: false });
-            if (later.length > 0) fields.push({ name: '🗓️ Późniejsze', value: buildLines(later, null), inline: false });
+            const sections = [];
+            if (soon.length > 0)  sections.push(`## 🚨 Najbliższe 24h\n${buildLines(soon, '<a:PepeAlarmMan:1341086085089857619>')}`);
+            if (week.length > 0)  sections.push(`## 📆 Najbliższe 7 dni\n${buildLines(week, null)}`);
+            if (later.length > 0) sections.push(`## 🗓️ Późniejsze\n${buildLines(later, null)}`);
 
-            if (fields.length > 0) embed.addFields(...fields);
+            embed.setDescription(sections.join('\n\n'));
         }
 
         embed.setFooter({ text: `Łączna liczba eventów: ${events.length}` });

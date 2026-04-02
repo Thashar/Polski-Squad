@@ -1178,6 +1178,7 @@ async function handleModalSubmit(interaction, sharedState) {
 
                 // Update events list
                 await listaEventowMenedzer.ensureEventsList();
+                await sharedState.tablicaMenedzer.ensureControlPanel();
                 await interaction.deleteReply();
                 logger.success(`Created event ${event.id}`);
             } catch (error) {
@@ -1233,6 +1234,7 @@ async function handleModalSubmit(interaction, sharedState) {
 
             // Update events list
             await listaEventowMenedzer.ensureEventsList();
+            await sharedState.tablicaMenedzer.ensureControlPanel();
             await interaction.deleteReply();
             logger.success(`Updated event ${eventId}`);
         }
@@ -2009,8 +2011,9 @@ async function handleConfirmDeleteEvent(interaction, sharedState) {
     try {
         await eventMenedzer.deleteEvent(eventId);
 
-        // Update events list
+        // Update events list and control panel
         await listaEventowMenedzer.ensureEventsList();
+        await tablicaMenedzer.ensureControlPanel();
 
         await interaction.deleteReply();
         logger.success(`Deleted event ${eventId}`);
