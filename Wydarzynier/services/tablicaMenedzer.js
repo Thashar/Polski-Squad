@@ -566,12 +566,12 @@ class TablicaMenedzer {
                     .setEmoji('➕'),
                 new ButtonBuilder()
                     .setCustomId('board_set_reminder')
-                    .setLabel('Ustaw Przypomnienie')
+                    .setLabel('Ustaw')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('⏰'),
                 new ButtonBuilder()
                     .setCustomId('board_edit_reminder')
-                    .setLabel('Edytuj Przypomnienie')
+                    .setLabel('Edytuj')
                     .setStyle(ButtonStyle.Primary)
                     .setEmoji('✏️')
             );
