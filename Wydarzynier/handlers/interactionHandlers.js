@@ -319,7 +319,8 @@ class InteractionHandler {
             customId.startsWith('scheduled_resume_') ||
             customId.startsWith('scheduled_edit_') ||
             customId.startsWith('scheduled_delete_') ||
-            customId.startsWith('edit_scheduled_')
+            customId.startsWith('edit_scheduled_') ||
+            customId.startsWith('ch_cat_')
         ) {
             await handlePrzypominienInteraction(interaction, sharedState);
             return;

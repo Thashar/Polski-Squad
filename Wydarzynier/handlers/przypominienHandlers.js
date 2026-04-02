@@ -14,57 +14,79 @@ const {
 
 // ==================== HELPER FUNCTIONS ====================
 
-const CHANNELS_PER_PAGE = 20;
-
-async function showChannelPage(interaction, sharedState, sessionId, page, isUpdate = false) {
-    const guild = interaction.guild;
-    const channels = guild.channels.cache
+function getTextChannelsByCategory(guild) {
+    const textChannels = guild.channels.cache
         .filter(c => c.type === ChannelType.GuildText)
-        .sort((a, b) => a.position - b.position)
-        .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || null }));
+        .sort((a, b) => {
+            const aOrder = (a.parent?.position ?? -1) * 1000 + a.position;
+            const bOrder = (b.parent?.position ?? -1) * 1000 + b.position;
+            return aOrder - bOrder;
+        });
 
-    const totalPages = Math.ceil(channels.length / CHANNELS_PER_PAGE);
-    const page_ = Math.max(0, Math.min(page, totalPages - 1));
-    const slice = channels.slice(page_ * CHANNELS_PER_PAGE, (page_ + 1) * CHANNELS_PER_PAGE);
+    const categories = new Map(); // categoryId -> { name, channels[] }
+
+    for (const ch of textChannels.values()) {
+        const catId = ch.parentId || 'none';
+        const catName = ch.parent?.name || '📁 Bez kategorii';
+        if (!categories.has(catId)) categories.set(catId, { name: catName, channels: [] });
+        categories.get(catId).channels.push({ id: ch.id, name: ch.name });
+    }
+
+    return categories;
+}
+
+async function showCategorySelect(interaction, sharedState, sessionId, isUpdate = false) {
+    const categories = getTextChannelsByCategory(interaction.guild);
+
+    const rows = [];
+    let currentRow = [];
+    for (const [catId, cat] of categories) {
+        if (currentRow.length === 5) {
+            rows.push(new ActionRowBuilder().addComponents(currentRow));
+            currentRow = [];
+        }
+        if (rows.length === 5) break; // Discord max 5 rows
+        currentRow.push(
+            new ButtonBuilder()
+                .setCustomId(`ch_cat_${sessionId}_${catId}`)
+                .setLabel(cat.name.slice(0, 80))
+                .setStyle(ButtonStyle.Secondary)
+        );
+    }
+    if (currentRow.length > 0) rows.push(new ActionRowBuilder().addComponents(currentRow));
+
+    const payload = { content: '**Krok 2/3:** Wybierz kategorię kanałów', components: rows };
+    if (isUpdate) await interaction.update(payload);
+    else await interaction.editReply(payload);
+}
+
+async function showChannelsByCategory(interaction, sharedState, sessionId, catId, isUpdate = false) {
+    const categories = getTextChannelsByCategory(interaction.guild);
+    const cat = categories.get(catId);
+    if (!cat) return;
 
     const select = new StringSelectMenuBuilder()
         .setCustomId(`channel_string_select_${sessionId}`)
         .setPlaceholder('Wybierz kanał...')
-        .addOptions(slice.map(c => ({
+        .addOptions(cat.channels.slice(0, 25).map(c => ({
             label: c.name.slice(0, 100),
-            description: c.parent ? c.parent.slice(0, 100) : undefined,
             value: c.id
         })));
 
-    const prev = new ButtonBuilder()
-        .setCustomId(`channel_page_prev_${sessionId}`)
-        .setLabel('◀ Poprzednia')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page_ === 0);
-
-    const next = new ButtonBuilder()
-        .setCustomId(`channel_page_next_${sessionId}`)
-        .setLabel('Następna ▶')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page_ >= totalPages - 1);
+    const backBtn = new ButtonBuilder()
+        .setCustomId(`ch_cat_back_${sessionId}`)
+        .setLabel('◀ Kategorie')
+        .setStyle(ButtonStyle.Secondary);
 
     const rowSelect = new ActionRowBuilder().addComponents(select);
-    const rowNav = new ActionRowBuilder().addComponents(prev, next);
+    const rowBack = new ActionRowBuilder().addComponents(backBtn);
 
-    const content = `**Krok 2/3:** Wybierz kanał (strona ${page_ + 1}/${totalPages})`;
-    const payload = { content, components: [rowSelect, rowNav] };
-
-    if (isUpdate) {
-        await interaction.update(payload);
-    } else {
-        await interaction.editReply(payload);
-    }
-
-    const userState = sharedState.userStates.get(interaction.user.id);
-    if (userState) {
-        userState.channelPage = page_;
-        sharedState.userStates.set(interaction.user.id, userState);
-    }
+    const payload = {
+        content: `**Krok 2/3:** Wybierz kanał z kategorii **${cat.name}**`,
+        components: [rowSelect, rowBack]
+    };
+    if (isUpdate) await interaction.update(payload);
+    else await interaction.editReply(payload);
 }
 
 /**
@@ -520,16 +542,29 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
-    if (customId.startsWith('channel_page_prev_') || customId.startsWith('channel_page_next_')) {
-        const isPrev = customId.startsWith('channel_page_prev_');
-        const sessionId = customId.replace('channel_page_prev_', '').replace('channel_page_next_', '');
+    if (customId.startsWith('ch_cat_back_')) {
+        const sessionId = customId.replace('ch_cat_back_', '');
         const userState = userStates.get(interaction.user.id);
         if (!userState || userState.sessionId !== sessionId) {
             await interaction.update({ content: '❌ Sesja wygasła.', components: [] });
             return;
         }
-        const newPage = (userState.channelPage || 0) + (isPrev ? -1 : 1);
-        await showChannelPage(interaction, sharedState, sessionId, newPage, true);
+        await showCategorySelect(interaction, sharedState, sessionId, true);
+        return;
+    }
+
+    if (customId.startsWith('ch_cat_')) {
+        // format: ch_cat_${sessionId}_${catId}
+        const withoutPrefix = customId.replace('ch_cat_', '');
+        const underscoreIdx = withoutPrefix.indexOf('_');
+        const sessionId = withoutPrefix.slice(0, underscoreIdx);
+        const catId = withoutPrefix.slice(underscoreIdx + 1);
+        const userState = userStates.get(interaction.user.id);
+        if (!userState || userState.sessionId !== sessionId) {
+            await interaction.update({ content: '❌ Sesja wygasła.', components: [] });
+            return;
+        }
+        await showChannelsByCategory(interaction, sharedState, sessionId, catId, true);
         return;
     }
 
@@ -1127,7 +1162,7 @@ async function handleModalSubmit(interaction, sharedState) {
                     step: 'select_channel'
                 });
 
-                await showChannelPage(interaction, sharedState, sessionId, 0, false);
+                await showCategorySelect(interaction, sharedState, sessionId, false);
             }
         }
         // Edit template
