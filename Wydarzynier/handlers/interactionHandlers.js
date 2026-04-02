@@ -1484,7 +1484,9 @@ async function handleInteraction(interaction, sharedState) {
             interaction.customId === 'event_list_channel_select' ||
             interaction.customId === 'put_list' ||
             interaction.customId.startsWith('channel_string_select_') ||
-            interaction.customId.startsWith('ch_cat_')
+            interaction.customId.startsWith('ch_cat_') ||
+            interaction.customId.startsWith('scheduled_page_manual_') ||
+            interaction.customId.startsWith('edit_reminder_manual')
         )
     );
 

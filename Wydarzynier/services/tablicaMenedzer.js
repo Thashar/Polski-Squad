@@ -85,120 +85,35 @@ class TablicaMenedzer {
 
     // Synchronizuj wszystkie powiadomienia na tablicy (przy starcie)
     async syncAllNotifications() {
-        const activeScheduled = this.przypomnieniaMenedzer.getActiveScheduled();
-        this.logger.info(`Synchronizowanie ${activeScheduled.length} aktywnych zaplanowanych przypomnień na tablicy`);
+        const allScheduled = this.przypomnieniaMenedzer.getAllScheduled();
+        this.logger.info(`Czyszczenie ${allScheduled.length} indywidualnych embedów z tablicy...`);
 
-        for (const scheduled of activeScheduled) {
+        // Usuń wszystkie istniejące indywidualne embedy z tablicy
+        for (const scheduled of allScheduled) {
             if (scheduled.boardMessageId) {
-                // Sprawdź czy wiadomość nadal istnieje
                 try {
-                    await this.boardChannel.messages.fetch(scheduled.boardMessageId);
-                    // Wiadomość istnieje, zaktualizuj ją
-                    const scheduledWithTemplate = this.przypomnieniaMenedzer.getScheduledWithTemplate(scheduled.id);
-                    await this.updateEmbed(scheduledWithTemplate);
+                    const msg = await this.boardChannel.messages.fetch(scheduled.boardMessageId);
+                    await msg.delete();
+                    this.logger.info(`Usunięto stary embed tablicy dla: ${scheduled.id}`);
                 } catch (error) {
-                    // Wiadomość nie istnieje, utwórz nową
-                    const scheduledWithTemplate = this.przypomnieniaMenedzer.getScheduledWithTemplate(scheduled.id);
-                    await this.createEmbed(scheduledWithTemplate);
+                    // Wiadomość już usunięta lub nie istnieje - ignoruj
                 }
-            } else {
-                // Brak ID wiadomości, utwórz nowy embed
-                const scheduledWithTemplate = this.przypomnieniaMenedzer.getScheduledWithTemplate(scheduled.id);
-                await this.createEmbed(scheduledWithTemplate);
+                await this.przypomnieniaMenedzer.updateBoardMessageId(scheduled.id, null);
             }
         }
     }
 
-    // Utwórz embed dla zaplanowanego przypomnienia
+    // Utwórz embed dla zaplanowanego przypomnienia (indywidualne embedy usunięte)
     async createEmbed(scheduled) {
-        if (!this.boardChannel) {
-            this.logger.error('Kanał tablicy nie zainicjalizowany');
-            return null;
-        }
-
-        if (!scheduled) {
-            this.logger.error('createEmbed: scheduled jest null lub undefined');
-            return null;
-        }
-
-        if (!scheduled.template) {
-            this.logger.error(`createEmbed: scheduled ${scheduled.id} nie ma dołączonego szablonu`);
-            return null;
-        }
-
-        this.logger.info(`Tworzenie embed dla zaplanowanego ${scheduled.id} z szablonem ${scheduled.template.name}`);
-
-        try {
-            const embed = await this.buildEmbed(scheduled);
-            const components = this.buildActionButtons(scheduled);
-            const message = await this.boardChannel.send({ embeds: [embed], components });
-
-            // Zaktualizuj powiadomienie z ID wiadomości
-            await this.przypomnieniaMenedzer.updateBoardMessageId(scheduled.id, message.id);
-
-            // Przenieś panel kontrolny na dół
-            await this.ensureControlPanel();
-
-            this.logger.info(`Utworzono embed tablicy dla zaplanowanego: ${scheduled.id}`);
-            return message;
-        } catch (error) {
-            this.logger.error(`Nie udało się utworzyć embed dla ${scheduled.id}:`, error);
-            return null;
-        }
+        // Indywidualne embedy nie są już używane - panel kontrolny wystarczy
+        await this.ensureControlPanel();
+        return null;
     }
 
-    // Zaktualizuj istniejący embed
+    // Zaktualizuj istniejący embed (indywidualne embedy usunięte)
     async updateEmbed(scheduled) {
-        if (!this.boardChannel) {
-            this.logger.error('Kanał tablicy nie zainicjalizowany');
-            return false;
-        }
-
-        if (!scheduled || !scheduled.template) {
-            this.logger.error('Nieprawidłowy obiekt scheduled lub brak szablonu');
-            return false;
-        }
-
-        if (!scheduled.boardMessageId) {
-            this.logger.warn(`Brak ID wiadomości tablicy dla zaplanowanego: ${scheduled.id}`);
-            return false;
-        }
-
-        try {
-            const message = await this.boardChannel.messages.fetch(scheduled.boardMessageId);
-            const embed = await this.buildEmbed(scheduled);
-            const components = this.buildActionButtons(scheduled);
-            await message.edit({ embeds: [embed], components });
-
-            return true;
-        } catch (error) {
-            // Deduplikacja logów błędów sieciowych - loguj tylko raz na 5 minut
-            const isTransientNetworkError =
-                error.code === 'EAI_AGAIN' ||
-                error.syscall === 'getaddrinfo' ||
-                error.name === 'ConnectTimeoutError' ||
-                error.name === 'SocketError' ||
-                error.name === 'RequestTimeoutError';
-            const now = Date.now();
-
-            if (isTransientNetworkError) {
-                // Loguj błąd sieciowy tylko raz na 5 minut
-                if (now - this.lastNetworkErrorLog > 5 * 60 * 1000) {
-                    this.logger.error(`❌ Network error - cannot reach Discord API (will retry): ${error.message}`);
-                    this.lastNetworkErrorLog = now;
-                }
-            } else {
-                // Inne błędy - loguj normalnie
-                this.logger.error(`Nie udało się zaktualizować embed dla ${scheduled.id}:`, error);
-
-                // Jeśli wiadomość nie znaleziona, utwórz nową
-                if (error.code === 10008) {
-                    await this.createEmbed(scheduled);
-                }
-            }
-
-            return false;
-        }
+        // Indywidualne embedy nie są już używane
+        return true;
     }
 
     // Usuń embed
@@ -362,50 +277,9 @@ class TablicaMenedzer {
         return embed;
     }
 
-    // Zaktualizuj wszystkie aktywne embedy
+    // Zaktualizuj panel kontrolny (indywidualne embedy usunięte)
     async updateAllEmbeds() {
-        // Sprawdź circuit breaker
-        if (this.circuitBreakerOpen) {
-            const now = Date.now();
-            if (now < this.circuitBreakerUntil) {
-                // Circuit breaker nadal otwarty - pomiń aktualizacje
-                return;
-            } else {
-                // Czas minął - zamknij circuit breaker i spróbuj ponownie
-                this.logger.info('🔄 Circuit breaker closed - resuming board updates');
-                this.circuitBreakerOpen = false;
-                this.circuitBreakerUntil = null;
-                this.consecutiveFailures = 0;
-            }
-        }
-
-        const activeScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
-        let failedCount = 0;
-
-        for (const scheduled of activeScheduled) {
-            if (scheduled.status === 'active') {
-                const success = await this.updateEmbed(scheduled);
-                if (!success) failedCount++;
-            }
-        }
-
-        // Jeśli wszystkie aktualizacje zawiodły, otwórz circuit breaker
-        if (activeScheduled.length > 0 && failedCount === activeScheduled.length) {
-            this.consecutiveFailures++;
-
-            if (this.consecutiveFailures >= 3) {
-                // Otwórz circuit breaker na 5 minut
-                this.circuitBreakerOpen = true;
-                this.circuitBreakerUntil = Date.now() + (5 * 60 * 1000);
-                this.logger.warn(`⚠️ Circuit breaker opened after ${this.consecutiveFailures} consecutive failures - pausing updates for 5 minutes`);
-            }
-        } else if (failedCount === 0) {
-            // Reset licznika przy sukcesie
-            if (this.consecutiveFailures > 0) {
-                this.logger.success('✅ Board updates recovered successfully');
-                this.consecutiveFailures = 0;
-            }
-        }
+        await this.updateControlPanel();
     }
 
     // Przy starcie bota: aktualizuj panel tylko jeśli coś się zmieniło, nie przenoś na dół
@@ -734,6 +608,8 @@ class TablicaMenedzer {
 
     buildManualPanel() {
         const allScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
+        this.logger.info(`[ManualPanel] Wszystkich scheduled: ${allScheduled.length}, z isManual: ${allScheduled.filter(s => s.isManual).length}`);
+        allScheduled.forEach(s => this.logger.info(`[ManualPanel] id=${s.id} isManual=${s.isManual} status=${s.status} template=${s.template?.name}`));
         const manual = allScheduled.filter(s => s.isManual);
         if (manual.length === 0) return null;
 
