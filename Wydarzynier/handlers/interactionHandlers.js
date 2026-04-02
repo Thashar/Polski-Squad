@@ -1482,7 +1482,9 @@ async function handleInteraction(interaction, sharedState) {
             interaction.customId.startsWith('confirm_delete_event_') ||
             interaction.customId.startsWith('cancel_delete_') ||
             interaction.customId === 'event_list_channel_select' ||
-            interaction.customId === 'put_list'
+            interaction.customId === 'put_list' ||
+            interaction.customId.startsWith('channel_string_select_') ||
+            interaction.customId.startsWith('ch_cat_')
         )
     );
 
