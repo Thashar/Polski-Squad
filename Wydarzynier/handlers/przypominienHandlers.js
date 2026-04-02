@@ -680,21 +680,19 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
 
     const typeInput = new TextInputBuilder()
         .setCustomId('type')
-        .setLabel('Typ: 0 = dopasowane | 1 = ustandaryzowane')
+        .setLabel('Ustandaryzowane? (TAK = tak, puste = dostosowane)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('0 lub 1')
-        .setValue('0')
-        .setRequired(true)
-        .setMaxLength(1);
+        .setPlaceholder('Wpisz TAK lub zostaw puste')
+        .setRequired(false)
+        .setMaxLength(3);
 
     const manualInput = new TextInputBuilder()
         .setCustomId('manual')
-        .setLabel('Tryb: 0 = harmonogram | 1 = tylko manualne')
+        .setLabel('Tylko manualne? (TAK = tak, puste = z datą)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('0 lub 1')
-        .setValue('0')
-        .setRequired(true)
-        .setMaxLength(1);
+        .setPlaceholder('Wpisz TAK lub zostaw puste')
+        .setRequired(false)
+        .setMaxLength(3);
 
     modal.addComponents(
         new ActionRowBuilder().addComponents(firstTriggerInput),
@@ -916,23 +914,9 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
             const interval = interaction.fields.getTextInputValue('interval');
             const type = interaction.fields.getTextInputValue('type');
-            const manualStr = interaction.fields.getTextInputValue('manual');
-            const isManual = manualStr === '1';
-
-            // Walidacja typu
-            if (type !== '0' && type !== '1') {
-                await interaction.editReply({
-                    content: '❌ Nieprawidłowy typ. Użyj: 0 (dopasowane) lub 1 (ustandaryzowane)'
-                });
-                return;
-            }
-
-            if (manualStr !== '0' && manualStr !== '1') {
-                await interaction.editReply({
-                    content: '❌ Nieprawidłowy tryb. Użyj: 0 (harmonogram) lub 1 (tylko manualne)'
-                });
-                return;
-            }
+            const manualStr = interaction.fields.getTextInputValue('manual').trim().toUpperCase();
+            const isManual = manualStr === 'TAK';
+            const isStandardized = type.trim().toUpperCase() === 'TAK';
 
             let firstTrigger = null;
             if (!isManual) {
@@ -976,14 +960,14 @@ async function handleModalSubmit(interaction, sharedState) {
 
             const sessionId = Date.now().toString();
 
-            // TYP 1 = USTANDARYZOWANE (kanał z Listą Eventów, tylko pingi)
-            if (type === '1') {
+            // USTANDARYZOWANE (kanał z Listą Eventów, tylko pingi)
+            if (isStandardized) {
                 const { eventMenedzer } = sharedState;
                 const eventListChannelId = eventMenedzer.getListChannelId();
 
                 if (!eventListChannelId) {
                     await interaction.editReply({
-                        content: '❌ Kanał z Listą Eventów nie został ustawiony. Użyj typu 0 (dopasowane) lub ustaw kanał listy eventów.'
+                        content: '❌ Kanał z Listą Eventów nie został ustawiony. Użyj opcji dostosowanej lub ustaw kanał listy eventów.'
                     });
                     return;
                 }
@@ -1025,7 +1009,7 @@ async function handleModalSubmit(interaction, sharedState) {
                     components: [row1, row2]
                 });
             }
-            // TYP 0 = DOPASOWANE (wybór kanału + pingi)
+            // DOSTOSOWANE (wybór kanału + pingi)
             else {
                 // Store in user state for channel/role selection
                 userStates.set(interaction.user.id, {
