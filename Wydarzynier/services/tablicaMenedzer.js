@@ -631,9 +631,11 @@ class TablicaMenedzer {
             }).join('\n');
         };
 
-        const recurring = allScheduled.filter(s => s.status === 'active' && s.interval && !s.isOneTime);
-        const oneTime   = allScheduled.filter(s => s.status === 'active' && (!s.interval || s.isOneTime));
-        const paused    = allScheduled.filter(s => s.status === 'paused');
+        const sortByNextTrigger = (a, b) => new Date(a.nextTrigger || 0) - new Date(b.nextTrigger || 0);
+
+        const recurring = allScheduled.filter(s => s.status === 'active' && s.interval && !s.isOneTime).sort(sortByNextTrigger);
+        const oneTime   = allScheduled.filter(s => s.status === 'active' && (!s.interval || s.isOneTime)).sort(sortByNextTrigger);
+        const paused    = allScheduled.filter(s => s.status === 'paused').sort(sortByNextTrigger);
 
         const activeScheduled = allScheduled.filter(s => s.status === 'active');
 
