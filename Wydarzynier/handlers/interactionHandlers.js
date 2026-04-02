@@ -320,8 +320,7 @@ class InteractionHandler {
             customId.startsWith('scheduled_edit_') ||
             customId.startsWith('scheduled_delete_') ||
             customId.startsWith('edit_scheduled_') ||
-            customId.startsWith('channel_page_prev_') ||
-            customId.startsWith('channel_page_next_')
+            customId.startsWith('ch_cat_')
         ) {
             await handlePrzypominienInteraction(interaction, sharedState);
             return;
