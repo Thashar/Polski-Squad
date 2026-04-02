@@ -561,12 +561,16 @@ class TablicaMenedzer {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('board_new_reminder')
-                    .setLabel('Nowe Przypomnienie')
+                    .setLabel('Nowy szablon')
                     .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('➕'),
+                    .setEmoji('➕')
+            );
+
+        const row2 = new ActionRowBuilder()
+            .addComponents(
                 new ButtonBuilder()
                     .setCustomId('board_set_reminder')
-                    .setLabel('Ustaw')
+                    .setLabel('Ustaw przypomnienie')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('⏰'),
                 new ButtonBuilder()
@@ -576,7 +580,7 @@ class TablicaMenedzer {
                     .setEmoji('✏️')
             );
 
-        const row2 = new ActionRowBuilder()
+        const row3 = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('board_add_event')
@@ -592,7 +596,11 @@ class TablicaMenedzer {
                     .setCustomId('board_delete_event')
                     .setLabel('Usuń')
                     .setStyle(ButtonStyle.Danger)
-                    .setEmoji('🗑️'),
+                    .setEmoji('🗑️')
+            );
+
+        const row4 = new ActionRowBuilder()
+            .addComponents(
                 new ButtonBuilder()
                     .setCustomId('board_put_list')
                     .setLabel('Ustaw Listę')
@@ -600,7 +608,7 @@ class TablicaMenedzer {
                     .setEmoji('📋')
             );
 
-        return { embeds: [embed], components: [row1, row2] };
+        return { embeds: [embed], components: [row1, row2, row3, row4] };
     }
 
     buildManualPanel() {
