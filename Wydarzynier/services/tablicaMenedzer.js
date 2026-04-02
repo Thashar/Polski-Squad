@@ -474,7 +474,6 @@ class TablicaMenedzer {
             if (panelMessage) {
                 const controlPanel = await this.buildControlPanel();
                 await panelMessage.edit(controlPanel);
-                this.logger.success('Panel kontrolny zaktualizowany');
             } else {
                 // Panel nie istnieje - nie twórz go, tylko zaloguj ostrzeżenie
                 this.logger.warn('Panel kontrolny nie znaleziony - pomijam aktualizację (zostanie utworzony przy następnym restarcie bota)');
