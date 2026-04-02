@@ -350,18 +350,23 @@ async function handleEditReminderCommand(interaction, sharedState) {
         .addComponents(
             new ButtonBuilder()
                 .setCustomId('edit_reminder_templates')
-                .setLabel('Template')
+                .setLabel('Szablony')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('📝'),
             new ButtonBuilder()
                 .setCustomId('edit_reminder_scheduled')
-                .setLabel('Scheduled')
+                .setLabel('Zaplanowane')
                 .setStyle(ButtonStyle.Primary)
-                .setEmoji('⏰')
+                .setEmoji('⏰'),
+            new ButtonBuilder()
+                .setCustomId('edit_reminder_manual')
+                .setLabel('Manualne')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🖐️')
         );
 
     await interaction.reply({
-        content: '**Edit reminders** - Choose type:',
+        content: '**Edytuj powiadomienia** - Wybierz typ:',
         components: [row],
         ephemeral: true
     });
@@ -420,6 +425,34 @@ async function handleButton(interaction, sharedState) {
 
     if (customId === 'edit_reminder_scheduled') {
         await handleEditScheduledButton(interaction, sharedState);
+        return;
+    }
+
+    if (customId === 'edit_reminder_manual') {
+        await handleEditManualButton(interaction, sharedState);
+        return;
+    }
+
+    // Scheduled edit pagination
+    if (customId.startsWith('scheduled_page_edit_')) {
+        await handleScheduledPageEdit(interaction, sharedState);
+        return;
+    }
+
+    // Manual edit pagination
+    if (customId.startsWith('scheduled_page_manual_')) {
+        await handleManualPageEdit(interaction, sharedState);
+        return;
+    }
+
+    // Edit scheduled pause/resume
+    if (customId.startsWith('edit_scheduled_pause_')) {
+        await handleEditScheduledPause(interaction, sharedState);
+        return;
+    }
+
+    if (customId.startsWith('edit_scheduled_resume_')) {
+        await handleEditScheduledResume(interaction, sharedState);
         return;
     }
 
@@ -683,6 +716,12 @@ async function handleSelectMenu(interaction, sharedState) {
         return;
     }
 
+    // Manual selection for /edit-reminder Manualne
+    if (customId.startsWith('scheduled_select_manual_')) {
+        await handleManualSelectForEdit(interaction, sharedState);
+        return;
+    }
+
     // Event delete selection
     if (customId === 'delete_event_select') {
         await handleDeleteEventSelect(interaction, sharedState);
@@ -876,6 +915,67 @@ async function handleScheduledSelectForEdit(interaction, sharedState) {
     }
 
     await showScheduledEditPreview(interaction, scheduled, sharedState);
+}
+
+async function handleManualSelectForEdit(interaction, sharedState) {
+    const { przypomnieniaMenedzer } = sharedState;
+
+    const scheduledId = interaction.values[0];
+    const scheduled = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
+
+    if (!scheduled) {
+        await interaction.update({
+            content: '❌ Nie znaleziono manualnego powiadomienia.',
+            components: []
+        });
+        return;
+    }
+
+    await showManualEditPreview(interaction, scheduled, sharedState);
+}
+
+async function handleEditScheduledPause(interaction, sharedState) {
+    const { przypomnieniaMenedzer, tablicaMenedzer, logger } = sharedState;
+
+    const scheduledId = interaction.customId.replace('edit_scheduled_pause_', '');
+
+    try {
+        await przypomnieniaMenedzer.pauseScheduled(scheduledId);
+        await tablicaMenedzer.ensureControlPanel();
+
+        const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
+        if (!updated) {
+            await interaction.update({ content: '❌ Nie znaleziono przypomnienia.', components: [] });
+            return;
+        }
+        await showScheduledEditPreview(interaction, updated, sharedState);
+        logger.success(`Wstrzymano zaplanowane ${scheduledId} z widoku edycji`);
+    } catch (error) {
+        logger.error('Błąd wstrzymywania zaplanowanego:', error);
+        await interaction.update({ content: '❌ Błąd podczas wstrzymywania.', components: [] });
+    }
+}
+
+async function handleEditScheduledResume(interaction, sharedState) {
+    const { przypomnieniaMenedzer, tablicaMenedzer, logger } = sharedState;
+
+    const scheduledId = interaction.customId.replace('edit_scheduled_resume_', '');
+
+    try {
+        await przypomnieniaMenedzer.resumeScheduled(scheduledId);
+        await tablicaMenedzer.ensureControlPanel();
+
+        const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
+        if (!updated) {
+            await interaction.update({ content: '❌ Nie znaleziono przypomnienia.', components: [] });
+            return;
+        }
+        await showScheduledEditPreview(interaction, updated, sharedState);
+        logger.success(`Wznowiono zaplanowane ${scheduledId} z widoku edycji`);
+    } catch (error) {
+        logger.error('Błąd wznawiania zaplanowanego:', error);
+        await interaction.update({ content: '❌ Błąd podczas wznawiania.', components: [] });
+    }
 }
 
 // ==================== CHANNEL SELECT MENU ====================
@@ -1431,11 +1531,9 @@ async function showTemplatePreview(interaction, data, sessionId) {
 }
 
 async function showTemplateEditPreview(interaction, template) {
-    let content = '**Edit Template:**\n\n';
-    content += `📝 **Name:** ${template.name}\n`;
-    content += `📋 **Type:** ${template.type === 'text' ? 'Text' : 'Embed'}\n`;
-    content += `🆔 **ID:** ${template.id}\n\n`;
-    content += '**Preview:**';
+    let content = `**📝 Szablon: ${template.name}**\n`;
+    content += `📋 Typ: ${template.type === 'text' ? 'Tekst' : 'Embed'}\n\n`;
+    content += '**Podgląd:**';
 
     const embeds = [];
     if (template.type === 'text') {
@@ -1455,12 +1553,12 @@ async function showTemplateEditPreview(interaction, template) {
         .addComponents(
             new ButtonBuilder()
                 .setCustomId(`edit_template_edit_${template.id}`)
-                .setLabel('Edit')
+                .setLabel('Edytuj')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('✏️'),
             new ButtonBuilder()
                 .setCustomId(`edit_template_delete_${template.id}`)
-                .setLabel('Delete')
+                .setLabel('Usuń')
                 .setStyle(ButtonStyle.Danger)
                 .setEmoji('🗑️')
         );
@@ -1478,24 +1576,93 @@ async function showScheduledEditPreview(interaction, scheduled, sharedState) {
     const template = scheduled.template;
     const nextTriggerDate = new Date(scheduled.nextTrigger);
     const nextTriggerTimestamp = Math.floor(nextTriggerDate.getTime() / 1000);
+    const statusIcon = scheduled.status === 'active' ? '🟢' : '⏸️';
+    const statusText = scheduled.status === 'active' ? 'Aktywne' : 'Wstrzymane';
 
-    let content = '**Scheduled Reminder:**\n\n';
-    content += `⏰ **ID:** ${scheduled.id}\n`;
-    content += `📝 **Template:** ${template.name}\n`;
-    content += `📅 **First trigger:** ${new Date(scheduled.firstTrigger).toLocaleString('en-US')}\n`;
-    content += `🔄 **Interval:** ${przypomnieniaMenedzer.formatInterval(scheduled.interval)}\n`;
-    content += `⏭️ **Next trigger:** <t:${nextTriggerTimestamp}:F> (<t:${nextTriggerTimestamp}:R>)\n`;
-    content += `📍 **Kanał:** <#${scheduled.channelId}>\n`;
-    content += `👥 **Roles:** ${scheduled.roles.length > 0 ? scheduled.roles.map(r => `<@&${r}>`).join(', ') : 'None'}\n`;
-    content += `📊 **Status:** ${scheduled.status === 'active' ? '🟢 Active' : '⏸️ Paused'}\n\n`;
-    content += '**Message preview:**';
+    let content = `**⏰ Zaplanowane: ${template.name}**\n`;
+    content += `📍 Kanał: <#${scheduled.channelId}> | ${statusIcon} ${statusText}\n`;
+    content += `⏭️ Następne: <t:${nextTriggerTimestamp}:R>\n`;
+    content += `🔄 Interwał: ${przypomnieniaMenedzer.formatInterval(scheduled.interval)}\n\n`;
+    content += '**Podgląd powiadomienia:**\n';
+
+    if (scheduled.roles && scheduled.roles.length > 0) {
+        if (scheduled.roles[0] === 'everyone') {
+            content += '@everyone\n';
+        } else {
+            content += scheduled.roles.map(r => `<@&${r}>`).join(' ') + '\n';
+        }
+    }
 
     const embeds = [];
     if (template.type === 'text') {
-        content += `\n\n${template.text}`;
+        content += `\n${template.text}`;
     } else {
         const embed = new EmbedBuilder()
-            .setDescription(template.embedDescription);
+            .setDescription(template.embedDescription)
+            .setTimestamp();
+
+        if (template.embedTitle) embed.setTitle(template.embedTitle);
+        if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+        if (template.embedImage) embed.setImage(template.embedImage);
+
+        embeds.push(embed);
+    }
+
+    const isPaused = scheduled.status === 'paused';
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`edit_scheduled_edit_${scheduled.id}`)
+                .setLabel('Edytuj')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('✏️'),
+            new ButtonBuilder()
+                .setCustomId(`edit_scheduled_delete_${scheduled.id}`)
+                .setLabel('Usuń')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🗑️'),
+            isPaused
+                ? new ButtonBuilder()
+                    .setCustomId(`edit_scheduled_resume_${scheduled.id}`)
+                    .setLabel('Wznów')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('▶️')
+                : new ButtonBuilder()
+                    .setCustomId(`edit_scheduled_pause_${scheduled.id}`)
+                    .setLabel('Wstrzymaj')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('⏸️')
+        );
+
+    await interaction.update({
+        content,
+        embeds,
+        components: [row]
+    });
+}
+
+async function showManualEditPreview(interaction, scheduled, sharedState) {
+    const template = scheduled.template;
+
+    let content = `**🖐️ Manualne: ${template.name}**\n`;
+    content += `📍 Kanał: <#${scheduled.channelId}>\n\n`;
+    content += '**Podgląd powiadomienia:**\n';
+
+    if (scheduled.roles && scheduled.roles.length > 0) {
+        if (scheduled.roles[0] === 'everyone') {
+            content += '@everyone\n';
+        } else {
+            content += scheduled.roles.map(r => `<@&${r}>`).join(' ') + '\n';
+        }
+    }
+
+    const embeds = [];
+    if (template.type === 'text') {
+        content += `\n${template.text}`;
+    } else {
+        const embed = new EmbedBuilder()
+            .setDescription(template.embedDescription)
+            .setTimestamp();
 
         if (template.embedTitle) embed.setTitle(template.embedTitle);
         if (template.embedIcon) embed.setThumbnail(template.embedIcon);
@@ -1508,12 +1675,12 @@ async function showScheduledEditPreview(interaction, scheduled, sharedState) {
         .addComponents(
             new ButtonBuilder()
                 .setCustomId(`edit_scheduled_edit_${scheduled.id}`)
-                .setLabel('Edit')
+                .setLabel('Edytuj')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('✏️'),
             new ButtonBuilder()
                 .setCustomId(`edit_scheduled_delete_${scheduled.id}`)
-                .setLabel('Delete')
+                .setLabel('Usuń')
                 .setStyle(ButtonStyle.Danger)
                 .setEmoji('🗑️')
         );
@@ -1802,7 +1969,8 @@ async function handleEditTemplatesButton(interaction, sharedState) {
 async function handleEditScheduledButton(interaction, sharedState) {
     const { przypomnieniaMenedzer } = sharedState;
 
-    const scheduled = przypomnieniaMenedzer.getAllScheduled();
+    const allScheduled = przypomnieniaMenedzer.getAllScheduled();
+    const scheduled = allScheduled.filter(s => !s.isManual && s.status !== 'manual');
 
     if (scheduled.length === 0) {
         await interaction.update({
@@ -1812,43 +1980,67 @@ async function handleEditScheduledButton(interaction, sharedState) {
         return;
     }
 
-    const ITEMS_PER_PAGE = 25;
-    const totalPages = Math.ceil(scheduled.length / ITEMS_PER_PAGE);
-    const page = 0;
-    const start = page * ITEMS_PER_PAGE;
-    const end = Math.min(start + ITEMS_PER_PAGE, scheduled.length);
-    const pageScheduled = scheduled.slice(start, end);
+    await showScheduledSelectPage(interaction, sharedState, 0, scheduled, 'edit');
+}
 
-    const options = pageScheduled.map(s => {
+async function handleEditManualButton(interaction, sharedState) {
+    const { przypomnieniaMenedzer } = sharedState;
+
+    const allScheduled = przypomnieniaMenedzer.getAllScheduled();
+    const manual = allScheduled.filter(s => s.isManual || s.status === 'manual');
+
+    if (manual.length === 0) {
+        await interaction.update({
+            content: '❌ Brak manualnych powiadomień. Utwórz powiadomienie z trybem manualnym.',
+            components: []
+        });
+        return;
+    }
+
+    await showScheduledSelectPage(interaction, sharedState, 0, manual, 'manual');
+}
+
+async function showScheduledSelectPage(interaction, sharedState, page, list, mode) {
+    const { przypomnieniaMenedzer } = sharedState;
+
+    const ITEMS_PER_PAGE = 25;
+    const totalPages = Math.ceil(list.length / ITEMS_PER_PAGE);
+    const start = page * ITEMS_PER_PAGE;
+    const end = Math.min(start + ITEMS_PER_PAGE, list.length);
+    const pageItems = list.slice(start, end);
+
+    const options = pageItems.map(s => {
         const template = przypomnieniaMenedzer.getTemplate(s.templateId);
-        const templateName = template ? template.name : 'Unknown';
+        const templateName = template ? template.name : 'Nieznany';
+        const channel = interaction.guild?.channels.cache.get(s.channelId);
+        const channelName = channel ? channel.name : s.channelId;
         return {
-            label: `⏰ ${templateName}`.substring(0, 100),
-            description: `ID: ${s.id} - Następny: ${new Date(s.nextTrigger).toLocaleString('pl-PL')}`.substring(0, 100),
+            label: `${templateName} — #${channelName}`.substring(0, 100),
             value: s.id
         };
     });
 
+    const customIdPrefix = mode === 'manual' ? 'scheduled_select_manual_' : 'scheduled_select_edit_';
+    const pageButtonPrefix = mode === 'manual' ? 'scheduled_page_manual_' : 'scheduled_page_edit_';
+    const title = mode === 'manual' ? 'Wybierz manualne powiadomienie' : 'Wybierz zaplanowane przypomnienie';
+
     const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId(`scheduled_select_edit_${page}`)
-        .setPlaceholder(`Wybierz zaplanowane przypomnienie (${scheduled.length} łącznie)`)
+        .setCustomId(`${customIdPrefix}${page}`)
+        .setPlaceholder(`${title} (${list.length} łącznie)`)
         .addOptions(options);
 
     const rows = [new ActionRowBuilder().addComponents(selectMenu)];
 
-    // Pagination
     if (totalPages > 1) {
         const paginationRow = new ActionRowBuilder();
-
         if (page > 0) {
             paginationRow.addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`scheduled_page_edit_${page - 1}`)
+                    .setCustomId(`${pageButtonPrefix}${page - 1}`)
                     .setLabel('◀ Poprzednia')
                     .setStyle(ButtonStyle.Secondary)
             );
         }
-
         paginationRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('page_info')
@@ -1856,23 +2048,37 @@ async function handleEditScheduledButton(interaction, sharedState) {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(true)
         );
-
         if (page < totalPages - 1) {
             paginationRow.addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`scheduled_page_edit_${page + 1}`)
+                    .setCustomId(`${pageButtonPrefix}${page + 1}`)
                     .setLabel('Następna ▶')
                     .setStyle(ButtonStyle.Secondary)
             );
         }
-
         rows.push(paginationRow);
     }
 
     await interaction.update({
-        content: `**Wybierz zaplanowane przypomnienie** (${scheduled.length} łącznie)`,
+        content: `**${title}** (${list.length} łącznie)`,
         components: rows
     });
+}
+
+async function handleScheduledPageEdit(interaction, sharedState) {
+    const { przypomnieniaMenedzer } = sharedState;
+    const page = parseInt(interaction.customId.replace('scheduled_page_edit_', ''));
+    const allScheduled = przypomnieniaMenedzer.getAllScheduled();
+    const list = allScheduled.filter(s => !s.isManual && s.status !== 'manual');
+    await showScheduledSelectPage(interaction, sharedState, page, list, 'edit');
+}
+
+async function handleManualPageEdit(interaction, sharedState) {
+    const { przypomnieniaMenedzer } = sharedState;
+    const page = parseInt(interaction.customId.replace('scheduled_page_manual_', ''));
+    const allScheduled = przypomnieniaMenedzer.getAllScheduled();
+    const list = allScheduled.filter(s => s.isManual || s.status === 'manual');
+    await showScheduledSelectPage(interaction, sharedState, page, list, 'manual');
 }
 
 async function handleTemplatePagination(interaction, sharedState) {
