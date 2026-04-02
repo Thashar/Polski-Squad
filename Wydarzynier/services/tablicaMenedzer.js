@@ -563,7 +563,12 @@ class TablicaMenedzer {
                     .setCustomId('board_new_reminder')
                     .setLabel('Nowy szablon')
                     .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('➕')
+                    .setEmoji('➕'),
+                new ButtonBuilder()
+                    .setCustomId('board_put_list')
+                    .setLabel('Ustaw Listę')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('📋')
             );
 
         const row2 = new ActionRowBuilder()
@@ -599,16 +604,7 @@ class TablicaMenedzer {
                     .setEmoji('🗑️')
             );
 
-        const row4 = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('board_put_list')
-                    .setLabel('Ustaw Listę')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('📋')
-            );
-
-        return { embeds: [embed], components: [row1, row2, row3, row4] };
+        return { embeds: [embed], components: [row1, row2, row3] };
     }
 
     buildManualPanel() {
