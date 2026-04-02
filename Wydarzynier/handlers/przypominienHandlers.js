@@ -2249,7 +2249,7 @@ async function handleEditScheduledEdit(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setValue(scheduled.interval)
+        .setValue(scheduled.interval ?? '')
         .setRequired(false)
         .setMaxLength(10);
 
@@ -2578,7 +2578,7 @@ async function handleBoardScheduledEdit(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setValue(scheduled.interval)
+        .setValue(scheduled.interval ?? '')
         .setRequired(false)
         .setMaxLength(10);
 
