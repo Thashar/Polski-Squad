@@ -680,17 +680,25 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
 
     const typeInput = new TextInputBuilder()
         .setCustomId('type')
-        .setLabel('Typ: 0 = dopasowane | 1 = ustandaryzowane')
+        .setLabel('Ustandaryzowane? (TAK = tak, puste = dostosowane)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('0 lub 1')
-        .setValue('0')
-        .setRequired(true)
-        .setMaxLength(1);
+        .setPlaceholder('Wpisz TAK lub zostaw puste')
+        .setRequired(false)
+        .setMaxLength(3);
+
+    const manualInput = new TextInputBuilder()
+        .setCustomId('manual')
+        .setLabel('Tylko manualne? (TAK = tak, puste = z datą)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz TAK lub zostaw puste')
+        .setRequired(false)
+        .setMaxLength(3);
 
     modal.addComponents(
         new ActionRowBuilder().addComponents(firstTriggerInput),
         new ActionRowBuilder().addComponents(intervalInput),
-        new ActionRowBuilder().addComponents(typeInput)
+        new ActionRowBuilder().addComponents(typeInput),
+        new ActionRowBuilder().addComponents(manualInput)
     );
 
     await interaction.showModal(modal);
@@ -906,62 +914,60 @@ async function handleModalSubmit(interaction, sharedState) {
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
             const interval = interaction.fields.getTextInputValue('interval');
             const type = interaction.fields.getTextInputValue('type');
+            const manualStr = interaction.fields.getTextInputValue('manual').trim().toUpperCase();
+            const isManual = manualStr === 'TAK';
+            const isStandardized = type.trim().toUpperCase() === 'TAK';
 
-            // Walidacja typu
-            if (type !== '0' && type !== '1') {
-                await interaction.editReply({
-                    content: '❌ Nieprawidłowy typ. Użyj: 0 (dopasowane) lub 1 (ustandaryzowane)'
-                });
-                return;
-            }
-
-            // Parse firstTrigger z konwersją strefy czasowej Warsaw → UTC
-            const timezone = sharedState.strefaCzasowaManager.getGlobalTimezone();
-            const firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
-            if (isNaN(firstTrigger.getTime())) {
-                await interaction.editReply({
-                    content: '❌ Nieprawidłowy format daty. Użyj: RRRR-MM-DD GG:MM (np. 2026-03-20 10:00)'
-                });
-                return;
-            }
-
-            if (firstTrigger < new Date()) {
-                await interaction.editReply({
-                    content: '❌ Data pierwszego wyzwolenia nie może być w przeszłości.'
-                });
-                return;
-            }
-
-            // Validate interval (opcjonalne - puste = jednorazowe)
-            if (!przypomnieniaMenedzer.validateInterval(interval)) {
-                await interaction.editReply({
-                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
-                });
-                return;
-            }
-
-            // Jeśli podano interwał, sprawdź limit
-            if (interval && interval.trim() !== '') {
-                const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
-                const maxInterval = 90 * 24 * 60 * 60 * 1000;
-                if (intervalMs && intervalMs > maxInterval) {
+            let firstTrigger = null;
+            if (!isManual) {
+                // Parse firstTrigger z konwersją strefy czasowej Warsaw → UTC
+                const timezone = sharedState.strefaCzasowaManager.getGlobalTimezone();
+                firstTrigger = parseDateInTimezone(firstTriggerStr, timezone);
+                if (isNaN(firstTrigger.getTime())) {
                     await interaction.editReply({
-                        content: '❌ Interwał nie może przekraczać 90 dni.'
+                        content: '❌ Nieprawidłowy format daty. Użyj: RRRR-MM-DD GG:MM (np. 2026-03-20 10:00)'
                     });
                     return;
+                }
+
+                if (firstTrigger < new Date()) {
+                    await interaction.editReply({
+                        content: '❌ Data pierwszego wyzwolenia nie może być w przeszłości.'
+                    });
+                    return;
+                }
+
+                // Validate interval (opcjonalne - puste = jednorazowe)
+                if (!przypomnieniaMenedzer.validateInterval(interval)) {
+                    await interaction.editReply({
+                        content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
+                    });
+                    return;
+                }
+
+                // Jeśli podano interwał, sprawdź limit
+                if (interval && interval.trim() !== '') {
+                    const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
+                    const maxInterval = 90 * 24 * 60 * 60 * 1000;
+                    if (intervalMs && intervalMs > maxInterval) {
+                        await interaction.editReply({
+                            content: '❌ Interwał nie może przekraczać 90 dni.'
+                        });
+                        return;
+                    }
                 }
             }
 
             const sessionId = Date.now().toString();
 
-            // TYP 1 = USTANDARYZOWANE (kanał z Listą Eventów, tylko pingi)
-            if (type === '1') {
+            // USTANDARYZOWANE (kanał z Listą Eventów, tylko pingi)
+            if (isStandardized) {
                 const { eventMenedzer } = sharedState;
                 const eventListChannelId = eventMenedzer.getListChannelId();
 
                 if (!eventListChannelId) {
                     await interaction.editReply({
-                        content: '❌ Kanał z Listą Eventów nie został ustawiony. Użyj typu 0 (dopasowane) lub ustaw kanał listy eventów.'
+                        content: '❌ Kanał z Listą Eventów nie został ustawiony. Użyj opcji dostosowanej lub ustaw kanał listy eventów.'
                     });
                     return;
                 }
@@ -970,10 +976,11 @@ async function handleModalSubmit(interaction, sharedState) {
                 userStates.set(interaction.user.id, {
                     sessionId,
                     templateId,
-                    firstTrigger: firstTrigger.toISOString(),
-                    interval,
+                    firstTrigger: firstTrigger ? firstTrigger.toISOString() : null,
+                    interval: isManual ? null : interval,
                     channelId: eventListChannelId,
                     notificationType: 1,
+                    isManual,
                     step: 'select_roles'
                 });
 
@@ -1002,15 +1009,16 @@ async function handleModalSubmit(interaction, sharedState) {
                     components: [row1, row2]
                 });
             }
-            // TYP 0 = DOPASOWANE (wybór kanału + pingi)
+            // DOSTOSOWANE (wybór kanału + pingi)
             else {
                 // Store in user state for channel/role selection
                 userStates.set(interaction.user.id, {
                     sessionId,
                     templateId,
-                    firstTrigger: firstTrigger.toISOString(),
-                    interval,
+                    firstTrigger: firstTrigger ? firstTrigger.toISOString() : null,
+                    interval: isManual ? null : interval,
                     notificationType: 0,
+                    isManual,
                     step: 'select_channel'
                 });
 
@@ -1222,12 +1230,12 @@ async function handleModalSubmit(interaction, sharedState) {
                 return;
             }
 
-            const intervalMs = eventMenedzer.parseInterval(interval);
+            const intervalMs = (interval && interval.trim() !== '') ? eventMenedzer.parseInterval(interval) : null;
 
             await eventMenedzer.updateEvent(eventId, {
                 name,
                 firstTrigger: firstTrigger.toISOString(),
-                interval,
+                interval: interval && interval.trim() !== '' ? interval : null,
                 intervalMs,
                 nextTrigger: firstTrigger.toISOString()
             });
@@ -1401,6 +1409,10 @@ async function createScheduledFromUserState(interaction, sharedState, userState)
             userState.roles || [],
             userState.notificationType || 0
         );
+
+        if (userState.isManual) {
+            await przypomnieniaMenedzer.updateScheduled(scheduled.id, { isManual: true, status: 'manual' });
+        }
 
         // Get scheduled with template for board embed
         const scheduledWithTemplate = przypomnieniaMenedzer.getScheduledWithTemplate(scheduled.id);
