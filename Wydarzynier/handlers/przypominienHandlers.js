@@ -2165,7 +2165,7 @@ async function handleBoardScheduledSend(interaction, sharedState) {
             content += template.text;
         } else if (template.type === 'embed') {
             const now = new Date();
-            const timeStr = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+            const timeStr = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
 
             const embed = new EmbedBuilder()
                 .setDescription(template.embedDescription)
