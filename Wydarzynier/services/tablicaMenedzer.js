@@ -617,8 +617,8 @@ class TablicaMenedzer {
         const guildId = this.boardChannel?.guild?.id;
         const boardChannelId = this.boardChannel?.id;
 
-        const buildScheduledLines = (list) => {
-            if (list.length === 0) return '_Brak_';
+        const buildScheduledFields = (list, title) => {
+            if (list.length === 0) return [{ name: title, value: '_Brak_', inline: false }];
             const lines = list.map(s => {
                 const name = s.template?.name ?? 'Nieznany szablon';
                 const link = s.boardMessageId && guildId && boardChannelId
@@ -629,16 +629,23 @@ class TablicaMenedzer {
                     : '';
                 return `**${name}**:${timestamp ? ' ' + timestamp : ''} ${link}`;
             });
-            let result = '';
+            const fields = [];
+            let current = '';
             for (const line of lines) {
-                const next = result ? result + '\n' + line : line;
-                if (next.length > 1020) {
-                    result += `\n_...i więcej_`;
-                    break;
+                const next = current ? current + '\n' + line : line;
+                if (next.length > 1024) {
+                    fields.push(current);
+                    current = line;
+                } else {
+                    current = next;
                 }
-                result = next;
             }
-            return result;
+            if (current) fields.push(current);
+            return fields.map((value, i) => ({
+                name: i === 0 ? title : '\u200b',
+                value,
+                inline: false
+            }));
         };
 
         const sortByNextTrigger = (a, b) => new Date(a.nextTrigger || 0) - new Date(b.nextTrigger || 0);
@@ -659,21 +666,9 @@ class TablicaMenedzer {
                     value: `📚 Szablony: **${templates.length}**\n🔔 Aktywne powiadomienia: **${activeScheduled.length}**\n📅 Eventy: **${events.length}**`,
                     inline: false
                 },
-                {
-                    name: `🔄 Aktywne powiadomienia cykliczne (${recurring.length})`,
-                    value: buildScheduledLines(recurring),
-                    inline: false
-                },
-                {
-                    name: `⏰ Powiadomienia jednorazowe (${oneTime.length})`,
-                    value: buildScheduledLines(oneTime),
-                    inline: false
-                },
-                {
-                    name: `⏸️ Powiadomienia wstrzymane (${paused.length})`,
-                    value: buildScheduledLines(paused),
-                    inline: false
-                }
+                ...buildScheduledFields(recurring, `🔄 Aktywne powiadomienia cykliczne (${recurring.length})`),
+                ...buildScheduledFields(oneTime, `⏰ Powiadomienia jednorazowe (${oneTime.length})`),
+                ...buildScheduledFields(paused, `⏸️ Powiadomienia wstrzymane (${paused.length})`)
             )
             .setFooter({ text: 'System Przypomnień' });
 
