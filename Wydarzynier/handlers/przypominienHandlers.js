@@ -1097,8 +1097,9 @@ async function handleModalSubmit(interaction, sharedState) {
             }
 
             // Jeśli podano interwał, sprawdź limit
+            let intervalMs = null;
             if (interval && interval.trim() !== '') {
-                const intervalMs = przypomnieniaMenedzer.parseInterval(interval);
+                intervalMs = przypomnieniaMenedzer.parseInterval(interval);
                 const maxInterval = 90 * 24 * 60 * 60 * 1000;
                 if (intervalMs && intervalMs > maxInterval) {
                     await interaction.editReply({
