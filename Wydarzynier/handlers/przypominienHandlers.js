@@ -622,21 +622,19 @@ async function handleNewReminderTypeSelect(interaction, sharedState) {
             .setPlaceholder('https://... (opcjonalne)')
             .setRequired(false);
 
-        const colorInput = new TextInputBuilder()
-            .setCustomId('embedColor')
-            .setLabel('Embed color (hex)')
+        const imageInput = new TextInputBuilder()
+            .setCustomId('embedImage')
+            .setLabel('Obraz embed (URL)')
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('#5865F2 or 5865F2 (default: #5865F2)')
-            .setValue('5865F2')
-            .setRequired(false)
-            .setMaxLength(7);
+            .setPlaceholder('https://... (opcjonalne)')
+            .setRequired(false);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(nameInput),
             new ActionRowBuilder().addComponents(titleInput),
             new ActionRowBuilder().addComponents(descInput),
             new ActionRowBuilder().addComponents(iconInput),
-            new ActionRowBuilder().addComponents(colorInput)
+            new ActionRowBuilder().addComponents(imageInput)
         );
 
         await interaction.showModal(modal);
@@ -880,19 +878,7 @@ async function handleModalSubmit(interaction, sharedState) {
             const embedTitle = interaction.fields.getTextInputValue('embedTitle');
             const embedDescription = interaction.fields.getTextInputValue('embedDescription');
             const embedIcon = interaction.fields.getTextInputValue('embedIcon') || null;
-            let embedColor = interaction.fields.getTextInputValue('embedColor') || '5865F2';
-
-            // Parse hex color - remove # if present
-            embedColor = embedColor.replace('#', '').toUpperCase();
-
-            // Validate hex color (6 characters, 0-9 A-F)
-            if (!/^[0-9A-F]{6}$/.test(embedColor)) {
-                await interaction.reply({
-                    content: '❌ Nieprawidłowy format koloru hex. Użyj 6 znaków (np. 5865F2 lub #5865F2)',
-                    ephemeral: true
-                });
-                return;
-            }
+            const embedImage = interaction.fields.getTextInputValue('embedImage') || null;
 
             const sessionId = Date.now().toString();
             userStates.set(interaction.user.id, {
@@ -902,7 +888,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 embedTitle,
                 embedDescription,
                 embedIcon,
-                embedColor
+                embedImage
             });
 
             await showTemplatePreview(interaction, {
@@ -911,7 +897,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 embedTitle,
                 embedDescription,
                 embedIcon,
-                embedColor
+                embedImage
             }, sessionId);
         }
         // Set reminder schedule
@@ -1064,26 +1050,14 @@ async function handleModalSubmit(interaction, sharedState) {
                 const embedTitle = interaction.fields.getTextInputValue('embedTitle');
                 const embedDescription = interaction.fields.getTextInputValue('embedDescription');
                 const embedIcon = interaction.fields.getTextInputValue('embedIcon') || null;
-                let embedColor = interaction.fields.getTextInputValue('embedColor') || '5865F2';
-
-                // Parse hex color - remove # if present
-                embedColor = embedColor.replace('#', '').toUpperCase();
-
-                // Validate hex color (6 characters, 0-9 A-F)
-                if (!/^[0-9A-F]{6}$/.test(embedColor)) {
-                    await interaction.editReply({
-                        content: '❌ Nieprawidłowy format koloru hex. Użyj 6 znaków (np. 5865F2 lub #5865F2)',
-                        components: []
-                    });
-                    return;
-                }
+                const embedImage = interaction.fields.getTextInputValue('embedImage') || null;
 
                 await przypomnieniaMenedzer.updateTemplate(templateId, {
                     name,
                     embedTitle,
                     embedDescription,
                     embedIcon,
-                    embedColor
+                    embedImage
                 });
                 await tablicaMenedzer.ensureControlPanel();
                 await interaction.deleteReply();
@@ -1272,13 +1246,12 @@ async function showTemplatePreview(interaction, data, sessionId) {
     if (data.type === 'text') {
         previewContent += `\n\n${data.text}`;
     } else {
-        const colorHex = parseInt(data.embedColor || '5865F2', 16);
         const embed = new EmbedBuilder()
-            .setDescription(data.embedDescription)
-            .setColor(colorHex);
+            .setDescription(data.embedDescription);
 
         if (data.embedTitle) embed.setTitle(data.embedTitle);
         if (data.embedIcon) embed.setThumbnail(data.embedIcon);
+        if (data.embedImage) embed.setImage(data.embedImage);
 
         embeds.push(embed);
     }
@@ -1320,13 +1293,12 @@ async function showTemplateEditPreview(interaction, template) {
     if (template.type === 'text') {
         content += `\n\n${template.text}`;
     } else {
-        const colorHex = parseInt(template.embedColor || '5865F2', 16);
         const embed = new EmbedBuilder()
-            .setDescription(template.embedDescription)
-            .setColor(colorHex);
+            .setDescription(template.embedDescription);
 
         if (template.embedTitle) embed.setTitle(template.embedTitle);
         if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+        if (template.embedImage) embed.setImage(template.embedImage);
 
         embeds.push(embed);
     }
@@ -1374,13 +1346,12 @@ async function showScheduledEditPreview(interaction, scheduled, sharedState) {
     if (template.type === 'text') {
         content += `\n\n${template.text}`;
     } else {
-        const colorHex = parseInt(template.embedColor || '5865F2', 16);
         const embed = new EmbedBuilder()
-            .setDescription(template.embedDescription)
-            .setColor(colorHex);
+            .setDescription(template.embedDescription);
 
         if (template.embedTitle) embed.setTitle(template.embedTitle);
         if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+        if (template.embedImage) embed.setImage(template.embedImage);
 
         embeds.push(embed);
     }
@@ -1495,7 +1466,7 @@ async function handleTemplatePreviewApprove(interaction, sharedState) {
                     embedTitle: userState.embedTitle,
                     embedDescription: userState.embedDescription,
                     embedIcon: userState.embedIcon,
-                    embedColor: userState.embedColor
+                    embedImage: userState.embedImage
                 }
             );
         }
@@ -1503,7 +1474,7 @@ async function handleTemplatePreviewApprove(interaction, sharedState) {
         userStates.delete(interaction.user.id);
 
         await interaction.editReply({
-            content: `✅ Szablon **${template.name}** został utworzony!\n🆔 ID: ${template.id}\n\nUżyj \`/set-reminder\` aby zaplanować przypomnienia.`,
+            content: `✅ Szablon **${template.name}** został utworzony!\n🆔 ID: ${template.id}`,
             embeds: [],
             components: []
         });
@@ -1613,21 +1584,20 @@ async function handleTemplatePreviewEdit(interaction, sharedState) {
             .setValue(userState.embedIcon || '')
             .setRequired(false);
 
-        const colorInput = new TextInputBuilder()
-            .setCustomId('embedColor')
-            .setLabel('Embed color (hex)')
+        const imageInput = new TextInputBuilder()
+            .setCustomId('embedImage')
+            .setLabel('Obraz embed (URL)')
             .setStyle(TextInputStyle.Short)
-            .setValue(userState.embedColor || '5865F2')
-            .setPlaceholder('#5865F2 lub 5865F2')
-            .setRequired(false)
-            .setMaxLength(7);
+            .setValue(userState.embedImage || '')
+            .setPlaceholder('https://... (opcjonalne)')
+            .setRequired(false);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(nameInput),
             new ActionRowBuilder().addComponents(titleInput),
             new ActionRowBuilder().addComponents(descInput),
             new ActionRowBuilder().addComponents(iconInput),
-            new ActionRowBuilder().addComponents(colorInput)
+            new ActionRowBuilder().addComponents(imageInput)
         );
 
         await interaction.showModal(modal);
@@ -1844,21 +1814,20 @@ async function handleEditTemplateEdit(interaction, sharedState) {
             .setValue(template.embedIcon || '')
             .setRequired(false);
 
-        const colorInput = new TextInputBuilder()
-            .setCustomId('embedColor')
-            .setLabel('Embed color (hex)')
+        const imageInput = new TextInputBuilder()
+            .setCustomId('embedImage')
+            .setLabel('Obraz embed (URL)')
             .setStyle(TextInputStyle.Short)
-            .setValue(template.embedColor || '5865F2')
-            .setPlaceholder('#5865F2 lub 5865F2')
-            .setRequired(false)
-            .setMaxLength(7);
+            .setValue(template.embedImage || '')
+            .setPlaceholder('https://... (opcjonalne)')
+            .setRequired(false);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(nameInput),
             new ActionRowBuilder().addComponents(titleInput),
             new ActionRowBuilder().addComponents(descInput),
             new ActionRowBuilder().addComponents(iconInput),
-            new ActionRowBuilder().addComponents(colorInput)
+            new ActionRowBuilder().addComponents(imageInput)
         );
 
         await interaction.showModal(modal);
@@ -2144,14 +2113,13 @@ async function handleBoardScheduledPreview(interaction, sharedState) {
         if (template.type === 'text') {
             content += template.text;
         } else if (template.type === 'embed') {
-            const colorHex = parseInt(template.embedColor || '5865F2', 16);
             const embed = new EmbedBuilder()
                 .setDescription(template.embedDescription)
-                .setColor(colorHex)
                 .setTimestamp();
 
             if (template.embedTitle) embed.setTitle(template.embedTitle);
             if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+            if (template.embedImage) embed.setImage(template.embedImage);
             embeds.push(embed);
         }
 
@@ -2195,17 +2163,16 @@ async function handleBoardScheduledSend(interaction, sharedState) {
         if (template.type === 'text') {
             content += template.text;
         } else if (template.type === 'embed') {
-            const colorHex = parseInt(template.embedColor || '5865F2', 16);
             const now = new Date();
             const timeStr = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
 
             const embed = new EmbedBuilder()
                 .setDescription(template.embedDescription)
-                .setColor(colorHex)
                 .setFooter({ text: `Wysłał ${interaction.user.displayName} • ${timeStr}` });
 
             if (template.embedTitle) embed.setTitle(template.embedTitle);
             if (template.embedIcon) embed.setThumbnail(template.embedIcon);
+            if (template.embedImage) embed.setImage(template.embedImage);
             embeds.push(embed);
         }
 
