@@ -566,12 +566,12 @@ class TablicaMenedzer {
                     .setEmoji('➕'),
                 new ButtonBuilder()
                     .setCustomId('board_set_reminder')
-                    .setLabel('Ustaw Przypomnienie')
+                    .setLabel('Ustaw')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('⏰'),
                 new ButtonBuilder()
                     .setCustomId('board_edit_reminder')
-                    .setLabel('Edytuj Przypomnienie')
+                    .setLabel('Edytuj')
                     .setStyle(ButtonStyle.Primary)
                     .setEmoji('✏️')
             );
@@ -580,19 +580,19 @@ class TablicaMenedzer {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('board_add_event')
-                    .setLabel('Dodaj Event')
+                    .setLabel('Nowy Event')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('📅'),
                 new ButtonBuilder()
-                    .setCustomId('board_delete_event')
-                    .setLabel('Usuń Event')
-                    .setStyle(ButtonStyle.Danger)
-                    .setEmoji('🗑️'),
-                new ButtonBuilder()
                     .setCustomId('board_edit_event')
-                    .setLabel('Edytuj Event')
+                    .setLabel('Edytuj')
                     .setStyle(ButtonStyle.Primary)
                     .setEmoji('✏️'),
+                new ButtonBuilder()
+                    .setCustomId('board_delete_event')
+                    .setLabel('Usuń')
+                    .setStyle(ButtonStyle.Danger)
+                    .setEmoji('🗑️'),
                 new ButtonBuilder()
                     .setCustomId('board_put_list')
                     .setLabel('Ustaw Listę')
