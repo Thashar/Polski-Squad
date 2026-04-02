@@ -617,17 +617,17 @@ class TablicaMenedzer {
         const guildId = this.boardChannel?.guild?.id;
         const boardChannelId = this.boardChannel?.id;
 
-        const buildScheduledFields = (list, title) => {
+        const buildScheduledFields = (list, title, showChannel = false) => {
             if (list.length === 0) return [{ name: title, value: '_Brak_', inline: false }];
             const lines = list.map(s => {
                 const name = s.template?.name ?? 'Nieznany szablon';
                 const link = s.boardMessageId && guildId && boardChannelId
                     ? `[🔗 Szczegóły](https://discord.com/channels/${guildId}/${boardChannelId}/${s.boardMessageId})`
                     : '🔗 Szczegóły';
-                const timestamp = s.nextTrigger
-                    ? `<t:${Math.floor(new Date(s.nextTrigger).getTime() / 1000)}:R>`
-                    : '';
-                return `**${name}**:${timestamp ? ' ' + timestamp : ''} ${link}`;
+                const info = showChannel
+                    ? (s.channelId ? `<#${s.channelId}>` : '')
+                    : (s.nextTrigger ? `<t:${Math.floor(new Date(s.nextTrigger).getTime() / 1000)}:R>` : '');
+                return `**${name}**:${info ? ' ' + info : ''} ${link}`;
             });
             const fields = [];
             let current = '';
@@ -670,7 +670,7 @@ class TablicaMenedzer {
                 ...buildScheduledFields(recurring, `🔄 Aktywne powiadomienia cykliczne (${recurring.length})`),
                 ...buildScheduledFields(oneTime, `⏰ Powiadomienia jednorazowe (${oneTime.length})`),
                 ...buildScheduledFields(paused, `⏸️ Powiadomienia wstrzymane (${paused.length})`),
-                ...buildScheduledFields(manual, `🖐️ Powiadomienia manualne (${manual.length})`)
+                ...buildScheduledFields(manual, `🖐️ Powiadomienia manualne (${manual.length})`, true)
             )
             .setFooter({ text: 'System Przypomnień' });
 
