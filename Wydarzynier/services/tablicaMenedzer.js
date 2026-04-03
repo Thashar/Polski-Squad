@@ -351,6 +351,8 @@ class TablicaMenedzer {
         } catch (error) {
             this.logger.error('Nie udało się zainicjalizować panelu kontrolnego:', error);
         }
+
+        await this.ensureManualPanel();
     }
 
     // Utwórz lub zaktualizuj panel kontrolny (używane w trakcie działania - przenosi na dół)
