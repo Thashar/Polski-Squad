@@ -532,12 +532,13 @@ class TablicaMenedzer {
 
         const sortByNextTrigger = (a, b) => new Date(a.nextTrigger || 0) - new Date(b.nextTrigger || 0);
 
-        const recurring = allScheduled.filter(s => s.status === 'active' && !s.isManual && s.interval && !s.isOneTime).sort(sortByNextTrigger);
-        const oneTime   = allScheduled.filter(s => s.status === 'active' && !s.isManual && (!s.interval || s.isOneTime)).sort(sortByNextTrigger);
-        const paused    = allScheduled.filter(s => s.status === 'paused' && !s.isManual).sort(sortByNextTrigger);
-        const manual    = allScheduled.filter(s => s.isManual);
+        const isManual  = s => s.isManual || s.status === 'manual';
+        const recurring = allScheduled.filter(s => s.status === 'active' && !isManual(s) && s.interval && !s.isOneTime).sort(sortByNextTrigger);
+        const oneTime   = allScheduled.filter(s => s.status === 'active' && !isManual(s) && (!s.interval || s.isOneTime)).sort(sortByNextTrigger);
+        const paused    = allScheduled.filter(s => s.status === 'paused' && !isManual(s)).sort(sortByNextTrigger);
+        const manual    = allScheduled.filter(s => isManual(s));
 
-        const activeScheduled = allScheduled.filter(s => s.status === 'active' && !s.isManual);
+        const activeScheduled = allScheduled.filter(s => s.status === 'active' && !isManual(s));
 
         const embed = new EmbedBuilder()
             .setColor(0xED4245) // Czerwony
@@ -610,7 +611,7 @@ class TablicaMenedzer {
         const allScheduled = this.przypomnieniaMenedzer.getAllScheduledWithTemplates();
         this.logger.info(`[ManualPanel] Wszystkich scheduled: ${allScheduled.length}, z isManual: ${allScheduled.filter(s => s.isManual).length}`);
         allScheduled.forEach(s => this.logger.info(`[ManualPanel] id=${s.id} isManual=${s.isManual} status=${s.status} template=${s.template?.name}`));
-        const manual = allScheduled.filter(s => s.isManual);
+        const manual = allScheduled.filter(s => s.isManual || s.status === 'manual');
         if (manual.length === 0) return null;
 
         const rows = [];
