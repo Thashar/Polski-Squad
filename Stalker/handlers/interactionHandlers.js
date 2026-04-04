@@ -3002,6 +3002,12 @@ async function handleKalkulatorHelpButton(interaction, sharedState) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const member = await interaction.guild.members.fetch(interaction.user.id);
+
+        if (!member.roles.cache.has('1486506395057524887')) {
+            await interaction.editReply({ content: '❌ Nie masz uprawnień do używania tego przycisku.' });
+            return;
+        }
+
         const helperNick = member.displayName || interaction.user.username;
 
         const request = await sharedState.kalkulatorEmbedService.assignHelper(
