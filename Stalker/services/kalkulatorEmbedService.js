@@ -91,13 +91,9 @@ class KalkulatorEmbedService {
         let requestsText = '*Brak aktywnych próśb o kalkulację*';
         if (sortedRequests.length > 0) {
             requestsText = sortedRequests.map(req => {
-                const rankPos = rankingMap.get(req.userId);
-                const rankStr = rankPos ? `#${rankPos}` : '#?';
-                const date = new Date(req.addedAt).toLocaleString('pl-PL', {
-                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                });
+                const timestamp = Math.floor(new Date(req.addedAt).getTime() / 1000);
                 const beingHelped = this.data.helpers.some(h => h.requestUserId === req.userId);
-                return `${rankStr} **${req.userNick}**${beingHelped ? ' 🔄' : ''} • ${req.points} pkt • ${date}`;
+                return `**${req.userNick}**${beingHelped ? ' 🔄' : ''} • <t:${timestamp}:f>`;
             }).join('\n');
         }
 
@@ -113,10 +109,11 @@ class KalkulatorEmbedService {
         }
 
         return new EmbedBuilder()
-            .setTitle('🧮 Dzielenie Mocą Obliczeniową Kalkulatora')
+            .setTitle('🧮 Lista osób proszących o pomoc')
             .setDescription(
-                'System dzielenia zasobami kalkulatora między członkami klanu.\n' +
-                'Użyj przycisków poniżej aby poprosić o kalkulację lub pomóc innym.'
+                'System pomocy w kalkulacji kalkulatora.\n' +
+                'Użyj przycisków poniżej aby poprosić o kalkulację lub pomóc innym.\n' +
+                'Aby pomagać musisz posiadać specjalną rolę, którą może nadać tylko administrator.'
             )
             .setColor(0x2ECC71)
             .addFields(
