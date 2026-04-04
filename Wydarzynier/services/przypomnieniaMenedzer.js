@@ -45,7 +45,7 @@ function addOneMonthWarsaw(dateUTC, originalDay) {
     return warsawComponentsToUTC(nextYear, nextMonth, actualDay, hours, minutes, seconds);
 }
 
-
+class PrzypomnieniaMenedzer {
     constructor(config, logger) {
         this.config = config;
         this.logger = logger;
