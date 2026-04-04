@@ -36,13 +36,6 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logger.info(`Bot zalogowany jako ${client.user.tag}`);
-    logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
-
-    client.guilds.cache.forEach(guild => {
-        logger.info(`- ${guild.name} (${guild.id})`);
-    });
-
     // Załaduj dane
     try {
         lastReminderMap = await reminderStorage.loadReminders();
@@ -64,8 +57,6 @@ client.once(Events.ClientReady, async () => {
     }, {
         timezone: "Europe/Warsaw"
     });
-
-    logger.info(`📅 Zaplanowano sprawdzanie wątków: codziennie o ${config.timing.checkHour}:${config.timing.checkMinute.toString().padStart(2, '0')} (strefa: Europe/Warsaw)`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
