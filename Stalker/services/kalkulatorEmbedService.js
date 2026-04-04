@@ -135,12 +135,34 @@ class KalkulatorEmbedService {
             new ButtonBuilder()
                 .setCustomId('kalkulator_request')
                 .setLabel('Poproś o kalkulację')
+                .setEmoji('🧮')
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('kalkulator_help')
                 .setLabel('Pomóż w przeliczeniu')
-                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🤝')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('kalkulator_delete')
+                .setLabel('Usuń prośbę')
+                .setEmoji('🗑️')
+                .setStyle(ButtonStyle.Danger)
         );
+    }
+
+    /**
+     * Usuwa prośbę użytkownika z systemu
+     */
+    async deleteRequest(userId, client) {
+        const exists = this.data.requests.some(r => r.userId === userId);
+        if (!exists) return false;
+
+        this.data.helpers = this.data.helpers.filter(h => h.requestUserId !== userId);
+        this.data.requests = this.data.requests.filter(r => r.userId !== userId);
+
+        await this.saveData();
+        await this.updateEmbed(client);
+        return true;
     }
 
     /**

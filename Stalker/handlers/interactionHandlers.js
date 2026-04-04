@@ -694,6 +694,10 @@ async function handleButton(interaction, sharedState) {
         await handleKalkulatorReturnButton(interaction, sharedState);
         return;
     }
+    if (interaction.customId === 'kalkulator_delete') {
+        await handleKalkulatorDeleteButton(interaction, sharedState);
+        return;
+    }
 
     // ============ BOROXONING - przyciski Tak/Nie ============
     if (interaction.customId === 'boroxoning_tak' || interaction.customId === 'boroxoning_nie') {
@@ -3070,6 +3074,30 @@ async function handleKalkulatorReturnButton(interaction, sharedState) {
         logger.error('[KalkulatorEmbed] Błąd zwracania kalkulacji:', error);
         try {
             await interaction.followUp({ content: '❌ Wystąpił błąd podczas zwracania.', flags: MessageFlags.Ephemeral });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorDeleteButton(interaction, sharedState) {
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const deleted = await sharedState.kalkulatorEmbedService.deleteRequest(
+            interaction.user.id, sharedState.client
+        );
+
+        if (!deleted) {
+            await interaction.editReply({ content: '❌ Nie masz aktywnej prośby o kalkulację.' });
+            return;
+        }
+
+        await interaction.editReply({ content: '✅ Twoja prośba o kalkulację została usunięta.' });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd usuwania prośby:', error);
+        try {
+            const msg = '❌ Wystąpił błąd podczas usuwania prośby.';
+            if (interaction.deferred) await interaction.editReply({ content: msg });
+            else await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
         } catch {}
     }
 }
