@@ -85,9 +85,6 @@ class PasswordSelectionService {
         const state = this.dataService.loadPasswordSelectionState();
         this.activeSelectionMessageId = state.activeSelectionMessageId || null;
 
-        if (this.activeSelectionMessageId) {
-            logger.info(`📂 Wczytano ID aktywnej wiadomości wyboru: ${this.activeSelectionMessageId}`);
-        }
     }
 }
 

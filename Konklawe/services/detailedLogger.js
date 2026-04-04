@@ -25,7 +25,6 @@ class DetailedLogger {
             }
 
             this.webhook = new WebhookClient({ url: this.webhookUrl });
-            logger.info(`📋 DetailedLogger zainicjalizowany - webhook połączony`);
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji DetailedLogger: ${error.message}`);
         }

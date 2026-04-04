@@ -102,9 +102,6 @@ class HintSelectionService {
         const state = this.dataService.loadHintSelectionState();
         this.activeSelectionMessageId = state.activeSelectionMessageId || null;
 
-        if (this.activeSelectionMessageId) {
-            logger.info(`📂 Wczytano ID aktywnej wiadomości wyboru podpowiedzi: ${this.activeSelectionMessageId}`);
-        }
     }
 }
 
