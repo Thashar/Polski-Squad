@@ -44,6 +44,17 @@ client.once(Events.ClientReady, async () => {
         logger.error('❌ Błąd ładowania danych przypomień:', error.message);
     }
 
+    // Policz wątki szkoleniowe
+    try {
+        const guild = client.guilds.cache.first();
+        const channel = await guild.channels.fetch(config.channels.training);
+        const activeThreads = await channel.threads.fetchActive();
+        const archivedThreads = await channel.threads.fetchArchived();
+        logger.info(`🧵 Wątki szkoleniowe: ${activeThreads.threads.size} otwartych, ${archivedThreads.threads.size} zamkniętych`);
+    } catch (error) {
+        logger.error('❌ Błąd pobierania wątków:', error.message);
+    }
+
     await registerSlashCommands(client);
 
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, AI Chat');
