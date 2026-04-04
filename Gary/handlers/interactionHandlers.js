@@ -69,14 +69,12 @@ class InteractionHandler {
         const rest = new REST({ version: '10' }).setToken(this.config.token);
         
         try {
-            this.logger.info('🔄 Registering slash commands...');
-            
             const data = await rest.put(
                 Routes.applicationCommands(this.config.clientId),
                 { body: this.commands.map(command => command.toJSON()) }
             );
-            
-            this.logger.info(`✅ Registered ${data.length} slash commands!`);
+
+            this.logger.info(`Registered ${data.length} slash commands`);
         } catch (error) {
             this.logger.error('❌ Error registering commands:', error);
         }
