@@ -152,38 +152,5 @@ module.exports = {
         passwords: Array.from({ length: 50 }, (_, i) => process.env[`HASLO${i + 1}`]).filter(Boolean)
     },
 
-    // Konfiguracja modułu Bomb Timer
-    bombTimer: {
-        controlChannelId: '1486510519119773818',
-        timerChannelId: '1486510420083740865'
-    },
-
-    // Konfiguracja modułu Button Order
-    buttonOrder: {
-        channelId: '1486582161627680789'
-    },
-
-    // Konfiguracja zagadki reakcji
-    reactionPuzzle: {
-        channelId: '1486582292964184206'
-    },
-
-    // Konfiguracja zagadki EMPTY
-    emptyPuzzle: {
-        channelId: '1486582235816530113'
-    },
-
-    // Konfiguracja zagadki Echo
-    echoPuzzle: {
-        channelId: '1486506666831773877'
-    },
-
-    // Konfiguracja gorącego kartofla
-    hotPotato: {
-        mainChannelId:   '1486582331278889040',
-        potatoChannelId: '1486848827997818900',
-        roleId:          '1486506395057524887'
-    },
-
     messages
 };
