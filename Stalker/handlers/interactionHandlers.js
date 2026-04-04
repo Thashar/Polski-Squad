@@ -621,6 +621,10 @@ async function handleDebugRolesCommand(interaction, config, reminderUsageService
 }
 
 async function handleSelectMenu(interaction, config, reminderService, sharedState) {
+    if (interaction.customId === 'kalkulator_delete_select') {
+        await handleKalkulatorDeleteSelect(interaction, sharedState);
+        return;
+    }
     if (interaction.customId === 'reminder_role_select') {
         const selectedRole = interaction.values[0];
         const roleId = config.targetRoles[selectedRole];
@@ -696,6 +700,22 @@ async function handleButton(interaction, sharedState) {
     }
     if (interaction.customId === 'kalkulator_delete') {
         await handleKalkulatorDeleteButton(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId === 'kalkulator_my_history') {
+        await handleKalkulatorMyHistoryButton(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId === 'kalkulator_delete_entry') {
+        await handleKalkulatorDeleteEntryButton(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId.startsWith('kalkulator_del_confirm_')) {
+        await handleKalkulatorDelConfirm(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId === 'kalkulator_del_cancel') {
+        await interaction.update({ content: '❌ Anulowano usuwanie.', components: [] });
         return;
     }
 
@@ -3051,29 +3071,197 @@ async function handleKalkulatorHelpButton(interaction, sharedState) {
 }
 
 async function handleKalkulatorReturnButton(interaction, sharedState) {
+    // Sprawdź czy pomocnik ma aktywne przydzielenie
+    const helper = sharedState.kalkulatorEmbedService.getHelperByHelperId(interaction.user.id);
+    if (!helper) {
+        await interaction.reply({
+            content: '❌ Nie znaleziono aktywnego przydzielenia. Możliwe, że zostało już zakończone.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    const modal = new ModalBuilder()
+        .setCustomId(`kalkulator_return_modal_${interaction.user.id}`)
+        .setTitle('Zwróć przeliczony kalkulator');
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('kalkulator_return_link')
+                .setLabel('Link do przeliczonego kalkulatora')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('https://...')
+                .setRequired(true)
+                .setMaxLength(500)
+        )
+    );
+
+    await interaction.showModal(modal);
+}
+
+async function handleKalkulatorReturnModalSubmit(interaction, sharedState) {
     try {
-        await interaction.deferUpdate();
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const returnLink = interaction.fields.getTextInputValue('kalkulator_return_link').trim();
 
         const result = await sharedState.kalkulatorEmbedService.completeHelp(
-            interaction.user.id, sharedState.client
+            interaction.user.id, returnLink, sharedState.client
         );
 
         if (!result) {
-            await interaction.followUp({
-                content: '❌ Nie znaleziono aktywnego przydzielenia. Możliwe, że zostało już zakończone.',
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: '❌ Nie znaleziono aktywnego przydzielenia. Możliwe, że zostało już zakończone.'
             });
             return;
         }
 
-        await interaction.followUp({
-            content: `✅ Gotowe! **${result.helper.requestUserNick}** otrzymał(a) prywatną wiadomość ze zwróconym linkiem.`,
-            flags: MessageFlags.Ephemeral
+        await interaction.editReply({
+            content: `✅ Gotowe! **${result.helper.requestUserNick}** otrzymał(a) prywatną wiadomość ze zwróconym linkiem.`
         });
     } catch (error) {
-        logger.error('[KalkulatorEmbed] Błąd zwracania kalkulacji:', error);
+        logger.error('[KalkulatorEmbed] Błąd zwracania kalkulacji (modal):', error);
         try {
-            await interaction.followUp({ content: '❌ Wystąpił błąd podczas zwracania.', flags: MessageFlags.Ephemeral });
+            const msg = '❌ Wystąpił błąd podczas zwracania.';
+            if (interaction.deferred) await interaction.editReply({ content: msg });
+            else await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorMyHistoryButton(interaction, sharedState) {
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const history = await sharedState.kalkulatorEmbedService.getUserHistory(interaction.user.id);
+
+        if (history.length === 0) {
+            await interaction.editReply({ content: '📊 Nie masz żadnych zapisanych przeliczeń.' });
+            return;
+        }
+
+        const listText = history.map((e, i) => {
+            const ts = Math.floor(new Date(e.completedAt).getTime() / 1000);
+            return `**${i + 1}.** ${e.returnLink} • ${e.points} pkt • <t:${ts}:f>`;
+        }).join('\n');
+
+        const deleteButton = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('kalkulator_delete_entry')
+                .setLabel('Usuń wpis')
+                .setEmoji('🗑️')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await interaction.editReply({
+            content: `📊 **Twoje przeliczenia:**\n\n${listText}`,
+            components: [deleteButton]
+        });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd pobierania historii:', error);
+        try {
+            if (interaction.deferred) await interaction.editReply({ content: '❌ Wystąpił błąd.' });
+            else await interaction.reply({ content: '❌ Wystąpił błąd.', flags: MessageFlags.Ephemeral });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorDeleteEntryButton(interaction, sharedState) {
+    try {
+        const history = await sharedState.kalkulatorEmbedService.getUserHistory(interaction.user.id);
+
+        if (history.length === 0) {
+            await interaction.update({ content: '📊 Brak wpisów do usunięcia.', components: [] });
+            return;
+        }
+
+        const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+
+        const options = history.map((e, i) => {
+            const ts = Math.floor(new Date(e.completedAt).getTime() / 1000);
+            const label = `${i + 1}. ${e.returnLink.slice(0, 60)}`;
+            const description = `${e.points} pkt — <t:${ts}:f>`;
+            return new StringSelectMenuOptionBuilder()
+                .setValue(e.id)
+                .setLabel(label.slice(0, 100))
+                .setDescription(description.slice(0, 100));
+        });
+
+        const selectRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('kalkulator_delete_select')
+                .setPlaceholder('Wybierz wpis do usunięcia')
+                .addOptions(options)
+        );
+
+        await interaction.update({
+            content: '🗑️ Wybierz wpis, który chcesz usunąć:',
+            components: [selectRow]
+        });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd wyświetlania listy do usunięcia:', error);
+        try {
+            await interaction.update({ content: '❌ Wystąpił błąd.', components: [] });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorDeleteSelect(interaction, sharedState) {
+    try {
+        const entryId = interaction.values[0];
+        const history = await sharedState.kalkulatorEmbedService.getUserHistory(interaction.user.id);
+        const entry = history.find(e => e.id === entryId);
+
+        if (!entry) {
+            await interaction.update({ content: '❌ Nie znaleziono wpisu.', components: [] });
+            return;
+        }
+
+        const ts = Math.floor(new Date(entry.completedAt).getTime() / 1000);
+        const confirmRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`kalkulator_del_confirm_${entryId}`)
+                .setLabel('Tak, usuń')
+                .setEmoji('✅')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('kalkulator_del_cancel')
+                .setLabel('Nie, anuluj')
+                .setEmoji('❌')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.update({
+            content:
+                `⚠️ Czy na pewno chcesz usunąć ten wpis?\n\n` +
+                `🔗 ${entry.returnLink}\n` +
+                `📊 ${entry.points} pkt • <t:${ts}:f>`,
+            components: [confirmRow]
+        });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd select usuń wpis:', error);
+        try {
+            await interaction.update({ content: '❌ Wystąpił błąd.', components: [] });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorDelConfirm(interaction, sharedState) {
+    try {
+        const entryId = interaction.customId.replace('kalkulator_del_confirm_', '');
+        const deleted = await sharedState.kalkulatorEmbedService.deleteHistoryEntry(interaction.user.id, entryId);
+
+        if (!deleted) {
+            await interaction.update({ content: '❌ Nie znaleziono wpisu lub brak uprawnień.', components: [] });
+            return;
+        }
+
+        await interaction.update({ content: '✅ Wpis został usunięty.', components: [] });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd potwierdzenia usunięcia:', error);
+        try {
+            await interaction.update({ content: '❌ Wystąpił błąd.', components: [] });
         } catch {}
     }
 }
@@ -3107,6 +3295,10 @@ async function handleKalkulatorDeleteButton(interaction, sharedState) {
 async function handleModalSubmit(interaction, sharedState) {
     if (interaction.customId === 'kalkulator_modal') {
         await handleKalkulatorModalSubmit(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId.startsWith('kalkulator_return_modal_')) {
+        await handleKalkulatorReturnModalSubmit(interaction, sharedState);
         return;
     }
     if (interaction.customId === 'decode_modal') {

@@ -3,6 +3,7 @@ const path = require('path');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const DATA_FILE = path.join(__dirname, '../data/kalkulator_embed.json');
+const HISTORY_FILE = path.join(__dirname, '../data/kalkulator_historia.json');
 const CALCULATOR_CHANNEL_ID = '1490035500126310460';
 
 class KalkulatorEmbedService {
@@ -143,7 +144,12 @@ class KalkulatorEmbedService {
                 .setCustomId('kalkulator_delete')
                 .setLabel('Usuń prośbę')
                 .setEmoji('🗑️')
-                .setStyle(ButtonStyle.Danger)
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('kalkulator_my_history')
+                .setLabel('Moje przeliczenia')
+                .setEmoji('📊')
+                .setStyle(ButtonStyle.Secondary)
         );
     }
 
@@ -259,7 +265,11 @@ class KalkulatorEmbedService {
      * Finalizuje pomoc: wysyła DM właścicielowi i usuwa wpisy.
      * Zwraca { helper, request } lub null.
      */
-    async completeHelp(helperId, client) {
+    /**
+     * Finalizuje pomoc: wysyła DM z podanym linkiem, zapisuje do historii i usuwa wpisy.
+     * returnLink — link wpisany przez pomocnika w modalu.
+     */
+    async completeHelp(helperId, returnLink, client) {
         const helper = this.data.helpers.find(h => h.helperId === helperId);
         if (!helper) return null;
 
@@ -271,23 +281,71 @@ class KalkulatorEmbedService {
         await this.saveData();
         await this.updateEmbed(client);
 
-        if (request) {
-            try {
-                const user = await client.users.fetch(helper.requestUserId);
-                await user.send(
-                    `✅ **${helper.helperNick}** przeliczył(a) Twój kalkulator!\n` +
-                    `🔗 Zwrócony link: ${request.link}`
-                );
-            } catch {
-                this.logger.warn(`[KalkulatorEmbed] Nie można wysłać DM do ${helper.requestUserId}`);
-            }
+        // Zapisz do historii
+        const historyEntry = {
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            ownerId: helper.requestUserId,
+            ownerNick: helper.requestUserNick,
+            helperId,
+            helperNick: helper.helperNick,
+            returnLink,
+            points: request?.points ?? '?',
+            completedAt: new Date().toISOString()
+        };
+        await this.addHistoryEntry(historyEntry);
+
+        // Wyślij DM do właściciela
+        try {
+            const user = await client.users.fetch(helper.requestUserId);
+            await user.send(
+                `✅ **${helper.helperNick}** przeliczył(a) Twój kalkulator!\n` +
+                `🔗 Zwrócony link: ${returnLink}`
+            );
+        } catch {
+            this.logger.warn(`[KalkulatorEmbed] Nie można wysłać DM do ${helper.requestUserId}`);
         }
 
-        return { helper, request };
+        return { helper, request, historyEntry };
     }
 
     getHelperByHelperId(helperId) {
         return this.data.helpers.find(h => h.helperId === helperId);
+    }
+
+    // ── Historia przeliczeń ───────────────────────────────────────────
+
+    async loadHistory() {
+        try {
+            const raw = await fs.readFile(HISTORY_FILE, 'utf8');
+            return JSON.parse(raw);
+        } catch {
+            return [];
+        }
+    }
+
+    async saveHistory(history) {
+        await fs.mkdir(path.dirname(HISTORY_FILE), { recursive: true });
+        await fs.writeFile(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+    }
+
+    async addHistoryEntry(entry) {
+        const history = await this.loadHistory();
+        history.push(entry);
+        await this.saveHistory(history);
+    }
+
+    async getUserHistory(userId) {
+        const history = await this.loadHistory();
+        return history.filter(e => e.ownerId === userId);
+    }
+
+    async deleteHistoryEntry(userId, entryId) {
+        const history = await this.loadHistory();
+        const idx = history.findIndex(e => e.id === entryId && e.ownerId === userId);
+        if (idx === -1) return false;
+        history.splice(idx, 1);
+        await this.saveHistory(history);
+        return true;
     }
 }
 
