@@ -3034,9 +3034,18 @@ async function handleKalkulatorHelpButton(interaction, sharedState) {
 
         const helperNick = member.displayName || interaction.user.username;
 
-        const request = await sharedState.kalkulatorEmbedService.assignHelper(
-            interaction.user.id, helperNick, sharedState.client, interaction.guild
-        );
+        // Sprawdź czy pomocnik ma już aktywne przydzielenie — jeśli tak, pokaż je ponownie
+        const existingHelper = sharedState.kalkulatorEmbedService.getHelperByHelperId(interaction.user.id);
+        let request;
+        if (existingHelper) {
+            request = sharedState.kalkulatorEmbedService.data.requests.find(
+                r => r.userId === existingHelper.requestUserId
+            );
+        } else {
+            request = await sharedState.kalkulatorEmbedService.assignHelper(
+                interaction.user.id, helperNick, sharedState.client, interaction.guild
+            );
+        }
 
         if (!request) {
             await interaction.editReply({
@@ -3054,7 +3063,7 @@ async function handleKalkulatorHelpButton(interaction, sharedState) {
 
         await interaction.editReply({
             content:
-                `✅ Przydzielono Ci kalkulację od **${request.userNick}**!\n\n` +
+                `${existingHelper ? '🔄 Twoje aktywne przydzielenie:' : `✅ Przydzielono Ci kalkulację od **${request.userNick}**!`}\n\n` +
                 `🔗 **Link:** ${request.link}\n` +
                 `📊 **Punkty:** ${request.points}\n\n` +
                 `Po przeliczeniu kliknij przycisk poniżej, aby zwrócić link właścicielowi.`,
