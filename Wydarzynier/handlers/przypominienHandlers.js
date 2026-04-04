@@ -873,11 +873,20 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
         .setRequired(false)
         .setMaxLength(3);
 
+    const monthlyDayInput = new TextInputBuilder()
+        .setCustomId('monthlyDay')
+        .setLabel('Powtarzaj tego samego dnia miesiąca?')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Wpisz TAK lub zostaw puste')
+        .setRequired(false)
+        .setMaxLength(3);
+
     modal.addComponents(
         new ActionRowBuilder().addComponents(firstTriggerInput),
         new ActionRowBuilder().addComponents(intervalInput),
         new ActionRowBuilder().addComponents(typeInput),
-        new ActionRowBuilder().addComponents(manualInput)
+        new ActionRowBuilder().addComponents(manualInput),
+        new ActionRowBuilder().addComponents(monthlyDayInput)
     );
 
     await interaction.showModal(modal);
@@ -1152,11 +1161,15 @@ async function handleModalSubmit(interaction, sharedState) {
         else if (customId.startsWith('set_reminder_modal_')) {
             const templateId = customId.replace('set_reminder_modal_', '');
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
-            const interval = interaction.fields.getTextInputValue('interval');
+            const intervalRaw = interaction.fields.getTextInputValue('interval');
             const type = interaction.fields.getTextInputValue('type');
             const manualStr = interaction.fields.getTextInputValue('manual').trim().toUpperCase();
+            const monthlyDayStr = interaction.fields.getTextInputValue('monthlyDay').trim().toUpperCase();
             const isManual = manualStr === 'TAK';
+            const isMonthlyDay = monthlyDayStr === 'TAK';
             const isStandardized = type.trim().toUpperCase() === 'TAK';
+            // Jeśli monthly day, ignoruj pole interval i używaj 'monthly'
+            const interval = isMonthlyDay ? 'monthly' : intervalRaw;
 
             let firstTrigger = null;
             if (!isManual) {
@@ -1321,7 +1334,10 @@ async function handleModalSubmit(interaction, sharedState) {
             }
 
             const firstTriggerStr = interaction.fields.getTextInputValue('firstTrigger');
-            const interval = interaction.fields.getTextInputValue('interval');
+            const intervalRaw = interaction.fields.getTextInputValue('interval');
+            const monthlyDayEditStr = (interaction.fields.getTextInputValue('monthlyDay') ?? '').trim().toUpperCase();
+            const isMonthlyDayEdit = monthlyDayEditStr === 'TAK';
+            const interval = isMonthlyDayEdit ? 'monthly' : intervalRaw;
 
             // Parse firstTrigger z konwersją strefy czasowej Warsaw → UTC
             const timezone = sharedState.strefaCzasowaManager.getGlobalTimezone();
@@ -1336,7 +1352,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval (opcjonalne - puste = jednorazowe)
             if (!przypomnieniaMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee", lub zostaw puste dla jednorazowego przypomnienia.'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee", "monthly", lub zostaw puste dla jednorazowego przypomnienia.'
                 });
                 return;
             }
@@ -1354,10 +1370,16 @@ async function handleModalSubmit(interaction, sharedState) {
                 }
             }
 
+            // Dla monthly - oblicz monthlyDay z nowego firstTrigger
+            const monthlyDay = interval === 'monthly'
+                ? firstTrigger.toLocaleString('en-US', { timeZone: 'Europe/Warsaw', day: 'numeric' }) * 1
+                : null;
+
             await przypomnieniaMenedzer.updateScheduled(scheduledId, {
                 firstTrigger: firstTrigger.toISOString(),
                 interval,
                 intervalMs,
+                monthlyDay,
                 nextTrigger: firstTrigger.toISOString()
             });
 
@@ -2253,9 +2275,19 @@ async function handleEditScheduledEdit(interaction, sharedState) {
         .setRequired(false)
         .setMaxLength(10);
 
+    const monthlyDayEditInput = new TextInputBuilder()
+        .setCustomId('monthlyDay')
+        .setLabel('Powtarzaj tego samego dnia miesiąca?')
+        .setStyle(TextInputStyle.Short)
+        .setValue(scheduled.interval === 'monthly' ? 'TAK' : '')
+        .setPlaceholder('Wpisz TAK lub zostaw puste')
+        .setRequired(false)
+        .setMaxLength(3);
+
     modal.addComponents(
         new ActionRowBuilder().addComponents(firstTriggerInput),
-        new ActionRowBuilder().addComponents(intervalInput)
+        new ActionRowBuilder().addComponents(intervalInput),
+        new ActionRowBuilder().addComponents(monthlyDayEditInput)
     );
 
     await interaction.showModal(modal);
