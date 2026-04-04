@@ -65,7 +65,6 @@ class OCRService {
                 logger.info(`[OCR] 🧹 Wyczyszczono ${cleaned} osieroconych plików temp z poprzedniej sesji`);
             }
 
-            logger.info('[OCR] ✅ Serwis OCR zainicjalizowany');
         } catch (error) {
             logger.error('[OCR] ❌ Błąd inicjalizacji OCR:', error);
         }

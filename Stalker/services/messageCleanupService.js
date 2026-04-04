@@ -14,7 +14,6 @@ class MessageCleanupService {
         try {
             await this.loadScheduledMessages();
             this.startCleanupInterval();
-            this.logger.info('[MESSAGE_CLEANUP] ✅ Serwis automatycznego usuwania wiadomości zainicjowany');
         } catch (error) {
             this.logger.error('[MESSAGE_CLEANUP] ❌ Błąd inicjalizacji serwisu:', error.message);
         }
@@ -29,7 +28,6 @@ class MessageCleanupService {
             if (error.code === 'ENOENT') {
                 this.scheduledMessages = [];
                 await this.saveScheduledMessages();
-                this.logger.info('[MESSAGE_CLEANUP] ✅ Utworzono nowy plik zaplanowanych usunięć');
             } else {
                 this.logger.error('[MESSAGE_CLEANUP] ❌ Błąd ładowania zaplanowanych usunięć:', error.message);
                 throw error;
@@ -72,7 +70,6 @@ class MessageCleanupService {
             await this.processScheduledDeletions();
         }, 2 * 60 * 1000);
 
-        this.logger.info('[MESSAGE_CLEANUP] ⏰ Uruchomiono automatyczne sprawdzanie co 2 minuty');
     }
 
     async processScheduledDeletions() {
