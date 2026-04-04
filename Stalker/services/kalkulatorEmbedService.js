@@ -113,10 +113,11 @@ class KalkulatorEmbedService {
         }
 
         return new EmbedBuilder()
-            .setTitle('🧮 Dzielenie Mocą Obliczeniową Kalkulatora')
+            .setTitle('🧮 Lista osób proszących o pomoc')
             .setDescription(
-                'System dzielenia zasobami kalkulatora między członkami klanu.\n' +
-                'Użyj przycisków poniżej aby poprosić o kalkulację lub pomóc innym.'
+                'System pomocy w kalkulacji kalkulatora.\n' +
+                'Użyj przycisków poniżej aby poprosić o kalkulację lub pomóc innym.\n' +
+                'Aby pomagać musisz posiadać specjalną rolę, którą może nadać tylko administrator.'
             )
             .setColor(0x2ECC71)
             .addFields(
