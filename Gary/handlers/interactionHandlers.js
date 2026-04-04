@@ -74,7 +74,6 @@ class InteractionHandler {
                 { body: this.commands.map(command => command.toJSON()) }
             );
 
-            this.logger.info(`Registered ${data.length} slash commands`);
         } catch (error) {
             this.logger.error('❌ Error registering commands:', error);
         }
