@@ -3063,7 +3063,7 @@ async function handleKalkulatorHelpButton(interaction, sharedState) {
 
         await interaction.editReply({
             content:
-                `${existingHelper ? `🔄 Twoje aktywne przydzielenie od gracza **${request.userNick}**!` : `✅ Przydzielono Ci kalkulację od **${request.userNick}**!`}\n\n` +
+                `${existingHelper ? `🔄 Twoje aktywne przydzielenie od gracza **${request.userNick}**!` : `✅ Przydzielono Ci kalkulację od gracza **${request.userNick}**!`}\n\n` +
                 `🔗 **Link:** ${request.link}\n` +
                 `📊 **Punkty:** ${request.points}\n\n` +
                 `Po przeliczeniu kliknij przycisk poniżej, aby zwrócić link właścicielowi.`,
