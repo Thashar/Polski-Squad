@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, UserSelectMenuBuilder } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
@@ -7,7 +7,7 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null, bombTimerService = null, buttonOrderService = null, reactionPuzzleService = null, emptyPuzzleService = null, echoPuzzleService = null, hotPotatoService = null, boosterSnapshotService = null, gameCountdownService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
@@ -15,14 +15,6 @@ class InteractionHandler {
         this.roleKickingService = roleKickingService;
         this.chaosService = chaosService;
         this.primaAprilisService = primaAprilisService;
-        this.bombTimerService = bombTimerService;
-        this.buttonOrderService = buttonOrderService;
-        this.reactionPuzzleService = reactionPuzzleService;
-        this.emptyPuzzleService = emptyPuzzleService;
-        this.echoPuzzleService = echoPuzzleService;
-        this.hotPotatoService = hotPotatoService;
-        this.boosterSnapshotService = boosterSnapshotService;
-        this.gameCountdownService = gameCountdownService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
@@ -461,10 +453,6 @@ class InteractionHandler {
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
-        } else if (interaction.isUserSelectMenu()) {
-            if (interaction.customId === 'bomb_free_player_select') {
-                await this.handleFreePlayerSelect(interaction);
-            }
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'report_modal_submit') {
                 await this.handleReportModalSubmit(interaction);
@@ -482,8 +470,6 @@ class InteractionHandler {
                 await this.handleContextWarnModalSubmit(interaction);
             } else if (interaction.customId.startsWith('automod_warn_modal_')) {
                 await this.handleAutoModWarnModalSubmit(interaction);
-            } else if (interaction.customId.startsWith('bomb_modal_')) {
-                await this.handleBombModalSubmit(interaction);
             }
         }
     }
@@ -498,14 +484,6 @@ class InteractionHandler {
             await this.primaAprilisService.rotatePassword();
         } else if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getButtonCustomId()) {
             await this.handlePrimaAprilisButton(interaction);
-        } else if (this.bombTimerService && this.bombTimerService.isMyButton(interaction.customId)) {
-            await this.handleBombTimerButton(interaction);
-        } else if (this.buttonOrderService && this.buttonOrderService.isMyButton(interaction.customId)) {
-            await this.buttonOrderService.handleButtonClick(interaction);
-        } else if (this.hotPotatoService && this.hotPotatoService.isMyButton(interaction.customId)) {
-            await this.hotPotatoService.handleButtonClick(interaction);
-        } else if (this.boosterSnapshotService && this.boosterSnapshotService.isMyButton(interaction.customId)) {
-            await this.boosterSnapshotService.handleButtonClick(interaction);
         } else if (interaction.customId.startsWith('special_roles_')) {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
@@ -524,214 +502,6 @@ class InteractionHandler {
         } else if (interaction.customId.startsWith('automod_delete_') ||
                    interaction.customId.startsWith('automod_warn_')) {
             await this.handleAutoModButton(interaction);
-        }
-    }
-
-    /**
-     * Obsługuje przyciski Bomb Timera
-     * @param {ButtonInteraction} interaction
-     */
-    async handleBombTimerButton(interaction) {
-        const BTN = this.bombTimerService.getButtonIds();
-        const { customId } = interaction;
-
-        if (customId === BTN.ADD_TIME) {
-            const modal = new ModalBuilder()
-                .setCustomId('bomb_modal_add')
-                .setTitle('Dodaj czas do timera');
-            const timeInput = new TextInputBuilder()
-                .setCustomId('add_time')
-                .setLabel('Czas do dodania (format HH:MM:SS)')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setPlaceholder('np. 01:00:00');
-            const clicksInput = new TextInputBuilder()
-                .setCustomId('required_clicks')
-                .setLabel('Ile kliknięć? (puste jeśli tryb reakcji)')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-                .setPlaceholder('np. 5');
-            const reactionsInput = new TextInputBuilder()
-                .setCustomId('required_reactions')
-                .setLabel('Ile reakcji 🛠️? (puste jeśli tryb kliknięć)')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-                .setPlaceholder('np. 10');
-            const chattersInput = new TextInputBuilder()
-                .setCustomId('required_chatters')
-                .setLabel('Ile osób musi napisać na czacie?')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-                .setPlaceholder('np. 15');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(timeInput),
-                new ActionRowBuilder().addComponents(clicksInput),
-                new ActionRowBuilder().addComponents(reactionsInput),
-                new ActionRowBuilder().addComponents(chattersInput)
-            );
-            await interaction.showModal(modal);
-
-        } else if (customId === BTN.STOP) {
-            await interaction.deferUpdate();
-            await this.bombTimerService.pause();
-
-        } else if (customId === BTN.RESUME) {
-            await interaction.deferUpdate();
-            await this.bombTimerService.resume();
-
-        } else if (customId === BTN.BOMB_ADD5) {
-            await interaction.deferUpdate();
-            await this.bombTimerService.addFiveMinutes();
-
-        } else if (customId === BTN.BOMB_RESET) {
-            await interaction.deferUpdate();
-            await this.bombTimerService.resetBomb();
-
-        } else if (customId === BTN.RESET_PASSWORD) {
-            await interaction.deferUpdate();
-            if (this.primaAprilisService) {
-                await this.primaAprilisService.rotatePassword();
-            }
-        } else if (customId === BTN.SHUFFLE_ORDER) {
-            await interaction.deferUpdate();
-            if (this.buttonOrderService) await this.buttonOrderService.shuffle();
-        } else if (customId === BTN.RESET_ORDER) {
-            await interaction.deferUpdate();
-            if (this.buttonOrderService) await this.buttonOrderService.resetOrder();
-        } else if (customId === BTN.RESET_REACTION_PUZZLE) {
-            await interaction.deferUpdate();
-            if (this.reactionPuzzleService) await this.reactionPuzzleService.reset();
-        } else if (customId === BTN.RESET_EMPTY_PUZZLE) {
-            await interaction.deferUpdate();
-            if (this.emptyPuzzleService) await this.emptyPuzzleService.reset();
-        } else if (customId === BTN.RESET_ECHO_PUZZLE) {
-            await interaction.deferUpdate();
-            if (this.echoPuzzleService) await this.echoPuzzleService.reset();
-        } else if (customId === BTN.RESET_HOTPOTATO) {
-            await interaction.deferUpdate();
-            if (this.hotPotatoService) await this.hotPotatoService.reset();
-        } else if (customId === BTN.HOTPOTATO_MINUS5) {
-            await interaction.deferUpdate();
-            if (this.hotPotatoService) await this.hotPotatoService.minusFiveMinutes();
-        } else if (customId === BTN.HOTPOTATO_ADD5) {
-            await interaction.deferUpdate();
-            if (this.hotPotatoService) await this.hotPotatoService.addFiveMinutes();
-        } else if (customId === BTN.SNAPSHOT_BOOSTER) {
-            if (this.boosterSnapshotService) await this.boosterSnapshotService.handleSnapshotButton(interaction);
-        } else if (customId === BTN.BOOSTER_BACK) {
-            if (this.boosterSnapshotService) await this.boosterSnapshotService.handleBoosterBack(interaction);
-        } else if (customId === BTN.START_GAME) {
-            await interaction.deferUpdate();
-            if (this.gameCountdownService) await this.gameCountdownService.start();
-            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
-        } else if (customId === BTN.STOP_GAME) {
-            await interaction.deferUpdate();
-            if (this.gameCountdownService) await this.gameCountdownService.stop();
-            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
-        } else if (customId === BTN.RESUME_GAME) {
-            await interaction.deferUpdate();
-            if (this.gameCountdownService) await this.gameCountdownService.resume();
-            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
-        } else if (customId === BTN.END_GAME) {
-            await interaction.deferUpdate();
-            if (this.gameCountdownService) await this.gameCountdownService.end();
-            if (this.bombTimerService) await this.bombTimerService.refreshControlPanel();
-        } else if (customId === BTN.FREE_PLAYER) {
-            const selectMenu = new UserSelectMenuBuilder()
-                .setCustomId('bomb_free_player_select')
-                .setPlaceholder('Wybierz gracza do uwolnienia')
-                .setMinValues(1)
-                .setMaxValues(1);
-            const row = new ActionRowBuilder().addComponents(selectMenu);
-            await interaction.reply({ content: '🔓 Wybierz gracza, który ma zostać uwolniony:', components: [row], ephemeral: true });
-        }
-    }
-
-    /**
-     * Obsługuje wybór gracza do uwolnienia z select menu
-     * @param {UserSelectMenuInteraction} interaction
-     */
-    async handleFreePlayerSelect(interaction) {
-        if (!this.primaAprilisService) {
-            await interaction.reply({ content: '❌ Serwis prima aprilis niedostępny.', ephemeral: true });
-            return;
-        }
-        const userId = interaction.values[0];
-        const guild = interaction.guild;
-        const member = await guild.members.fetch(userId).catch(() => null);
-        if (!member) {
-            await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
-            return;
-        }
-        if (!this.primaAprilisService.isTrapped(userId)) {
-            await interaction.reply({ content: `ℹ️ Użytkownik ${member.displayName} nie jest uwięziony.`, ephemeral: true });
-            return;
-        }
-        try {
-            await this.primaAprilisService.freeUser(member);
-            logger.info(`🔓 Admin uwolnił gracza ${member.displayName} (${userId}) przez panel`);
-            await interaction.reply({ content: `✅ Gracz **${member.displayName}** został uwolniony i odzyskał swoje role.`, ephemeral: true });
-        } catch (err) {
-            logger.error('❌ Błąd podczas uwalniania gracza przez panel:', err.message);
-            await interaction.reply({ content: `❌ Błąd podczas uwalniania gracza: ${err.message}`, ephemeral: true });
-        }
-    }
-
-    /**
-     * Obsługuje submit modali Bomb Timera
-     * @param {ModalSubmitInteraction} interaction
-     */
-    async handleBombModalSubmit(interaction) {
-        const { customId } = interaction;
-
-        if (customId === 'bomb_modal_add') {
-            const timeStr = interaction.fields.getTextInputValue('add_time');
-            const clicksStr = interaction.fields.getTextInputValue('required_clicks').trim();
-            const reactionsStr = interaction.fields.getTextInputValue('required_reactions').trim();
-            const chattersStr = interaction.fields.getTextInputValue('required_chatters').trim();
-            const seconds = this.bombTimerService.parseTimeInput(timeStr);
-
-            if (seconds === null || seconds <= 0) {
-                await interaction.reply({ content: '❌ Podaj prawidłowy czas w formacie HH:MM:SS.', ephemeral: true });
-                return;
-            }
-
-            const requiredChatters = chattersStr ? parseInt(chattersStr) : 0;
-            const requiredReactions = reactionsStr ? parseInt(reactionsStr) : 0;
-            const requiredClicks = clicksStr ? parseInt(clicksStr) : 0;
-
-            if (requiredChatters > 0) {
-                // Tryb czatu
-                if (isNaN(requiredChatters) || requiredChatters < 1) {
-                    await interaction.reply({ content: '❌ Podaj prawidłową liczbę osób do napisania (min. 1).', ephemeral: true });
-                    return;
-                }
-                await interaction.deferUpdate();
-                await this.bombTimerService.addTimeAndStart(seconds, 0, 0, requiredChatters);
-                await this.bombTimerService.refreshControlPanel();
-            } else if (requiredReactions > 0) {
-                // Tryb reakcji
-                if (isNaN(requiredReactions) || requiredReactions < 1) {
-                    await interaction.reply({ content: '❌ Podaj prawidłową liczbę reakcji (min. 1).', ephemeral: true });
-                    return;
-                }
-                await interaction.deferUpdate();
-                await this.bombTimerService.addTimeAndStart(seconds, 0, requiredReactions, 0);
-                await this.bombTimerService.refreshControlPanel();
-            } else if (requiredClicks > 0) {
-                // Tryb kliknięć
-                if (isNaN(requiredClicks) || requiredClicks < 1) {
-                    await interaction.reply({ content: '❌ Podaj prawidłową liczbę kliknięć (min. 1).', ephemeral: true });
-                    return;
-                }
-                await interaction.deferUpdate();
-                await this.bombTimerService.addTimeAndStart(seconds, requiredClicks, 0, 0);
-                await this.bombTimerService.refreshControlPanel();
-            } else {
-                await interaction.reply({ content: '❌ Wypełnij jedno z pól: kliknięcia, reakcje lub czat.', ephemeral: true });
-                return;
-            }
-
         }
     }
 

@@ -20,15 +20,6 @@ const RoleConflictService = require('./services/roleConflictService');
 const MemberCacheService = require('./services/memberCacheService');
 const ChaosService = require('./services/chaosService');
 const PrimaAprilisService = require('./services/primaAprilisService');
-const BombTimerService = require('./services/bombTimerService');
-const ButtonOrderService = require('./services/buttonOrderService');
-const ReactionPuzzleService = require('./services/reactionPuzzleService');
-const EmptyPuzzleService = require('./services/emptyPuzzleService');
-const EchoPuzzleService = require('./services/echoPuzzleService');
-const HotPotatoService = require('./services/hotPotatoService');
-const BoosterSnapshotService = require('./services/boosterSnapshotService');
-const GameCountdownService = require('./services/gameCountdownService');
-const PuzzleChainService = require('./services/puzzleChainService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -60,18 +51,6 @@ const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
 const chaosService = new ChaosService(config, logService);
 const primaAprilisService = new PrimaAprilisService(config);
-const bombTimerService = new BombTimerService(config);
-const buttonOrderService = new ButtonOrderService(config);
-const reactionPuzzleService = new ReactionPuzzleService(config);
-const emptyPuzzleService = new EmptyPuzzleService(config);
-const echoPuzzleService = new EchoPuzzleService(config);
-const hotPotatoService = new HotPotatoService(config);
-const boosterSnapshotService = new BoosterSnapshotService();
-const gameCountdownService = new GameCountdownService();
-const puzzleChainService = new PuzzleChainService();
-bombTimerService.gameCountdownService = gameCountdownService;
-bombTimerService.boosterSnapshotService = boosterSnapshotService;
-boosterSnapshotService.onSnapshotChange = () => bombTimerService.refreshControlPanel();
 
 let nicknameManager;
 let reactionRoleService;
@@ -80,7 +59,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService, bombTimerService, buttonOrderService, reactionPuzzleService, emptyPuzzleService, echoPuzzleService, hotPotatoService, boosterSnapshotService, gameCountdownService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -161,43 +140,6 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj Prima Aprilis
     await primaAprilisService.initialize();
 
-    // Inicjalizuj Bomb Timer
-    await bombTimerService.initialize(client);
-
-    // Inicjalizuj Button Order
-    await buttonOrderService.initialize(client);
-    await reactionPuzzleService.initialize(client);
-    await emptyPuzzleService.initialize(client);
-    await echoPuzzleService.initialize(client);
-    await hotPotatoService.initialize(client);
-    boosterSnapshotService.initialize(client);
-    gameCountdownService.initialize(client);
-    puzzleChainService.initialize(client);
-
-    // Powiąż łańcuch zagadek: wygrana → odblokowanie następnego kanału
-    echoPuzzleService.onWin    = () => puzzleChainService.onPuzzleSolved(0);
-    buttonOrderService.onWin   = () => puzzleChainService.onPuzzleSolved(1);
-    emptyPuzzleService.onWin   = () => puzzleChainService.onPuzzleSolved(2);
-    reactionPuzzleService.onWin = () => puzzleChainService.onPuzzleSolved(3);
-    hotPotatoService.onWin = async () => {
-        const guild = client.guilds.cache.first();
-        // Zatrzymaj countdown gry
-        await gameCountdownService.stop().catch(() => {});
-        // Rozbrój bombę jeśli aktywna
-        await bombTimerService.forceDefuse().catch(() => {});
-        // Wyślij wiadomość zwycięstwa na kanał countdown
-        try {
-            const victoryChannel = await client.channels.fetch('1486919971165442048');
-            await victoryChannel.send('@everyone\n# Serwer został uratowany! Gratulacje! <a:PepeOklaski:1259556219312410760>');
-        } catch (err) {
-            logger.error('❌ Błąd wysyłania wiadomości zwycięstwa:', err.message);
-        }
-        // Zwolnij wszystkich uwięzionych graczy w kolejności
-        if (guild) await primaAprilisService.freeAllTrapped(guild).catch(() => {});
-        // Odśwież panel kontrolny
-        await bombTimerService.refreshControlPanel().catch(() => {});
-    };
-
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
 
@@ -211,10 +153,7 @@ client.once(Events.ClientReady, async () => {
     await primaAprilisService.setupButtonMessage(client);
     await primaAprilisService.setupPasswordMessage(client);
 
-    // Wyślij/odśwież panel kontrolny Bomb Timer
-    await bombTimerService.setupControlMessage(client);
-
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń, Prima Aprilis, Bomb Timer');
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń, Prima Aprilis');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -230,27 +169,6 @@ client.on(Events.MessageCreate, async (message) => {
             await message.delete().catch(() => {});
             return;
         }
-    }
-
-    if (!message.author.bot && message.guild) {
-        bombTimerService.handleMessageCreate(message).catch(err =>
-            logger.error('❌ BombTimer: błąd handleMessageCreate:', err.message)
-        );
-        reactionPuzzleService.handleMessageCreate(message).catch(err =>
-            logger.error('❌ ReactionPuzzle: błąd handleMessageCreate:', err.message)
-        );
-        emptyPuzzleService.handleMessageCreate(message).catch(err =>
-            logger.error('❌ EmptyPuzzle: błąd handleMessageCreate:', err.message)
-        );
-        echoPuzzleService.handleMessageCreate(message).catch(err =>
-            logger.error('❌ EchoPuzzle: błąd handleMessageCreate:', err.message)
-        );
-        buttonOrderService.handleMessageCreate(message).catch(err =>
-            logger.error('❌ ButtonOrder: błąd handleMessageCreate:', err.message)
-        );
-        hotPotatoService.handleMessageCreate(message).catch(err =>
-            logger.error('❌ HotPotato: błąd handleMessageCreate:', err.message)
-        );
     }
 
     // Prima Aprilis: sprawdzanie hasła przez uwięzionych użytkowników
@@ -415,11 +333,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         }
 
         await reactionRoleService.handleReactionAdd(reaction, user);
-        await bombTimerService.handleReactionAdd(reaction, user);
-        await reactionPuzzleService.handleReactionAdd(reaction, user);
-        await emptyPuzzleService.handleReactionAdd(reaction, user);
-        await buttonOrderService.handleReactionAdd(reaction, user);
-        await hotPotatoService.handleReactionAdd(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (add):', error);
     }
@@ -443,7 +356,6 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
         }
 
         await reactionRoleService.handleReactionRemove(reaction, user);
-        await bombTimerService.handleReactionRemove(reaction, user);
     } catch (error) {
         logger.error('❌ Błąd w obsłudze reakcji (remove):', error);
     }
@@ -497,19 +409,18 @@ process.on('SIGINT', async () => {
     reactionRoleService.cleanup();
     roleConflictService.cleanup();
     await memberCacheService.cleanup();
-    bombTimerService.cleanup();
     primaAprilisService.cleanup();
 
     // Wyczyść ImageBlockService
     if (messageHandler.imageBlockService) {
         await messageHandler.imageBlockService.shutdown();
     }
-    
+
     // Wyczyść WordBlockService
     if (messageHandler.wordBlockService) {
         await messageHandler.wordBlockService.shutdown();
     }
-    
+
     client.destroy();
     process.exit(0);
 });
@@ -520,18 +431,17 @@ process.on('SIGTERM', async () => {
     } else {
         logger.info('Otrzymano sygnał SIGTERM, zamykam bota...');
     }
-    
+
     try {
         if (config.media.autoCleanup && mediaService) {
             await mediaService.cleanupAllCache();
         }
-        
+
         // Wyczyść timery reaction roles i role conflicts
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
         await memberCacheService.cleanup();
-        bombTimerService.cleanup();
-    primaAprilisService.cleanup();
+        primaAprilisService.cleanup();
 
         // Wyczyść ImageBlockService
         if (messageHandler.imageBlockService) {
