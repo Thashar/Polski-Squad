@@ -24,7 +24,6 @@ class RoleMonitoringService {
         
         if (this.config.roleMonitoring.enabled) {
             this.startCronJob();
-            logger.info('Serwis monitorowania ról został zainicjalizowany');
         }
     }
 
@@ -76,7 +75,6 @@ class RoleMonitoringService {
             this.checkUsersWithoutRoles();
         });
 
-        logger.info(`Zadanie cron uruchomione: ${this.config.roleMonitoring.checkInterval}`);
     }
 
     /**
