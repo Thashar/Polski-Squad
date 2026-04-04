@@ -33,10 +33,16 @@ class ProxyService {
             this.refreshProxyListFromWebshare().then(() => {
                 if (this.proxyList.length > 0) {
                     this.currentProxyIndex = Math.floor(Math.random() * this.proxyList.length);
+                    this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
                 }
             }).catch(error => {
                 this.logger.warn(`⚠️ Failed to refresh proxy list from Webshare: ${error.message}`);
+                if (this.proxyList.length > 0) {
+                    this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+                }
             });
+        } else if (this.enabled && this.proxyList.length > 0) {
+            this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
         }
         this.retryAttempts = config.proxy?.retryAttempts || 3;
         this.maxProxyAttempts = 10; // Maksymalnie 10 prób zmiany proxy

@@ -27,6 +27,8 @@ let garrytoolsService, clanService, playerService, endersEchoService, logService
  */
 async function initializeBot() {
     try {
+        logger.info(`Bot logged in as ${client.user.tag}`);
+
         // Set client for log service
         logService.setClient(client);
         
