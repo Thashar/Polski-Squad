@@ -103,6 +103,8 @@ const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 const GaryCombatIngestionService = require('./services/garyCombatIngestionService');
 const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger);
+const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
+const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
 
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
 ocrService.setServices(reminderService, punishmentService, phaseService);
@@ -133,7 +135,8 @@ const sharedState = {
     broadcastMessageService,
     aiChatService,
     phaseService,
-    garyCombatIngestionService
+    garyCombatIngestionService,
+    kalkulatorEmbedService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -149,6 +152,13 @@ client.once(Events.ClientReady, async () => {
     await reminderUsageService.loadUsageData();
     await loadCalculatorCooldowns();
     await loadBorixoningCooldowns();
+
+    // Inicjalizacja embeda kalkulatora
+    try {
+        await kalkulatorEmbedService.initialize(client);
+    } catch (error) {
+        logger.error(`❌ Błąd inicjalizacji embeda kalkulatora: ${error.message}`);
+    }
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
