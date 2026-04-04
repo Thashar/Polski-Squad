@@ -56,7 +56,6 @@ class PrzypomnieniaMenedzer {
     async initialize() {
         try {
             await this.loadData();
-            this.logger.success('PrzypomnieniaMenedzer zainicjalizowany');
         } catch (error) {
             this.logger.error('Nie udało się zainicjalizować PrzypomnieniaMenedzer:', error);
             throw error;

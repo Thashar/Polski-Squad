@@ -30,17 +30,10 @@ class TablicaMenedzer {
             }
 
             this.boardChannel = channel;
-            this.logger.success('TablicaMenedzer zainicjalizowany');
 
             // Wczytaj ID wiadomości panelu kontrolnego z persistent storage
             this.controlPanelMessageId = this.eventMenedzer.getControlPanelMessageId();
-            if (this.controlPanelMessageId) {
-                this.logger.info(`Wczytano ID wiadomości panelu kontrolnego: ${this.controlPanelMessageId}`);
-            }
             this.manualPanelMessageId = this.eventMenedzer.getManualPanelMessageId();
-            if (this.manualPanelMessageId) {
-                this.logger.info(`Wczytano ID wiadomości panelu manualnego: ${this.manualPanelMessageId}`);
-            }
 
             // Rozpocznij okresowe aktualizacje
             this.startPeriodicUpdates();
@@ -61,7 +54,6 @@ class TablicaMenedzer {
             await this.updateAllEmbeds();
         }, this.config.boardUpdateInterval);
 
-        this.logger.info('Rozpoczęto okresowe aktualizacje tablicy');
     }
 
     stopPeriodicUpdates() {
@@ -338,9 +330,6 @@ class TablicaMenedzer {
 
                 if (existingContent !== newContent) {
                     await existingPanel.edit(newPanel);
-                    this.logger.info('Panel kontrolny zaktualizowany przy starcie (wykryto zmiany)');
-                } else {
-                    this.logger.info('Panel kontrolny bez zmian - pominięto aktualizację');
                 }
             } else {
                 // Panel nie istnieje - utwórz nowy

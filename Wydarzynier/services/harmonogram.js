@@ -18,8 +18,6 @@ class Harmonogram {
             await this.checkNotifications();
         }, 30000); // 30 sekund
 
-        this.logger.success('Harmonogram zainicjalizowany - sprawdzanie co 30 sekund');
-
         // Sprawdź również natychmiast przy starcie
         setTimeout(() => this.checkNotifications(), 5000);
     }

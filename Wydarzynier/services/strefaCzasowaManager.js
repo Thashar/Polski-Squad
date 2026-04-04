@@ -5,7 +5,6 @@ class StrefaCzasowaManager {
     }
 
     async initialize() {
-        this.logger.success('StrefaCzasowaManager zainicjalizowany (Europe/Warsaw)');
     }
 
     getGlobalTimezone() {

@@ -136,7 +136,6 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
                         b.label === buttons[i].data.label
                     );
                 if (same) {
-                    logger.info('[ROBOT3] Wiadomość aktywacji bez zmian - pomijam');
                     return;
                 }
                 await existing.edit({ content, components: [row] });

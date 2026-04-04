@@ -16,15 +16,12 @@ class ListaEventowMenedzer {
                 const channel = await this.client.channels.fetch(channelId);
                 if (channel) {
                     this.listChannel = channel;
-                    this.logger.success('ListaEventowMenedzer zainicjalizowany');
 
                     // Utwórz lub zaktualizuj listę
                     await this.ensureEventsList();
                 } else {
                     this.logger.warn('Kanał listy eventów nie znaleziony');
                 }
-            } else {
-                this.logger.info('Kanał listy eventów nie ustawiony');
             }
         } catch (error) {
             this.logger.error('Nie udało się zainicjalizować ListaEventowMenedzer:', error);

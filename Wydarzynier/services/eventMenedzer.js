@@ -38,7 +38,6 @@ class EventMenedzer {
     async initialize() {
         try {
             await this.loadData();
-            this.logger.success('EventMenedzer zainicjalizowany');
         } catch (error) {
             this.logger.error('Nie udało się zainicjalizować EventMenedzer:', error);
             throw error;
