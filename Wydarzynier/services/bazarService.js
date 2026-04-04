@@ -25,7 +25,6 @@ class BazarService {
         await this.loadFromFile();
         
         if (this.isActive) {
-            logger.info('Przywracanie timerów bazaru po restarcie...');
             await this.restoreTimers();
         }
     }

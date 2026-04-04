@@ -21,7 +21,6 @@ class RaportCleanupService {
             await this.loadData();
             await this.restoreTimers();
             await this.cleanupExpiredMessages();
-            this.logger.info('[RAPORT-CLEANUP] ✅ Serwis auto-usuwania raportów zainicjalizowany');
         } catch (error) {
             this.logger.error('[RAPORT-CLEANUP] ❌ Błąd inicjalizacji:', error);
         }

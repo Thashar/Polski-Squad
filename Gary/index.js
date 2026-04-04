@@ -27,12 +27,6 @@ let garrytoolsService, clanService, playerService, endersEchoService, logService
  */
 async function initializeBot() {
     try {
-        logger.info(`Bot logged in as ${client.user.tag}!`);
-        logger.info('🎯 Gary Bot - Survivor.io Lunar Mine Expedition Analysis');
-        logger.info('🔗 Connected to Garrytools API (garrytools.com)');
-        logger.info('✨ Translated to English with Polski Squad architecture');
-        logger.info('🔧 Enhanced with logging and .env configuration');
-        
         // Set client for log service
         logService.setClient(client);
         
@@ -265,17 +259,12 @@ cron.schedule('45 18 * * 3', async () => {
  */
 async function startBot() {
     try {
-        // Initialize services with error handling
-        logger.info('🔧 Initializing services...');
-
-        // Initialize ProxyService first (singleton pattern)
+        // Initialize services
         const ProxyService = require('./services/proxyService');
         const proxyService = new ProxyService(config, logger);
-        logger.info('✅ ProxyService initialized (singleton)');
 
         try {
             garrytoolsService = new GarrytoolsService(config, logger);
-            logger.info('✅ GarrytoolsService initialized');
         } catch (error) {
             logger.error('❌ GarrytoolsService failed to initialize:', error.message);
             throw error;
@@ -283,7 +272,6 @@ async function startBot() {
 
         try {
             clanService = new ClanService(config, logger);
-            logger.info('✅ ClanService initialized');
         } catch (error) {
             logger.error('❌ ClanService failed to initialize:', error.message);
             throw error;
@@ -291,7 +279,6 @@ async function startBot() {
 
         try {
             playerService = new PlayerService(config, logger);
-            logger.info('✅ PlayerService initialized');
         } catch (error) {
             logger.error('❌ PlayerService failed to initialize:', error.message);
             throw error;
@@ -299,23 +286,20 @@ async function startBot() {
 
         try {
             endersEchoService = new EndersEchoService(config, logger);
-            logger.info('✅ EndersEchoService initialized');
         } catch (error) {
             logger.error('❌ EndersEchoService failed to initialize:', error.message);
             throw error;
         }
-        
+
         try {
             logService = new LogService(config, logger);
-            logger.info('✅ LogService initialized');
         } catch (error) {
             logger.error('❌ LogService failed to initialize:', error.message);
             throw error;
         }
-        
+
         try {
             clanHistoryService = new ClanHistoryService(logger);
-            logger.info('✅ ClanHistoryService initialized');
         } catch (error) {
             logger.error('❌ ClanHistoryService failed to initialize:', error.message);
             throw error;
@@ -323,7 +307,6 @@ async function startBot() {
 
         try {
             interactionHandler = new InteractionHandler(config, garrytoolsService, clanService, playerService, endersEchoService, logService, clanHistoryService, logger);
-            logger.info('✅ InteractionHandler initialized');
         } catch (error) {
             logger.error('❌ InteractionHandler failed to initialize:', error.message);
             throw error;

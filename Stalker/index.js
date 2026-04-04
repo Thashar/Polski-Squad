@@ -179,7 +179,6 @@ client.once(Events.ClientReady, async () => {
         logger.info('⏰ Deadline minął - usuwam wygasłe przyciski potwierdzenia natychmiast po starcie...');
         try {
             await reminderService.disableExpiredConfirmationButtons(client);
-            logger.info('✅ Przyciski zostały usunięte po starcie bota');
         } catch (error) {
             logger.error(`❌ Błąd usuwania przycisków po starcie: ${error.message}`);
         }

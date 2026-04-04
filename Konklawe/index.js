@@ -244,13 +244,11 @@ async function onReady() {
         // Inicjalizacja embeda na kanale trigger
         if (triggerChannel && triggerChannel.isTextBased()) {
             await passwordEmbedService.initializeEmbed();
-            logger.info('✅ Zainicjalizowano embed statusu hasła');
         }
 
         // Inicjalizacja embeda Sądu Bożego
         judgmentService.setClient(client);
         await judgmentService.initializeJudgmentEmbed();
-        logger.info('✅ Zainicjalizowano embed Sądu Bożego');
 
         // Ustawienie odpowiednich timerów
         if (gameService.trigger === null) {

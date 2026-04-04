@@ -36,19 +36,23 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
-    logger.info(`Bot zalogowany jako ${client.user.tag}`);
-    logger.info(`Aktywny na ${client.guilds.cache.size} serwerach`);
-
-    client.guilds.cache.forEach(guild => {
-        logger.info(`- ${guild.name} (${guild.id})`);
-    });
-
     // Załaduj dane
     try {
         lastReminderMap = await reminderStorage.loadReminders();
         sharedState.lastReminderMap = lastReminderMap;
     } catch (error) {
         logger.error('❌ Błąd ładowania danych przypomień:', error.message);
+    }
+
+    // Policz wątki szkoleniowe
+    try {
+        const guild = client.guilds.cache.first();
+        const channel = await guild.channels.fetch(config.channels.training);
+        const activeThreads = await channel.threads.fetchActive();
+        const archivedThreads = await channel.threads.fetchArchived();
+        logger.info(`🧵 Wątki szkoleniowe: ${activeThreads.threads.size} otwartych, ${archivedThreads.threads.size} zamkniętych`);
+    } catch (error) {
+        logger.error('❌ Błąd pobierania wątków:', error.message);
     }
 
     await registerSlashCommands(client);
@@ -64,8 +68,6 @@ client.once(Events.ClientReady, async () => {
     }, {
         timezone: "Europe/Warsaw"
     });
-
-    logger.info(`📅 Zaplanowano sprawdzanie wątków: codziennie o ${config.timing.checkHour}:${config.timing.checkMinute.toString().padStart(2, '0')} (strefa: Europe/Warsaw)`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

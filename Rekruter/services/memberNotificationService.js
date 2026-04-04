@@ -15,9 +15,8 @@ class MemberNotificationService {
     initialize(client) {
         this.client = client;
         
-        if (this.config.memberNotifications.enabled) {
-            logger.info('Serwis powiadomień o członkach został zainicjalizowany');
-        }
+        // No initialization needed
+
     }
 
     /**

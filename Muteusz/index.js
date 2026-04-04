@@ -443,7 +443,6 @@ async function setupReportButtonMessage(client, config) {
         );
 
         if (existing) {
-            logger.info('ℹ️ Wiadomość z przyciskiem zgłoszenia już istnieje na kanale, pomijam.');
             return;
         }
 

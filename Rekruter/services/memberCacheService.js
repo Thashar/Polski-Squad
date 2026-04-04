@@ -190,7 +190,6 @@ class MemberCacheService {
                 }
             }
 
-            this.logger.info(`📁 Załadowano cache boost: ${this.memberBoostCache.size} wpisów`);
 
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -337,7 +336,6 @@ class MemberCacheService {
         }
 
         try {
-            this.logger.info('🏗️ Budowanie początkowego cache boost członków...');
             let totalCached = 0;
             let totalErrors = 0;
 

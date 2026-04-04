@@ -35,7 +35,6 @@ class LotteryService {
             this.cleanupOldWarnings();
         }, 60 * 60 * 1000); // co godzinę
         
-        logger.info('✅ Serwis loterii został zainicjalizowany');
     }
 
     /**

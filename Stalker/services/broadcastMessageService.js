@@ -17,7 +17,6 @@ class BroadcastMessageService {
     async initialize() {
         try {
             await this.loadMessages();
-            this.logger.info('[BROADCAST] ✅ Serwis wiadomości broadcast zainicjalizowany');
         } catch (error) {
             this.logger.error('[BROADCAST] ❌ Błąd inicjalizacji:', error);
         }

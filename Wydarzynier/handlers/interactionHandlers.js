@@ -73,21 +73,19 @@ class InteractionHandler {
         const rest = new REST().setToken(this.config.token);
         
         try {
-            logger.info('Rozpoczynam rejestrację slash commands...');
-            
             // Pobierz guild ID z pierwszego serwera (podobnie jak w innych botach)
             const guildId = client.guilds.cache.first()?.id;
             if (!guildId) {
                 logger.error('Nie znaleziono serwera do rejestracji komend');
                 return;
             }
-            
+
             await rest.put(
                 Routes.applicationGuildCommands(client.user.id, guildId),
                 { body: commands }
             );
-            
-            logger.info('Slash commands zostały pomyślnie zarejestrowane!');
+
+            logger.info('Zarejestrowano slash commands');
         } catch (error) {
             logger.error('Błąd podczas rejestracji slash commands:', error);
         }

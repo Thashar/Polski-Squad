@@ -53,7 +53,6 @@ async function initializeServices() {
         votingService
     );
 
-    logger.success('Wszystkie serwisy zostały zainicjalizowane');
 }
 
 /**
@@ -167,7 +166,6 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
                         b.label === buttons[i].data.label
                     );
                 if (same) {
-                    logger.info('[ROBOT1] Wiadomość aktywacji bez zmian - pomijam');
                     return;
                 }
                 await existing.edit({ content, components: [row] });

@@ -114,7 +114,6 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
                         b.label === buttons[i].data.label
                     );
                 if (same) {
-                    logger.info('[ROBOT2] Wiadomość aktywacji bez zmian - pomijam');
                     return;
                 }
                 await existing.edit({ content, components: [row] });
@@ -171,9 +170,8 @@ client.once('ready', async () => {
             for (const [messageId, message] of botMessages) {
                 try {
                     await message.delete();
-                    logger.info(`[BOT] Usunięto starą wiadomość ${messageId}`);
                 } catch (deleteError) {
-                    logger.info(`[BOT] Nie udało się usunąć wiadomości ${messageId}`);
+                    logger.warn(`[BOT] Nie udało się usunąć wiadomości ${messageId}`);
                 }
             }
         } catch (error) {

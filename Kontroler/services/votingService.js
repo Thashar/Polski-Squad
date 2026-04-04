@@ -52,7 +52,6 @@ class VotingService {
         await this.ensureDataDirectory();
         await this.loadData();
         await this.restoreTimers();
-        this.logger.info('✅ VotingService zainicjalizowany');
     }
 
     /**
