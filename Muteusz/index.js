@@ -1,12 +1,10 @@
-const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
+const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const path = require('path');
 
 const config = require('./config/config');
 const { createBotLogger } = require('../utils/consoleLogger');
 const NicknameManager = require('../utils/nicknameManagerService');
 
-const PLAYER_WELCOME_GIF_PATH = path.join(__dirname, 'data', 'player_welcome.gif');
 
 const logger = createBotLogger('Muteusz');
 
@@ -211,24 +209,8 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
         await memberHandler.handleBoostGain(newMember);
     }
 
-    // Rola gracza: ping + GIF gdy ktoś dostanie rolę
-    const PLAYER_ROLE_ID = '1486506395057524887';
-    const PLAYER_WELCOME_CHANNEL_ID = '1486848827997818900';
-    const hadRole = oldMember.roles.cache.has(PLAYER_ROLE_ID);
-    const hasRole = newMember.roles.cache.has(PLAYER_ROLE_ID);
-    if (!hadRole && hasRole) {
-        try {
-            const channel = await client.channels.fetch(PLAYER_WELCOME_CHANNEL_ID);
-            const msgData = { content: `<@${newMember.id}>` };
-            if (fs.existsSync(PLAYER_WELCOME_GIF_PATH)) {
-                msgData.files = [new AttachmentBuilder(PLAYER_WELCOME_GIF_PATH, { name: 'welcome.gif' })];
-            }
-            await channel.send(msgData);
-        } catch (err) {
-            logger.error('❌ Błąd pinga nowego gracza:', err.message);
-        }
-    }
 });
+
 
 client.on(Events.InteractionCreate, async (interaction) => {
     // Guard: Informuj użytkownika jeśli bot jeszcze się inicjalizuje
