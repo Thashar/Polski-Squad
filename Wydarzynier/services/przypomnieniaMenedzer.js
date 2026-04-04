@@ -1,7 +1,51 @@
 const fs = require('fs').promises;
 const path = require('path');
 
-class PrzypomnieniaMenedzer {
+const WARSAW_TZ = 'Europe/Warsaw';
+
+// Pobierz składowe daty w strefie Warsaw (rok, miesiąc 1-indexed, dzień, godziny, minuty)
+function getWarsawComponents(dateUTC) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: WARSAW_TZ,
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', second: 'numeric',
+        hour12: false
+    }).formatToParts(dateUTC);
+    const get = type => parseInt(parts.find(p => p.type === type).value);
+    return {
+        year: get('year'),
+        month: get('month'),   // 1-indexed
+        day: get('day'),
+        hours: get('hour') % 24,
+        minutes: get('minute'),
+        seconds: get('second')
+    };
+}
+
+// Konwertuj składowe Warsaw na UTC Date
+function warsawComponentsToUTC(year, month1, day, hours, minutes, seconds = 0) {
+    // Oblicz offset Warsaw: pobierz godzinę Warsaw przy północy UTC tej daty
+    const refDate = new Date(Date.UTC(year, month1 - 1, day, 0, 0, 0));
+    const tzParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: WARSAW_TZ, hour: '2-digit', hour12: false
+    }).formatToParts(refDate);
+    const warsawHourAtMidnight = parseInt(tzParts.find(p => p.type === 'hour').value) % 24;
+    const offsetMs = warsawHourAtMidnight * 60 * 60 * 1000;
+    // UTC = Warsaw_local - offset
+    return new Date(Date.UTC(year, month1 - 1, day, hours, minutes, seconds) - offsetMs);
+}
+
+// Dodaj 1 miesiąc zachowując ten sam dzień i godzinę w strefie Warsaw
+function addOneMonthWarsaw(dateUTC, originalDay) {
+    const { year, month, hours, minutes, seconds } = getWarsawComponents(dateUTC);
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const daysInNextMonth = new Date(nextYear, nextMonth, 0).getDate();
+    const actualDay = Math.min(originalDay, daysInNextMonth);
+    return warsawComponentsToUTC(nextYear, nextMonth, actualDay, hours, minutes, seconds);
+}
+
+
     constructor(config, logger) {
         this.config = config;
         this.logger = logger;
@@ -149,8 +193,8 @@ class PrzypomnieniaMenedzer {
             // Parsuj interwał na milisekundy
             intervalMs = this.parseInterval(interval);
 
-            // Sprawdź maksymalny interwał (pomiń dla wzorca "ee")
-            if (interval !== 'ee') {
+            // Sprawdź maksymalny interwał (pomiń dla wzorca "ee" i "monthly")
+            if (interval !== 'ee' && interval !== 'monthly') {
                 const maxInterval = 90 * 24 * 60 * 60 * 1000; // 90 dni w ms
                 if (intervalMs > maxInterval) {
                     throw new Error('Interwał nie może przekraczać 90 dni');
@@ -161,6 +205,12 @@ class PrzypomnieniaMenedzer {
             interval = null;
         }
 
+        // Dla interwału monthly - zapisz oryginalny dzień miesiąca (w strefie Warsaw)
+        let monthlyDay = null;
+        if (interval === 'monthly') {
+            monthlyDay = getWarsawComponents(new Date(firstTrigger)).day;
+        }
+
         const scheduled = {
             id: `sch_${id}`,
             templateId,
@@ -169,6 +219,7 @@ class PrzypomnieniaMenedzer {
             firstTrigger: new Date(firstTrigger).toISOString(),
             interval, // null dla jednorazowego
             intervalMs, // null dla jednorazowego
+            monthlyDay, // dzień miesiąca dla interwału 'monthly'
             nextTrigger: new Date(firstTrigger).toISOString(),
             channelId,
             roles,
@@ -193,7 +244,7 @@ class PrzypomnieniaMenedzer {
         if (!interval || interval.trim() === '') {
             return true;
         }
-        return /^\d+[smhd]$/.test(interval) || interval === 'ee';
+        return /^\d+[smhd]$/.test(interval) || interval === 'ee' || interval === 'monthly';
     }
 
     // Parsuj interwał na milisekundy
@@ -201,6 +252,11 @@ class PrzypomnieniaMenedzer {
         // Specjalny wzorzec "ee" - dynamiczny interwał (3d x8, potem 4d, powtórz)
         if (interval === 'ee') {
             return null; // Dynamiczny, obliczany per wyzwalacz
+        }
+
+        // Miesięczny (ten sam dzień miesiąca)
+        if (interval === 'monthly') {
+            return null; // Kalendarzowy, obliczany per wyzwalacz
         }
 
         const match = interval.match(/^(\d+)([smhd])$/);
@@ -225,6 +281,11 @@ class PrzypomnieniaMenedzer {
         // Jednorazowe przypomnienie
         if (!interval || interval === null) {
             return 'Jednorazowe';
+        }
+
+        // Miesięczny
+        if (interval === 'monthly') {
+            return 'Co miesiąc (ten sam dzień)';
         }
 
         // Specjalny wzorzec "ee"
@@ -326,24 +387,28 @@ class PrzypomnieniaMenedzer {
         }
 
         const lastTrigger = new Date(scheduled.nextTrigger);
-        let nextIntervalMs;
+        let nextTrigger;
         let newTriggerCount = (scheduled.triggerCount || 0) + 1;
 
-        // Specjalny wzorzec "ee": 3d x8, potem 4d, powtórz
-        if (scheduled.interval === 'ee') {
-            const cyclePosition = (scheduled.triggerCount || 0) % 9;
-            // Pozycje 0-7 (pierwsze 8 wyzwoleń): 3 dni
-            // Pozycja 8 (9-te wyzwolenie): 4 dni
-            if (cyclePosition === 8) {
-                nextIntervalMs = 4 * 24 * 60 * 60 * 1000; // 4 dni
-            } else {
-                nextIntervalMs = 3 * 24 * 60 * 60 * 1000; // 3 dni
-            }
+        // Miesięczny (ten sam dzień miesiąca, ta sama godzina w Warsaw)
+        if (scheduled.interval === 'monthly') {
+            const originalDay = scheduled.monthlyDay || getWarsawComponents(lastTrigger).day;
+            nextTrigger = addOneMonthWarsaw(lastTrigger, originalDay).toISOString();
         } else {
-            nextIntervalMs = scheduled.intervalMs;
+            let nextIntervalMs;
+            // Specjalny wzorzec "ee": 3d x8, potem 4d, powtórz
+            if (scheduled.interval === 'ee') {
+                const cyclePosition = (scheduled.triggerCount || 0) % 9;
+                if (cyclePosition === 8) {
+                    nextIntervalMs = 4 * 24 * 60 * 60 * 1000;
+                } else {
+                    nextIntervalMs = 3 * 24 * 60 * 60 * 1000;
+                }
+            } else {
+                nextIntervalMs = scheduled.intervalMs;
+            }
+            nextTrigger = new Date(lastTrigger.getTime() + nextIntervalMs).toISOString();
         }
-
-        const nextTrigger = new Date(lastTrigger.getTime() + nextIntervalMs).toISOString();
 
         return await this.updateScheduled(id, {
             nextTrigger,
