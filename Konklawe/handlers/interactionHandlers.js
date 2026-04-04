@@ -3837,8 +3837,8 @@ class InteractionHandler {
 
         if (targetUser.id === userId || targetIsLucyfer) {
             // WARIANT 1: Na siebie lub innego Lucyfera - usuwa klątwę
-            const activeCurses = this.activeCurses.get(targetUser.id) || [];
-            if (activeCurses.length === 0) {
+            const activeCurseData = this.activeCurses.get(targetUser.id);
+            if (!activeCurseData) {
                 // Zwróć manę - brak klątwy
                 this.virtuttiService.consumeEnergy(userId, -15, 'chaos_blessing_refund');
                 return await interaction.reply({
@@ -3847,9 +3847,9 @@ class InteractionHandler {
                 });
             }
 
-            // Usuń pierwszą klątwę
-            const firstCurse = activeCurses[0];
-            await this.removeCurse(targetUser.id, firstCurse.type);
+            // Usuń klątwę
+            this.activeCurses.delete(targetUser.id);
+            await this.saveActiveCurses();
 
             effectMessage = `🌑 **Mroczne moce uwolniły ${targetUser.toString()} od klątwy!**`;
             publicMessage = `🌑 Lucyfer użył mrocznego błogosławieństwa!`;
