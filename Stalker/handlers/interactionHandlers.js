@@ -681,6 +681,20 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
 async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, survivorService, phaseService } = sharedState;
 
+    // ============ KALKULATOR EMBED - system dzielenia obliczeniami ============
+    if (interaction.customId === 'kalkulator_request') {
+        await handleKalkulatorRequestButton(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId === 'kalkulator_help') {
+        await handleKalkulatorHelpButton(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId.startsWith('kalkulator_return_')) {
+        await handleKalkulatorReturnButton(interaction, sharedState);
+        return;
+    }
+
     // ============ BOROXONING - przyciski Tak/Nie ============
     if (interaction.customId === 'boroxoning_tak' || interaction.customId === 'boroxoning_nie') {
         try {
@@ -2926,7 +2940,141 @@ async function handleDecodeCommand(interaction, sharedState) {
     await interaction.showModal(modal);
 }
 
+// =====================================================================
+//  KALKULATOR EMBED — system dzielenia mocą obliczeniową
+// =====================================================================
+
+async function handleKalkulatorRequestButton(interaction, sharedState) {
+    const modal = new ModalBuilder()
+        .setCustomId('kalkulator_modal')
+        .setTitle('Poproś o kalkulację');
+
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('kalkulator_link')
+                .setLabel('Link do kalkulatora')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('https://...')
+                .setRequired(true)
+                .setMaxLength(500)
+        ),
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('kalkulator_points')
+                .setLabel('Ilość punktów')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('np. 1500')
+                .setRequired(true)
+                .setMaxLength(20)
+        )
+    );
+
+    await interaction.showModal(modal);
+}
+
+async function handleKalkulatorModalSubmit(interaction, sharedState) {
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const link = interaction.fields.getTextInputValue('kalkulator_link').trim();
+        const points = interaction.fields.getTextInputValue('kalkulator_points').trim();
+        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const userNick = member.displayName || interaction.user.username;
+
+        await sharedState.kalkulatorEmbedService.addRequest(
+            interaction.user.id, userNick, link, points, sharedState.client
+        );
+
+        await interaction.editReply({ content: '✅ Twoja prośba o kalkulację została dodana do listy!' });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd modala:', error);
+        try {
+            const msg = '❌ Wystąpił błąd podczas dodawania prośby.';
+            if (interaction.deferred) await interaction.editReply({ content: msg });
+            else await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorHelpButton(interaction, sharedState) {
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const helperNick = member.displayName || interaction.user.username;
+
+        const request = await sharedState.kalkulatorEmbedService.assignHelper(
+            interaction.user.id, helperNick, sharedState.client, interaction.guild
+        );
+
+        if (!request) {
+            await interaction.editReply({
+                content: '❌ Brak osób, którym trzeba pomóc. Spróbuj ponownie później!'
+            });
+            return;
+        }
+
+        const returnRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`kalkulator_return_${interaction.user.id}`)
+                .setLabel('Zwróć przeliczone')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await interaction.editReply({
+            content:
+                `✅ Przydzielono Ci kalkulację od **${request.userNick}**!\n\n` +
+                `🔗 **Link:** ${request.link}\n` +
+                `📊 **Punkty:** ${request.points}\n\n` +
+                `Po przeliczeniu kliknij przycisk poniżej, aby zwrócić link właścicielowi.`,
+            components: [returnRow]
+        });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd przydziału pomocy:', error);
+        try {
+            const msg = '❌ Wystąpił błąd podczas przydzielania.';
+            if (interaction.deferred) await interaction.editReply({ content: msg });
+            else await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+        } catch {}
+    }
+}
+
+async function handleKalkulatorReturnButton(interaction, sharedState) {
+    try {
+        await interaction.deferUpdate();
+
+        const result = await sharedState.kalkulatorEmbedService.completeHelp(
+            interaction.user.id, sharedState.client
+        );
+
+        if (!result) {
+            await interaction.followUp({
+                content: '❌ Nie znaleziono aktywnego przydzielenia. Możliwe, że zostało już zakończone.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        await interaction.followUp({
+            content: `✅ Gotowe! **${result.helper.requestUserNick}** otrzymał(a) prywatną wiadomość ze zwróconym linkiem.`,
+            flags: MessageFlags.Ephemeral
+        });
+    } catch (error) {
+        logger.error('[KalkulatorEmbed] Błąd zwracania kalkulacji:', error);
+        try {
+            await interaction.followUp({ content: '❌ Wystąpił błąd podczas zwracania.', flags: MessageFlags.Ephemeral });
+        } catch {}
+    }
+}
+
+// =====================================================================
+
 async function handleModalSubmit(interaction, sharedState) {
+    if (interaction.customId === 'kalkulator_modal') {
+        await handleKalkulatorModalSubmit(interaction, sharedState);
+        return;
+    }
     if (interaction.customId === 'decode_modal') {
         await handleDecodeModalSubmit(interaction, sharedState);
     // Modal wyniki_attachments_modal został usunięty - teraz używamy przesyłania plików bezpośrednio
