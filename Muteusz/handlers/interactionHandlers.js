@@ -7,18 +7,16 @@ const ReportStatsService = require('../services/reportStatsService');
 const logger = createBotLogger('Muteusz');
 
 class InteractionHandler {
-    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null, primaAprilisService = null) {
+    constructor(config, logService, specialRolesService, messageHandler = null, roleKickingService = null, chaosService = null) {
         this.config = config;
         this.logService = logService;
         this.specialRolesService = specialRolesService;
         this.messageHandler = messageHandler;
         this.roleKickingService = roleKickingService;
         this.chaosService = chaosService;
-        this.primaAprilisService = primaAprilisService;
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
-        this._trapCooldowns = new Map(); // userId → timestamp ostatniej próby
     }
 
     /**
@@ -479,12 +477,7 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      */
     async handleButtonInteraction(interaction) {
-        if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getPasswordRotateBtnId()) {
-            await interaction.deferUpdate();
-            await this.primaAprilisService.rotatePassword();
-        } else if (this.primaAprilisService && interaction.customId === this.primaAprilisService.getButtonCustomId()) {
-            await this.handlePrimaAprilisButton(interaction);
-        } else if (interaction.customId.startsWith('special_roles_')) {
+        if (interaction.customId.startsWith('special_roles_')) {
             await this.handleSpecialRolesButtonInteraction(interaction);
         } else if (interaction.customId.startsWith('violations_')) {
             await this.handleViolationsButtonInteraction(interaction);
@@ -502,75 +495,6 @@ class InteractionHandler {
         } else if (interaction.customId.startsWith('automod_delete_') ||
                    interaction.customId.startsWith('automod_warn_')) {
             await this.handleAutoModButton(interaction);
-        }
-    }
-
-    /**
-     * Obsługuje kliknięcie przycisku Prima Aprilis "NIE KLIKAĆ"
-     * @param {ButtonInteraction} interaction
-     */
-    async handlePrimaAprilisButton(interaction) {
-        try {
-            const member = interaction.member;
-            const prisonRoleId = this.config.primaAprilis.prisonRoleId;
-            logger.info(`🔘 PrimaAprilis: kliknięcie przycisku od ${member.user.tag} (${member.id})`);
-
-            // Ignoruj kliknięcie jeśli użytkownik już ma rolę więźnia
-            if (member.roles.cache.has(prisonRoleId)) {
-                logger.info(`🔒 PrimaAprilis: ${member.user.tag} już ma rolę więźnia — ignoruję`);
-                await interaction.deferUpdate();
-                return;
-            }
-
-            // Ignoruj właściciela serwera — Discord nie pozwala zmieniać jego ról
-            if (interaction.guild.ownerId === member.id) {
-                logger.info(`👑 PrimaAprilis: ${member.user.tag} jest właścicielem serwera — ignoruję`);
-                await interaction.deferUpdate();
-                return;
-            }
-
-            // Cooldown 15s per-user — blokuj spam-klikanie
-            const now = Date.now();
-            const lastAttempt = this._trapCooldowns.get(member.id) ?? 0;
-            if (now - lastAttempt < 15000) {
-                logger.info(`⏳ PrimaAprilis: ${member.user.tag} cooldown (${Math.round((15000 - (now - lastAttempt)) / 1000)}s pozostało) — ignoruję`);
-                await interaction.deferUpdate();
-                return;
-            }
-            this._trapCooldowns.set(member.id, now);
-            logger.info(`⚙️ PrimaAprilis: przetwarzam pułapkę dla ${member.user.tag}`);
-
-            // Napraw zawieszony stan: dane zapisane, ale rola nie została nadana (np. błąd API)
-            if (this.primaAprilisService.isTrapped(member.id)) {
-                logger.warn(`⚠️ PrimaAprilis: ${member.user.tag} ma zawieszony stan — czyszczę przed ponowną próbą`);
-                await this.primaAprilisService.clearStuckUser(member.id);
-            }
-
-            // Odpowiedz natychmiast żeby nie przekroczyć limitu 3 sekund Discord
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            logger.info(`📨 PrimaAprilis: deferReply wysłany dla ${member.user.tag}`);
-
-            await this.primaAprilisService.trapUser(member);
-            logger.info(`✅ PrimaAprilis: trapUser zakończony dla ${member.user.tag}`);
-
-            // Zlicz kliknięcie jako próbę rozbrojenia bomby (jeśli timer aktywny)
-            if (this.bombTimerService) {
-                await this.bombTimerService.registerDefuseClick(member.id);
-            }
-
-            await interaction.editReply({
-                content: `A było nie klikać <:z_Trollface:1171154605372084367>\nTeraz jesteś uwięziony(-a). Żeby wyjść, musisz rozwiązać zagadkę.`,
-            });
-            logger.info(`💬 PrimaAprilis: wysłano wiadomość pułapki do ${member.user.tag}`);
-        } catch (error) {
-            logger.error('❌ PrimaAprilis: błąd przy łapaniu użytkownika:', error.message, error.stack?.split('\n')[1]?.trim() ?? '');
-            try {
-                if (interaction.deferred) {
-                    await interaction.deleteReply();
-                } else {
-                    await interaction.deferUpdate();
-                }
-            } catch {}
         }
     }
 
