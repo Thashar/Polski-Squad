@@ -25,7 +25,6 @@ class RoleKickingService {
         if (this.config.roleKicking.enabled) {
             this.startCronJob();
             this.setupRoleUpdateListener();
-            logger.info('Serwis kickowania użytkowników bez ról został zainicjalizowany');
         }
     }
 
@@ -41,7 +40,6 @@ class RoleKickingService {
             this.checkAndKickUsers();
         });
 
-        logger.info(`Zadanie cron kickowania uruchomione: ${this.config.roleKicking.checkInterval}`);
     }
 
     /**

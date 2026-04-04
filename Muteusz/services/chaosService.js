@@ -68,7 +68,6 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
     async initialize() {
         try {
             await this.loadChaosMode();
-            logger.info('✅ ChaosService zainicjalizowany');
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji ChaosService: ${error.message}`);
             throw error;

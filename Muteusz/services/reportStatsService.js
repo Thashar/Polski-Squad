@@ -23,7 +23,6 @@ class ReportStatsService {
             } catch {
                 this.stats = {};
             }
-            logger.info('📊 ReportStatsService zainicjalizowany');
         } catch (error) {
             logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${error.message}`);
         }

@@ -14,7 +14,6 @@ class LogService {
      */
     initialize(client) {
         this.client = client;
-        logger.info('Serwis logowania został zainicjalizowany');
     }
 
     /**
