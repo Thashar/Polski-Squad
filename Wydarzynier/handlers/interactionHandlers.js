@@ -349,6 +349,10 @@ class InteractionHandler {
             await this.handleAcceptPlayer(interaction, customId, lobby, sharedState);
         } else if (customId.startsWith('reject_')) {
             await this.handleRejectPlayer(interaction, customId, lobby, sharedState);
+        } else if (customId.startsWith('help_request_')) {
+            await this.handleHelpRequest(interaction, customId, sharedState);
+        } else if (customId.startsWith('delete_request_')) {
+            await this.handleDeleteRequest(interaction, customId, lobby, sharedState);
         }
     }
 
@@ -457,6 +461,61 @@ class InteractionHandler {
             logger.error('❌ Błąd podczas odrzucania gracza:', error);
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas odrzucania gracza.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Obsługuje przycisk Pomocy - wyświetla info o graczu
+     */
+    async handleHelpRequest(interaction, customId, sharedState) {
+        const playerId = customId.replace('help_request_', '');
+
+        try {
+            const member = await interaction.guild.members.fetch(playerId);
+            const joinedAt = member.joinedAt
+                ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>`
+                : 'nieznana';
+
+            await interaction.reply({
+                content: `❓ **Informacje o graczu:**\n👤 ${member.toString()} (${member.user.tag})\n📅 Na serwerze od: ${joinedAt}`,
+                ephemeral: true
+            });
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi pomocy:', error);
+            await interaction.reply({
+                content: '❌ Nie udało się pobrać informacji o graczu.',
+                ephemeral: true
+            });
+        }
+    }
+
+    /**
+     * Usuwa prośbę z systemu bez powiadomienia gracza
+     */
+    async handleDeleteRequest(interaction, customId, lobby, sharedState) {
+        const playerId = customId.replace('delete_request_', '');
+
+        try {
+            sharedState.lobbyService.removePendingRequest(lobby.id, playerId);
+
+            try {
+                await interaction.message.delete();
+            } catch (error) {
+                try {
+                    await interaction.update({
+                        content: '🗑️ **Prośba usunięta**',
+                        components: []
+                    });
+                } catch (updateError) {
+                    logger.error('❌ Błąd podczas aktualizacji wiadomości:', updateError);
+                }
+            }
+        } catch (error) {
+            logger.error('❌ Błąd podczas usuwania prośby:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas usuwania prośby.',
                 ephemeral: true
             });
         }

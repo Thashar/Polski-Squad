@@ -65,10 +65,17 @@ async function createJoinRequest(lobby, user, sharedState) {
                 new ButtonBuilder()
                     .setCustomId(`accept_${user.id}`)
                     .setLabel('Tak')
+                    .setEmoji('🧮')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
-                    .setCustomId(`reject_${user.id}`)
-                    .setLabel('Nie')
+                    .setCustomId(`help_request_${user.id}`)
+                    .setLabel('Pomoc')
+                    .setEmoji('❓')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`delete_request_${user.id}`)
+                    .setLabel('Usuń prośbę')
+                    .setEmoji('🗑️')
                     .setStyle(ButtonStyle.Danger)
             );
 
