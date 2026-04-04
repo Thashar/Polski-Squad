@@ -1071,7 +1071,8 @@ class InteractionHandler {
 
             const blessingReply = await interaction.reply({
                 content: blessingMessage,
-                ephemeral: false
+                ephemeral: false,
+                fetchReply: true
             });
 
             // Zaplanuj automatyczne usunięcie wiadomości po 10 min
@@ -1195,7 +1196,7 @@ class InteractionHandler {
         });
 
         try {
-            const virtueCheckReply = await interaction.reply({ embeds: [embed], ephemeral: false });
+            const virtueCheckReply = await interaction.reply({ embeds: [embed], ephemeral: false, fetchReply: true });
 
             // Zaplanuj automatyczne usunięcie wiadomości po 10 min
             if (this.messageCleanupService && virtueCheckReply) {
@@ -1661,7 +1662,8 @@ class InteractionHandler {
                 // Wyślij komunikat o odbiciu i blokadzie
                 const reflectionReply = await interaction.reply({
                     content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został uśpiony!**\n\n*Siły ciemności nie zagrażają serwerowi...*`,
-                    ephemeral: false
+                    ephemeral: false,
+                    fetchReply: true
                 });
 
                 // Zaplanuj automatyczne usunięcie wiadomości po 1h (czas blokady)
