@@ -352,7 +352,7 @@ class TablicaMenedzer {
             this.logger.error('Nie udało się zainicjalizować panelu kontrolnego:', error);
         }
 
-        await this.ensureManualPanel();
+        await this.initializeManualPanel();
     }
 
     // Utwórz lub zaktualizuj panel kontrolny (używane w trakcie działania - przenosi na dół)
@@ -682,6 +682,48 @@ class TablicaMenedzer {
 
         } catch (error) {
             this.logger.error('Błąd przy aktualizacji panelu manualnego:', error);
+        }
+    }
+
+    // Lekka wersja na startup - edytuje w miejscu jeśli istnieje, tworzy tylko gdy nie ma
+    async initializeManualPanel() {
+        if (!this.boardChannel) return;
+
+        try {
+            const panelData = this.buildManualPanel();
+
+            let existingMsg = null;
+            if (this.manualPanelMessageId) {
+                try {
+                    existingMsg = await this.boardChannel.messages.fetch(this.manualPanelMessageId);
+                } catch (error) {
+                    if (error.code === 10008) {
+                        await this.saveManualPanelMessageId(null);
+                    } else throw error;
+                }
+            }
+
+            if (!panelData) {
+                if (existingMsg) {
+                    await existingMsg.delete().catch(() => {});
+                    await this.saveManualPanelMessageId(null);
+                }
+                return;
+            }
+
+            if (existingMsg) {
+                // Edytuj w miejscu bez przenoszenia
+                await existingMsg.edit(panelData).catch(() => {});
+                return;
+            }
+
+            // Nie istnieje - utwórz nową
+            const message = await this.boardChannel.send(panelData);
+            await this.saveManualPanelMessageId(message.id);
+            this.logger.info('Panel manualny utworzony przy starcie');
+
+        } catch (error) {
+            this.logger.error('Błąd przy inicjalizacji panelu manualnego:', error);
         }
     }
 
