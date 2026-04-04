@@ -63,14 +63,10 @@ class InteractionHandler {
         const rest = new REST().setToken(this.config.token);
         
         try {
-            logger.info('Rozpoczynam rejestrację slash commands...');
-            
             await rest.put(
                 Routes.applicationGuildCommands(this.config.clientId, this.config.guildId),
                 { body: commands }
             );
-            
-            logger.info('Slash commands zostały pomyślnie zarejestrowane!');
         } catch (error) {
             logger.error('Błąd podczas rejestracji slash commands:', error);
         }
