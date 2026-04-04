@@ -91,13 +91,9 @@ class KalkulatorEmbedService {
         let requestsText = '*Brak aktywnych próśb o kalkulację*';
         if (sortedRequests.length > 0) {
             requestsText = sortedRequests.map(req => {
-                const rankPos = rankingMap.get(req.userId);
-                const rankStr = rankPos ? `#${rankPos}` : '#?';
-                const date = new Date(req.addedAt).toLocaleString('pl-PL', {
-                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                });
+                const timestamp = Math.floor(new Date(req.addedAt).getTime() / 1000);
                 const beingHelped = this.data.helpers.some(h => h.requestUserId === req.userId);
-                return `${rankStr} **${req.userNick}**${beingHelped ? ' 🔄' : ''} • ${req.points} pkt • ${date}`;
+                return `**${req.userNick}**${beingHelped ? ' 🔄' : ''} • <t:${timestamp}:f>`;
             }).join('\n');
         }
 
