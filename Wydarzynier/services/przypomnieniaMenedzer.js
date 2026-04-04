@@ -194,7 +194,7 @@ class PrzypomnieniaMenedzer {
             intervalMs = this.parseInterval(interval);
 
             // Sprawdź maksymalny interwał (pomiń dla wzorca "ee" i "monthly")
-            if (interval !== 'ee' && interval !== 'monthly') {
+            if (interval !== 'ee' && interval !== 'msc') {
                 const maxInterval = 90 * 24 * 60 * 60 * 1000; // 90 dni w ms
                 if (intervalMs > maxInterval) {
                     throw new Error('Interwał nie może przekraczać 90 dni');
@@ -205,9 +205,9 @@ class PrzypomnieniaMenedzer {
             interval = null;
         }
 
-        // Dla interwału monthly - zapisz oryginalny dzień miesiąca (w strefie Warsaw)
+        // Dla interwału msc - zapisz oryginalny dzień miesiąca (w strefie Warsaw)
         let monthlyDay = null;
-        if (interval === 'monthly') {
+        if (interval === 'msc') {
             monthlyDay = getWarsawComponents(new Date(firstTrigger)).day;
         }
 
@@ -219,7 +219,7 @@ class PrzypomnieniaMenedzer {
             firstTrigger: new Date(firstTrigger).toISOString(),
             interval, // null dla jednorazowego
             intervalMs, // null dla jednorazowego
-            monthlyDay, // dzień miesiąca dla interwału 'monthly'
+            monthlyDay, // dzień miesiąca dla interwału 'msc'
             nextTrigger: new Date(firstTrigger).toISOString(),
             channelId,
             roles,
@@ -244,7 +244,7 @@ class PrzypomnieniaMenedzer {
         if (!interval || interval.trim() === '') {
             return true;
         }
-        return /^\d+[smhd]$/.test(interval) || interval === 'ee' || interval === 'monthly';
+        return /^\d+[smhd]$/.test(interval) || interval === 'ee' || interval === 'msc';
     }
 
     // Parsuj interwał na milisekundy
@@ -255,7 +255,7 @@ class PrzypomnieniaMenedzer {
         }
 
         // Miesięczny (ten sam dzień miesiąca)
-        if (interval === 'monthly') {
+        if (interval === 'msc') {
             return null; // Kalendarzowy, obliczany per wyzwalacz
         }
 
@@ -284,7 +284,7 @@ class PrzypomnieniaMenedzer {
         }
 
         // Miesięczny
-        if (interval === 'monthly') {
+        if (interval === 'msc') {
             return 'Co miesiąc (ten sam dzień)';
         }
 
@@ -391,7 +391,7 @@ class PrzypomnieniaMenedzer {
         let newTriggerCount = (scheduled.triggerCount || 0) + 1;
 
         // Miesięczny (ten sam dzień miesiąca, ta sama godzina w Warsaw)
-        if (scheduled.interval === 'monthly') {
+        if (scheduled.interval === 'msc') {
             const originalDay = scheduled.monthlyDay || getWarsawComponents(lastTrigger).day;
             nextTrigger = addOneMonthWarsaw(lastTrigger, originalDay).toISOString();
         } else {
