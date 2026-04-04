@@ -19,7 +19,6 @@ const ReactionRoleService = require('./services/reactionRoleService');
 const RoleConflictService = require('./services/roleConflictService');
 const MemberCacheService = require('./services/memberCacheService');
 const ChaosService = require('./services/chaosService');
-const PrimaAprilisService = require('./services/primaAprilisService');
 
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
@@ -50,7 +49,6 @@ const roleKickingService = new RoleKickingService(config);
 const roleConflictService = new RoleConflictService(config);
 const memberCacheService = new MemberCacheService(config);
 const chaosService = new ChaosService(config, logService);
-const primaAprilisService = new PrimaAprilisService(config);
 
 let nicknameManager;
 let reactionRoleService;
@@ -59,7 +57,7 @@ let reactionRoleService;
 let isFullyInitialized = false;
 
 const messageHandler = new MessageHandler(config, mediaService, logService, chaosService);
-const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService, primaAprilisService);
+const interactionHandler = new InteractionHandler(config, logService, specialRolesService, messageHandler, roleKickingService, chaosService);
 const memberHandler = new MemberHandler(config, logService, specialRolesService, roleManagementService, roleConflictService, memberCacheService);
 
 const sharedState = {
@@ -80,7 +78,6 @@ const sharedState = {
 // Kanały z auto-czyszczeniem wiadomości/reakcji/wątków nie-adminów
 const AUTO_CLEANUP_CHANNEL_IDS = new Set([
     '1486919971165442048', // countdown
-    '1486500418358870074', // prima aprilis
 ]);
 
 async function isAdminMember(guild, userId) {
@@ -137,9 +134,6 @@ client.once(Events.ClientReady, async () => {
     await chaosService.initialize();
     await chaosService.restoreTimeouts(client);
 
-    // Inicjalizuj Prima Aprilis
-    await primaAprilisService.initialize();
-
     // Rejestruj komendy na końcu (może blokować startup)
     await interactionHandler.registerSlashCommands(client);
 
@@ -149,11 +143,7 @@ client.once(Events.ClientReady, async () => {
     // Wyślij/odśwież wiadomość z przyciskiem do zgłaszania
     await setupReportButtonMessage(client, config);
 
-    // Wyślij/odśwież wiadomość Prima Aprilis
-    await primaAprilisService.setupButtonMessage(client);
-    await primaAprilisService.setupPasswordMessage(client);
-
-    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń, Prima Aprilis');
+    logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -169,17 +159,6 @@ client.on(Events.MessageCreate, async (message) => {
             await message.delete().catch(() => {});
             return;
         }
-    }
-
-    // Prima Aprilis: sprawdzanie hasła przez uwięzionych użytkowników
-    if (!message.author.bot && message.guild && primaAprilisService.isTrapped(message.author.id)) {
-        try {
-            const member = await message.guild.members.fetch(message.author.id);
-            await primaAprilisService.tryPassword(member, message.content);
-        } catch (error) {
-            logger.error('❌ PrimaAprilis: błąd przy sprawdzaniu hasła:', error.message);
-        }
-        return;
     }
 
     await messageHandler.handleMessage(message, client);
@@ -203,25 +182,8 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
 
 client.on(Events.GuildMemberAdd, async (member) => {
     if (!isFullyInitialized) return;
-
-    // Prima Aprilis: jeśli uwięziony gracz wrócił na serwer, przywróć rolę gracza
-    if (primaAprilisService.isTrapped(member.id)) {
-        try {
-            await primaAprilisService.handleMemberRejoin(member);
-        } catch (error) {
-            logger.error('❌ PrimaAprilis: błąd przy powrocie gracza na serwer:', error.message);
-        }
-    }
 });
 
-client.on(Events.GuildMemberRemove, async (member) => {
-    if (!isFullyInitialized) return;
-    try {
-        await primaAprilisService.handleMemberLeave(member);
-    } catch (error) {
-        logger.error('❌ PrimaAprilis: błąd przy opuszczeniu serwera przez gracza:', error.message);
-    }
-});
 
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     // Guard: Ignoruj eventy dopóki bot nie jest w pełni zainicjalizowany
@@ -409,7 +371,6 @@ process.on('SIGINT', async () => {
     reactionRoleService.cleanup();
     roleConflictService.cleanup();
     await memberCacheService.cleanup();
-    primaAprilisService.cleanup();
 
     // Wyczyść ImageBlockService
     if (messageHandler.imageBlockService) {
@@ -441,8 +402,7 @@ process.on('SIGTERM', async () => {
         reactionRoleService.cleanup();
         roleConflictService.cleanup();
         await memberCacheService.cleanup();
-        primaAprilisService.cleanup();
-
+    
         // Wyczyść ImageBlockService
         if (messageHandler.imageBlockService) {
             await messageHandler.imageBlockService.shutdown();
