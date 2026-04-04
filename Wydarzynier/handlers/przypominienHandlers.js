@@ -853,7 +853,7 @@ async function handleTemplateSelectForSet(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 90d), ee')
+        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 90d), ee, msc')
         .setRequired(false)
         .setMaxLength(10);
 
@@ -1406,7 +1406,7 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval
             if (!eventMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d) lub "ee"'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee" lub "msc"'
                 });
                 return;
             }
@@ -1460,18 +1460,22 @@ async function handleModalSubmit(interaction, sharedState) {
             // Validate interval
             if (!eventMenedzer.validateInterval(interval)) {
                 await interaction.editReply({
-                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d) lub "ee"'
+                    content: '❌ Nieprawidłowy format interwału. Użyj: 1s, 1m, 1h, 1d (max 90d), "ee" lub "msc"'
                 });
                 return;
             }
 
             const intervalMs = (interval && interval.trim() !== '') ? eventMenedzer.parseInterval(interval) : null;
 
+            const effectiveInterval = interval && interval.trim() !== '' ? interval : null;
             await eventMenedzer.updateEvent(eventId, {
                 name,
                 firstTrigger: firstTrigger.toISOString(),
-                interval: interval && interval.trim() !== '' ? interval : null,
+                interval: effectiveInterval,
                 intervalMs,
+                monthlyDay: effectiveInterval === 'msc'
+                    ? parseInt(firstTrigger.toLocaleString('en-US', { timeZone: 'Europe/Warsaw', day: 'numeric' }))
+                    : null,
                 nextTrigger: firstTrigger.toISOString()
             });
 
@@ -2764,7 +2768,7 @@ async function handleAddEvent(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 90d), ee')
+        .setPlaceholder('Puste = jednorazowe, lub: 1s, 1m, 1h, 1d (max 90d), ee, msc')
         .setRequired(false)
         .setMaxLength(10);
 
