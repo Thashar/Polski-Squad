@@ -283,6 +283,11 @@ class RankingService {
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
 
+        if (!isGlobal && guild) {
+            const iconUrl = guild.iconURL({ size: 128 });
+            if (iconUrl) embed.setThumbnail(iconUrl);
+        }
+
         return embed;
     }
 
