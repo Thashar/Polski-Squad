@@ -3152,7 +3152,7 @@ async function handleKalkulatorMyHistoryButton(interaction, sharedState) {
             return;
         }
 
-        const listText = history.map((e, i) => {
+        const listText = [...history].reverse().map((e, i) => {
             const ts = Math.floor(new Date(e.completedAt).getTime() / 1000);
             const safeLink = e.returnLink.match(/^https?:\/\//) ? e.returnLink : `https://${e.returnLink}`;
             const linkLabel = safeLink.includes('=') ? safeLink.split('=').pop() : 'Link';
