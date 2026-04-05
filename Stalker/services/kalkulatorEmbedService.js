@@ -13,6 +13,7 @@ class KalkulatorEmbedService {
         this.logger = logger;
         this.data = {
             messageId: null,
+            pingMessageId: null,
             requests: [],   // { userId, userNick, link, points, addedAt }
             helpers: []     // { helperId, helperNick, requestUserId, requestUserNick, assignedAt }
         };
@@ -23,6 +24,7 @@ class KalkulatorEmbedService {
             const raw = await fs.readFile(DATA_FILE, 'utf8');
             const parsed = JSON.parse(raw);
             this.data.messageId = parsed.messageId || null;
+            this.data.pingMessageId = parsed.pingMessageId || null;
             this.data.requests = Array.isArray(parsed.requests) ? parsed.requests : [];
             this.data.helpers = Array.isArray(parsed.helpers) ? parsed.helpers : [];
         } catch {
@@ -225,6 +227,37 @@ class KalkulatorEmbedService {
 
         await this.saveData();
         await this.updateEmbed(client);
+        await this.sendPingNotification(client);
+    }
+
+    /**
+     * Usuwa poprzednią wiadomość z pingiem i wysyła nową
+     */
+    async sendPingNotification(client) {
+        const channel = await client.channels.fetch(CALCULATOR_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+
+        // Usuń poprzedni ping
+        if (this.data.pingMessageId) {
+            try {
+                const old = await channel.messages.fetch(this.data.pingMessageId);
+                await old.delete();
+            } catch {
+                // Wiadomość już nie istnieje
+            }
+            this.data.pingMessageId = null;
+        }
+
+        // Wyślij nowy ping
+        try {
+            const msg = await channel.send(
+                `<@&1486506395057524887> pojawiła się nowa prośba o przeliczenie kalkulatora!`
+            );
+            this.data.pingMessageId = msg.id;
+            await this.saveData();
+        } catch (e) {
+            this.logger.error('[KalkulatorEmbed] Błąd wysyłania pinga:', e);
+        }
     }
 
     /**
