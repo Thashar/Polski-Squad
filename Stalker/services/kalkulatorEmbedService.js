@@ -94,7 +94,7 @@ class KalkulatorEmbedService {
             requestsText = sortedRequests.map(req => {
                 const timestamp = Math.floor(new Date(req.addedAt).getTime() / 1000);
                 const beingHelped = this.data.helpers.some(h => h.requestUserId === req.userId);
-                return `**${req.userNick}**${beingHelped ? ' 🔄' : ''} • <t:${timestamp}:f>`;
+                return `**${req.userNick}**${beingHelped ? ' 🔄' : ''} • <t:${timestamp}:R>`;
             }).join('\n');
         }
 
@@ -102,10 +102,8 @@ class KalkulatorEmbedService {
         let helpersText = '*Brak aktywnych pomagających*';
         if (this.data.helpers.length > 0) {
             helpersText = this.data.helpers.map(h => {
-                const date = new Date(h.assignedAt).toLocaleString('pl-PL', {
-                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                });
-                return `**${h.helperNick}** → **${h.requestUserNick}** • ${date}`;
+                const ts = Math.floor(new Date(h.assignedAt).getTime() / 1000);
+                return `**${h.helperNick}** → **${h.requestUserNick}** • <t:${ts}:R>`;
             }).join('\n');
         }
 
