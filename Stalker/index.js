@@ -489,6 +489,12 @@ client.on(Events.MessageCreate, async (message) => {
                     session.publicInteraction
                 );
 
+                // Sprawdź czy sesja nie została anulowana podczas przetwarzania
+                if (session.cancelled || !session.aggregatedResults) {
+                    logger.info('[PHASE1] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    return;
+                }
+
                 // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
                 const confirmation = phaseService.createProcessedImagesEmbed(session);
 
@@ -572,6 +578,12 @@ client.on(Events.MessageCreate, async (message) => {
                     session.publicInteraction,
                     ocrService
                 );
+
+                // Sprawdź czy sesja nie została anulowana podczas przetwarzania
+                if (session.cancelled || !session.aggregatedResults) {
+                    logger.info('[REMIND] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    return;
+                }
 
                 // Pokaż końcowe potwierdzenie z listą graczy
                 const confirmation = reminderService.createFinalConfirmationEmbed(session);
