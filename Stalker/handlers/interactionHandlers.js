@@ -3154,8 +3154,9 @@ async function handleKalkulatorMyHistoryButton(interaction, sharedState) {
 
         const listText = history.map((e, i) => {
             const ts = Math.floor(new Date(e.completedAt).getTime() / 1000);
-            const linkLabel = e.returnLink.includes('=') ? e.returnLink.split('=').pop() : 'Link';
-            return `**${i + 1}.** [${linkLabel}](${e.returnLink}) • ${e.points} pkt • <t:${ts}:D>`;
+            const safeLink = e.returnLink.match(/^https?:\/\//) ? e.returnLink : `https://${e.returnLink}`;
+            const linkLabel = safeLink.includes('=') ? safeLink.split('=').pop() : 'Link';
+            return `**${i + 1}.** [${linkLabel}](${safeLink}) • ${e.points} pkt • <t:${ts}:D>`;
         }).join('\n');
 
         const deleteButton = new ActionRowBuilder().addComponents(
@@ -3192,7 +3193,8 @@ async function handleKalkulatorDeleteEntryButton(interaction, sharedState) {
 
         const options = history.map((e, i) => {
             const ts = Math.floor(new Date(e.completedAt).getTime() / 1000);
-            const label = `${i + 1}. ${e.returnLink.slice(0, 60)}`;
+            const safeLink = e.returnLink.match(/^https?:\/\//) ? e.returnLink : `https://${e.returnLink}`;
+            const label = `${i + 1}. ${safeLink.slice(0, 60)}`;
             const description = `${e.points} pkt — <t:${ts}:f>`;
             return new StringSelectMenuOptionBuilder()
                 .setValue(e.id)
