@@ -17,6 +17,15 @@ class InteractionHandler {
     }
 
     /**
+     * Zwraca zestaw komunikatów dla danego serwera
+     * @param {string} guildId
+     * @returns {Object}
+     */
+    msgs(guildId) {
+        return this.config.getMessages(guildId);
+    }
+
+    /**
      * Sprawdza czy kanał jest dozwolony dla danego serwera
      * @param {string} channelId
      * @param {string} guildId
@@ -35,30 +44,30 @@ class InteractionHandler {
         const commands = [
             new SlashCommandBuilder()
                 .setName('ranking')
-                .setDescription('Wyświetla ranking graczy (wybierz serwer lub global)'),
+                .setDescription('Display the player ranking (choose server or global)'),
 
             new SlashCommandBuilder()
                 .setName('update')
-                .setDescription('Aktualizuje wynik na podstawie załączonego obrazu')
+                .setDescription('Update your score from a result screenshot')
                 .addAttachmentOption(option =>
                     option.setName('obraz')
-                        .setDescription('Obraz z wynikiem zawierający "Best:" i "Total:"')
+                        .setDescription('Image containing "Best:" and "Total:"')
                         .setRequired(true)),
 
             new SlashCommandBuilder()
                 .setName('remove')
-                .setDescription('Usuwa gracza z rankingu (tylko dla administratorów)')
+                .setDescription('Remove a player from the ranking (admins only)')
                 .addUserOption(option =>
                     option.setName('user')
-                        .setDescription('Użytkownik do usunięcia z rankingu')
+                        .setDescription('User to remove from the ranking')
                         .setRequired(true)),
 
             new SlashCommandBuilder()
                 .setName('ocr-debug')
-                .setDescription('Przełącz szczegółowe logowanie OCR')
+                .setDescription('Toggle detailed OCR logging')
                 .addBooleanOption(option =>
                     option.setName('enabled')
-                        .setDescription('Włącz (true) lub wyłącz (false) szczegółowe logowanie')
+                        .setDescription('Enable (true) or disable (false) detailed logging')
                         .setRequired(false))
         ];
 
@@ -85,25 +94,17 @@ class InteractionHandler {
         if (interaction.isChatInputCommand()) {
             if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) {
                 await interaction.reply({
-                    content: this.config.messages.channelNotAllowed,
+                    content: this.msgs(interaction.guildId).channelNotAllowed,
                     flags: ['Ephemeral']
                 });
                 return;
             }
 
             switch (interaction.commandName) {
-                case 'ranking':
-                    await this.handleRankingCommand(interaction);
-                    break;
-                case 'update':
-                    await this.handleUpdateCommand(interaction);
-                    break;
-                case 'remove':
-                    await this.handleRemoveCommand(interaction);
-                    break;
-                case 'ocr-debug':
-                    await this.handleOcrDebugCommand(interaction);
-                    break;
+                case 'ranking': await this.handleRankingCommand(interaction); break;
+                case 'update':  await this.handleUpdateCommand(interaction);  break;
+                case 'remove':  await this.handleRemoveCommand(interaction);  break;
+                case 'ocr-debug': await this.handleOcrDebugCommand(interaction); break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -117,13 +118,15 @@ class InteractionHandler {
     async handleRankingCommand(interaction) {
         await this.logService.logCommandUsage('ranking', interaction);
 
+        const msgs = this.msgs(interaction.guildId);
+
         try {
             await interaction.deferReply({ flags: ['Ephemeral'] });
 
-            const selectRows = this.rankingService.createServerSelectButtons(interaction.client);
+            const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs);
 
             await interaction.editReply({
-                content: '📊 **Wybierz ranking do wyświetlenia:**',
+                content: msgs.rankingSelectPrompt,
                 components: selectRows
             });
 
@@ -131,12 +134,9 @@ class InteractionHandler {
             await this.logService.logRankingError(error, 'handleRankingCommand');
 
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: this.config.messages.rankingError,
-                    flags: ['Ephemeral']
-                });
+                await interaction.reply({ content: msgs.rankingError, flags: ['Ephemeral'] });
             } else if (interaction.deferred) {
-                await interaction.editReply({ content: this.config.messages.rankingError });
+                await interaction.editReply({ content: msgs.rankingError });
             }
         }
     }
@@ -148,6 +148,7 @@ class InteractionHandler {
     async handleUpdateCommand(interaction) {
         await this.logService.logCommandUsage('update', interaction);
 
+        const msgs = this.msgs(interaction.guildId);
         const attachment = interaction.options.getAttachment('obraz');
 
         const isImage = this.config.images.supportedExtensions.some(ext =>
@@ -155,10 +156,7 @@ class InteractionHandler {
         );
 
         if (!isImage) {
-            await interaction.reply({
-                content: this.config.messages.updateNotImage,
-                flags: ['Ephemeral']
-            });
+            await interaction.reply({ content: msgs.updateNotImage, flags: ['Ephemeral'] });
             return;
         }
 
@@ -166,14 +164,14 @@ class InteractionHandler {
             const maxSizeMB = Math.round(this.config.images.maxSize / (1024 * 1024));
             const fileSizeMB = Math.round(attachment.size / (1024 * 1024) * 100) / 100;
             await interaction.reply({
-                content: `❌ Plik jest za duży! Maksymalny rozmiar: **${maxSizeMB}MB**, twój plik: **${fileSizeMB}MB**\n💡 **Tip:** Zmniejsz jakość obrazu lub użyj kompresji.`,
+                content: formatMessage(msgs.updateFileTooLarge, { maxMB: maxSizeMB, fileMB: fileSizeMB }),
                 flags: ['Ephemeral']
             });
             return;
         }
 
         await interaction.deferReply({ flags: ['Ephemeral'] });
-        await interaction.editReply({ content: this.config.messages.updateProcessing });
+        await interaction.editReply({ content: msgs.updateProcessing });
 
         let tempImagePath = null;
 
@@ -201,21 +199,21 @@ class InteractionHandler {
                         await fs.unlink(tempImagePath);
 
                         if (aiResult.error === 'FAKE_PHOTO') {
-                            await interaction.editReply('🚫 **WYKRYTO PODROBIONE ZDJĘCIE!**\n\nTwoje zdjęcie zostało zidentyfikowane jako sfałszowane lub zmodyfikowane. Wynik nie zostanie przyjęty.\n\n⚠️ Przerabianie screenshotów jest niedozwolone!');
+                            await interaction.editReply(msgs.fakePhotoDetected);
                             return;
                         }
 
-                        await interaction.editReply('❌ Niepoprawny screenshot. Upewnij się, że zdjęcie zawiera ekran po zakończeniu walki Ender\'s Echo!');
+                        await interaction.editReply(msgs.invalidScreenshot);
                         return;
                     }
                 } catch (aiError) {
                     logger.error('❌ AI OCR błąd, przechodzę na tradycyjny OCR:', aiError);
-                    await interaction.editReply({ content: '⚠️ AI OCR niedostępny, używam tradycyjnego OCR...' });
+                    await interaction.editReply({ content: msgs.aiOcrUnavailable });
 
                     const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
                     if (!hasRequiredWords) {
                         await fs.unlink(tempImagePath);
-                        await interaction.editReply(this.config.messages.updateNoRequiredWords);
+                        await interaction.editReply(msgs.updateNoRequiredWords);
                         return;
                     }
 
@@ -224,7 +222,7 @@ class InteractionHandler {
 
                     if (!bestScore || bestScore.trim() === '') {
                         await fs.unlink(tempImagePath);
-                        await interaction.editReply(this.config.messages.updateNoScore);
+                        await interaction.editReply(msgs.updateNoScore);
                         return;
                     }
 
@@ -237,7 +235,7 @@ class InteractionHandler {
                 const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
                 if (!hasRequiredWords) {
                     await fs.unlink(tempImagePath);
-                    await interaction.editReply(this.config.messages.updateNoRequiredWords);
+                    await interaction.editReply(msgs.updateNoRequiredWords);
                     return;
                 }
 
@@ -246,7 +244,7 @@ class InteractionHandler {
 
                 if (!bestScore || bestScore.trim() === '') {
                     await fs.unlink(tempImagePath);
-                    await interaction.editReply(this.config.messages.updateNoScore);
+                    await interaction.editReply(msgs.updateNoScore);
                     return;
                 }
 
@@ -279,13 +277,13 @@ class InteractionHandler {
                     });
 
                     const resultEmbed = this.rankingService.createResultEmbed(
-                        userName, bestScore, currentScore.score, imageAttachment.name, bossName
+                        userName, bestScore, currentScore.score, imageAttachment.name, bossName, msgs
                     );
 
                     try {
                         await interaction.editReply({ embeds: [resultEmbed] });
                         await interaction.followUp({
-                            content: `📎 **Oryginalny obraz wyniku:**`,
+                            content: msgs.rankingImageCaption,
                             files: [imageAttachment],
                             flags: ['Ephemeral']
                         });
@@ -294,14 +292,18 @@ class InteractionHandler {
                         logger.error('❌ Błąd podczas wysyłania embed (brak rekordu):', editReplyError);
                         try {
                             await interaction.editReply({
-                                content: `❌ Nie pobito rekordu\n**Gracz:** ${userName}\n**Wynik:** ${bestScore}\n**Obecny rekord:** ${currentScore.score}\n\n*Błąd wysyłania embed z obrazem*`
+                                content: formatMessage(msgs.noRecordFallback, {
+                                    username: userName,
+                                    score: bestScore,
+                                    current: currentScore.score
+                                })
                             });
                         } catch (fallbackError) {
                             logger.error('❌ Nie można wysłać fallback odpowiedzi:', fallbackError);
                         }
                     }
 
-                    await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
+                    await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
                     return;
                 } catch (noRecordError) {
                     throw noRecordError;
@@ -322,13 +324,12 @@ class InteractionHandler {
                 imageAttachment.name,
                 currentScore ? currentScore.score : null,
                 userId,
-                guildId
+                interaction.guildId,
+                msgs
             );
 
             try {
-                await interaction.editReply({
-                    content: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.'
-                });
+                await interaction.editReply({ content: msgs.newRecordConfirmed });
 
                 await interaction.followUp({
                     embeds: [publicEmbed],
@@ -340,7 +341,11 @@ class InteractionHandler {
                 logger.error('❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie:', newRecordError);
                 try {
                     await interaction.editReply({
-                        content: `🏆 **NOWY REKORD!**\n**Gracz:** ${userName}\n**Nowy rekord:** ${bestScore}\n**Poprzedni:** ${currentScore ? currentScore.score : 'brak'}\n\n*Błąd wysyłania pełnego embed*`
+                        content: formatMessage(msgs.newRecordFallback, {
+                            username: userName,
+                            score: bestScore,
+                            previous: currentScore ? currentScore.score : '—'
+                        })
                     });
                 } catch (fallbackError) {
                     logger.error('❌ Nie można wysłać fallback odpowiedzi dla nowego rekordu:', fallbackError);
@@ -349,25 +354,25 @@ class InteractionHandler {
 
             // Aktualizacja ról TOP po nowym rekordzie
             try {
-                const guildConfig = this.config.getGuildConfig(guildId);
-                const updatedPlayers = await this.rankingService.getSortedPlayers(guildId);
+                const guildConfig = this.config.getGuildConfig(interaction.guildId);
+                const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 await this.logService.logMessage('success', 'Role TOP zostały zaktualizowane po nowym rekordzie', interaction);
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
             }
 
-            await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
+            await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
 
         } catch (error) {
             await this.logService.logOCRError(error, 'handleUpdateCommand');
 
             if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(error => logger.error('Błąd usuwania pliku tymczasowego:', error));
+                await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
             }
 
             try {
-                await interaction.editReply(this.config.messages.updateError);
+                await interaction.editReply(msgs.updateError);
             } catch (replyError) {
                 logger.error('Błąd podczas wysyłania komunikatu o błędzie:', replyError.message);
             }
@@ -381,11 +386,10 @@ class InteractionHandler {
     async handleRemoveCommand(interaction) {
         await this.logService.logCommandUsage('remove', interaction);
 
+        const msgs = this.msgs(interaction.guildId);
+
         if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-                flags: ['Ephemeral']
-            });
+            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
             return;
         }
 
@@ -398,7 +402,7 @@ class InteractionHandler {
             const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUser.id, guildId);
 
             if (!wasRemoved) {
-                await interaction.editReply(`❌ Gracz ${targetUser.tag} nie był w rankingu tego serwera.`);
+                await interaction.editReply(formatMessage(msgs.playerNotInRanking, { tag: targetUser.tag }));
                 return;
             }
 
@@ -411,11 +415,11 @@ class InteractionHandler {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP po usunięciu gracza: ${roleError.message}`, interaction);
             }
 
-            await interaction.editReply(`✅ Gracz ${targetUser.tag} został pomyślnie usunięty z rankingu. Role TOP zostały zaktualizowane.`);
+            await interaction.editReply(formatMessage(msgs.playerRemovedSuccess, { tag: targetUser.tag }));
 
         } catch (error) {
             await this.logService.logMessage('error', `Błąd usuwania gracza ${targetUser.tag} z rankingu: ${error.message}`, interaction);
-            await interaction.editReply(`❌ Wystąpił błąd podczas usuwania gracza z rankingu.`);
+            await interaction.editReply(msgs.playerRemoveError);
         }
     }
 
@@ -439,19 +443,19 @@ class InteractionHandler {
             const rankingData = this.rankingService.getActiveRanking(interaction.message.id);
 
             if (!rankingData) {
-                await interaction.editReply({
-                    content: this.config.messages.rankingExpired,
-                    embeds: [],
-                    components: []
-                });
+                // Wiadomość wygasła — komunikat w języku serwera wywołującego
+                const msgs = this.msgs(interaction.guildId);
+                await interaction.editReply({ content: msgs.rankingExpired, embeds: [], components: [] });
                 return;
             }
 
+            // Komunikaty z języka serwera, z którego pochodzi aktywny ranking
+            const msgs = rankingData.guildId
+                ? this.msgs(rankingData.guildId)
+                : this.msgs(interaction.guildId);
+
             if (interaction.user.id !== rankingData.userId) {
-                await interaction.followUp({
-                    content: this.config.messages.rankingWrongUser,
-                    flags: ['Ephemeral']
-                });
+                await interaction.followUp({ content: msgs.rankingWrongUser, flags: ['Ephemeral'] });
                 return;
             }
 
@@ -459,9 +463,9 @@ class InteractionHandler {
 
             switch (customId) {
                 case 'ranking_first': newPage = 0; break;
-                case 'ranking_prev': newPage = Math.max(0, rankingData.currentPage - 1); break;
-                case 'ranking_next': newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1); break;
-                case 'ranking_last': newPage = rankingData.totalPages - 1; break;
+                case 'ranking_prev':  newPage = Math.max(0, rankingData.currentPage - 1); break;
+                case 'ranking_next':  newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1); break;
+                case 'ranking_last':  newPage = rankingData.totalPages - 1; break;
             }
 
             rankingData.currentPage = newPage;
@@ -473,26 +477,25 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 rankingData.players, newPage, rankingData.totalPages, rankingData.userId, guild,
-                { mode: rankingData.mode, client: rankingData.mode === 'global' ? interaction.client : null }
+                {
+                    mode: rankingData.mode,
+                    client: rankingData.mode === 'global' ? interaction.client : null,
+                    messages: msgs
+                }
             );
-            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false);
+            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false, msgs);
 
             await interaction.editReply({ embeds: [embed], components: [buttons] });
 
         } catch (error) {
             logger.error('Błąd w handleButtonInteraction:', error);
 
+            const msgs = this.msgs(interaction.guildId);
+
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: this.config.messages.rankingError,
-                    flags: ['Ephemeral']
-                });
+                await interaction.reply({ content: msgs.rankingError, flags: ['Ephemeral'] });
             } else if (interaction.deferred) {
-                await interaction.editReply({
-                    content: this.config.messages.rankingError,
-                    embeds: [],
-                    components: []
-                });
+                await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
             }
         }
     }
@@ -505,28 +508,31 @@ class InteractionHandler {
     async _handleRankingSelect(interaction, customId) {
         await interaction.deferUpdate();
 
+        // Język użytkownika = język serwera, na którym kliknął przycisk
+        const msgs = this.msgs(interaction.guildId);
+
         try {
             let players;
             let mode;
             let guildId = null;
             let guild = null;
+            let rankMsgs = msgs; // komunikaty do użycia w embeddzie
 
             if (customId === 'ranking_select_global') {
                 players = await this.rankingService.getGlobalRanking();
                 mode = 'global';
+                // Dla globalnego używamy języka bieżącego serwera
             } else {
-                // ranking_select_server_{guildId}
                 guildId = customId.replace('ranking_select_server_', '');
                 players = await this.rankingService.getSortedPlayers(guildId);
                 mode = 'server';
                 guild = interaction.client.guilds.cache.get(guildId) || null;
+                // Komunikaty w języku wybranego serwera
+                rankMsgs = this.msgs(guildId);
             }
 
             if (players.length === 0) {
-                await interaction.editReply({
-                    content: this.config.messages.rankingEmpty,
-                    components: []
-                });
+                await interaction.editReply({ content: rankMsgs.rankingEmpty, components: [] });
                 return;
             }
 
@@ -535,9 +541,13 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, currentPage, totalPages, interaction.user.id, guild,
-                { mode, client: mode === 'global' ? interaction.client : null }
+                {
+                    mode,
+                    client: mode === 'global' ? interaction.client : null,
+                    messages: rankMsgs
+                }
             );
-            const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false);
+            const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false, rankMsgs);
 
             const reply = await interaction.editReply({
                 content: null,
@@ -557,11 +567,7 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error('Błąd w _handleRankingSelect:', error);
-            await interaction.editReply({
-                content: this.config.messages.rankingError,
-                embeds: [],
-                components: []
-            });
+            await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
         }
     }
 
@@ -570,11 +576,10 @@ class InteractionHandler {
      * @param {CommandInteraction} interaction
      */
     async handleOcrDebugCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+
         if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-                flags: ['Ephemeral']
-            });
+            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
             return;
         }
 
@@ -583,7 +588,9 @@ class InteractionHandler {
         if (enabled === null) {
             const currentState = this.config.ocr.detailedLogging.enabled;
             await interaction.reply({
-                content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
+                content: formatMessage(msgs.ocrDebugStatus, {
+                    status: currentState ? msgs.ocrDebugEnabled : msgs.ocrDebugDisabled
+                }),
                 flags: ['Ephemeral']
             });
             return;
@@ -591,13 +598,10 @@ class InteractionHandler {
 
         this.config.ocr.detailedLogging.enabled = enabled;
 
-        const statusText = enabled ? '✅ Włączone' : '❌ Wyłączone';
-        const emoji = enabled ? '🔍' : '🔇';
-
-        logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+        logger.info(`${enabled ? '🔍' : '🔇'} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
 
         await interaction.reply({
-            content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
+            content: enabled ? msgs.ocrDebugOn : msgs.ocrDebugOff,
             flags: ['Ephemeral']
         });
     }

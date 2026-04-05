@@ -1,5 +1,5 @@
 const path = require('path');
-const messages = require('./messages');
+const allMessages = require('./messages');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('EndersEcho');
@@ -16,8 +16,9 @@ if (missingVars.length > 0) {
 
 /**
  * Parsuje konfigurację serwerów z env vars.
- * Format: ENDERSECHO_GUILD_1_ID, ENDERSECHO_GUILD_1_CHANNEL, ENDERSECHO_GUILD_1_TOP1_ROLE, ...
- * Role TOP są opcjonalne — jeśli brak, bot nie zarządza rolami na tym serwerze.
+ * Format: ENDERSECHO_GUILD_N_ID, ENDERSECHO_GUILD_N_CHANNEL, ENDERSECHO_GUILD_N_LANG,
+ *         ENDERSECHO_GUILD_N_TOP1_ROLE, ...
+ * Role TOP i język są opcjonalne (domyślnie lang=pol).
  */
 function parseGuildsConfig() {
     const guilds = [];
@@ -30,6 +31,13 @@ function parseGuildsConfig() {
         if (!channelId) {
             logger.error(`❌ Brak ENDERSECHO_GUILD_${i}_CHANNEL dla serwera ${guildId}`);
             process.exit(1);
+        }
+
+        // Język interfejsu — domyślnie pol
+        const rawLang = (process.env[`ENDERSECHO_GUILD_${i}_LANG`] || 'pol').toLowerCase();
+        const lang = allMessages[rawLang] ? rawLang : 'pol';
+        if (rawLang !== lang) {
+            logger.warn(`⚠️ Nieznany język "${rawLang}" dla serwera ${guildId} — używam "pol"`);
         }
 
         // Role TOP są w pełni opcjonalne
@@ -47,6 +55,7 @@ function parseGuildsConfig() {
         guilds.push({
             id: guildId,
             allowedChannelId: channelId,
+            lang,
             // null jeśli żadna rola nie skonfigurowana — roleService pomija wtedy aktualizację
             topRoles: Object.keys(topRoles).length > 0 ? topRoles : null
         });
@@ -74,17 +83,32 @@ module.exports = {
     guilds,
 
     /**
-     * Zwraca konfigurację serwera po guildId lub null jeśli nieznany
+     * Zwraca konfigurację serwera po guildId lub null
      * @param {string} guildId
      */
     getGuildConfig(guildId) {
         return guilds.find(g => g.id === guildId) || null;
     },
 
+    /**
+     * Zwraca zestaw komunikatów dla danego serwera (pol lub eng).
+     * Fallback: pol.
+     * @param {string} guildId
+     * @returns {Object}
+     */
+    getMessages(guildId) {
+        const guildConfig = guilds.find(g => g.id === guildId);
+        const lang = guildConfig?.lang || 'pol';
+        return allMessages[lang] || allMessages['pol'];
+    },
+
+    // Domyślne wiadomości (pol) — do użytku wewnętrznego / fallback
+    messages: allMessages['pol'],
+
     // Konfiguracja rankingu
     ranking: {
         dataDir: path.join(__dirname, '../data'),
-        legacyFile: path.join(__dirname, '../data/ranking.json'), // migracja starego formatu
+        legacyFile: path.join(__dirname, '../data/ranking.json'),
         playersPerPage: 10,
         paginationTimeout: 3600000 // 1 godzina
     },
@@ -135,6 +159,4 @@ module.exports = {
         },
         medals: ['🥇', '🥈', '🥉']
     },
-
-    messages
 };

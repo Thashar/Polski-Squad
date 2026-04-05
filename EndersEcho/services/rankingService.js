@@ -23,7 +23,7 @@ class RankingService {
 
     /**
      * Wczytuje ranking dla danego serwera.
-     * Przy pierwszym wywołaniu sprawdza czy istnieje stary ranking.json i migruje go.
+     * Przy pierwszym wywołaniu na guild_1 sprawdza czy istnieje stary ranking.json i migruje go.
      * @param {string} guildId
      * @returns {Promise<Object>}
      */
@@ -33,7 +33,6 @@ class RankingService {
             const data = await fs.readFile(file, 'utf8');
             return JSON.parse(data);
         } catch (error) {
-            // Przy pierwszym serwerze sprawdź czy istnieje stary ranking.json do migracji
             if (this.config.guilds[0]?.id === guildId) {
                 const legacy = await this._loadLegacyRanking();
                 if (legacy) {
@@ -69,8 +68,6 @@ class RankingService {
             await fs.mkdir(this.config.ranking.dataDir, { recursive: true });
             const file = this.getRankingFile(guildId);
             await fs.writeFile(file, JSON.stringify(ranking, null, 2), 'utf8');
-
-            // Eksportuj zaktualizowany globalny ranking do shared_data
             await this.saveSharedRanking();
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
@@ -80,11 +77,10 @@ class RankingService {
 
     /**
      * Buduje globalny ranking — najlepszy wynik gracza ze wszystkich serwerów.
-     * Każdy wpis ma dodatkowe pole sourceGuildId.
      * @returns {Promise<Array>}
      */
     async getGlobalRanking() {
-        const bestPerPlayer = new Map(); // userId → { ...playerData, sourceGuildId }
+        const bestPerPlayer = new Map();
 
         for (const guild of this.config.guilds) {
             const ranking = await this.loadRanking(guild.id);
@@ -102,7 +98,6 @@ class RankingService {
 
     /**
      * Eksportuje globalny ranking do shared_data/endersecho_ranking.json
-     * Używany przez inne boty (np. Stalker /player-status)
      */
     async saveSharedRanking() {
         try {
@@ -121,16 +116,11 @@ class RankingService {
                 sourceGuildId: player.sourceGuildId
             }));
 
-            const sharedData = {
-                updatedAt: new Date().toISOString(),
-                players
-            };
-
+            const sharedData = { updatedAt: new Date().toISOString(), players };
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
         } catch (error) {
             logger.error('Błąd eksportu rankingu do shared_data:', error);
-            // Nie rzucamy błędu — to operacja pomocnicza
         }
     }
 
@@ -143,10 +133,8 @@ class RankingService {
         const upperScore = scoreText.toUpperCase().trim();
         const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|[KMBTQ])?$/);
         if (!match) return 0;
-
         const number = parseFloat(match[1]);
         const unit = match[2];
-
         return unit ? number * (this.config.scoring.units[unit] || 1) : number;
     }
 
@@ -195,14 +183,10 @@ class RankingService {
      * @returns {string}
      */
     formatProgressInUnit(improvement, targetUnit) {
-        if (!targetUnit) {
-            return `+${improvement}`;
-        }
+        if (!targetUnit) return `+${improvement}`;
 
         const unitValue = this.config.scoring.units[targetUnit];
-        if (!unitValue) {
-            return `+${this.formatScore(improvement)}`;
-        }
+        if (!unitValue) return `+${this.formatScore(improvement)}`;
 
         const unitImprovement = improvement / unitValue;
         const formattedValue = unitImprovement % 1 === 0 ?
@@ -215,16 +199,17 @@ class RankingService {
 
     /**
      * Tworzy embed rankingu
-     * @param {Array} players - Lista graczy
-     * @param {number} page - Aktualna strona
-     * @param {number} totalPages - Całkowita liczba stron
-     * @param {string} userId - ID użytkownika wywołującego
-     * @param {Guild|null} guild - Serwer Discord (null dla globalnego)
-     * @param {Object} options - { mode: 'global'|'server', client: Client|null }
+     * @param {Array} players
+     * @param {number} page
+     * @param {number} totalPages
+     * @param {string} userId
+     * @param {Guild|null} guild
+     * @param {Object} options - { mode: 'global'|'server', client, messages }
      * @returns {Promise<EmbedBuilder>}
      */
     async createRankingEmbed(players, page, totalPages, userId, guild, options = {}) {
         const { mode = 'server', client = null } = options;
+        const msgs = options.messages || this.config.messages;
         const isGlobal = mode === 'global';
 
         const startIndex = page * this.config.ranking.playersPerPage;
@@ -249,8 +234,6 @@ class RankingService {
 
                 let displayName = player.username || `ID:${player.userId}`;
                 try {
-                    // Dla serwera — pobierz nick z tego serwera
-                    // Dla globalnego — spróbuj pobrać z serwera źródłowego
                     const targetGuild = isGlobal
                         ? (client?.guilds.cache.get(player.sourceGuildId) || null)
                         : guild;
@@ -263,7 +246,7 @@ class RankingService {
                     // fallback na zapisane username
                 }
 
-                const bossName = player.bossName || 'Nieznany';
+                const bossName = player.bossName || msgs.unknownBoss;
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
 
@@ -288,24 +271,22 @@ class RankingService {
         }
 
         if (!rankingText.trim()) {
-            rankingText = '⚠️ Brak danych do wyświetlenia na tej stronie';
+            rankingText = msgs.noDataOnPage;
         }
 
-        const title = isGlobal
-            ? '🌐 Ranking Globalny'
-            : this.config.messages.rankingTitle;
+        const title = isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle;
 
         const embed = new EmbedBuilder()
             .setColor(isGlobal ? 0x5865f2 : 0xffd700)
             .setTitle(title)
             .setDescription(rankingText)
             .addFields({
-                name: this.config.messages.rankingStats,
-                value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) +
-                       (players.length > 0 ? '\n' + formatMessage(this.config.messages.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
+                name: msgs.rankingStats,
+                value: formatMessage(msgs.rankingPlayersCount, { count: players.length }) +
+                       (players.length > 0 ? '\n' + formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
                 inline: false
             })
-            .setFooter({ text: formatMessage(this.config.messages.rankingPage, { current: page + 1, total: totalPages }) })
+            .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
 
         return embed;
@@ -316,33 +297,35 @@ class RankingService {
      * @param {number} page
      * @param {number} totalPages
      * @param {boolean} disabled
+     * @param {Object|null} messages - opcjonalny zestaw komunikatów
      * @returns {ActionRowBuilder}
      */
-    createRankingButtons(page, totalPages, disabled = false) {
+    createRankingButtons(page, totalPages, disabled = false, messages = null) {
+        const msgs = messages || this.config.messages;
         const row = new ActionRowBuilder();
 
         row.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_first')
-                .setLabel(this.config.messages.buttonFirst)
+                .setLabel(msgs.buttonFirst)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page === 0),
 
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
-                .setLabel(this.config.messages.buttonPrev)
+                .setLabel(msgs.buttonPrev)
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(disabled || page === 0),
 
             new ButtonBuilder()
                 .setCustomId('ranking_next')
-                .setLabel(this.config.messages.buttonNext)
+                .setLabel(msgs.buttonNext)
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(disabled || page >= totalPages - 1),
 
             new ButtonBuilder()
                 .setCustomId('ranking_last')
-                .setLabel(this.config.messages.buttonLast)
+                .setLabel(msgs.buttonLast)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1)
         );
@@ -351,16 +334,18 @@ class RankingService {
     }
 
     /**
-     * Tworzy przyciski wyboru serwera/global dla komendy /ranking
-     * @param {Client} client - Discord client (do pobrania nazw serwerów)
+     * Tworzy przyciski wyboru serwera/global dla komendy /ranking.
+     * Etykiety przycisków serwera to nazwy z Discord, przycisk Global — z komunikatów danego serwera.
+     * @param {Client} client
+     * @param {Object} messages - komunikaty serwera wywołującego
      * @returns {ActionRowBuilder[]}
      */
-    createServerSelectButtons(client) {
+    createServerSelectButtons(client, messages = null) {
+        const msgs = messages || this.config.messages;
         const buttons = [];
 
         for (const guildConfig of this.config.guilds) {
-            const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Serwer ${guildConfig.id}`;
-            // Skróć nazwę do 20 znaków jeśli za długa (limit labela przycisku to 80)
+            const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Server ${guildConfig.id}`;
             const label = guildName.length > 20 ? guildName.substring(0, 20) + '…' : guildName;
 
             buttons.push(
@@ -374,11 +359,10 @@ class RankingService {
         buttons.push(
             new ButtonBuilder()
                 .setCustomId('ranking_select_global')
-                .setLabel('🌐 Global')
+                .setLabel(msgs.globalButtonLabel)
                 .setStyle(ButtonStyle.Success)
         );
 
-        // Discord: max 5 przycisków na rząd, max 5 rzędów
         const rows = [];
         for (let i = 0; i < buttons.length; i += 5) {
             const row = new ActionRowBuilder();
@@ -391,44 +375,46 @@ class RankingService {
 
     /**
      * Tworzy embed wyniku (bez pobicia rekordu)
+     * @param {string} userName
+     * @param {string} bestScore
+     * @param {string} currentScore
+     * @param {string|null} attachmentName
+     * @param {string|null} bossName
+     * @param {Object|null} messages
+     * @returns {EmbedBuilder}
      */
-    createResultEmbed(userName, bestScore, currentScore, attachmentName = null, bossName = null) {
-        const logger = require('../../utils/consoleLogger').createBotLogger('EndersEcho');
+    createResultEmbed(userName, bestScore, currentScore, attachmentName = null, bossName = null, messages = null) {
+        const msgs = messages || this.config.messages;
 
         if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: createResultEmbed - Rozpoczynam tworzenie embed');
-            logger.info('🔍 DEBUG: createResultEmbed - userName: "' + userName + '"');
-            logger.info('🔍 DEBUG: createResultEmbed - bestScore: "' + bestScore + '"');
-            logger.info('🔍 DEBUG: createResultEmbed - currentScore: "' + currentScore + '"');
+            logger.info(`🔍 DEBUG: createResultEmbed - userName: "${userName}", bestScore: "${bestScore}", currentScore: "${currentScore}"`);
         }
 
         try {
             const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
             const newScoreValue = this.parseScoreValue(bestScore);
             const difference = currentScoreValue - newScoreValue;
-            const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
+            const differenceText = difference > 0
+                ? `+${this.formatScore(difference)}`
+                : this.formatScore(Math.abs(difference));
 
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: difference: ' + difference + ', differenceText: "' + differenceText + '"');
-            }
-
-            const statusMessage = formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore || 'Brak poprzedniego wyniku' });
-            const fullStatusValue = statusMessage + `\n**Różnica:** ${differenceText}`;
+            const statusMessage = formatMessage(msgs.resultNotBeaten, { currentScore: currentScore || msgs.unknownBoss });
+            const fullStatusValue = statusMessage + '\n' + formatMessage(msgs.resultDifference, { diff: differenceText });
 
             const fields = [
-                { name: this.config.messages.resultPlayer, value: userName, inline: true },
-                { name: this.config.messages.resultScore, value: bestScore, inline: true }
+                { name: msgs.resultPlayer, value: userName, inline: true },
+                { name: msgs.resultScore, value: bestScore, inline: true }
             ];
 
             if (bossName) {
-                fields.push({ name: '👹 Boss', value: bossName, inline: false });
+                fields.push({ name: msgs.recordBoss, value: bossName, inline: false });
             }
 
-            fields.push({ name: this.config.messages.resultStatus, value: fullStatusValue, inline: false });
+            fields.push({ name: msgs.resultStatus, value: fullStatusValue, inline: false });
 
             const embed = new EmbedBuilder()
                 .setColor(0xff9900)
-                .setTitle(this.config.messages.resultTitle)
+                .setTitle(msgs.resultTitle)
                 .addFields(fields)
                 .setTimestamp();
 
@@ -445,8 +431,19 @@ class RankingService {
 
     /**
      * Tworzy embed nowego rekordu
+     * @param {string} userName
+     * @param {string} bestScore
+     * @param {string} userAvatarUrl
+     * @param {string} attachmentName
+     * @param {string|null} previousScore
+     * @param {string|null} userId
+     * @param {string|null} guildId
+     * @param {Object|null} messages
+     * @returns {Promise<EmbedBuilder>}
      */
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null) {
+        const msgs = messages || this.config.messages;
+
         let newScoreText = `**${bestScore}**`;
 
         if (previousScore) {
@@ -455,7 +452,7 @@ class RankingService {
             const improvement = newScoreValue - previousScoreValue;
             const newScoreUnit = this.getScoreUnit(bestScore);
             const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
-            newScoreText = `${bestScore} (progres ${improvementText})`;
+            newScoreText = `${bestScore} (${improvementText})`;
         }
 
         let rankingText = '';
@@ -478,15 +475,15 @@ class RankingService {
                             const positionChange = previousPosition - currentPosition;
 
                             if (positionChange > 0) {
-                                rankingText = `Miejsce w rankingu: ${currentPosition} (Awans o +${positionChange})`;
+                                rankingText = formatMessage(msgs.rankingPositionPromotion, { pos: currentPosition, change: positionChange });
                             } else {
-                                rankingText = `Miejsce w rankingu: ${currentPosition}`;
+                                rankingText = formatMessage(msgs.rankingPosition, { pos: currentPosition });
                             }
                         } else {
-                            rankingText = `Miejsce w rankingu: ${currentPosition}`;
+                            rankingText = formatMessage(msgs.rankingPosition, { pos: currentPosition });
                         }
                     } else {
-                        rankingText = `Miejsce w rankingu: ${currentPosition} (nowy w rankingu)`;
+                        rankingText = formatMessage(msgs.rankingPositionNew, { pos: currentPosition });
                     }
                 }
             } catch (error) {
@@ -495,20 +492,20 @@ class RankingService {
         }
 
         const embedFields = [
-            { name: '🏆 Nowy wynik', value: newScoreText, inline: true },
-            { name: this.config.messages.recordDate, value: new Date().toLocaleDateString('pl-PL'), inline: true }
+            { name: msgs.recordNewScore, value: newScoreText, inline: true },
+            { name: msgs.recordDate, value: new Date().toLocaleDateString('pl-PL'), inline: true }
         ];
 
         if (rankingText) {
-            embedFields.push({ name: '📊 Ranking', value: rankingText, inline: false });
+            embedFields.push({ name: msgs.recordRanking, value: rankingText, inline: false });
         }
 
-        embedFields.push({ name: this.config.messages.recordStatus, value: this.config.messages.recordSaved, inline: false });
+        embedFields.push({ name: msgs.recordStatus, value: msgs.recordSaved, inline: false });
 
         const embed = new EmbedBuilder()
             .setColor(0x00ff00)
-            .setTitle(this.config.messages.recordTitle)
-            .setDescription(formatMessage(this.config.messages.recordDescription, { username: userName }))
+            .setTitle(msgs.recordTitle)
+            .setDescription(formatMessage(msgs.recordDescription, { username: userName }))
             .setThumbnail(userAvatarUrl)
             .addFields(embedFields)
             .setTimestamp()
@@ -551,8 +548,8 @@ class RankingService {
                 username: userName,
                 timestamp: new Date().toISOString(),
                 scoreValue: newScoreValue,
-                userId: userId,
-                bossName: bossName || 'Nieznany boss'
+                userId,
+                bossName: bossName || this.config.messages.unknownBossLabel
             };
             await this.saveRanking(guildId, ranking);
         }
@@ -567,10 +564,7 @@ class RankingService {
      */
     async getSortedPlayers(guildId) {
         const ranking = await this.loadRanking(guildId);
-        const players = Object.entries(ranking).map(([userId, data]) => ({
-            ...data,
-            userId
-        }));
+        const players = Object.entries(ranking).map(([userId, data]) => ({ ...data, userId }));
         return players.sort((a, b) => b.scoreValue - a.scoreValue);
     }
 
@@ -578,9 +572,7 @@ class RankingService {
      * Dodaje aktywny ranking do cache
      */
     addActiveRanking(messageId, rankingData) {
-        if (rankingData.mobileFormat === undefined) {
-            rankingData.mobileFormat = false;
-        }
+        if (rankingData.mobileFormat === undefined) rankingData.mobileFormat = false;
         this.activeRankings.set(messageId, rankingData);
 
         setTimeout(() => {
@@ -588,16 +580,10 @@ class RankingService {
         }, this.config.ranking.paginationTimeout);
     }
 
-    /**
-     * Pobiera aktywny ranking
-     */
     getActiveRanking(messageId) {
         return this.activeRankings.get(messageId) || null;
     }
 
-    /**
-     * Aktualizuje aktywny ranking
-     */
     updateActiveRanking(messageId, rankingData) {
         this.activeRankings.set(messageId, rankingData);
     }
