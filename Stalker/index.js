@@ -489,28 +489,50 @@ client.on(Events.MessageCreate, async (message) => {
                     session.publicInteraction
                 );
 
+                // Sprawdź czy sesja nie została anulowana podczas przetwarzania
+                if (session.cancelled || !session.aggregatedResults) {
+                    logger.info('[PHASE1] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    return;
+                }
+
                 // Pokaż potwierdzenie przetworzenia w publicznej wiadomości
                 const confirmation = phaseService.createProcessedImagesEmbed(session);
 
                 session.stage = 'confirming_complete';
                 phaseService.refreshSessionTimeout(session.sessionId);
 
+                const channel = await client.channels.fetch(session.channelId);
+
                 if (session.publicInteraction) {
                     // Obsługa zarówno Interaction jak i Message
-                    if (session.publicInteraction.editReply) {
-                        await session.publicInteraction.editReply({
-                            embeds: [confirmation.embed],
-                            components: [confirmation.row]
-                        });
-                    } else {
-                        await session.publicInteraction.edit({
+                    let editSuccess = false;
+                    try {
+                        if (session.publicInteraction.editReply) {
+                            await session.publicInteraction.editReply({
+                                embeds: [confirmation.embed],
+                                components: [confirmation.row]
+                            });
+                        } else {
+                            await session.publicInteraction.edit({
+                                embeds: [confirmation.embed],
+                                components: [confirmation.row]
+                            });
+                        }
+                        editSuccess = true;
+                    } catch (editError) {
+                        logger.warn(`[PHASE1] ⚠️ Nie można zaktualizować wiadomości postępu (${editError.message}) - wysyłam nową`);
+                    }
+
+                    // Jeśli edycja się nie powiodła, wyślij nową wiadomość
+                    if (!editSuccess && channel) {
+                        await channel.send({
+                            content: `<@${message.author.id}>`,
                             embeds: [confirmation.embed],
                             components: [confirmation.row]
                         });
                     }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
-                    const channel = await client.channels.fetch(session.channelId);
                     await sendGhostPing(channel, message.author.id, session);
                 }
             }
@@ -573,22 +595,46 @@ client.on(Events.MessageCreate, async (message) => {
                     ocrService
                 );
 
+                // Sprawdź czy sesja nie została anulowana podczas przetwarzania
+                if (session.cancelled || !session.aggregatedResults) {
+                    logger.info('[REMIND] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    return;
+                }
+
                 // Pokaż końcowe potwierdzenie z listą graczy
                 const confirmation = reminderService.createFinalConfirmationEmbed(session);
 
                 session.stage = 'confirming_complete';
                 reminderService.refreshSessionTimeout(session.sessionId);
 
+                const channelRemind = await client.channels.fetch(session.channelId);
+
                 if (session.publicInteraction) {
                     // Obsługa zarówno Interaction jak i Message
-                    if (session.publicInteraction.editReply) {
-                        await session.publicInteraction.editReply({
-                            embeds: [confirmation.embed],
-                            components: [confirmation.row],
-                            files: confirmation.files
-                        });
-                    } else {
-                        await session.publicInteraction.edit({
+                    let editSuccess = false;
+                    try {
+                        if (session.publicInteraction.editReply) {
+                            await session.publicInteraction.editReply({
+                                embeds: [confirmation.embed],
+                                components: [confirmation.row],
+                                files: confirmation.files
+                            });
+                        } else {
+                            await session.publicInteraction.edit({
+                                embeds: [confirmation.embed],
+                                components: [confirmation.row],
+                                files: confirmation.files
+                            });
+                        }
+                        editSuccess = true;
+                    } catch (editError) {
+                        logger.warn(`[REMIND] ⚠️ Nie można zaktualizować wiadomości postępu (${editError.message}) - wysyłam nową`);
+                    }
+
+                    // Jeśli edycja się nie powiodła, wyślij nową wiadomość
+                    if (!editSuccess && channelRemind) {
+                        await channelRemind.send({
+                            content: `<@${message.author.id}>`,
                             embeds: [confirmation.embed],
                             components: [confirmation.row],
                             files: confirmation.files
@@ -596,8 +642,7 @@ client.on(Events.MessageCreate, async (message) => {
                     }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
-                    const channel = await client.channels.fetch(session.channelId);
-                    await sendGhostPing(channel, message.author.id, session);
+                    await sendGhostPing(channelRemind, message.author.id, session);
                 }
             }
         }
