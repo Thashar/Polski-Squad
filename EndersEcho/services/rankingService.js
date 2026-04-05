@@ -250,13 +250,7 @@ class RankingService {
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
 
-                let lineText;
-                if (isGlobal && client && player.sourceGuildId) {
-                    const sourceName = client.guilds.cache.get(player.sourceGuildId)?.name || player.sourceGuildId;
-                    lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName} *(${sourceName})*\n`;
-                } else {
-                    lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
-                }
+                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
 
                 rankingText += lineText;
 
