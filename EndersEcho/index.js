@@ -30,22 +30,22 @@ const interactionHandler = new InteractionHandler(config, ocrService, aiOcrServi
  */
 async function initializeBot() {
     try {
-        logger.success('✅ EndersEcho gotowy - ranking z OCR, TOP role');
+        const guildCount = config.guilds.length;
+        logger.success(`✅ EndersEcho gotowy - ranking z OCR, TOP role, ${guildCount} serwer(ów)`);
 
         // Inicjalizuj OCR service
         await ocrService.initialize();
 
-        // Rejestracja slash commands
+        // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
 
-        // Eksportuj aktualny ranking do shared_data przy starcie
+        // Eksportuj aktualny globalny ranking do shared_data przy starcie
         try {
-            const ranking = await rankingService.loadRanking();
-            await rankingService.saveSharedRanking(ranking);
+            await rankingService.saveSharedRanking();
         } catch (e) {
             logger.warn('Nie można wyeksportować rankingu do shared_data przy starcie:', e.message);
         }
-        
+
     } catch (error) {
         logger.error('Błąd podczas inicjalizacji bota EndersEcho:', error);
     }
@@ -58,20 +58,19 @@ client.on('interactionCreate', async (interaction) => {
         await interactionHandler.handleInteraction(interaction);
     } catch (error) {
         logger.error('Błąd podczas obsługi interakcji:', error);
-        
+
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    flags: ['Ephemeral'] 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    flags: ['Ephemeral']
                 });
             } else if (interaction.deferred) {
-                await interaction.editReply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
                 });
             }
         } catch (replyError) {
-            // Jeśli nie można odpowiedzieć (np. timeout), loguj tylko błąd
             logger.error('Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
         }
     }
@@ -123,7 +122,7 @@ if (require.main === module) {
         await stopBot();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
         logger.info('Otrzymano sygnał SIGTERM, zamykam bota EndersEcho...');
         await stopBot();

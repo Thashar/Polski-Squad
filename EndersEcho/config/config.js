@@ -2,39 +2,93 @@ const path = require('path');
 const messages = require('./messages');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
-
 const logger = createBotLogger('EndersEcho');
+
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-// Walidacja wymaganych zmiennych środowiskowych
-const requiredEnvVars = [
-    'ENDERSECHO_TOKEN',
-    'ENDERSECHO_CLIENT_ID',
-    'ENDERSECHO_GUILD_ID',
-    'ENDERSECHO_ALLOWED_CHANNEL_ID'
-];
-
+// Walidacja podstawowych zmiennych
+const requiredEnvVars = ['ENDERSECHO_TOKEN', 'ENDERSECHO_CLIENT_ID'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
 if (missingVars.length > 0) {
     logger.error('❌ Brakujące zmienne środowiskowe:', missingVars.join(', '));
-    logger.error('Sprawdź plik EndersEcho/.env i upewnij się, że wszystkie wymagane zmienne są ustawione.');
     process.exit(1);
 }
+
+/**
+ * Parsuje konfigurację serwerów z env vars.
+ * Format: ENDERSECHO_GUILD_1_ID, ENDERSECHO_GUILD_1_CHANNEL, ENDERSECHO_GUILD_1_TOP1_ROLE, ...
+ * Role TOP są opcjonalne — jeśli brak, bot nie zarządza rolami na tym serwerze.
+ */
+function parseGuildsConfig() {
+    const guilds = [];
+    let i = 1;
+
+    while (process.env[`ENDERSECHO_GUILD_${i}_ID`]) {
+        const guildId = process.env[`ENDERSECHO_GUILD_${i}_ID`];
+        const channelId = process.env[`ENDERSECHO_GUILD_${i}_CHANNEL`];
+
+        if (!channelId) {
+            logger.error(`❌ Brak ENDERSECHO_GUILD_${i}_CHANNEL dla serwera ${guildId}`);
+            process.exit(1);
+        }
+
+        // Role TOP są w pełni opcjonalne
+        const top1 = process.env[`ENDERSECHO_GUILD_${i}_TOP1_ROLE`];
+        const top2 = process.env[`ENDERSECHO_GUILD_${i}_TOP2_ROLE`];
+        const top3 = process.env[`ENDERSECHO_GUILD_${i}_TOP3_ROLE`];
+        const top4to10 = process.env[`ENDERSECHO_GUILD_${i}_TOP4TO10_ROLE`];
+        const top11to30 = process.env[`ENDERSECHO_GUILD_${i}_TOP11TO30_ROLE`];
+
+        const topRolesRaw = { top1, top2, top3, top4to10, top11to30 };
+        const topRoles = Object.fromEntries(
+            Object.entries(topRolesRaw).filter(([, v]) => v)
+        );
+
+        guilds.push({
+            id: guildId,
+            allowedChannelId: channelId,
+            // null jeśli żadna rola nie skonfigurowana — roleService pomija wtedy aktualizację
+            topRoles: Object.keys(topRoles).length > 0 ? topRoles : null
+        });
+
+        i++;
+    }
+
+    return guilds;
+}
+
+const guilds = parseGuildsConfig();
+
+if (guilds.length === 0) {
+    logger.error('❌ Brak konfiguracji serwerów. Ustaw ENDERSECHO_GUILD_1_ID i ENDERSECHO_GUILD_1_CHANNEL w pliku .env');
+    process.exit(1);
+}
+
+logger.info(`📋 Załadowano konfigurację dla ${guilds.length} serwer(ów)`);
 
 module.exports = {
     token: process.env.ENDERSECHO_TOKEN,
     clientId: process.env.ENDERSECHO_CLIENT_ID,
-    guildId: process.env.ENDERSECHO_GUILD_ID,
-    allowedChannelId: process.env.ENDERSECHO_ALLOWED_CHANNEL_ID,
-    
+
+    // Lista skonfigurowanych serwerów
+    guilds,
+
+    /**
+     * Zwraca konfigurację serwera po guildId lub null jeśli nieznany
+     * @param {string} guildId
+     */
+    getGuildConfig(guildId) {
+        return guilds.find(g => g.id === guildId) || null;
+    },
+
     // Konfiguracja rankingu
     ranking: {
-        file: path.join(__dirname, '../data/ranking.json'),
+        dataDir: path.join(__dirname, '../data'),
+        legacyFile: path.join(__dirname, '../data/ranking.json'), // migracja starego formatu
         playersPerPage: 10,
         paginationTimeout: 3600000 // 1 godzina
     },
-    
+
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
@@ -50,25 +104,25 @@ module.exports = {
         saveProcessedImages: false,
         processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 400,
-        
+
         // Szczegółowe logowanie OCR
         detailedLogging: {
-            enabled: false,  // Domyślnie wyłączone
+            enabled: false,
             logImageProcessing: true,
             logTextExtraction: true,
             logScoreAnalysis: true,
             logBossNameExtraction: true
         }
     },
-    
+
     // Konfiguracja obrazów
     images: {
         supportedExtensions: ['.png', '.jpg', '.jpeg', '.gif', '.bmp'],
         processedSuffix: '_processed.png',
         checkSuffix: '_check.png',
-        maxSize: 25 * 1024 * 1024 // 25MB - obsługa Nitro użytkowników
+        maxSize: 25 * 1024 * 1024 // 25MB
     },
-    
+
     // Konfiguracja wyników
     scoring: {
         units: {
@@ -81,15 +135,6 @@ module.exports = {
         },
         medals: ['🥇', '🥈', '🥉']
     },
-    
-    // Konfiguracja ról TOP
-    topRoles: {
-        top1: '1392875142383931462',
-        top2: '1392877265284763740',
-        top3: '1392877372486713434',
-        top4to10: '1392916393615294534',
-        top11to30: '1392917115614527599'
-    },
-    
+
     messages
 };

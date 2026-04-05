@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
@@ -12,33 +13,65 @@ class RankingService {
     }
 
     /**
-     * Wczytuje ranking z pliku
-     * @returns {Promise<Object>} - Obiekt z rankingiem
+     * Zwraca ścieżkę do pliku rankingu dla danego serwera
+     * @param {string} guildId
+     * @returns {string}
      */
-    async loadRanking() {
+    getRankingFile(guildId) {
+        return path.join(this.config.ranking.dataDir, `ranking_${guildId}.json`);
+    }
+
+    /**
+     * Wczytuje ranking dla danego serwera.
+     * Przy pierwszym wywołaniu sprawdza czy istnieje stary ranking.json i migruje go.
+     * @param {string} guildId
+     * @returns {Promise<Object>}
+     */
+    async loadRanking(guildId) {
+        const file = this.getRankingFile(guildId);
         try {
-            const data = await fs.readFile(this.config.ranking.file, 'utf8');
+            const data = await fs.readFile(file, 'utf8');
             return JSON.parse(data);
         } catch (error) {
+            // Przy pierwszym serwerze sprawdź czy istnieje stary ranking.json do migracji
+            if (this.config.guilds[0]?.id === guildId) {
+                const legacy = await this._loadLegacyRanking();
+                if (legacy) {
+                    logger.info(`🔄 Migruję stary ranking.json do ranking_${guildId}.json`);
+                    await this.saveRanking(guildId, legacy);
+                    return legacy;
+                }
+            }
             return {};
         }
     }
 
     /**
-     * Zapisuje ranking do pliku
-     * @param {Object} ranking - Obiekt z rankingiem
+     * Wczytuje stary ranking.json (migracja jednorazowa)
+     * @returns {Promise<Object|null>}
      */
-    async saveRanking(ranking) {
+    async _loadLegacyRanking() {
         try {
-            // Upewniamy się, że katalog istnieje
-            const path = require('path');
-            const dir = path.dirname(this.config.ranking.file);
-            await fs.mkdir(dir, { recursive: true });
+            const data = await fs.readFile(this.config.ranking.legacyFile, 'utf8');
+            return JSON.parse(data);
+        } catch {
+            return null;
+        }
+    }
 
-            await fs.writeFile(this.config.ranking.file, JSON.stringify(ranking, null, 2), 'utf8');
+    /**
+     * Zapisuje ranking dla danego serwera
+     * @param {string} guildId
+     * @param {Object} ranking
+     */
+    async saveRanking(guildId, ranking) {
+        try {
+            await fs.mkdir(this.config.ranking.dataDir, { recursive: true });
+            const file = this.getRankingFile(guildId);
+            await fs.writeFile(file, JSON.stringify(ranking, null, 2), 'utf8');
 
-            // Eksportuj posortowany ranking do shared_data
-            await this.saveSharedRanking(ranking);
+            // Eksportuj zaktualizowany globalny ranking do shared_data
+            await this.saveSharedRanking();
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
             throw error;
@@ -46,30 +79,51 @@ class RankingService {
     }
 
     /**
-     * Eksportuje posortowany ranking do shared_data/endersecho_ranking.json
+     * Buduje globalny ranking — najlepszy wynik gracza ze wszystkich serwerów.
+     * Każdy wpis ma dodatkowe pole sourceGuildId.
+     * @returns {Promise<Array>}
+     */
+    async getGlobalRanking() {
+        const bestPerPlayer = new Map(); // userId → { ...playerData, sourceGuildId }
+
+        for (const guild of this.config.guilds) {
+            const ranking = await this.loadRanking(guild.id);
+            for (const [userId, data] of Object.entries(ranking)) {
+                const existing = bestPerPlayer.get(userId);
+                if (!existing || data.scoreValue > existing.scoreValue) {
+                    bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guild.id });
+                }
+            }
+        }
+
+        return Array.from(bestPerPlayer.values())
+            .sort((a, b) => b.scoreValue - a.scoreValue);
+    }
+
+    /**
+     * Eksportuje globalny ranking do shared_data/endersecho_ranking.json
      * Używany przez inne boty (np. Stalker /player-status)
      */
-    async saveSharedRanking(ranking) {
+    async saveSharedRanking() {
         try {
-            const path = require('path');
             const sharedDir = path.join(__dirname, '../../shared_data');
             await fs.mkdir(sharedDir, { recursive: true });
 
-            const sorted = Object.values(ranking)
-                .sort((a, b) => b.scoreValue - a.scoreValue)
-                .map((player, index) => ({
-                    rank: index + 1,
-                    userId: player.userId,
-                    username: player.username,
-                    score: player.score,
-                    scoreValue: player.scoreValue,
-                    bossName: player.bossName || null,
-                    timestamp: player.timestamp
-                }));
+            const sorted = await this.getGlobalRanking();
+            const players = sorted.map((player, index) => ({
+                rank: index + 1,
+                userId: player.userId,
+                username: player.username,
+                score: player.score,
+                scoreValue: player.scoreValue,
+                bossName: player.bossName || null,
+                timestamp: player.timestamp,
+                sourceGuildId: player.sourceGuildId
+            }));
 
             const sharedData = {
                 updatedAt: new Date().toISOString(),
-                players: sorted
+                players
             };
 
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
@@ -82,8 +136,8 @@ class RankingService {
 
     /**
      * Konwertuje tekst wyniku na wartość liczbową
-     * @param {string} scoreText - Tekst wyniku
-     * @returns {number} - Wartość liczbowa
+     * @param {string} scoreText
+     * @returns {number}
      */
     parseScoreValue(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
@@ -98,8 +152,8 @@ class RankingService {
 
     /**
      * Formatuje wartość liczbową na tekst z jednostkami
-     * @param {number} value - Wartość liczbowa
-     * @returns {string} - Sformatowany tekst
+     * @param {number} value
+     * @returns {string}
      */
     formatScore(value) {
         const units = [
@@ -110,23 +164,23 @@ class RankingService {
             { name: 'M', value: 1000000 },
             { name: 'K', value: 1000 }
         ];
-        
+
         for (const unit of units) {
             if (value >= unit.value) {
                 const unitValue = value / unit.value;
-                return unitValue % 1 === 0 ? 
-                    `${unitValue}${unit.name}` : 
+                return unitValue % 1 === 0 ?
+                    `${unitValue}${unit.name}` :
                     `${unitValue.toFixed(2)}${unit.name}`;
             }
         }
-        
+
         return value.toString();
     }
 
     /**
      * Pobiera jednostkę z wyniku tekstowego
-     * @param {string} scoreText - Tekst wyniku
-     * @returns {string} - Jednostka lub pusty string
+     * @param {string} scoreText
+     * @returns {string}
      */
     getScoreUnit(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
@@ -136,9 +190,9 @@ class RankingService {
 
     /**
      * Formatuje progres w określonej jednostce
-     * @param {number} improvement - Wartość progreso w jednostkach bazowych
-     * @param {string} targetUnit - Docelowa jednostka
-     * @returns {string} - Sformatowany progres
+     * @param {number} improvement
+     * @param {string} targetUnit
+     * @returns {string}
      */
     formatProgressInUnit(improvement, targetUnit) {
         if (!targetUnit) {
@@ -155,9 +209,7 @@ class RankingService {
             Math.floor(unitImprovement).toString() :
             parseFloat(unitImprovement.toFixed(2)).toString();
 
-        // Zamień QI na Qi dla wyświetlania
         const displayUnit = targetUnit === 'QI' ? 'Qi' : targetUnit;
-
         return `+${formattedValue}${displayUnit}`;
     }
 
@@ -166,20 +218,21 @@ class RankingService {
      * @param {Array} players - Lista graczy
      * @param {number} page - Aktualna strona
      * @param {number} totalPages - Całkowita liczba stron
-     * @param {string} userId - ID użytkownika
-     * @param {Guild} guild - Serwer Discord
-     * @returns {EmbedBuilder} - Embed rankingu
+     * @param {string} userId - ID użytkownika wywołującego
+     * @param {Guild|null} guild - Serwer Discord (null dla globalnego)
+     * @param {Object} options - { mode: 'global'|'server', client: Client|null }
+     * @returns {Promise<EmbedBuilder>}
      */
-    async createRankingEmbed(players, page, totalPages, userId, guild) {
+    async createRankingEmbed(players, page, totalPages, userId, guild, options = {}) {
+        const { mode = 'server', client = null } = options;
+        const isGlobal = mode === 'global';
+
         const startIndex = page * this.config.ranking.playersPerPage;
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
-        
-        // Tworzymy ranking w prostym formacie
-        const medals = this.config.scoring.medals;
-        
+
         let rankingText = '';
-        
+
         for (const [index, player] of currentPagePlayers.entries()) {
             try {
                 const actualPosition = startIndex + index + 1;
@@ -190,295 +243,231 @@ class RankingService {
                 } else {
                     position = `${actualPosition}.`;
                 }
-                
-                // Skrócona data - tylko dzień i miesiąc
+
                 const date = new Date(player.timestamp);
                 const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-                
-                // Pobierz nick na serwerze (displayName to nickname użytkownika na serwerze)
+
                 let displayName = player.username || `ID:${player.userId}`;
                 try {
-                    if (guild) {
-                        const member = await guild.members.fetch(player.userId);
-                        displayName = member.displayName; // displayName to server nickname
+                    // Dla serwera — pobierz nick z tego serwera
+                    // Dla globalnego — spróbuj pobrać z serwera źródłowego
+                    const targetGuild = isGlobal
+                        ? (client?.guilds.cache.get(player.sourceGuildId) || null)
+                        : guild;
+
+                    if (targetGuild) {
+                        const member = await targetGuild.members.fetch(player.userId);
+                        displayName = member.displayName;
                     }
-                } catch (error) {
-                    // Jeśli nie można pobrać membera, używamy zapisanego username jako fallback
-                    // displayName zostaje jako player.username lub ID
+                } catch {
+                    // fallback na zapisane username
                 }
-                
+
                 const bossName = player.bossName || 'Nieznany';
-                
-                // Wyróżnij tylko osobę, która wywołuje ranking
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
-                
-                // Prosty format: pozycja nick • wynik (data) • boss
-                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
+
+                let lineText;
+                if (isGlobal && client && player.sourceGuildId) {
+                    const sourceName = client.guilds.cache.get(player.sourceGuildId)?.name || player.sourceGuildId;
+                    lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName} *(${sourceName})*\n`;
+                } else {
+                    lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
+                }
+
                 rankingText += lineText;
-                
-                // Sprawdź limity Discord
+
                 if (rankingText.length > 1800) {
                     logger.warn(`⚠️ Osiągnięto limit 1800 znaków, przerywam na pozycji ${actualPosition}`);
                     break;
                 }
             } catch (error) {
                 logger.error(`❌ Błąd podczas przetwarzania gracza ${index}: ${error.message}`);
-                logger.error('Player data:', player);
-                // Kontynuuj z następnym graczem zamiast przerywać całą pętlę
                 continue;
             }
         }
-        
-        
-        // Sprawdź czy rankingText nie jest pusty
+
         if (!rankingText.trim()) {
-            logger.error('❌ BŁĄD: rankingText jest pusty!');
             rankingText = '⚠️ Brak danych do wyświetlenia na tej stronie';
         }
-        
+
+        const title = isGlobal
+            ? '🌐 Ranking Globalny'
+            : this.config.messages.rankingTitle;
+
         const embed = new EmbedBuilder()
-            .setColor(0xffd700)
-            .setTitle(this.config.messages.rankingTitle)
+            .setColor(isGlobal ? 0x5865f2 : 0xffd700)
+            .setTitle(title)
             .setDescription(rankingText)
-            .addFields(
-                {
-                    name: this.config.messages.rankingStats,
-                    value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) + 
-                           (players.length > 0 ? '\n' + formatMessage(this.config.messages.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
-                    inline: false
-                }
-            )
+            .addFields({
+                name: this.config.messages.rankingStats,
+                value: formatMessage(this.config.messages.rankingPlayersCount, { count: players.length }) +
+                       (players.length > 0 ? '\n' + formatMessage(this.config.messages.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
+                inline: false
+            })
             .setFooter({ text: formatMessage(this.config.messages.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
-        
+
         return embed;
     }
 
     /**
      * Tworzy przyciski nawigacji rankingu
-     * @param {number} page - Aktualna strona
-     * @param {number} totalPages - Całkowita liczba stron
-     * @param {boolean} disabled - Czy przyciski mają być wyłączone
-     * @returns {ActionRowBuilder} - Rząd przycisków
+     * @param {number} page
+     * @param {number} totalPages
+     * @param {boolean} disabled
+     * @returns {ActionRowBuilder}
      */
     createRankingButtons(page, totalPages, disabled = false) {
         const row = new ActionRowBuilder();
-        
+
         row.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_first')
                 .setLabel(this.config.messages.buttonFirst)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page === 0),
-            
+
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
                 .setLabel(this.config.messages.buttonPrev)
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(disabled || page === 0),
-            
+
             new ButtonBuilder()
                 .setCustomId('ranking_next')
                 .setLabel(this.config.messages.buttonNext)
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(disabled || page >= totalPages - 1),
-            
+
             new ButtonBuilder()
                 .setCustomId('ranking_last')
                 .setLabel(this.config.messages.buttonLast)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1)
         );
-        
+
         return row;
     }
 
     /**
+     * Tworzy przyciski wyboru serwera/global dla komendy /ranking
+     * @param {Client} client - Discord client (do pobrania nazw serwerów)
+     * @returns {ActionRowBuilder[]}
+     */
+    createServerSelectButtons(client) {
+        const buttons = [];
+
+        for (const guildConfig of this.config.guilds) {
+            const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Serwer ${guildConfig.id}`;
+            // Skróć nazwę do 20 znaków jeśli za długa (limit labela przycisku to 80)
+            const label = guildName.length > 20 ? guildName.substring(0, 20) + '…' : guildName;
+
+            buttons.push(
+                new ButtonBuilder()
+                    .setCustomId(`ranking_select_server_${guildConfig.id}`)
+                    .setLabel(label)
+                    .setStyle(ButtonStyle.Primary)
+            );
+        }
+
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId('ranking_select_global')
+                .setLabel('🌐 Global')
+                .setStyle(ButtonStyle.Success)
+        );
+
+        // Discord: max 5 przycisków na rząd, max 5 rzędów
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) {
+            const row = new ActionRowBuilder();
+            row.addComponents(buttons.slice(i, i + 5));
+            rows.push(row);
+        }
+
+        return rows;
+    }
+
+    /**
      * Tworzy embed wyniku (bez pobicia rekordu)
-     * @param {string} userName - Nazwa użytkownika
-     * @param {string} bestScore - Najlepszy wynik
-     * @param {string} currentScore - Obecny wynik
-     * @param {string} attachmentName - Nazwa załącznika ze zdjęciem (opcjonalny)
-     * @param {string} bossName - Nazwa bossa (opcjonalny)
-     * @returns {EmbedBuilder} - Embed wyniku
      */
     createResultEmbed(userName, bestScore, currentScore, attachmentName = null, bossName = null) {
         const logger = require('../../utils/consoleLogger').createBotLogger('EndersEcho');
-        
+
         if (this.config.ocr.detailedLogging.enabled) {
             logger.info('🔍 DEBUG: createResultEmbed - Rozpoczynam tworzenie embed');
-            logger.info('🔍 DEBUG: createResultEmbed - Parametry wejściowe:');
-            logger.info('🔍 DEBUG: - userName: "' + userName + '"');
-            logger.info('🔍 DEBUG: - bestScore: "' + bestScore + '"');
-            logger.info('🔍 DEBUG: - currentScore: "' + currentScore + '"');
-            logger.info('🔍 DEBUG: - attachmentName: "' + attachmentName + '"');
+            logger.info('🔍 DEBUG: createResultEmbed - userName: "' + userName + '"');
+            logger.info('🔍 DEBUG: createResultEmbed - bestScore: "' + bestScore + '"');
+            logger.info('🔍 DEBUG: createResultEmbed - currentScore: "' + currentScore + '"');
         }
-        
+
         try {
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Sprawdzam currentScore i wywołuję parseScoreValue');
-            }
             const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: currentScoreValue: ' + currentScoreValue);
-                logger.info('🔍 DEBUG: Parsowanie bestScore');
-            }
-            
             const newScoreValue = this.parseScoreValue(bestScore);
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: newScoreValue: ' + newScoreValue);
-                logger.info('🔍 DEBUG: Obliczanie różnicy');
-            }
-            
             const difference = currentScoreValue - newScoreValue;
             const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
-            
+
             if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: difference: ' + difference);
-                logger.info('🔍 DEBUG: differenceText: "' + differenceText + '"');
+                logger.info('🔍 DEBUG: difference: ' + difference + ', differenceText: "' + differenceText + '"');
             }
-        } catch (parseError) {
-            logger.error('🔍 DEBUG: Błąd podczas parsowania wartości w createResultEmbed:');
-            logger.error('🔍 DEBUG: parseError message: ' + parseError.message);
-            logger.error('🔍 DEBUG: parseError stack: ' + parseError.stack);
-            throw parseError;
-        }
-        
-        const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
-        const newScoreValue = this.parseScoreValue(bestScore);
-        const difference = currentScoreValue - newScoreValue;
-        const differenceText = difference > 0 ? `+${this.formatScore(difference)}` : this.formatScore(Math.abs(difference));
-        
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: Tworzenie EmbedBuilder');
-        }
-        
-        try {
-            const embed = new EmbedBuilder()
-                .setColor(0xff9900)
-                .setTitle(this.config.messages.resultTitle);
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Podstawowy embed utworzony');
-                logger.info('🔍 DEBUG: Dodawanie pól do embed');
-                logger.info('🔍 DEBUG: resultPlayer field - name: "' + this.config.messages.resultPlayer + '", value: "' + userName + '"');
-                logger.info('🔍 DEBUG: resultScore field - name: "' + this.config.messages.resultScore + '", value: "' + bestScore + '"');
-            }
-            
+
             const statusMessage = formatMessage(this.config.messages.resultNotBeaten, { currentScore: currentScore || 'Brak poprzedniego wyniku' });
             const fullStatusValue = statusMessage + `\n**Różnica:** ${differenceText}`;
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: statusMessage: "' + statusMessage + '"');
-                logger.info('🔍 DEBUG: fullStatusValue: "' + fullStatusValue + '"');
-            }
-            
+
             const fields = [
-                {
-                    name: this.config.messages.resultPlayer,
-                    value: userName,
-                    inline: true
-                },
-                {
-                    name: this.config.messages.resultScore,
-                    value: bestScore,
-                    inline: true
-                }
+                { name: this.config.messages.resultPlayer, value: userName, inline: true },
+                { name: this.config.messages.resultScore, value: bestScore, inline: true }
             ];
 
-            // Dodaj pole z bossem jeśli dostępne
             if (bossName) {
-                fields.push({
-                    name: '👹 Boss',
-                    value: bossName,
-                    inline: false
-                });
+                fields.push({ name: '👹 Boss', value: bossName, inline: false });
             }
 
-            // Dodaj status na końcu
-            fields.push({
-                name: this.config.messages.resultStatus,
-                value: fullStatusValue,
-                inline: false
-            });
+            fields.push({ name: this.config.messages.resultStatus, value: fullStatusValue, inline: false });
 
-            embed.addFields(fields);
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Pola dodane do embed');
-            }
-            
-            embed.setTimestamp();
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: Timestamp ustawiony');
-            }
-            
+            const embed = new EmbedBuilder()
+                .setColor(0xff9900)
+                .setTitle(this.config.messages.resultTitle)
+                .addFields(fields)
+                .setTimestamp();
+
             if (attachmentName) {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: Ustawianie obrazu attachment: ' + attachmentName);
-                }
                 embed.setImage(`attachment://${attachmentName}`);
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: Obraz ustawiony');
-                }
-            } else {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: Brak attachmentName - pomijam obraz');
-                }
             }
-            
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: createResultEmbed zakończone pomyślnie');
-            }
+
             return embed;
-        } catch (embedError) {
-            logger.error('🔍 DEBUG: Błąd podczas tworzenia embed w createResultEmbed:');
-            logger.error('🔍 DEBUG: embedError message: ' + embedError.message);
-            logger.error('🔍 DEBUG: embedError stack: ' + embedError.stack);
-            throw embedError;
+        } catch (error) {
+            logger.error('🔍 DEBUG: Błąd w createResultEmbed:', error.message);
+            throw error;
         }
     }
 
     /**
      * Tworzy embed nowego rekordu
-     * @param {string} userName - Nazwa użytkownika
-     * @param {string} bestScore - Najlepszy wynik
-     * @param {string} userAvatarUrl - URL awatara użytkownika
-     * @param {string} attachmentName - Nazwa załącznika
-     * @param {string} previousScore - Poprzedni wynik (opcjonalny)
-     * @param {string} userId - ID użytkownika (opcjonalny)
-     * @returns {EmbedBuilder} - Embed rekordu
      */
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null) {
         let newScoreText = `**${bestScore}**`;
-        
+
         if (previousScore) {
             const previousScoreValue = this.parseScoreValue(previousScore);
             const newScoreValue = this.parseScoreValue(bestScore);
             const improvement = newScoreValue - previousScoreValue;
-            
-            // Formatuj progres w tej samej jednostce co nowy wynik
             const newScoreUnit = this.getScoreUnit(bestScore);
             const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
-            
             newScoreText = `${bestScore} (progres ${improvementText})`;
         }
 
-        // Pobierz pozycję w rankingu jeśli userId jest podany
         let rankingText = '';
-        if (userId) {
+        if (userId && guildId) {
             try {
-                const sortedPlayers = await this.getSortedPlayers();
+                const sortedPlayers = await this.getSortedPlayers(guildId);
                 const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
-                
+
                 if (userIndex !== -1) {
                     const currentPosition = userIndex + 1;
-                    
-                    // Sprawdź poprzednią pozycję jeśli był poprzedni wynik
+
                     if (previousScore) {
-                        // Stwórz tymczasowy ranking z poprzednim wynikiem
                         const tempPlayers = [...sortedPlayers];
                         const userPlayer = tempPlayers.find(p => p.userId === userId);
                         if (userPlayer) {
@@ -487,7 +476,7 @@ class RankingService {
                             const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
                             const previousPosition = previousIndex + 1;
                             const positionChange = previousPosition - currentPosition;
-                            
+
                             if (positionChange > 0) {
                                 rankingText = `Miejsce w rankingu: ${currentPosition} (Awans o +${positionChange})`;
                             } else {
@@ -497,7 +486,6 @@ class RankingService {
                             rankingText = `Miejsce w rankingu: ${currentPosition}`;
                         }
                     } else {
-                        // Pierwszy wynik - brak poprzedniej pozycji do porównania
                         rankingText = `Miejsce w rankingu: ${currentPosition} (nowy w rankingu)`;
                     }
                 }
@@ -505,35 +493,18 @@ class RankingService {
                 logger.error('Błąd pobierania pozycji w rankingu:', error);
             }
         }
-        
+
         const embedFields = [
-            {
-                name: '🏆 Nowy wynik',
-                value: newScoreText,
-                inline: true
-            },
-            {
-                name: this.config.messages.recordDate,
-                value: new Date().toLocaleDateString('pl-PL'),
-                inline: true
-            }
+            { name: '🏆 Nowy wynik', value: newScoreText, inline: true },
+            { name: this.config.messages.recordDate, value: new Date().toLocaleDateString('pl-PL'), inline: true }
         ];
 
-        // Dodaj pole z pozycją w rankingu jeśli jest dostępne - przeniesione wyżej
         if (rankingText) {
-            embedFields.push({
-                name: '📊 Ranking',
-                value: rankingText,
-                inline: false
-            });
+            embedFields.push({ name: '📊 Ranking', value: rankingText, inline: false });
         }
 
-        embedFields.push({
-            name: this.config.messages.recordStatus,
-            value: this.config.messages.recordSaved,
-            inline: false
-        });
-        
+        embedFields.push({ name: this.config.messages.recordStatus, value: this.config.messages.recordSaved, inline: false });
+
         const embed = new EmbedBuilder()
             .setColor(0x00ff00)
             .setTitle(this.config.messages.recordTitle)
@@ -542,77 +513,39 @@ class RankingService {
             .addFields(embedFields)
             .setTimestamp()
             .setImage(`attachment://${attachmentName}`);
-        
+
         return embed;
     }
 
     /**
-     * Aktualizuje ranking użytkownika
-     * @param {string} userId - ID użytkownika
-     * @param {string} userName - Nazwa użytkownika
-     * @param {string} bestScore - Najlepszy wynik
-     * @param {string} bossName - Nazwa bossa
-     * @returns {Promise<{isNewRecord: boolean, ranking: Object}>} - Wynik aktualizacji
+     * Aktualizuje ranking użytkownika na danym serwerze
+     * @param {string} guildId
+     * @param {string} userId
+     * @param {string} userName
+     * @param {string} bestScore
+     * @param {string|null} bossName
      */
-    async updateUserRanking(userId, userName, bestScore, bossName = null) {
-        const logger = require('../../utils/consoleLogger').createBotLogger('EndersEcho');
-        
+    async updateUserRanking(guildId, userId, userName, bestScore, bossName = null) {
         if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: updateUserRanking - Start');
-            logger.info('🔍 DEBUG: updateUserRanking - userId: ' + userId);
-            logger.info('🔍 DEBUG: updateUserRanking - userName: "' + userName + '"');
-            logger.info('🔍 DEBUG: updateUserRanking - bestScore: "' + bestScore + '"');
-            logger.info('🔍 DEBUG: updateUserRanking - bossName: "' + bossName + '"');
+            logger.info(`🔍 DEBUG: updateUserRanking - guildId: ${guildId}, userId: ${userId}, bestScore: "${bestScore}"`);
         }
-        
-        const ranking = await this.loadRanking();
-        
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: updateUserRanking - Ranking załadowany');
-        }
-        
+
+        const ranking = await this.loadRanking(guildId);
         const newScoreValue = this.parseScoreValue(bestScore);
-        
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: updateUserRanking - newScoreValue: ' + newScoreValue);
-        }
-        
         const currentScore = ranking[userId];
-        
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: updateUserRanking - currentScore: ' + (currentScore ? JSON.stringify(currentScore) : 'null'));
-        }
-        
+
         let isNewRecord = false;
-        
+
         if (!currentScore) {
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: updateUserRanking - Użytkownik nie ma poprzedniego wyniku - to będzie nowy rekord');
-            }
             isNewRecord = true;
         } else {
             const currentScoreValue = this.parseScoreValue(currentScore.score);
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: updateUserRanking - currentScoreValue: ' + currentScoreValue);
-                logger.info('🔍 DEBUG: updateUserRanking - Porównanie: newScoreValue (' + newScoreValue + ') > currentScoreValue (' + currentScoreValue + ') = ' + (newScoreValue > currentScoreValue));
-            }
-            
             if (newScoreValue > currentScoreValue) {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: updateUserRanking - Nowy wynik jest lepszy - to będzie nowy rekord');
-                }
                 isNewRecord = true;
-            } else {
-                if (this.config.ocr.detailedLogging.enabled) {
-                    logger.info('🔍 DEBUG: updateUserRanking - Nowy wynik NIE jest lepszy - nie ma rekordu');
-                }
             }
         }
-        
+
         if (isNewRecord) {
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: updateUserRanking - Zapisywanie nowego rekordu');
-            }
             ranking[userId] = {
                 score: bestScore,
                 username: userName,
@@ -621,46 +554,35 @@ class RankingService {
                 userId: userId,
                 bossName: bossName || 'Nieznany boss'
             };
-            await this.saveRanking(ranking);
-            if (this.config.ocr.detailedLogging.enabled) {
-                logger.info('🔍 DEBUG: updateUserRanking - Nowy rekord zapisany');
-            }
+            await this.saveRanking(guildId, ranking);
         }
-        
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info('🔍 DEBUG: updateUserRanking - Zwracanie rezultatu: isNewRecord=' + isNewRecord);
-        }
+
         return { isNewRecord, ranking, currentScore };
     }
 
     /**
-     * Pobiera posortowanych graczy
-     * @returns {Promise<Array>} - Lista posortowanych graczy
+     * Pobiera posortowanych graczy dla danego serwera
+     * @param {string} guildId
+     * @returns {Promise<Array>}
      */
-    async getSortedPlayers() {
-        const ranking = await this.loadRanking();
+    async getSortedPlayers(guildId) {
+        const ranking = await this.loadRanking(guildId);
         const players = Object.entries(ranking).map(([userId, data]) => ({
             ...data,
-            userId: userId
+            userId
         }));
-        
         return players.sort((a, b) => b.scoreValue - a.scoreValue);
     }
 
     /**
      * Dodaje aktywny ranking do cache
-     * @param {string} messageId - ID wiadomości
-     * @param {Object} rankingData - Dane rankingu
      */
     addActiveRanking(messageId, rankingData) {
-        // Dodaj domyślny format jeśli nie jest określony
         if (rankingData.mobileFormat === undefined) {
             rankingData.mobileFormat = false;
         }
-        
         this.activeRankings.set(messageId, rankingData);
-        
-        // Automatyczne czyszczenie
+
         setTimeout(() => {
             this.activeRankings.delete(messageId);
         }, this.config.ranking.paginationTimeout);
@@ -668,8 +590,6 @@ class RankingService {
 
     /**
      * Pobiera aktywny ranking
-     * @param {string} messageId - ID wiadomości
-     * @returns {Object|null} - Dane rankingu lub null
      */
     getActiveRanking(messageId) {
         return this.activeRankings.get(messageId) || null;
@@ -677,29 +597,28 @@ class RankingService {
 
     /**
      * Aktualizuje aktywny ranking
-     * @param {string} messageId - ID wiadomości
-     * @param {Object} rankingData - Dane rankingu
      */
     updateActiveRanking(messageId, rankingData) {
         this.activeRankings.set(messageId, rankingData);
     }
 
     /**
-     * Usuwa gracza z rankingu
-     * @param {string} userId - ID użytkownika do usunięcia
-     * @returns {Promise<boolean>} - True jeśli gracz został usunięty, false jeśli nie był w rankingu
+     * Usuwa gracza z rankingu danego serwera
+     * @param {string} userId
+     * @param {string} guildId
+     * @returns {Promise<boolean>}
      */
-    async removePlayerFromRanking(userId) {
+    async removePlayerFromRanking(userId, guildId) {
         try {
-            const ranking = await this.loadRanking();
-            
+            const ranking = await this.loadRanking(guildId);
+
             if (ranking[userId]) {
                 delete ranking[userId];
-                await this.saveRanking(ranking);
-                logger.info(`🗑️ Usunięto gracza ${userId} z rankingu`);
+                await this.saveRanking(guildId, ranking);
+                logger.info(`🗑️ Usunięto gracza ${userId} z rankingu serwera ${guildId}`);
                 return true;
             }
-            
+
             return false;
         } catch (error) {
             logger.error('❌ Błąd podczas usuwania gracza z rankingu:', error);

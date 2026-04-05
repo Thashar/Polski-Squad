@@ -1,6 +1,7 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
+
 class RoleService {
     constructor(config, rankingService) {
         this.config = config;
@@ -8,39 +9,41 @@ class RoleService {
     }
 
     /**
-     * Aktualizuje role TOP 1-3, TOP 4-10 oraz TOP 11-30 na podstawie aktualnego rankingu
+     * Aktualizuje role TOP na podstawie aktualnego rankingu serwera.
+     * Jeśli guildTopRoles jest null (brak konfiguracji ról), metoda nie robi nic.
      * @param {Guild} guild - Serwer Discord
      * @param {Array} sortedPlayers - Posortowani gracze
+     * @param {Object|null} guildTopRoles - Konfiguracja ról dla tego serwera (lub null)
      */
-    async updateTopRoles(guild, sortedPlayers) {
+    async updateTopRoles(guild, sortedPlayers, guildTopRoles = null) {
+        // Jeśli serwer nie ma skonfigurowanych ról TOP — pomijamy
+        if (!guildTopRoles || Object.keys(guildTopRoles).length === 0) {
+            logger.info(`ℹ️ Serwer ${guild.name} nie ma skonfigurowanych ról TOP — pomijam aktualizację`);
+            return true;
+        }
+
         try {
-            // Rozpoczynam aktualizację ról TOP (bez logowania)
+            const top1Role = guildTopRoles.top1 ? guild.roles.cache.get(guildTopRoles.top1) : null;
+            const top2Role = guildTopRoles.top2 ? guild.roles.cache.get(guildTopRoles.top2) : null;
+            const top3Role = guildTopRoles.top3 ? guild.roles.cache.get(guildTopRoles.top3) : null;
+            const top4to10Role = guildTopRoles.top4to10 ? guild.roles.cache.get(guildTopRoles.top4to10) : null;
+            const top11to30Role = guildTopRoles.top11to30 ? guild.roles.cache.get(guildTopRoles.top11to30) : null;
 
-            // Pobierz role z serwera
-            const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
-            const top2Role = guild.roles.cache.get(this.config.topRoles.top2);
-            const top3Role = guild.roles.cache.get(this.config.topRoles.top3);
-            const top4to10Role = guild.roles.cache.get(this.config.topRoles.top4to10);
-            const top11to30Role = guild.roles.cache.get(this.config.topRoles.top11to30);
+            // Zbierz tylko role, które faktycznie istnieją na serwerze
+            const allTopRoles = [top1Role, top2Role, top3Role, top4to10Role, top11to30Role].filter(Boolean);
 
-            if (!top1Role || !top2Role || !top3Role || !top4to10Role || !top11to30Role) {
-                logger.error('❌ Nie znaleziono wszystkich ról TOP na serwerze');
+            if (allTopRoles.length === 0) {
+                logger.warn(`⚠️ Żadna skonfigurowana rola TOP nie istnieje na serwerze ${guild.name}`);
                 return false;
             }
 
-            const allTopRoles = [top1Role, top2Role, top3Role, top4to10Role, top11to30Role];
-
-            // Zbierz ID graczy w rankingu
             const playerIds = new Set(sortedPlayers.map(player => player.userId));
-
-            // Flaga informująca czy usunieto kogoś z rankingu
             let playersRemovedFromRanking = false;
-            
+
             // Usuń role TOP od graczy którzy zniknęli z rankingu
             for (const role of allTopRoles) {
                 const membersWithRole = role.members;
                 for (const [memberId, member] of membersWithRole) {
-                    // Jeśli gracz nie jest w rankingu, usuń mu rolę TOP
                     if (!playerIds.has(memberId)) {
                         try {
                             await member.roles.remove(role);
@@ -51,59 +54,48 @@ class RoleService {
                     }
                 }
             }
-            
-            // Usuń wszystkie role TOP od wszystkich użytkowników w rankingu (reset)
+
+            // Reset ról graczy w rankingu
             for (const role of allTopRoles) {
                 const membersWithRole = role.members;
                 for (const [memberId, member] of membersWithRole) {
-                    // Tylko dla graczy w rankingu - resetuj role
                     if (playerIds.has(memberId)) {
                         try {
                             await member.roles.remove(role);
-                            // Usunięto rolę (bez logowania)
                         } catch (error) {
                             logger.error(`Błąd resetowania roli ${role.name} od ${member.user.tag}:`, error.message);
                         }
                     }
                 }
             }
-            
-            // Przyznaj nowe role na podstawie pozycji w rankingu
+
+            // Przyznaj nowe role na podstawie pozycji
             for (let i = 0; i < sortedPlayers.length; i++) {
                 const player = sortedPlayers[i];
                 const position = i + 1;
                 let targetRole = null;
-                
-                // Określ odpowiednią rolę na podstawie pozycji
-                if (position === 1) {
-                    targetRole = top1Role;
-                } else if (position === 2) {
-                    targetRole = top2Role;
-                } else if (position === 3) {
-                    targetRole = top3Role;
-                } else if (position >= 4 && position <= 10) {
-                    targetRole = top4to10Role;
-                } else if (position >= 11 && position <= 30) {
-                    targetRole = top11to30Role;
-                }
-                
+
+                if (position === 1) targetRole = top1Role;
+                else if (position === 2) targetRole = top2Role;
+                else if (position === 3) targetRole = top3Role;
+                else if (position >= 4 && position <= 10) targetRole = top4to10Role;
+                else if (position >= 11 && position <= 30) targetRole = top11to30Role;
+
                 if (targetRole) {
                     try {
                         const member = await guild.members.fetch(player.userId);
                         if (member) {
                             await member.roles.add(targetRole);
-                            // Przyznano rolę (bez logowania)
                         }
                     } catch (error) {
                         logger.error(`Błąd przyznawania roli ${targetRole.name} użytkownikowi ${player.userName || `ID:${player.userId}`}:`, error.message);
 
-                        // Jeśli błąd to "Unknown Member" lub "Unknown User", oznacza to że użytkownik nie jest na serwerze
                         if (error.code === 10007 || error.message.includes('Unknown Member') || error.message.includes('Unknown User')) {
-                            logger.warn(`⚠️ Użytkownik ${player.userName || `ID:${player.userId}`} nie jest na serwerze - usuwanie z rankingu`);
+                            logger.warn(`⚠️ Użytkownik ${player.userName || `ID:${player.userId}`} nie jest na serwerze — usuwam z rankingu`);
 
                             if (this.rankingService) {
                                 try {
-                                    await this.rankingService.removePlayerFromRanking(player.userId);
+                                    await this.rankingService.removePlayerFromRanking(player.userId, guild.id);
                                     logger.success(`✅ Usunięto użytkownika ${player.userName || `ID:${player.userId}`} z rankingu`);
                                     playersRemovedFromRanking = true;
                                 } catch (removeError) {
@@ -115,13 +107,11 @@ class RoleService {
                 }
             }
 
-            // Jeśli ktoś został usunięty z rankingu, przeładuj ranking i zaktualizuj role ponownie
+            // Przeładuj jeśli ktoś został usunięty z rankingu
             if (playersRemovedFromRanking && this.rankingService) {
-                logger.info('🔄 Przeładowywanie rankingu i aktualizacja ról po usunięciu nieaktywnych użytkowników');
-                const updatedPlayers = await this.rankingService.getSortedPlayers();
-
-                // Rekurencyjne wywołanie z zaktualizowanym rankingiem
-                return await this.updateTopRoles(guild, updatedPlayers);
+                logger.info('🔄 Przeładowywanie rankingu po usunięciu nieaktywnych użytkowników');
+                const updatedPlayers = await this.rankingService.getSortedPlayers(guild.id);
+                return await this.updateTopRoles(guild, updatedPlayers, guildTopRoles);
             }
 
             logger.info('✅ Aktualizacja ról TOP zakończona pomyślnie');
@@ -135,23 +125,21 @@ class RoleService {
 
     /**
      * Pobiera informacje o aktualnych posiadaczach ról TOP
-     * @param {Guild} guild - Serwer Discord
-     * @returns {Object} - Obiekt z informacjami o rolach
+     * @param {Guild} guild
+     * @param {Object|null} guildTopRoles
      */
-    async getTopRoleHolders(guild) {
+    async getTopRoleHolders(guild, guildTopRoles = null) {
+        const topRoles = guildTopRoles || {};
         try {
-            const top1Role = guild.roles.cache.get(this.config.topRoles.top1);
-            const top2Role = guild.roles.cache.get(this.config.topRoles.top2);
-            const top3Role = guild.roles.cache.get(this.config.topRoles.top3);
-            const top4to10Role = guild.roles.cache.get(this.config.topRoles.top4to10);
-            const top11to30Role = guild.roles.cache.get(this.config.topRoles.top11to30);
-            
+            const get = (key) => topRoles[key] ? guild.roles.cache.get(topRoles[key]) : null;
+            const toArr = (role) => role ? Array.from(role.members.values()) : [];
+
             return {
-                top1: top1Role ? Array.from(top1Role.members.values()) : [],
-                top2: top2Role ? Array.from(top2Role.members.values()) : [],
-                top3: top3Role ? Array.from(top3Role.members.values()) : [],
-                top4to10: top4to10Role ? Array.from(top4to10Role.members.values()) : [],
-                top11to30: top11to30Role ? Array.from(top11to30Role.members.values()) : []
+                top1: toArr(get('top1')),
+                top2: toArr(get('top2')),
+                top3: toArr(get('top3')),
+                top4to10: toArr(get('top4to10')),
+                top11to30: toArr(get('top11to30'))
             };
         } catch (error) {
             logger.error('Błąd pobierania posiadaczy ról TOP:', error);
@@ -160,35 +148,34 @@ class RoleService {
     }
 
     /**
-     * Sprawdza czy użytkownik ma jakąkolwiek rolę TOP
-     * @param {GuildMember} member - Członek serwera
-     * @returns {string|null} - Nazwa roli TOP lub null
+     * Sprawdza czy użytkownik ma jakąkolwiek rolę TOP (na danym serwerze)
+     * @param {GuildMember} member
+     * @param {Object|null} guildTopRoles
      */
-    getUserTopRole(member) {
-        const topRoleIds = Object.values(this.config.topRoles);
-        
-        for (const roleId of topRoleIds) {
+    getUserTopRole(member, guildTopRoles = null) {
+        const topRoles = guildTopRoles || {};
+        const roleIds = Object.values(topRoles).filter(Boolean);
+
+        for (const roleId of roleIds) {
             if (member.roles.cache.has(roleId)) {
                 const role = member.guild.roles.cache.get(roleId);
                 return role ? role.name : null;
             }
         }
-        
+
         return null;
     }
 
     /**
      * Loguje zmiany w rolach TOP
-     * @param {Array} oldHolders - Poprzedni posiadacze ról
-     * @param {Array} newHolders - Nowi posiadacze ról
      */
     logRoleChanges(oldHolders, newHolders) {
         const positions = ['TOP1', 'TOP2', 'TOP3'];
-        
+
         for (let i = 0; i < 3; i++) {
             const oldHolder = oldHolders[i] ? oldHolders[i].user.tag : 'Brak';
             const newHolder = newHolders[i] ? newHolders[i].username : 'Brak';
-            
+
             if (oldHolder !== newHolder) {
                 logger.info(`${positions[i]}: ${oldHolder} → ${newHolder}`);
             }
