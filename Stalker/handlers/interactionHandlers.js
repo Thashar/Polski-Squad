@@ -3001,7 +3001,8 @@ async function handleKalkulatorModalSubmit(interaction, sharedState) {
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const link = interaction.fields.getTextInputValue('kalkulator_link').trim();
+        const rawLink = interaction.fields.getTextInputValue('kalkulator_link').trim();
+        const link = rawLink.match(/^https?:\/\//) ? rawLink : `https://${rawLink}`;
         const points = interaction.fields.getTextInputValue('kalkulator_points').trim();
         const member = await interaction.guild.members.fetch(interaction.user.id);
         const userNick = member.displayName || interaction.user.username;
@@ -3113,7 +3114,8 @@ async function handleKalkulatorReturnModalSubmit(interaction, sharedState) {
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const returnLink = interaction.fields.getTextInputValue('kalkulator_return_link').trim();
+        const rawReturnLink = interaction.fields.getTextInputValue('kalkulator_return_link').trim();
+        const returnLink = rawReturnLink.match(/^https?:\/\//) ? rawReturnLink : `https://${rawReturnLink}`;
 
         const result = await sharedState.kalkulatorEmbedService.completeHelp(
             interaction.user.id, returnLink, sharedState.client
