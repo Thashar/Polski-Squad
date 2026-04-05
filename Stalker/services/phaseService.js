@@ -859,8 +859,12 @@ class PhaseService {
                     });
                 }
             } catch (editError) {
+                // Wiadomość postępu usunięta - kontynuuj przetwarzanie bez aktualizacji postępu
+                if (editError.code === 10008 || editError.message?.includes('Unknown Message')) {
+                    logger.warn('[PHASE] ⚠️ Wiadomość postępu usunięta - kontynuuję przetwarzanie bez aktualizacji postępu');
+                    // Nie przerywaj - index.js wyśle nową wiadomość po zakończeniu
                 // Interakcja wygasła - anuluj sesję i odblokuj kolejkę
-                if (editError.code === 10015 || editError.message?.includes('Unknown Webhook') || editError.message?.includes('Invalid Webhook Token')) {
+                } else if (editError.code === 10015 || editError.message?.includes('Unknown Webhook') || editError.message?.includes('Invalid Webhook Token')) {
                     logger.warn('[PHASE] ⏰ Interakcja wygasła, anuluję sesję i odblokowuję kolejkę');
 
                     // Wyślij informację do kanału
