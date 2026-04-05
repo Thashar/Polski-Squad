@@ -3154,7 +3154,8 @@ async function handleKalkulatorMyHistoryButton(interaction, sharedState) {
 
         const listText = history.map((e, i) => {
             const ts = Math.floor(new Date(e.completedAt).getTime() / 1000);
-            return `**${i + 1}.** [Link](${e.returnLink}) • ${e.points} pkt • <t:${ts}:f>`;
+            const linkLabel = e.returnLink.includes('=') ? e.returnLink.split('=').pop() : 'Link';
+            return `**${i + 1}.** [${linkLabel}](${e.returnLink}) • ${e.points} pkt • <t:${ts}:f>`;
         }).join('\n');
 
         const deleteButton = new ActionRowBuilder().addComponents(
