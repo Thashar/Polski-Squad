@@ -54,6 +54,7 @@ ENDERSECHO_CLIENT_ID=client_id
 # Serwer 1
 ENDERSECHO_GUILD_1_ID=guild_id
 ENDERSECHO_GUILD_1_CHANNEL=channel_id
+ENDERSECHO_GUILD_1_LANG=pol          # pol lub eng (domyślnie pol)
 
 # Role TOP serwera 1 (opcjonalne — jeśli brak, bot nie zarządza rolami)
 ENDERSECHO_GUILD_1_TOP1_ROLE=role_id
@@ -65,6 +66,7 @@ ENDERSECHO_GUILD_1_TOP11TO30_ROLE=role_id
 # Serwer 2
 ENDERSECHO_GUILD_2_ID=guild_id
 ENDERSECHO_GUILD_2_CHANNEL=channel_id
+ENDERSECHO_GUILD_2_LANG=eng          # pol lub eng (domyślnie pol)
 # Role TOP serwera 2 (opcjonalne)
 ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 # ... itd.
