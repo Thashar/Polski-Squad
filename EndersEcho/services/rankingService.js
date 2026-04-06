@@ -537,7 +537,7 @@ class RankingService {
         const medal = this.getPositionMedal(currentPosition);
 
         // Buduj opis z wszystkimi danymi
-        const dateStr = new Date().toLocaleDateString('pl-PL');
+        const dateStr = new Date().toLocaleDateString(msgs.recordDateLocale || 'pl-PL');
         let descLines = [];
         descLines.push(formatMessage(msgs.recordDescription, { username: userName }));
         descLines.push('');
@@ -560,8 +560,8 @@ class RankingService {
 
         const timeSince = this.formatTimeSince(previousTimestamp);
         const dateLine = timeSince
-            ? `**📅 Data:** ${dateStr}  *(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`
-            : `**📅 Data:** ${dateStr}`;
+            ? `**${msgs.recordDateLabel}:** ${dateStr}  *(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`
+            : `**${msgs.recordDateLabel}:** ${dateStr}`;
         descLines.push(dateLine);
 
         const description = descLines.join('\n');

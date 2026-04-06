@@ -63,8 +63,10 @@ const pol = {
     recordRanking: '🏅 Pozycja',
     recordPromotionBy: 'awans o',
     recordNewEntry: 'nowy w rankingu',
+    recordDateLabel: '📅 Data',
     recordPreviousRecordAgo: 'poprzedni rekord',
     recordAgo: 'temu',
+    recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
 
     // /remove
@@ -162,8 +164,10 @@ const eng = {
     recordRanking: '🏅 Position',
     recordPromotionBy: 'promoted by',
     recordNewEntry: 'new entry',
+    recordDateLabel: '📅 Date',
     recordPreviousRecordAgo: 'previous record',
     recordAgo: 'ago',
+    recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
 
     // /remove
