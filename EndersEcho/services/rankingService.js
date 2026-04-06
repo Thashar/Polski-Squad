@@ -529,14 +529,14 @@ class RankingService {
         descLines.push('');
 
         if (previousScore) {
-            descLines.push(`${msgs.recordProgress}  ${progressText}`);
-            descLines.push(`${msgs.recordImprovement}  **${improvementText}**`);
+            descLines.push(`**${msgs.recordProgress}:** ${progressText}`);
+            descLines.push(`**${msgs.recordImprovement}:** ${improvementText}`);
         } else {
-            descLines.push(`${msgs.recordNewScore}  **${bestScore}**`);
+            descLines.push(`**${msgs.recordNewScore}:** ${bestScore}`);
         }
 
         if (currentPosition !== null) {
-            let posLine = `${medal}  **#${currentPosition}**`;
+            let posLine = `**${msgs.recordRanking}:** ${medal} #${currentPosition}`;
             if (positionChange > 0) {
                 posLine += `  *(${msgs.recordPromotionBy} +${positionChange})*`;
             } else if (isNewEntry) {
@@ -545,7 +545,7 @@ class RankingService {
             descLines.push(posLine);
         }
 
-        descLines.push(`📅  ${dateStr}`);
+        descLines.push(`**Data:** ${dateStr}`);
 
         const description = descLines.join('\n');
 
