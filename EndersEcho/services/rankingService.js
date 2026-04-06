@@ -469,19 +469,33 @@ class RankingService {
         return roleId ? guild.roles.cache.get(roleId) || null : null;
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null) {
+    formatTimeSince(previousTimestamp) {
+        if (!previousTimestamp) return null;
+        const diffMs = Date.now() - new Date(previousTimestamp).getTime();
+        if (diffMs <= 0) return null;
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+        const parts = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0 || days > 0) parts.push(`${hours}h`);
+        parts.push(`${minutes}m`);
+        return parts.join(' ');
+    }
+
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null) {
         const msgs = messages || this.config.messages;
 
-        // Oblicz postęp
-        let progressText = `**${bestScore}**`;
-        let improvementText = null;
+        // Oblicz postęp i poprawę w jednej linii
+        let progressText = bestScore;
         if (previousScore) {
-            progressText = `${previousScore} ➜ **${bestScore}**`;
             const previousScoreValue = this.parseScoreValue(previousScore);
             const newScoreValue = this.parseScoreValue(bestScore);
             const improvement = newScoreValue - previousScoreValue;
             const newScoreUnit = this.getScoreUnit(bestScore);
-            improvementText = `+${this.formatProgressInUnit(improvement, newScoreUnit)}`;
+            const improvementText = `+${this.formatProgressInUnit(improvement, newScoreUnit)}`;
+            progressText = `${previousScore} ➜ ${bestScore} (${improvementText})`;
         }
 
         // Pobierz pozycję w rankingu
@@ -530,7 +544,6 @@ class RankingService {
 
         if (previousScore) {
             descLines.push(`**${msgs.recordProgress}:** ${progressText}`);
-            descLines.push(`**${msgs.recordImprovement}:** ${improvementText}`);
         } else {
             descLines.push(`**${msgs.recordNewScore}:** ${bestScore}`);
         }
@@ -545,7 +558,11 @@ class RankingService {
             descLines.push(posLine);
         }
 
-        descLines.push(`**📅 Data:** ${dateStr}`);
+        const timeSince = this.formatTimeSince(previousTimestamp);
+        const dateLine = timeSince
+            ? `**📅 Data:** ${dateStr}  *(poprzedni rekord: ${timeSince} temu)*`
+            : `**📅 Data:** ${dateStr}`;
+        descLines.push(dateLine);
 
         const description = descLines.join('\n');
 
