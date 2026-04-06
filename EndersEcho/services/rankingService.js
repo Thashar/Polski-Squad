@@ -545,7 +545,7 @@ class RankingService {
             descLines.push(posLine);
         }
 
-        descLines.push(`**Data:** ${dateStr}`);
+        descLines.push(`**📅 Data:** ${dateStr}`);
 
         const description = descLines.join('\n');
 
