@@ -328,7 +328,8 @@ class InteractionHandler {
                 interaction.guildId,
                 msgs,
                 interaction.guild,
-                guildConfig?.topRoles || null
+                guildConfig?.topRoles || null,
+                currentScore ? currentScore.timestamp : null
             );
 
             try {

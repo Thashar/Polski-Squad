@@ -58,12 +58,15 @@ const pol = {
     // Embed — nowy rekord
     recordTitle: '🏆 GRATULACJE!',
     recordDescription: '## {username} pobił swój rekord!',
-    recordNewScore: '🏆',
-    recordProgress: '📈',
-    recordImprovement: '⬆️',
+    recordNewScore: '🏆 Wynik',
+    recordProgress: '📈 Progres',
     recordRanking: '🏅 Pozycja',
     recordPromotionBy: 'awans o',
     recordNewEntry: 'nowy w rankingu',
+    recordDateLabel: '📅 Data',
+    recordPreviousRecordAgo: 'poprzedni rekord',
+    recordAgo: 'temu',
+    recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
 
     // /remove
@@ -156,12 +159,15 @@ const eng = {
     // Embed — new record
     recordTitle: '🏆 CONGRATULATIONS!',
     recordDescription: '## {username} broke their record!',
-    recordNewScore: '🏆',
-    recordProgress: '📈',
-    recordImprovement: '⬆️',
+    recordNewScore: '🏆 Score',
+    recordProgress: '📈 Progress',
     recordRanking: '🏅 Position',
     recordPromotionBy: 'promoted by',
     recordNewEntry: 'new entry',
+    recordDateLabel: '📅 Date',
+    recordPreviousRecordAgo: 'previous record',
+    recordAgo: 'ago',
+    recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
 
     // /remove
