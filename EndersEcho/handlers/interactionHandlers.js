@@ -317,6 +317,7 @@ class InteractionHandler {
                 name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}`
             });
 
+            const guildConfig = this.config.getGuildConfig(interaction.guildId);
             const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName,
                 bestScore,
@@ -325,7 +326,9 @@ class InteractionHandler {
                 currentScore ? currentScore.score : null,
                 userId,
                 interaction.guildId,
-                msgs
+                msgs,
+                interaction.guild,
+                guildConfig?.topRoles || null
             );
 
             try {
@@ -354,7 +357,6 @@ class InteractionHandler {
 
             // Aktualizacja ról TOP po nowym rekordzie
             try {
-                const guildConfig = this.config.getGuildConfig(interaction.guildId);
                 const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 await this.logService.logMessage('success', 'Role TOP zostały zaktualizowane po nowym rekordzie', interaction);
