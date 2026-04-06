@@ -560,7 +560,7 @@ class RankingService {
 
         const timeSince = this.formatTimeSince(previousTimestamp);
         const dateLine = timeSince
-            ? `**📅 Data:** ${dateStr}  *(poprzedni rekord: ${timeSince} temu)*`
+            ? `**📅 Data:** ${dateStr}  *(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`
             : `**📅 Data:** ${dateStr}`;
         descLines.push(dateLine);
 
