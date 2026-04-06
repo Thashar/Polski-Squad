@@ -56,13 +56,14 @@ const pol = {
     resultDifference: '**Różnica:** {diff}',
 
     // Embed — nowy rekord
-    recordTitle: '🎉 Nowy rekord!',
-    recordDescription: 'Gratulacje dla **{username}**!',
-    recordNewScore: '🏆 Nowy wynik',
-    recordDate: '📅 Data',
-    recordStatus: '🎯 Status',
-    recordSaved: '✅ Wynik zapisany do rankingu!',
-    recordRanking: '📊 Ranking',
+    recordTitle: '🏆 GRATULACJE!',
+    recordDescription: '## {username} pobił swój rekord!',
+    recordNewScore: '🏆',
+    recordProgress: '📈',
+    recordImprovement: '⬆️',
+    recordRanking: '🏅 Pozycja',
+    recordPromotionBy: 'awans o',
+    recordNewEntry: 'nowy w rankingu',
     recordBoss: '👹 Boss',
 
     // /remove
@@ -153,13 +154,14 @@ const eng = {
     resultDifference: '**Difference:** {diff}',
 
     // Embed — new record
-    recordTitle: '🎉 New Record!',
-    recordDescription: 'Congratulations to **{username}**!',
-    recordNewScore: '🏆 New score',
-    recordDate: '📅 Date',
-    recordStatus: '🎯 Status',
-    recordSaved: '✅ Score saved to the ranking!',
-    recordRanking: '📊 Ranking',
+    recordTitle: '🏆 CONGRATULATIONS!',
+    recordDescription: '## {username} broke their record!',
+    recordNewScore: '🏆',
+    recordProgress: '📈',
+    recordImprovement: '⬆️',
+    recordRanking: '🏅 Position',
+    recordPromotionBy: 'promoted by',
+    recordNewEntry: 'new entry',
     recordBoss: '👹 Boss',
 
     // /remove

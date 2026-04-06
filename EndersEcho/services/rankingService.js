@@ -440,28 +440,62 @@ class RankingService {
      * @param {Object|null} messages
      * @returns {Promise<EmbedBuilder>}
      */
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null) {
+    getPositionColor(position) {
+        if (!position) return 0x57F287;
+        if (position === 1) return 0xFFD700;
+        if (position === 2) return 0xC0C0C0;
+        if (position === 3) return 0xCD7F32;
+        if (position <= 10) return 0x5865F2;
+        return 0x57F287;
+    }
+
+    getPositionMedal(position) {
+        if (!position) return '⭐';
+        if (position === 1) return '🥇';
+        if (position === 2) return '🥈';
+        if (position === 3) return '🥉';
+        if (position <= 10) return '🏅';
+        return '⭐';
+    }
+
+    getPositionRole(position, guildTopRoles, guild) {
+        if (!guildTopRoles || !guild) return null;
+        let roleId = null;
+        if (position === 1) roleId = guildTopRoles.top1;
+        else if (position === 2) roleId = guildTopRoles.top2;
+        else if (position === 3) roleId = guildTopRoles.top3;
+        else if (position >= 4 && position <= 10) roleId = guildTopRoles.top4to10;
+        else if (position >= 11 && position <= 30) roleId = guildTopRoles.top11to30;
+        return roleId ? guild.roles.cache.get(roleId) || null : null;
+    }
+
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null) {
         const msgs = messages || this.config.messages;
 
-        let newScoreText = `**${bestScore}**`;
-
+        // Oblicz postęp
+        let progressText = `**${bestScore}**`;
+        let improvementText = null;
         if (previousScore) {
+            progressText = `${previousScore} ➜ **${bestScore}**`;
             const previousScoreValue = this.parseScoreValue(previousScore);
             const newScoreValue = this.parseScoreValue(bestScore);
             const improvement = newScoreValue - previousScoreValue;
             const newScoreUnit = this.getScoreUnit(bestScore);
-            const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
-            newScoreText = `${bestScore} (${improvementText})`;
+            improvementText = `+${this.formatProgressInUnit(improvement, newScoreUnit)}`;
         }
 
-        let rankingText = '';
+        // Pobierz pozycję w rankingu
+        let currentPosition = null;
+        let positionChange = 0;
+        let isNewEntry = false;
+
         if (userId && guildId) {
             try {
                 const sortedPlayers = await this.getSortedPlayers(guildId);
                 const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
 
                 if (userIndex !== -1) {
-                    const currentPosition = userIndex + 1;
+                    currentPosition = userIndex + 1;
 
                     if (previousScore) {
                         const tempPlayers = [...sortedPlayers];
@@ -470,19 +504,10 @@ class RankingService {
                             userPlayer.scoreValue = this.parseScoreValue(previousScore);
                             tempPlayers.sort((a, b) => b.scoreValue - a.scoreValue);
                             const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
-                            const previousPosition = previousIndex + 1;
-                            const positionChange = previousPosition - currentPosition;
-
-                            if (positionChange > 0) {
-                                rankingText = formatMessage(msgs.rankingPositionPromotion, { pos: currentPosition, change: positionChange });
-                            } else {
-                                rankingText = formatMessage(msgs.rankingPosition, { pos: currentPosition });
-                            }
-                        } else {
-                            rankingText = formatMessage(msgs.rankingPosition, { pos: currentPosition });
+                            positionChange = (previousIndex + 1) - currentPosition;
                         }
                     } else {
-                        rankingText = formatMessage(msgs.rankingPositionNew, { pos: currentPosition });
+                        isNewEntry = true;
                     }
                 }
             } catch (error) {
@@ -490,25 +515,64 @@ class RankingService {
             }
         }
 
-        const embedFields = [
-            { name: msgs.recordNewScore, value: newScoreText, inline: true },
-            { name: msgs.recordDate, value: new Date().toLocaleDateString('pl-PL'), inline: true }
-        ];
+        // Rola i ikona roli
+        const positionRole = currentPosition ? this.getPositionRole(currentPosition, guildTopRoles, guild) : null;
 
-        if (rankingText) {
-            embedFields.push({ name: msgs.recordRanking, value: rankingText, inline: false });
+        // Kolor i medal wg pozycji
+        const embedColor = this.getPositionColor(currentPosition);
+        const medal = this.getPositionMedal(currentPosition);
+
+        // Buduj opis z wszystkimi danymi
+        const dateStr = new Date().toLocaleDateString('pl-PL');
+        let descLines = [];
+        descLines.push(formatMessage(msgs.recordDescription, { username: userName }));
+        descLines.push('');
+
+        if (previousScore) {
+            descLines.push(`${msgs.recordProgress}  ${progressText}`);
+            descLines.push(`${msgs.recordImprovement}  **${improvementText}**`);
+        } else {
+            descLines.push(`${msgs.recordNewScore}  **${bestScore}**`);
         }
 
-        embedFields.push({ name: msgs.recordStatus, value: msgs.recordSaved, inline: false });
+        if (currentPosition !== null) {
+            let posLine = `${medal}  **#${currentPosition}**`;
+            if (positionChange > 0) {
+                posLine += `  *(${msgs.recordPromotionBy} +${positionChange})*`;
+            } else if (isNewEntry) {
+                posLine += `  *(${msgs.recordNewEntry})*`;
+            }
+            descLines.push(posLine);
+        }
+
+        descLines.push(`📅  ${dateStr}`);
+
+        const description = descLines.join('\n');
+
+        // Author: ikona roli jeśli dostępna
+        let authorData = null;
+        if (positionRole) {
+            const roleIconUrl = positionRole.iconURL({ size: 256 });
+            if (roleIconUrl) {
+                authorData = { name: positionRole.name, iconURL: roleIconUrl };
+            } else if (positionRole.unicodeEmoji) {
+                authorData = { name: `${positionRole.unicodeEmoji} ${positionRole.name}` };
+            } else {
+                authorData = { name: positionRole.name };
+            }
+        }
 
         const embed = new EmbedBuilder()
-            .setColor(0x00ff00)
+            .setColor(embedColor)
             .setTitle(msgs.recordTitle)
-            .setDescription(formatMessage(msgs.recordDescription, { username: userName }))
+            .setDescription(description)
             .setThumbnail(userAvatarUrl)
-            .addFields(embedFields)
             .setTimestamp()
             .setImage(`attachment://${attachmentName}`);
+
+        if (authorData) {
+            embed.setAuthor(authorData);
+        }
 
         return embed;
     }

@@ -23,6 +23,12 @@
    - 5 poziomów (top1, top2, top3, top4-10, top11-30), auto-update
    - Role są **opcjonalne per serwer** — jeśli serwer nie ma skonfigurowanych ról, bot je pomija
    - `updateTopRoles(guild, sortedPlayers, guildTopRoles)` — przyjmuje konfigurację ról danego serwera
+   - **Ogłoszenie rekordu** (`rankingService.createRecordEmbed`):
+     - Kolor embeda wg pozycji: 🥇 złoty (TOP1), 🥈 srebrny (TOP2), 🥉 brązowy (TOP3), niebieski (TOP4-10), zielony (TOP11+)
+     - Tytuł: `🏆 GRATULACJE!` + opis z headerem markdown
+     - Pola: Postęp (`stary ➜ nowy`), Poprawa (`+X`), Data, Pozycja z medalem emoji
+     - Author (górny pasek): ikona roli + nazwa roli (jeśli rola ma ikonę/emoji)
+     - Thumbnail: avatar gracza | Image: screenshot wyniku
 
 4. **Paginacja + Wybór Rankingu** - `interactionHandlers.js`:
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
