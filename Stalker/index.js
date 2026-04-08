@@ -596,7 +596,7 @@ client.on(Events.MessageCreate, async (message) => {
                 );
 
                 // Sprawdź czy sesja nie została anulowana podczas przetwarzania
-                if (session.cancelled || !session.aggregatedResults) {
+                if (session.cancelled) {
                     logger.info('[REMIND] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
                     return;
                 }
