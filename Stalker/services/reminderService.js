@@ -317,6 +317,8 @@ class ReminderService {
             createdAt: Date.now(),
             timeout: null,
             publicInteraction: null,
+            isProcessing: false, // flaga czy aktualnie przetwarza zdjęcia
+            cancelled: false, // flaga czy sesja została anulowana
             ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
         };
 
@@ -374,6 +376,13 @@ class ReminderService {
         if (!session) return;
 
         logger.info(`[REMIND] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
+
+        // Jeśli sesja jest w trakcie przetwarzania, tylko ustaw flagę cancelled
+        if (session.isProcessing) {
+            logger.warn('[REMIND] ⚠️ Sesja jest w trakcie przetwarzania - ustawiam flagę cancelled');
+            session.cancelled = true;
+            return; // Pętla przetwarzania sama się zatrzyma i wyczyści
+        }
 
         if (session.timeout) {
             clearTimeout(session.timeout);
@@ -615,6 +624,9 @@ class ReminderService {
 
         session.publicInteraction = publicInteraction;
 
+        // Ustaw flagę przetwarzania
+        session.isProcessing = true;
+
         // Inicjalizuj stan migania
         session.blinkState = false;
         session.isUpdatingProgress = false; // Flaga zapobiegająca nakładaniu się wywołań
@@ -695,6 +707,12 @@ class ReminderService {
             );
 
         for (let i = 0; i < downloadedFiles.length; i++) {
+            // Sprawdź czy sesja została anulowana
+            if (session.cancelled) {
+                logger.warn('[REMIND] ⚠️ Sesja została anulowana podczas przetwarzania - przerywam pętlę');
+                break;
+            }
+
             const file = downloadedFiles[i];
             const imageIndex = i + 1;
 
@@ -851,6 +869,28 @@ class ReminderService {
 
         // Wyczyść aktualnie przetwarzane dane
         session.currentProcessingData = null;
+
+        // Wyłącz flagę przetwarzania
+        session.isProcessing = false;
+
+        // Jeśli sesja została anulowana podczas przetwarzania, zaktualizuj embed i wyczyść
+        if (session.cancelled) {
+            logger.info('[REMIND] 🧹 Sesja została anulowana - czyszczę po zakończeniu przetwarzania');
+            const cancelledInteraction = session.publicInteraction;
+            if (cancelledInteraction) {
+                try {
+                    const cancelledEmbed = new EmbedBuilder()
+                        .setTitle('❌ Sesja anulowana')
+                        .setDescription('Sesja /remind została anulowana. Wszystkie pliki zostały usunięte.')
+                        .setColor('#FF0000')
+                        .setTimestamp();
+                    await cancelledInteraction.editReply({ embeds: [cancelledEmbed], components: [] });
+                } catch (err) {
+                    logger.warn(`[REMIND] ⚠️ Nie udało się zaktualizować embeda po anulowaniu: ${err.message}`);
+                }
+            }
+            await this.cleanupSession(sessionId);
+        }
 
         return results;
     }
