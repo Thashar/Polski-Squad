@@ -773,6 +773,27 @@ class PhaseService {
         // Jeśli sesja została anulowana podczas przetwarzania, wyczyść ją teraz
         if (session.cancelled) {
             logger.info(`[PHASE${session.phase}] 🧹 Sesja została anulowana - czyszczę po zakończeniu przetwarzania`);
+
+            // Zaktualizuj embed na Discordzie do stanu "Anulowano" przed cleanup
+            const cancelledInteraction = session.publicInteraction;
+            if (cancelledInteraction) {
+                try {
+                    const cancelledEmbed = new EmbedBuilder()
+                        .setTitle('❌ Sesja anulowana')
+                        .setDescription('Przetwarzanie zostało anulowane przez użytkownika.')
+                        .setColor('#FF0000')
+                        .setTimestamp();
+
+                    if (cancelledInteraction.editReply) {
+                        await cancelledInteraction.editReply({ embeds: [cancelledEmbed], components: [] });
+                    } else {
+                        await cancelledInteraction.edit({ embeds: [cancelledEmbed], components: [] });
+                    }
+                } catch (err) {
+                    logger.warn(`[PHASE${session.phase}] ⚠️ Nie udało się zaktualizować embeda po anulowaniu: ${err.message}`);
+                }
+            }
+
             await this.cleanupSession(sessionId);
         }
 
