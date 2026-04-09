@@ -249,7 +249,13 @@ class RankingService {
                 const bossName = player.bossName || msgs.unknownBoss;
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
-                const serverInitial = targetGuild?.name?.[0] || '';
+                const serverInitial = (() => {
+                    const n = targetGuild?.name;
+                    if (!n) return '';
+                    // Flagi (dwa Regional_Indicator), ZWJ sequence, lub zwykłe emoji/znak
+                    const m = n.match(/^(?:\p{Regional_Indicator}{2}|\p{Emoji_Presentation}\uFE0F?(?:\u200D\p{Emoji_Presentation}\uFE0F?)*)/u);
+                    return m ? m[0] : ([...n][0] || '');
+                })();
                 const serverSuffix = serverInitial ? ` • ${serverInitial}` : '';
 
                 const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}${serverSuffix}\n`;
