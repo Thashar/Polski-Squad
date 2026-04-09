@@ -494,6 +494,12 @@ class InteractionHandler {
                 return;
             }
 
+            // === Przycisk powrotu do wyboru ===
+            if (customId === 'ranking_back') {
+                await this._handleRankingBack(interaction);
+                return;
+            }
+
             // === Przyciski paginacji ===
             await interaction.deferUpdate();
 
@@ -506,10 +512,8 @@ class InteractionHandler {
                 return;
             }
 
-            // Komunikaty z języka serwera, z którego pochodzi aktywny ranking
-            const msgs = rankingData.guildId
-                ? this.msgs(rankingData.guildId)
-                : this.msgs(interaction.guildId);
+            // Język zawsze wg serwera, na którym użytkownik klika
+            const msgs = this.msgs(interaction.guildId);
 
             if (interaction.user.id !== rankingData.userId) {
                 await interaction.followUp({ content: msgs.rankingWrongUser, flags: ['Ephemeral'] });
@@ -542,7 +546,7 @@ class InteractionHandler {
             );
             const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false, msgs);
 
-            await interaction.editReply({ embeds: [embed], components: [buttons] });
+            await interaction.editReply({ embeds: [embed], components: buttons });
 
         } catch (error) {
             logger.error('Błąd w handleButtonInteraction:', error);
@@ -584,8 +588,7 @@ class InteractionHandler {
                 players = await this.rankingService.getSortedPlayers(guildId);
                 mode = 'server';
                 guild = interaction.client.guilds.cache.get(guildId) || null;
-                // Komunikaty w języku wybranego serwera
-                rankMsgs = this.msgs(guildId);
+                // Język zawsze wg serwera, na którym użytkownik klika
             }
 
             if (players.length === 0) {
@@ -609,7 +612,7 @@ class InteractionHandler {
             const reply = await interaction.editReply({
                 content: null,
                 embeds: [embed],
-                components: [buttons]
+                components: buttons
             });
 
             this.rankingService.addActiveRanking(reply.id, {
@@ -626,6 +629,21 @@ class InteractionHandler {
             logger.error('Błąd w _handleRankingSelect:', error);
             await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
         }
+    }
+
+    /**
+     * Obsługuje przycisk powrotu do wyboru serwera/global
+     * @param {ButtonInteraction} interaction
+     */
+    async _handleRankingBack(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs);
+        await interaction.editReply({
+            content: msgs.rankingSelectPrompt,
+            embeds: [],
+            components: selectRows
+        });
     }
 
     /**

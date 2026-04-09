@@ -86,6 +86,7 @@ const pol = {
     buttonPrev: '◀️ Poprzednia',
     buttonNext: 'Następna ▶️',
     buttonLast: 'Ostatnia ⏩',
+    buttonBack: '↩️ Powrót do wyboru',
 
     // Role TOP
     topRoleUpdated: '🏆 Role TOP zostały zaktualizowane!',
@@ -195,6 +196,7 @@ const eng = {
     buttonPrev: '◀️ Previous',
     buttonNext: 'Next ▶️',
     buttonLast: 'Last ⏩',
+    buttonBack: '↩️ Back to selection',
 
     // TOP roles
     topRoleUpdated: '🏆 TOP roles have been updated!',
