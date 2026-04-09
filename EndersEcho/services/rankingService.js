@@ -232,12 +232,12 @@ class RankingService {
                 const date = new Date(player.timestamp);
                 const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
 
+                const targetGuild = isGlobal
+                    ? (client?.guilds.cache.get(player.sourceGuildId) || null)
+                    : guild;
+
                 let displayName = player.username || `ID:${player.userId}`;
                 try {
-                    const targetGuild = isGlobal
-                        ? (client?.guilds.cache.get(player.sourceGuildId) || null)
-                        : guild;
-
                     if (targetGuild) {
                         const member = await targetGuild.members.fetch(player.userId);
                         displayName = member.displayName;
@@ -249,8 +249,10 @@ class RankingService {
                 const bossName = player.bossName || msgs.unknownBoss;
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
+                const serverInitial = targetGuild?.name?.[0] || '';
+                const serverSuffix = serverInitial ? `. ${serverInitial}` : '';
 
-                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}\n`;
+                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}${serverSuffix}\n`;
 
                 rankingText += lineText;
 
