@@ -164,10 +164,8 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 数字を「千」単位として解釈してカンマを追加しないでください。
 画面にない数字を追加しないでください。
 スコアの最後の文字に特に注意してください — それは単位（アルファベット）であり、数字ではありません。
-ボス名を英語に翻訳してください。翻訳がわからない場合は元の名前をそのまま記載してください。
-
-ボス名（英語訳）、スコア（最高記録）と単位、合計の値を以下の形式で記載してください：
-<英語のボス名>
+ボス名、スコア（最高記録）と単位、合計の値を以下の形式で記載してください：
+<ボス名>
 <スコア>
 <合計>`
             : `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
