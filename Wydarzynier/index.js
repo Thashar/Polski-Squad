@@ -29,10 +29,6 @@ const client = new Client({
         GatewayIntentBits.DirectMessages,
     ],
     partials: [Partials.Message, Partials.Reaction, Partials.User, Partials.Channel],
-    rest: {
-        timeout: 60000, // 60 sekund timeout dla REST API
-        retries: 3      // 3 próby w przypadku błędu
-    }
 });
 
 const lobbyService = new LobbyService(config);
