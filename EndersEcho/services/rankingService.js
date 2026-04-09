@@ -250,13 +250,11 @@ class RankingService {
                 const bossName = player.bossName || msgs.unknownBoss;
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
-                const serverInitial = (() => {
-                    const n = targetGuild?.name;
-                    if (!n) return '';
-                    const m = n.match(/^(?:\p{Regional_Indicator}{2}|\p{Emoji_Presentation}\uFE0F?(?:\u200D\p{Emoji_Presentation}\uFE0F?)*)/u);
-                    return m ? m[0] : ([...n][0] || '');
-                })();
-                const serverSuffix = serverInitial ? ` • ${serverInitial}` : '';
+                let serverSuffix = '';
+                if (isGlobal) {
+                    const guildTag = this.config.guilds.find(g => g.id === player.sourceGuildId)?.tag;
+                    serverSuffix = guildTag ? ` • ${guildTag}` : '';
+                }
 
                 const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n\n`;
 

@@ -40,6 +40,9 @@ function parseGuildsConfig() {
             logger.warn(`⚠️ Nieznany język "${rawLang}" dla serwera ${guildId} — używam "pol"`);
         }
 
+        // Tag serwera w globalnym rankingu (opcjonalny, np. "🔥 PS" lub "⚔️ CS")
+        const tag = process.env[`ENDERSECHO_GUILD_${i}_TAG`] || null;
+
         // Role TOP są w pełni opcjonalne
         const top1 = process.env[`ENDERSECHO_GUILD_${i}_TOP1_ROLE`];
         const top2 = process.env[`ENDERSECHO_GUILD_${i}_TOP2_ROLE`];
@@ -56,6 +59,7 @@ function parseGuildsConfig() {
             id: guildId,
             allowedChannelId: channelId,
             lang,
+            tag,
             // null jeśli żadna rola nie skonfigurowana — roleService pomija wtedy aktualizację
             topRoles: Object.keys(topRoles).length > 0 ? topRoles : null
         });
