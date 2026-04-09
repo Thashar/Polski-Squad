@@ -372,27 +372,39 @@ class InteractionHandler {
                 const newGlobalRanking = await this.rankingService.getGlobalRanking();
                 const newGlobalUserIndex = newGlobalRanking.findIndex(p => p.userId === userId);
                 const newGlobalPosition = newGlobalUserIndex !== -1 ? newGlobalUserIndex + 1 : null;
+                const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
+                const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
+
+                logger.info(`🌐 Global Top 3 check: userId=${userId}, prevPos=${prevGlobalPosition ?? 'brak'}, newPos=${newGlobalPosition ?? 'brak'}`);
 
                 if (newGlobalPosition && newGlobalPosition <= 3) {
                     const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
                     const newGlobalUser = newGlobalRanking[newGlobalUserIndex];
-                    const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
-                    const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
                     const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
                     const positionChanged = prevGlobalPosition !== newGlobalPosition;
+
+                    logger.info(`🌐 W Top 3: globalScoreChanged=${globalScoreChanged}, positionChanged=${positionChanged} (${prevGlobalPosition ?? 'brak'} → ${newGlobalPosition})`);
 
                     if (globalScoreChanged && positionChanged) {
                         const sourceGuildName = interaction.guild.name;
                         const notifAvatarUrl = interaction.user.displayAvatarURL();
 
-                        logger.info(`🌐 Zmiana w Global Top 3: ${userName} na pozycji #${newGlobalPosition}`);
+                        logger.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${this.config.guilds.length} serwerów`);
 
                         for (const guildCfg of this.config.guilds) {
                             try {
-                                const targetGuild = interaction.client.guilds.cache.get(guildCfg.id);
-                                if (!targetGuild) continue;
-                                const channel = targetGuild.channels.cache.get(guildCfg.allowedChannelId);
-                                if (!channel) continue;
+                                // Pobieramy kanał bezpośrednio przez klienta bota, żeby mieć pewność tokenu
+                                let channel;
+                                try {
+                                    channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
+                                } catch (fetchErr) {
+                                    logger.warn(`⚠️ Nie można pobrać kanału ${guildCfg.allowedChannelId} dla serwera ${guildCfg.id}: ${fetchErr.message}`);
+                                    continue;
+                                }
+                                if (!channel) {
+                                    logger.warn(`⚠️ Kanał ${guildCfg.allowedChannelId} nie istnieje`);
+                                    continue;
+                                }
 
                                 const guildMsgs = this.msgs(guildCfg.id);
                                 const globalEmbed = this.rankingService.createGlobalTop3Embed(
@@ -410,10 +422,14 @@ class InteractionHandler {
                                 await channel.send({ embeds: [globalEmbed] });
                                 logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}`);
                             } catch (notifError) {
-                                logger.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}:`, notifError);
+                                logger.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
                             }
                         }
+                    } else {
+                        logger.info(`🌐 Warunki nie spełnione — nie wysyłam powiadomień`);
                     }
+                } else {
+                    logger.info(`🌐 Gracz poza Top 3 (pos=${newGlobalPosition ?? 'brak'}) — nie wysyłam powiadomień`);
                 }
             } catch (globalCheckError) {
                 logger.error('❌ Błąd sprawdzania/wysyłania Global Top 3:', globalCheckError);
@@ -541,7 +557,8 @@ class InteractionHandler {
                 {
                     mode: rankingData.mode,
                     client: rankingData.mode === 'global' ? interaction.client : null,
-                    messages: msgs
+                    messages: msgs,
+                    callerStats: rankingData.callerStats || null
                 }
             );
             const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false, msgs);
@@ -599,12 +616,30 @@ class InteractionHandler {
             const totalPages = Math.ceil(players.length / this.config.ranking.playersPerPage);
             const currentPage = 0;
 
+            // Statystyki wywołującego (raz, przy pierwszym otwarciu)
+            let callerStats = null;
+            try {
+                const callerUserId = interaction.user.id;
+                const globalRanking = await this.rankingService.getGlobalRanking();
+                const globalIdx = globalRanking.findIndex(p => p.userId === callerUserId);
+                const serverPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
+                const serverIdx = serverPlayers.findIndex(p => p.userId === callerUserId);
+                callerStats = {
+                    score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
+                    serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
+                    globalPosition: globalIdx !== -1 ? globalIdx + 1 : null
+                };
+            } catch (statsErr) {
+                logger.error('Błąd pobierania statystyk wywołującego:', statsErr);
+            }
+
             const embed = await this.rankingService.createRankingEmbed(
                 players, currentPage, totalPages, interaction.user.id, guild,
                 {
                     mode,
                     client: mode === 'global' ? interaction.client : null,
-                    messages: rankMsgs
+                    messages: rankMsgs,
+                    callerStats
                 }
             );
             const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false, rankMsgs);
@@ -622,7 +657,8 @@ class InteractionHandler {
                 userId: interaction.user.id,
                 messageId: reply.id,
                 mode,
-                guildId
+                guildId,
+                callerStats
             });
 
         } catch (error) {
